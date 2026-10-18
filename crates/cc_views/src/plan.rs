@@ -70,8 +70,42 @@ pub fn plan(project: &Project, geom: &ModelGeometry, level: LevelId, cut_height:
                 section_mark(&mut d, start, end, depth, &v.name);
             }
         }
+        if let Some((lo, hi)) = geom.bounds() {
+            let (lo, hi) = (DVec2::new(lo.x, lo.y), DVec2::new(hi.x, hi.y));
+            for v in project.views.values() {
+                if let ViewKind::Elevation { direction } = v.kind {
+                    elevation_mark(&mut d, lo, hi, direction.look(), &v.name);
+                }
+            }
+        }
     }
     d
+}
+
+/// Distance from the model extents to elevation markers, in meters.
+const ELEVATION_MARK_OFFSET: f64 = 1.2;
+const ELEVATION_MARK_RADIUS: f64 = 0.25;
+
+/// Elevation marker outside the model: a circle with a filled arrow pointing
+/// along `look` (towards the model), labeled with the view name.
+fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &str) {
+    let center = (lo + hi) * 0.5;
+    let half = (hi - lo) * 0.5;
+    let reach = (half.x * look.x.abs() + half.y * look.y.abs()) + ELEVATION_MARK_OFFSET;
+    let c = center - look * reach;
+    let r = ELEVATION_MARK_RADIUS;
+    let circle: Vec<DVec2> = (0..24)
+        .map(|i| {
+            let a = i as f64 / 24.0 * std::f64::consts::TAU;
+            c + DVec2::new(a.cos(), a.sin()) * r
+        })
+        .collect();
+    d.polyline(&circle, true, LineStyle::Annotation, None);
+    let side = look.perp();
+    let arrow = vec![c + look * (r * 1.6), c + side * (r * 0.8), c - side * (r * 0.8)];
+    d.fill(arrow, [30, 90, 170, 255], None);
+    // Label below and to the right of the circle, clear of the arrow.
+    d.text(c + DVec2::new(r + 0.08, -r - 0.05), name, 2.5);
 }
 
 fn draw_wall(d: &mut Drawing2D, g: &WallGeom, cut_z: f64) {
