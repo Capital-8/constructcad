@@ -13,6 +13,8 @@ use egui::{Align, Button, DragValue, Layout, Response, RichText, Sense, Stroke, 
 /// Height of the large ribbon buttons.
 const BUTTON_HEIGHT: f32 = 66.0;
 const ICON_SIZE: f32 = 22.0;
+/// Icon size of the small stacked ribbon buttons.
+const STACK_ICON_SIZE: f32 = 20.0;
 
 /// Icon of a model category, shared by the ribbon, options bar and browser.
 pub fn category_icon(category: Category) -> Icon {
@@ -175,7 +177,8 @@ fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
                     (true, true) => PALETTE.accent_text,
                     (true, false) => PALETTE.text,
                 };
-                icons::paint(painter, egui::Rect::from_center_size(rect.center(), vec2(15.0, 15.0)), b.icon, color);
+                let icon_rect = egui::Rect::from_center_size(rect.center(), vec2(STACK_ICON_SIZE, STACK_ICON_SIZE));
+                icons::paint(painter, icon_rect, b.icon, color);
                 let r = if b.enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
                 if r.on_hover_text(&b.tooltip).clicked() && b.enabled {
                     clicked = Some(column * rows + row);
