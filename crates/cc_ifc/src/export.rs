@@ -173,7 +173,58 @@ impl<'a> Exporter<'a> {
         for id in others {
             self.write_sketched(id);
         }
+        self.write_spaces();
         self.write_relationships();
+    }
+
+    /// Enclosed rooms as `IfcSpace`s aggregated into their storey.
+    fn write_spaces(&mut self) {
+        let project = self.project;
+        let geom = self.geom;
+        let mut by_storey: BTreeMap<LevelId, Vec<Id>> = BTreeMap::new();
+        for e in project.elements.values() {
+            let ElementKind::Room(room) = &e.kind else { continue };
+            let Some(boundary) = geom.rooms.get(&e.id) else { continue };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let placement = self.local_placement(Some(storey), Frame::at(DVec3::ZERO));
+            let profile = polygon::ccw(boundary);
+            let body = self.extrude_polygon(&profile, self.identity, self.dir_z, room.height.max(0.01));
+            let shape = self.shape(vec![body], None);
+            let gid = self.guid_of(e.uid, &format!("element-{}", e.id));
+            let n = Value::Null;
+            let space = self.w.add(
+                "IFCSPACE",
+                args![
+                    gid,
+                    n.clone(),
+                    opt_str(&room.number),
+                    opt_str(&e.comments),
+                    n.clone(),
+                    placement,
+                    shape,
+                    opt_str(&room.name),
+                    Value::Enum("ELEMENT"),
+                    Value::Enum("SPACE"),
+                    n
+                ],
+            );
+            self.products.insert(e.id, space);
+            by_storey.entry(e.level).or_default().push(space);
+            self.quantities(
+                e,
+                "Qto_SpaceBaseQuantities",
+                &[
+                    ("Height", Quantity::Length(room.height)),
+                    ("NetPerimeter", Quantity::Length(polygon::perimeter(boundary))),
+                    ("NetFloorArea", Quantity::Area(polygon::area(boundary))),
+                    ("NetVolume", Quantity::Volume(polygon::area(boundary) * room.height)),
+                ],
+            );
+        }
+        for (level, spaces) in by_storey {
+            let Some(&(storey, _)) = self.storeys.get(&level) else { continue };
+            self.aggregate(&format!("agg-spaces-{level}"), storey, spaces);
+        }
     }
 
     // --- Project, units, contexts, spatial structure ---
@@ -483,6 +534,8 @@ impl<'a> Exporter<'a> {
         let base =
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
+            // Rooms, grids and dimensions have no IFC type object.
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => return None,
             TypeData::Wall { .. } => ("IFCWALLTYPE", args![Value::Enum("STANDARD")]),
             TypeData::Floor { .. } => ("IFCSLABTYPE", args![Value::Enum("FLOOR")]),
             TypeData::Ceiling { .. } => ("IFCCOVERINGTYPE", args![Value::Enum("CEILING")]),
@@ -901,6 +954,7 @@ mod tests {
         assert_eq!(count(&text, "IFCSLAB"), project.elements_of(Category::Floor).count());
         assert_eq!(count(&text, "IFCCOVERING"), project.elements_of(Category::Ceiling).count());
         assert_eq!(count(&text, "IFCROOF"), project.elements_of(Category::Roof).count());
+        assert_eq!(count(&text, "IFCSPACE"), project.elements_of(Category::Room).count());
     }
 
     #[test]

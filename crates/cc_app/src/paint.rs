@@ -42,6 +42,7 @@ pub fn stroke_for(style: LineStyle, highlighted: bool) -> Stroke {
         LineStyle::Thin => (0.6, Color32::from_gray(95)),
         LineStyle::Hidden => (0.8, Color32::from_gray(120)),
         LineStyle::Annotation => (0.9, Color32::from_rgb(30, 90, 170)),
+        LineStyle::Center => (0.8, Color32::from_rgb(30, 90, 170)),
     };
     if highlighted { Stroke::new(width + 0.6, HIGHLIGHT) } else { Stroke::new(width, color) }
 }
@@ -84,7 +85,9 @@ pub fn fill_polygon(painter: &Painter, pts: Vec<Pos2>, color: Color32) {
 fn tint(c: [u8; 4], highlighted: bool) -> Color32 {
     if highlighted {
         let mix = |v: u8, h: u8| ((v as u16 + h as u16 * 2) / 3) as u8;
-        Color32::from_rgba_unmultiplied(mix(c[0], 120), mix(c[1], 175), mix(c[2], 255), c[3])
+        // Invisible fills (room areas, tag pick areas) become a light tint when selected.
+        let alpha = if c[3] < 8 { 60 } else { c[3] };
+        Color32::from_rgba_unmultiplied(mix(c[0], 120), mix(c[1], 175), mix(c[2], 255), alpha)
     } else {
         Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3])
     }
@@ -134,25 +137,37 @@ pub fn paint_drawing(painter: &Painter, d: &Drawing2D, xf: &Xf, opts: &PaintOpti
                 }
                 if *style == LineStyle::Hidden {
                     painter.extend(Shape::dashed_line(&[pa, pb], stroke, 6.0, 4.0));
+                } else if *style == LineStyle::Center {
+                    // Dash-dot.
+                    painter.extend(Shape::dashed_line_with_offset(&[pa, pb], stroke, &[14.0, 2.0], &[3.0, 3.0], 0.0));
                 } else {
                     painter.line_segment([pa, pb], stroke);
                 }
             }
-            Prim::Text { pos, text, size } => {
+            Prim::Text { pos, text, size, anchor, angle } => {
                 if opts.only.is_some() {
                     continue;
                 }
                 let px = (size * opts.px_per_mm) as f32;
                 if px >= 3.5 {
-                    painter.text(
-                        xf.to_screen(*pos),
-                        egui::Align2::LEFT_BOTTOM,
-                        text,
-                        egui::FontId::proportional(px),
-                        Color32::from_gray(20),
-                    );
+                    paint_text(painter, xf.to_screen(*pos), text, px, *anchor, *angle as f32);
                 }
             }
         }
     }
+}
+
+/// Text anchored at `pos` and rotated by `angle` (radians, counter-clockwise on the drawing).
+fn paint_text(painter: &Painter, pos: Pos2, text: &str, px: f32, anchor: cc_views::Anchor, angle: f32) {
+    let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(px), Color32::from_gray(20));
+    let size = galley.size();
+    let local = match anchor {
+        cc_views::Anchor::LeftBottom => egui::vec2(0.0, -size.y),
+        cc_views::Anchor::CenterBottom => egui::vec2(-size.x / 2.0, -size.y),
+        cc_views::Anchor::Center => egui::vec2(-size.x / 2.0, -size.y / 2.0),
+    };
+    // Screen Y points down, so drawing rotations are negated.
+    let rot = egui::emath::Rot2::from_angle(-angle);
+    let top_left = pos + rot * local;
+    painter.add(egui::epaint::TextShape::new(top_left, galley, Color32::from_gray(20)).with_angle(-angle));
 }

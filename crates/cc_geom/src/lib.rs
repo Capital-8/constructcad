@@ -7,11 +7,13 @@
 mod build;
 mod cut;
 pub mod polygon;
+mod rooms;
 mod solid;
 mod wall;
 
 pub use build::{FRAME_COLOR, HostedPart, ModelGeometry, hosted_parts};
 pub use cut::{clip_polygon, face_plane_segments};
+pub use rooms::room_boundary;
 pub use solid::{Face, Ray, Solid};
 pub use wall::{Column, Opening, WallGeom};
 

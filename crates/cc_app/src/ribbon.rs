@@ -23,6 +23,9 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Floor => Icon::Floor,
         Category::Ceiling => Icon::Ceiling,
         Category::Roof => Icon::Roof,
+        Category::Room => Icon::Room,
+        Category::Grid => Icon::Grid,
+        Category::Dimension => Icon::Dimension,
     }
 }
 
@@ -90,7 +93,11 @@ fn icon_button(ui: &mut Ui, icon: Icon, enabled: bool) -> Response {
 
 /// A captioned group of ribbon buttons followed by a vertical divider.
 fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
+    let caption_w =
+        ui.painter().layout_no_wrap(caption.clone(), egui::FontId::proportional(11.0), PALETTE.text).size().x;
     let inner = ui.vertical(|ui| {
+        // At least as wide as the caption, so it never wraps.
+        ui.set_min_width(caption_w + 8.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             add(ui);
@@ -182,6 +189,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             (RibbonTab::File, t!("ribbon-file")),
             (RibbonTab::Architecture, t!("ribbon-architecture")),
             (RibbonTab::Modify, t!("ribbon-modify")),
+            (RibbonTab::Annotate, t!("ribbon-annotate")),
             (RibbonTab::View, t!("ribbon-view")),
             (RibbonTab::Manage, t!("ribbon-manage")),
         ] {
@@ -200,6 +208,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             RibbonTab::File => file_tab(ui, state),
             RibbonTab::Architecture => architecture_tab(ui, state),
             RibbonTab::Modify => modify_tab(ui, state),
+            RibbonTab::Annotate => annotate_tab(ui, state),
             RibbonTab::View => view_tab(ui, state),
             RibbonTab::Manage => manage_tab(ui, state),
         }
@@ -262,6 +271,19 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
         tool_button(ui, state, t!("tool-floor"), "SB", Category::Floor);
         tool_button(ui, state, t!("tool-ceiling"), "FO", Category::Ceiling);
         tool_button(ui, state, t!("tool-roof"), "TE", Category::Roof);
+    });
+    group(ui, t!("group-room"), |ui| {
+        tool_button(ui, state, t!("tool-room"), "RM", Category::Room);
+    });
+    group(ui, t!("group-datum"), |ui| {
+        tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
+    });
+    group(ui, t!("group-selection"), |ui| select_button(ui, state));
+}
+
+fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
+    group(ui, t!("group-dimension"), |ui| {
+        tool_button(ui, state, t!("tool-dimension"), "DI", Category::Dimension);
     });
     group(ui, t!("group-selection"), |ui| select_button(ui, state));
 }
@@ -334,7 +356,7 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         }
         let r = big_button(ui, Icon::Schedule, &t!("view-new-schedule"), false, true, true);
         egui::Popup::menu(&r).show(|ui| {
-            for c in Category::ALL {
+            for c in Category::SCHEDULABLE {
                 if ui.button(actions::t_category(c)).clicked() {
                     actions::new_schedule(state, c);
                 }
@@ -470,6 +492,15 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Section => {
                 ui.label(theme::muted(t!("msg-section-hint")));
+            }
+            Tool::Room { .. } => {
+                ui.label(theme::muted(t!("hint-room")));
+            }
+            Tool::Grid { .. } => {
+                ui.label(theme::muted(t!("hint-grid")));
+            }
+            Tool::Dimension { .. } => {
+                ui.label(theme::muted(t!("hint-dimension")));
             }
         }
     });

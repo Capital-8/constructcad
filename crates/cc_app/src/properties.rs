@@ -253,6 +253,35 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             }
         }
+        ElementKind::Room(r) => room_props(ui, state, &el, r),
+        ElementKind::Grid(g) => {
+            section(ui, "identity-grid", t!("section-identity"), |ui| {
+                let (resp, text) = text_row(ui, &t!("col-name"), g.name.clone());
+                if resp.changed() {
+                    modify(state, id, "grid-name", |e| {
+                        if let ElementKind::Grid(g) = &mut e.kind {
+                            g.name = text;
+                        }
+                    });
+                }
+                finish(state, &resp);
+            });
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(g.start.distance(g.end))));
+            });
+        }
+        ElementKind::Dimension(d) => {
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                readonly_row(ui, &t!("prop-value"), format!("{} m", format::number(d.length(), 3)));
+                let view = state.project().view(d.view).map(|v| v.name.clone()).unwrap_or_default();
+                readonly_row(ui, &t!("prop-view"), view);
+                length_row(ui, state, &t!("prop-dimension-offset"), id, "dim-offset", d.offset, |e, v| {
+                    if let ElementKind::Dimension(d) = &mut e.kind {
+                        d.offset = v;
+                    }
+                });
+            });
+        }
         ElementKind::Floor(f) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
@@ -294,10 +323,15 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         }
     }
 
-    section(ui, "identity", t!("section-identity"), |ui| {
-        for (label, field, value) in
-            [(t!("col-mark"), "mark", el.mark.clone()), (t!("col-comments"), "comments", el.comments.clone())]
-        {
+    // Rooms, grids and dimensions have their own identity rows; only model elements carry a mark.
+    let mut identity = vec![(t!("col-comments"), "comments", el.comments.clone())];
+    if category.is_model() {
+        identity.insert(0, (t!("col-mark"), "mark", el.mark.clone()));
+    }
+    let identity_id = if category.is_model() { "identity" } else { "identity-extra" };
+    let identity_title = if category.is_model() { t!("section-identity") } else { t!("section-other") };
+    section(ui, identity_id, identity_title, |ui| {
+        for (label, field, value) in identity {
             let (r, text) = text_row(ui, &label, value);
             if r.changed() {
                 modify(state, id, field, |e| {
@@ -318,6 +352,51 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         if ui.button(t!("action-delete")).clicked() {
             state.delete_selection();
         }
+    });
+}
+
+/// Number, name, height and computed area of a room.
+fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room) {
+    let id = el.id;
+    section(ui, "identity-room", t!("section-identity"), |ui| {
+        for (label, field, value) in
+            [(t!("col-number"), "number", r.number.clone()), (t!("col-name"), "name", r.name.clone())]
+        {
+            let (resp, text) = text_row(ui, &label, value);
+            if resp.changed() {
+                modify(state, id, field, |e| {
+                    if let ElementKind::Room(r) = &mut e.kind {
+                        if field == "number" {
+                            r.number = text;
+                        } else {
+                            r.name = text;
+                        }
+                    }
+                });
+            }
+            finish(state, &resp);
+        }
+    });
+    section(ui, "constraints", t!("section-constraints"), |ui| {
+        readonly_row(ui, &t!("prop-level"), state.project().level_name(el.level).to_string());
+        length_row(ui, state, &t!("prop-room-height"), id, "room-height", r.height, |e, v| {
+            if let ElementKind::Room(r) = &mut e.kind {
+                r.height = v.max(0.1);
+            }
+        });
+    });
+    section(ui, "dimensions", t!("section-dimensions"), |ui| match state.geom.rooms.get(&id).cloned() {
+        Some(boundary) => {
+            let area = cc_geom::polygon::area(&boundary);
+            readonly_row(ui, &t!("col-area"), format!("{} m²", format::number(area, 2)));
+            readonly_row(
+                ui,
+                &t!("col-perimeter"),
+                format!("{} m", format::meters(cc_geom::polygon::perimeter(&boundary))),
+            );
+            readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(area * r.height, 2)));
+        }
+        None => readonly_row(ui, &t!("col-area"), t!("room-not-enclosed")),
     });
 }
 

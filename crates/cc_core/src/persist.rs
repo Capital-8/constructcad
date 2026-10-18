@@ -44,6 +44,7 @@ pub fn from_ron(text: &str) -> Result<Project, PersistError> {
     // Version 1 files have no persistent ids; version 2 only adds fields with defaults.
     let mut project = file.project;
     project.ensure_uids();
+    project.ensure_annotation_types();
     Ok(project)
 }
 

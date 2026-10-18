@@ -37,6 +37,8 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
   - Paredes em cadeia, com junções automáticas em L (meia-esquadria) e T.
   - Portas e janelas hospedadas na parede, com abertura recortada automaticamente.
   - Pisos, forros e telhados (plano ou de uma água, com beiral) por esboço ou "Das paredes".
+- **Ambientes**: clique dentro de paredes que delimitam ambientes para criar o ambiente; contorno, área e perímetro acompanham as paredes. Etiquetas na planta, tabela de ambientes e exportação como `IfcSpace`.
+- **Eixos e anotação**: eixos com bolhas em todas as plantas; cotas alinhadas em qualquer vista 2D (aba *Anotar*); marcas de portas e janelas etiquetadas automaticamente.
 - **Snapping**: extremidades, pontos médios, sobre a parede, ângulos de 15°, Shift para ortogonal, comprimento digitado + Enter.
 - **Edição**: seleção por clique ou janela (contida ou cruzada), mover arrastando, copiar com Ctrl+arrastar, excluir. Desfazer e refazer cobrem todas as edições.
 - **Propriedades**: parâmetros de instância e da vista em seções recolhíveis; paredes com restrição de base e de topo (altura desconectada ou até um nível), linha de localização, delimitação de ambientes e estrutural.
@@ -64,6 +66,8 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 | Ctrl+Z / Ctrl+Y | Desfazer / Refazer | Delete | Excluir |
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar como | Espaço | Inverter porta |
 | Ctrl+N / Ctrl+O | Novo / Abrir | Ctrl+W | Fechar projeto |
+| RM | Ambiente | GR | Eixo |
+| DI | Cota alinhada | | |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 

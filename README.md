@@ -41,6 +41,8 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
   - Chained walls with automatic L (mitered) and T joins.
   - Wall-hosted doors and windows, with openings cut automatically.
   - Floors, ceilings and roofs (flat or single-slope, with overhang) by sketch or "From walls".
+- **Rooms**: click inside room-bounding walls to place a room; its boundary, area and perimeter follow the walls. Room tags in plans, room schedule and `IfcSpace` export.
+- **Grids and annotation**: grid lines with bubbles in every plan; aligned dimensions in any 2D view (*Annotate* tab); door and window marks tagged automatically.
 - **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
 - **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
 - **Properties**: instance and view parameters in collapsible sections; walls with base and top constraints (unconnected height or up to a level), location line, room bounding and structural flags.
@@ -68,6 +70,8 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Delete | Delete |
 | Ctrl+S / Ctrl+Shift+S | Save / Save as | Space | Flip door |
 | Ctrl+N / Ctrl+O | New / Open | Ctrl+W | Close project |
+| RM | Room | GR | Grid |
+| DI | Aligned dimension | | |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 

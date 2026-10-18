@@ -57,6 +57,8 @@ pub fn hosted_parts(data: &TypeData, width: f64, height: f64, half: f64) -> Vec<
 pub struct ModelGeometry {
     pub solids: Vec<Solid>,
     pub walls: BTreeMap<ElementId, WallGeom>,
+    /// Boundary of each enclosed room (missing when the room is not enclosed).
+    pub rooms: BTreeMap<ElementId, Vec<DVec2>>,
 }
 
 impl ModelGeometry {
@@ -65,7 +67,34 @@ impl ModelGeometry {
         geom.build_walls(project);
         geom.build_hosted(project);
         geom.build_slabs(project);
+        geom.build_rooms(project);
         geom
+    }
+
+    /// Footprints of the room-bounding walls of `level`.
+    pub fn bounding_footprints(&self, project: &Project, level: cc_core::LevelId) -> Vec<Vec<DVec2>> {
+        project
+            .walls()
+            .filter(|(e, w)| e.level == level && w.room_bounding)
+            .filter_map(|(e, _)| self.walls.get(&e.id))
+            .map(|g| g.footprint().to_vec())
+            .collect()
+    }
+
+    /// Boundary of the room that would enclose `point` on `level`.
+    pub fn room_at(&self, project: &Project, level: cc_core::LevelId, point: DVec2) -> Option<Vec<DVec2>> {
+        crate::room_boundary(&self.bounding_footprints(project, level), point)
+    }
+
+    fn build_rooms(&mut self, project: &Project) {
+        let mut footprints: BTreeMap<cc_core::LevelId, Vec<Vec<DVec2>>> = BTreeMap::new();
+        for e in project.elements.values() {
+            let ElementKind::Room(room) = &e.kind else { continue };
+            let walls = footprints.entry(e.level).or_insert_with(|| self.bounding_footprints(project, e.level));
+            if let Some(boundary) = crate::room_boundary(walls, room.position) {
+                self.rooms.insert(e.id, boundary);
+            }
+        }
     }
 
     fn build_walls(&mut self, project: &Project) {

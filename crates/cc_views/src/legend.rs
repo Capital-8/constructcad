@@ -11,7 +11,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
     let row = 16.0 * mm;
     let sample = 1.2_f64.max(22.0 * mm);
     let mut y = 0.0;
-    for t in types.iter().filter_map(|id| project.element_type(*id)) {
+    for t in types.iter().filter_map(|id| project.element_type(*id)).filter(|t| t.category().is_model()) {
         // Door swings extend above the row; leave room for them.
         let above = match t.data {
             TypeData::Door { width, .. } => width + 0.075,
@@ -81,6 +81,8 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 ];
                 d.polyline(&r, true, LineStyle::Projection, None);
             }
+            // Filtered out above: annotation types have no legend symbol.
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => {}
         }
         let text_x = sample.max(t.opening_size().map_or(0.0, |(w, _)| w + 0.4)) + 6.0 * mm;
         d.text(DVec2::new(text_x, y - 1.2 * mm), &t.name, 2.5);

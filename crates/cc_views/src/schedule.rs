@@ -147,5 +147,37 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category) -> 
             ];
             Table { headers, rows, totals }
         }
+        Category::Room => {
+            let headers = vec!["col-number", "col-name", "col-level", "col-area", "col-perimeter"];
+            let mut rooms: Vec<(&Element, &cc_core::Room)> = elements
+                .iter()
+                .filter_map(|e| match &e.kind {
+                    ElementKind::Room(r) => Some((*e, r)),
+                    _ => None,
+                })
+                .collect();
+            rooms.sort_by(|a, b| match (a.1.number.parse::<u64>(), b.1.number.parse::<u64>()) {
+                (Ok(x), Ok(y)) => x.cmp(&y),
+                _ => a.1.number.cmp(&b.1.number),
+            });
+            let mut area_sum = 0.0;
+            let rows = rooms
+                .iter()
+                .map(|(e, r)| {
+                    // Rooms that are not enclosed have no area.
+                    let (area, perimeter) = match geom.rooms.get(&e.id) {
+                        Some(b) => {
+                            area_sum += polygon::area(b);
+                            (format::number(polygon::area(b), 2), format::meters(polygon::perimeter(b)))
+                        }
+                        None => ("—".to_string(), "—".to_string()),
+                    };
+                    Row { element: e.id, cells: vec![r.number.clone(), r.name.clone(), level(e), area, perimeter] }
+                })
+                .collect();
+            let totals = vec![count, String::new(), String::new(), format::number(area_sum, 2), String::new()];
+            Table { headers, rows, totals }
+        }
+        Category::Grid | Category::Dimension => Table::default(),
     }
 }

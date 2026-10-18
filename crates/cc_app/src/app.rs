@@ -228,6 +228,9 @@ impl ConstructApp {
                         state.set_tool(Tool::Select);
                         Some(None)
                     }
+                    "RM" => Some(Some(Category::Room)),
+                    "GR" => Some(Some(Category::Grid)),
+                    "DI" => Some(Some(Category::Dimension)),
                     "CT" => {
                         state.set_tool(Tool::Section);
                         state.message = t!("msg-section-hint");

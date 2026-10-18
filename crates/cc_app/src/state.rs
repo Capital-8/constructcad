@@ -15,6 +15,7 @@ pub enum RibbonTab {
     #[default]
     Architecture,
     Modify,
+    Annotate,
     View,
     Manage,
 }

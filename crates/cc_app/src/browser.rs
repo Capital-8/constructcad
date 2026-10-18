@@ -222,7 +222,7 @@ fn add_button(ui: &mut Ui, state: &mut AppState, category: ViewCategory, row: &R
         }
         ViewCategory::Schedule => {
             egui::Popup::menu(&r).show(|ui| {
-                for c in Category::ALL {
+                for c in Category::SCHEDULABLE {
                     if ui.button(actions::t_category(c)).clicked() {
                         actions::new_schedule(state, c);
                         used = true;

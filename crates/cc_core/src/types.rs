@@ -10,11 +10,42 @@ pub enum Category {
     Floor,
     Ceiling,
     Roof,
+    Room,
+    Grid,
+    Dimension,
 }
 
 impl Category {
-    pub const ALL: [Category; 6] =
+    pub const ALL: [Category; 9] = [
+        Category::Wall,
+        Category::Door,
+        Category::Window,
+        Category::Floor,
+        Category::Ceiling,
+        Category::Roof,
+        Category::Room,
+        Category::Grid,
+        Category::Dimension,
+    ];
+
+    /// Categories with physical elements (shown in legends and 3D).
+    pub const MODEL: [Category; 6] =
         [Category::Wall, Category::Door, Category::Window, Category::Floor, Category::Ceiling, Category::Roof];
+
+    /// Categories that can be listed in a schedule.
+    pub const SCHEDULABLE: [Category; 7] = [
+        Category::Wall,
+        Category::Door,
+        Category::Window,
+        Category::Floor,
+        Category::Ceiling,
+        Category::Roof,
+        Category::Room,
+    ];
+
+    pub fn is_model(self) -> bool {
+        Category::MODEL.contains(&self)
+    }
 
     /// Translation key for the category name.
     pub fn key(self) -> &'static str {
@@ -25,6 +56,9 @@ impl Category {
             Category::Floor => "category-floor",
             Category::Ceiling => "category-ceiling",
             Category::Roof => "category-roof",
+            Category::Room => "category-room",
+            Category::Grid => "category-grid",
+            Category::Dimension => "category-dimension",
         }
     }
 }
@@ -148,9 +182,19 @@ pub enum TypeData {
     Roof {
         layers: Vec<Layer>,
     },
+    /// Rooms have no type parameters yet; the type groups them in schedules.
+    Room {},
+    /// Grid line with a bubble of `bubble` paper millimeters.
+    Grid {
+        bubble: f64,
+    },
+    /// Linear dimension with text of `text_size` paper millimeters.
+    Dimension {
+        text_size: f64,
+    },
 }
 
-/// A family type: the shared parameters of a group of instances.
+/// An element type: the shared parameters of a group of instances.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ElementType {
     pub id: ElementTypeId,
@@ -171,6 +215,9 @@ impl ElementType {
             TypeData::Floor { .. } => Category::Floor,
             TypeData::Ceiling { .. } => Category::Ceiling,
             TypeData::Roof { .. } => Category::Roof,
+            TypeData::Room {} => Category::Room,
+            TypeData::Grid { .. } => Category::Grid,
+            TypeData::Dimension { .. } => Category::Dimension,
         }
     }
 
@@ -232,6 +279,7 @@ impl ElementType {
             TypeData::Wall { layers, .. } | TypeData::Roof { layers } => {
                 layers.first().map_or("", |l| l.material.as_str())
             }
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => "",
             TypeData::Floor { .. } => self
                 .layers()
                 .iter()

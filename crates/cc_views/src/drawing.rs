@@ -14,6 +14,17 @@ pub enum LineStyle {
     Hidden,
     /// Levels, section marks, text leaders.
     Annotation,
+    /// Dash-dot: grid lines and center lines.
+    Center,
+}
+
+/// Which point of a text box sits at its position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Anchor {
+    #[default]
+    LeftBottom,
+    CenterBottom,
+    Center,
 }
 
 /// Drawing primitive, in view coordinates (meters on the view plane).
@@ -31,11 +42,14 @@ pub enum Prim {
         color: [u8; 4],
         element: Option<ElementId>,
     },
-    /// Text with its baseline-left at `pos`; `size` is paper height in millimeters.
+    /// Text placed by `anchor` at `pos`, rotated by `angle` radians
+    /// (counter-clockwise); `size` is paper height in millimeters.
     Text {
         pos: DVec2,
         text: String,
         size: f64,
+        anchor: Anchor,
+        angle: f64,
     },
 }
 
@@ -68,7 +82,11 @@ impl Drawing2D {
     }
 
     pub fn text(&mut self, pos: DVec2, text: impl Into<String>, size: f64) {
-        self.prims.push(Prim::Text { pos, text: text.into(), size });
+        self.text_at(pos, text, size, Anchor::LeftBottom, 0.0);
+    }
+
+    pub fn text_at(&mut self, pos: DVec2, text: impl Into<String>, size: f64, anchor: Anchor, angle: f64) {
+        self.prims.push(Prim::Text { pos, text: text.into(), size, anchor, angle });
     }
 
     /// Circular arc approximated with line segments.
@@ -111,7 +129,10 @@ impl Drawing2D {
             return Some(id);
         }
         self.prims.iter().rev().find_map(|prim| match prim {
-            Prim::Fill { pts, element: Some(id), .. } if cc_geom::polygon::contains(pts, p) => Some(*id),
+            // Fully transparent fills only show selection (room areas); they are not picked.
+            Prim::Fill { pts, element: Some(id), color } if color[3] > 0 && cc_geom::polygon::contains(pts, p) => {
+                Some(*id)
+            }
             _ => None,
         })
     }

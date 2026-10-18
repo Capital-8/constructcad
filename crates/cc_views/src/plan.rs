@@ -71,7 +71,14 @@ pub fn plan(project: &Project, geom: &ModelGeometry, level: LevelId, cut_height:
             }
         }
         if let Some((lo, hi)) = geom.bounds() {
-            let (lo, hi) = (DVec2::new(lo.x, lo.y), DVec2::new(hi.x, hi.y));
+            // Markers stay outside the grid lines too, which usually extend past the model.
+            let grid_ends = project.elements.values().filter_map(|e| match &e.kind {
+                ElementKind::Grid(g) => Some([g.start, g.end]),
+                _ => None,
+            });
+            let (lo, hi) = grid_ends
+                .flatten()
+                .fold((DVec2::new(lo.x, lo.y), DVec2::new(hi.x, hi.y)), |(lo, hi), p| (lo.min(p), hi.max(p)));
             for v in project.views.values() {
                 if let ViewKind::Elevation { direction } = v.kind {
                     elevation_mark(&mut d, lo, hi, direction.look(), &v.name);

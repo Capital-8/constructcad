@@ -7,7 +7,8 @@ Checks:
   * schema and EXPRESS rule validation;
   * every building element is contained in a storey and has a type;
   * every building element's geometry can be built, with openings cut;
-  * built volumes match the exported base quantities.
+  * built volumes match the exported base quantities;
+  * spaces are aggregated into a storey and their volume is area x height.
 
 Usage: python scripts/validate_ifc.py model.ifc
 """
@@ -75,6 +76,23 @@ def main(path):
                     expected = gross * thickness
             if expected is not None and abs(volume - expected) > REL_TOL * max(expected, 1e-9):
                 errors.append(f"{label}: volume {volume:.6f} differs from quantity {expected:.6f}")
+
+    spaces = model.by_type("IfcSpace")
+    print(f"  IfcSpace: {len(spaces)}")
+    for space in spaces:
+        label = f"IfcSpace {space.GlobalId} '{space.Name}'"
+        parent = ifcopenshell.util.element.get_aggregate(space)
+        if parent is None or not parent.is_a("IfcBuildingStorey"):
+            errors.append(f"{label}: not aggregated into a storey")
+        try:
+            shape = ifcopenshell.geom.create_shape(settings, space)
+        except Exception as exc:  # noqa: BLE001 - report any kernel failure
+            errors.append(f"{label}: geometry failed: {exc}")
+            continue
+        volume = ifcopenshell.util.shape.get_volume(shape.geometry)
+        area, height = quantity(space, "NetFloorArea"), quantity(space, "Height")
+        if area is not None and height is not None and abs(volume - area * height) > REL_TOL * area * height:
+            errors.append(f"{label}: volume {volume:.6f} differs from area x height {area * height:.6f}")
 
     for error in errors:
         print(f"ERROR {error}")

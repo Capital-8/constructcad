@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Rooms: boundary detected from room-bounding walls around a point (openings do not break it), with number, name, height, area, perimeter and volume; room tags in plans, room schedule and `IfcSpace` export with base quantities.
+- Grids: named grid lines with bubbles shown in every plan; elevation markers stay outside them.
+- Aligned dimensions in any 2D view, on a new *Annotate* tab, snapping to the view's linework.
+- Automatic door and window tags (marks) in floor plans.
+- Room, grid and dimension types; projects created earlier gain default types when opened.
 - Wall constraints: top constrained to a level with offset (follows the level), location line (centerline, core or finish faces), room bounding and structural parameters; the wall tool sets top constraint and location line in the options bar.
 - Type parameters: wall function, layer functions (core and finishes), type mark, description, manufacturer, model, URL, keynote, classification code, fire rating, comments and cost.
 - New Type Properties dialog with type switching, Duplicate, Rename, sectioned parameters and a layer editor.

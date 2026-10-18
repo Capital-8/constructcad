@@ -1,4 +1,5 @@
-//! Modeling tools: selection, walls, hosted openings, sketches and sections.
+//! Modeling tools: selection, walls, hosted openings, sketches, sections,
+//! rooms, grids and dimensions.
 
 use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
@@ -20,6 +21,9 @@ pub enum Tool {
     Hosted { category: Category, type_id: ElementTypeId },
     Sketch { category: Category, type_id: ElementTypeId },
     Section,
+    Room { type_id: ElementTypeId },
+    Grid { type_id: ElementTypeId },
+    Dimension { type_id: ElementTypeId },
 }
 
 impl Tool {
@@ -34,12 +38,20 @@ impl Tool {
             Tool::Sketch { category: Category::Roof, .. } => "tool-roof",
             Tool::Sketch { .. } => "tool-floor",
             Tool::Section => "tool-section",
+            Tool::Room { .. } => "tool-room",
+            Tool::Grid { .. } => "tool-grid",
+            Tool::Dimension { .. } => "tool-dimension",
         }
     }
 
     pub fn type_id(&self) -> Option<ElementTypeId> {
         match self {
-            Tool::Wall { type_id } | Tool::Hosted { type_id, .. } | Tool::Sketch { type_id, .. } => Some(*type_id),
+            Tool::Wall { type_id }
+            | Tool::Hosted { type_id, .. }
+            | Tool::Sketch { type_id, .. }
+            | Tool::Room { type_id }
+            | Tool::Grid { type_id }
+            | Tool::Dimension { type_id } => Some(*type_id),
             _ => None,
         }
     }
@@ -48,6 +60,9 @@ impl Tool {
         match self {
             Tool::Wall { .. } => Some(Category::Wall),
             Tool::Hosted { category, .. } | Tool::Sketch { category, .. } => Some(*category),
+            Tool::Room { .. } => Some(Category::Room),
+            Tool::Grid { .. } => Some(Category::Grid),
+            Tool::Dimension { .. } => Some(Category::Dimension),
             _ => None,
         }
     }
@@ -57,6 +72,9 @@ impl Tool {
             Tool::Wall { .. } => Tool::Wall { type_id: id },
             Tool::Hosted { category, .. } => Tool::Hosted { category, type_id: id },
             Tool::Sketch { category, .. } => Tool::Sketch { category, type_id: id },
+            Tool::Room { .. } => Tool::Room { type_id: id },
+            Tool::Grid { .. } => Tool::Grid { type_id: id },
+            Tool::Dimension { .. } => Tool::Dimension { type_id: id },
             t => t,
         }
     }
@@ -68,6 +86,9 @@ impl Tool {
             Category::Wall => Tool::Wall { type_id },
             Category::Door | Category::Window => Tool::Hosted { category, type_id },
             Category::Floor | Category::Ceiling | Category::Roof => Tool::Sketch { category, type_id },
+            Category::Room => Tool::Room { type_id },
+            Category::Grid => Tool::Grid { type_id },
+            Category::Dimension => Tool::Dimension { type_id },
         })
     }
 }
@@ -235,6 +256,10 @@ pub fn handle(
     let tool = state.tool.clone();
     match (&tool, view.level()) {
         (Tool::Select, _) => select(ui, resp, painter, state, is_plan, xf, drawing),
+        // Dimensions work in any 2D view.
+        (Tool::Dimension { type_id }, level) => {
+            dimension_tool(ui, resp, painter, state, view, level, *type_id, xf, drawing)
+        }
         (_, None) | (_, Some(_)) if !is_plan => {
             if resp.clicked() {
                 state.message = t!("msg-plan-only");
@@ -249,7 +274,154 @@ pub fn handle(
             sketch_tool(ui, resp, painter, state, level, *category, *type_id, xf)
         }
         (Tool::Section, level) => section_tool(ui, resp, painter, state, level, xf),
+        (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
+        (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
         _ => {}
+    }
+}
+
+/// Next free number among `existing` names (1 when none is numeric).
+fn next_number<'a>(existing: impl Iterator<Item = &'a str>) -> String {
+    (existing.filter_map(|s| s.trim().parse::<u32>().ok()).max().unwrap_or(0) + 1).to_string()
+}
+
+/// Click inside walls to create a room; the enclosed region under the cursor is previewed.
+fn room_tool(
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(p) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let boundary = state.geom.room_at(state.project(), level, p);
+    if let Some(b) = &boundary {
+        let pts: Vec<Pos2> = b.iter().map(|q| xf.to_screen(*q)).collect();
+        crate::paint::fill_polygon(painter, pts.clone(), PREVIEW.gamma_multiply(0.18));
+        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+    }
+    if resp.clicked() {
+        if boundary.is_none() {
+            state.message = t!("msg-room-not-enclosed");
+            return;
+        }
+        let project = state.project();
+        let number = next_number(project.elements.values().filter_map(|e| match &e.kind {
+            ElementKind::Room(r) => Some(r.number.as_str()),
+            _ => None,
+        }));
+        let room = cc_core::Room {
+            position: p,
+            number,
+            name: t!("room-default-name"),
+            height: project.level_height(level, 3.0),
+        };
+        state.create_element(t!("tx-create-room"), level, type_id, ElementKind::Room(room));
+    }
+}
+
+/// Two clicks: start and end of a grid line.
+fn grid_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap(state.project(), Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
+    draw_snap(painter, xf, s);
+    if let Some(a) = state.interaction.anchor {
+        painter.add(egui::Shape::dashed_line(
+            &[xf.to_screen(a), xf.to_screen(s.point)],
+            Stroke::new(1.5, PREVIEW),
+            10.0,
+            4.0,
+        ));
+        label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
+    }
+    if resp.clicked() {
+        match state.interaction.anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.1 => {
+                let name = next_number(state.project().elements.values().filter_map(|e| match &e.kind {
+                    ElementKind::Grid(g) => Some(g.name.as_str()),
+                    _ => None,
+                }));
+                let grid = cc_core::Grid { start: a, end: s.point, name };
+                state.create_element(t!("tx-create-grid"), level, type_id, ElementKind::Grid(grid));
+                state.interaction.anchor = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Three clicks: the two measured points, then the position of the dimension line.
+#[allow(clippy::too_many_arguments)]
+fn dimension_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    view: &View,
+    level: Option<LevelId>,
+    type_id: ElementTypeId,
+    xf: &Xf,
+    drawing: &Drawing2D,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    // Snap to the visible linework of the view.
+    let ends: Vec<DVec2> = drawing
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            cc_views::Prim::Line { a, b, .. } => Some([*a, *b]),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let anchor = state.interaction.points.last().copied();
+    let s = snap(state.project(), None, raw, anchor, &ends, xf.scale, shift);
+    let stroke = Stroke::new(1.5, PREVIEW);
+    let points = state.interaction.points.clone();
+    match points.as_slice() {
+        [] => draw_snap(painter, xf, s),
+        [a] => {
+            draw_snap(painter, xf, s);
+            painter.line_segment([xf.to_screen(*a), xf.to_screen(s.point)], stroke);
+            label(painter, xf.to_screen(s.point), format::number(a.distance(s.point), 2));
+        }
+        [a, b, ..] => {
+            let n = (*b - *a).normalize_or_zero().perp();
+            let offset = (raw - *a).dot(n);
+            let (p, q) = (*a + n * offset, *b + n * offset);
+            painter.line_segment([xf.to_screen(*a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
+            painter.line_segment([xf.to_screen(*b), xf.to_screen(q)], Stroke::new(1.0, PREVIEW));
+            painter.line_segment([xf.to_screen(p), xf.to_screen(q)], stroke);
+            label(painter, xf.to_screen((p + q) * 0.5), format::number(a.distance(*b), 2));
+        }
+    }
+    if resp.clicked() {
+        match points.as_slice() {
+            [] => state.interaction.points.push(s.point),
+            [a] if a.distance(s.point) > 1e-3 => state.interaction.points.push(s.point),
+            [a, b] => {
+                let n = (*b - *a).normalize_or_zero().perp();
+                let dim = cc_core::Dimension { view: view.id, a: *a, b: *b, offset: (raw - *a).dot(n) };
+                let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
+                if let Some(level) = level {
+                    state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(dim));
+                }
+                state.interaction.points.clear();
+            }
+            _ => {}
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{Category, ElementId, ElementTypeId, LevelId, Uid};
+use crate::{Category, ElementId, ElementTypeId, LevelId, Uid, ViewId};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,9 @@ pub enum ElementKind {
     Floor(Floor),
     Ceiling(Ceiling),
     Roof(Roof),
+    Room(Room),
+    Grid(Grid),
+    Dimension(Dimension),
 }
 
 impl Element {
@@ -38,6 +41,9 @@ impl Element {
             ElementKind::Floor(_) => Category::Floor,
             ElementKind::Ceiling(_) => Category::Ceiling,
             ElementKind::Roof(_) => Category::Roof,
+            ElementKind::Room(_) => Category::Room,
+            ElementKind::Grid(_) => Category::Grid,
+            ElementKind::Dimension(_) => Category::Dimension,
         }
     }
 
@@ -82,6 +88,15 @@ impl Element {
             ElementKind::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
             ElementKind::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
             ElementKind::Roof(r) => r.footprint.iter_mut().for_each(|p| *p += delta),
+            ElementKind::Room(r) => r.position += delta,
+            ElementKind::Grid(g) => {
+                g.start += delta;
+                g.end += delta;
+            }
+            ElementKind::Dimension(d) => {
+                d.a += delta;
+                d.b += delta;
+            }
             ElementKind::Door(_) | ElementKind::Window(_) => {}
         }
     }
@@ -246,4 +261,41 @@ pub struct Roof {
     pub base_offset: f64,
     pub overhang: f64,
     pub shape: RoofShape,
+}
+
+/// A room: the space enclosed by room-bounding walls around `position`.
+/// Its boundary is derived from the walls (see `cc_geom`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Room {
+    /// A point inside the room; also where its tag is drawn.
+    pub position: DVec2,
+    pub number: String,
+    pub name: String,
+    /// Height of the room above its level (upper limit).
+    pub height: f64,
+}
+
+/// A named grid line (datum), shown in every plan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Grid {
+    pub start: DVec2,
+    pub end: DVec2,
+    pub name: String,
+}
+
+/// An aligned linear dimension between two points of one view, in that
+/// view's drawing coordinates.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Dimension {
+    pub view: ViewId,
+    pub a: DVec2,
+    pub b: DVec2,
+    /// Distance of the dimension line from `a`-`b`, positive on the left.
+    pub offset: f64,
+}
+
+impl Dimension {
+    pub fn length(&self) -> f64 {
+        self.a.distance(self.b)
+    }
 }

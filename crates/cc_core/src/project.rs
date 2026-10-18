@@ -143,6 +143,9 @@ impl Project {
                 },
             ),
             (&n("tpl-type-ceiling-gypsum"), TypeData::Ceiling { thickness: 0.02, material: n("tpl-mat-gypsum") }),
+            (&n("tpl-type-room"), TypeData::Room {}),
+            (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
+            (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
             (
                 &n("tpl-type-roof-tile"),
                 TypeData::Roof { layers: vec![finish(&n("tpl-mat-roof-tile"), 0.05), layer(&n("tpl-mat-wood"), 0.10)] },
@@ -174,12 +177,13 @@ impl Project {
         ] {
             add_view(&mut p, name, 100, ViewKind::Elevation { direction });
         }
-        let all_types: Vec<_> = p.types.keys().copied().collect();
+        let all_types: Vec<_> = p.types.values().filter(|t| t.category().is_model()).map(|t| t.id).collect();
         add_view(&mut p, &n("tpl-legend"), 50, ViewKind::Legend { types: all_types });
         for (name, category) in [
             (&n("tpl-schedule-doors"), Category::Door),
             (&n("tpl-schedule-windows"), Category::Window),
             (&n("tpl-schedule-walls"), Category::Wall),
+            (&n("tpl-schedule-rooms"), Category::Room),
         ] {
             add_view(&mut p, name, 1, ViewKind::Schedule { category });
         }
@@ -213,6 +217,29 @@ impl Project {
         fresh(&mut self.info.uid);
         self.types.values_mut().for_each(|t| fresh(&mut t.uid));
         self.elements.values_mut().for_each(|e| fresh(&mut e.uid));
+    }
+
+    /// Add default room, grid and dimension types to projects created before
+    /// those categories existed.
+    pub fn ensure_annotation_types(&mut self) {
+        let defaults = [
+            (Category::Room, "tpl-type-room", TypeData::Room {}),
+            (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
+            (Category::Dimension, "tpl-type-dimension", TypeData::Dimension { text_size: 2.5 }),
+        ];
+        for (category, key, data) in defaults {
+            if self.default_type(category).is_none() {
+                let id = ElementTypeId(self.alloc_id());
+                let name = template_default(key).to_string();
+                self.types
+                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+            }
+        }
+    }
+
+    /// The level above `id`, or `id` itself plus `fallback` meters: the default upper limit of rooms.
+    pub fn level_height(&self, id: LevelId, fallback: f64) -> f64 {
+        self.level_above(id).map_or(fallback, |above| above.elevation - self.level_elevation(id))
     }
 
     /// Elevation of a wall's base.
@@ -379,6 +406,11 @@ fn template_default(key: &str) -> &'static str {
         "tpl-schedule-windows" => "Tabela de janelas",
         "tpl-schedule-walls" => "Tabela de paredes",
         "tpl-sheet-plans" => "Plantas",
+        "tpl-type-room" => "Ambiente",
+        "tpl-type-grid" => "Eixo 8 mm",
+        "tpl-type-dimension" => "Cota linear 2,5 mm",
+        "tpl-schedule-rooms" => "Tabela de ambientes",
+        "tpl-room-name" => "Ambiente",
         _ => "?",
     }
 }

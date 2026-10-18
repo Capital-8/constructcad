@@ -13,7 +13,9 @@ mod types;
 mod view;
 
 pub use document::{Document, EditCtx, Transaction};
-pub use element::{Ceiling, Element, ElementKind, Floor, Hosted, LocationLine, Roof, RoofShape, Wall, WallTop};
+pub use element::{
+    Ceiling, Dimension, Element, ElementKind, Floor, Grid, Hosted, LocationLine, Roof, RoofShape, Room, Wall, WallTop,
+};
 pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
 pub use persist::{FORMAT_VERSION, PersistError, from_ron, load, save, to_ron};
 pub use project::{Level, Material, Project, ProjectInfo};
