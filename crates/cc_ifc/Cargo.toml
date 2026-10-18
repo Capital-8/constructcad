@@ -11,3 +11,6 @@ repository.workspace = true
 cc_core.workspace = true
 cc_geom.workspace = true
 glam.workspace = true
+
+[lints]
+workspace = true

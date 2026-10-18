@@ -145,10 +145,16 @@ impl Renderer3D {
         });
     }
 
+    /// (Re)create the render targets when the size changes; returns whether they were recreated.
     fn ensure_targets(&mut self, device: &wgpu::Device, size: [u32; 2]) -> bool {
         if self.targets.as_ref().is_some_and(|t| t.size == size) {
             return false;
         }
+        self.targets = Some(Self::create_targets(device, size));
+        true
+    }
+
+    fn create_targets(device: &wgpu::Device, size: [u32; 2]) -> Targets {
         let texture = |label, format, samples, usage| {
             device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
@@ -170,25 +176,24 @@ impl Renderer3D {
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
         );
-        self.targets = Some(Targets {
+        Targets {
             size,
             msaa: view(texture("cc_render msaa", COLOR_FORMAT, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT)),
             depth: view(texture("cc_render depth", DEPTH_FORMAT, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT)),
             resolve: resolve_texture.create_view(&Default::default()),
             resolve_texture,
-        });
-        true
+        }
     }
 
     /// Render a frame. Returns the output view and whether it was recreated
-    /// (callers must then re-register it with egui).
+    /// (callers must then re-register it with egui); `None` if there are no targets.
     pub fn render(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: [u32; 2],
         camera: &CameraState,
-    ) -> (&wgpu::TextureView, bool) {
+    ) -> Option<(&wgpu::TextureView, bool)> {
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
         let recreated = self.ensure_targets(device, size);
         let aspect = size[0] as f32 / size[1] as f32;
@@ -201,7 +206,7 @@ impl Renderer3D {
         };
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&u));
 
-        let targets = self.targets.as_ref().expect("targets created above");
+        let targets = self.targets.as_ref()?;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("cc_render") });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -237,7 +242,7 @@ impl Renderer3D {
             }
         }
         queue.submit([encoder.finish()]);
-        (&targets.resolve, recreated)
+        Some((&targets.resolve, recreated))
     }
 
     /// Render one frame of `size` pixels and read it back as tightly packed
@@ -250,7 +255,7 @@ impl Renderer3D {
         camera: &CameraState,
     ) -> Option<Vec<u8>> {
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
-        self.render(device, queue, size, camera);
+        self.render(device, queue, size, camera)?;
         let targets = self.targets.as_ref()?;
         let row = size[0] * 4;
         let padded = row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;

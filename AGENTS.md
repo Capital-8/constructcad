@@ -42,6 +42,15 @@ Rust workspace (edition 2024). Dependency direction: `cc_core` ← `cc_geom` ←
 - Property grids use the shared `table.rs` primitives (collapsible `section`, two-column `row`).
 - No hard-coded interface text: keys live in `assets/i18n/{en,pt-BR}.ftl`, read with `t!` / `tr`. A test scans the sources and fails if any key used in code is missing from a language, so add every new key to both files.
 
+## Robustness rules
+
+- **Non-test code never panics.** No `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!`, `unimplemented!` — the workspace denies them in clippy (`[workspace.lints]`), and `clippy.toml` allows them only in tests. Return errors and propagate with `?`, or use `let … else`, `if let`, `ok_or(…)?`, `unwrap_or*` where the fallback is truly correct (never one that silently corrupts a document).
+- **No `unsafe`** (`unsafe_code = "forbid"`).
+- **Files are hostile input.** `.ccad` files pass through `Project::repair` on load (`persist::from_ron_with_repairs`): invalid numbers and dangling references are removed or reset and the app reports how many. Use `get()` for indices that come from files, selections or arithmetic on them; guard divisions by zero and NaN/inf.
+- **Bound recursion and loops** over model references with visited sets or limits (hosting can be cyclic in a crafted file; see `EditCtx::remove_element`).
+- **Last-resort guard:** opening, saving and exporting run inside `actions::guard` (`catch_unwind`); a panic becomes an error message and the open document is kept. Keep `panic = "unwind"` (the default profile).
+- **Prove it:** every crash fix comes with a small synthetic regression test that failed before the fix.
+
 ## Project policies
 
 - Clean-room: behaviour comes from public documentation, general CAD conventions, open standards and user feedback; reference tests use analytic values or open-source tools (see CONTRIBUTING.md and the README "Independence" section).

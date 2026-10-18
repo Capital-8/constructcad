@@ -128,7 +128,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
     let ppp = ui.ctx().pixels_per_point();
     let size = [(rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32];
-    let (texture_view, recreated) = renderer.render(&rs.device, &rs.queue, size, &v3.camera);
+    let Some((texture_view, recreated)) = renderer.render(&rs.device, &rs.queue, size, &v3.camera) else { return };
     {
         let mut egui_renderer = rs.renderer.write();
         match v3.texture {

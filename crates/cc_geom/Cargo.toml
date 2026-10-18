@@ -11,3 +11,6 @@ repository.workspace = true
 cc_core.workspace = true
 glam.workspace = true
 earcutr.workspace = true
+
+[lints]
+workspace = true

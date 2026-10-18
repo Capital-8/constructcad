@@ -31,3 +31,6 @@ png.workspace = true
 log.workspace = true
 sys-locale.workspace = true
 env_logger.workspace = true
+
+[lints]
+workspace = true

@@ -9,6 +9,7 @@ mod element;
 mod ids;
 mod persist;
 mod project;
+mod repair;
 mod types;
 mod view;
 
@@ -17,7 +18,9 @@ pub use element::{
     Ceiling, Dimension, Element, ElementKind, Floor, Grid, Hosted, LocationLine, Roof, RoofShape, Room, Wall, WallTop,
 };
 pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
-pub use persist::{FORMAT_VERSION, PersistError, from_ron, load, save, to_ron};
+pub use persist::{
+    FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
+};
 pub use project::{Level, Material, Project, ProjectInfo};
 pub use types::{Category, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction};
 pub use view::{CameraState, Direction, SheetSize, View, ViewCategory, ViewKind, Viewport};

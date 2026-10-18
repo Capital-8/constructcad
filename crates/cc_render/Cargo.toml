@@ -13,3 +13,6 @@ cc_geom.workspace = true
 glam.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true
+
+[lints]
+workspace = true

@@ -37,15 +37,22 @@ pub fn to_ron(project: &Project) -> Result<String, PersistError> {
 }
 
 pub fn from_ron(text: &str) -> Result<Project, PersistError> {
+    from_ron_with_repairs(text).map(|(project, _)| project)
+}
+
+/// Parse a project and repair invalid data (see `Project::repair`); also
+/// returns how many repairs were needed.
+pub fn from_ron_with_repairs(text: &str) -> Result<(Project, usize), PersistError> {
     let file: ProjectFile = ron::from_str(text)?;
     if file.format_version > FORMAT_VERSION {
         return Err(PersistError::Version(file.format_version));
     }
     // Version 1 files have no persistent ids; version 2 only adds fields with defaults.
     let mut project = file.project;
+    let repairs = project.repair();
     project.ensure_uids();
     project.ensure_annotation_types();
-    Ok(project)
+    Ok((project, repairs))
 }
 
 pub fn save(project: &Project, path: &Path) -> Result<(), PersistError> {
@@ -58,7 +65,11 @@ pub fn save(project: &Project, path: &Path) -> Result<(), PersistError> {
 }
 
 pub fn load(path: &Path) -> Result<Project, PersistError> {
-    from_ron(&std::fs::read_to_string(path)?)
+    load_with_repairs(path).map(|(project, _)| project)
+}
+
+pub fn load_with_repairs(path: &Path) -> Result<(Project, usize), PersistError> {
+    from_ron_with_repairs(&std::fs::read_to_string(path)?)
 }
 
 #[cfg(test)]

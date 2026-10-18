@@ -263,13 +263,37 @@ pub fn open(state: &mut AppState) {
     open_path(state, path);
 }
 
+/// Last-resort guard for file operations: a panic becomes an error message and
+/// the open document is kept. A safety net, not a licence to panic.
+fn guard<T>(f: impl FnOnce() -> T) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|payload| {
+        let detail = payload
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        t!("err-internal", "detail" => detail)
+    })
+}
+
 pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
-    match cc_core::load(&path) {
-        Ok(project) => {
+    let loaded = match guard(|| cc_core::load_with_repairs(&path)) {
+        Ok(result) => result,
+        Err(message) => {
+            state.dialogs.error = Some(t!("msg-open-failed", "error" => message));
+            return;
+        }
+    };
+    match loaded {
+        Ok((project, repairs)) => {
             let mut doc = Document::new(project);
             doc.path = Some(path.clone());
             state.replace_document(doc);
-            state.message = t!("msg-opened", "path" => path.display());
+            state.message = if repairs > 0 {
+                t!("msg-opened-repaired", "path" => path.display(), "count" => repairs)
+            } else {
+                t!("msg-opened", "path" => path.display())
+            };
             crate::home::push_recent(&mut state.recent, &path);
             if crate::thumbnails::project_file(&path).is_some_and(|f| !f.exists()) {
                 state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path));
@@ -286,12 +310,13 @@ pub fn export_ifc(state: &mut AppState) {
     if path.extension().is_none() {
         path.set_extension("ifc");
     }
-    match cc_ifc::export_to_file(state.project(), &path) {
-        Ok(()) => state.message = t!("msg-exported", "path" => path.display()),
-        Err(err) => {
+    match guard(|| cc_ifc::export_to_file(state.project(), &path)) {
+        Ok(Ok(())) => state.message = t!("msg-exported", "path" => path.display()),
+        Ok(Err(err)) => {
             let error = t!("err-io", "detail" => err);
             state.dialogs.error = Some(t!("msg-export-failed", "error" => error));
         }
+        Err(message) => state.dialogs.error = Some(t!("msg-export-failed", "error" => message)),
     }
 }
 
@@ -307,7 +332,14 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
             p
         }
     };
-    match cc_core::save(state.project(), &path) {
+    let saved = match guard(|| cc_core::save(state.project(), &path)) {
+        Ok(result) => result,
+        Err(message) => {
+            state.dialogs.error = Some(t!("msg-save-failed", "error" => message));
+            return false;
+        }
+    };
+    match saved {
         Ok(()) => {
             state.doc.path = Some(path.clone());
             state.doc.mark_saved();

@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Robustness rules: clippy denies `unwrap`, `expect` and `panic!` outside tests and the workspace forbids `unsafe`; opening, saving and exporting are guarded so an internal error never loses the open project.
+- Projects are repaired when opened: invalid numbers, missing levels or types, orphan doors and windows, broken view references are removed or reset, and the number of repairs is reported.
 - Standard dialog layout for every window (header with close button, footer with right-aligned actions, highlighted main and red destructive buttons, alert icons); data dialogs have OK / Cancel and Cancel undoes their edits; deleting a level asks for confirmation.
 - `.ccad` format version 2 (adds the fields above; version 1 files still open).
 - Redesigned About dialog with version, author, license, repository and credits.
@@ -32,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A crafted file with cyclic hosting (e.g. a door hosting itself) crashed the application when the element was deleted.
 - Deleting a level no longer leaves walls attached to it with a near-zero height; they become unconnected at their current height.
 - Stray lines on roofs and other large faces in 3D sheet views, elevations and sections: faces are now ordered by comparing depths where they overlap.
 - Closing the last open view tab crashed the application.

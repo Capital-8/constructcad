@@ -32,3 +32,15 @@ thiserror = "2"
 log = "0.4"
 sys-locale = "0.3.2"
 env_logger = "0.11"
+
+# Robustness rules (see AGENTS.md): no unsafe, and no panics outside tests.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"

@@ -1,0 +1,4 @@
+# Tests may unwrap, expect and panic; everything else must not (see AGENTS.md).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

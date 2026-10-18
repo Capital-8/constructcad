@@ -159,14 +159,19 @@ impl<'a> EditCtx<'a> {
         self.project.elements.get_mut(&id)
     }
 
-    /// Remove an element and everything it hosts.
+    /// Remove an element and everything it hosts. Iterative with a visited set,
+    /// so cyclic hosting in a crafted file cannot recurse forever.
     pub fn remove_element(&mut self, id: ElementId) {
-        let hosted: Vec<_> = self.project.hosted_by(id).map(|e| e.id).collect();
-        for h in hosted {
-            self.remove_element(h);
+        let mut pending = vec![id];
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            pending.extend(self.project.hosted_by(id).map(|e| e.id));
+            self.touch_element(id);
+            self.project.elements.remove(&id);
         }
-        self.touch_element(id);
-        self.project.elements.remove(&id);
     }
 
     pub fn add_view(&mut self, view: View) -> ViewId {
@@ -464,6 +469,57 @@ mod tests {
         doc.undo();
         assert!(doc.project.element(door).is_some());
         assert!(doc.project.element(wall).is_some());
+    }
+
+    /// A crafted file can make doors host each other (or themselves); removing
+    /// one must not recurse forever.
+    #[test]
+    fn removing_cyclic_hosted_elements_terminates() {
+        let mut doc = Document::new(Project::from_template());
+        let (a, b) = doc.edit("cycle", |e| {
+            let level = e.project().levels[0].id;
+            let type_id = e.project().default_type(Category::Door).unwrap();
+            let (a, b) = (ElementId(e.alloc_id()), ElementId(e.alloc_id()));
+            for (id, host) in [(a, b), (b, a)] {
+                let kind = ElementKind::Door(Hosted {
+                    host,
+                    offset: 1.0,
+                    sill_height: 0.0,
+                    flip_facing: false,
+                    flip_hand: false,
+                });
+                e.add_element(Element {
+                    id,
+                    level,
+                    type_id,
+                    mark: String::new(),
+                    comments: String::new(),
+                    kind,
+                    uid: Default::default(),
+                });
+            }
+            let selfie = ElementId(e.alloc_id());
+            let kind = ElementKind::Door(Hosted {
+                host: selfie,
+                offset: 1.0,
+                sill_height: 0.0,
+                flip_facing: false,
+                flip_hand: false,
+            });
+            e.add_element(Element {
+                id: selfie,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Default::default(),
+            });
+            e.remove_element(selfie);
+            (a, b)
+        });
+        doc.edit("delete", |e| e.remove_element(a));
+        assert!(doc.project.element(a).is_none() && doc.project.element(b).is_none());
     }
 
     #[test]

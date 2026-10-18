@@ -139,21 +139,21 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
 
     let n = views.len();
     for (i, (id, label)) in views.into_iter().enumerate() {
-        if state.rename.as_ref().is_some_and(|(rid, _)| *rid == id) {
+        if let Some((rid, text)) = state.rename.as_mut().filter(|(rid, _)| *rid == id) {
+            let rid = *rid;
             let finished = ui
                 .horizontal(|ui| {
                     ui.add_space(PAD + CHEVRON + INDENT + 21.0);
-                    let text = &mut state.rename.as_mut().unwrap().1;
                     let r = ui.add(egui::TextEdit::singleline(text).desired_width(ui.available_width() - 8.0));
                     r.request_focus();
                     r.lost_focus().then(|| !ui.input(|i| i.key_pressed(egui::Key::Escape)))
                 })
                 .inner;
-            if let Some(accept) = finished {
-                let (rid, text) = state.rename.take().unwrap();
-                if accept {
-                    actions::rename_view(state, rid, text);
-                }
+            if let Some(accept) = finished
+                && let Some((_, text)) = state.rename.take()
+                && accept
+            {
+                actions::rename_view(state, rid, text);
             }
             continue;
         }

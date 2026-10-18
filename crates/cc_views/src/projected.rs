@@ -276,8 +276,7 @@ fn chain_loops(segs: &[(DVec2, DVec2)]) -> Vec<Vec<DVec2>> {
         }
         used[start] = true;
         let mut pts = vec![segs[start].0, segs[start].1];
-        loop {
-            let tail = *pts.last().unwrap();
+        while let Some(&tail) = pts.last() {
             if pts.len() > 2 && tail.distance(pts[0]) < TOL {
                 pts.pop();
                 loops.push(pts);

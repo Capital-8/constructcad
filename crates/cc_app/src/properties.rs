@@ -105,8 +105,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
                 }
             },
             1 => {
-                let id = *state.selection.iter().next().unwrap();
-                element_props(ui, state, id);
+                if let Some(&id) = state.selection.iter().next() {
+                    element_props(ui, state, id);
+                }
             }
             n => multi_props(ui, state, n),
         }
