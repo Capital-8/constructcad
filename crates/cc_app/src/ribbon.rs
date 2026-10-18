@@ -222,6 +222,10 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
         if save_as.on_hover_text("Ctrl+Shift+S").clicked() {
             actions::save(state, true);
         }
+        let close = big_button(ui, Icon::CloseProject, &t!("action-close-project"), false, true, false);
+        if close.on_hover_text("Ctrl+W").clicked() {
+            actions::guarded(state, PendingAction::Close);
+        }
     });
     group(ui, t!("group-export"), |ui| {
         if big_button(ui, Icon::Export, &t!("action-export-ifc"), false, true, false).clicked() {

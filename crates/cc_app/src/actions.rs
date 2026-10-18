@@ -218,9 +218,6 @@ pub fn guarded(state: &mut AppState, action: PendingAction) {
 }
 
 pub fn run_pending(state: &mut AppState, action: PendingAction) {
-    if action != PendingAction::Quit {
-        state.show_home = false;
-    }
     match action {
         PendingAction::New => {
             state.replace_document(Document::new(new_project()));
@@ -235,8 +232,17 @@ pub fn run_pending(state: &mut AppState, action: PendingAction) {
                 state.message = t!("msg-opened", "path" => name);
             }
         }
+        PendingAction::Close => close_project(state),
         PendingAction::Quit => state.quit_confirmed = true,
     }
+}
+
+/// Close the project and return to the home screen.
+fn close_project(state: &mut AppState) {
+    state.replace_document(Document::new(new_project()));
+    state.project_open = false;
+    state.show_home = true;
+    state.message = t!("msg-project-closed");
 }
 
 pub fn open(state: &mut AppState) {
@@ -301,5 +307,26 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
             state.dialogs.error = Some(t!("msg-save-failed", "error" => persist_error(&err)));
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closing_returns_home_and_opening_leaves_it() {
+        let mut state = AppState::new(Document::new(new_project()));
+        run_pending(&mut state, PendingAction::Close);
+        assert!(state.show_home && !state.project_open);
+
+        // Opening a sample leaves the home screen with a project open.
+        run_pending(&mut state, PendingAction::OpenSample("casa_simples"));
+        assert!(!state.show_home && state.project_open);
+        assert_eq!(state.project().info.name, crate::home::sample_project("casa_simples").unwrap().info.name);
+
+        run_pending(&mut state, PendingAction::Close);
+        run_pending(&mut state, PendingAction::New);
+        assert!(!state.show_home && state.project_open);
     }
 }

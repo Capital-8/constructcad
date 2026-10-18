@@ -66,6 +66,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 | ZE | Zoom to fit | Esc | Cancel / exit tool |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Delete | Delete |
 | Ctrl+S / Ctrl+Shift+S | Save / Save as | Space | Flip door |
+| Ctrl+N / Ctrl+O | New / Open | Ctrl+W | Close project |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 

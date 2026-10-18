@@ -40,6 +40,7 @@ pub enum Icon {
     Plus,
     Home,
     ArrowLeft,
+    CloseProject,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -275,6 +276,12 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Home => {
             closed(&[(8.0, 1.8), (14.5, 7.5), (12.8, 7.5), (12.8, 14.2), (3.2, 14.2), (3.2, 7.5), (1.5, 7.5)]);
             rect_s(6.6, 9.6, 9.4, 14.2, 0.0);
+        }
+        Icon::CloseProject => {
+            closed(&[(3.5, 1.5), (9.5, 1.5), (12.5, 4.5), (12.5, 14.5), (3.5, 14.5)]);
+            line(&[(9.5, 1.5), (9.5, 4.5), (12.5, 4.5)]);
+            seg((6.0, 7.5), (10.0, 11.5), s);
+            seg((10.0, 7.5), (6.0, 11.5), s);
         }
         Icon::ArrowLeft => {
             seg((13.5, 8.0), (2.5, 8.0), s);

@@ -33,11 +33,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 }
 
 fn sidebar(ui: &mut Ui, state: &mut AppState) {
-    let back = round_button(ui, Icon::ArrowLeft).on_hover_text(t!("home-back"));
-    if back.clicked() {
-        state.show_home = false;
+    // Back to the open project; without one there is nothing to return to.
+    if state.project_open {
+        let back = round_button(ui, Icon::ArrowLeft).on_hover_text(t!("home-back"));
+        if back.clicked() {
+            state.show_home = false;
+        }
+        ui.add_space(28.0);
     }
-    ui.add_space(28.0);
     ui.label(theme::caption(t!("home-projects").to_uppercase()));
     ui.add_space(4.0);
     if side_button(ui, Icon::Open, &t!("action-open")).clicked() {

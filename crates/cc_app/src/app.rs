@@ -45,7 +45,10 @@ impl ConstructApp {
         }
         match path {
             Some(path) => actions::open_path(&mut state, path),
-            None => state.show_home = true,
+            None => {
+                state.project_open = false;
+                state.show_home = true;
+            }
         }
         let dock = initial_dock(state.project());
         let dock_generation = state.generation;
@@ -138,10 +141,24 @@ impl ConstructApp {
         let state = &mut self.state;
         let cmd = |i: &mut egui::InputState, k| i.consume_key(Modifiers::COMMAND, k);
         let cmd_shift = |i: &mut egui::InputState, k| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, k);
-        let (undo, redo, save, save_as, open, new) = ctx.input_mut(|i| {
+        let (undo, redo, save, save_as, open, new, close) = ctx.input_mut(|i| {
             let redo = cmd(i, Key::Y) || cmd_shift(i, Key::Z);
-            (cmd(i, Key::Z), redo, cmd(i, Key::S), cmd_shift(i, Key::S), cmd(i, Key::O), cmd(i, Key::N))
+            let close = cmd(i, Key::W);
+            (cmd(i, Key::Z), redo, cmd(i, Key::S), cmd_shift(i, Key::S), cmd(i, Key::O), cmd(i, Key::N), close)
         });
+        if open {
+            actions::guarded(state, PendingAction::Open);
+        }
+        if new {
+            actions::guarded(state, PendingAction::New);
+        }
+        // The remaining commands act on the project, which the home screen hides.
+        if state.show_home || !state.project_open {
+            return;
+        }
+        if close {
+            actions::guarded(state, PendingAction::Close);
+        }
         if undo && state.interaction.is_idle() {
             state.doc.undo();
         }
@@ -152,12 +169,6 @@ impl ConstructApp {
             actions::save(state, true);
         } else if save {
             actions::save(state, false);
-        }
-        if open {
-            actions::guarded(state, PendingAction::Open);
-        }
-        if new {
-            actions::guarded(state, PendingAction::New);
         }
 
         // Plain keys only when no text field has focus.
@@ -312,11 +323,12 @@ impl eframe::App for ConstructApp {
         self.handle_close(&ctx);
         self.sync_dock();
 
-        let title = format!(
-            "ConstructCAD — {}{}",
-            self.state.project().info.name,
-            if self.state.doc.is_dirty() { " *" } else { "" }
-        );
+        let title = if self.state.project_open {
+            let dirty = if self.state.doc.is_dirty() { " *" } else { "" };
+            format!("ConstructCAD — {}{dirty}", self.state.project().info.name)
+        } else {
+            "ConstructCAD".to_string()
+        };
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
         if self.state.show_home {

@@ -26,6 +26,7 @@ pub enum PendingAction {
     Open,
     OpenPath(std::path::PathBuf),
     OpenSample(&'static str),
+    Close,
     Quit,
 }
 
@@ -77,6 +78,9 @@ pub struct AppState {
     pub generation: u64,
     /// The home screen is shown instead of the project.
     pub show_home: bool,
+    /// A project is open (false after "Close Project" and at startup without
+    /// a file; the document is then an unused placeholder).
+    pub project_open: bool,
     /// Recently opened or saved projects, most recent first.
     pub recent: Vec<std::path::PathBuf>,
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
@@ -113,6 +117,7 @@ impl AppState {
             textures_to_free: Vec::new(),
             generation: 0,
             show_home: false,
+            project_open: true,
             recent: Vec::new(),
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),

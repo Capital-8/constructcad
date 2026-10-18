@@ -62,6 +62,7 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 | ZE | Ajustar zoom | Esc | Cancelar / sair da ferramenta |
 | Ctrl+Z / Ctrl+Y | Desfazer / Refazer | Delete | Excluir |
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar como | Espaço | Inverter porta |
+| Ctrl+N / Ctrl+O | Novo / Abrir | Ctrl+W | Fechar projeto |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 
