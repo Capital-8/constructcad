@@ -134,14 +134,25 @@ pub struct StackButton {
     pub selected: bool,
 }
 
-/// Columns of up to three small icon buttons, for panels with many tools.
-/// Returns the index of the clicked button.
+/// Rows of a stacked family: families of 2 or 4 use two rows (one column,
+/// or 2 x 2), everything else three.
+fn stack_rows(n: usize) -> usize {
+    if n == 2 || n == 4 { 2 } else { 3 }
+}
+
+/// One family of related commands as small icon buttons in columns of
+/// two or three (see [`stack_rows`]); each family starts its own column,
+/// so unrelated commands never share one. Two-row columns are centered on
+/// the large buttons' height. Returns the index of the clicked button.
 fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
     let mut clicked = None;
+    let rows = stack_rows(buttons.len());
     let size = vec2(26.0, (BUTTON_HEIGHT - 4.0) / 3.0);
-    for (column, chunk) in buttons.chunks(3).enumerate() {
+    let column_h = rows as f32 * size.y + (rows as f32 - 1.0) * 2.0;
+    for (column, chunk) in buttons.chunks(rows).enumerate() {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
+            ui.add_space(((BUTTON_HEIGHT - column_h) / 2.0).max(0.0));
             for (row, b) in chunk.iter().enumerate() {
                 let sense = if b.enabled { Sense::click() } else { Sense::hover() };
                 let (rect, r) = ui.allocate_exact_size(size, sense);
@@ -167,7 +178,7 @@ fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
                 icons::paint(painter, egui::Rect::from_center_size(rect.center(), vec2(15.0, 15.0)), b.icon, color);
                 let r = if b.enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
                 if r.on_hover_text(&b.tooltip).clicked() && b.enabled {
-                    clicked = Some(column * 3 + row);
+                    clicked = Some(column * rows + row);
                 }
             }
         });
@@ -448,8 +459,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     let has_sel = !state.selection.is_empty();
     group(ui, t!("group-selection"), |ui| {
         select_button(ui, state);
-        let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
-        let buttons = [
+        let edit = [
             StackButton { icon: Icon::Copy, tooltip: t!("hint-copy"), enabled: has_sel, selected: false },
             StackButton {
                 icon: Icon::Delete,
@@ -457,6 +467,17 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
                 enabled: has_sel,
                 selected: false,
             },
+        ];
+        match stacked(ui, &edit) {
+            Some(0) => {
+                let ids: Vec<_> = state.selection.iter().copied().collect();
+                crate::tools::duplicate(state, &ids, glam::DVec2::new(1.0, -1.0));
+            }
+            Some(1) => state.delete_selection(),
+            _ => {}
+        }
+        let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
+        let history = [
             StackButton {
                 icon: Icon::Undo,
                 tooltip: format!("{}{undo_name} (Ctrl+Z)", t!("action-undo")),
@@ -470,16 +491,11 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
                 selected: false,
             },
         ];
-        match stacked(ui, &buttons) {
+        match stacked(ui, &history) {
             Some(0) => {
-                let ids: Vec<_> = state.selection.iter().copied().collect();
-                crate::tools::duplicate(state, &ids, glam::DVec2::new(1.0, -1.0));
-            }
-            Some(1) => state.delete_selection(),
-            Some(2) => {
                 state.doc.undo();
             }
-            Some(3) => {
+            Some(1) => {
                 state.doc.redo();
             }
             _ => {}
@@ -874,5 +890,10 @@ mod tests {
         }
         // A single long word cannot wrap.
         assert_eq!(lines[4], vec!["Supercalifragilístico"]);
+    }
+
+    #[test]
+    fn families_of_two_or_four_use_two_rows() {
+        assert_eq!([1, 2, 3, 4, 5, 6, 7].map(stack_rows), [3, 2, 3, 2, 3, 3, 3]);
     }
 }
