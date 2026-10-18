@@ -442,7 +442,7 @@ fn default_roof_base(project: &Project, level: LevelId) -> f64 {
     project
         .walls()
         .filter(|(e, _)| e.level == level)
-        .map(|(_, w)| w.base_offset + w.height)
+        .map(|(e, w)| project.wall_top_z(e, w) - project.level_elevation(level))
         .fold(None, |m: Option<f64>, h| Some(m.map_or(h, |m| m.max(h))))
         .unwrap_or(3.0)
 }

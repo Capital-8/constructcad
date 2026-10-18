@@ -80,7 +80,8 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category) -> 
                         .filter_map(|h| project.element_type(h.type_id)?.opening_size())
                         .map(|(w, h)| w * h)
                         .sum();
-                    let area = (w.length() * w.height - openings).max(0.0);
+                    let height = project.wall_height(e, w);
+                    let area = (w.length() * height - openings).max(0.0);
                     let volume = geom.volume(e.id);
                     area_sum += area;
                     volume_sum += volume;
@@ -92,7 +93,7 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category) -> 
                             ty(e),
                             level(e),
                             format::meters(w.length()),
-                            format::meters(w.height),
+                            format::meters(height),
                             format::meters(project.thickness_of(e)),
                             format::number(area, 2),
                             format::number(volume, 3),

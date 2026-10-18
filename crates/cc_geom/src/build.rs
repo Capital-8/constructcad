@@ -77,12 +77,17 @@ impl ModelGeometry {
             }
         }
         for walls in by_level.values() {
+            // Joins work on the body centerlines (location lines shifted by the location line setting).
             let lines: Vec<WallLine> = walls
                 .iter()
-                .map(|(e, w)| WallLine { start: w.start, end: w.end, half: project.thickness_of(e) * 0.5 })
+                .map(|(e, w)| {
+                    let (start, end) = project.wall_axis(e, w);
+                    WallLine { start, end, half: project.thickness_of(e) * 0.5 }
+                })
                 .collect();
             for (i, (e, w)) in walls.iter().enumerate() {
-                let base_z = project.level_elevation(e.level) + w.base_offset;
+                let base_z = project.wall_base_z(e, w);
+                let top_z = project.wall_top_z(e, w);
                 let ty = project.element_type(e.type_id);
                 let mut layers = Vec::new();
                 let mut v = lines[i].half;
@@ -94,7 +99,7 @@ impl ModelGeometry {
                     e.id,
                     lines[i],
                     base_z,
-                    base_z + w.height,
+                    top_z,
                     resolve_join(&lines, i, true),
                     resolve_join(&lines, i, false),
                     layers,
@@ -306,6 +311,31 @@ mod tests {
             let got = g.volume(*id);
             assert!((got - want).abs() < 1e-9, "{id}: {got} vs {want}");
         }
+    }
+
+    #[test]
+    fn walls_follow_top_constraint_and_location_line() {
+        use cc_core::{LocationLine, WallTop};
+        let mut doc = sample_house();
+        let wall_id = *ModelGeometry::build(&doc.project).walls.keys().next().unwrap();
+        let upper = doc.project.levels[1].clone();
+        doc.edit("constrain", |e| {
+            if let Some(ElementKind::Wall(w)) = e.element_mut(wall_id).map(|x| &mut x.kind) {
+                w.top = WallTop::Level { level: upper.id, offset: -0.5 };
+                w.location_line = LocationLine::FinishExterior;
+            }
+        });
+        let g = ModelGeometry::build(&doc.project);
+        let wall = &g.walls[&wall_id];
+        assert!((wall.top_z - (upper.elevation - 0.5)).abs() < 1e-9);
+        // The first wall runs along +X from the origin; its exterior face (left, +Y)
+        // now lies on the drawn line, so the body is centered half a thickness to the right.
+        assert!((wall.origin.y - -0.075).abs() < 1e-9, "{}", wall.origin.y);
+
+        // Moving the upper level moves the wall top with it.
+        doc.edit("raise", |e| e.levels_mut()[1].elevation += 1.0);
+        let g = ModelGeometry::build(&doc.project);
+        assert!((g.walls[&wall_id].top_z - (upper.elevation + 0.5)).abs() < 1e-9);
     }
 
     #[test]
