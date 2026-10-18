@@ -113,6 +113,8 @@ impl Tool {
             Category::Beam => Tool::Beam { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
+            // The component tool arrives with the component interface.
+            Category::Component => return None,
         })
     }
 }

@@ -110,6 +110,23 @@ fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall) -> f64 {
     (w.length() * project.wall_height(e, w) - openings).max(0.0)
 }
 
+/// Width (X), depth (Y) and height of a component's pieces in its own frame.
+fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> {
+    let ElementKind::Component(c) = &e.kind else { return None };
+    let Some(TypeData::Component { def, .. }) = project.element_type(e.type_id).map(|t| &t.data) else { return None };
+    let (parts, _) = def.resolve(&c.overrides);
+    let mut lo = glam::DVec3::splat(f64::INFINITY);
+    let mut hi = glam::DVec3::splat(f64::NEG_INFINITY);
+    for p in &parts {
+        for q in &p.footprint {
+            lo = lo.min(q.extend(p.z0));
+            hi = hi.max(q.extend(p.z1));
+        }
+    }
+    let size = hi - lo;
+    size.is_finite().then_some((size.x, size.y, size.z))
+}
+
 fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField) -> Value {
     use ScheduleField as F;
     let ty = project.element_type(e.type_id);
@@ -142,12 +159,24 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             (ElementKind::Room(r), _) => Value::Length(r.height),
             (_, Some(TypeData::Door { height, .. } | TypeData::Window { height, .. })) => Value::Length(*height),
             (_, Some(TypeData::Railing { height, .. })) => Value::Length(*height),
+            (ElementKind::Component(_), _) => {
+                component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.2))
+            }
             _ => Value::Missing,
         },
         F::Width => match ty.map(|t| &t.data) {
             Some(TypeData::Door { width, .. } | TypeData::Window { width, .. } | TypeData::Stair { width, .. }) => {
                 Value::Length(*width)
             }
+            _ => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.0)),
+        },
+        F::Depth => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.1)),
+        F::ComponentName => match ty.map(|t| &t.data) {
+            Some(TypeData::Component { component, .. }) => text(component),
+            _ => Value::Missing,
+        },
+        F::ComponentKind => match ty.map(|t| &t.data) {
+            Some(TypeData::Component { def, .. }) => Value::Key(def.kind.key()),
             _ => Value::Missing,
         },
         F::Thickness => match ty {

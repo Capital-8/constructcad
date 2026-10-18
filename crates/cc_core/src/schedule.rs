@@ -34,6 +34,9 @@ pub enum ScheduleField {
     Risers,
     RiserHeight,
     Run,
+    Depth,
+    ComponentName,
+    ComponentKind,
 }
 
 impl ScheduleField {
@@ -66,6 +69,9 @@ impl ScheduleField {
             ScheduleField::Risers => "col-risers",
             ScheduleField::RiserHeight => "col-riser-height",
             ScheduleField::Run => "col-run",
+            ScheduleField::Depth => "col-depth",
+            ScheduleField::ComponentName => "col-component",
+            ScheduleField::ComponentKind => "col-component-kind",
         }
     }
 
@@ -84,6 +90,7 @@ impl ScheduleField {
             Category::Beam => &[F::Length, F::Volume],
             Category::Stair => &[F::Width, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => &[F::Length, F::Height],
+            Category::Component => &[F::ComponentName, F::ComponentKind, F::Width, F::Depth, F::Height, F::Volume],
             Category::Room => {
                 return vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter, F::Height, F::Volume, F::Comments];
             }
@@ -106,6 +113,7 @@ impl ScheduleField {
             Category::Beam => vec![F::Mark, F::Type, F::Level, F::Length, F::Volume],
             Category::Stair => vec![F::Mark, F::Type, F::Level, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => vec![F::Mark, F::Type, F::Level, F::Length],
+            Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
             Category::Grid | Category::Dimension => Vec::new(),
         }

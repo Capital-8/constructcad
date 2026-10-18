@@ -30,6 +30,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Beam => Icon::Beam,
         Category::Stair => Icon::Stair,
         Category::Railing => Icon::Railing,
+        Category::Component => Icon::Component,
     }
 }
 

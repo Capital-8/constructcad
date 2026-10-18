@@ -49,6 +49,7 @@ pub enum Icon {
     Beam,
     Stair,
     Railing,
+    Component,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -310,6 +311,14 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             seg((0.5, 10.0), (2.5, 8.0), s);
             seg((13.5, 10.0), (15.5, 8.0), s);
             seg((5.5, 6.0), (10.5, 6.0), thin);
+        }
+        Icon::Component => {
+            // A chair in side view: seat, back and legs.
+            poly(&[(4.0, 8.0), (12.0, 8.0), (12.0, 10.0), (4.0, 10.0)], fill);
+            line(&[(4.0, 8.0), (12.0, 8.0), (12.0, 10.0), (4.0, 10.0), (4.0, 8.0)]);
+            line(&[(4.0, 8.0), (4.0, 1.5)]);
+            seg((4.5, 10.0), (4.5, 14.5), s);
+            seg((11.5, 10.0), (11.5, 14.5), s);
         }
         Icon::Column => {
             poly(&[(5.0, 1.5), (11.0, 1.5), (11.0, 14.5), (5.0, 14.5)], fill);

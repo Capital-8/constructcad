@@ -136,4 +136,59 @@ mod tests {
         let pdf = export::to_pdf(&composed.drawing, composed.paper);
         assert!(pdf.starts_with(b"%PDF") && pdf.ends_with(b"%%EOF\n"));
     }
+
+    #[test]
+    fn placed_component_appears_in_3d_plan_schedule_and_legend() {
+        let mut project = Project::from_template();
+        let level = project.levels[0].id;
+        let table = project
+            .types_of(Category::Component)
+            .find(|t| matches!(&t.data, cc_core::TypeData::Component { def, .. } if def.items.len() == 5))
+            .unwrap()
+            .id;
+        let id = cc_core::ElementId(project.alloc_id());
+        let component = cc_core::Component {
+            position: DVec2::new(2.0, 3.0),
+            rotation_deg: 90.0,
+            base_offset: 0.0,
+            overrides: Default::default(),
+        };
+        project.elements.insert(
+            id,
+            cc_core::Element {
+                id,
+                level,
+                type_id: table,
+                mark: "M1".into(),
+                comments: String::new(),
+                kind: cc_core::ElementKind::Component(component),
+                uid: Default::default(),
+            },
+        );
+        assert_eq!(project.repair(), 0);
+        let geom = ModelGeometry::build(&project);
+        assert_eq!(geom.solids_of(id).count(), 5);
+        // Rotated 90°: the 1.20 m width runs along Y.
+        let (lo, hi) =
+            geom.solids_of(id).filter_map(|s| s.bounds()).fold(
+                (glam::DVec3::splat(f64::INFINITY), glam::DVec3::splat(f64::NEG_INFINITY)),
+                |(lo, hi), (a, b)| (lo.min(a), hi.max(b)),
+            );
+        assert!((hi - lo - glam::DVec3::new(0.8, 1.2, 0.75)).abs().max_element() < 1e-9, "{lo} {hi}");
+        // In plan only the top (marked for plans) is drawn: one closed outline of 4 lines.
+        let d = plan::plan(&project, &geom, level, 1.2, false);
+        let lines = d.prims.iter().filter(|p| matches!(p, Prim::Line { element: Some(e), .. } if *e == id)).count();
+        assert_eq!(lines, 4);
+        assert_eq!(d.hit_test(DVec2::new(2.4, 3.0), 0.05), Some(id));
+        // Schedule extents come from the pieces, in the component's own frame.
+        let table = schedule(&project, &geom, Category::Component, &Default::default());
+        let row = table.rows.iter().find(|r| r.element == id).unwrap();
+        let cells: Vec<String> = row.cells.iter().map(|c| c.raw().to_string()).collect();
+        assert!(cells.contains(&format::number(1.2, 2)), "{cells:?}");
+        assert!(cells.contains(&format::number(0.8, 2)), "{cells:?}");
+        // The legend draws every library component.
+        let types: Vec<_> = project.types_of(Category::Component).map(|t| t.id).collect();
+        let legend = legend(&project, &types, 50);
+        assert!(legend.prims.iter().filter(|p| matches!(p, Prim::Line { .. })).count() > 20);
+    }
 }

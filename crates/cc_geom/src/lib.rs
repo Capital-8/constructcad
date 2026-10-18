@@ -13,7 +13,8 @@ mod solid;
 mod wall;
 
 pub use build::{
-    BoxPart, FRAME_COLOR, HostedPart, ModelGeometry, StairGeom, column_outline, hosted_parts, railing_parts, stair_geom,
+    BoxPart, FRAME_COLOR, HostedPart, ModelGeometry, StairGeom, column_outline, component_parts, hosted_parts,
+    railing_parts, stair_geom,
 };
 pub use cut::{clip_polygon, face_plane_segments};
 pub use rooms::room_boundary;

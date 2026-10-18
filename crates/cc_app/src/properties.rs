@@ -171,6 +171,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     }
 
     match &el.kind {
+        ElementKind::Component(_) => {}
         ElementKind::Wall(w) => {
             section(ui, "constraints", t!("section-constraints"), |ui| wall_constraints(ui, state, &el, w));
             section(ui, "structural", t!("section-structural"), |ui| {

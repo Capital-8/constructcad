@@ -34,6 +34,7 @@ pub enum ElementKind {
     Beam(Beam),
     Stair(Stair),
     Railing(Railing),
+    Component(Component),
 }
 
 impl Element {
@@ -52,6 +53,7 @@ impl Element {
             ElementKind::Beam(_) => Category::Beam,
             ElementKind::Stair(_) => Category::Stair,
             ElementKind::Railing(_) => Category::Railing,
+            ElementKind::Component(_) => Category::Component,
         }
     }
 
@@ -112,6 +114,7 @@ impl Element {
             }
             ElementKind::Stair(s) => s.start += delta,
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
+            ElementKind::Component(c) => c.position += delta,
             ElementKind::Door(_) | ElementKind::Window(_) => {}
         }
     }
@@ -375,4 +378,18 @@ impl Railing {
     pub fn length(&self) -> f64 {
         self.path.windows(2).map(|w| w[0].distance(w[1])).sum()
     }
+}
+
+/// A placed parametric component (see [`crate::component`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Component {
+    /// Insertion point in plan.
+    pub position: DVec2,
+    /// Rotation in plan, degrees counter-clockwise.
+    pub rotation_deg: f64,
+    /// Elevation of the insertion point above the level.
+    pub base_offset: f64,
+    /// Values of instance parameters that differ from the type.
+    #[serde(default)]
+    pub overrides: std::collections::BTreeMap<String, f64>,
 }

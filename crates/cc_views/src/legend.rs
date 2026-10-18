@@ -12,10 +12,20 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
     let sample = 1.2_f64.max(22.0 * mm);
     let mut y = 0.0;
     for t in types.iter().filter_map(|id| project.element_type(*id)).filter(|t| t.category().is_model()) {
-        // Door swings extend above the row; leave room for them.
+        // Component outlines in plan, centered on the row.
+        let plan: Vec<Vec<DVec2>> = match &t.data {
+            TypeData::Component { def, .. } => {
+                def.resolve(&Default::default()).0.into_iter().filter(|p| p.in_plan).map(|p| p.footprint).collect()
+            }
+            _ => Vec::new(),
+        };
+        let plan_bounds = plan.iter().flatten().fold(None, |acc: Option<(DVec2, DVec2)>, p| {
+            Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
+        });
+        // Door swings and tall component outlines extend above the row; leave room for them.
         let above = match t.data {
             TypeData::Door { width, .. } => width + 0.075,
-            _ => 0.0,
+            _ => plan_bounds.map_or(0.0, |(lo, hi)| (hi.y - lo.y) / 2.0),
         };
         y -= above;
         let o = DVec2::new(0.0, y);
@@ -111,12 +121,22 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                     d.line(o + DVec2::new(x, 0.0), o + DVec2::new(x, *height), LineStyle::Thin, None);
                 }
             }
+            TypeData::Component { .. } => {
+                if let Some((lo, hi)) = plan_bounds {
+                    let shift = o - DVec2::new(lo.x, (lo.y + hi.y) / 2.0);
+                    for outline in &plan {
+                        let pts: Vec<DVec2> = outline.iter().map(|p| *p + shift).collect();
+                        d.polyline(&pts, true, LineStyle::Projection, None);
+                    }
+                }
+            }
             // Filtered out above: annotation types have no legend symbol.
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => {}
         }
-        let text_x = sample.max(t.opening_size().map_or(0.0, |(w, _)| w + 0.4)) + 6.0 * mm;
+        let width = plan_bounds.map_or(0.0, |(lo, hi)| hi.x - lo.x);
+        let text_x = sample.max(width).max(t.opening_size().map_or(0.0, |(w, _)| w + 0.4)) + 6.0 * mm;
         d.text(DVec2::new(text_x, y - 1.2 * mm), &t.name, 2.5);
-        y -= row;
+        y -= row + if plan_bounds.is_some() { above } else { 0.0 };
     }
     d
 }

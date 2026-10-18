@@ -203,6 +203,32 @@ pub fn column_outline(section: cc_core::ColumnSection, position: DVec2, rotation
     }
 }
 
+/// Pieces of a placed component in world coordinates: footprints rotated
+/// and moved to the insertion point, elevations absolute. Pieces whose
+/// expressions fail are left out (the component editor reports them).
+pub fn component_parts(
+    project: &Project,
+    element: &cc_core::Element,
+    component: &cc_core::Component,
+) -> Vec<cc_core::component::ComponentPart> {
+    let Some(TypeData::Component { def, .. }) = project.element_type(element.type_id).map(|t| &t.data) else {
+        return Vec::new();
+    };
+    let rot = DVec2::from_angle(component.rotation_deg.to_radians());
+    let z = project.level_elevation(element.level) + component.base_offset;
+    let (parts, _) = def.resolve(&component.overrides);
+    parts
+        .into_iter()
+        .map(|mut p| {
+            p.footprint = p.footprint.iter().map(|q| component.position + rot.rotate(*q)).collect();
+            p.z0 += z;
+            p.z1 += z;
+            p
+        })
+        .filter(|p| p.footprint.iter().all(|q| q.is_finite()) && p.z0.is_finite() && p.z1.is_finite())
+        .collect()
+}
+
 impl ModelGeometry {
     pub fn build(project: &Project) -> Self {
         let mut geom = Self::default();
@@ -210,8 +236,23 @@ impl ModelGeometry {
         geom.build_hosted(project);
         geom.build_slabs(project);
         geom.build_structure(project);
+        geom.build_components(project);
         geom.build_rooms(project);
         geom
+    }
+
+    /// One solid per resolved piece of each component, colored by its material.
+    fn build_components(&mut self, project: &Project) {
+        for e in project.elements.values() {
+            let ElementKind::Component(c) = &e.kind else { continue };
+            for part in component_parts(project, e, c) {
+                let mut s = Solid::new(e.id, e.category(), project.material_color(&part.material));
+                s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
+                if !s.faces.is_empty() {
+                    self.solids.push(s);
+                }
+            }
+        }
     }
 
     /// Columns, beams, stairs and railings.

@@ -17,10 +17,11 @@ pub enum Category {
     Beam,
     Stair,
     Railing,
+    Component,
 }
 
 impl Category {
-    pub const ALL: [Category; 13] = [
+    pub const ALL: [Category; 14] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -31,13 +32,14 @@ impl Category {
         Category::Beam,
         Category::Stair,
         Category::Railing,
+        Category::Component,
         Category::Room,
         Category::Grid,
         Category::Dimension,
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 10] = [
+    pub const MODEL: [Category; 11] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -48,10 +50,11 @@ impl Category {
         Category::Beam,
         Category::Stair,
         Category::Railing,
+        Category::Component,
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 11] = [
+    pub const SCHEDULABLE: [Category; 12] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -62,6 +65,7 @@ impl Category {
         Category::Beam,
         Category::Stair,
         Category::Railing,
+        Category::Component,
         Category::Room,
     ];
 
@@ -85,6 +89,7 @@ impl Category {
             Category::Beam => "category-beam",
             Category::Stair => "category-stair",
             Category::Railing => "category-railing",
+            Category::Component => "category-component",
         }
     }
 }
@@ -241,6 +246,12 @@ pub enum TypeData {
         post_spacing: f64,
         material: String,
     },
+    /// Parametric component: `component` names the definition shared by its
+    /// types; the parameter values in `def` are this type's.
+    Component {
+        component: String,
+        def: crate::component::ComponentDef,
+    },
 }
 
 /// Cross-section of a column type.
@@ -278,6 +289,7 @@ impl ElementType {
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Railing { .. } => Category::Railing,
+            TypeData::Component { .. } => Category::Component,
         }
     }
 
@@ -344,6 +356,7 @@ impl ElementType {
             | TypeData::Beam { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => material,
+            TypeData::Component { def, .. } => def.main_material(),
             TypeData::Floor { .. } => self
                 .layers()
                 .iter()

@@ -62,6 +62,7 @@ pub fn plan(project: &Project, geom: &ModelGeometry, level: LevelId, cut_height:
     if !ceiling {
         draw_structure(&mut d, project, level, cut_z);
     }
+    draw_components(&mut d, project, level, cut_z, ceiling);
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level) {
         if let Some(g) = geom.walls.get(&e.id) {
@@ -122,6 +123,24 @@ fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &s
 }
 
 /// Columns, beams, stairs and railings of `level` as seen from the cut plane.
+/// Outlines of component pieces marked for plans: in floor plans the pieces
+/// starting below the cut (pieces above it dashed), in ceiling plans only
+/// the pieces above the cut (light fixtures and the like).
+fn draw_components(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, ceiling: bool) {
+    for e in project.elements.values().filter(|e| e.level == level) {
+        let ElementKind::Component(c) = &e.kind else { continue };
+        for part in cc_geom::component_parts(project, e, c).into_iter().filter(|p| p.in_plan) {
+            let above = part.z0 >= cut_z;
+            let style = match (ceiling, above) {
+                (false, false) | (true, true) => LineStyle::Projection,
+                (false, true) => LineStyle::Hidden,
+                (true, false) => continue,
+            };
+            d.polyline(&part.footprint, true, style, Some(e.id));
+        }
+    }
+}
+
 fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64) {
     for e in project.elements.values().filter(|e| e.level == level) {
         let id = Some(e.id);

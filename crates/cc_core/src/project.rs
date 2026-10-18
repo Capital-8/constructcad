@@ -92,6 +92,8 @@ impl Project {
             (&n("tpl-mat-gypsum"), [245, 245, 240]),
             (&n("tpl-mat-roof-tile"), [168, 70, 48]),
             (&n("tpl-mat-screed"), [190, 185, 175]),
+            (&n("tpl-mat-fabric"), [120, 132, 150]),
+            (&n("tpl-mat-porcelain"), [240, 240, 236]),
         ]
         .into_iter()
         .map(|(name, color)| Material { name: name.into(), color })
@@ -174,6 +176,11 @@ impl Project {
                 id,
                 ElementType { id, name: name.into(), data, info: Default::default(), uid: Default::default() },
             );
+        }
+        for (component, name, def) in crate::component::library(&n) {
+            let id = ElementTypeId(p.alloc_id());
+            let data = TypeData::Component { component, def };
+            p.types.insert(id, ElementType { id, name, data, info: Default::default(), uid: Default::default() });
         }
 
         let add_view = |p: &mut Project, name: &str, scale: u32, kind: ViewKind| {
@@ -280,6 +287,22 @@ impl Project {
             if self.default_type(category).is_none() {
                 let id = ElementTypeId(self.alloc_id());
                 let name = template_default(key).to_string();
+                self.types
+                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+            }
+        }
+        // Projects created before components get the default library.
+        if self.default_type(Category::Component).is_none() {
+            let n = |key: &str| template_default(key).to_string();
+            for (key, color) in [("tpl-mat-fabric", [120, 132, 150]), ("tpl-mat-porcelain", [240, 240, 236])] {
+                let name = n(key);
+                if !self.materials.iter().any(|m| m.name == name) {
+                    self.materials.push(Material { name, color });
+                }
+            }
+            for (component, name, def) in crate::component::library(&n) {
+                let id = ElementTypeId(self.alloc_id());
+                let data = TypeData::Component { component, def };
                 self.types
                     .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
             }
@@ -485,6 +508,38 @@ fn template_default(key: &str) -> &'static str {
         "tpl-type-dimension" => "Cota linear 2,5 mm",
         "tpl-schedule-rooms" => "Tabela de ambientes",
         "tpl-room-name" => "Ambiente",
+        "tpl-mat-fabric" => "Tecido",
+        "tpl-mat-porcelain" => "Louça",
+        "tpl-param-width" => "Largura",
+        "tpl-param-depth" => "Profundidade",
+        "tpl-param-height" => "Altura",
+        "tpl-param-seat-height" => "AlturaAssento",
+        "tpl-part-top" => "Tampo",
+        "tpl-part-leg" => "Perna",
+        "tpl-part-seat" => "Assento",
+        "tpl-part-back" => "Encosto",
+        "tpl-part-arm" => "Braço",
+        "tpl-part-mattress" => "Colchão",
+        "tpl-part-headboard" => "Cabeceira",
+        "tpl-part-bowl" => "Bacia",
+        "tpl-part-tank" => "Caixa acoplada",
+        "tpl-part-basin" => "Cuba",
+        "tpl-part-pedestal" => "Coluna",
+        "tpl-part-body" => "Corpo",
+        "tpl-comp-table" => "Mesa",
+        "tpl-comp-chair" => "Cadeira",
+        "tpl-comp-bed" => "Cama",
+        "tpl-comp-sofa" => "Sofá",
+        "tpl-comp-toilet" => "Bacia sanitária",
+        "tpl-comp-washbasin" => "Lavatório",
+        "tpl-comp-wardrobe" => "Armário",
+        "tpl-type-table" => "Mesa 120 x 80",
+        "tpl-type-chair" => "Cadeira simples",
+        "tpl-type-bed" => "Cama casal 140 x 190",
+        "tpl-type-sofa" => "Sofá 3 lugares",
+        "tpl-type-toilet" => "Bacia com caixa acoplada",
+        "tpl-type-washbasin" => "Lavatório de coluna",
+        "tpl-type-wardrobe" => "Armário 160 cm",
         _ => "?",
     }
 }

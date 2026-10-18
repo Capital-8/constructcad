@@ -686,6 +686,8 @@ impl<'a> Exporter<'a> {
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             // Rooms, grids and dimensions have no IFC type object.
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => return None,
+            // Components are not exported yet.
+            TypeData::Component { .. } => return None,
             TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
             TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
             TypeData::Stair { .. } => ("IFCSTAIRTYPE", args![Value::Enum("STRAIGHT_RUN_STAIR")]),

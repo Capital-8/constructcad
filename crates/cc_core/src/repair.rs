@@ -47,6 +47,7 @@ fn element_is_valid(e: &Element) -> bool {
             finite(&[s.direction_deg, s.base_offset, s.height]) && s.start.is_finite() && top_ok(s.top)
         }
         ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
+        ElementKind::Component(c) => finite(&[c.rotation_deg, c.base_offset]) && c.position.is_finite(),
     }
 }
 
@@ -109,6 +110,14 @@ impl Project {
                 TypeData::Railing { height, post_spacing, .. } => {
                     repairs += usize::from(fix_positive(height, 1.1)) + usize::from(fix_positive(post_spacing, 1.2));
                 }
+                TypeData::Component { def, .. } => {
+                    for p in &mut def.params {
+                        if !p.value.is_finite() {
+                            p.value = 0.0;
+                            repairs += 1;
+                        }
+                    }
+                }
             }
         }
 
@@ -137,6 +146,14 @@ impl Project {
             repairs += invalid.len();
             for id in invalid {
                 self.elements.remove(&id);
+            }
+        }
+        // Component overrides must be finite.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Component(c) = &mut e.kind {
+                let before = c.overrides.len();
+                c.overrides.retain(|_, v| v.is_finite());
+                repairs += before - c.overrides.len();
             }
         }
         // Walls attached to a missing level keep their height, unconnected.
@@ -232,5 +249,49 @@ mod tests {
             assert!(p.element(id).is_none());
         }
         assert_eq!(p.repair(), 0, "repair is idempotent");
+    }
+
+    #[test]
+    fn components_are_repaired_and_old_projects_get_the_library() {
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let ty = p.default_type(Category::Component).unwrap();
+        if let Some(crate::TypeData::Component { def, .. }) = p.types.get_mut(&ty).map(|t| &mut t.data) {
+            def.params[0].value = f64::INFINITY;
+        }
+        let ok = ElementId(p.alloc_id());
+        let bad = ElementId(p.alloc_id());
+        for (id, rotation) in [(ok, 0.0), (bad, f64::NAN)] {
+            let overrides = std::collections::BTreeMap::from([("x".to_string(), f64::NAN), ("y".to_string(), 1.0)]);
+            let kind = ElementKind::Component(crate::Component {
+                position: DVec2::ZERO,
+                rotation_deg: rotation,
+                base_offset: 0.0,
+                overrides,
+            });
+            p.elements.insert(
+                id,
+                Element {
+                    id,
+                    level,
+                    type_id: ty,
+                    mark: String::new(),
+                    comments: String::new(),
+                    kind,
+                    uid: Default::default(),
+                },
+            );
+        }
+        // Infinite parameter, invalid element, NaN override.
+        assert_eq!(p.repair(), 3);
+        assert!(p.element(bad).is_none());
+        let Some(ElementKind::Component(c)) = p.element(ok).map(|e| &e.kind) else { panic!("component removed") };
+        assert_eq!(c.overrides.len(), 1);
+
+        let mut old = Project::from_template();
+        old.types.retain(|_, t| t.category() != Category::Component);
+        old.ensure_annotation_types();
+        assert_eq!(old.types_of(Category::Component).count(), 7);
+        assert!(old.materials.iter().any(|m| m.name == "Tecido"));
     }
 }
