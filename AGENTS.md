@@ -38,7 +38,7 @@ Rust workspace (edition 2024). Dependency direction: `cc_core` ← `cc_geom` ←
 ## UI conventions
 
 - **Familiar by design**: menus, shortcuts, panels and tools go where desktop CAD/BIM users expect them (quick access toolbar top-left, ribbon tabs, properties/browser docked left, standard Ctrl shortcuts and two-letter tool keys). Use general conventions only — never a specific product's icons, colors or wording; prefer neutral terms (Category, Type, Component — not "Family").
-- Colors and fonts come from `theme.rs` (`PALETTE`, Inter). Icons are painter-drawn line icons in `icons.rs`.
+- Colors and fonts come from `theme.rs` (`PALETTE`, Inter). Icons are our own SVG line drawings in `assets/icons/ui` (24 grid, white strokes, `stroke-width` 1.75, round caps/joins, soft fills at 20% opacity), rasterized by resvg per pixel size and tinted in `icons.rs`.
 - Every modal uses `dialog::Dialog` (header with close button, footer buttons right-aligned: main action first, Cancel last; auxiliary buttons left; `danger` for destructive). Dialogs that edit data offer OK/Cancel and wrap edits in `dialog::session` so Cancel undoes them.
 - Property grids use the shared `table.rs` primitives (collapsible `section`, two-column `row`).
 - No hard-coded interface text: keys live in `assets/i18n/{en,pt-BR}.ftl`, read with `t!` / `tr`. A test scans the sources and fails if any key used in code is missing from a language, so add every new key to both files.

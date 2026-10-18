@@ -1,10 +1,13 @@
-//! Line icons drawn with the egui painter, so they scale crisply and follow
-//! the theme colors. Each icon is designed on a 16 x 16 grid.
+//! Interface icons: SVG drawings in `assets/icons/ui` (24 x 24 grid, white
+//! strokes and fills), rasterized with resvg at the exact pixel size they
+//! are shown at and tinted with the theme color. Textures are cached per
+//! icon and size, so each one is rasterized once.
 
-use egui::epaint::{CubicBezierShape, PathStroke};
-use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, StrokeKind};
+use egui::{Color32, ColorImage, Context, Painter, Rect, TextureHandle, TextureOptions};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Icon {
     New,
     Open,
@@ -68,422 +71,229 @@ pub enum Icon {
     MatchType,
 }
 
-/// Maps the 16 x 16 design grid into a screen rectangle.
-struct Grid {
-    origin: Pos2,
-    scale: f32,
+impl Icon {
+    #[cfg(test)]
+    pub const ALL: [Icon; 60] = [
+        Icon::New,
+        Icon::Open,
+        Icon::Save,
+        Icon::SaveAs,
+        Icon::Export,
+        Icon::About,
+        Icon::Wall,
+        Icon::Door,
+        Icon::Window,
+        Icon::Floor,
+        Icon::Ceiling,
+        Icon::Roof,
+        Icon::Select,
+        Icon::Copy,
+        Icon::Delete,
+        Icon::Undo,
+        Icon::Redo,
+        Icon::FloorPlan,
+        Icon::CeilingPlan,
+        Icon::View3D,
+        Icon::Section,
+        Icon::Elevation,
+        Icon::Legend,
+        Icon::Schedule,
+        Icon::Sheet,
+        Icon::ZoomFit,
+        Icon::ProjectInfo,
+        Icon::Levels,
+        Icon::Materials,
+        Icon::ChevronDown,
+        Icon::ChevronRight,
+        Icon::Plus,
+        Icon::Home,
+        Icon::ArrowLeft,
+        Icon::CloseProject,
+        Icon::Close,
+        Icon::Room,
+        Icon::Grid,
+        Icon::Dimension,
+        Icon::Column,
+        Icon::Beam,
+        Icon::Stair,
+        Icon::Railing,
+        Icon::Component,
+        Icon::Move,
+        Icon::Rotate,
+        Icon::MirrorPick,
+        Icon::MirrorDraw,
+        Icon::Array,
+        Icon::TrimCorner,
+        Icon::TrimExtend,
+        Icon::Split,
+        Icon::Offset,
+        Icon::Align,
+        Icon::Pin,
+        Icon::Unpin,
+        Icon::Join,
+        Icon::Cut,
+        Icon::Paste,
+        Icon::MatchType,
+    ];
+
+    /// The icon's SVG source.
+    fn source(self) -> &'static str {
+        match self {
+            Icon::New => include_str!("../../../assets/icons/ui/new.svg"),
+            Icon::Open => include_str!("../../../assets/icons/ui/open.svg"),
+            Icon::Save => include_str!("../../../assets/icons/ui/save.svg"),
+            Icon::SaveAs => include_str!("../../../assets/icons/ui/save-as.svg"),
+            Icon::Export => include_str!("../../../assets/icons/ui/export.svg"),
+            Icon::About => include_str!("../../../assets/icons/ui/about.svg"),
+            Icon::Wall => include_str!("../../../assets/icons/ui/wall.svg"),
+            Icon::Door => include_str!("../../../assets/icons/ui/door.svg"),
+            Icon::Window => include_str!("../../../assets/icons/ui/window.svg"),
+            Icon::Floor => include_str!("../../../assets/icons/ui/floor.svg"),
+            Icon::Ceiling => include_str!("../../../assets/icons/ui/ceiling.svg"),
+            Icon::Roof => include_str!("../../../assets/icons/ui/roof.svg"),
+            Icon::Select => include_str!("../../../assets/icons/ui/select.svg"),
+            Icon::Copy => include_str!("../../../assets/icons/ui/copy.svg"),
+            Icon::Delete => include_str!("../../../assets/icons/ui/delete.svg"),
+            Icon::Undo => include_str!("../../../assets/icons/ui/undo.svg"),
+            Icon::Redo => include_str!("../../../assets/icons/ui/redo.svg"),
+            Icon::FloorPlan => include_str!("../../../assets/icons/ui/floor-plan.svg"),
+            Icon::CeilingPlan => include_str!("../../../assets/icons/ui/ceiling-plan.svg"),
+            Icon::View3D => include_str!("../../../assets/icons/ui/view-3d.svg"),
+            Icon::Section => include_str!("../../../assets/icons/ui/section.svg"),
+            Icon::Elevation => include_str!("../../../assets/icons/ui/elevation.svg"),
+            Icon::Legend => include_str!("../../../assets/icons/ui/legend.svg"),
+            Icon::Schedule => include_str!("../../../assets/icons/ui/schedule.svg"),
+            Icon::Sheet => include_str!("../../../assets/icons/ui/sheet.svg"),
+            Icon::ZoomFit => include_str!("../../../assets/icons/ui/zoom-fit.svg"),
+            Icon::ProjectInfo => include_str!("../../../assets/icons/ui/project-info.svg"),
+            Icon::Levels => include_str!("../../../assets/icons/ui/levels.svg"),
+            Icon::Materials => include_str!("../../../assets/icons/ui/materials.svg"),
+            Icon::ChevronDown => include_str!("../../../assets/icons/ui/chevron-down.svg"),
+            Icon::ChevronRight => include_str!("../../../assets/icons/ui/chevron-right.svg"),
+            Icon::Plus => include_str!("../../../assets/icons/ui/plus.svg"),
+            Icon::Home => include_str!("../../../assets/icons/ui/home.svg"),
+            Icon::ArrowLeft => include_str!("../../../assets/icons/ui/arrow-left.svg"),
+            Icon::CloseProject => include_str!("../../../assets/icons/ui/close-project.svg"),
+            Icon::Close => include_str!("../../../assets/icons/ui/close.svg"),
+            Icon::Room => include_str!("../../../assets/icons/ui/room.svg"),
+            Icon::Grid => include_str!("../../../assets/icons/ui/grid.svg"),
+            Icon::Dimension => include_str!("../../../assets/icons/ui/dimension.svg"),
+            Icon::Column => include_str!("../../../assets/icons/ui/column.svg"),
+            Icon::Beam => include_str!("../../../assets/icons/ui/beam.svg"),
+            Icon::Stair => include_str!("../../../assets/icons/ui/stair.svg"),
+            Icon::Railing => include_str!("../../../assets/icons/ui/railing.svg"),
+            Icon::Component => include_str!("../../../assets/icons/ui/component.svg"),
+            Icon::Move => include_str!("../../../assets/icons/ui/move.svg"),
+            Icon::Rotate => include_str!("../../../assets/icons/ui/rotate.svg"),
+            Icon::MirrorPick => include_str!("../../../assets/icons/ui/mirror-pick.svg"),
+            Icon::MirrorDraw => include_str!("../../../assets/icons/ui/mirror-draw.svg"),
+            Icon::Array => include_str!("../../../assets/icons/ui/array.svg"),
+            Icon::TrimCorner => include_str!("../../../assets/icons/ui/trim-corner.svg"),
+            Icon::TrimExtend => include_str!("../../../assets/icons/ui/trim-extend.svg"),
+            Icon::Split => include_str!("../../../assets/icons/ui/split.svg"),
+            Icon::Offset => include_str!("../../../assets/icons/ui/offset.svg"),
+            Icon::Align => include_str!("../../../assets/icons/ui/align.svg"),
+            Icon::Pin => include_str!("../../../assets/icons/ui/pin.svg"),
+            Icon::Unpin => include_str!("../../../assets/icons/ui/unpin.svg"),
+            Icon::Join => include_str!("../../../assets/icons/ui/join.svg"),
+            Icon::Cut => include_str!("../../../assets/icons/ui/cut.svg"),
+            Icon::Paste => include_str!("../../../assets/icons/ui/paste.svg"),
+            Icon::MatchType => include_str!("../../../assets/icons/ui/match-type.svg"),
+        }
+    }
 }
 
-impl Grid {
-    fn p(&self, x: f32, y: f32) -> Pos2 {
-        self.origin + egui::vec2(x, y) * self.scale
-    }
+/// Rasterized icons by (icon, side in physical pixels); `None` when an
+/// icon failed to rasterize, so it is not retried every frame.
+#[derive(Clone, Default)]
+struct Cache(Arc<std::sync::Mutex<Textures>>);
 
-    fn pts(&self, pts: &[(f32, f32)]) -> Vec<Pos2> {
-        pts.iter().map(|&(x, y)| self.p(x, y)).collect()
-    }
+type Textures = HashMap<(Icon, u32), Option<TextureHandle>>;
 
-    fn rect(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
-        Rect::from_two_pos(self.p(x0, y0), self.p(x1, y1))
-    }
-}
-
-/// Paint `icon` centered in `rect` with stroke color `color`.
+/// Paint `icon` centered in `rect` (the largest square that fits), tinted with `color`.
 pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
-    let size = rect.width().min(rect.height());
-    let scale = size / 16.0;
-    let g = Grid { origin: rect.center() - egui::vec2(8.0, 8.0) * scale, scale };
-    let w = (1.35 * scale).max(1.0);
-    let s = Stroke::new(w, color);
-    let thin = Stroke::new((0.9 * scale).max(0.8), color);
-    let fill = color.gamma_multiply(0.18);
-    let line = |pts: &[(f32, f32)]| {
-        painter.add(Shape::line(g.pts(pts), PathStroke::from(s)));
-    };
-    let closed = |pts: &[(f32, f32)]| {
-        painter.add(Shape::closed_line(g.pts(pts), PathStroke::from(s)));
-    };
-    let poly = |pts: &[(f32, f32)], fill: Color32| {
-        painter.add(Shape::convex_polygon(g.pts(pts), fill, s));
-    };
-    let seg = |a: (f32, f32), b: (f32, f32), st: Stroke| {
-        painter.line_segment([g.p(a.0, a.1), g.p(b.0, b.1)], st);
-    };
-    let rect_s = |x0: f32, y0: f32, x1: f32, y1: f32, r: f32| {
-        painter.rect_stroke(g.rect(x0, y0, x1, y1), r * scale, s, StrokeKind::Middle);
-    };
-    let arc = |cx: f32, cy: f32, r: f32, a0: f32, a1: f32| {
-        let n = 16;
-        let pts: Vec<Pos2> = (0..=n)
-            .map(|i| {
-                let a = (a0 + (a1 - a0) * i as f32 / n as f32).to_radians();
-                g.p(cx + r * a.cos(), cy + r * a.sin())
-            })
-            .collect();
-        painter.add(Shape::line(pts, PathStroke::from(s)));
-    };
-
-    match icon {
-        Icon::New => {
-            closed(&[(3.5, 1.5), (9.5, 1.5), (12.5, 4.5), (12.5, 14.5), (3.5, 14.5)]);
-            line(&[(9.5, 1.5), (9.5, 4.5), (12.5, 4.5)]);
-            seg((8.0, 7.5), (8.0, 11.5), s);
-            seg((6.0, 9.5), (10.0, 9.5), s);
-        }
-        Icon::Open => {
-            closed(&[(1.5, 3.5), (6.0, 3.5), (7.5, 5.0), (13.5, 5.0), (13.5, 13.5), (1.5, 13.5)]);
-            poly(&[(3.5, 7.5), (15.0, 7.5), (13.5, 13.5), (1.5, 13.5)], fill);
-        }
-        Icon::Save | Icon::SaveAs => {
-            closed(&[(2.0, 2.0), (11.5, 2.0), (14.0, 4.5), (14.0, 14.0), (2.0, 14.0)]);
-            rect_s(4.5, 2.0, 10.5, 6.0, 0.0);
-            rect_s(4.5, 9.0, 11.5, 14.0, 0.5);
-            if icon == Icon::SaveAs {
-                painter.circle_filled(g.p(13.0, 13.0), 3.6 * scale, painter_bg(painter));
-                seg((10.8, 15.2), (15.2, 10.8), s);
-                seg((10.2, 15.8), (10.8, 15.2), s);
-            }
-        }
-        Icon::Export => {
-            line(&[(6.0, 2.5), (2.5, 2.5), (2.5, 13.5), (13.5, 13.5), (13.5, 10.0)]);
-            seg((7.5, 8.5), (14.0, 2.0), s);
-            line(&[(9.5, 2.0), (14.0, 2.0), (14.0, 6.5)]);
-        }
-        Icon::About => {
-            painter.circle_stroke(g.p(8.0, 8.0), 6.5 * scale, s);
-            seg((8.0, 7.0), (8.0, 11.5), s);
-            painter.circle_filled(g.p(8.0, 4.8), 0.9 * scale, color);
-        }
-        Icon::Wall => {
-            poly(&[(1.5, 5.0), (14.5, 5.0), (14.5, 11.0), (1.5, 11.0)], fill);
-            for i in 0..5 {
-                let x = 2.5 + i as f32 * 3.0;
-                seg((x, 11.0), (x + 3.0, 5.0), thin);
-            }
-        }
-        Icon::Door => {
-            seg((0.5, 14.0), (3.0, 14.0), s);
-            seg((13.0, 14.0), (15.5, 14.0), s);
-            seg((3.0, 14.0), (3.0, 4.0), s);
-            arc(3.0, 14.0, 10.0, -90.0, 0.0);
-        }
-        Icon::Window => {
-            rect_s(2.0, 2.0, 14.0, 14.0, 0.5);
-            seg((8.0, 2.0), (8.0, 14.0), thin);
-            seg((2.0, 8.0), (14.0, 8.0), thin);
-            poly(&[(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)], fill);
-        }
-        Icon::Floor => {
-            poly(&[(1.0, 9.0), (6.0, 6.0), (15.0, 6.0), (10.0, 9.0)], fill);
-            line(&[(1.0, 9.0), (1.0, 11.0), (10.0, 11.0), (15.0, 8.0), (15.0, 6.0)]);
-            seg((10.0, 9.0), (10.0, 11.0), s);
-        }
-        Icon::Ceiling => {
-            poly(&[(1.0, 5.0), (6.0, 2.0), (15.0, 2.0), (10.0, 5.0)], fill);
-            for x in [4.0, 8.0, 12.0] {
-                seg((x, 6.5), (x, 12.5), thin);
-                line(&[(x - 1.5, 11.0), (x, 12.5), (x + 1.5, 11.0)]);
-            }
-        }
-        Icon::Roof => {
-            poly(&[(8.0, 2.0), (15.0, 8.5), (1.0, 8.5)], fill);
-            line(&[(3.0, 7.0), (3.0, 14.0), (13.0, 14.0), (13.0, 7.0)]);
-            rect_s(6.5, 10.0, 9.5, 14.0, 0.0);
-        }
-        Icon::Select => {
-            let pts = [(4.0, 1.5), (4.0, 13.0), (7.0, 10.2), (9.2, 14.8), (11.0, 14.0), (8.8, 9.4), (12.8, 9.4)];
-            painter.add(Shape::closed_line(g.pts(&pts), PathStroke::from(s)));
-        }
-        Icon::Copy => {
-            rect_s(5.5, 5.5, 14.0, 14.0, 1.5);
-            line(&[(10.5, 5.5), (10.5, 2.0), (2.0, 2.0), (2.0, 10.5), (5.5, 10.5)]);
-        }
-        Icon::Delete => {
-            seg((2.0, 4.0), (14.0, 4.0), s);
-            line(&[(6.0, 4.0), (6.0, 2.0), (10.0, 2.0), (10.0, 4.0)]);
-            line(&[(3.5, 4.0), (4.5, 14.5), (11.5, 14.5), (12.5, 4.0)]);
-            seg((6.5, 7.0), (6.5, 12.0), thin);
-            seg((9.5, 7.0), (9.5, 12.0), thin);
-        }
-        Icon::Undo | Icon::Redo => {
-            let flip = |x: f32| if icon == Icon::Redo { 16.0 - x } else { x };
-            let curve = CubicBezierShape::from_points_stroke(
-                [g.p(flip(3.0), 6.0), g.p(flip(11.0), 6.0), g.p(flip(15.0), 12.0), g.p(flip(9.0), 13.5)],
-                false,
-                Color32::TRANSPARENT,
-                s,
-            );
-            painter.add(curve);
-            line(&[(flip(6.0), 2.5), (flip(2.5), 6.0), (flip(6.0), 9.5)]);
-        }
-        Icon::FloorPlan => {
-            rect_s(1.5, 2.5, 14.5, 13.5, 0.5);
-            line(&[(8.0, 2.5), (8.0, 7.0)]);
-            line(&[(8.0, 9.5), (8.0, 13.5)]);
-            seg((8.0, 8.0), (14.5, 8.0), thin);
-        }
-        Icon::CeilingPlan => {
-            rect_s(1.5, 2.5, 14.5, 13.5, 0.5);
-            for x in [5.75, 10.25] {
-                seg((x, 2.5), (x, 13.5), thin);
-            }
-            seg((1.5, 8.0), (14.5, 8.0), thin);
-        }
-        Icon::View3D => {
-            poly(&[(8.0, 1.5), (14.0, 4.8), (8.0, 8.1), (2.0, 4.8)], fill);
-            line(&[(2.0, 4.8), (2.0, 11.2), (8.0, 14.5), (14.0, 11.2), (14.0, 4.8)]);
-            seg((8.0, 8.1), (8.0, 14.5), s);
-        }
-        Icon::Section => {
-            seg((8.0, 1.5), (8.0, 14.5), Stroke::new(w, color));
-            poly(&[(8.0, 1.5), (13.5, 1.5), (8.0, 5.5)], color);
-            poly(&[(8.0, 14.5), (13.5, 14.5), (8.0, 10.5)], color);
-            seg((2.0, 8.0), (6.0, 8.0), thin);
-        }
-        Icon::Elevation => {
-            painter.circle_stroke(g.p(8.0, 9.0), 4.5 * scale, s);
-            poly(&[(8.0, 1.0), (12.5, 6.0), (3.5, 6.0)], color);
-            seg((3.5, 9.0), (12.5, 9.0), thin);
-        }
-        Icon::Legend => {
-            for (i, y) in [3.0, 8.0, 13.0].into_iter().enumerate() {
-                let sw = g.rect(1.5, y - 1.8, 5.1, y + 1.8);
-                painter.rect_filled(sw, 0.5 * scale, if i == 0 { color } else { fill });
-                painter.rect_stroke(sw, 0.5 * scale, thin, StrokeKind::Middle);
-                seg((7.5, y), (14.5, y), s);
-            }
-        }
-        Icon::Schedule => {
-            rect_s(1.5, 2.5, 14.5, 13.5, 1.0);
-            painter.rect_filled(g.rect(1.5, 2.5, 14.5, 5.5), 0.0, fill);
-            for y in [5.5, 8.2, 10.9] {
-                seg((1.5, y), (14.5, y), thin);
-            }
-            seg((6.0, 2.5), (6.0, 13.5), thin);
-        }
-        Icon::Sheet => {
-            rect_s(1.5, 3.0, 14.5, 13.0, 0.5);
-            rect_s(10.0, 9.5, 14.5, 13.0, 0.0);
-            rect_s(3.0, 4.5, 8.5, 11.5, 0.0);
-        }
-        Icon::ZoomFit => {
-            for (cx, cy, dx, dy) in
-                [(1.5, 1.5, 1.0, 1.0), (14.5, 1.5, -1.0, 1.0), (1.5, 14.5, 1.0, -1.0), (14.5, 14.5, -1.0, -1.0)]
-            {
-                line(&[(cx + 4.0 * dx, cy), (cx, cy), (cx, cy + 4.0 * dy)]);
-            }
-            rect_s(5.0, 5.0, 11.0, 11.0, 0.5);
-        }
-        Icon::ProjectInfo => {
-            closed(&[(3.0, 1.5), (13.0, 1.5), (13.0, 14.5), (3.0, 14.5)]);
-            for y in [5.0, 8.0, 11.0] {
-                seg((5.5, y), (10.5, y), thin);
-            }
-        }
-        Icon::Levels => {
-            for y in [3.5, 8.0, 12.5] {
-                seg((5.5, y), (15.0, y), s);
-                poly(&[(1.0, y - 2.0), (4.5, y - 2.0), (2.75, y)], color);
-            }
-        }
-        Icon::Materials => {
-            painter.circle_filled(g.p(5.5, 6.0), 3.5 * scale, color);
-            painter.circle_stroke(g.p(10.5, 6.0), 3.5 * scale, s);
-            painter.circle_filled(g.p(8.0, 10.5), 3.5 * scale, fill);
-            painter.circle_stroke(g.p(8.0, 10.5), 3.5 * scale, s);
-        }
-        Icon::ChevronDown => {
-            line(&[(4.0, 6.0), (8.0, 10.0), (12.0, 6.0)]);
-        }
-        Icon::ChevronRight => {
-            line(&[(6.0, 4.0), (10.0, 8.0), (6.0, 12.0)]);
-        }
-        Icon::Home => {
-            closed(&[(8.0, 1.8), (14.5, 7.5), (12.8, 7.5), (12.8, 14.2), (3.2, 14.2), (3.2, 7.5), (1.5, 7.5)]);
-            rect_s(6.6, 9.6, 9.4, 14.2, 0.0);
-        }
-        Icon::CloseProject => {
-            closed(&[(3.5, 1.5), (9.5, 1.5), (12.5, 4.5), (12.5, 14.5), (3.5, 14.5)]);
-            line(&[(9.5, 1.5), (9.5, 4.5), (12.5, 4.5)]);
-            seg((6.0, 7.5), (10.0, 11.5), s);
-            seg((10.0, 7.5), (6.0, 11.5), s);
-        }
-        Icon::Room => {
-            rect_s(1.5, 2.5, 14.5, 13.5, 0.5);
-            poly(&[(1.5, 2.5), (14.5, 2.5), (14.5, 13.5), (1.5, 13.5)], fill);
-            seg((5.0, 7.0), (11.0, 7.0), thin);
-            seg((6.0, 9.5), (10.0, 9.5), thin);
-        }
-        Icon::Grid => {
-            painter.circle_stroke(g.p(8.0, 3.5), 2.8 * scale, s);
-            seg((8.0, 6.3), (8.0, 8.5), s);
-            seg((8.0, 10.0), (8.0, 11.0), s);
-            seg((8.0, 12.5), (8.0, 15.0), s);
-        }
-        Icon::Dimension => {
-            seg((1.5, 4.0), (1.5, 12.0), thin);
-            seg((14.5, 4.0), (14.5, 12.0), thin);
-            seg((1.5, 9.0), (14.5, 9.0), s);
-            seg((0.5, 10.0), (2.5, 8.0), s);
-            seg((13.5, 10.0), (15.5, 8.0), s);
-            seg((5.5, 6.0), (10.5, 6.0), thin);
-        }
-        Icon::Move => {
-            seg((8.0, 1.5), (8.0, 14.5), s);
-            seg((1.5, 8.0), (14.5, 8.0), s);
-            for (a, b, c) in [
-                ((6.0, 3.5), (8.0, 1.5), (10.0, 3.5)),
-                ((6.0, 12.5), (8.0, 14.5), (10.0, 12.5)),
-                ((3.5, 6.0), (1.5, 8.0), (3.5, 10.0)),
-                ((12.5, 6.0), (14.5, 8.0), (12.5, 10.0)),
-            ] {
-                line(&[a, b, c]);
-            }
-        }
-        Icon::Rotate => {
-            arc(8.0, 8.5, 5.5, 200.0, 500.0);
-            line(&[(1.8, 3.8), (2.6, 7.1), (5.8, 6.0)]);
-        }
-        Icon::MirrorPick | Icon::MirrorDraw => {
-            let dashed = Stroke::new(thin.width, color);
-            for i in 0..5 {
-                let y = 1.0 + i as f32 * 3.0;
-                seg((8.0, y), (8.0, y + 1.6), dashed);
-            }
-            poly(&[(6.5, 3.5), (1.5, 12.5), (6.5, 12.5)], fill);
-            closed(&[(9.5, 3.5), (14.5, 12.5), (9.5, 12.5)]);
-            if icon == Icon::MirrorDraw {
-                seg((11.5, 15.0), (15.0, 11.5), s);
-            }
-        }
-        Icon::Array => {
-            for x in [1.5, 6.0, 10.5] {
-                rect_s(x, 5.5, x + 4.0, 9.5, 0.8);
-            }
-            seg((1.5, 12.5), (14.5, 12.5), thin);
-            line(&[(12.5, 11.0), (14.5, 12.5), (12.5, 14.0)]);
-        }
-        Icon::TrimCorner => {
-            line(&[(3.0, 14.5), (3.0, 3.0), (14.5, 3.0)]);
-            seg((3.0, 3.0), (3.0, 1.0), thin);
-            seg((3.0, 3.0), (1.0, 3.0), thin);
-            painter.circle_stroke(g.p(3.0, 3.0), 1.6 * scale, thin);
-        }
-        Icon::TrimExtend => {
-            seg((13.0, 1.5), (13.0, 14.5), s);
-            seg((2.0, 8.0), (8.5, 8.0), s);
-            let dashed = Stroke::new(thin.width, color);
-            seg((9.5, 8.0), (10.7, 8.0), dashed);
-            seg((11.5, 8.0), (12.6, 8.0), dashed);
-        }
-        Icon::Split => {
-            seg((1.5, 9.5), (6.5, 9.5), s);
-            seg((9.5, 9.5), (14.5, 9.5), s);
-            seg((9.5, 3.0), (6.5, 14.0), thin);
-        }
-        Icon::Offset => {
-            seg((2.0, 12.5), (14.0, 12.5), s);
-            let dashed = Stroke::new(thin.width, color);
-            for i in 0..4 {
-                let x = 2.0 + i as f32 * 3.2;
-                seg((x, 4.5), (x + 1.8, 4.5), dashed);
-            }
-            line(&[(8.0, 11.0), (8.0, 6.0)]);
-            line(&[(6.5, 7.5), (8.0, 6.0), (9.5, 7.5)]);
-        }
-        Icon::Align => {
-            seg((2.0, 2.5), (2.0, 13.5), s);
-            rect_s(5.0, 3.0, 13.5, 6.5, 0.5);
-            rect_s(5.0, 9.5, 10.5, 13.0, 0.5);
-            line(&[(4.5, 7.0), (2.5, 8.0), (4.5, 9.0)]);
-        }
-        Icon::Pin | Icon::Unpin => {
-            poly(&[(6.0, 2.0), (10.0, 2.0), (9.5, 6.5), (11.5, 9.0), (4.5, 9.0), (6.5, 6.5)], fill);
-            seg((8.0, 9.0), (8.0, 15.0), s);
-            if icon == Icon::Unpin {
-                seg((2.0, 14.0), (14.0, 2.0), s);
-            }
-        }
-        Icon::Join => {
-            closed(&[(2.0, 2.0), (9.0, 2.0), (9.0, 7.0), (14.0, 7.0), (14.0, 14.0), (2.0, 14.0)]);
-            seg((2.0, 7.0), (9.0, 7.0), thin);
-        }
-        Icon::Component => {
-            // A chair in side view: seat, back and legs.
-            poly(&[(4.0, 8.0), (12.0, 8.0), (12.0, 10.0), (4.0, 10.0)], fill);
-            line(&[(4.0, 8.0), (12.0, 8.0), (12.0, 10.0), (4.0, 10.0), (4.0, 8.0)]);
-            line(&[(4.0, 8.0), (4.0, 1.5)]);
-            seg((4.5, 10.0), (4.5, 14.5), s);
-            seg((11.5, 10.0), (11.5, 14.5), s);
-        }
-        Icon::Column => {
-            poly(&[(5.0, 1.5), (11.0, 1.5), (11.0, 14.5), (5.0, 14.5)], fill);
-            seg((3.0, 1.5), (13.0, 1.5), s);
-            seg((3.0, 14.5), (13.0, 14.5), s);
-        }
-        Icon::Beam => {
-            poly(&[(1.0, 6.0), (15.0, 6.0), (15.0, 10.0), (1.0, 10.0)], fill);
-            seg((3.0, 10.0), (3.0, 14.5), thin);
-            seg((13.0, 10.0), (13.0, 14.5), thin);
-        }
-        Icon::Stair => {
-            line(&[
-                (1.5, 14.5),
-                (1.5, 11.5),
-                (5.0, 11.5),
-                (5.0, 8.0),
-                (8.5, 8.0),
-                (8.5, 4.5),
-                (12.0, 4.5),
-                (12.0, 1.5),
-                (14.5, 1.5),
-            ]);
-            seg((1.5, 14.5), (14.5, 14.5), thin);
-        }
-        Icon::Railing => {
-            seg((1.5, 4.0), (14.5, 4.0), s);
-            for x in [2.5, 6.0, 9.5, 13.0] {
-                seg((x, 4.0), (x, 13.5), thin);
-            }
-            seg((1.5, 13.5), (14.5, 13.5), thin);
-        }
-        Icon::Close => {
-            seg((3.0, 3.0), (13.0, 13.0), s);
-            seg((13.0, 3.0), (3.0, 13.0), s);
-        }
-        Icon::ArrowLeft => {
-            seg((13.5, 8.0), (2.5, 8.0), s);
-            line(&[(7.0, 3.5), (2.5, 8.0), (7.0, 12.5)]);
-        }
-        Icon::Plus => {
-            seg((8.0, 2.5), (8.0, 13.5), s);
-            seg((2.5, 8.0), (13.5, 8.0), s);
-        }
-        Icon::Cut => {
-            // Scissors: two crossing blades over two finger rings.
-            seg((4.5, 1.5), (10.2, 10.0), s);
-            seg((11.5, 1.5), (5.8, 10.0), s);
-            painter.circle_stroke(g.p(4.5, 12.2), 2.3 * scale, s);
-            painter.circle_stroke(g.p(11.5, 12.2), 2.3 * scale, s);
-        }
-        Icon::Paste => {
-            // A clipboard with its clip and a sheet on it.
-            line(&[(5.5, 2.8), (3.0, 2.8), (3.0, 14.5), (13.0, 14.5), (13.0, 2.8), (10.5, 2.8)]);
-            rect_s(5.5, 1.5, 10.5, 4.0, 0.5);
-            poly(&[(6.0, 7.0), (11.0, 7.0), (11.0, 12.5), (6.0, 12.5)], fill);
-            seg((7.5, 9.0), (9.5, 9.0), thin);
-            seg((7.5, 10.8), (9.5, 10.8), thin);
-        }
-        Icon::MatchType => {
-            // A paint brush: handle, ferrule and bristles.
-            seg((14.0, 2.0), (9.0, 7.0), s);
-            poly(&[(9.6, 5.0), (11.0, 6.4), (8.0, 9.4), (6.6, 8.0)], fill);
-            closed(&[(6.6, 8.0), (8.0, 9.4), (5.0, 14.5), (1.5, 14.5), (1.5, 11.0)]);
-        }
-    }
+    let ppp = painter.pixels_per_point();
+    let side = rect.width().min(rect.height());
+    // Whole physical pixels, placed on the pixel grid, keep the strokes crisp.
+    let px = (side * ppp).round().clamp(1.0, 512.0);
+    let size = px / ppp;
+    let min = ((rect.center() - egui::vec2(size, size) / 2.0) * ppp).round() / ppp;
+    let target = Rect::from_min_size(min, egui::vec2(size, size));
+    let Some(texture) = texture(painter.ctx(), icon, px as u32) else { return };
+    let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+    painter.image(texture.id(), target, uv, color);
 }
 
-/// Background color used to knock out icon parts (matches panels).
-fn painter_bg(_painter: &Painter) -> Color32 {
-    crate::theme::PALETTE.panel
+fn texture(ctx: &Context, icon: Icon, px: u32) -> Option<TextureHandle> {
+    let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Cache>(egui::Id::new("icon-cache")).clone());
+    let mut map = cache.0.lock().ok()?;
+    map.entry((icon, px))
+        .or_insert_with(|| {
+            let image = rasterize(icon, px);
+            if image.is_none() {
+                log::warn!("icon {icon:?} failed to rasterize");
+            }
+            image.map(|image| ctx.load_texture(format!("icon-{icon:?}-{px}"), image, TextureOptions::LINEAR))
+        })
+        .clone()
+}
+
+/// Render an icon's SVG into a `px` x `px` image (premultiplied alpha).
+fn rasterize(icon: Icon, px: u32) -> Option<ColorImage> {
+    let tree = resvg::usvg::Tree::from_str(icon.source(), &resvg::usvg::Options::default()).ok()?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(px, px)?;
+    let scale = px as f32 / tree.size().width().max(tree.size().height());
+    resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    let side = px as usize;
+    Some(ColorImage::from_rgba_premultiplied([side, side], pixmap.data()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_icon_rasterizes() {
+        for icon in Icon::ALL {
+            let image = rasterize(icon, 20).unwrap_or_else(|| panic!("{icon:?} does not rasterize"));
+            let inked = image.pixels.iter().filter(|p| p.a() > 0).count();
+            assert!(inked > 20, "{icon:?} is (nearly) empty");
+            // Strokes stay inside the icon, with a margin.
+            let edge = image.pixels.iter().enumerate().filter(|(i, p)| {
+                let (x, y) = (i % 20, i / 20);
+                p.a() > 128 && (x == 0 || y == 0 || x == 19 || y == 19)
+            });
+            assert_eq!(edge.count(), 0, "{icon:?} touches the border");
+        }
+    }
+
+    /// `ICON_SHEET=path.png cargo test -p cc_app icon_sheet` writes every
+    /// icon at a few sizes, dark on light, for review.
+    #[test]
+    fn icon_sheet() {
+        let Ok(path) = std::env::var("ICON_SHEET") else { return };
+        let sizes = [16u32, 20, 24, 32, 48];
+        let cell = 56usize;
+        let cols = Icon::ALL.len();
+        let (w, h) = (cols * cell, sizes.len() * cell);
+        let mut rgba = vec![248u8; w * h * 4];
+        for (row, &px) in sizes.iter().enumerate() {
+            for (col, icon) in Icon::ALL.iter().enumerate() {
+                let image = rasterize(*icon, px).unwrap();
+                for (i, p) in image.pixels.iter().enumerate() {
+                    let (x, y) = (col * cell + 4 + i % px as usize, row * cell + 4 + i / px as usize);
+                    let a = p.a() as f32 / 255.0;
+                    let o = (y * w + x) * 4;
+                    for c in 0..3 {
+                        rgba[o + c] = (248.0 * (1.0 - a) + 40.0 * a) as u8;
+                    }
+                }
+            }
+        }
+        let file = std::fs::File::create(path).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&rgba).unwrap();
+    }
 }
