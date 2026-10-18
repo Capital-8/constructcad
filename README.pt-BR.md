@@ -43,18 +43,23 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 - **Eixos e anotação**: eixos com bolhas em todas as plantas; cotas alinhadas em qualquer vista 2D (aba *Anotar*); marcas de portas e janelas etiquetadas automaticamente.
 - **Snapping**: extremidades, pontos médios, sobre a parede, ângulos de 15°, Shift para ortogonal, comprimento digitado + Enter.
 - **Edição**: seleção por clique ou janela (contida ou cruzada), mover arrastando, copiar com Ctrl+arrastar, excluir. Desfazer e refazer cobrem todas as edições.
+- **Componentes paramétricos**: mobiliário, louças e marcenaria feitos de caixas, cilindros e perfis extrudados cujas medidas são expressões sobre parâmetros nomeados (do tipo ou da instância). Editor de componentes com verificação imediata e pré-visualização em planta e vista frontal, biblioteca inicial (mesa, cadeira, cama, sofá, bacia sanitária, lavatório, armário), ferramenta *Componente* (CM), tabelas e legendas, arquivos `.ccomp` para compartilhar e exportação/importação IFC como `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` ou `IfcBuildingElementProxy`.
 - **Propriedades**: parâmetros de instância e da vista em seções recolhíveis; paredes com restrição de base e de topo (altura desconectada ou até um nível), linha de localização, delimitação de ambientes e estrutural.
 - **Tipos**: diálogo de propriedades do tipo com duplicar e renomear, editor de camadas com função (núcleo, acabamentos), função da parede e dados de identidade (marca de tipo, fabricante, modelo, classificação, resistência ao fogo, custo…).
 - **Vista 3D** (wgpu, MSAA): orbitar, pan, zoom, ajustar ao modelo e seleção por clique.
 - **Elevações e cortes**: remoção de linhas ocultas, hachura de corte e níveis anotados.
-- **Tabelas**:
-  - Portas e janelas.
-  - Paredes, com comprimento, área e volume.
-  - Pisos, forros e telhados, com área, perímetro e volume.
-- **Folhas** A0–A4: carimbo com dados do projeto e viewports arrastáveis em escala.
+- **Tabelas** de todas as categorias do modelo e de ambientes: escolha e ordem dos campos (da instância, do tipo e calculados, como comprimento, área e volume), ordenação, filtro, totais e exportação para CSV.
+- **Folhas** A0–A4: carimbo com dados do projeto e viewports arrastáveis em escala; exportação vetorial para PDF e SVG (*Arquivo → Exportar PDF/SVG…*), idêntica à tela.
 - **Gerenciar**: informações do projeto, níveis (cada nível novo cria suas plantas) e materiais.
 - **Arquivo `.ccad`**: RON versionado e legível; o salvamento é atômico.
-- **Exportação IFC4** (*Arquivo → Exportar IFC…*): pavimentos, paredes com aberturas, portas, janelas, pisos, forros e telhados como sólidos extrudados, com tipos, camadas de materiais, cores e quantitativos. Gerada pelo escritor STEP do próprio ConstructCAD, sem bibliotecas IFC de terceiros.
+- **Exportação IFC4** (*Arquivo → Exportar IFC…*): pavimentos, paredes com aberturas, portas, janelas, pisos, forros, telhados, estrutura e componentes como sólidos extrudados, com tipos, camadas de materiais, cores e quantitativos. Gerada pelo escritor STEP do próprio ConstructCAD, sem bibliotecas IFC de terceiros.
+- **Importação IFC** (*Arquivo → Importar IFC…*, IFC2X3 e IFC4): pavimentos viram níveis; paredes, portas, janelas, lajes, forros, telhados, ambientes, pilares, vigas, mobiliário e louças viram elementos nativos com tipos (existentes ou novos), materiais e cores. Lida pelo leitor STEP do próprio ConstructCAD; produtos não suportados são contados e ignorados.
+
+## Vindo do Revit?
+
+O ConstructCAD não lê arquivos `.rvt`. Para trazer um modelo do Revit, exporte-o para IFC no próprio Revit (*File → Export → IFC*, IFC4 ou IFC2x3) e abra o arquivo em *Arquivo → Importar IFC…*. Pavimentos, paredes, portas, janelas, lajes, forros, telhados, ambientes, pilares e vigas chegam como elementos nativos e editáveis, com seus tipos e materiais; a mensagem da importação informa o que foi ignorado.
+
+Quem não tem o Revit pode usar ferramentas independentes de terceiros que convertem `.rvt` para IFC; verifique por conta própria a cobertura e a licença delas. O ConstructCAD não as inclui nem as endossa.
 
 ## Atalhos
 
@@ -71,7 +76,7 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 | RM | Ambiente | GR | Eixo |
 | DI | Cota alinhada | CL | Pilar |
 | BM | Viga | ST | Escada |
-| RA | Guarda-corpo | | |
+| RA | Guarda-corpo | CM | Componente |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 
@@ -81,9 +86,9 @@ Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3
 crates/
   cc_core    modelo BIM (elementos, tipos, níveis, vistas), transações undo/redo, persistência .ccad
   cc_geom    geometria derivada: paredes com junções e aberturas, lajes, telhados, cortes, picking
-  cc_views   geração de desenhos 2D (planta, forro, elevação, corte, axonometria, legenda) e tabelas
+  cc_views   geração de desenhos 2D (planta, forro, elevação, corte, axonometria, legenda), tabelas, montagem das folhas e exportação PDF/SVG
   cc_render  renderizador 3D offscreen em wgpu
-  cc_ifc     exportação IFC4: escritor de arquivos STEP e mapeamento do modelo
+  cc_ifc     exportação IFC4 e importação IFC2X3/IFC4: escritor e leitor STEP, mapeamento do modelo
   cc_app     aplicativo eframe/egui: ribbon, navegador, propriedades, ferramentas, folhas
 assets/i18n  traduções (pt-BR, en); textos de interface nunca ficam fixos no código
 ```
@@ -108,12 +113,9 @@ python scripts/validate_ifc.py casa_simples.ifc
 
 ## Próximos passos
 
-- Importação IFC.
-- Exportação das folhas em PDF/SVG.
-- Cotas e anotações.
-- Componentes paramétricos definidos pelo usuário.
-- Eixos (grids).
-- Paredes amarradas ao nível superior.
+- Componentes em série, aninhados e hospedados (em paredes e forros).
+- Importação IFC de escadas, guarda-corpos, eixos e geometria livre.
+- Arquitetura em que tudo é um comando (scripts e macros).
 - Texturas de materiais.
 
 ## Independência

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Parametric components: definitions made of boxes, cylinders and extruded profiles sized by expressions over named type or instance parameters; a component editor with live expression checking and plan/front previews; a starter library (table, chair, bed, sofa, toilet, washbasin, wardrobe); the *Component* tool (CM) with rotation; instance parameter overrides in Properties; components in 3D, plans, elevations, sections, legends and schedules; `.ccomp` files to save and load components; IFC export and import as `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` and `IfcBuildingElementProxy`, keeping parametric types and instance values on a round trip.
 - IFC import (*File → Import IFC…*): an in-house STEP parser and a mapping of IFC2X3/IFC4 storeys, walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams (extruded solids, B-reps and face sets; millimeter and imperial units) to native elements and types; export → import round trips are tested.
 - Sheet export to vector PDF and SVG (*File → Export PDF/SVG…*); the sheet is composed once in `cc_views`, so the screen and the files match.
 - Configurable schedules: choose and order fields (instance, type and computed values), sort ascending or descending, filter by text, show or hide totals, and export to CSV (semicolon-separated when the decimal comma is used).
@@ -30,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `.ccad` format version 3 (components); older files still open and receive the component library.
+- The sample house is furnished with library components.
 - Robustness rules: clippy denies `unwrap`, `expect` and `panic!` outside tests and the workspace forbids `unsafe`; opening, saving and exporting are guarded so an internal error never loses the open project.
 - Projects are repaired when opened: invalid numbers, missing levels or types, orphan doors and windows, broken view references are removed or reset, and the number of repairs is reported.
 - Standard dialog layout for every window (header with close button, footer with right-aligned actions, highlighted main and red destructive buttons, alert icons); data dialogs have OK / Cancel and Cancel undoes their edits; deleting a level asks for confirmation.

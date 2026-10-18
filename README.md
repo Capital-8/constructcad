@@ -45,6 +45,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Roofs**: flat, shed, gable and hip (lowest of the planes rising from each eave), with ridges and hips in plan; pitched roofs export as faceted B-reps.
 - **Rooms**: click inside room-bounding walls to place a room; its boundary, area and perimeter follow the walls. Room tags in plans, room schedule and `IfcSpace` export.
 - **Grids and annotation**: grid lines with bubbles in every plan; aligned dimensions in any 2D view (*Annotate* tab); door and window marks tagged automatically.
+- **Parametric components**: furniture, fixtures and casework made of boxes, cylinders and extruded profiles whose sizes are expressions over named parameters (type or instance). A component editor with live checking and plan/front previews, a starter library (table, chair, bed, sofa, toilet, washbasin, wardrobe), the *Component* tool (CM), schedules and legends, `.ccomp` files to share them, and IFC export/import as `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` or `IfcBuildingElementProxy`.
 - **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
 - **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
 - **Properties**: instance and view parameters in collapsible sections; walls with base and top constraints (unconnected height or up to a level), location line, room bounding and structural flags.
@@ -55,7 +56,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Sheets** A0–A4: title block with project data and draggable, scaled viewports; export to vector PDF and SVG (*File → Export PDF/SVG…*), identical to the screen.
 - **Manage**: project information, levels (each new level creates its plans) and materials.
 - **`.ccad` files**: versioned, human-readable RON; saving is atomic.
-- **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings and roofs as swept solids, with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
+- **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings, roofs, structure and components as swept solids, with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
 - **IFC import** (*File → Import IFC…*, IFC2X3 and IFC4): storeys become levels; walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams become native elements with matching or new types, materials and colors. Read by ConstructCAD's own STEP parser; unsupported products are counted and skipped.
 
 ## Coming from Revit?
@@ -79,7 +80,7 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | RM | Room | GR | Grid |
 | DI | Aligned dimension | CL | Column |
 | BM | Beam | ST | Stair |
-| RA | Railing | | |
+| RA | Railing | CM | Component |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 
@@ -118,7 +119,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 
 ## Roadmap
 
-- User-defined parametric components.
+- Component arrays, nested components and hosted components (on walls and ceilings).
 - IFC import of stairs, railings, grids and free-form geometry.
 - Everything-is-a-command architecture (scripting and macros).
 - Material textures.
