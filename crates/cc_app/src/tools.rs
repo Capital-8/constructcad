@@ -1283,6 +1283,18 @@ fn section_tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppStat
     }
 }
 
+/// Resize cursor along a screen direction (end handles stretch along the element).
+fn resize_cursor(dir: egui::Vec2) -> egui::CursorIcon {
+    // Fold the angle into [0°, 180°): screen y points down.
+    let angle = dir.y.atan2(dir.x).to_degrees().rem_euclid(180.0);
+    match angle {
+        a if !(22.5..157.5).contains(&a) => egui::CursorIcon::ResizeHorizontal,
+        a if a < 67.5 => egui::CursorIcon::ResizeNwSe,
+        a if a < 112.5 => egui::CursorIcon::ResizeVertical,
+        _ => egui::CursorIcon::ResizeNeSw,
+    }
+}
+
 fn select(
     ui: &Ui,
     resp: &Response,
@@ -1330,8 +1342,8 @@ fn select(
         painter.rect_filled(r, 1.5, Color32::WHITE);
         painter.rect_stroke(r, 1.5, Stroke::new(1.5, HIGHLIGHT), egui::StrokeKind::Middle);
     }
-    if resp.hover_pos().and_then(grip_at).is_some() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    if let Some((_, _, at, other)) = resp.hover_pos().and_then(grip_at) {
+        ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(other) - xf.to_screen(at)));
     }
 
     if resp.drag_started_by(egui::PointerButton::Primary) {
@@ -1364,6 +1376,7 @@ fn select(
 
     // Dragging an end handle: the end snaps like a drawing point.
     if let (Some(Drag::Grip { id, at_start, fixed }), Some(raw)) = (state.interaction.drag.clone(), raw) {
+        ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(raw) - xf.to_screen(fixed)));
         let level = state.project().element(id).map(|e| e.level);
         let s = snap_at(state, level, raw, Some(fixed), &[], xf.scale, shift);
         draw_snap(painter, xf, s);
@@ -1571,6 +1584,17 @@ mod tests {
         // Nothing turnable selected: no undo step.
         state.selection = [wall].into_iter().collect();
         assert!(!rotate_selection(&mut state));
+    }
+
+    #[test]
+    fn end_handles_use_a_resize_cursor_along_the_element() {
+        use egui::{CursorIcon as C, vec2};
+        assert_eq!(resize_cursor(vec2(10.0, 0.0)), C::ResizeHorizontal);
+        assert_eq!(resize_cursor(vec2(-10.0, 1.0)), C::ResizeHorizontal);
+        assert_eq!(resize_cursor(vec2(0.0, -10.0)), C::ResizeVertical);
+        // Screen y points down: towards the lower right is NW-SE.
+        assert_eq!(resize_cursor(vec2(10.0, 10.0)), C::ResizeNwSe);
+        assert_eq!(resize_cursor(vec2(10.0, -10.0)), C::ResizeNeSw);
     }
 
     #[test]
