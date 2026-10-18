@@ -4,6 +4,7 @@ mod actions;
 mod app;
 mod browser;
 mod canvas;
+mod dialog;
 mod dialogs;
 mod home;
 mod i18n;

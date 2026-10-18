@@ -73,6 +73,7 @@ action-copy = Copiar
 action-delete = Excluir
 action-cancel = Cancelar
 action-discard = Descartar
+action-dont-save = Não salvar
 action-ok = OK
 action-zoom-fit = Ajustar zoom
 
@@ -266,6 +267,8 @@ dlg-type = Propriedades do tipo
 dlg-unsaved = Alterações não salvas
 dlg-unsaved-text = O projeto possui alterações não salvas. Deseja salvá-las?
 dlg-error = Erro
+dlg-delete-level = Excluir nível
+dlg-delete-level-text = Excluir o nível “{ $level }”? As { $views } vista(s) dele também serão excluídas.
 dlg-about = Sobre
 info-name = Nome do projeto
 info-number = Número

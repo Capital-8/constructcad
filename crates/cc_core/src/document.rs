@@ -327,6 +327,11 @@ impl Document {
     }
 
     /// End coalescing so the next merged edit starts a new undo step.
+    /// Number of undoable transactions.
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
+    }
+
     pub fn break_merge(&mut self) {
         self.last_merge_key = None;
     }

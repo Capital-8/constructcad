@@ -39,36 +39,31 @@ pub fn show(ctx: &Context, state: &mut AppState) {
         state.dialogs.type_editor = None;
         return;
     };
-    // A centered modal, like the other dialogs; the model stays visible behind it.
-    let frame =
-        egui::Frame::popup(&ctx.style_of(egui::Theme::Light)).inner_margin(egui::Margin::same(18)).corner_radius(8);
-    let response = egui::Modal::new(egui::Id::new("type_editor")).frame(frame).show(ctx, |ui| {
-        ui.set_width(580.0);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(t!("dlg-type")).family(theme::semibold()).size(16.0).color(PALETTE.text));
-        });
-        ui.add_space(10.0);
-        header(ui, state, &ty);
-        ui.add_space(8.0);
-        ui.label(theme::muted(t!("type-parameters")).size(12.0));
-        ui.add_space(2.0);
-        egui::Frame::new().stroke(egui::Stroke::new(1.0, PALETTE.border)).show(ui, |ui| {
-            let max_height = (ctx.content_rect().height() - 300.0).clamp(240.0, 560.0);
-            egui::ScrollArea::vertical().max_height(max_height).auto_shrink([false, true]).show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                parameters(ui, state, &ty);
+    crate::dialog::session::begin(state);
+    let mut ok = 0;
+    let max_height = (ctx.content_rect().height() - 320.0).clamp(240.0, 560.0);
+    let response = crate::dialog::Dialog::new("type-editor", t!("dlg-type")).width(580.0).show(
+        ctx,
+        |ui| {
+            header(ui, state, &ty);
+            ui.add_space(6.0);
+            ui.label(theme::muted(t!("type-parameters")).size(12.0));
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, PALETTE.border)).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(max_height).auto_shrink([false, true]).show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    parameters(ui, state, &ty);
+                });
             });
-        });
-        ui.add_space(12.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let label = RichText::new(t!("action-close")).color(egui::Color32::WHITE);
-            ui.add(egui::Button::new(label).fill(PALETTE.accent).min_size(egui::vec2(88.0, 26.0))).clicked()
-        })
-        .inner
-    });
-    // Close with the button or Esc; a stray click outside does not discard the dialog.
-    let escape = state.dialogs.type_rename.is_none() && ctx.input(|i| i.key_pressed(egui::Key::Escape));
-    if response.inner || escape {
+        },
+        |f| {
+            ok = f.primary(t!("action-ok"));
+            f.secondary(t!("action-cancel"));
+        },
+    );
+    // While renaming, Esc only cancels the rename.
+    let renaming = state.dialogs.type_rename.is_some();
+    let response = crate::dialog::DialogResponse { dismissed: response.dismissed && !renaming, ..response };
+    if crate::dialogs::ok_cancel(state, &response, ok) {
         state.dialogs.type_editor = None;
         state.dialogs.type_rename = None;
     }

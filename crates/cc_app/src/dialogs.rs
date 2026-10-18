@@ -1,8 +1,10 @@
-//! Modal and floating dialogs.
+//! Application dialogs, all built on [`crate::dialog::Dialog`].
 
 use crate::actions;
+use crate::dialog::{Dialog, Kind, session};
 use crate::state::AppState;
 use crate::t;
+use crate::theme::{self, PALETTE};
 use cc_core::Material;
 use egui::{Context, DragValue, RichText, Ui};
 use std::hash::{Hash, Hasher};
@@ -29,117 +31,218 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     about(ctx, state);
 }
 
+/// Footer of a data dialog: OK keeps the edits, Cancel (or Esc / close) undoes them.
+/// Returns true when the dialog closes.
+pub(crate) fn ok_cancel(state: &mut AppState, response: &crate::dialog::DialogResponse, ok: usize) -> bool {
+    match response.clicked {
+        Some(i) if i == ok => {
+            session::commit(state);
+            true
+        }
+        Some(_) => {
+            session::cancel(state);
+            true
+        }
+        None if response.dismissed => {
+            session::cancel(state);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Label of a form row.
+fn form_label(ui: &mut Ui, label: &str) {
+    ui.label(RichText::new(label).color(PALETTE.text_muted));
+}
+
 fn project_info(ctx: &Context, state: &mut AppState) {
-    let mut open = state.dialogs.project_info;
-    egui::Window::new(t!("dlg-project-info")).open(&mut open).resizable(false).show(ctx, |ui| {
-        let info = state.project().info.clone();
-        egui::Grid::new("info").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            let fields = [
-                (t!("info-name"), "name", info.name),
-                (t!("info-number"), "number", info.number),
-                (t!("info-client"), "client", info.client),
-                (t!("info-address"), "address", info.address),
-                (t!("info-author"), "author", info.author),
-            ];
-            for (label, field, value) in fields {
-                ui.label(label);
-                let mut text = value;
-                let r = ui.text_edit_singleline(&mut text);
-                if r.changed() {
-                    state.doc.edit_merged(t!("tx-project-info"), key(("info", field)), |e| {
-                        let info = e.info_mut();
-                        match field {
-                            "name" => info.name = text,
-                            "number" => info.number = text,
-                            "client" => info.client = text,
-                            "address" => info.address = text,
-                            _ => info.author = text,
-                        }
-                    });
+    if !state.dialogs.project_info {
+        return;
+    }
+    session::begin(state);
+    let mut ok = 0;
+    let response = Dialog::new("project-info", t!("dlg-project-info")).width(440.0).show(
+        ctx,
+        |ui| {
+            let info = state.project().info.clone();
+            egui::Grid::new("info").num_columns(2).spacing([14.0, 8.0]).min_col_width(110.0).show(ui, |ui| {
+                let fields = [
+                    (t!("info-name"), "name", info.name),
+                    (t!("info-number"), "number", info.number),
+                    (t!("info-client"), "client", info.client),
+                    (t!("info-address"), "address", info.address),
+                    (t!("info-author"), "author", info.author),
+                ];
+                for (label, field, value) in fields {
+                    form_label(ui, &label);
+                    let mut text = value;
+                    let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(300.0));
+                    if r.changed() {
+                        state.doc.edit_merged(t!("tx-project-info"), key(("info", field)), |e| {
+                            let info = e.info_mut();
+                            match field {
+                                "name" => info.name = text,
+                                "number" => info.number = text,
+                                "client" => info.client = text,
+                                "address" => info.address = text,
+                                _ => info.author = text,
+                            }
+                        });
+                    }
+                    done(state, &r);
+                    ui.end_row();
                 }
-                done(state, &r);
-                ui.end_row();
-            }
-        });
-    });
-    state.dialogs.project_info = open;
+            });
+        },
+        |f| {
+            ok = f.primary(t!("action-ok"));
+            f.secondary(t!("action-cancel"));
+        },
+    );
+    if ok_cancel(state, &response, ok) {
+        state.dialogs.project_info = false;
+    }
 }
 
 fn levels(ctx: &Context, state: &mut AppState) {
-    let mut open = state.dialogs.levels;
-    egui::Window::new(t!("dlg-levels")).open(&mut open).resizable(false).show(ctx, |ui| {
-        let levels = state.project().levels.clone();
-        egui::Grid::new("levels").num_columns(3).striped(true).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new(t!("prop-name")).strong());
-            ui.label(RichText::new(t!("level-elevation")).strong());
-            ui.label("");
-            ui.end_row();
-            for level in levels.iter().rev() {
-                let mut name = level.name.clone();
-                let r = ui.text_edit_singleline(&mut name);
-                if r.changed() {
-                    state.doc.edit_merged(t!("tx-modify-level"), key((level.id, "name")), |e| {
-                        if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {
-                            l.name = name;
-                        }
-                    });
-                }
-                done(state, &r);
-                let mut elev = level.elevation;
-                let r = ui.add(DragValue::new(&mut elev).speed(0.01).fixed_decimals(2).suffix(" m"));
-                if r.changed() {
-                    state.doc.edit_merged(t!("tx-modify-level"), key((level.id, "elev")), |e| {
-                        if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {
-                            l.elevation = elev;
-                        }
-                        e.levels_mut().sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
-                    });
-                }
-                done(state, &r);
-                if ui.add_enabled(levels.len() > 1, egui::Button::new(t!("action-delete"))).clicked() {
-                    actions::delete_level(state, level.id);
-                }
+    if !state.dialogs.levels {
+        return;
+    }
+    session::begin(state);
+    let mut ok = 0;
+    let response = Dialog::new("levels", t!("dlg-levels")).width(460.0).show(
+        ctx,
+        |ui| {
+            let levels = state.project().levels.clone();
+            egui::Grid::new("levels").num_columns(3).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
+                form_label(ui, &t!("prop-name"));
+                form_label(ui, &t!("level-elevation"));
+                ui.label("");
                 ui.end_row();
+                for level in levels.iter().rev() {
+                    let mut name = level.name.clone();
+                    let r = ui.add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut name));
+                    if r.changed() {
+                        state.doc.edit_merged(t!("tx-modify-level"), key((level.id, "name")), |e| {
+                            if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {
+                                l.name = name;
+                            }
+                        });
+                    }
+                    done(state, &r);
+                    let mut elev = level.elevation;
+                    let r = ui.add(DragValue::new(&mut elev).speed(0.01).fixed_decimals(2).suffix(" m"));
+                    if r.changed() {
+                        state.doc.edit_merged(t!("tx-modify-level"), key((level.id, "elev")), |e| {
+                            if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {
+                                l.elevation = elev;
+                            }
+                            e.levels_mut().sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+                        });
+                    }
+                    done(state, &r);
+                    if ui.add_enabled(levels.len() > 1, egui::Button::new(t!("action-delete"))).clicked() {
+                        state.dialogs.delete_level = Some(level.id);
+                    }
+                    ui.end_row();
+                }
+            });
+            ui.add_space(4.0);
+            if ui.button(t!("level-add")).clicked() {
+                actions::add_level(state);
             }
-        });
-        ui.add_space(6.0);
-        if ui.button(t!("level-add")).clicked() {
-            actions::add_level(state);
-        }
-    });
-    state.dialogs.levels = open;
+        },
+        |f| {
+            ok = f.primary(t!("action-ok"));
+            f.secondary(t!("action-cancel"));
+        },
+    );
+    if ok_cancel(state, &response, ok) {
+        state.dialogs.levels = false;
+    }
+    delete_level(ctx, state);
+}
+
+/// Confirmation before deleting a level (and the views on it), shown over the levels dialog.
+fn delete_level(ctx: &Context, state: &mut AppState) {
+    let Some(level) = state.dialogs.delete_level else { return };
+    let project = state.project();
+    let name = project.level_name(level).to_string();
+    let in_use = project.elements.values().any(|e| e.level == level);
+    let views = project.views.values().filter(|v| v.level() == Some(level)).count();
+    let mut delete = None;
+    let response = Dialog::new("delete-level", t!("dlg-delete-level")).kind(Kind::Warning).width(380.0).show(
+        ctx,
+        |ui| {
+            if in_use {
+                ui.label(t!("msg-level-in-use"));
+            } else {
+                ui.label(t!("dlg-delete-level-text", "level" => name, "views" => views));
+            }
+        },
+        |f| {
+            if in_use {
+                f.primary(t!("action-ok"));
+            } else {
+                delete = Some(f.danger(t!("action-delete")));
+                f.secondary(t!("action-cancel"));
+            }
+        },
+    );
+    if response.clicked.is_some() && response.clicked == delete {
+        actions::delete_level(state, level);
+    }
+    if response.clicked.is_some() || response.dismissed {
+        state.dialogs.delete_level = None;
+    }
 }
 
 fn materials(ctx: &Context, state: &mut AppState) {
-    let mut open = state.dialogs.materials;
-    egui::Window::new(t!("dlg-materials")).open(&mut open).resizable(false).show(ctx, |ui| {
-        let mats = state.project().materials.clone();
-        egui::Grid::new("materials").num_columns(2).striped(true).show(ui, |ui| {
-            for (i, m) in mats.iter().enumerate() {
-                let mut color = m.color;
-                let r = ui.color_edit_button_srgb(&mut color);
-                if r.changed() {
-                    state.doc.edit_merged(t!("tx-modify-material"), key(("mat", i)), |e| {
-                        if let Some(m) = e.materials_mut().get_mut(i) {
-                            m.color = color;
+    if !state.dialogs.materials {
+        return;
+    }
+    session::begin(state);
+    let mut ok = 0;
+    let response = Dialog::new("materials", t!("dlg-materials")).width(400.0).show(
+        ctx,
+        |ui| {
+            let mats = state.project().materials.clone();
+            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                egui::Grid::new("materials").num_columns(2).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
+                    for (i, m) in mats.iter().enumerate() {
+                        let mut color = m.color;
+                        let r = ui.color_edit_button_srgb(&mut color);
+                        if r.changed() {
+                            state.doc.edit_merged(t!("tx-modify-material"), key(("mat", i)), |e| {
+                                if let Some(m) = e.materials_mut().get_mut(i) {
+                                    m.color = color;
+                                }
+                            });
                         }
-                    });
-                }
-                // Names are referenced by layers, so they stay fixed here.
-                ui.label(&m.name);
-                ui.end_row();
-            }
-        });
-        ui.add_space(6.0);
-        if ui.button(t!("material-add")).clicked() {
-            let n = mats.len() + 1;
-            state.doc.edit(t!("tx-modify-material"), |e| {
-                e.materials_mut()
-                    .push(Material { name: t!("default-material-name", "n" => n), color: [180, 180, 180] });
+                        // Names are referenced by layers, so they stay fixed here.
+                        ui.label(&m.name);
+                        ui.end_row();
+                    }
+                });
             });
-        }
-    });
-    state.dialogs.materials = open;
+            ui.add_space(4.0);
+            if ui.button(t!("material-add")).clicked() {
+                let n = mats.len() + 1;
+                state.doc.edit(t!("tx-modify-material"), |e| {
+                    e.materials_mut()
+                        .push(Material { name: t!("default-material-name", "n" => n), color: [180, 180, 180] });
+                });
+            }
+        },
+        |f| {
+            ok = f.primary(t!("action-ok"));
+            f.secondary(t!("action-cancel"));
+        },
+    );
+    if ok_cancel(state, &response, ok) {
+        state.dialogs.materials = false;
+    }
 }
 
 pub(crate) fn material_combo(
@@ -159,112 +262,108 @@ pub(crate) fn material_combo(
 
 fn confirm(ctx: &Context, state: &mut AppState) {
     let Some(action) = state.dialogs.confirm.clone() else { return };
-    let modal = egui::Modal::new(egui::Id::new("confirm")).show(ctx, |ui| {
-        ui.set_width(340.0);
-        ui.heading(t!("dlg-unsaved"));
-        ui.label(t!("dlg-unsaved-text"));
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.button(t!("action-save")).clicked() {
-                state.dialogs.confirm = None;
-                if actions::save(state, false) {
-                    actions::run_pending(state, action.clone());
-                }
+    let (mut save, mut dont_save) = (0, 0);
+    let response = Dialog::new("confirm", t!("dlg-unsaved")).kind(Kind::Warning).width(400.0).show(
+        ctx,
+        |ui| {
+            ui.label(t!("dlg-unsaved-text"));
+        },
+        |f| {
+            save = f.primary(t!("action-save"));
+            dont_save = f.secondary(t!("action-dont-save"));
+            f.secondary(t!("action-cancel"));
+        },
+    );
+    match response.clicked {
+        Some(i) if i == save => {
+            state.dialogs.confirm = None;
+            if actions::save(state, false) {
+                actions::run_pending(state, action);
             }
-            if ui.button(t!("action-discard")).clicked() {
-                state.dialogs.confirm = None;
-                actions::run_pending(state, action.clone());
-            }
-            if ui.button(t!("action-cancel")).clicked() {
-                state.dialogs.confirm = None;
-            }
-        });
-    });
-    if modal.should_close() {
-        state.dialogs.confirm = None;
+        }
+        Some(i) if i == dont_save => {
+            state.dialogs.confirm = None;
+            actions::run_pending(state, action);
+        }
+        Some(_) => state.dialogs.confirm = None,
+        None if response.dismissed => state.dialogs.confirm = None,
+        None => {}
     }
 }
 
 fn error(ctx: &Context, state: &mut AppState) {
     let Some(msg) = state.dialogs.error.clone() else { return };
-    let modal = egui::Modal::new(egui::Id::new("error")).show(ctx, |ui| {
-        ui.set_width(380.0);
-        ui.heading(t!("dlg-error"));
-        ui.label(msg);
-        ui.add_space(8.0);
-        if ui.button(t!("action-ok")).clicked() {
-            state.dialogs.error = None;
-        }
-    });
-    if modal.should_close() {
+    let response = Dialog::new("error", t!("dlg-error")).kind(Kind::Error).width(400.0).show(
+        ctx,
+        |ui| {
+            ui.label(msg);
+        },
+        |f| {
+            f.primary(t!("action-ok"));
+        },
+    );
+    if response.clicked.is_some() || response.dismissed {
         state.dialogs.error = None;
     }
 }
 
 fn about(ctx: &Context, state: &mut AppState) {
-    use crate::theme::{self, PALETTE};
-    use egui::RichText;
     if !state.dialogs.about {
         return;
     }
     let repository = env!("CARGO_PKG_REPOSITORY");
-    let modal = egui::Modal::new(egui::Id::new("about")).frame(
-        egui::Frame::popup(&ctx.style_of(egui::Theme::Light)).inner_margin(egui::Margin::same(24)).corner_radius(10),
-    );
-    let response = modal.show(ctx, |ui| {
-        ui.set_width(440.0);
-        ui.horizontal(|ui| {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
-            if let Some(logo) = theme::logo(ui.ctx()) {
-                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                ui.painter().image(logo.id(), rect, uv, egui::Color32::WHITE);
+    let mut open_repo = 0;
+    let response = Dialog::new("about", t!("dlg-about")).width(440.0).show(
+        ctx,
+        |ui| {
+            ui.horizontal(|ui| {
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
+                if let Some(logo) = theme::logo(ui.ctx()) {
+                    let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                    ui.painter().image(logo.id(), rect, uv, egui::Color32::WHITE);
+                }
+                ui.add_space(8.0);
+                ui.vertical(|ui| {
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("ConstructCAD").family(theme::semibold()).size(22.0).color(PALETTE.text));
+                    let version = format!("{} {}", t!("about-version"), env!("CARGO_PKG_VERSION"));
+                    ui.label(RichText::new(version).color(PALETTE.text_muted));
+                });
+            });
+            ui.add_space(8.0);
+            ui.label(t!("about-text"));
+            ui.label(RichText::new(t!("about-familiar")).color(PALETTE.text_muted));
+            ui.add_space(6.0);
+            ui.separator();
+            ui.add_space(4.0);
+            egui::Grid::new("about-info").num_columns(2).striped(false).spacing([16.0, 6.0]).show(ui, |ui| {
+                ui.label(theme::muted(t!("about-author")));
+                ui.label(env!("CARGO_PKG_AUTHORS"));
+                ui.end_row();
+                ui.label(theme::muted(t!("about-license-label")));
+                ui.hyperlink_to("GPL-3.0-or-later", "https://www.gnu.org/licenses/gpl-3.0.html");
+                ui.end_row();
+                ui.label(theme::muted(t!("about-repository")));
+                ui.hyperlink_to(repository.trim_start_matches("https://"), repository);
+                ui.end_row();
+            });
+            ui.add_space(8.0);
+            ui.label(theme::title(t!("about-credits")));
+            for line in [t!("about-built-with"), t!("about-font-credit"), t!("about-icon-credit")] {
+                ui.label(RichText::new(line).size(12.0).color(PALETTE.text_muted));
             }
             ui.add_space(8.0);
-            ui.vertical(|ui| {
-                ui.add_space(6.0);
-                ui.label(RichText::new("ConstructCAD").family(theme::semibold()).size(22.0).color(PALETTE.text));
-                let version = format!("{} {}", t!("about-version"), env!("CARGO_PKG_VERSION"));
-                ui.label(RichText::new(version).color(PALETTE.text_muted));
-            });
-        });
-        ui.add_space(12.0);
-        ui.label(t!("about-text"));
-        ui.label(RichText::new(t!("about-familiar")).color(PALETTE.text_muted));
-        ui.add_space(12.0);
-        ui.separator();
-        ui.add_space(8.0);
-        egui::Grid::new("about-info").num_columns(2).striped(false).spacing([16.0, 6.0]).show(ui, |ui| {
-            ui.label(theme::muted(t!("about-author")));
-            ui.label(env!("CARGO_PKG_AUTHORS"));
-            ui.end_row();
-            ui.label(theme::muted(t!("about-license-label")));
-            ui.hyperlink_to("GPL-3.0-or-later", "https://www.gnu.org/licenses/gpl-3.0.html");
-            ui.end_row();
-            ui.label(theme::muted(t!("about-repository")));
-            ui.hyperlink_to(repository.trim_start_matches("https://"), repository);
-            ui.end_row();
-        });
-        ui.add_space(12.0);
-        ui.label(theme::title(t!("about-credits")));
-        ui.add_space(2.0);
-        for line in [t!("about-built-with"), t!("about-font-credit"), t!("about-icon-credit")] {
-            ui.label(RichText::new(line).size(12.0).color(PALETTE.text_muted));
-        }
-        ui.add_space(12.0);
-        ui.label(RichText::new(t!("about-independence")).size(11.5).color(PALETTE.text_faint));
-        ui.add_space(16.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let close = ui.add(
-                egui::Button::new(RichText::new(t!("action-close")).color(egui::Color32::WHITE)).fill(PALETTE.accent),
-            );
-            if ui.button(t!("about-open-repository")).clicked() {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(repository));
-            }
-            close.clicked()
-        })
-        .inner
-    });
-    if response.inner || response.should_close() {
-        state.dialogs.about = false;
+            ui.label(RichText::new(t!("about-independence")).size(11.5).color(PALETTE.text_faint));
+        },
+        |f| {
+            open_repo = f.extra(t!("about-open-repository"));
+            f.primary(t!("action-close"));
+        },
+    );
+    match response.clicked {
+        Some(i) if i == open_repo => ctx.open_url(egui::OpenUrl::new_tab(repository)),
+        Some(_) => state.dialogs.about = false,
+        None if response.dismissed => state.dialogs.about = false,
+        None => {}
     }
 }

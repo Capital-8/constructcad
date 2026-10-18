@@ -73,6 +73,7 @@ action-copy = Copy
 action-delete = Delete
 action-cancel = Cancel
 action-discard = Discard
+action-dont-save = Don't Save
 action-ok = OK
 action-zoom-fit = Zoom to Fit
 
@@ -266,6 +267,8 @@ dlg-type = Type Properties
 dlg-unsaved = Unsaved Changes
 dlg-unsaved-text = The project has unsaved changes. Do you want to save them?
 dlg-error = Error
+dlg-delete-level = Delete Level
+dlg-delete-level-text = Delete the level “{ $level }”? Its { $views } view(s) will be deleted too.
 dlg-about = About
 info-name = Project Name
 info-number = Number

@@ -60,6 +60,7 @@ cargo test --workspace
 ## Project rules
 
 - **One model, many views.** Every change to the model goes through `Document::edit` so it is recorded as a reversible `Transaction`. Never mutate the document outside a transaction.
+- **Dialogs.** Build every dialog with `cc_app::dialog::Dialog`: title and close button in the header, buttons in the footer (main action first, Cancel last, auxiliary buttons on the left, destructive actions with `danger`). Dialogs that edit data offer OK / Cancel and wrap their edits in `dialog::session` so Cancel undoes them. Colors come from `theme::PALETTE`.
 - **No hard-coded interface text.** User-facing strings go in `assets/i18n/*.ftl` and are accessed with `t!`. Add every new key to **all** languages; a test enforces matching keys and placeholders.
 - **File format compatibility.** `.ccad` files are versioned. Changes to persisted structures must keep older files loadable or bump the format version with a migration.
 - **Respect crate boundaries.** `cc_core` does not depend on geometry, views or UI; `cc_geom`, `cc_views`, `cc_render` and `cc_ifc` do not depend on `cc_app`.

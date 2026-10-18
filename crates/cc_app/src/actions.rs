@@ -158,9 +158,22 @@ pub fn delete_level(state: &mut AppState, level: LevelId) {
         return;
     }
     let views: Vec<_> = state.project().views.values().filter(|v| v.level() == Some(level)).map(|v| v.id).collect();
+    // Walls rising to this level keep their current height, unconnected.
+    let attached: Vec<_> = state
+        .project()
+        .walls()
+        .filter(|(_, w)| matches!(w.top, cc_core::WallTop::Level { level: l, .. } if l == level))
+        .map(|(e, w)| (e.id, state.project().wall_height(e, w)))
+        .collect();
     state.doc.edit(t!("tx-delete-level"), |e| {
         for v in views {
             e.remove_view(v);
+        }
+        for (id, height) in attached {
+            if let Some(cc_core::ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
+                w.top = cc_core::WallTop::Unconnected;
+                w.height = height;
+            }
         }
         e.levels_mut().retain(|l| l.id != level);
     });
@@ -328,5 +341,23 @@ mod tests {
         run_pending(&mut state, PendingAction::Close);
         run_pending(&mut state, PendingAction::New);
         assert!(!state.show_home && state.project_open);
+    }
+
+    #[test]
+    fn deleting_a_level_unconnects_walls_rising_to_it() {
+        let mut state = AppState::new(Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        let upper = state.project().levels[1].id;
+        let (id, height) = state
+            .project()
+            .walls()
+            .find(|(_, w)| matches!(w.top, cc_core::WallTop::Level { .. }))
+            .map(|(e, w)| (e.id, state.project().wall_height(e, w)))
+            .unwrap();
+        delete_level(&mut state, upper);
+        let e = state.project().element(id).unwrap();
+        let w = e.as_wall().unwrap();
+        assert_eq!(w.top, cc_core::WallTop::Unconnected);
+        assert!((state.project().wall_height(e, w) - height).abs() < 1e-9);
+        assert!(state.project().level(upper).is_none());
     }
 }

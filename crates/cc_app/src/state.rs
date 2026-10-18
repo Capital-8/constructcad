@@ -40,6 +40,10 @@ pub struct Dialogs {
     pub type_rename: Option<String>,
     /// The layer editor is expanded in the type dialog.
     pub type_layers_open: bool,
+    /// Undo depth when the open data dialog started editing (see `dialog::session`).
+    pub edit_start: Option<usize>,
+    /// Level waiting for delete confirmation.
+    pub delete_level: Option<LevelId>,
     pub confirm: Option<PendingAction>,
     pub error: Option<String>,
     pub about: bool,
