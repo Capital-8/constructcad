@@ -44,6 +44,25 @@ fn trimmed(a: DVec2, b: DVec2, pick: DVec2, c: DVec2, d: DVec2) -> Option<(DVec2
     (s.distance(e) > 1e-4).then_some((s, e))
 }
 
+/// Ends of other walls on the same level that meet `point` (within 1 cm),
+/// as `(wall, is_start)`.
+pub fn connected_ends(project: &Project, id: ElementId, point: DVec2) -> Vec<(ElementId, bool)> {
+    let Some(me) = project.element(id).filter(|e| e.as_wall().is_some()) else { return Vec::new() };
+    project
+        .walls()
+        .filter(|(e, _)| e.id != id && e.level == me.level)
+        .filter_map(|(e, w)| {
+            if w.start.distance(point) < 0.01 {
+                Some((e.id, true))
+            } else if w.end.distance(point) < 0.01 {
+                Some((e.id, false))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 /// Why an edit could not be made.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditError {
@@ -138,6 +157,28 @@ impl EditCtx<'_> {
             }
         }
         Ok(new)
+    }
+
+    /// Move one end of a wall, beam or grid to `to` (lengthening or
+    /// shortening it). Walls whose ends met that end move with it, so
+    /// corners stay closed; openings keep their place.
+    pub fn move_endpoint(&mut self, id: ElementId, at_start: bool, to: DVec2) -> Result<(), EditError> {
+        let (a, b) = line(self.project(), id)?;
+        let from = if at_start { a } else { b };
+        let new = if at_start { (to, b) } else { (a, to) };
+        if new.0.distance(new.1) < 0.01 {
+            return Err(EditError::Degenerate);
+        }
+        let connected = connected_ends(self.project(), id, from);
+        self.apply_line(id, new);
+        for (other, other_start) in connected {
+            let Ok((s, e)) = line(self.project(), other) else { continue };
+            let moved = if other_start { (to, e) } else { (s, to) };
+            if moved.0.distance(moved.1) >= 0.01 {
+                self.apply_line(other, moved);
+            }
+        }
+        Ok(())
     }
 
     /// A copy of `id` moved `distance` perpendicular to its line (positive
@@ -265,5 +306,17 @@ mod tests {
         assert_eq!(wall(&doc, copy), (v(0.0, 2.0), v(4.0, 2.0)));
         // Not parallel enough.
         assert_eq!(doc.edit("align", |e| e.align_to(ids[1], v(0.0, 0.0), v(0.0, 5.0))), Err(EditError::Parallel));
+    }
+
+    #[test]
+    fn dragging_an_end_keeps_the_corner_closed() {
+        let (mut doc, ids) =
+            doc_with_walls(&[(v(0.0, 0.0), v(4.0, 0.0)), (v(4.0, 0.0), v(4.0, 3.0)), (v(9.0, 9.0), v(9.0, 12.0))]);
+        doc.edit("grip", |e| e.move_endpoint(ids[0], false, v(5.0, 0.0))).unwrap();
+        assert_eq!(wall(&doc, ids[0]), (v(0.0, 0.0), v(5.0, 0.0)));
+        // The wall that met that end follows; unrelated walls do not.
+        assert_eq!(wall(&doc, ids[1]), (v(5.0, 0.0), v(4.0, 3.0)));
+        assert_eq!(wall(&doc, ids[2]), (v(9.0, 9.0), v(9.0, 12.0)));
+        assert_eq!(doc.edit("grip", |e| e.move_endpoint(ids[2], true, v(9.0, 12.0))), Err(EditError::Degenerate));
     }
 }

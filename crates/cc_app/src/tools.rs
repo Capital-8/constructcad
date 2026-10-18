@@ -176,8 +176,20 @@ impl Tool {
 
 #[derive(Debug, Clone)]
 pub enum Drag {
-    Box { start: Pos2 },
-    Move { start: DVec2, ids: Vec<ElementId>, copy: bool },
+    Box {
+        start: Pos2,
+    },
+    /// An end handle of a wall, beam or grid; `fixed` is the other end.
+    Grip {
+        id: ElementId,
+        at_start: bool,
+        fixed: DVec2,
+    },
+    Move {
+        start: DVec2,
+        ids: Vec<ElementId>,
+        copy: bool,
+    },
 }
 
 /// Transient state of the active tool.
@@ -1299,9 +1311,36 @@ fn select(
         paint_drawing(painter, drawing, xf, &opts);
     }
 
+    // End handles of selected walls, beams and grids (not pinned ones).
+    let grips: Vec<(ElementId, bool, DVec2, DVec2)> = if movable && state.interaction.drag.is_none() {
+        state
+            .selection
+            .iter()
+            .take(50)
+            .filter(|id| !state.project().is_pinned(**id))
+            .filter_map(|id| state.project().element(*id).and_then(cc_core::wall_ops::line_of).map(|l| (*id, l)))
+            .flat_map(|(id, (a, b))| [(id, true, a, b), (id, false, b, a)])
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let grip_at = |p: Pos2| grips.iter().find(|g| xf.to_screen(g.2).distance(p) <= 7.0).copied();
+    for (_, _, at, _) in &grips {
+        let r = egui::Rect::from_center_size(xf.to_screen(*at), egui::vec2(9.0, 9.0));
+        painter.rect_filled(r, 1.5, Color32::WHITE);
+        painter.rect_stroke(r, 1.5, Stroke::new(1.5, HIGHLIGHT), egui::StrokeKind::Middle);
+    }
+    if resp.hover_pos().and_then(grip_at).is_some() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+
     if resp.drag_started_by(egui::PointerButton::Primary) {
         let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or_default();
         let w = xf.to_world(origin);
+        if let Some((id, at_start, _, fixed)) = grip_at(origin) {
+            state.interaction.drag = Some(Drag::Grip { id, at_start, fixed });
+            return;
+        }
         match drawing.hit_test(w, tol) {
             Some(hit) if movable => {
                 if !state.selection.contains(&hit) {
@@ -1322,6 +1361,23 @@ fn select(
         }
         (d / step).round() * step
     };
+
+    // Dragging an end handle: the end snaps like a drawing point.
+    if let (Some(Drag::Grip { id, at_start, fixed }), Some(raw)) = (state.interaction.drag.clone(), raw) {
+        let level = state.project().element(id).map(|e| e.level);
+        let s = snap_at(state, level, raw, Some(fixed), &[], xf.scale, shift);
+        draw_snap(painter, xf, s);
+        painter.line_segment([xf.to_screen(fixed), xf.to_screen(s.point)], Stroke::new(2.0, PREVIEW));
+        temp_dimension(painter, xf, fixed, s.point, None, "", 0.0);
+        if resp.drag_stopped() {
+            state.interaction.drag = None;
+            let result = state.doc.edit(t!("tx-modify"), |e| e.move_endpoint(id, at_start, s.point));
+            if result.is_err() {
+                state.message = t!("msg-degenerate");
+            }
+        }
+        return;
+    }
 
     match (&state.interaction.drag, raw) {
         (Some(Drag::Move { start, ids, copy }), Some(raw)) => {
@@ -1365,6 +1421,8 @@ fn select(
                     }
                 }
             }
+            // Handled above while the pointer is over the view.
+            Some(Drag::Grip { .. }) => {}
             Some(Drag::Box { start }) => {
                 let end = resp.interact_pointer_pos().or(resp.hover_pos()).unwrap_or(start);
                 let (a, b) = (xf.to_world(start), xf.to_world(end));
