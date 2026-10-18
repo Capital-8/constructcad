@@ -15,6 +15,7 @@ mod persist;
 mod project;
 mod repair;
 mod schedule;
+pub mod transform;
 mod types;
 pub mod units;
 mod view;
@@ -32,6 +33,7 @@ pub use persist::{
 };
 pub use project::{Level, Project, ProjectInfo};
 pub use schedule::{ScheduleDef, ScheduleField};
+pub use transform::PlanTransform;
 pub use types::{
     Category, ColumnSection, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction, stair_layout,
 };

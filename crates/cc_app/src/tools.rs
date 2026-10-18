@@ -1315,61 +1315,25 @@ fn select(
 
 /// Translate elements; hosted elements slide along their host unless it moves too.
 pub fn move_elements(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
-    let moving: BTreeSet<_> = ids.iter().copied().collect();
-    state.doc.edit(t!("tx-move"), |e| {
-        for id in ids {
-            let Some(el) = e.project().element(*id) else { continue };
-            if let Some(h) = el.as_hosted() {
-                if moving.contains(&h.host) {
-                    continue;
-                }
-                let Some(dir) = e.project().element(h.host).and_then(|w| w.as_wall()).map(|w| w.direction()) else {
-                    continue;
-                };
-                if let Some(h) = e.element_mut(*id).and_then(|el| el.as_hosted_mut()) {
-                    h.offset += delta.dot(dir);
-                }
-            } else if let Some(el) = e.element_mut(*id) {
-                el.translate(delta);
-            }
-        }
-    });
+    transform_selection(state, ids, &cc_core::PlanTransform::translate(delta), t!("tx-move"));
+}
+
+/// Move, rotate or mirror `ids` in one undo step (walls take their openings).
+pub fn transform_selection(state: &mut AppState, ids: &[ElementId], t: &cc_core::PlanTransform, name: String) {
+    if t.is_identity() {
+        return;
+    }
+    state.doc.edit(name, |e| e.transform_elements(ids, t));
 }
 
 /// Copy elements by `delta`; hosted elements follow copied hosts.
 pub fn duplicate(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
-    let selected: BTreeSet<_> = ids.iter().copied().collect();
-    let new_ids = state.doc.edit(t!("tx-copy"), |e| {
-        let originals: Vec<Element> = ids.iter().filter_map(|id| e.project().element(*id).cloned()).collect();
-        let mut remap = std::collections::BTreeMap::new();
-        let mut created = Vec::new();
-        // Hosts first so hosted copies can be remapped.
-        for el in originals.iter().filter(|el| el.as_hosted().is_none()) {
-            let mut c = el.clone();
-            c.id = ElementId(e.alloc_id());
-            c.translate(delta);
-            remap.insert(el.id, c.id);
-            created.push(e.add_element(c));
-        }
-        for el in originals.iter().filter(|el| el.as_hosted().is_some()) {
-            let mut c = el.clone();
-            c.id = ElementId(e.alloc_id());
-            c.mark = e.project().next_mark(c.category());
-            let host = el.as_hosted().map(|h| h.host).unwrap_or(ElementId(0));
-            let dir = e.project().element(host).and_then(|w| w.as_wall()).map(|w| w.direction());
-            if let Some(h) = c.as_hosted_mut() {
-                if let Some(new_host) = remap.get(&h.host) {
-                    h.host = *new_host;
-                } else if selected.contains(&host) {
-                    continue;
-                } else if let Some(dir) = dir {
-                    h.offset += delta.dot(dir);
-                }
-            }
-            created.push(e.add_element(c));
-        }
-        created
-    });
+    copy_transformed(state, ids, &[cc_core::PlanTransform::translate(delta)], t!("tx-copy"));
+}
+
+/// Copy `ids` once per transform and select the copies.
+pub fn copy_transformed(state: &mut AppState, ids: &[ElementId], transforms: &[cc_core::PlanTransform], name: String) {
+    let new_ids = state.doc.edit(name, |e| e.copy_elements(ids, transforms));
     state.selection = new_ids.into_iter().collect();
 }
 
