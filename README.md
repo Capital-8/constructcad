@@ -46,6 +46,9 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Rooms**: click inside room-bounding walls to place a room; its boundary, area and perimeter follow the walls. Room tags in plans, room schedule and `IfcSpace` export.
 - **Grids and annotation**: grid lines with bubbles in every plan; aligned dimensions in any 2D view (*Annotate* tab); door and window marks tagged automatically.
 - **Parametric components**: furniture, fixtures and casework made of boxes, cylinders and extruded profiles whose sizes are expressions over named parameters (type or instance). A component editor with live checking and plan/front previews, a starter library (table, chair, bed, sofa, toilet, washbasin, wardrobe), the *Component* tool (CM), schedules and legends, `.ccomp` files to share them, and IFC export/import as `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` or `IfcBuildingElementProxy`.
+- **Materials**: browser with identity, graphics (shading, transparency, surface and cut patterns), render appearance and physical properties; cut patterns show in plans and sections, transparency in 3D.
+- **Project units**: millimeters, centimeters or meters (and area, volume, angle, slope and currency formats) with decimals, symbols and digit grouping.
+- **Navigation and drawing aids**: 3D navigation cube, temporary dimensions with angles, alignment guides, Space to rotate or flip.
 - **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
 - **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
 - **Properties**: instance and view parameters in collapsible sections; walls with base and top constraints (unconnected height or up to a level), location line, room bounding and structural flags.
