@@ -3,8 +3,8 @@
 //! Run with `cargo run -p cc_core --example casa_simples`.
 
 use cc_core::{
-    Category, Dimension, Document, Element, ElementId, ElementKind, Floor, Grid, Hosted, Project, Roof, RoofShape,
-    Room, View, ViewCategory, ViewId, ViewKind, Viewport, Wall, WallTop,
+    Beam, Category, Column, Dimension, Document, Element, ElementId, ElementKind, Floor, Grid, Hosted, Project,
+    Railing, Roof, RoofShape, Room, Stair, View, ViewCategory, ViewId, ViewKind, Viewport, Wall, WallTop,
 };
 use glam::DVec2;
 
@@ -81,13 +81,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             DVec2::new(-0.075, 6.075),
         ];
         add(e, floor_t, "", ElementKind::Floor(Floor { boundary: slab.clone(), height_offset: 0.0 }));
-        let roof = Roof {
-            footprint: slab,
-            base_offset: 3.0,
-            overhang: 0.5,
-            shape: RoofShape::Shed { slope: 0.1, direction_deg: 90.0 },
-        };
+        let roof = Roof { footprint: slab, base_offset: 3.0, overhang: 0.5, shape: RoofShape::Hip { slope: 0.35 } };
         add(e, roof_t, "", ElementKind::Roof(roof));
+
+        // A stair in the living room up to the upper level.
+        let stair_t = p.default_type(Category::Stair).ok_or("template lacks a stair type")?;
+        let up = WallTop::Level { level: upper, offset: 0.0 };
+        let stair = Stair { start: DVec2::new(1.0, 0.8), direction_deg: 90.0, base_offset: 0.0, height: 3.0, top: up };
+        add(e, stair_t, "", ElementKind::Stair(stair));
+
+        // A front porch: two columns, a beam and a railing.
+        let column_t = p.default_type(Category::Column).ok_or("template lacks a column type")?;
+        let beam_t = p.default_type(Category::Beam).ok_or("template lacks a beam type")?;
+        let railing_t = p.default_type(Category::Railing).ok_or("template lacks a railing type")?;
+        for x in [2.0, 7.0] {
+            let column =
+                Column { position: DVec2::new(x, -2.5), rotation_deg: 0.0, base_offset: 0.0, height: 3.0, top: up };
+            add(e, column_t, "", ElementKind::Column(column));
+        }
+        let beam = Beam { start: DVec2::new(2.0, -2.5), end: DVec2::new(7.0, -2.5), top_offset: 3.0 };
+        add(e, beam_t, "", ElementKind::Beam(beam));
+        let railing = Railing { path: vec![DVec2::new(2.1, -2.5), DVec2::new(5.5, -2.5)], base_offset: 0.0 };
+        add(e, railing_t, "", ElementKind::Railing(railing));
 
         // Rooms, grids and a dimension on the ground floor plan.
         let room_t = p.default_type(Category::Room).ok_or("template lacks a room type")?;

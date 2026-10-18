@@ -81,6 +81,36 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 ];
                 d.polyline(&r, true, LineStyle::Projection, None);
             }
+            TypeData::Column { section, .. } => {
+                let c = o + DVec2::new(0.4, 0.0);
+                let outline = cc_geom::column_outline(*section, c, 0.0);
+                d.fill(outline.clone(), POCHE, None);
+                d.polyline(&outline, true, LineStyle::Cut, None);
+            }
+            TypeData::Beam { width, height, .. } => {
+                // Section of the beam.
+                let r = [o, o + DVec2::new(*width, 0.0), o + DVec2::new(*width, *height), o + DVec2::new(0.0, *height)];
+                d.fill(r.to_vec(), POCHE, None);
+                d.polyline(&r, true, LineStyle::Cut, None);
+            }
+            TypeData::Stair { tread, max_riser, .. } => {
+                // A few steps in profile.
+                let mut pts = vec![o];
+                for k in 0..4 {
+                    let (x, y) = (k as f64 * tread, (k + 1) as f64 * max_riser);
+                    pts.push(o + DVec2::new(x, y));
+                    pts.push(o + DVec2::new(x + tread, y));
+                }
+                d.polyline(&pts, false, LineStyle::Projection, None);
+            }
+            TypeData::Railing { height, .. } => {
+                d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Thin, None);
+                d.line(o + DVec2::new(0.0, *height), o + DVec2::new(sample, *height), LineStyle::Projection, None);
+                for k in 0..=3 {
+                    let x = sample * k as f64 / 3.0;
+                    d.line(o + DVec2::new(x, 0.0), o + DVec2::new(x, *height), LineStyle::Thin, None);
+                }
+            }
             // Filtered out above: annotation types have no legend symbol.
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => {}
         }

@@ -45,6 +45,10 @@ pub enum Icon {
     Room,
     Grid,
     Dimension,
+    Column,
+    Beam,
+    Stair,
+    Railing,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -306,6 +310,37 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             seg((0.5, 10.0), (2.5, 8.0), s);
             seg((13.5, 10.0), (15.5, 8.0), s);
             seg((5.5, 6.0), (10.5, 6.0), thin);
+        }
+        Icon::Column => {
+            poly(&[(5.0, 1.5), (11.0, 1.5), (11.0, 14.5), (5.0, 14.5)], fill);
+            seg((3.0, 1.5), (13.0, 1.5), s);
+            seg((3.0, 14.5), (13.0, 14.5), s);
+        }
+        Icon::Beam => {
+            poly(&[(1.0, 6.0), (15.0, 6.0), (15.0, 10.0), (1.0, 10.0)], fill);
+            seg((3.0, 10.0), (3.0, 14.5), thin);
+            seg((13.0, 10.0), (13.0, 14.5), thin);
+        }
+        Icon::Stair => {
+            line(&[
+                (1.5, 14.5),
+                (1.5, 11.5),
+                (5.0, 11.5),
+                (5.0, 8.0),
+                (8.5, 8.0),
+                (8.5, 4.5),
+                (12.0, 4.5),
+                (12.0, 1.5),
+                (14.5, 1.5),
+            ]);
+            seg((1.5, 14.5), (14.5, 14.5), thin);
+        }
+        Icon::Railing => {
+            seg((1.5, 4.0), (14.5, 4.0), s);
+            for x in [2.5, 6.0, 9.5, 13.0] {
+                seg((x, 4.0), (x, 13.5), thin);
+            }
+            seg((1.5, 13.5), (14.5, 13.5), thin);
         }
         Icon::Close => {
             seg((3.0, 3.0), (13.0, 13.0), s);

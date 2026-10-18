@@ -1,6 +1,6 @@
 use crate::{
-    CameraState, Category, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId, Layer,
-    LayerFunction, LevelId, SheetSize, TypeData, View, ViewCategory, ViewId, ViewKind, Viewport, WallFunction,
+    CameraState, Category, ColumnSection, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId,
+    Layer, LayerFunction, LevelId, SheetSize, TypeData, View, ViewCategory, ViewId, ViewKind, Viewport, WallFunction,
 };
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
@@ -143,6 +143,23 @@ impl Project {
                 },
             ),
             (&n("tpl-type-ceiling-gypsum"), TypeData::Ceiling { thickness: 0.02, material: n("tpl-mat-gypsum") }),
+            (
+                &n("tpl-type-column-rect"),
+                TypeData::Column {
+                    section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
+                    material: n("tpl-mat-concrete"),
+                },
+            ),
+            (
+                &n("tpl-type-column-round"),
+                TypeData::Column { section: ColumnSection::Round { diameter: 0.3 }, material: n("tpl-mat-concrete") },
+            ),
+            (&n("tpl-type-beam"), TypeData::Beam { width: 0.15, height: 0.4, material: n("tpl-mat-concrete") }),
+            (
+                &n("tpl-type-stair"),
+                TypeData::Stair { width: 1.0, max_riser: 0.18, tread: 0.28, material: n("tpl-mat-concrete") },
+            ),
+            (&n("tpl-type-railing"), TypeData::Railing { height: 1.1, post_spacing: 1.2, material: n("tpl-mat-wood") }),
             (&n("tpl-type-room"), TypeData::Room {}),
             (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
             (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
@@ -223,6 +240,38 @@ impl Project {
     /// those categories existed.
     pub fn ensure_annotation_types(&mut self) {
         let defaults = [
+            (
+                Category::Column,
+                "tpl-type-column-rect",
+                TypeData::Column {
+                    section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
+                    material: template_default("tpl-mat-concrete").to_string(),
+                },
+            ),
+            (
+                Category::Beam,
+                "tpl-type-beam",
+                TypeData::Beam { width: 0.15, height: 0.4, material: template_default("tpl-mat-concrete").to_string() },
+            ),
+            (
+                Category::Stair,
+                "tpl-type-stair",
+                TypeData::Stair {
+                    width: 1.0,
+                    max_riser: 0.18,
+                    tread: 0.28,
+                    material: template_default("tpl-mat-concrete").to_string(),
+                },
+            ),
+            (
+                Category::Railing,
+                "tpl-type-railing",
+                TypeData::Railing {
+                    height: 1.1,
+                    post_spacing: 1.2,
+                    material: template_default("tpl-mat-wood").to_string(),
+                },
+            ),
             (Category::Room, "tpl-type-room", TypeData::Room {}),
             (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
             (Category::Dimension, "tpl-type-dimension", TypeData::Dimension { text_size: 2.5 }),
@@ -240,6 +289,26 @@ impl Project {
     /// The level above `id`, or `id` itself plus `fallback` meters: the default upper limit of rooms.
     pub fn level_height(&self, id: LevelId, fallback: f64) -> f64 {
         self.level_above(id).map_or(fallback, |above| above.elevation - self.level_elevation(id))
+    }
+
+    /// Base elevation and top elevation of a column (top at least 1 cm above).
+    pub fn column_span(&self, element: &Element, column: &crate::Column) -> (f64, f64) {
+        let base = self.level_elevation(element.level) + column.base_offset;
+        let top = match column.top {
+            crate::WallTop::Unconnected => base + column.height,
+            crate::WallTop::Level { level, offset } => self.level_elevation(level) + offset,
+        };
+        (base, top.max(base + 0.01))
+    }
+
+    /// Base and top elevation of a stair (the top at least one riser above).
+    pub fn stair_span(&self, element: &Element, stair: &crate::Stair) -> (f64, f64) {
+        let base = self.level_elevation(element.level) + stair.base_offset;
+        let top = match stair.top {
+            crate::WallTop::Unconnected => base + stair.height,
+            crate::WallTop::Level { level, offset } => self.level_elevation(level) + offset,
+        };
+        (base, top.max(base + 0.05))
     }
 
     /// Elevation of a wall's base.
@@ -407,6 +476,11 @@ fn template_default(key: &str) -> &'static str {
         "tpl-schedule-walls" => "Tabela de paredes",
         "tpl-sheet-plans" => "Plantas",
         "tpl-type-room" => "Ambiente",
+        "tpl-type-column-rect" => "Pilar 20 x 20 cm",
+        "tpl-type-column-round" => "Pilar circular 30 cm",
+        "tpl-type-beam" => "Viga 15 x 40 cm",
+        "tpl-type-stair" => "Escada 1,00 m",
+        "tpl-type-railing" => "Guarda-corpo 1,10 m",
         "tpl-type-grid" => "Eixo 8 mm",
         "tpl-type-dimension" => "Cota linear 2,5 mm",
         "tpl-schedule-rooms" => "Tabela de ambientes",

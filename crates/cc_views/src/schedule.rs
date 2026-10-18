@@ -178,6 +178,73 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category) -> 
             let totals = vec![count, String::new(), String::new(), format::number(area_sum, 2), String::new()];
             Table { headers, rows, totals }
         }
+        Category::Column | Category::Beam | Category::Stair | Category::Railing => {
+            structure_schedule(project, geom, category, &elements)
+        }
         Category::Grid | Category::Dimension => Table::default(),
     }
+}
+
+/// Columns (height), beams (length), stairs (risers and run) and railings (length).
+fn structure_schedule(project: &Project, geom: &ModelGeometry, category: Category, elements: &[&Element]) -> Table {
+    let measure = match category {
+        Category::Column => "col-height",
+        Category::Stair => "col-risers",
+        _ => "col-length",
+    };
+    let mut headers = vec!["col-mark", "col-type", "col-level", measure];
+    if category == Category::Stair {
+        headers.extend(["col-riser-height", "col-run"]);
+    }
+    if category != Category::Railing {
+        headers.push("col-volume");
+    }
+    let (mut volume_sum, mut length_sum) = (0.0, 0.0);
+    let rows = elements
+        .iter()
+        .map(|e| {
+            let mut cells =
+                vec![e.mark.clone(), project.type_name(e.type_id).to_string(), project.level_name(e.level).to_string()];
+            match &e.kind {
+                ElementKind::Column(c) => {
+                    let (base, top) = project.column_span(e, c);
+                    cells.push(format::meters(top - base));
+                }
+                ElementKind::Beam(b) => {
+                    length_sum += b.length();
+                    cells.push(format::meters(b.length()));
+                }
+                ElementKind::Stair(s) => match cc_geom::stair_geom(project, e, s) {
+                    Some(g) => cells.extend([g.risers.to_string(), format::meters(g.riser), format::meters(g.run())]),
+                    None => cells.extend(["—".to_string(), "—".to_string(), "—".to_string()]),
+                },
+                ElementKind::Railing(r) => {
+                    length_sum += r.length();
+                    cells.push(format::meters(r.length()));
+                }
+                _ => {}
+            }
+            if category != Category::Railing {
+                let volume = geom.volume(e.id);
+                volume_sum += volume;
+                cells.push(format::number(volume, 3));
+            }
+            Row { element: e.id, cells }
+        })
+        .collect();
+    let mut totals = vec![String::new(); headers.len()];
+    if let Some(first) = totals.first_mut() {
+        *first = elements.len().to_string();
+    }
+    if matches!(category, Category::Beam | Category::Railing)
+        && let Some(cell) = totals.get_mut(3)
+    {
+        *cell = format::meters(length_sum);
+    }
+    if category != Category::Railing
+        && let Some(cell) = totals.last_mut()
+    {
+        *cell = format::number(volume_sum, 3);
+    }
+    Table { headers, rows, totals }
 }

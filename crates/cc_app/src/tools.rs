@@ -24,6 +24,10 @@ pub enum Tool {
     Room { type_id: ElementTypeId },
     Grid { type_id: ElementTypeId },
     Dimension { type_id: ElementTypeId },
+    Column { type_id: ElementTypeId },
+    Beam { type_id: ElementTypeId },
+    Stair { type_id: ElementTypeId },
+    Railing { type_id: ElementTypeId },
 }
 
 impl Tool {
@@ -41,6 +45,10 @@ impl Tool {
             Tool::Room { .. } => "tool-room",
             Tool::Grid { .. } => "tool-grid",
             Tool::Dimension { .. } => "tool-dimension",
+            Tool::Column { .. } => "tool-column",
+            Tool::Beam { .. } => "tool-beam",
+            Tool::Stair { .. } => "tool-stair",
+            Tool::Railing { .. } => "tool-railing",
         }
     }
 
@@ -51,7 +59,11 @@ impl Tool {
             | Tool::Sketch { type_id, .. }
             | Tool::Room { type_id }
             | Tool::Grid { type_id }
-            | Tool::Dimension { type_id } => Some(*type_id),
+            | Tool::Dimension { type_id }
+            | Tool::Column { type_id }
+            | Tool::Beam { type_id }
+            | Tool::Stair { type_id }
+            | Tool::Railing { type_id } => Some(*type_id),
             _ => None,
         }
     }
@@ -63,6 +75,10 @@ impl Tool {
             Tool::Room { .. } => Some(Category::Room),
             Tool::Grid { .. } => Some(Category::Grid),
             Tool::Dimension { .. } => Some(Category::Dimension),
+            Tool::Column { .. } => Some(Category::Column),
+            Tool::Beam { .. } => Some(Category::Beam),
+            Tool::Stair { .. } => Some(Category::Stair),
+            Tool::Railing { .. } => Some(Category::Railing),
             _ => None,
         }
     }
@@ -75,6 +91,10 @@ impl Tool {
             Tool::Room { .. } => Tool::Room { type_id: id },
             Tool::Grid { .. } => Tool::Grid { type_id: id },
             Tool::Dimension { .. } => Tool::Dimension { type_id: id },
+            Tool::Column { .. } => Tool::Column { type_id: id },
+            Tool::Beam { .. } => Tool::Beam { type_id: id },
+            Tool::Stair { .. } => Tool::Stair { type_id: id },
+            Tool::Railing { .. } => Tool::Railing { type_id: id },
             t => t,
         }
     }
@@ -89,6 +109,10 @@ impl Tool {
             Category::Room => Tool::Room { type_id },
             Category::Grid => Tool::Grid { type_id },
             Category::Dimension => Tool::Dimension { type_id },
+            Category::Column => Tool::Column { type_id },
+            Category::Beam => Tool::Beam { type_id },
+            Category::Stair => Tool::Stair { type_id },
+            Category::Railing => Tool::Railing { type_id },
         })
     }
 }
@@ -276,7 +300,216 @@ pub fn handle(
         (Tool::Section, level) => section_tool(ui, resp, painter, state, level, xf),
         (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
         (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Column { type_id }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
         _ => {}
+    }
+}
+
+/// Top constraint for new columns and stairs: the level above, if any.
+fn default_top(project: &Project, level: LevelId) -> cc_core::WallTop {
+    match project.level_above(level) {
+        Some(above) => cc_core::WallTop::Level { level: above.id, offset: 0.0 },
+        None => cc_core::WallTop::Unconnected,
+    }
+}
+
+/// Click to place a column (snaps to wall ends and grid crossings through the usual snaps).
+fn column_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap(state.project(), Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
+    draw_snap(painter, xf, s);
+    if let Some(cc_core::TypeData::Column { section, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
+        let outline: Vec<Pos2> =
+            cc_geom::column_outline(*section, s.point, 0.0).iter().map(|p| xf.to_screen(*p)).collect();
+        painter.add(egui::Shape::closed_line(outline, Stroke::new(1.5, PREVIEW)));
+    }
+    if resp.clicked() {
+        let project = state.project();
+        let column = cc_core::Column {
+            position: s.point,
+            rotation_deg: 0.0,
+            base_offset: 0.0,
+            height: project.level_height(level, 3.0),
+            top: default_top(project, level),
+        };
+        state.create_element(t!("tx-create-column"), level, type_id, ElementKind::Column(column));
+    }
+}
+
+/// Intersections of grid lines, offered as snap points.
+fn grid_crossings(project: &Project) -> Vec<DVec2> {
+    let grids: Vec<(DVec2, DVec2)> = project
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            ElementKind::Grid(g) => Some((g.start, g.end)),
+            _ => None,
+        })
+        .collect();
+    let mut points = Vec::new();
+    for (i, &(a, b)) in grids.iter().enumerate() {
+        for &(c, d) in grids.iter().skip(i + 1) {
+            if let Some(t) = polygon::line_intersect(a, b - a, c, d - c)
+                && (0.0..=1.0).contains(&t)
+            {
+                points.push(a + (b - a) * t);
+            }
+        }
+    }
+    points
+}
+
+/// Two clicks: start and end of a beam. Its top is at the level above by default.
+fn beam_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap(
+        state.project(),
+        Some(level),
+        raw,
+        state.interaction.anchor,
+        &grid_crossings(state.project()),
+        xf.scale,
+        shift,
+    );
+    draw_snap(painter, xf, s);
+    if let Some(a) = state.interaction.anchor {
+        let width = match state.project().element_type(type_id).map(|t| &t.data) {
+            Some(cc_core::TypeData::Beam { width, .. }) => *width,
+            _ => 0.15,
+        };
+        let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
+        let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
+        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+        label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
+    }
+    if resp.clicked() {
+        match state.interaction.anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.05 => {
+                let beam =
+                    cc_core::Beam { start: a, end: s.point, top_offset: state.project().level_height(level, 3.0) };
+                state.create_element(t!("tx-create-beam"), level, type_id, ElementKind::Beam(beam));
+                state.interaction.anchor = Some(s.point);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Two clicks: the foot of the stair, then a point giving its direction.
+fn stair_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap(state.project(), Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
+    draw_snap(painter, xf, s);
+    let project = state.project();
+    let Some(cc_core::TypeData::Stair { width, max_riser, tread, .. }) =
+        project.element_type(type_id).map(|t| t.data.clone())
+    else {
+        return;
+    };
+    let height = match default_top(project, level) {
+        cc_core::WallTop::Level { level: top, .. } => project.level_elevation(top) - project.level_elevation(level),
+        cc_core::WallTop::Unconnected => 3.0,
+    };
+    let (risers, _, run) = cc_core::stair_layout(height, max_riser, tread);
+    if let Some(a) = state.interaction.anchor {
+        let u = (s.point - a).normalize_or(DVec2::X);
+        let v = u.perp() * (width / 2.0);
+        let end = a + u * run;
+        let pts = vec![xf.to_screen(a - v), xf.to_screen(end - v), xf.to_screen(end + v), xf.to_screen(a + v)];
+        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+        for k in 1..risers.saturating_sub(1) {
+            let p = a + u * (k as f64 * tread);
+            painter.line_segment([xf.to_screen(p - v), xf.to_screen(p + v)], Stroke::new(1.0, PREVIEW));
+        }
+        label(painter, xf.to_screen(end), t!("label-stair", "risers" => risers, "run" => format::meters(run)));
+    }
+    if resp.clicked() {
+        match state.interaction.anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.05 => {
+                let d = s.point - a;
+                let stair = cc_core::Stair {
+                    start: a,
+                    direction_deg: d.y.atan2(d.x).to_degrees(),
+                    base_offset: 0.0,
+                    height,
+                    top: default_top(state.project(), level),
+                };
+                state.create_element(t!("tx-create-stair"), level, type_id, ElementKind::Stair(stair));
+                state.interaction.anchor = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Click the points of the railing path; Enter, a double click or Finish ends it.
+fn railing_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let last = state.interaction.points.last().copied();
+    let s = snap(state.project(), Some(level), raw, last, &state.interaction.points.clone(), xf.scale, shift);
+    draw_snap(painter, xf, s);
+    let pts: Vec<Pos2> =
+        state.interaction.points.iter().map(|p| xf.to_screen(*p)).chain([xf.to_screen(s.point)]).collect();
+    if pts.len() >= 2 {
+        painter.add(egui::Shape::line(pts, Stroke::new(1.5, PREVIEW)));
+    }
+    let finish = resp.double_clicked() || ui.input(|i| i.key_pressed(Key::Enter));
+    if resp.clicked() && !resp.double_clicked() {
+        state.interaction.points.push(s.point);
+    }
+    if finish {
+        finish_railing(state, level, type_id);
+    }
+}
+
+/// Create the railing from the points clicked so far.
+pub fn finish_railing(state: &mut AppState, level: LevelId, type_id: ElementTypeId) {
+    let mut path = std::mem::take(&mut state.interaction.points);
+    path.dedup_by(|a, b| a.distance(*b) < 1e-3);
+    if path.len() >= 2 {
+        let railing = cc_core::Railing { path, base_offset: 0.0 };
+        state.create_element(t!("tx-create-railing"), level, type_id, ElementKind::Railing(railing));
     }
 }
 

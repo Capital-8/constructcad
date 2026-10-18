@@ -26,6 +26,10 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Room => Icon::Room,
         Category::Grid => Icon::Grid,
         Category::Dimension => Icon::Dimension,
+        Category::Column => Icon::Column,
+        Category::Beam => Icon::Beam,
+        Category::Stair => Icon::Stair,
+        Category::Railing => Icon::Railing,
     }
 }
 
@@ -188,6 +192,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         for (tab, label) in [
             (RibbonTab::File, t!("ribbon-file")),
             (RibbonTab::Architecture, t!("ribbon-architecture")),
+            (RibbonTab::Structure, t!("ribbon-structure")),
             (RibbonTab::Modify, t!("ribbon-modify")),
             (RibbonTab::Annotate, t!("ribbon-annotate")),
             (RibbonTab::View, t!("ribbon-view")),
@@ -207,6 +212,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         match state.ribbon_tab {
             RibbonTab::File => file_tab(ui, state),
             RibbonTab::Architecture => architecture_tab(ui, state),
+            RibbonTab::Structure => structure_tab(ui, state),
             RibbonTab::Modify => modify_tab(ui, state),
             RibbonTab::Annotate => annotate_tab(ui, state),
             RibbonTab::View => view_tab(ui, state),
@@ -272,8 +278,23 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
         tool_button(ui, state, t!("tool-ceiling"), "FO", Category::Ceiling);
         tool_button(ui, state, t!("tool-roof"), "TE", Category::Roof);
     });
+    group(ui, t!("group-circulation"), |ui| {
+        tool_button(ui, state, t!("tool-stair"), "ST", Category::Stair);
+        tool_button(ui, state, t!("tool-railing"), "RA", Category::Railing);
+    });
     group(ui, t!("group-room"), |ui| {
         tool_button(ui, state, t!("tool-room"), "RM", Category::Room);
+    });
+    group(ui, t!("group-datum"), |ui| {
+        tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
+    });
+    group(ui, t!("group-selection"), |ui| select_button(ui, state));
+}
+
+fn structure_tab(ui: &mut Ui, state: &mut AppState) {
+    group(ui, t!("group-structure"), |ui| {
+        tool_button(ui, state, t!("tool-column"), "CL", Category::Column);
+        tool_button(ui, state, t!("tool-beam"), "BM", Category::Beam);
     });
     group(ui, t!("group-datum"), |ui| {
         tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
@@ -501,6 +522,27 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Dimension { .. } => {
                 ui.label(theme::muted(t!("hint-dimension")));
+            }
+            Tool::Column { .. } => {
+                ui.label(theme::muted(t!("hint-column")));
+            }
+            Tool::Beam { .. } => {
+                ui.label(theme::muted(t!("hint-beam")));
+            }
+            Tool::Stair { .. } => {
+                ui.label(theme::muted(t!("hint-stair")));
+            }
+            Tool::Railing { type_id } => {
+                let n = state.interaction.points.len();
+                if ui.add_enabled(n >= 2, Button::new(t!("sketch-finish"))).clicked()
+                    && let Some(level) = state.active_level()
+                {
+                    crate::tools::finish_railing(state, level, type_id);
+                }
+                if ui.add_enabled(n > 0, Button::new(t!("action-cancel"))).clicked() {
+                    state.interaction.points.clear();
+                }
+                ui.label(theme::muted(t!("hint-railing")));
             }
         }
     });

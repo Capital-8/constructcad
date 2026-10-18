@@ -37,6 +37,8 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
   - Paredes em cadeia, com junções automáticas em L (meia-esquadria) e T.
   - Portas e janelas hospedadas na parede, com abertura recortada automaticamente.
   - Pisos, forros e telhados (plano ou de uma água, com beiral) por esboço ou "Das paredes".
+- **Estrutura e circulação**: pilares (retangulares ou circulares, topo preso a um nível), vigas, escadas retas (espelhos a partir do espelho máximo do tipo) e guarda-corpos; aba *Estrutura*; exportados como `IfcColumn`, `IfcBeam`, `IfcStair`, `IfcRailing`.
+- **Telhados**: plano, uma água, duas águas e quatro águas (a menor das águas que sobem de cada beiral), com cumeeira e espigões na planta; telhados inclinados saem no IFC como B-rep de faces.
 - **Ambientes**: clique dentro de paredes que delimitam ambientes para criar o ambiente; contorno, área e perímetro acompanham as paredes. Etiquetas na planta, tabela de ambientes e exportação como `IfcSpace`.
 - **Eixos e anotação**: eixos com bolhas em todas as plantas; cotas alinhadas em qualquer vista 2D (aba *Anotar*); marcas de portas e janelas etiquetadas automaticamente.
 - **Snapping**: extremidades, pontos médios, sobre a parede, ângulos de 15°, Shift para ortogonal, comprimento digitado + Enter.
@@ -67,7 +69,9 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar como | Espaço | Inverter porta |
 | Ctrl+N / Ctrl+O | Novo / Abrir | Ctrl+W | Fechar projeto |
 | RM | Ambiente | GR | Eixo |
-| DI | Cota alinhada | | |
+| DI | Cota alinhada | CL | Pilar |
+| BM | Viga | ST | Escada |
+| RA | Guarda-corpo | | |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 
@@ -108,9 +112,7 @@ python scripts/validate_ifc.py casa_simples.ifc
 - Exportação das folhas em PDF/SVG.
 - Cotas e anotações.
 - Componentes paramétricos definidos pelo usuário.
-- Escadas e guarda-corpos.
 - Eixos (grids).
-- Telhados de duas e quatro águas.
 - Paredes amarradas ao nível superior.
 - Texturas de materiais.
 

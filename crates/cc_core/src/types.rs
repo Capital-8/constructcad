@@ -13,33 +13,55 @@ pub enum Category {
     Room,
     Grid,
     Dimension,
+    Column,
+    Beam,
+    Stair,
+    Railing,
 }
 
 impl Category {
-    pub const ALL: [Category; 9] = [
+    pub const ALL: [Category; 13] = [
         Category::Wall,
         Category::Door,
         Category::Window,
         Category::Floor,
         Category::Ceiling,
         Category::Roof,
+        Category::Column,
+        Category::Beam,
+        Category::Stair,
+        Category::Railing,
         Category::Room,
         Category::Grid,
         Category::Dimension,
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 6] =
-        [Category::Wall, Category::Door, Category::Window, Category::Floor, Category::Ceiling, Category::Roof];
-
-    /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 7] = [
+    pub const MODEL: [Category; 10] = [
         Category::Wall,
         Category::Door,
         Category::Window,
         Category::Floor,
         Category::Ceiling,
         Category::Roof,
+        Category::Column,
+        Category::Beam,
+        Category::Stair,
+        Category::Railing,
+    ];
+
+    /// Categories that can be listed in a schedule.
+    pub const SCHEDULABLE: [Category; 11] = [
+        Category::Wall,
+        Category::Door,
+        Category::Window,
+        Category::Floor,
+        Category::Ceiling,
+        Category::Roof,
+        Category::Column,
+        Category::Beam,
+        Category::Stair,
+        Category::Railing,
         Category::Room,
     ];
 
@@ -59,6 +81,10 @@ impl Category {
             Category::Room => "category-room",
             Category::Grid => "category-grid",
             Category::Dimension => "category-dimension",
+            Category::Column => "category-column",
+            Category::Beam => "category-beam",
+            Category::Stair => "category-stair",
+            Category::Railing => "category-railing",
         }
     }
 }
@@ -192,6 +218,36 @@ pub enum TypeData {
     Dimension {
         text_size: f64,
     },
+    Column {
+        section: ColumnSection,
+        material: String,
+    },
+    /// Beam section `width` x `height`.
+    Beam {
+        width: f64,
+        height: f64,
+        material: String,
+    },
+    /// Straight stair: risers at most `max_riser` high, treads `tread` deep.
+    Stair {
+        width: f64,
+        max_riser: f64,
+        tread: f64,
+        material: String,
+    },
+    /// Railing with a top rail at `height` and posts every `post_spacing`.
+    Railing {
+        height: f64,
+        post_spacing: f64,
+        material: String,
+    },
+}
+
+/// Cross-section of a column type.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ColumnSection {
+    Rectangular { width: f64, depth: f64 },
+    Round { diameter: f64 },
 }
 
 /// An element type: the shared parameters of a group of instances.
@@ -218,6 +274,10 @@ impl ElementType {
             TypeData::Room {} => Category::Room,
             TypeData::Grid { .. } => Category::Grid,
             TypeData::Dimension { .. } => Category::Dimension,
+            TypeData::Column { .. } => Category::Column,
+            TypeData::Beam { .. } => Category::Beam,
+            TypeData::Stair { .. } => Category::Stair,
+            TypeData::Railing { .. } => Category::Railing,
         }
     }
 
@@ -280,6 +340,10 @@ impl ElementType {
                 layers.first().map_or("", |l| l.material.as_str())
             }
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => "",
+            TypeData::Column { material, .. }
+            | TypeData::Beam { material, .. }
+            | TypeData::Stair { material, .. }
+            | TypeData::Railing { material, .. } => material,
             TypeData::Floor { .. } => self
                 .layers()
                 .iter()
@@ -288,4 +352,14 @@ impl ElementType {
                 .unwrap_or(""),
         }
     }
+}
+
+/// Riser count, riser height and run length of a straight stair of `height`
+/// with at most `max_riser` per riser and `tread`-deep treads (one tread fewer
+/// than risers: the last riser lands on the upper floor).
+pub fn stair_layout(height: f64, max_riser: f64, tread: f64) -> (usize, f64, f64) {
+    let max_riser = if max_riser.is_finite() && max_riser > 0.01 { max_riser } else { 0.18 };
+    let risers = ((height / max_riser).ceil().max(1.0) as usize).min(200);
+    let riser = height / risers as f64;
+    (risers, riser, tread.max(0.0) * (risers.saturating_sub(1)) as f64)
 }

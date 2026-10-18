@@ -219,6 +219,8 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         }
     });
 
+    structure_parameters(ui, state, ty);
+
     if let TypeData::Door { width, height, .. } | TypeData::Window { width, height, .. } = ty.data {
         section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
             length_row(ui, state, &t!("col-width"), tid, "w", width, |d, v| {
@@ -241,8 +243,13 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         });
     }
 
-    if let TypeData::Door { material, .. } | TypeData::Window { material, .. } | TypeData::Ceiling { material, .. } =
-        &ty.data
+    if let TypeData::Door { material, .. }
+    | TypeData::Window { material, .. }
+    | TypeData::Ceiling { material, .. }
+    | TypeData::Column { material, .. }
+    | TypeData::Beam { material, .. }
+    | TypeData::Stair { material, .. }
+    | TypeData::Railing { material, .. } = &ty.data
     {
         section(ui, "type-materials", t!("section-materials"), |ui| {
             let mut m = material.clone();
@@ -252,9 +259,11 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 update(state, tid, "mat", |t| match &mut t.data {
                     TypeData::Door { material, .. }
                     | TypeData::Window { material, .. }
-                    | TypeData::Ceiling { material, .. } => {
-                        *material = m;
-                    }
+                    | TypeData::Ceiling { material, .. }
+                    | TypeData::Column { material, .. }
+                    | TypeData::Beam { material, .. }
+                    | TypeData::Stair { material, .. }
+                    | TypeData::Railing { material, .. } => *material = m,
                     _ => {}
                 });
             }
@@ -388,5 +397,88 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
             let total = format!("{}: {} m", t!("type-total-thickness"), format::number(ty.thickness(), 3));
             ui.label(theme::muted(total));
         });
+    });
+}
+
+/// Section and layout parameters of columns, beams, stairs and railings.
+fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
+    let tid = ty.id;
+    match ty.data {
+        TypeData::Column { section, .. } => {
+            section_rows(ui, state, tid, section);
+        }
+        TypeData::Beam { width, height, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                length_row(ui, state, &t!("col-width"), tid, "bw", width, |d, v| {
+                    if let TypeData::Beam { width, .. } = d {
+                        *width = v.max(0.01);
+                    }
+                });
+                length_row(ui, state, &t!("col-height"), tid, "bh", height, |d, v| {
+                    if let TypeData::Beam { height, .. } = d {
+                        *height = v.max(0.01);
+                    }
+                });
+            });
+        }
+        TypeData::Stair { width, max_riser, tread, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                length_row(ui, state, &t!("col-width"), tid, "sw", width, |d, v| {
+                    if let TypeData::Stair { width, .. } = d {
+                        *width = v.max(0.3);
+                    }
+                });
+                length_row(ui, state, &t!("prop-max-riser"), tid, "sr", max_riser, |d, v| {
+                    if let TypeData::Stair { max_riser, .. } = d {
+                        *max_riser = v.clamp(0.05, 0.5);
+                    }
+                });
+                length_row(ui, state, &t!("col-tread"), tid, "st", tread, |d, v| {
+                    if let TypeData::Stair { tread, .. } = d {
+                        *tread = v.clamp(0.1, 1.0);
+                    }
+                });
+            });
+        }
+        TypeData::Railing { height, post_spacing, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                length_row(ui, state, &t!("col-height"), tid, "rh", height, |d, v| {
+                    if let TypeData::Railing { height, .. } = d {
+                        *height = v.clamp(0.3, 3.0);
+                    }
+                });
+                length_row(ui, state, &t!("prop-post-spacing"), tid, "rp", post_spacing, |d, v| {
+                    if let TypeData::Railing { post_spacing, .. } = d {
+                        *post_spacing = v.clamp(0.1, 5.0);
+                    }
+                });
+            });
+        }
+        _ => {}
+    }
+}
+
+fn section_rows(ui: &mut Ui, state: &mut AppState, tid: ElementTypeId, section: cc_core::ColumnSection) {
+    use cc_core::ColumnSection;
+    crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| match section {
+        ColumnSection::Rectangular { width, depth } => {
+            length_row(ui, state, &t!("col-width"), tid, "cw", width, |d, v| {
+                if let TypeData::Column { section: ColumnSection::Rectangular { width, .. }, .. } = d {
+                    *width = v.max(0.01);
+                }
+            });
+            length_row(ui, state, &t!("prop-depth-section"), tid, "cd", depth, |d, v| {
+                if let TypeData::Column { section: ColumnSection::Rectangular { depth, .. }, .. } = d {
+                    *depth = v.max(0.01);
+                }
+            });
+        }
+        ColumnSection::Round { diameter } => {
+            length_row(ui, state, &t!("prop-diameter"), tid, "cdia", diameter, |d, v| {
+                if let TypeData::Column { section: ColumnSection::Round { diameter }, .. } = d {
+                    *diameter = v.max(0.01);
+                }
+            });
+        }
     });
 }

@@ -3,7 +3,7 @@
   generator: "ConstructCAD 0.1.0",
   project: (
     info: (
-      uid: "41bda48ad8994738a4ec96c9a0d546bb",
+      uid: "116329fa490f4b679a4a72e0b50df790",
       name: "Casa simples",
       number: "0001",
       client: "Exemplo",
@@ -92,7 +92,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "3fb2a6f38cdd4a89ac1f6e01bc32dc78",
+        uid: "4884921dfa71453ab33fd28533d2a338",
       ),
       (4): (
         id: (4),
@@ -129,7 +129,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "cae5741f7b4a4deeb7233365b971b188",
+        uid: "7635a0412f1b45429ff116e93cc5b80c",
       ),
       (5): (
         id: (5),
@@ -156,7 +156,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "6180af0cdf7b41d69d0b769d52a93519",
+        uid: "28b2006233424ebebb71bde77dc1f296",
       ),
       (6): (
         id: (6),
@@ -178,7 +178,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "e51ce47bd74a404694e19d48d3030bf1",
+        uid: "1fcd195c0e1347d693c75c913a890e37",
       ),
       (7): (
         id: (7),
@@ -200,7 +200,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "b0081bf5367b4d84b7e2f683d55e0632",
+        uid: "78dd4c7d69da42fd841f9ddb0aba5660",
       ),
       (8): (
         id: (8),
@@ -223,7 +223,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "49f463e3073e4184a1f9a2af555763bf",
+        uid: "a3eca72d401341ae93ee16099cf5e0f9",
       ),
       (9): (
         id: (9),
@@ -246,7 +246,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "f2b452f92ce645a4a6f530f1952811d3",
+        uid: "90bb0e4a2da2476a94f478a875204062",
       ),
       (10): (
         id: (10),
@@ -277,7 +277,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "3ed46ee9ed004b4885afa11634f89508",
+        uid: "e019c6dc748046ba84746505bce121dd",
       ),
       (11): (
         id: (11),
@@ -298,10 +298,124 @@
           comments: "",
           cost: None,
         ),
-        uid: "eddd6680709441c6a37d263acbd22b31",
+        uid: "017d22e44c3644b8a9e80efc05bbe9aa",
       ),
       (12): (
         id: (12),
+        name: "Pilar 20 x 20 cm",
+        data: Column(
+          section: Rectangular(
+            width: 0.2,
+            depth: 0.2,
+          ),
+          material: "Concreto",
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "5409e4ea08bf4057a39ba054faf2cb59",
+      ),
+      (13): (
+        id: (13),
+        name: "Pilar circular 30 cm",
+        data: Column(
+          section: Round(
+            diameter: 0.3,
+          ),
+          material: "Concreto",
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "d53cdccd079a40a5980084506009eb89",
+      ),
+      (14): (
+        id: (14),
+        name: "Viga 15 x 40 cm",
+        data: Beam(
+          width: 0.15,
+          height: 0.4,
+          material: "Concreto",
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "7480934b2ea04ef8ba3e03baae3964e2",
+      ),
+      (15): (
+        id: (15),
+        name: "Escada 1,00 m",
+        data: Stair(
+          width: 1.0,
+          max_riser: 0.18,
+          tread: 0.28,
+          material: "Concreto",
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "cc0de83f0e6c4191a1eeb95bc9b28795",
+      ),
+      (16): (
+        id: (16),
+        name: "Guarda-corpo 1,10 m",
+        data: Railing(
+          height: 1.1,
+          post_spacing: 1.2,
+          material: "Madeira",
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "94c490b8499c4ee6b977d31bb06ebfb2",
+      ),
+      (17): (
+        id: (17),
         name: "Ambiente",
         data: Room(),
         info: (
@@ -316,10 +430,10 @@
           comments: "",
           cost: None,
         ),
-        uid: "6fa8fc63c0fc4828a8d24837530f179c",
+        uid: "4df91b00014a4266a048a66e8cfbb34a",
       ),
-      (13): (
-        id: (13),
+      (18): (
+        id: (18),
         name: "Eixo 8 mm",
         data: Grid(
           bubble: 8.0,
@@ -336,10 +450,10 @@
           comments: "",
           cost: None,
         ),
-        uid: "e3aa3de0b62d4f2ab341a56d6f49cf14",
+        uid: "7ec72cafb1e540749ffa4c4e09697474",
       ),
-      (14): (
-        id: (14),
+      (19): (
+        id: (19),
         name: "Cota linear 2,5 mm",
         data: Dimension(
           text_size: 2.5,
@@ -356,10 +470,10 @@
           comments: "",
           cost: None,
         ),
-        uid: "aa6ab157a44e4fdfa75a83e40ce3547f",
+        uid: "929fc1ae66854091b68053ed138cb4f1",
       ),
-      (15): (
-        id: (15),
+      (20): (
+        id: (20),
         name: "Telhado cerâmico",
         data: Roof(
           layers: [
@@ -387,12 +501,12 @@
           comments: "",
           cost: None,
         ),
-        uid: "c11f5e2897c64f6faaa3071473323d51",
+        uid: "2eb82c509aee464ab05919c349260201",
       ),
     },
     elements: {
-      (31): (
-        id: (31),
+      (36): (
+        id: (36),
         level: (1),
         type_id: (3),
         mark: "",
@@ -410,10 +524,10 @@
           room_bounding: true,
           structural: true,
         )),
-        uid: "ab4c557ed4d44d3ca9a240f951a4b88b",
+        uid: "df5722cd13b049e6869a3666728e0260",
       ),
-      (32): (
-        id: (32),
+      (37): (
+        id: (37),
         level: (1),
         type_id: (3),
         mark: "",
@@ -431,10 +545,10 @@
           room_bounding: true,
           structural: true,
         )),
-        uid: "169d006c243041758826392d7f8c9e44",
+        uid: "8ecf57d92120453db5603f0e94cb369a",
       ),
-      (33): (
-        id: (33),
+      (38): (
+        id: (38),
         level: (1),
         type_id: (3),
         mark: "",
@@ -452,10 +566,10 @@
           room_bounding: true,
           structural: true,
         )),
-        uid: "5a650c85c56047158c5e328a33ef01d7",
+        uid: "cbfaa5ac183947b98ce8917699ceb684",
       ),
-      (34): (
-        id: (34),
+      (39): (
+        id: (39),
         level: (1),
         type_id: (3),
         mark: "",
@@ -473,10 +587,10 @@
           room_bounding: true,
           structural: true,
         )),
-        uid: "220d88608a314f6bb32828d76221f46f",
+        uid: "321f3d16905f4e0a8bff73d2b7bed4b9",
       ),
-      (35): (
-        id: (35),
+      (40): (
+        id: (40),
         level: (1),
         type_id: (3),
         mark: "",
@@ -491,100 +605,100 @@
           room_bounding: true,
           structural: false,
         )),
-        uid: "f9d937cac0444aafa4aef54226525a6d",
+        uid: "b78b22e17df142c8aea3cc633886c5e6",
       ),
-      (36): (
-        id: (36),
+      (41): (
+        id: (41),
         level: (1),
         type_id: (6),
         mark: "1",
         comments: "",
         kind: Door((
-          host: (34),
+          host: (39),
           offset: 6.5,
           sill_height: 0.0,
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "a132ddc12fb24abdb42c47f17f22383b",
+        uid: "067623df94eb4887b4864088c857a020",
       ),
-      (37): (
-        id: (37),
+      (42): (
+        id: (42),
         level: (1),
         type_id: (6),
         mark: "2",
         comments: "",
         kind: Door((
-          host: (35),
+          host: (40),
           offset: 4.0,
           sill_height: 0.0,
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "6133b2f52f69465687dd5ed6a4d00a76",
+        uid: "c39b3cf8de284c5d969f79f90891cd60",
       ),
-      (38): (
-        id: (38),
+      (43): (
+        id: (43),
         level: (1),
         type_id: (8),
         mark: "1",
         comments: "",
         kind: Window((
-          host: (34),
+          host: (39),
           offset: 2.0,
           sill_height: 1.0,
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "cfdfcc94a85b46fea15122885799fede",
+        uid: "5a272b0e02c149129e5887760ef071a3",
       ),
-      (39): (
-        id: (39),
+      (44): (
+        id: (44),
         level: (1),
         type_id: (8),
         mark: "2",
         comments: "",
         kind: Window((
-          host: (32),
+          host: (37),
           offset: 2.5,
           sill_height: 1.0,
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "c31a516e07414ec8a6d2fa2db0b4f07d",
+        uid: "b0a1217ddaac452199e7410089cb9a9f",
       ),
-      (40): (
-        id: (40),
+      (45): (
+        id: (45),
         level: (1),
         type_id: (8),
         mark: "3",
         comments: "",
         kind: Window((
-          host: (32),
+          host: (37),
           offset: 6.5,
           sill_height: 1.0,
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "7ca5cb0b038a45b2be3abb1169cf3c9d",
+        uid: "0d23c73fe8e24cabb630f91998696dcd",
       ),
-      (41): (
-        id: (41),
+      (46): (
+        id: (46),
         level: (1),
         type_id: (8),
         mark: "4",
         comments: "",
         kind: Window((
-          host: (33),
+          host: (38),
           offset: 3.0,
           sill_height: 1.0,
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "9bae439851b7419384d7cee33c386c38",
+        uid: "569183cb2d6f4b7c88d4486594d9f086",
       ),
-      (42): (
-        id: (42),
+      (47): (
+        id: (47),
         level: (1),
         type_id: (10),
         mark: "",
@@ -598,12 +712,12 @@
           ],
           height_offset: 0.0,
         )),
-        uid: "434e6d3ced1b42c4806c4b287e2b554b",
+        uid: "7d406d2f784f46958de2a0fd277425e6",
       ),
-      (43): (
-        id: (43),
+      (48): (
+        id: (48),
         level: (1),
-        type_id: (15),
+        type_id: (20),
         mark: "",
         comments: "",
         kind: Roof((
@@ -615,17 +729,98 @@
           ],
           base_offset: 3.0,
           overhang: 0.5,
-          shape: Shed(
-            slope: 0.1,
-            direction_deg: 90.0,
+          shape: Hip(
+            slope: 0.35,
           ),
         )),
-        uid: "dcfe8cc8f43745899a0094900a7ee958",
+        uid: "afcb5cb712ec4cf292b3bf71b7c61754",
       ),
-      (44): (
-        id: (44),
+      (49): (
+        id: (49),
+        level: (1),
+        type_id: (15),
+        mark: "",
+        comments: "",
+        kind: Stair((
+          start: (1.0, 0.8),
+          direction_deg: 90.0,
+          base_offset: 0.0,
+          height: 3.0,
+          top: Level(
+            level: (2),
+            offset: 0.0,
+          ),
+        )),
+        uid: "4c607740cd2e497a97c41d5d90a2cdc5",
+      ),
+      (50): (
+        id: (50),
         level: (1),
         type_id: (12),
+        mark: "",
+        comments: "",
+        kind: Column((
+          position: (2.0, -2.5),
+          rotation_deg: 0.0,
+          base_offset: 0.0,
+          height: 3.0,
+          top: Level(
+            level: (2),
+            offset: 0.0,
+          ),
+        )),
+        uid: "ddb29d5d320e4d61b14803c409231c5d",
+      ),
+      (51): (
+        id: (51),
+        level: (1),
+        type_id: (12),
+        mark: "",
+        comments: "",
+        kind: Column((
+          position: (7.0, -2.5),
+          rotation_deg: 0.0,
+          base_offset: 0.0,
+          height: 3.0,
+          top: Level(
+            level: (2),
+            offset: 0.0,
+          ),
+        )),
+        uid: "1106f204e19044e58d7de0d5f8614713",
+      ),
+      (52): (
+        id: (52),
+        level: (1),
+        type_id: (14),
+        mark: "",
+        comments: "",
+        kind: Beam((
+          start: (2.0, -2.5),
+          end: (7.0, -2.5),
+          top_offset: 3.0,
+        )),
+        uid: "0cd9c6dfd2354270a034cd1aec2b3c81",
+      ),
+      (53): (
+        id: (53),
+        level: (1),
+        type_id: (16),
+        mark: "",
+        comments: "",
+        kind: Railing((
+          path: [
+            (2.1, -2.5),
+            (5.5, -2.5),
+          ],
+          base_offset: 0.0,
+        )),
+        uid: "106abfcbc0b147c0bfb7947a106e45d0",
+      ),
+      (54): (
+        id: (54),
+        level: (1),
+        type_id: (17),
         mark: "",
         comments: "",
         kind: Room((
@@ -634,12 +829,12 @@
           name: "Sala",
           height: 3.0,
         )),
-        uid: "ab9c6c6f38364323bf1eb0451c0255ae",
+        uid: "1848cfbfac0e475fa10880784ff748d1",
       ),
-      (45): (
-        id: (45),
+      (55): (
+        id: (55),
         level: (1),
-        type_id: (12),
+        type_id: (17),
         mark: "",
         comments: "",
         kind: Room((
@@ -648,12 +843,12 @@
           name: "Quarto",
           height: 3.0,
         )),
-        uid: "415cf27c35b94f80b760694d3df717f8",
+        uid: "2010396269164bce8f2f7baff891ee71",
       ),
-      (46): (
-        id: (46),
+      (56): (
+        id: (56),
         level: (1),
-        type_id: (13),
+        type_id: (18),
         mark: "",
         comments: "",
         kind: Grid((
@@ -661,12 +856,12 @@
           end: (0.0, 7.5),
           name: "1",
         )),
-        uid: "7c28c5fab9134adfaa4cdd5e7c3e1bf1",
+        uid: "65c5c1d9041143fb8dcbfe3aab1d38b1",
       ),
-      (47): (
-        id: (47),
+      (57): (
+        id: (57),
         level: (1),
-        type_id: (13),
+        type_id: (18),
         mark: "",
         comments: "",
         kind: Grid((
@@ -674,12 +869,12 @@
           end: (5.0, 7.5),
           name: "2",
         )),
-        uid: "c4c8c2edae7a4f94b54ca321fa0f6886",
+        uid: "3d0df6b94f7d427eb50ee9a9cb3bdc90",
       ),
-      (48): (
-        id: (48),
+      (58): (
+        id: (58),
         level: (1),
-        type_id: (13),
+        type_id: (18),
         mark: "",
         comments: "",
         kind: Grid((
@@ -687,12 +882,12 @@
           end: (9.0, 7.5),
           name: "3",
         )),
-        uid: "35ac25e5b373491a825a59ecee139a1a",
+        uid: "9918f85084594b79a5cecc7041f13e78",
       ),
-      (49): (
-        id: (49),
+      (59): (
+        id: (59),
         level: (1),
-        type_id: (13),
+        type_id: (18),
         mark: "",
         comments: "",
         kind: Grid((
@@ -700,12 +895,12 @@
           end: (10.5, 0.0),
           name: "A",
         )),
-        uid: "c7a00bd098864ad3b6c46aad72543774",
+        uid: "cdc8b057bd2d4ada9ef3898e05b17d12",
       ),
-      (50): (
-        id: (50),
+      (60): (
+        id: (60),
         level: (1),
-        type_id: (13),
+        type_id: (18),
         mark: "",
         comments: "",
         kind: Grid((
@@ -713,54 +908,54 @@
           end: (10.5, 6.0),
           name: "B",
         )),
-        uid: "822ee49f61534dc4b00c6e7f9c4fe00e",
+        uid: "1f0d0eddd3da45d6940e4047369703f4",
       ),
-      (51): (
-        id: (51),
+      (61): (
+        id: (61),
         level: (1),
-        type_id: (14),
+        type_id: (19),
         mark: "",
         comments: "",
         kind: Dimension((
-          view: (16),
+          view: (21),
           a: (0.0, 0.0),
           b: (5.0, 0.0),
           offset: -1.2,
         )),
-        uid: "7131555676bf4ff8bffb6807a1d78c6e",
+        uid: "1d7b3120e9a54e8199f987ec948ee790",
       ),
-      (52): (
-        id: (52),
+      (62): (
+        id: (62),
         level: (1),
-        type_id: (14),
+        type_id: (19),
         mark: "",
         comments: "",
         kind: Dimension((
-          view: (16),
+          view: (21),
           a: (5.0, 0.0),
           b: (9.0, 0.0),
           offset: -1.2,
         )),
-        uid: "eacd4707e59a418d9b3b473208a2c641",
+        uid: "665088aa0fb54634addb37d51c01175a",
       ),
-      (53): (
-        id: (53),
+      (63): (
+        id: (63),
         level: (1),
-        type_id: (14),
+        type_id: (19),
         mark: "",
         comments: "",
         kind: Dimension((
-          view: (16),
+          view: (21),
           a: (0.0, 0.0),
           b: (9.0, 0.0),
           offset: -1.9,
         )),
-        uid: "652e8a97ed214921a87d42469659451c",
+        uid: "6d65e430589c4909899c0e79bdfbd622",
       ),
     },
     views: {
-      (16): (
-        id: (16),
+      (21): (
+        id: (21),
         name: "Térreo",
         scale: 50,
         kind: FloorPlan(
@@ -768,8 +963,8 @@
           cut_height: 1.2,
         ),
       ),
-      (17): (
-        id: (17),
+      (22): (
+        id: (22),
         name: "Pavimento 1",
         scale: 50,
         kind: FloorPlan(
@@ -777,8 +972,8 @@
           cut_height: 1.2,
         ),
       ),
-      (18): (
-        id: (18),
+      (23): (
+        id: (23),
         name: "Térreo",
         scale: 50,
         kind: CeilingPlan(
@@ -786,8 +981,8 @@
           cut_height: 1.2,
         ),
       ),
-      (19): (
-        id: (19),
+      (24): (
+        id: (24),
         name: "Pavimento 1",
         scale: 50,
         kind: CeilingPlan(
@@ -795,8 +990,8 @@
           cut_height: 1.2,
         ),
       ),
-      (20): (
-        id: (20),
+      (25): (
+        id: (25),
         name: "{3D}",
         scale: 100,
         kind: ThreeD(
@@ -808,40 +1003,40 @@
           ),
         ),
       ),
-      (21): (
-        id: (21),
+      (26): (
+        id: (26),
         name: "Norte",
         scale: 100,
         kind: Elevation(
           direction: North,
         ),
       ),
-      (22): (
-        id: (22),
+      (27): (
+        id: (27),
         name: "Sul",
         scale: 100,
         kind: Elevation(
           direction: South,
         ),
       ),
-      (23): (
-        id: (23),
+      (28): (
+        id: (28),
         name: "Leste",
         scale: 100,
         kind: Elevation(
           direction: East,
         ),
       ),
-      (24): (
-        id: (24),
+      (29): (
+        id: (29),
         name: "Oeste",
         scale: 100,
         kind: Elevation(
           direction: West,
         ),
       ),
-      (25): (
-        id: (25),
+      (30): (
+        id: (30),
         name: "Legenda de tipos",
         scale: 50,
         kind: Legend(
@@ -855,44 +1050,49 @@
             (9),
             (10),
             (11),
+            (12),
+            (13),
+            (14),
             (15),
+            (16),
+            (20),
           ],
         ),
       ),
-      (26): (
-        id: (26),
+      (31): (
+        id: (31),
         name: "Tabela de portas",
         scale: 1,
         kind: Schedule(
           category: Door,
         ),
       ),
-      (27): (
-        id: (27),
+      (32): (
+        id: (32),
         name: "Tabela de janelas",
         scale: 1,
         kind: Schedule(
           category: Window,
         ),
       ),
-      (28): (
-        id: (28),
+      (33): (
+        id: (33),
         name: "Tabela de paredes",
         scale: 1,
         kind: Schedule(
           category: Wall,
         ),
       ),
-      (29): (
-        id: (29),
+      (34): (
+        id: (34),
         name: "Tabela de ambientes",
         scale: 1,
         kind: Schedule(
           category: Room,
         ),
       ),
-      (30): (
-        id: (30),
+      (35): (
+        id: (35),
         name: "Plantas",
         scale: 1,
         kind: Sheet(
@@ -900,18 +1100,18 @@
           size: A3,
           viewports: [
             (
-              view: (16),
+              view: (21),
               center: (130.0, 160.0),
             ),
             (
-              view: (20),
+              view: (25),
               center: (320.0, 190.0),
             ),
           ],
         ),
       ),
-      (54): (
-        id: (54),
+      (64): (
+        id: (64),
         name: "Corte 1",
         scale: 50,
         kind: Section(
@@ -920,8 +1120,8 @@
           depth: 10.0,
         ),
       ),
-      (55): (
-        id: (55),
+      (65): (
+        id: (65),
         name: "Elevação e corte",
         scale: 1,
         kind: Sheet(
@@ -929,17 +1129,17 @@
           size: A3,
           viewports: [
             (
-              view: (22),
+              view: (27),
               center: (130.0, 170.0),
             ),
             (
-              view: (54),
+              view: (64),
               center: (310.0, 170.0),
             ),
           ],
         ),
       ),
     },
-    next_id: 56,
+    next_id: 66,
   ),
 )

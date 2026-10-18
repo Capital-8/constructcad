@@ -13,17 +13,17 @@ fn finite_points(points: &[DVec2]) -> bool {
     points.iter().all(|p| p.is_finite())
 }
 
+fn top_ok(top: WallTop) -> bool {
+    match top {
+        WallTop::Level { offset, .. } => offset.is_finite(),
+        WallTop::Unconnected => true,
+    }
+}
+
 /// Whether every number of the element is finite and its outlines have at least three points.
 fn element_is_valid(e: &Element) -> bool {
     match &e.kind {
-        ElementKind::Wall(w) => {
-            finite(&[w.base_offset, w.height])
-                && finite_points(&[w.start, w.end])
-                && match w.top {
-                    WallTop::Level { offset, .. } => offset.is_finite(),
-                    WallTop::Unconnected => true,
-                }
-        }
+        ElementKind::Wall(w) => finite(&[w.base_offset, w.height]) && finite_points(&[w.start, w.end]) && top_ok(w.top),
         ElementKind::Door(h) | ElementKind::Window(h) => finite(&[h.offset, h.sill_height]),
         ElementKind::Floor(f) => f.height_offset.is_finite() && f.boundary.len() >= 3 && finite_points(&f.boundary),
         ElementKind::Ceiling(c) => c.height_offset.is_finite() && c.boundary.len() >= 3 && finite_points(&c.boundary),
@@ -31,12 +31,22 @@ fn element_is_valid(e: &Element) -> bool {
             let shape = match r.shape {
                 crate::RoofShape::Flat => true,
                 crate::RoofShape::Shed { slope, direction_deg } => finite(&[slope, direction_deg]),
+                crate::RoofShape::Gable { slope, ridge_deg } => finite(&[slope, ridge_deg]),
+                crate::RoofShape::Hip { slope } => slope.is_finite(),
             };
             shape && finite(&[r.base_offset, r.overhang]) && r.footprint.len() >= 3 && finite_points(&r.footprint)
         }
         ElementKind::Room(r) => r.height.is_finite() && r.position.is_finite(),
         ElementKind::Grid(g) => finite_points(&[g.start, g.end]),
         ElementKind::Dimension(d) => d.offset.is_finite() && finite_points(&[d.a, d.b]),
+        ElementKind::Column(c) => {
+            finite(&[c.rotation_deg, c.base_offset, c.height]) && c.position.is_finite() && top_ok(c.top)
+        }
+        ElementKind::Beam(b) => b.top_offset.is_finite() && finite_points(&[b.start, b.end]),
+        ElementKind::Stair(s) => {
+            finite(&[s.direction_deg, s.base_offset, s.height]) && s.start.is_finite() && top_ok(s.top)
+        }
+        ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
     }
 }
 
@@ -82,6 +92,23 @@ impl Project {
                 TypeData::Grid { bubble } => repairs += usize::from(fix_positive(bubble, 8.0)),
                 TypeData::Dimension { text_size } => repairs += usize::from(fix_positive(text_size, 2.5)),
                 TypeData::Room {} => {}
+                TypeData::Column { section, .. } => match section {
+                    crate::ColumnSection::Rectangular { width, depth } => {
+                        repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
+                    }
+                    crate::ColumnSection::Round { diameter } => repairs += usize::from(fix_positive(diameter, 0.3)),
+                },
+                TypeData::Beam { width, height, .. } => {
+                    repairs += usize::from(fix_positive(width, 0.15)) + usize::from(fix_positive(height, 0.4));
+                }
+                TypeData::Stair { width, max_riser, tread, .. } => {
+                    repairs += usize::from(fix_positive(width, 1.0))
+                        + usize::from(fix_positive(max_riser, 0.18))
+                        + usize::from(fix_positive(tread, 0.28));
+                }
+                TypeData::Railing { height, post_spacing, .. } => {
+                    repairs += usize::from(fix_positive(height, 1.1)) + usize::from(fix_positive(post_spacing, 1.2));
+                }
             }
         }
 
@@ -115,11 +142,16 @@ impl Project {
         // Walls attached to a missing level keep their height, unconnected.
         let levels: Vec<_> = self.levels.iter().map(|l| l.id).collect();
         for e in self.elements.values_mut() {
-            if let ElementKind::Wall(w) = &mut e.kind
-                && let WallTop::Level { level, .. } = w.top
+            let top = match &mut e.kind {
+                ElementKind::Wall(w) => &mut w.top,
+                ElementKind::Column(c) => &mut c.top,
+                ElementKind::Stair(s) => &mut s.top,
+                _ => continue,
+            };
+            if let WallTop::Level { level, .. } = *top
                 && !levels.contains(&level)
             {
-                w.top = WallTop::Unconnected;
+                *top = WallTop::Unconnected;
                 repairs += 1;
             }
         }

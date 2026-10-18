@@ -21,7 +21,10 @@ import ifcopenshell.util.element
 import ifcopenshell.util.shape
 import ifcopenshell.validate
 
-ELEMENTS = ("IfcWall", "IfcDoor", "IfcWindow", "IfcSlab", "IfcCovering", "IfcRoof")
+ELEMENTS = (
+    "IfcWall", "IfcDoor", "IfcWindow", "IfcSlab", "IfcCovering", "IfcRoof",
+    "IfcColumn", "IfcBeam", "IfcStair", "IfcRailing",
+)
 REL_TOL = 1e-3
 
 

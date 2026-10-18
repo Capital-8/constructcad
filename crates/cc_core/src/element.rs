@@ -30,6 +30,10 @@ pub enum ElementKind {
     Room(Room),
     Grid(Grid),
     Dimension(Dimension),
+    Column(Column),
+    Beam(Beam),
+    Stair(Stair),
+    Railing(Railing),
 }
 
 impl Element {
@@ -44,6 +48,10 @@ impl Element {
             ElementKind::Room(_) => Category::Room,
             ElementKind::Grid(_) => Category::Grid,
             ElementKind::Dimension(_) => Category::Dimension,
+            ElementKind::Column(_) => Category::Column,
+            ElementKind::Beam(_) => Category::Beam,
+            ElementKind::Stair(_) => Category::Stair,
+            ElementKind::Railing(_) => Category::Railing,
         }
     }
 
@@ -97,6 +105,13 @@ impl Element {
                 d.a += delta;
                 d.b += delta;
             }
+            ElementKind::Column(c) => c.position += delta,
+            ElementKind::Beam(b) => {
+                b.start += delta;
+                b.end += delta;
+            }
+            ElementKind::Stair(s) => s.start += delta,
+            ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Door(_) | ElementKind::Window(_) => {}
         }
     }
@@ -252,6 +267,16 @@ pub enum RoofShape {
         slope: f64,
         direction_deg: f64,
     },
+    /// Two slopes meeting at a ridge along `ridge_deg`; the eaves parallel to
+    /// the ridge rise, the others become gable ends.
+    Gable {
+        slope: f64,
+        ridge_deg: f64,
+    },
+    /// Every eave rises with the same slope (hips and, on long plans, a ridge).
+    Hip {
+        slope: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -297,5 +322,57 @@ pub struct Dimension {
 impl Dimension {
     pub fn length(&self) -> f64 {
         self.a.distance(self.b)
+    }
+}
+
+/// A column placed at a point, from its base to its top constraint.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Column {
+    pub position: DVec2,
+    /// Rotation of the section in plan, degrees counter-clockwise.
+    pub rotation_deg: f64,
+    pub base_offset: f64,
+    /// Height when `top` is unconnected.
+    pub height: f64,
+    pub top: WallTop,
+}
+
+/// A horizontal beam between two points; its top is at the level elevation
+/// plus `top_offset`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Beam {
+    pub start: DVec2,
+    pub end: DVec2,
+    pub top_offset: f64,
+}
+
+impl Beam {
+    pub fn length(&self) -> f64 {
+        self.start.distance(self.end)
+    }
+}
+
+/// A straight stair run starting at `start` (bottom of the first riser,
+/// center of the width) going up along `direction_deg`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Stair {
+    pub start: DVec2,
+    pub direction_deg: f64,
+    pub base_offset: f64,
+    /// Height when `top` is unconnected.
+    pub height: f64,
+    pub top: WallTop,
+}
+
+/// A railing along an open path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Railing {
+    pub path: Vec<DVec2>,
+    pub base_offset: f64,
+}
+
+impl Railing {
+    pub fn length(&self) -> f64 {
+        self.path.windows(2).map(|w| w[0].distance(w[1])).sum()
     }
 }

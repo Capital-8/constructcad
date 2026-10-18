@@ -255,6 +255,78 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             }
         }
         ElementKind::Room(r) => room_props(ui, state, &el, r),
+        ElementKind::Column(c) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-base-offset"), id, "base", c.base_offset, |e, v| {
+                    if let ElementKind::Column(c) = &mut e.kind {
+                        c.base_offset = v;
+                    }
+                });
+                top_rows(ui, state, &el, c.top, c.height);
+                let mut rot = c.rotation_deg;
+                let r = row(ui, &t!("prop-rotation"), |ui| ui.add(DragValue::new(&mut rot).speed(1.0).suffix("°")));
+                if r.changed() {
+                    modify(state, id, "rotation", |e| {
+                        if let ElementKind::Column(c) = &mut e.kind {
+                            c.rotation_deg = rot.rem_euclid(360.0);
+                        }
+                    });
+                }
+                finish(state, &r);
+            });
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                let (base, top) = state.project().column_span(&el, c);
+                readonly_row(ui, &t!("prop-height"), format!("{} m", format::meters(top - base)));
+                readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+            });
+        }
+        ElementKind::Beam(b) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-top-offset"), id, "beam-top", b.top_offset, |e, v| {
+                    if let ElementKind::Beam(b) = &mut e.kind {
+                        b.top_offset = v;
+                    }
+                });
+            });
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(b.length())));
+                readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+            });
+        }
+        ElementKind::Stair(st) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-base-offset"), id, "base", st.base_offset, |e, v| {
+                    if let ElementKind::Stair(s) = &mut e.kind {
+                        s.base_offset = v;
+                    }
+                });
+                top_rows(ui, state, &el, st.top, st.height);
+            });
+            if let Some(g) = cc_geom::stair_geom(state.project(), &el, st) {
+                section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                    readonly_row(ui, &t!("col-risers"), g.risers.to_string());
+                    readonly_row(ui, &t!("col-riser-height"), format!("{} m", format::number(g.riser, 3)));
+                    readonly_row(ui, &t!("col-tread"), format!("{} m", format::meters(g.tread)));
+                    readonly_row(ui, &t!("col-run"), format!("{} m", format::meters(g.run())));
+                });
+            }
+        }
+        ElementKind::Railing(r) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-base-offset"), id, "base", r.base_offset, |e, v| {
+                    if let ElementKind::Railing(r) = &mut e.kind {
+                        r.base_offset = v;
+                    }
+                });
+            });
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(r.length())));
+            });
+        }
         ElementKind::Grid(g) => {
             section(ui, "identity-grid", t!("section-identity"), |ui| {
                 let (resp, text) = text_row(ui, &t!("col-name"), g.name.clone());
@@ -354,6 +426,69 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             state.delete_selection();
         }
     });
+}
+
+/// Top constraint rows shared by columns and stairs (walls have their own).
+fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallTop, height: f64) {
+    use cc_core::WallTop;
+    let id = el.id;
+    let set_top = |state: &mut AppState, field: &str, top: WallTop, height: Option<f64>| {
+        modify(state, id, field, |e| match &mut e.kind {
+            ElementKind::Column(c) => {
+                c.top = top;
+                if let Some(h) = height {
+                    c.height = h;
+                }
+            }
+            ElementKind::Stair(s) => {
+                s.top = top;
+                if let Some(h) = height {
+                    s.height = h;
+                }
+            }
+            _ => {}
+        });
+    };
+    let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
+    let name = |level| levels.iter().find(|l| l.0 == level).map_or("?".to_string(), |l| l.1.clone());
+    let current = match top {
+        WallTop::Unconnected => t!("top-unconnected"),
+        WallTop::Level { level, .. } => t!("top-up-to", "level" => name(level)),
+    };
+    let mut choice = match top {
+        WallTop::Level { level, .. } => Some(level),
+        WallTop::Unconnected => None,
+    };
+    let before = choice;
+    row(ui, &t!("prop-top-constraint"), |ui| {
+        egui::ComboBox::from_id_salt(("top", id.0)).selected_text(current).show_ui(ui, |ui| {
+            ui.selectable_value(&mut choice, None, t!("top-unconnected"));
+            for (lid, lname) in &levels {
+                ui.selectable_value(&mut choice, Some(*lid), t!("top-up-to", "level" => lname));
+            }
+        });
+    });
+    if choice != before {
+        let new_top = choice.map_or(WallTop::Unconnected, |level| WallTop::Level { level, offset: 0.0 });
+        set_top(state, "top", new_top, None);
+        state.doc.break_merge();
+    }
+    match top {
+        WallTop::Level { level, offset } => {
+            length_row(ui, state, &t!("prop-top-offset"), id, "top-offset", offset, move |e, v| match &mut e.kind {
+                ElementKind::Column(c) => c.top = WallTop::Level { level, offset: v },
+                ElementKind::Stair(s) => s.top = WallTop::Level { level, offset: v },
+                _ => {}
+            });
+        }
+        WallTop::Unconnected => {
+            length_row(ui, state, &t!("prop-unconnected-height"), id, "height", height, |e, v| match &mut e.kind {
+                ElementKind::Column(c) => c.height = v.max(0.1),
+                ElementKind::Stair(s) => s.height = v.max(0.1),
+                _ => {}
+            });
+        }
+    }
 }
 
 /// Number, name, height and computed area of a room.
@@ -500,34 +635,84 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
             r.overhang = v.max(0.0);
         }
     });
-    let mut shed = matches!(r.shape, RoofShape::Shed { .. });
+    // Shape: 0 flat, 1 shed, 2 gable, 3 hip.
+    let index = |shape: RoofShape| match shape {
+        RoofShape::Flat => 0,
+        RoofShape::Shed { .. } => 1,
+        RoofShape::Gable { .. } => 2,
+        RoofShape::Hip { .. } => 3,
+    };
+    let current = index(r.shape);
+    let mut shape = current;
+    let labels = [t!("roof-flat"), t!("roof-shed"), t!("roof-gable"), t!("roof-hip")];
     row(ui, &t!("prop-roof-shape"), |ui| {
-        ui.radio_value(&mut shed, false, t!("roof-flat"));
-        ui.radio_value(&mut shed, true, t!("roof-shed"));
+        egui::ComboBox::from_id_salt(("roof-shape", id.0)).selected_text(labels[current].clone()).show_ui(ui, |ui| {
+            for (i, label) in labels.iter().enumerate() {
+                ui.selectable_value(&mut shape, i, label);
+            }
+        });
     });
-    if shed != matches!(r.shape, RoofShape::Shed { .. }) {
+    if shape != current {
+        // Keep the slope when switching between pitched shapes; gables run along the longest edge.
+        let slope = match r.shape {
+            RoofShape::Shed { slope, .. } | RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } => slope,
+            RoofShape::Flat => 0.4,
+        };
+        let longest = r
+            .footprint
+            .iter()
+            .zip(r.footprint.iter().cycle().skip(1))
+            .map(|(a, b)| *b - *a)
+            .max_by(|a, b| a.length().total_cmp(&b.length()))
+            .map_or(0.0, |d| d.y.atan2(d.x).to_degrees());
         state.doc.edit(t!("tx-modify"), |e| {
             if let Some(ElementKind::Roof(r)) = e.element_mut(id).map(|x| &mut x.kind) {
-                r.shape = if shed { RoofShape::Shed { slope: 0.15, direction_deg: 90.0 } } else { RoofShape::Flat };
+                r.shape = match shape {
+                    1 => RoofShape::Shed { slope, direction_deg: 90.0 },
+                    2 => RoofShape::Gable { slope, ridge_deg: longest },
+                    3 => RoofShape::Hip { slope },
+                    _ => RoofShape::Flat,
+                };
             }
         });
     }
-    if let RoofShape::Shed { slope, direction_deg } = r.shape {
+    if let RoofShape::Gable { slope, ridge_deg } | RoofShape::Shed { slope, direction_deg: ridge_deg } = r.shape {
+        let is_gable = matches!(r.shape, RoofShape::Gable { .. });
         let mut pct = slope * 100.0;
         let rs = row(ui, &t!("prop-slope"), |ui| {
             ui.add(DragValue::new(&mut pct).speed(0.5).range(0.0..=200.0).suffix(" %"))
         });
-        let mut dir = direction_deg;
-        let rd = row(ui, &t!("prop-direction"), |ui| ui.add(DragValue::new(&mut dir).speed(1.0).suffix("°")));
+        let mut dir = ridge_deg;
+        let label = if is_gable { t!("prop-ridge-direction") } else { t!("prop-direction") };
+        let rd = row(ui, &label, |ui| ui.add(DragValue::new(&mut dir).speed(1.0).suffix("°")));
         if rs.changed() || rd.changed() {
             modify(state, id, "shape", |e| {
                 if let ElementKind::Roof(r) = &mut e.kind {
-                    r.shape = RoofShape::Shed { slope: pct / 100.0, direction_deg: dir.rem_euclid(360.0) };
+                    let (slope, angle) = (pct / 100.0, dir.rem_euclid(360.0));
+                    r.shape = if is_gable {
+                        RoofShape::Gable { slope, ridge_deg: angle }
+                    } else {
+                        RoofShape::Shed { slope, direction_deg: angle }
+                    };
                 }
             });
         }
         finish(state, &rs);
         finish(state, &rd);
+    }
+    if let RoofShape::Hip { slope } = r.shape {
+        let mut pct = slope * 100.0;
+        let rs = row(ui, &t!("prop-slope"), |ui| {
+            ui.add(DragValue::new(&mut pct).speed(0.5).range(0.0..=200.0).suffix(" %"))
+        });
+        if rs.changed() {
+            modify(state, id, "shape", |e| {
+                if let ElementKind::Roof(r) = &mut e.kind {
+                    r.shape = RoofShape::Hip { slope: pct / 100.0 };
+                }
+            });
+        }
+        finish(state, &rs);
     }
 }
 

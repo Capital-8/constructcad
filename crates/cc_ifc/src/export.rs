@@ -173,6 +173,7 @@ impl<'a> Exporter<'a> {
         for id in others {
             self.write_sketched(id);
         }
+        self.write_structure();
         self.write_spaces();
         self.write_relationships();
     }
@@ -464,12 +465,161 @@ impl<'a> Exporter<'a> {
 
     /// Product shape from body items and an optional 2D axis curve.
     fn shape(&mut self, body: Vec<Id>, axis: Option<Id>) -> Id {
+        self.shape_of_type(body, axis, "SweptSolid")
+    }
+
+    fn shape_of_type(&mut self, body: Vec<Id>, axis: Option<Id>, kind: &str) -> Id {
         let mut reps = Vec::new();
         if let Some(curve) = axis {
             reps.push(self.w.add("IFCSHAPEREPRESENTATION", args![self.axis_ctx, "Axis", "Curve2D", vec![curve]]));
         }
-        reps.push(self.w.add("IFCSHAPEREPRESENTATION", args![self.body_ctx, "Body", "SweptSolid", body]));
+        reps.push(self.w.add("IFCSHAPEREPRESENTATION", args![self.body_ctx, "Body", kind, body]));
         self.w.add("IFCPRODUCTDEFINITIONSHAPE", args![Value::Null, Value::Null, reps])
+    }
+
+    /// A box in a horizontal frame, as a rectangle extruded upwards; `z0` is the
+    /// elevation of the element placement.
+    fn oriented_box(&mut self, part: &cc_geom::BoxPart, z0: f64) -> Id {
+        let (u, v, z) = (part.u_range, part.v_range, part.z_range);
+        let center = self.point2(DVec2::new((u.0 + u.1) / 2.0, (v.0 + v.1) / 2.0));
+        let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
+        let profile = self
+            .w
+            .add("IFCRECTANGLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, position2, u.1 - u.0, v.1 - v.0]);
+        let frame = Frame::horizontal(DVec3::new(part.origin.x, part.origin.y, z.0 - z0), part.u);
+        let position = self.placement3(frame);
+        self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, z.1 - z.0])
+    }
+
+    /// Closed shell of planar faces (points relative to `z0`).
+    fn faceted_brep(&mut self, faces: &[cc_geom::Face], z0: f64) -> Id {
+        let mut points: HashMap<(i64, i64, i64), Id> = HashMap::new();
+        let mut ifc_faces = Vec::new();
+        for face in faces {
+            let ids: Vec<Id> = face
+                .verts
+                .iter()
+                .map(|p| {
+                    let p = DVec3::new(p.x, p.y, p.z - z0);
+                    let key = ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64, (p.z * 1e6).round() as i64);
+                    *points
+                        .entry(key)
+                        .or_insert_with(|| self.w.add("IFCCARTESIANPOINT", args![reals(&[p.x, p.y, p.z])]))
+                })
+                .collect();
+            let lp = self.w.add("IFCPOLYLOOP", args![ids]);
+            let bound = self.w.add("IFCFACEOUTERBOUND", args![lp, true]);
+            ifc_faces.push(self.w.add("IFCFACE", args![vec![bound]]));
+        }
+        let shell = self.w.add("IFCCLOSEDSHELL", args![ifc_faces]);
+        self.w.add("IFCFACETEDBREP", args![shell])
+    }
+
+    /// Columns, beams, stairs and railings.
+    fn write_structure(&mut self) {
+        let project = self.project;
+        for e in project.elements.values() {
+            let Some(ty) = project.element_type(e.type_id) else { continue };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let level_z = project.level_elevation(e.level);
+            let placement = self.local_placement(Some(storey), Frame::at(DVec3::ZERO));
+            let style = self.material_style(ty.main_material());
+            let product: StructureProduct = match (&e.kind, &ty.data) {
+                (ElementKind::Column(c), TypeData::Column { section, .. }) => {
+                    let (base, top) = project.column_span(e, c);
+                    let item = match *section {
+                        cc_core::ColumnSection::Rectangular { width, depth } => {
+                            let part = cc_geom::BoxPart {
+                                origin: c.position,
+                                u: DVec2::from_angle(c.rotation_deg.to_radians()),
+                                v: DVec2::from_angle(c.rotation_deg.to_radians()).perp(),
+                                u_range: (-width / 2.0, width / 2.0),
+                                v_range: (-depth / 2.0, depth / 2.0),
+                                z_range: (base, top),
+                            };
+                            self.oriented_box(&part, level_z)
+                        }
+                        cc_core::ColumnSection::Round { diameter } => {
+                            let center = self.point2(c.position);
+                            let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
+                            let profile = self.w.add(
+                                "IFCCIRCLEPROFILEDEF",
+                                args![Value::Enum("AREA"), Value::Null, position2, diameter / 2.0],
+                            );
+                            let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, base - level_z)));
+                            self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, top - base])
+                        }
+                    };
+                    let volume = match *section {
+                        cc_core::ColumnSection::Rectangular { width, depth } => width * depth * (top - base),
+                        cc_core::ColumnSection::Round { diameter } => {
+                            std::f64::consts::PI * diameter * diameter / 4.0 * (top - base)
+                        }
+                    };
+                    let q = vec![("Length", Quantity::Length(top - base)), ("NetVolume", Quantity::Volume(volume))];
+                    StructureProduct::new("IFCCOLUMN", "COLUMN", vec![item]).quantities("Qto_ColumnBaseQuantities", q)
+                }
+                (ElementKind::Beam(b), TypeData::Beam { width, height, .. }) => {
+                    let Some(u) = (b.end - b.start).try_normalize() else { continue };
+                    let top = level_z + b.top_offset;
+                    let part = cc_geom::BoxPart {
+                        origin: b.start,
+                        u,
+                        v: u.perp(),
+                        u_range: (0.0, b.length()),
+                        v_range: (-width / 2.0, width / 2.0),
+                        z_range: (top - height, top),
+                    };
+                    let item = self.oriented_box(&part, level_z);
+                    let q = vec![
+                        ("Length", Quantity::Length(b.length())),
+                        ("NetVolume", Quantity::Volume(width * height * b.length())),
+                    ];
+                    StructureProduct::new("IFCBEAM", "BEAM", vec![item]).quantities("Qto_BeamBaseQuantities", q)
+                }
+                (ElementKind::Stair(s), TypeData::Stair { .. }) => {
+                    let Some(g) = cc_geom::stair_geom(project, e, s) else { continue };
+                    let items: Vec<Id> = g.steps().iter().map(|p| self.oriented_box(p, level_z)).collect();
+                    let count = |k: usize| Value::Typed("IFCCOUNTMEASURE", Box::new(Value::Int(k as i64)));
+                    let length = |x: f64| Value::Typed("IFCPOSITIVELENGTHMEASURE", Box::new(Value::Real(x)));
+                    let props = vec![
+                        ("NumberOfRiser", count(g.risers)),
+                        ("NumberOfTreads", count(g.risers.saturating_sub(1))),
+                        ("RiserHeight", length(g.riser)),
+                        ("TreadLength", length(g.tread)),
+                    ];
+                    StructureProduct {
+                        props: Some(("Pset_StairCommon", props)),
+                        ..StructureProduct::new("IFCSTAIR", "STRAIGHT_RUN_STAIR", items)
+                    }
+                }
+                (ElementKind::Railing(r), TypeData::Railing { .. }) => {
+                    let items: Vec<Id> =
+                        cc_geom::railing_parts(project, e, r).iter().map(|p| self.oriented_box(p, level_z)).collect();
+                    let q = vec![("Length", Quantity::Length(r.length()))];
+                    StructureProduct::new("IFCRAILING", "GUARDRAIL", items).quantities("Qto_RailingBaseQuantities", q)
+                }
+                _ => continue,
+            };
+            if product.items.is_empty() {
+                continue;
+            }
+            for &item in &product.items {
+                self.styled(item, style);
+            }
+            let shape = self.shape(product.items, None);
+            let mut attrs = self.element_args(e, placement, shape);
+            attrs.push(Value::Enum(product.kind));
+            let id = self.w.add(product.entity, attrs);
+            self.products.insert(e.id, id);
+            self.register(e, id);
+            if let Some((set, quantities)) = &product.quantities {
+                self.quantities(e, set, quantities);
+            }
+            if let Some((name, props)) = product.props {
+                self.property_set(&format!("pset-{}-{name}", e.id), name, vec![id], props);
+            }
+        }
     }
 
     // --- Materials and types ---
@@ -536,6 +686,10 @@ impl<'a> Exporter<'a> {
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             // Rooms, grids and dimensions have no IFC type object.
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => return None,
+            TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
+            TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
+            TypeData::Stair { .. } => ("IFCSTAIRTYPE", args![Value::Enum("STRAIGHT_RUN_STAIR")]),
+            TypeData::Railing { .. } => ("IFCRAILINGTYPE", args![Value::Enum("GUARDRAIL")]),
             TypeData::Wall { .. } => ("IFCWALLTYPE", args![Value::Enum("STANDARD")]),
             TypeData::Floor { .. } => ("IFCSLABTYPE", args![Value::Enum("FLOOR")]),
             TypeData::Ceiling { .. } => ("IFCCOVERINGTYPE", args![Value::Enum("CEILING")]),
@@ -782,6 +936,10 @@ impl<'a> Exporter<'a> {
                     "CEILING",
                 )
             }
+            ElementKind::Roof(r) if matches!(r.shape, RoofShape::Gable { .. } | RoofShape::Hip { .. }) => {
+                self.write_pitched_roof(e, r, storey);
+                return;
+            }
             ElementKind::Roof(r) => {
                 let fp = polygon::ccw(&polygon::offset(&r.footprint, r.overhang));
                 match r.shape {
@@ -793,6 +951,7 @@ impl<'a> Exporter<'a> {
                         "IFCROOF",
                         "FLAT_ROOF",
                     ),
+                    RoofShape::Gable { .. } | RoofShape::Hip { .. } => return,
                     RoofShape::Shed { slope, direction_deg } => {
                         // The profile lies on the sloped underside; the extrusion is vertical,
                         // which is oblique in the profile's frame.
@@ -858,7 +1017,7 @@ impl<'a> Exporter<'a> {
                 let projected = polygon::area(&polygon::offset(&r.footprint, r.overhang));
                 let slope = match r.shape {
                     RoofShape::Flat => 0.0,
-                    RoofShape::Shed { slope, .. } => slope,
+                    RoofShape::Shed { slope, .. } | RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } => slope,
                 };
                 let gross = projected * (1.0 + slope * slope).sqrt();
                 self.quantities(
@@ -869,6 +1028,42 @@ impl<'a> Exporter<'a> {
             }
             _ => {}
         }
+    }
+
+    /// Gable and hip roofs as a faceted B-rep of the computed roof solid.
+    fn write_pitched_roof(&mut self, e: &Element, r: &cc_core::Roof, storey: Id) {
+        let project = self.project;
+        let geom = self.geom;
+        let Some(ty) = project.element_type(e.type_id) else { return };
+        let level_z = project.level_elevation(e.level);
+        let faces: Vec<cc_geom::Face> = geom.solids_of(e.id).flat_map(|s| s.faces.iter().cloned()).collect();
+        if faces.is_empty() {
+            return;
+        }
+        let placement = self.local_placement(Some(storey), Frame::at(DVec3::ZERO));
+        let body = self.faceted_brep(&faces, level_z);
+        let style = self.material_style(ty.main_material());
+        self.styled(body, style);
+        let shape = self.shape_of_type(vec![body], None, "Brep");
+        let kind = if matches!(r.shape, RoofShape::Hip { .. }) { "HIP_ROOF" } else { "GABLE_ROOF" };
+        let mut attrs = self.element_args(e, placement, shape);
+        attrs.push(Value::Enum(kind));
+        let product = self.w.add("IFCROOF", attrs);
+        self.products.insert(e.id, product);
+        self.register(e, product);
+        let projected = polygon::area(&polygon::offset(&r.footprint, r.overhang));
+        let slope = match r.shape {
+            RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } => slope,
+            _ => 0.0,
+        };
+        self.quantities(
+            e,
+            "Qto_RoofBaseQuantities",
+            &[
+                ("GrossArea", Quantity::Area(projected * (1.0 + slope * slope).sqrt())),
+                ("ProjectedArea", Quantity::Area(projected)),
+            ],
+        );
     }
 
     // --- Relationships collected while writing elements ---
@@ -889,6 +1084,27 @@ impl<'a> Exporter<'a> {
             self.w
                 .add("IFCRELCONTAINEDINSPATIALSTRUCTURE", args![gid, n.clone(), n.clone(), n.clone(), objects, storey]);
         }
+    }
+}
+
+/// An IFC product written by `write_structure`: entity, predefined type, body
+/// items and optional base quantities and property set.
+struct StructureProduct {
+    entity: &'static str,
+    kind: &'static str,
+    items: Vec<Id>,
+    quantities: Option<(&'static str, Vec<(&'static str, Quantity)>)>,
+    props: Option<(&'static str, Vec<(&'static str, Value)>)>,
+}
+
+impl StructureProduct {
+    fn new(entity: &'static str, kind: &'static str, items: Vec<Id>) -> Self {
+        Self { entity, kind, items, quantities: None, props: None }
+    }
+
+    fn quantities(mut self, set: &'static str, quantities: Vec<(&'static str, Quantity)>) -> Self {
+        self.quantities = Some((set, quantities));
+        self
     }
 }
 

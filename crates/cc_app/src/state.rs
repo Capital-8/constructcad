@@ -14,6 +14,7 @@ pub enum RibbonTab {
     File,
     #[default]
     Architecture,
+    Structure,
     Modify,
     Annotate,
     View,

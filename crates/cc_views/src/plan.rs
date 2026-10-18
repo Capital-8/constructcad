@@ -1,5 +1,5 @@
 use crate::{Drawing2D, LineStyle};
-use cc_core::{ElementKind, LevelId, Project, ViewKind};
+use cc_core::{ElementKind, LevelId, Project, TypeData, ViewKind};
 use cc_geom::{Column, ModelGeometry, WallGeom, polygon};
 use glam::DVec2;
 use std::f64::consts::{PI, TAU};
@@ -52,9 +52,15 @@ pub fn plan(project: &Project, geom: &ModelGeometry, level: LevelId, cut_height:
                 if r.overhang > 0.0 {
                     d.polyline(&r.footprint, true, LineStyle::Hidden, id);
                 }
+                for &(a, b) in geom.roof_ridges.get(&e.id).into_iter().flatten() {
+                    d.line(a, b, LineStyle::Projection, id);
+                }
             }
             _ => {}
         }
+    }
+    if !ceiling {
+        draw_structure(&mut d, project, level, cut_z);
     }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level) {
@@ -113,6 +119,85 @@ fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &s
     d.fill(arrow, [30, 90, 170, 255], None);
     // Label below and to the right of the circle, clear of the arrow.
     d.text(c + DVec2::new(r + 0.08, -r - 0.05), name, 2.5);
+}
+
+/// Columns, beams, stairs and railings of `level` as seen from the cut plane.
+fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64) {
+    for e in project.elements.values().filter(|e| e.level == level) {
+        let id = Some(e.id);
+        let data = project.element_type(e.type_id).map(|t| &t.data);
+        match (&e.kind, data) {
+            (ElementKind::Column(c), Some(TypeData::Column { section, .. })) => {
+                let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
+                let (base, top) = project.column_span(e, c);
+                if base <= cut_z && cut_z <= top {
+                    d.fill(outline.clone(), POCHE, id);
+                    d.polyline(&outline, true, LineStyle::Cut, id);
+                } else {
+                    let style = if base > cut_z { LineStyle::Hidden } else { LineStyle::Projection };
+                    d.polyline(&outline, true, style, id);
+                }
+            }
+            (ElementKind::Beam(b), Some(TypeData::Beam { width, height, .. })) => {
+                let Some(u) = (b.end - b.start).try_normalize() else { continue };
+                let n = u.perp() * (width / 2.0);
+                let top = project.level_elevation(e.level) + b.top_offset;
+                // Beams above the cut plane are dashed; cut beams are drawn heavy.
+                let style = if top - height > cut_z {
+                    LineStyle::Hidden
+                } else if top >= cut_z {
+                    LineStyle::Cut
+                } else {
+                    LineStyle::Projection
+                };
+                d.polyline(&[b.start - n, b.end - n, b.end + n, b.start + n], true, style, id);
+            }
+            (ElementKind::Stair(st), Some(TypeData::Stair { .. })) => {
+                if let Some(g) = cc_geom::stair_geom(project, e, st) {
+                    draw_stair(d, &g, cut_z, e.id);
+                }
+            }
+            (ElementKind::Railing(r), Some(TypeData::Railing { .. })) => {
+                d.polyline(&r.path, false, LineStyle::Projection, id);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Stair symbol: outline, treads (dashed beyond the cut), a break line where
+/// the run passes the cut plane and an arrow pointing up the run.
+fn draw_stair(d: &mut Drawing2D, g: &cc_geom::StairGeom, cut_z: f64, element: cc_core::ElementId) {
+    let id = Some(element);
+    let w = g.width / 2.0;
+    let p = |a: f64, b: f64| g.start + g.u * a + g.v * b;
+    // Distance along the run where the treads reach the cut plane.
+    let cut_u = if g.riser > 0.0 { ((cut_z - g.base) / g.riser).floor() * g.tread } else { g.run() };
+    let cut_u = cut_u.clamp(0.0, g.run());
+    let style_at = |u: f64| if u <= cut_u + 1e-9 { LineStyle::Projection } else { LineStyle::Hidden };
+    for side in [-w, w] {
+        d.line(p(0.0, side), p(cut_u, side), LineStyle::Projection, id);
+        d.line(p(cut_u, side), p(g.run(), side), LineStyle::Hidden, id);
+    }
+    for k in 0..g.risers {
+        let u = k as f64 * g.tread;
+        d.line(p(u, -w), p(u, w), style_at(u), id);
+    }
+    if cut_u < g.run() {
+        // Break line: a diagonal with a small zigzag across the run.
+        let (a, b) = (p(cut_u - 0.15, -w), p(cut_u + 0.15, w));
+        let m = (a + b) * 0.5;
+        let z = g.u * 0.08;
+        d.polyline(&[a, m - z, m + z, b], false, LineStyle::Projection, id);
+    }
+    // Arrow from the first riser up the run, to the cut (or the top).
+    let end = p(cut_u.max(g.tread).min(g.run()), 0.0);
+    d.line(p(0.0, 0.0), end, LineStyle::Annotation, id);
+    let head = 0.12;
+    d.line(end, end - g.u * head + g.v * head * 0.6, LineStyle::Annotation, id);
+    d.line(end, end - g.u * head - g.v * head * 0.6, LineStyle::Annotation, id);
+    let foot = g.v * 0.06;
+    d.line(p(0.0, 0.0) - foot, p(0.0, 0.0) + foot, LineStyle::Annotation, id);
 }
 
 fn draw_wall(d: &mut Drawing2D, g: &WallGeom, cut_z: f64) {
