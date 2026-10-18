@@ -149,7 +149,7 @@ fn stack_rows(n: usize) -> usize {
 fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
     let mut clicked = None;
     let rows = stack_rows(buttons.len());
-    let size = vec2(26.0, (BUTTON_HEIGHT - 4.0) / 3.0);
+    let size = vec2(28.0, (BUTTON_HEIGHT - 4.0) / 3.0);
     let column_h = rows as f32 * size.y + (rows as f32 - 1.0) * 2.0;
     for (column, chunk) in buttons.chunks(rows).enumerate() {
         ui.vertical(|ui| {
