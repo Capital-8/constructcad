@@ -236,6 +236,17 @@ impl ConstructApp {
                     }
                     "RM" => Some(Some(Category::Room)),
                     "CL" => Some(Some(Category::Column)),
+                    "TR" | "TX" | "SL" | "OF" | "AL" => {
+                        let tool = match state.key_buffer.as_str() {
+                            "TR" => Tool::TrimCorner,
+                            "TX" => Tool::TrimExtend,
+                            "SL" => Tool::Split,
+                            "OF" => Tool::Offset,
+                            _ => Tool::Align,
+                        };
+                        crate::modify::start_pick(state, tool);
+                        Some(None)
+                    }
                     "MV" | "CO" | "RO" | "MM" | "DM" | "AR" => {
                         let tool = match state.key_buffer.as_str() {
                             "MV" => Tool::Move,

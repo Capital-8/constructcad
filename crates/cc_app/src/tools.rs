@@ -61,6 +61,11 @@ pub enum Tool {
         draw: bool,
     },
     Array,
+    TrimCorner,
+    TrimExtend,
+    Split,
+    Offset,
+    Align,
 }
 
 impl Tool {
@@ -89,6 +94,11 @@ impl Tool {
             Tool::Mirror { draw: false } => "tool-mirror-pick",
             Tool::Mirror { draw: true } => "tool-mirror-draw",
             Tool::Array => "tool-array",
+            Tool::TrimCorner => "tool-trim-corner",
+            Tool::TrimExtend => "tool-trim-extend",
+            Tool::Split => "tool-split",
+            Tool::Offset => "tool-offset",
+            Tool::Align => "tool-align",
         }
     }
 
@@ -557,9 +567,19 @@ pub fn handle(
         (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Move | Tool::Copy | Tool::Rotate | Tool::Mirror { .. } | Tool::Array, Some(level)) => {
-            crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool)
-        }
+        (
+            Tool::Move
+            | Tool::Copy
+            | Tool::Rotate
+            | Tool::Mirror { .. }
+            | Tool::Array
+            | Tool::TrimCorner
+            | Tool::TrimExtend
+            | Tool::Split
+            | Tool::Offset
+            | Tool::Align,
+            Some(level),
+        ) => crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool),
         (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
         _ => {}
     }

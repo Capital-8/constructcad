@@ -19,6 +19,7 @@ pub mod transform;
 mod types;
 pub mod units;
 mod view;
+pub mod wall_ops;
 
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
 pub use document::{Document, EditCtx, Transaction};

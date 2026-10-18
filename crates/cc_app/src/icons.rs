@@ -55,6 +55,11 @@ pub enum Icon {
     MirrorPick,
     MirrorDraw,
     Array,
+    TrimCorner,
+    TrimExtend,
+    Split,
+    Offset,
+    Align,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -351,6 +356,40 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             }
             seg((1.5, 12.5), (14.5, 12.5), thin);
             line(&[(12.5, 11.0), (14.5, 12.5), (12.5, 14.0)]);
+        }
+        Icon::TrimCorner => {
+            line(&[(3.0, 14.5), (3.0, 3.0), (14.5, 3.0)]);
+            seg((3.0, 3.0), (3.0, 1.0), thin);
+            seg((3.0, 3.0), (1.0, 3.0), thin);
+            painter.circle_stroke(g.p(3.0, 3.0), 1.6 * scale, thin);
+        }
+        Icon::TrimExtend => {
+            seg((13.0, 1.5), (13.0, 14.5), s);
+            seg((2.0, 8.0), (8.5, 8.0), s);
+            let dashed = Stroke::new(thin.width, color);
+            seg((9.5, 8.0), (10.7, 8.0), dashed);
+            seg((11.5, 8.0), (12.6, 8.0), dashed);
+        }
+        Icon::Split => {
+            seg((1.5, 9.5), (6.5, 9.5), s);
+            seg((9.5, 9.5), (14.5, 9.5), s);
+            seg((9.5, 3.0), (6.5, 14.0), thin);
+        }
+        Icon::Offset => {
+            seg((2.0, 12.5), (14.0, 12.5), s);
+            let dashed = Stroke::new(thin.width, color);
+            for i in 0..4 {
+                let x = 2.0 + i as f32 * 3.2;
+                seg((x, 4.5), (x + 1.8, 4.5), dashed);
+            }
+            line(&[(8.0, 11.0), (8.0, 6.0)]);
+            line(&[(6.5, 7.5), (8.0, 6.0), (9.5, 7.5)]);
+        }
+        Icon::Align => {
+            seg((2.0, 2.5), (2.0, 13.5), s);
+            rect_s(5.0, 3.0, 13.5, 6.5, 0.5);
+            rect_s(5.0, 9.5, 10.5, 13.0, 0.5);
+            line(&[(4.5, 7.0), (2.5, 8.0), (4.5, 9.0)]);
         }
         Icon::Component => {
             // A chair in side view: seat, back and legs.

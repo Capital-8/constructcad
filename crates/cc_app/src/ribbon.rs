@@ -44,6 +44,11 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Mirror { draw: false } => Icon::MirrorPick,
         Tool::Mirror { draw: true } => Icon::MirrorDraw,
         Tool::Array => Icon::Array,
+        Tool::TrimCorner => Icon::TrimCorner,
+        Tool::TrimExtend => Icon::TrimExtend,
+        Tool::Split => Icon::Split,
+        Tool::Offset => Icon::Offset,
+        Tool::Align => Icon::Align,
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
 }
@@ -503,6 +508,28 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
         {
             crate::modify::start(state, tool.clone());
         }
+        // Geometry edits pick their elements, no selection needed.
+        let picks = [
+            (Tool::Align, Icon::Align, tip("tool-align", "AL")),
+            (Tool::Offset, Icon::Offset, tip("tool-offset", "OF")),
+            (Tool::TrimCorner, Icon::TrimCorner, tip("tool-trim-corner", "TR")),
+            (Tool::TrimExtend, Icon::TrimExtend, tip("tool-trim-extend", "TX")),
+            (Tool::Split, Icon::Split, tip("tool-split", "SL")),
+        ];
+        let buttons: Vec<StackButton> = picks
+            .iter()
+            .map(|(tool, icon, tooltip)| StackButton {
+                icon: *icon,
+                tooltip: tooltip.clone(),
+                enabled: true,
+                selected: state.tool == *tool,
+            })
+            .collect();
+        if let Some(i) = stacked(ui, &buttons)
+            && let Some((tool, _, _)) = picks.get(i)
+        {
+            crate::modify::start_pick(state, tool.clone());
+        }
     });
 }
 
@@ -734,6 +761,20 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     state.interaction.placing_center = true;
                 }
                 ui.label(theme::muted(t!("hint-rotate")));
+            }
+            Tool::Offset => {
+                ui.label(t!("opt-distance"));
+                ui.add(crate::properties::length_drag(&mut state.modify.offset).range(0.001..=100.0));
+                ui.label(theme::muted(t!("hint-offset")));
+            }
+            Tool::TrimCorner | Tool::TrimExtend | Tool::Split | Tool::Align => {
+                let key = match state.tool {
+                    Tool::TrimCorner => "hint-trim-corner",
+                    Tool::TrimExtend => "hint-trim-extend",
+                    Tool::Split => "hint-split",
+                    _ => "hint-align",
+                };
+                ui.label(theme::muted(crate::i18n::tr(key)));
             }
             Tool::Mirror { draw } => {
                 ui.checkbox(&mut state.modify.mirror_copy, t!("opt-copy"));

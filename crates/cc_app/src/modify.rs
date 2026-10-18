@@ -25,11 +25,13 @@ pub struct ModifyOptions {
     pub count: u32,
     /// Angle typed in the options bar, degrees.
     pub angle: f64,
+    /// Offset distance, meters.
+    pub offset: f64,
 }
 
 impl Default for ModifyOptions {
     fn default() -> Self {
-        Self { multiple: true, rotate_copy: false, mirror_copy: true, count: 3, angle: 90.0 }
+        Self { multiple: true, rotate_copy: false, mirror_copy: true, count: 3, angle: 90.0, offset: 1.0 }
     }
 }
 
@@ -45,8 +47,19 @@ pub fn start(state: &mut AppState, tool: Tool) {
     state.message = crate::i18n::tr(hint_key(&tool));
 }
 
+/// Start a pick tool (trim, split, offset, align): it acts on clicked elements.
+pub fn start_pick(state: &mut AppState, tool: Tool) {
+    state.set_tool(tool.clone());
+    state.message = crate::i18n::tr(hint_key(&tool));
+}
+
 fn hint_key(tool: &Tool) -> &'static str {
     match tool {
+        Tool::TrimCorner => "hint-trim-corner",
+        Tool::TrimExtend => "hint-trim-extend",
+        Tool::Split => "hint-split",
+        Tool::Offset => "hint-offset",
+        Tool::Align => "hint-align",
         Tool::Move | Tool::Copy | Tool::Array => "hint-base-point",
         Tool::Rotate => "hint-rotate",
         Tool::Mirror { draw: false } => "hint-mirror-pick",
@@ -104,6 +117,11 @@ pub fn handle(
     drawing: &Drawing2D,
     tool: &Tool,
 ) {
+    if matches!(tool, Tool::TrimCorner | Tool::TrimExtend | Tool::Split | Tool::Offset | Tool::Align) {
+        pick_tool(resp, painter, state, xf, drawing, tool);
+        return;
+    }
+    let _ = level;
     let targets: BTreeSet<ElementId> = state.interaction.targets.iter().copied().collect();
     if targets.is_empty() {
         state.set_tool(Tool::Select);
@@ -321,6 +339,107 @@ fn mirror(
             crate::tools::transform_selection(state, &ids, &t, t!("tx-mirror"));
             finish(state, ids);
         }
+    }
+}
+
+/// The linear element (wall, beam, grid) under the pointer, and its line.
+fn linear_at(state: &AppState, drawing: &Drawing2D, raw: DVec2, tol: f64) -> Option<(ElementId, (DVec2, DVec2))> {
+    let id = drawing.hit_test(raw, tol)?;
+    let line = state.project().element(id).and_then(cc_core::wall_ops::line_of)?;
+    Some((id, line))
+}
+
+fn edit_message(e: cc_core::wall_ops::EditError) -> String {
+    match e {
+        cc_core::wall_ops::EditError::NotLinear => t!("msg-pick-linear"),
+        cc_core::wall_ops::EditError::Parallel => t!("msg-parallel"),
+        cc_core::wall_ops::EditError::Degenerate => t!("msg-degenerate"),
+    }
+}
+
+fn report(state: &mut AppState, result: Result<(), cc_core::wall_ops::EditError>) {
+    if let Err(e) = result {
+        state.message = edit_message(e);
+    }
+}
+
+/// Trim/extend to corner or to a reference, split, offset and align.
+fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, drawing: &Drawing2D, tool: &Tool) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let tol = 6.0 / xf.scale;
+    let hovered = linear_at(state, drawing, raw, tol);
+    let first = state.interaction.targets.first().copied();
+    let first_pick = state.interaction.points.first().copied();
+    // Highlight the first pick and the element under the pointer.
+    let mut lit: BTreeSet<ElementId> = first.into_iter().collect();
+    lit.extend(hovered.map(|h| h.0));
+    paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
+    let clicked = resp.clicked();
+    match tool {
+        Tool::TrimCorner | Tool::Align | Tool::TrimExtend => {
+            let Some((id, _)) = hovered else { return };
+            if !clicked {
+                return;
+            }
+            match (first, first_pick) {
+                (None, _) | (_, None) => {
+                    state.interaction.targets = vec![id];
+                    state.interaction.points = vec![raw];
+                    state.message = crate::i18n::tr(match tool {
+                        Tool::TrimCorner => "hint-trim-corner-second",
+                        Tool::Align => "hint-align-second",
+                        _ => "hint-trim-extend-second",
+                    });
+                }
+                (Some(a), Some(pick_a)) if a != id => {
+                    let reference = state.project().element(a).and_then(cc_core::wall_ops::line_of);
+                    let result = match (tool, reference) {
+                        (Tool::TrimCorner, _) => state.doc.edit(t!("tx-trim"), |e| e.trim_corner(a, pick_a, id, raw)),
+                        (Tool::Align, Some((r0, r1))) => state.doc.edit(t!("tx-align"), |e| e.align_to(id, r0, r1)),
+                        (_, Some((r0, r1))) => state.doc.edit(t!("tx-trim"), |e| e.trim_to(id, raw, r0, r1)),
+                        _ => Err(cc_core::wall_ops::EditError::NotLinear),
+                    };
+                    report(state, result);
+                    // Trim/extend keeps its reference for more elements.
+                    if *tool != Tool::TrimExtend {
+                        state.interaction.targets.clear();
+                        state.interaction.points.clear();
+                        state.message = crate::i18n::tr(hint_key(tool));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Tool::Split => {
+            let Some((id, (a, b))) = hovered else { return };
+            let dir = (b - a).normalize_or_zero();
+            let p = a + dir * (raw - a).dot(dir);
+            let n = dir.perp() * (8.0 / xf.scale);
+            painter.line_segment([xf.to_screen(p - n), xf.to_screen(p + n)], Stroke::new(2.0, PREVIEW));
+            label(painter, xf.to_screen(p), format::length(a.distance(p)));
+            if clicked {
+                let result = state.doc.edit(t!("tx-split"), |e| e.split(id, p).map(|_| ()));
+                report(state, result);
+            }
+        }
+        Tool::Offset => {
+            let Some((id, (a, b))) = hovered else { return };
+            let n = (b - a).normalize_or_zero().perp();
+            let side = if (raw - a).dot(n) >= 0.0 { 1.0 } else { -1.0 };
+            let d = state.modify.offset.abs() * side;
+            let (oa, ob) = (a + n * d, b + n * d);
+            painter.extend(egui::Shape::dashed_line(
+                &[xf.to_screen(oa), xf.to_screen(ob)],
+                Stroke::new(1.5, PREVIEW),
+                8.0,
+                4.0,
+            ));
+            if clicked {
+                let result = state.doc.edit(t!("tx-offset"), |e| e.offset_copy(id, d).map(|_| ()));
+                report(state, result);
+            }
+        }
+        _ => {}
     }
 }
 
