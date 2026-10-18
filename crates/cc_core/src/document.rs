@@ -140,8 +140,12 @@ impl<'a> EditCtx<'a> {
     }
 
     /// Insert an element. Its `id` must come from [`EditCtx::alloc_id`].
-    pub fn add_element(&mut self, element: Element) -> ElementId {
+    pub fn add_element(&mut self, mut element: Element) -> ElementId {
         let id = element.id;
+        // Copies of an element get their own persistent id.
+        if element.uid.is_nil() || self.project.elements.values().any(|e| e.uid == element.uid && e.id != id) {
+            element.uid = crate::Uid::generate();
+        }
         self.touch_element(id);
         self.project.elements.insert(id, element);
         id
@@ -201,8 +205,11 @@ impl<'a> EditCtx<'a> {
         self.project.views.remove(&id);
     }
 
-    pub fn add_type(&mut self, element_type: ElementType) -> ElementTypeId {
+    pub fn add_type(&mut self, mut element_type: ElementType) -> ElementTypeId {
         let id = element_type.id;
+        if element_type.uid.is_nil() || self.project.types.values().any(|t| t.uid == element_type.uid && t.id != id) {
+            element_type.uid = crate::Uid::generate();
+        }
         self.touch_type(id);
         self.project.types.insert(id, element_type);
         id
@@ -276,7 +283,8 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(project: Project) -> Self {
+    pub fn new(mut project: Project) -> Self {
+        project.ensure_uids();
         Self {
             project,
             path: None,
@@ -393,11 +401,13 @@ mod tests {
                 type_id,
                 mark: String::new(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Wall(Wall {
                     start: DVec2::ZERO,
                     end: DVec2::new(5.0, 0.0),
                     base_offset: 0.0,
                     height: 3.0,
+                    ..Default::default()
                 }),
             })
         })
@@ -434,6 +444,7 @@ mod tests {
                 type_id,
                 mark: "1".into(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Door(Hosted {
                     host: wall,
                     offset: 2.0,

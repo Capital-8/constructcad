@@ -4,7 +4,7 @@
 
 use cc_core::{
     Category, Document, Element, ElementId, ElementKind, Floor, Hosted, Project, Roof, RoofShape, View, ViewCategory,
-    ViewId, ViewKind, Viewport, Wall,
+    ViewId, ViewKind, Viewport, Wall, WallTop,
 };
 use glam::DVec2;
 
@@ -16,6 +16,7 @@ fn main() {
         e.info_mut().author = "ConstructCAD".into();
         let p = e.project().clone();
         let level = p.levels[0].id;
+        let upper = p.levels[1].id;
         let wall_t = p.default_type(Category::Wall).unwrap();
         let door_t = p.default_type(Category::Door).unwrap();
         let window_t = p.default_type(Category::Window).unwrap();
@@ -23,19 +24,42 @@ fn main() {
         let roof_t = p.default_type(Category::Roof).unwrap();
         let add = |e: &mut cc_core::EditCtx, type_id, mark: &str, kind| {
             let id = ElementId(e.alloc_id());
-            e.add_element(Element { id, level, type_id, mark: mark.into(), comments: String::new(), kind })
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: mark.into(),
+                comments: String::new(),
+                kind,
+                uid: Default::default(),
+            })
         };
 
         // Clockwise outline so each wall's left face points outward.
         let outline = [DVec2::new(0.0, 0.0), DVec2::new(0.0, 6.0), DVec2::new(9.0, 6.0), DVec2::new(9.0, 0.0)];
         let walls: Vec<_> = (0..4)
             .map(|i| {
-                let w = Wall { start: outline[i], end: outline[(i + 1) % 4], base_offset: 0.0, height: 3.0 };
+                // Exterior walls are load-bearing and rise to the upper level.
+                let w = Wall {
+                    start: outline[i],
+                    end: outline[(i + 1) % 4],
+                    base_offset: 0.0,
+                    height: 3.0,
+                    top: WallTop::Level { level: upper, offset: 0.0 },
+                    structural: true,
+                    ..Default::default()
+                };
                 add(e, wall_t, "", ElementKind::Wall(w))
             })
             .collect();
         // Interior partition meeting the north and south walls (T-joins).
-        let inner = Wall { start: DVec2::new(5.0, 0.0), end: DVec2::new(5.0, 6.0), base_offset: 0.0, height: 3.0 };
+        let inner = Wall {
+            start: DVec2::new(5.0, 0.0),
+            end: DVec2::new(5.0, 6.0),
+            base_offset: 0.0,
+            height: 3.0,
+            ..Default::default()
+        };
         let partition = add(e, wall_t, "", ElementKind::Wall(inner));
 
         let hosted =

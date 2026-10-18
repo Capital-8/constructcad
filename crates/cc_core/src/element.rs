@@ -1,4 +1,4 @@
-use crate::{Category, ElementId, ElementTypeId, LevelId};
+use crate::{Category, ElementId, ElementTypeId, LevelId, Uid};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,9 @@ pub struct Element {
     #[serde(default)]
     pub comments: String,
     pub kind: ElementKind,
+    /// Persistent unique id (IFC GlobalId and similar).
+    #[serde(default)]
+    pub uid: Uid,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,15 +87,88 @@ impl Element {
     }
 }
 
+/// How the top of a wall is defined.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum WallTop {
+    /// `height` above the base.
+    #[default]
+    Unconnected,
+    /// At a level's elevation plus `offset`; follows the level when it moves.
+    Level { level: LevelId, offset: f64 },
+}
+
+/// Which line of the wall the drawn `start`-`end` line follows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum LocationLine {
+    #[default]
+    Centerline,
+    CoreCenter,
+    FinishExterior,
+    FinishInterior,
+    CoreExterior,
+    CoreInterior,
+}
+
+impl LocationLine {
+    pub const ALL: [LocationLine; 6] = [
+        LocationLine::Centerline,
+        LocationLine::CoreCenter,
+        LocationLine::FinishExterior,
+        LocationLine::FinishInterior,
+        LocationLine::CoreExterior,
+        LocationLine::CoreInterior,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            LocationLine::Centerline => "loc-centerline",
+            LocationLine::CoreCenter => "loc-core-center",
+            LocationLine::FinishExterior => "loc-finish-exterior",
+            LocationLine::FinishInterior => "loc-finish-interior",
+            LocationLine::CoreExterior => "loc-core-exterior",
+            LocationLine::CoreInterior => "loc-core-interior",
+        }
+    }
+}
+
+fn yes() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Wall {
-    /// Location line (wall centerline) start point.
+    /// Location line start point (see `location_line`).
     pub start: DVec2,
     pub end: DVec2,
     /// Offset of the wall base from its level elevation.
     pub base_offset: f64,
-    /// Unconnected height.
+    /// Unconnected height (used when `top` is [`WallTop::Unconnected`]).
     pub height: f64,
+    #[serde(default)]
+    pub top: WallTop,
+    #[serde(default)]
+    pub location_line: LocationLine,
+    /// The wall bounds rooms.
+    #[serde(default = "yes")]
+    pub room_bounding: bool,
+    /// The wall is load-bearing.
+    #[serde(default)]
+    pub structural: bool,
+}
+
+impl Default for Wall {
+    fn default() -> Self {
+        Self {
+            start: DVec2::ZERO,
+            end: DVec2::X,
+            base_offset: 0.0,
+            height: 3.0,
+            top: WallTop::Unconnected,
+            location_line: LocationLine::Centerline,
+            room_bounding: true,
+            structural: false,
+        }
+    }
 }
 
 impl Wall {

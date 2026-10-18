@@ -1,6 +1,6 @@
 use crate::{
-    CameraState, Category, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId, Layer, LevelId,
-    SheetSize, TypeData, View, ViewCategory, ViewId, ViewKind, Viewport,
+    CameraState, Category, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId, Layer,
+    LayerFunction, LevelId, SheetSize, TypeData, View, ViewCategory, ViewId, ViewKind, Viewport, WallFunction,
 };
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct ProjectInfo {
+    /// Persistent unique id of the project.
+    #[serde(default)]
+    pub uid: crate::Uid,
     pub name: String,
     pub number: String,
     pub client: String,
@@ -67,6 +70,7 @@ impl Project {
         let n = |key: &str| translate(key).unwrap_or_else(|| template_default(key).to_string());
         let mut p = Self::empty();
         p.info = ProjectInfo {
+            uid: crate::Uid::default(),
             name: n("tpl-project-name"),
             number: "0001".into(),
             client: String::new(),
@@ -93,29 +97,35 @@ impl Project {
         .map(|(name, color)| Material { name: name.into(), color })
         .collect();
 
-        let layer = |m: &str, t: f64| Layer { material: m.into(), thickness: t };
+        let layer = |m: &str, t: f64| Layer { material: m.into(), thickness: t, function: LayerFunction::Structure };
+        let finish = |m: &str, t: f64| Layer { material: m.into(), thickness: t, function: LayerFunction::Finish };
         let types = [
             (
                 &n("tpl-type-masonry-15"),
                 TypeData::Wall {
                     layers: vec![
-                        layer(&n("tpl-mat-plaster"), 0.02),
+                        finish(&n("tpl-mat-plaster"), 0.02),
                         layer(&n("tpl-mat-masonry"), 0.11),
-                        layer(&n("tpl-mat-plaster"), 0.02),
+                        finish(&n("tpl-mat-plaster"), 0.02),
                     ],
+                    function: WallFunction::Exterior,
                 },
             ),
             (
                 &n("tpl-type-masonry-25"),
                 TypeData::Wall {
                     layers: vec![
-                        layer(&n("tpl-mat-plaster"), 0.025),
+                        finish(&n("tpl-mat-plaster"), 0.025),
                         layer(&n("tpl-mat-masonry"), 0.20),
-                        layer(&n("tpl-mat-plaster"), 0.025),
+                        finish(&n("tpl-mat-plaster"), 0.025),
                     ],
+                    function: WallFunction::Exterior,
                 },
             ),
-            (&n("tpl-type-drywall-10"), TypeData::Wall { layers: vec![layer(&n("tpl-mat-gypsum"), 0.10)] }),
+            (
+                &n("tpl-type-drywall-10"),
+                TypeData::Wall { layers: vec![layer(&n("tpl-mat-gypsum"), 0.10)], function: WallFunction::Interior },
+            ),
             (&n("tpl-type-door-80"), TypeData::Door { width: 0.8, height: 2.1, material: n("tpl-mat-wood") }),
             (&n("tpl-type-door-90"), TypeData::Door { width: 0.9, height: 2.1, material: n("tpl-mat-wood") }),
             (
@@ -129,18 +139,21 @@ impl Project {
             (
                 &n("tpl-type-slab-12"),
                 TypeData::Floor {
-                    layers: vec![layer(&n("tpl-mat-screed"), 0.03), layer(&n("tpl-mat-concrete"), 0.12)],
+                    layers: vec![finish(&n("tpl-mat-screed"), 0.03), layer(&n("tpl-mat-concrete"), 0.12)],
                 },
             ),
             (&n("tpl-type-ceiling-gypsum"), TypeData::Ceiling { thickness: 0.02, material: n("tpl-mat-gypsum") }),
             (
                 &n("tpl-type-roof-tile"),
-                TypeData::Roof { layers: vec![layer(&n("tpl-mat-roof-tile"), 0.05), layer(&n("tpl-mat-wood"), 0.10)] },
+                TypeData::Roof { layers: vec![finish(&n("tpl-mat-roof-tile"), 0.05), layer(&n("tpl-mat-wood"), 0.10)] },
             ),
         ];
         for (name, data) in types {
             let id = ElementTypeId(p.alloc_id());
-            p.types.insert(id, ElementType { id, name: name.into(), data });
+            p.types.insert(
+                id,
+                ElementType { id, name: name.into(), data, info: Default::default(), uid: Default::default() },
+            );
         }
 
         let add_view = |p: &mut Project, name: &str, scale: u32, kind: ViewKind| {
@@ -183,7 +196,65 @@ impl Project {
                 ],
             },
         );
+        p.ensure_uids();
         p
+    }
+
+    /// Assign persistent unique ids to the project, types and elements that
+    /// lack one, and replace duplicates (e.g. from copied elements).
+    pub fn ensure_uids(&mut self) {
+        let mut seen = std::collections::HashSet::new();
+        let mut fresh = |uid: &mut crate::Uid| {
+            if uid.is_nil() || !seen.insert(*uid) {
+                *uid = crate::Uid::generate();
+                seen.insert(*uid);
+            }
+        };
+        fresh(&mut self.info.uid);
+        self.types.values_mut().for_each(|t| fresh(&mut t.uid));
+        self.elements.values_mut().for_each(|e| fresh(&mut e.uid));
+    }
+
+    /// Elevation of a wall's base.
+    pub fn wall_base_z(&self, element: &Element, wall: &crate::Wall) -> f64 {
+        self.level_elevation(element.level) + wall.base_offset
+    }
+
+    /// Elevation of a wall's top, from its top constraint (at least 1 cm above the base).
+    pub fn wall_top_z(&self, element: &Element, wall: &crate::Wall) -> f64 {
+        let base = self.wall_base_z(element, wall);
+        let top = match wall.top {
+            crate::WallTop::Unconnected => base + wall.height,
+            crate::WallTop::Level { level, offset } => self.level_elevation(level) + offset,
+        };
+        top.max(base + 0.01)
+    }
+
+    /// Effective height of a wall.
+    pub fn wall_height(&self, element: &Element, wall: &crate::Wall) -> f64 {
+        self.wall_top_z(element, wall) - self.wall_base_z(element, wall)
+    }
+
+    /// Start and end of a wall's body centerline: the location line shifted
+    /// across the wall according to `location_line` and the type's layers
+    /// (listed from the exterior face, on the left of the line).
+    pub fn wall_axis(&self, element: &Element, wall: &crate::Wall) -> (DVec2, DVec2) {
+        use crate::LocationLine as L;
+        let Some(ty) = self.element_type(element.type_id) else { return (wall.start, wall.end) };
+        let half = ty.thickness() * 0.5;
+        let (core_ext, core_int) = ty.core_range();
+        // Position of the location line across the wall, measured from the
+        // centerline towards the exterior face.
+        let line = match wall.location_line {
+            L::Centerline => 0.0,
+            L::FinishExterior => half,
+            L::FinishInterior => -half,
+            L::CoreExterior => half - core_ext,
+            L::CoreInterior => half - core_int,
+            L::CoreCenter => half - (core_ext + core_int) * 0.5,
+        };
+        let shift = wall.normal() * -line;
+        (wall.start + shift, wall.end + shift)
     }
 
     /// Allocate a new unique id (shared by all id kinds).

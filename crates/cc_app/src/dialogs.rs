@@ -268,7 +268,7 @@ fn type_editor(ctx: &Context, state: &mut AppState) {
                     state.doc.edit_merged(t!("tx-modify-type"), key((tid, field)), |e| {
                         if let Some(t) = e.type_mut(tid) {
                             match &mut t.data {
-                                TypeData::Wall { layers: l }
+                                TypeData::Wall { layers: l, .. }
                                 | TypeData::Floor { layers: l }
                                 | TypeData::Roof { layers: l } => *l = layers,
                                 _ => {}
@@ -307,7 +307,7 @@ fn type_editor(ctx: &Context, state: &mut AppState) {
                 if ui.button(t!("type-add-layer")).clicked() {
                     let mut l = layers.clone();
                     let material = state.project().materials.first().map(|m| m.name.clone()).unwrap_or_default();
-                    l.push(Layer { material, thickness: 0.02 });
+                    l.push(Layer { material, thickness: 0.02, function: Default::default() });
                     set_layers(state, "ladd", l);
                     state.doc.break_merge();
                 }
@@ -319,7 +319,13 @@ fn type_editor(ctx: &Context, state: &mut AppState) {
                 let selection: Vec<_> = state.selection.iter().copied().collect();
                 let new_id = state.doc.edit(t!("tx-duplicate-type"), |e| {
                     let id = ElementTypeId(e.alloc_id());
-                    e.add_type(ElementType { id, name: t!("copy-of", "name" => ty.name), data: ty.data.clone() });
+                    e.add_type(ElementType {
+                        id,
+                        name: t!("copy-of", "name" => ty.name),
+                        data: ty.data.clone(),
+                        info: ty.info.clone(),
+                        uid: Default::default(),
+                    });
                     // The selected instances switch to the new type.
                     for el in selection {
                         if let Some(x) = e.element_mut(el).filter(|x| x.type_id == tid) {

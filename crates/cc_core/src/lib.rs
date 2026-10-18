@@ -13,11 +13,11 @@ mod types;
 mod view;
 
 pub use document::{Document, EditCtx, Transaction};
-pub use element::{Ceiling, Element, ElementKind, Floor, Hosted, Roof, RoofShape, Wall};
-pub use ids::{ElementId, ElementTypeId, LevelId, ViewId};
+pub use element::{Ceiling, Element, ElementKind, Floor, Hosted, LocationLine, Roof, RoofShape, Wall, WallTop};
+pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
 pub use persist::{FORMAT_VERSION, PersistError, from_ron, load, save, to_ron};
 pub use project::{Level, Material, Project, ProjectInfo};
-pub use types::{Category, ElementType, Layer, TypeData};
+pub use types::{Category, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction};
 pub use view::{CameraState, Direction, SheetSize, View, ViewCategory, ViewKind, Viewport};
 
 pub use glam::{DVec2, DVec3};

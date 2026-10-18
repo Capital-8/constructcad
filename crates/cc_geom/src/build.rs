@@ -240,11 +240,13 @@ mod tests {
                     type_id: wall_t,
                     mark: String::new(),
                     comments: String::new(),
+                    uid: Default::default(),
                     kind: ElementKind::Wall(Wall {
                         start: pts[i],
                         end: pts[(i + 1) % 4],
                         base_offset: 0.0,
                         height: 3.0,
+                        ..Default::default()
                     }),
                 });
             }
@@ -255,6 +257,7 @@ mod tests {
                 type_id: door_t,
                 mark: "1".into(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Door(Hosted {
                     host: walls[0],
                     offset: 2.0,
@@ -270,6 +273,7 @@ mod tests {
                 type_id: floor_t,
                 mark: String::new(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Floor(Floor { boundary: pts.to_vec(), height_offset: 0.0 }),
             });
         });

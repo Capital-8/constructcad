@@ -226,6 +226,7 @@ impl AppState {
             type_id,
             mark: String::new(),
             comments: String::new(),
+            uid: Default::default(),
             kind: kind.clone(),
         }
         .category();
@@ -236,7 +237,7 @@ impl AppState {
                 String::new()
             };
             let id = ElementId(e.alloc_id());
-            e.add_element(Element { id, level, type_id, mark, comments: String::new(), kind })
+            e.add_element(Element { id, level, type_id, mark, comments: String::new(), kind, uid: Default::default() })
         });
         self.selection = BTreeSet::from([id]);
         id

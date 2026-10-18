@@ -236,11 +236,13 @@ mod tests {
                 type_id: wall_t,
                 mark: String::new(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Wall(Wall {
                     start: DVec2::ZERO,
                     end: DVec2::new(5.0, 0.0),
                     base_offset: 0.0,
                     height: 3.0,
+                    ..Default::default()
                 }),
             });
             let dr = ElementId(e.alloc_id());
@@ -250,6 +252,7 @@ mod tests {
                 type_id: door_t,
                 mark: "1".into(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Door(Hosted {
                     host: w,
                     offset: 2.5,

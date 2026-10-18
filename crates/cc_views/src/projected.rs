@@ -352,11 +352,13 @@ mod tests {
                 type_id,
                 mark: String::new(),
                 comments: String::new(),
+                uid: Default::default(),
                 kind: ElementKind::Wall(Wall {
                     start: DVec2::ZERO,
                     end: DVec2::new(4.0, 0.0),
                     base_offset: 0.0,
                     height: 3.0,
+                    ..Default::default()
                 }),
             })
         });

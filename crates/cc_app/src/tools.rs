@@ -292,7 +292,7 @@ fn wall_tool(
         match anchor {
             None => state.interaction.anchor = Some(p),
             Some(a) if a.distance(p) > 0.01 => {
-                let wall = Wall { start: a, end: p, base_offset: 0.0, height: state.wall_height };
+                let wall = Wall { start: a, end: p, base_offset: 0.0, height: state.wall_height, ..Default::default() };
                 state.create_element(t!("tx-create-wall"), level, type_id, ElementKind::Wall(wall));
                 state.interaction.anchor = Some(p);
                 state.length_input.clear();
