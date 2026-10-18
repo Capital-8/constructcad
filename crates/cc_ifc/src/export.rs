@@ -174,6 +174,7 @@ impl<'a> Exporter<'a> {
             self.write_sketched(id);
         }
         self.write_structure();
+        self.write_components();
         self.write_spaces();
         self.write_relationships();
     }
@@ -622,6 +623,70 @@ impl<'a> Exporter<'a> {
         }
     }
 
+    /// Components: one extrusion per piece in the component's own placement
+    /// (insertion point and rotation), so importers recover the instance.
+    fn write_components(&mut self) {
+        let project = self.project;
+        for e in project.elements.values() {
+            let ElementKind::Component(c) = &e.kind else { continue };
+            let Some(TypeData::Component { def, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
+                continue;
+            };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let rot = DVec2::from_angle(c.rotation_deg.to_radians());
+            let placement = self.local_placement(
+                Some(storey),
+                Frame::horizontal(DVec3::new(c.position.x, c.position.y, c.base_offset), rot),
+            );
+            let (parts, _) = def.resolve(&c.overrides);
+            let mut items = Vec::new();
+            for part in parts {
+                let profile = polygon::ccw(&part.footprint);
+                if profile.len() < 3 || part.z1 - part.z0 < 1e-6 {
+                    continue;
+                }
+                let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, part.z0)));
+                let item = self.extrude_polygon(&profile, position, self.dir_z, part.z1 - part.z0);
+                let style = if part.material.is_empty() {
+                    self.style("Generic", [200, 200, 200])
+                } else {
+                    self.material_style(&part.material)
+                };
+                self.styled(item, style);
+                items.push(item);
+            }
+            if items.is_empty() {
+                continue;
+            }
+            let shape = self.shape(items, None);
+            let (entity, kind) = component_entity(def.kind);
+            let mut attrs = self.element_args(e, placement, shape);
+            attrs.push(Value::Enum(kind));
+            let product = self.w.add(entity, attrs);
+            self.products.insert(e.id, product);
+            self.register(e, product);
+            // Instance parameter values, so importers can restore overrides.
+            let values = def.values(&c.overrides);
+            let props: Vec<(&str, Value)> = def
+                .params
+                .iter()
+                .filter(|p| p.instance)
+                .filter_map(|p| {
+                    let v = *values.get(&p.name)?;
+                    let measure = match p.kind {
+                        cc_core::ParamKind::Length => "IFCLENGTHMEASURE",
+                        cc_core::ParamKind::Angle => "IFCPLANEANGLEMEASURE",
+                        cc_core::ParamKind::Number => "IFCREAL",
+                    };
+                    // Angles are stored in radians (the file's angle unit).
+                    let v = if p.kind == cc_core::ParamKind::Angle { v.to_radians() } else { v };
+                    Some((p.name.as_str(), Value::Typed(measure, Box::new(Value::Real(v)))))
+                })
+                .collect();
+            self.property_set(&format!("comp-{}", e.id), COMPONENT_PSET, vec![product], props);
+        }
+    }
+
     // --- Materials and types ---
 
     fn material(&mut self, name: &str) -> Id {
@@ -686,8 +751,22 @@ impl<'a> Exporter<'a> {
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             // Rooms, grids and dimensions have no IFC type object.
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => return None,
-            // Components are not exported yet.
-            TypeData::Component { .. } => return None,
+            TypeData::Component { ref def, .. } => {
+                let (entity, kind) = component_entity(def.kind);
+                let entity = match entity {
+                    "IFCFURNITURE" => "IFCFURNITURETYPE",
+                    "IFCSANITARYTERMINAL" => "IFCSANITARYTERMINALTYPE",
+                    "IFCLIGHTFIXTURE" => "IFCLIGHTFIXTURETYPE",
+                    _ => "IFCBUILDINGELEMENTPROXYTYPE",
+                };
+                // Furniture types also state where they are assembled.
+                let extra = if entity == "IFCFURNITURETYPE" {
+                    args![Value::Enum("NOTDEFINED"), Value::Enum(kind)]
+                } else {
+                    args![Value::Enum(kind)]
+                };
+                (entity, extra)
+            }
             TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
             TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
             TypeData::Stair { .. } => ("IFCSTAIRTYPE", args![Value::Enum("STRAIGHT_RUN_STAIR")]),
@@ -717,6 +796,10 @@ impl<'a> Exporter<'a> {
             TypeData::Door { material, .. }
             | TypeData::Window { material, .. }
             | TypeData::Ceiling { material, .. } => Some(self.material(material)),
+            TypeData::Component { def, .. } if !def.main_material().is_empty() => {
+                Some(self.material(def.main_material()))
+            }
+            TypeData::Component { .. } => None,
             _ => self.layer_set(type_id),
         };
         if let Some(m) = material {
@@ -1115,6 +1198,19 @@ enum Quantity {
     Length(f64),
     Area(f64),
     Volume(f64),
+}
+
+/// Property set with the instance parameter values of components.
+pub const COMPONENT_PSET: &str = "ConstructCAD_Parameters";
+
+/// IFC entity and predefined type of a component kind.
+fn component_entity(kind: cc_core::ComponentKind) -> (&'static str, &'static str) {
+    match kind {
+        cc_core::ComponentKind::Furniture | cc_core::ComponentKind::Casework => ("IFCFURNITURE", "NOTDEFINED"),
+        cc_core::ComponentKind::Plumbing => ("IFCSANITARYTERMINAL", "NOTDEFINED"),
+        cc_core::ComponentKind::Lighting => ("IFCLIGHTFIXTURE", "NOTDEFINED"),
+        cc_core::ComponentKind::Generic => ("IFCBUILDINGELEMENTPROXY", "NOTDEFINED"),
+    }
 }
 
 /// Current UTC time as `YYYY-MM-DDThh:mm:ss`.

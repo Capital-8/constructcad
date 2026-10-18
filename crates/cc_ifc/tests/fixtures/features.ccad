@@ -1,5 +1,5 @@
 (
-  format_version: 2,
+  format_version: 3,
   generator: "ConstructCAD 0.1.0",
   project: (
     info: (
@@ -54,6 +54,14 @@
       (
         name: "Contrapiso",
         color: (190, 185, 175),
+      ),
+      (
+        name: "Tecido",
+        color: (120, 132, 150),
+      ),
+      (
+        name: "Louça",
+        color: (240, 240, 236),
       ),
     ],
     types: {
@@ -480,6 +488,543 @@
         ),
         uid: "1b34929164a3494ea0e56d0049c970e3",
       ),
+      (53): (
+        id: (53),
+        name: "Mesa 120 x 80",
+        data: Component(
+          component: "Mesa",
+          def: (
+            kind: Furniture,
+            params: [
+              (
+                name: "Largura",
+                value: 1.2,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 0.8,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 0.75,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Tampo",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "Altura - 0.03", width: "Largura", depth: "Profundidade", height: "0.03"),
+                material: "Madeira",
+                in_plan: true,
+              ),
+              (
+                name: "Perna 1",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "0", width: "0.05", depth: "0.05", height: "Altura - 0.03"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Perna 2",
+                shape: Box(x: "Largura / 2 - 0.05", y: "-Profundidade / 2", z: "0", width: "0.05", depth: "0.05", height: "Altura - 0.03"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Perna 3",
+                shape: Box(x: "Largura / 2 - 0.05", y: "Profundidade / 2 - 0.05", z: "0", width: "0.05", depth: "0.05", height: "Altura - 0.03"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Perna 4",
+                shape: Box(x: "-Largura / 2", y: "Profundidade / 2 - 0.05", z: "0", width: "0.05", depth: "0.05", height: "Altura - 0.03"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "afafa4bd831b43a8b549b06123f14104",
+      ),
+      (54): (
+        id: (54),
+        name: "Cadeira simples",
+        data: Component(
+          component: "Cadeira",
+          def: (
+            kind: Furniture,
+            params: [
+              (
+                name: "Largura",
+                value: 0.45,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 0.5,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 0.9,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "AlturaAssento",
+                value: 0.45,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Assento",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "AlturaAssento - 0.04", width: "Largura", depth: "Profundidade", height: "0.04"),
+                material: "Madeira",
+                in_plan: true,
+              ),
+              (
+                name: "Perna 1",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "0", width: "0.04", depth: "0.04", height: "AlturaAssento - 0.04"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Perna 2",
+                shape: Box(x: "Largura / 2 - 0.04", y: "-Profundidade / 2", z: "0", width: "0.04", depth: "0.04", height: "AlturaAssento - 0.04"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Perna 3",
+                shape: Box(x: "Largura / 2 - 0.04", y: "Profundidade / 2 - 0.04", z: "0", width: "0.04", depth: "0.04", height: "AlturaAssento - 0.04"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Perna 4",
+                shape: Box(x: "-Largura / 2", y: "Profundidade / 2 - 0.04", z: "0", width: "0.04", depth: "0.04", height: "AlturaAssento - 0.04"),
+                material: "Madeira",
+                in_plan: false,
+              ),
+              (
+                name: "Encosto",
+                shape: Box(x: "-Largura / 2", y: "Profundidade / 2 - 0.03", z: "AlturaAssento", width: "Largura", depth: "0.03", height: "Altura - AlturaAssento"),
+                material: "Madeira",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "adbea79f77a045fb89815f47ae032bf7",
+      ),
+      (55): (
+        id: (55),
+        name: "Cama casal 140 x 190",
+        data: Component(
+          component: "Cama",
+          def: (
+            kind: Furniture,
+            params: [
+              (
+                name: "Largura",
+                value: 1.4,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 1.9,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 0.5,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Colchão",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "0", width: "Largura", depth: "Profundidade - 0.05", height: "Altura"),
+                material: "Tecido",
+                in_plan: true,
+              ),
+              (
+                name: "Cabeceira",
+                shape: Box(x: "-Largura / 2", y: "Profundidade / 2 - 0.05", z: "0", width: "Largura", depth: "0.05", height: "Altura + 0.5"),
+                material: "Madeira",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "f75f87333856486b8ee0223567315a5c",
+      ),
+      (56): (
+        id: (56),
+        name: "Sofá 3 lugares",
+        data: Component(
+          component: "Sofá",
+          def: (
+            kind: Furniture,
+            params: [
+              (
+                name: "Largura",
+                value: 2.0,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 0.9,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 0.8,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "AlturaAssento",
+                value: 0.42,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Assento",
+                shape: Box(x: "-Largura / 2 + 0.15", y: "-Profundidade / 2", z: "0", width: "Largura - 2 * 0.15", depth: "Profundidade - 0.2", height: "AlturaAssento"),
+                material: "Tecido",
+                in_plan: true,
+              ),
+              (
+                name: "Encosto",
+                shape: Box(x: "-Largura / 2", y: "Profundidade / 2 - 0.2", z: "0", width: "Largura", depth: "0.2", height: "Altura"),
+                material: "Tecido",
+                in_plan: true,
+              ),
+              (
+                name: "Braço 1",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "0", width: "0.15", depth: "Profundidade - 0.2", height: "AlturaAssento + 0.2"),
+                material: "Tecido",
+                in_plan: true,
+              ),
+              (
+                name: "Braço 2",
+                shape: Box(x: "Largura / 2 - 0.15", y: "-Profundidade / 2", z: "0", width: "0.15", depth: "Profundidade - 0.2", height: "AlturaAssento + 0.2"),
+                material: "Tecido",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "d754f6d505404b89a0dee649c715ca9b",
+      ),
+      (57): (
+        id: (57),
+        name: "Bacia com caixa acoplada",
+        data: Component(
+          component: "Bacia sanitária",
+          def: (
+            kind: Plumbing,
+            params: [
+              (
+                name: "Largura",
+                value: 0.38,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 0.65,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 0.78,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Bacia",
+                shape: Cylinder(x: "0", y: "-Profundidade / 2 + Largura / 2", z: "0", radius: "Largura / 2", height: "0.4"),
+                material: "Louça",
+                in_plan: true,
+              ),
+              (
+                name: "Caixa acoplada",
+                shape: Box(x: "-Largura / 2", y: "Profundidade / 2 - 0.18", z: "0", width: "Largura", depth: "0.18", height: "Altura"),
+                material: "Louça",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "6bbfb61b9f3f4691b6b5aff6a0da552f",
+      ),
+      (58): (
+        id: (58),
+        name: "Lavatório de coluna",
+        data: Component(
+          component: "Lavatório",
+          def: (
+            kind: Plumbing,
+            params: [
+              (
+                name: "Largura",
+                value: 0.55,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 0.45,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 0.85,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Cuba",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "Altura - 0.15", width: "Largura", depth: "Profundidade", height: "0.15"),
+                material: "Louça",
+                in_plan: true,
+              ),
+              (
+                name: "Coluna",
+                shape: Cylinder(x: "0", y: "Profundidade / 2 - 0.12", z: "0", radius: "0.09", height: "Altura - 0.15"),
+                material: "Louça",
+                in_plan: false,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "96edfc8712834560945133af65d4c5d2",
+      ),
+      (59): (
+        id: (59),
+        name: "Armário 160 cm",
+        data: Component(
+          component: "Armário",
+          def: (
+            kind: Casework,
+            params: [
+              (
+                name: "Largura",
+                value: 1.6,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Profundidade",
+                value: 0.6,
+                kind: Length,
+                instance: false,
+              ),
+              (
+                name: "Altura",
+                value: 2.2,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Corpo",
+                shape: Box(x: "-Largura / 2", y: "-Profundidade / 2", z: "0", width: "Largura", depth: "Profundidade", height: "Altura"),
+                material: "Madeira",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "6c1e625655a24fd69f7e678348ed23c5",
+      ),
+      (60): (
+        id: (60),
+        name: "Luminária",
+        data: Component(
+          component: "Luminária",
+          def: (
+            kind: Lighting,
+            params: [
+              (
+                name: "Diametro",
+                value: 0.4,
+                kind: Length,
+                instance: true,
+              ),
+            ],
+            items: [
+              (
+                name: "Corpo",
+                shape: Cylinder(x: "0", y: "0", z: "-0.1", radius: "Diametro / 2", height: "0.1"),
+                material: "Vidro",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "e9b3b30f1d3b4d5cb9988aae7e24615e",
+      ),
+      (61): (
+        id: (61),
+        name: "Base em L",
+        data: Component(
+          component: "Base em L",
+          def: (
+            kind: Generic,
+            params: [
+              (
+                name: "Lado",
+                value: 1.0,
+                kind: Length,
+                instance: false,
+              ),
+            ],
+            items: [
+              (
+                name: "Base",
+                shape: Extrusion(points: [("0", "0"), ("Lado", "0"), ("Lado", "0.3"), ("0.3", "0.3"), ("0.3", "Lado"), ("0", "Lado")], z: "0", height: "0.2"),
+                material: "Concreto",
+                in_plan: true,
+              ),
+            ],
+          ),
+        ),
+        info: (
+          type_mark: "",
+          description: "",
+          manufacturer: "",
+          model: "",
+          url: "",
+          keynote: "",
+          classification: "",
+          fire_rating: "",
+          comments: "",
+          cost: None,
+        ),
+        uid: "ccd18afcddf94ce7a5bf473217e02ec5",
+      ),
     },
     elements: {
       (27): (
@@ -780,7 +1325,65 @@
             ridge_deg: 0.0,
           ),
         )),
-        uid: "00000000000000000000000000000000",
+        uid: "15bb010d71944692b7941666bcc69b88",
+      ),
+      (62): (
+        id: (62),
+        level: (1),
+        type_id: (57),
+        mark: "",
+        comments: "",
+        kind: Component((
+          position: (1.0, 1.0),
+          rotation_deg: 30.0,
+          base_offset: 0.0,
+          overrides: {},
+        )),
+        uid: "8bc5adab072e4ce08721564a5e736798",
+      ),
+      (63): (
+        id: (63),
+        level: (1),
+        type_id: (58),
+        mark: "",
+        comments: "",
+        kind: Component((
+          position: (2.0, 1.0),
+          rotation_deg: 0.0,
+          base_offset: 0.0,
+          overrides: {},
+        )),
+        uid: "bfd52edcede64815b1c36ab991f15420",
+      ),
+      (64): (
+        id: (64),
+        level: (1),
+        type_id: (60),
+        mark: "",
+        comments: "",
+        kind: Component((
+          position: (2.0, 2.0),
+          rotation_deg: 0.0,
+          base_offset: 2.7,
+          overrides: {
+            "Diametro": 0.6,
+          },
+        )),
+        uid: "30ff2eb165c34b2fb6e71253278d2c6c",
+      ),
+      (65): (
+        id: (65),
+        level: (1),
+        type_id: (61),
+        mark: "",
+        comments: "",
+        kind: Component((
+          position: (3.0, 3.0),
+          rotation_deg: 45.0,
+          base_offset: 0.0,
+          overrides: {},
+        )),
+        uid: "73a11429d14842029ae39e1b6f3c532d",
       ),
     },
     views: {
@@ -890,6 +1493,13 @@
         scale: 1,
         kind: Schedule(
           category: Door,
+          def: (
+            fields: [],
+            sort_by: None,
+            descending: false,
+            filter: None,
+            hide_totals: false,
+          ),
         ),
       ),
       (24): (
@@ -898,6 +1508,13 @@
         scale: 1,
         kind: Schedule(
           category: Window,
+          def: (
+            fields: [],
+            sort_by: None,
+            descending: false,
+            filter: None,
+            hide_totals: false,
+          ),
         ),
       ),
       (25): (
@@ -906,6 +1523,13 @@
         scale: 1,
         kind: Schedule(
           category: Wall,
+          def: (
+            fields: [],
+            sort_by: None,
+            descending: false,
+            filter: None,
+            hide_totals: false,
+          ),
         ),
       ),
       (26): (
@@ -957,6 +1581,6 @@
         ),
       ),
     },
-    next_id: 53,
+    next_id: 66,
   ),
 )

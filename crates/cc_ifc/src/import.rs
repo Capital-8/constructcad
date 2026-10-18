@@ -11,9 +11,10 @@
 use crate::guid;
 use crate::parse::{Entity, Param, ParseError, StepFile, parse};
 use cc_core::{
-    Beam, Category, Ceiling, Column, ColumnSection, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor,
-    Hosted, Layer, LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, TypeData, Uid, View,
-    ViewId, ViewKind, Wall, WallFunction, WallTop,
+    Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
+    ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Hosted, Layer, LayerFunction,
+    Level, LevelId, Material, Project, Roof, RoofShape, Room, TypeData, Uid, View, ViewId, ViewKind, Wall,
+    WallFunction, WallTop,
 };
 use cc_geom::polygon;
 use glam::{DAffine3, DMat3, DVec2, DVec3};
@@ -326,6 +327,14 @@ impl<'a> Importer<'a> {
                 "IFCSPACE" => Some(self.import_space(*id, e)),
                 "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => Some(self.import_column(*id, e)),
                 "IFCBEAM" | "IFCBEAMSTANDARDCASE" => Some(self.import_beam(*id, e)),
+                "IFCFURNITURE" | "IFCFURNISHINGELEMENT" | "IFCSYSTEMFURNITUREELEMENT" => {
+                    Some(self.import_component(*id, e, ComponentKind::Furniture))
+                }
+                "IFCSANITARYTERMINAL" => Some(self.import_component(*id, e, ComponentKind::Plumbing)),
+                "IFCLIGHTFIXTURE" => Some(self.import_component(*id, e, ComponentKind::Lighting)),
+                "IFCBUILDINGELEMENTPROXY" | "IFCFLOWTERMINAL" => {
+                    Some(self.import_component(*id, e, ComponentKind::Generic))
+                }
                 _ => None,
             };
             if let Some(ok) = ok {
@@ -606,6 +615,27 @@ impl<'a> Importer<'a> {
             }
         }
         None
+    }
+
+    /// Numeric properties of a property set of the product.
+    fn numeric_properties(&self, id: u32, set: &str) -> Vec<(String, f64, Option<String>)> {
+        let f = self.f;
+        let mut out = Vec::new();
+        for set_id in self.psets_of.get(&id).into_iter().flatten() {
+            let Some(pset) = f.get(*set_id).filter(|s| s.name == "IFCPROPERTYSET" && s.arg(2).as_str() == Some(set))
+            else {
+                continue;
+            };
+            for prop in pset.arg(4).as_list().iter().filter_map(|p| f.deref(p)) {
+                let (Some(name), Some(v)) = (prop.arg(0).as_str(), prop.arg(2).as_f64()) else { continue };
+                let measure = match prop.arg(2) {
+                    Param::Typed(t, _) => Some(t.clone()),
+                    _ => None,
+                };
+                out.push((name.to_string(), v, measure));
+            }
+        }
+        out
     }
 
     /// Material layers (name, thickness) and the main material name of a
@@ -1483,6 +1513,116 @@ impl<'a> Importer<'a> {
         true
     }
 
+    /// Furniture, fixtures and proxies: pieces in the product's own frame
+    /// (extrusions as profiles, anything else as its bounding box). An
+    /// existing component type with the same name and size is reused, so
+    /// parametric components survive a round trip.
+    fn import_component(&mut self, id: u32, e: &Entity, kind: ComponentKind) -> bool {
+        let (world, body) = self.product(e);
+        if body.solids.is_empty() {
+            return false;
+        }
+        let x = world.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X);
+        let rotation = x.y.atan2(x.x);
+        let origin = world.translation;
+        // Plan frame of the component: origin and rotation in plan, Z up.
+        let frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+        let inv = frame.inverse();
+        let material = self.main_material(id, e);
+        let n = |v: f64| literal(v);
+        let mut items = Vec::new();
+        for (i, solid) in body.solids.iter().enumerate() {
+            let name = format!("{} {}", self.type_name(id, e).unwrap_or_else(|| "IFC".into()), i + 1);
+            let shape = match solid.extrusion.as_ref().filter(|ex| ex.is_vertical()) {
+                Some(ex) => {
+                    let pts: Vec<DVec2> =
+                        ex.profile.pts.iter().map(|p| inv.transform_point3(ex.plane_point(*p)).truncate()).collect();
+                    let z0 = ex
+                        .profile
+                        .pts
+                        .iter()
+                        .map(|p| inv.transform_point3(ex.plane_point(*p)).z)
+                        .fold(f64::INFINITY, f64::min);
+                    let z0 = z0.min(z0 + ex.vector.z);
+                    let points = clean_polygon(pts).into_iter().map(|p| (n(p.x), n(p.y))).collect::<Vec<_>>();
+                    if points.len() < 3 {
+                        continue;
+                    }
+                    ComponentShape::Extrusion { points, z: n(z0), height: n(ex.vector.z.abs()) }
+                }
+                None => {
+                    let local: Vec<DVec3> = solid.points.iter().map(|p| inv.transform_point3(*p)).collect();
+                    let Some((lo, hi)) = local.iter().fold(None, |acc: Option<(DVec3, DVec3)>, p| {
+                        Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
+                    }) else {
+                        continue;
+                    };
+                    let size = hi - lo;
+                    if size.min_element() < 1e-4 {
+                        continue;
+                    }
+                    ComponentShape::Box {
+                        x: n(lo.x),
+                        y: n(lo.y),
+                        z: n(lo.z),
+                        width: n(size.x),
+                        depth: n(size.y),
+                        height: n(size.z),
+                    }
+                }
+            };
+            items.push(ComponentItem { name, shape, material: material.clone(), in_plan: true });
+        }
+        let def = ComponentDef { kind, params: Vec::new(), items };
+        let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
+        // Instance parameter values written by ConstructCAD.
+        let overrides: std::collections::BTreeMap<String, f64> = self
+            .numeric_properties(id, crate::export::COMPONENT_PSET)
+            .into_iter()
+            .map(|(name, v, measure)| {
+                let v = match measure.as_deref() {
+                    Some("IFCLENGTHMEASURE") => v * self.scale,
+                    Some("IFCPLANEANGLEMEASURE") => v.to_degrees(),
+                    _ => v,
+                };
+                (name, v)
+            })
+            .filter(|(_, v)| v.is_finite())
+            .collect();
+        let check = overrides.clone();
+        let (level, elevation) = self.level_for(id, origin.z + lo.z);
+        let name = self.type_name(id, e);
+        let fallback = format!("{} {}", e.name.trim_start_matches("IFC").to_lowercase(), id);
+        let uid = self.type_uid(id);
+        let component = name.clone().unwrap_or_else(|| fallback.clone());
+        // Same name and same size: the existing (possibly parametric) type.
+        let same = move |d: &TypeData| match d {
+            TypeData::Component { def, .. } => def_bounds(def, &check)
+                .is_some_and(|(a, b)| (a - lo).abs().max_element() < 1e-3 && (b - hi).abs().max_element() < 1e-3),
+            _ => false,
+        };
+        let type_id = self.find_or_add_type(Category::Component, name, fallback, uid, same, || TypeData::Component {
+            component,
+            def,
+        });
+        // Overrides only make sense for a parametric type that declares them.
+        let overrides = match self.p.element_type(type_id).map(|t| &t.data) {
+            Some(TypeData::Component { def, .. }) => overrides
+                .into_iter()
+                .filter(|(k, v)| def.param(k).is_some_and(|p| p.instance && p.value != *v))
+                .collect(),
+            _ => Default::default(),
+        };
+        let c = Component {
+            position: origin.truncate(),
+            rotation_deg: rotation.to_degrees(),
+            base_offset: origin.z - elevation,
+            overrides,
+        };
+        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Component(c));
+        true
+    }
+
     fn import_beam(&mut self, id: u32, e: &Entity) -> bool {
         let (_, body) = self.product(e);
         let Some((_, z1)) = body.z_range() else { return false };
@@ -1523,6 +1663,25 @@ impl<'a> Importer<'a> {
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
         true
     }
+}
+
+/// A number as an expression literal.
+fn literal(v: f64) -> String {
+    let s = format!("{:.6}", if v.abs() < 5e-7 { 0.0 } else { v });
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".to_string() } else { s.to_string() }
+}
+
+/// Bounds of a definition's pieces in its own frame.
+fn def_bounds(def: &ComponentDef, overrides: &BTreeMap<String, f64>) -> Option<(DVec3, DVec3)> {
+    let (parts, errors) = def.resolve(overrides);
+    if !errors.is_empty() {
+        return None;
+    }
+    parts
+        .iter()
+        .flat_map(|p| p.footprint.iter().flat_map(move |q| [q.extend(p.z0), q.extend(p.z1)]))
+        .fold(None, |acc, p| Some(acc.map_or((p, p), |(lo, hi): (DVec3, DVec3)| (lo.min(p), hi.max(p)))))
 }
 
 fn si_prefix(prefix: Option<&str>) -> f64 {
@@ -1612,7 +1771,9 @@ END-ISO-10303-21;
         assert_eq!(wall_el.mark, "W1");
         // The cyclic placement does not hang; the column still imports.
         assert_eq!(report.imported.get(&Category::Column), Some(&1));
-        assert_eq!(report.skipped.get("IFCFURNISHINGELEMENT"), Some(&1));
+        // Furnishings become components (here a box from the wall's body).
+        assert_eq!(report.imported.get(&Category::Component), Some(&1));
+        assert!(report.skipped.is_empty(), "{:?}", report.skipped);
         assert!(p.views_of(cc_core::ViewCategory::FloorPlan).count() == 1);
     }
 }

@@ -3,8 +3,8 @@
 //! Run with `cargo run -p cc_core --example casa_simples`.
 
 use cc_core::{
-    Beam, Category, Column, Dimension, Document, Element, ElementId, ElementKind, Floor, Grid, Hosted, Project,
-    Railing, Roof, RoofShape, Room, Stair, View, ViewCategory, ViewId, ViewKind, Viewport, Wall, WallTop,
+    Beam, Category, Column, Component, Dimension, Document, Element, ElementId, ElementKind, Floor, Grid, Hosted,
+    Project, Railing, Roof, RoofShape, Room, Stair, View, ViewCategory, ViewId, ViewKind, Viewport, Wall, WallTop,
 };
 use glam::DVec2;
 
@@ -104,6 +104,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let railing = Railing { path: vec![DVec2::new(2.1, -2.5), DVec2::new(5.5, -2.5)], base_offset: 0.0 };
         add(e, railing_t, "", ElementKind::Railing(railing));
 
+        // Furniture from the default library: living room and bedroom.
+        let component = |name: &str| {
+            p.types_of(Category::Component)
+                .find(|t| matches!(&t.data, cc_core::TypeData::Component { component, .. } if component == name))
+                .map(|t| t.id)
+                .ok_or(format!("template lacks the component {name}"))
+        };
+        let place = |e: &mut cc_core::EditCtx, type_id, x: f64, y: f64, rotation_deg: f64| {
+            let c =
+                Component { position: DVec2::new(x, y), rotation_deg, base_offset: 0.0, overrides: Default::default() };
+            add(e, type_id, "", ElementKind::Component(c));
+        };
+        place(e, component("Sofá")?, 3.4, 5.45, 0.0);
+        place(e, component("Mesa")?, 3.6, 2.2, 0.0);
+        place(e, component("Cadeira")?, 3.6, 2.9, 0.0);
+        place(e, component("Cadeira")?, 3.6, 1.5, 180.0);
+        // Headboard (the back, +Y) against the east wall.
+        place(e, component("Cama")?, 7.975, 3.2, -90.0);
+        place(e, component("Armário")?, 6.3, 5.625, 0.0);
+
         // Rooms, grids and a dimension on the ground floor plan.
         let room_t = p.default_type(Category::Room).ok_or("template lacks a room type")?;
         let grid_t = p.default_type(Category::Grid).ok_or("template lacks a grid type")?;
@@ -130,6 +150,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let dim = Dimension { view: ground_plan, a: DVec2::new(a.0, a.1), b: DVec2::new(b.0, b.1), offset };
             add(e, dim_t, "", ElementKind::Dimension(dim));
+        }
+
+        // At 1:75 the ground plan, with its grids, fits the A3 sheet.
+        if let Some(plan) = e.view_mut(ground_plan) {
+            plan.scale = 75;
         }
 
         let section = ViewId(e.alloc_id());

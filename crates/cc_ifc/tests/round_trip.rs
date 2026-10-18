@@ -56,6 +56,7 @@ fn check(original: &Project) {
                 | Category::Room
                 | Category::Column
                 | Category::Beam
+                | Category::Component
         );
         if !importable {
             continue;
@@ -64,6 +65,7 @@ fn check(original: &Project) {
         assert_eq!(i.category(), e.category());
         assert_eq!(level_name(&imported, i), level_name(original, e), "level of {}", e.id);
         assert_eq!(imported.type_name(i.type_id), original.type_name(e.type_id), "type of {}", e.id);
+
         if e.category() != Category::Room {
             assert_eq!(i.mark, e.mark);
         }
@@ -146,6 +148,46 @@ fn check(original: &Project) {
                     }
                     (x, y) => panic!("section {x:?} came back as {y:?}"),
                 }
+            }
+            (ElementKind::Component(a), ElementKind::Component(b)) => {
+                close2(a.position, b.position, TOL, "component position");
+                let diff = (a.rotation_deg - b.rotation_deg).rem_euclid(360.0);
+                assert!(diff < 1e-6 || diff > 360.0 - 1e-6, "rotation {} vs {}", a.rotation_deg, b.rotation_deg);
+                close(a.base_offset, b.base_offset, TOL, "component base");
+                let in_base = Project::from_template().types.values().any(|t| t.name == original.type_name(e.type_id));
+                if in_base {
+                    // The parametric type is reused, with the instance overrides.
+                    assert!(matches!(
+                        imported.element_type(i.type_id).map(|t| &t.data),
+                        Some(TypeData::Component { def, .. }) if !def.params.is_empty()
+                    ));
+                    assert_eq!(a.overrides.keys().collect::<Vec<_>>(), b.overrides.keys().collect::<Vec<_>>());
+                    for (k, v) in &a.overrides {
+                        close(*v, b.overrides[k], TOL, "override");
+                    }
+                }
+                // Either way the pieces end up in the same place.
+                let bounds = |p: &Project, x: &Element, c: &cc_core::Component| {
+                    cc_geom::component_parts(p, x, c)
+                        .iter()
+                        .flat_map(|q| {
+                            q.footprint
+                                .iter()
+                                .map(|v| v.extend(q.z0))
+                                .chain(q.footprint.iter().map(|v| v.extend(q.z1)))
+                                .collect::<Vec<_>>()
+                        })
+                        .fold(
+                            (glam::DVec3::splat(f64::INFINITY), glam::DVec3::splat(f64::NEG_INFINITY)),
+                            |(lo, hi), v| (lo.min(v), hi.max(v)),
+                        )
+                };
+                let (lo0, hi0) = bounds(original, e, a);
+                let (lo1, hi1) = bounds(&imported, i, b);
+                assert!(
+                    (lo0 - lo1).abs().max_element() < 1e-5 && (hi0 - hi1).abs().max_element() < 1e-5,
+                    "{lo0} {hi0} vs {lo1} {hi1}"
+                );
             }
             (ElementKind::Beam(a), ElementKind::Beam(b)) => {
                 close2(a.start, b.start, TOL, "beam start");
