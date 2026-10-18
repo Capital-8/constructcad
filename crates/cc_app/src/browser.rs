@@ -11,7 +11,7 @@ use cc_core::{Category, ViewCategory, ViewId, ViewKind};
 use egui::{Rect, Response, Sense, Ui, vec2};
 
 const ROW_HEIGHT: f32 = 24.0;
-const INDENT: f32 = 16.0;
+const INDENT: f32 = 20.0;
 
 pub fn category_icon(category: ViewCategory) -> Icon {
     match category {
@@ -36,7 +36,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(id, !matches!(category, ViewCategory::Legend)));
             let count = state.project().views_of(category).count();
             let label = format!("{}  ", tr(category.key()));
-            let row = tree_row(ui, 0, Some(open), category_icon(category), &label, Some(count), false);
+            let row = tree_row(ui, 0, Some(open), false, category_icon(category), &label, Some(count), false);
             if add_button(ui, state, category, &row) {
                 open = true;
             } else if row.clicked() {
@@ -51,11 +51,23 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
     });
 }
 
-/// One row of the tree. `expander` is `Some(open)` for collapsible rows.
+/// Row layout: left padding, then the chevron column, then one indent per depth.
+const PAD: f32 = 10.0;
+const CHEVRON: f32 = 15.0;
+
+/// Left edge of the icon of a row at `depth`.
+fn icon_x(left: f32, depth: usize) -> f32 {
+    left + PAD + CHEVRON + depth as f32 * INDENT
+}
+
+/// One row of the tree. `expander` is `Some(open)` for collapsible rows;
+/// `last` tells child rows whether they end their branch (for the guide lines).
+#[allow(clippy::too_many_arguments)]
 fn tree_row(
     ui: &mut Ui,
     depth: usize,
     expander: Option<bool>,
+    last: bool,
     icon: Icon,
     label: &str,
     count: Option<usize>,
@@ -72,12 +84,19 @@ fn tree_row(
     } else if response.hovered() {
         painter.rect_filled(bg, theme::RADIUS as f32, PALETTE.hover);
     }
-    let mut x = rect.left() + 10.0 + depth as f32 * INDENT;
     let cy = rect.center().y;
+    let mut x = icon_x(rect.left(), depth);
     if let Some(open) = expander {
-        let chevron = Rect::from_center_size(egui::pos2(x + 5.0, cy), vec2(10.0, 10.0));
+        let chevron = Rect::from_center_size(egui::pos2(x - CHEVRON + 5.0, cy), vec2(10.0, 10.0));
         icons::paint(painter, chevron, if open { Icon::ChevronDown } else { Icon::ChevronRight }, PALETTE.text_faint);
-        x += 15.0;
+    }
+    if depth > 0 {
+        // Guide from the parent's icon down to this row, with a tick into it.
+        let gx = icon_x(rect.left(), depth - 1) + 7.0;
+        let guide = egui::Stroke::new(1.0, PALETTE.border_strong);
+        let bottom = if last { cy } else { rect.bottom() };
+        painter.vline(gx, rect.top()..=bottom, guide);
+        painter.hline(gx..=x - 3.0, cy, guide);
     }
     let color = if selected { PALETTE.accent_text } else { PALETTE.text };
     let icon_color = if selected { PALETTE.accent_text } else { PALETTE.text_muted };
@@ -118,11 +137,12 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
         views.sort_by(|a, b| a.1.cmp(&b.1));
     }
 
-    for (id, label) in views {
+    let n = views.len();
+    for (i, (id, label)) in views.into_iter().enumerate() {
         if state.rename.as_ref().is_some_and(|(rid, _)| *rid == id) {
             let finished = ui
                 .horizontal(|ui| {
-                    ui.add_space(10.0 + INDENT + 21.0);
+                    ui.add_space(PAD + CHEVRON + INDENT + 21.0);
                     let text = &mut state.rename.as_mut().unwrap().1;
                     let r = ui.add(egui::TextEdit::singleline(text).desired_width(ui.available_width() - 8.0));
                     r.request_focus();
@@ -138,7 +158,7 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
             continue;
         }
         let active = state.active_view == Some(id);
-        let r = tree_row(ui, 1, None, category_icon(category), &label, None, active);
+        let r = tree_row(ui, 1, None, i + 1 == n, category_icon(category), &label, None, active);
         if r.clicked() {
             state.open_view(id);
         }
