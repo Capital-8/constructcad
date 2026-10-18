@@ -113,3 +113,5 @@ O ConstructCAD é um projeto independente. O comportamento do programa foi proje
 Copyright © Francis Rebouças <francisreboucas@gmail.com>.
 
 O ConstructCAD é distribuído sob a [GNU General Public License v3.0 ou posterior](LICENSE) (GPL-3.0-or-later).
+
+A fonte [Inter](https://rsms.me/inter/) incluída é © The Inter Project Authors e distribuída sob a [SIL Open Font License 1.1](assets/fonts/OFL-Inter.txt).

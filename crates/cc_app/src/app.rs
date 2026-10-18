@@ -2,12 +2,13 @@
 
 use crate::i18n::Language;
 use crate::state::{AppState, PendingAction};
+use crate::theme::PALETTE;
 use crate::tools::Tool;
-use crate::{actions, browser, canvas, dialogs, properties, ribbon, schedule_ui, sheet, t, view3d};
+use crate::{actions, browser, canvas, dialogs, properties, ribbon, schedule_ui, sheet, t, theme, view3d};
 use cc_core::{Category, Document, Project, ViewCategory, ViewId};
 use egui::{Event, Key, Modifiers, Ui, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
-use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
+use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 
 /// Command-line options.
 #[derive(Debug, Default)]
@@ -32,6 +33,7 @@ impl ConstructApp {
     /// Create the app; see [`Args`] for the startup options.
     pub fn new(cc: &eframe::CreationContext<'_>, args: Args) -> Self {
         let Args { path, views, language } = args;
+        crate::theme::apply(&cc.egui_ctx);
         // Command line, then saved preference, then the operating system language.
         let saved = cc.storage.and_then(|s| s.get_string(LANGUAGE_KEY)).and_then(|c| Language::from_code(&c));
         crate::i18n::set_language(language.or(saved).unwrap_or_else(Language::from_system));
@@ -60,6 +62,10 @@ fn initial_dock(project: &Project) -> DockState<ViewId> {
     let mut dock = DockState::new(plan.into_iter().collect());
     if let Some(t3) = threed {
         dock.main_surface_mut().split_right(NodeIndex::root(), 0.55, vec![t3]);
+    }
+    // Focus the plan so the properties palette shows it from the start.
+    if let Some(path) = plan.and_then(|p| dock.find_tab(&p)) {
+        dock.set_focused_node_and_surface(path.node_path());
     }
     dock
 }
@@ -295,23 +301,44 @@ impl eframe::App for ConstructApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
         let state = &mut self.state;
-        egui::Panel::top("ribbon").show(ui, |ui| ribbon::ribbon(ui, state));
-        egui::Panel::top("options").show(ui, |ui| ribbon::options_bar(ui, state));
-        egui::Panel::bottom("status").show(ui, |ui| ribbon::status_bar(ui, state));
-        egui::Panel::left("left").resizable(true).default_size(270.0).size_range(200.0..=480.0).show(ui, |ui| {
-            let h = ui.available_height();
-            egui::Panel::top("browser").resizable(true).default_size(h * 0.55).show(ui, |ui| browser::show(ui, state));
-            properties::show(ui, state);
-        });
+        let bar = |fill, y| egui::Frame::new().fill(fill).inner_margin(egui::Margin::symmetric(10, y));
+        egui::Panel::top("ribbon")
+            .frame(bar(PALETTE.panel, 6).stroke(egui::Stroke::new(1.0, PALETTE.border)))
+            .show(ui, |ui| ribbon::ribbon(ui, state));
+        egui::Panel::top("options")
+            .frame(bar(PALETTE.surface, 5).stroke(egui::Stroke::new(1.0, PALETTE.border)))
+            .show(ui, |ui| ribbon::options_bar(ui, state));
+        egui::Panel::bottom("status")
+            .frame(bar(PALETTE.surface, 3).stroke(egui::Stroke::new(1.0, PALETTE.border)))
+            .show(ui, |ui| ribbon::status_bar(ui, state));
+        egui::Panel::left("left")
+            .frame(egui::Frame::new().fill(PALETTE.panel).stroke(egui::Stroke::new(1.0, PALETTE.border)))
+            .resizable(true)
+            .default_size(290.0)
+            .size_range(220.0..=520.0)
+            .show(ui, |ui| {
+                let h = ui.available_height();
+                egui::Panel::top("browser")
+                    .frame(egui::Frame::new().fill(PALETTE.panel))
+                    .resizable(true)
+                    .default_size(h * 0.5)
+                    .size_range(120.0..=h - 120.0)
+                    .show(ui, |ui| browser::show(ui, state));
+                properties::show(ui, state);
+            });
         let render_state = frame.wgpu_render_state();
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+        let central = egui::Frame::new().fill(PALETTE.app_bg).inner_margin(egui::Margin::same(4));
+        egui::CentralPanel::no_frame().frame(central).show(ui, |ui| {
             if self.dock.iter_all_tabs().next().is_none() {
                 ui.centered_and_justified(|ui| ui.label(t!("msg-no-views-open")));
             }
             DockArea::new(&mut self.dock)
-                .style(Style::from_egui(ui.style()))
+                .style(theme::dock_style(ui.style()))
+                .show_leaf_collapse_buttons(false)
+                .show_leaf_close_all_buttons(false)
                 .show_inside(ui, &mut Tabs { state: &mut self.state, render_state });
         });
         dialogs::show(&ctx, &mut self.state);
     }
 }
+

@@ -6,7 +6,7 @@ use egui::{Color32, Painter, Pos2, Shape, Stroke};
 use glam::DVec2;
 use std::collections::BTreeSet;
 
-pub const HIGHLIGHT: Color32 = Color32::from_rgb(20, 120, 255);
+pub const HIGHLIGHT: Color32 = crate::theme::PALETTE.accent;
 pub const PREVIEW: Color32 = Color32::from_rgb(230, 110, 20);
 
 /// Maps drawing coordinates to the screen.

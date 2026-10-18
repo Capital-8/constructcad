@@ -166,7 +166,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
 
 /// Small compass showing the world axes in the corner.
 fn view_cube(painter: &egui::Painter, rect: egui::Rect, cam: &CameraState) {
-    let center = rect.right_bottom() + egui::vec2(-48.0, -48.0);
+    let center = rect.right_top() + egui::vec2(-58.0, 58.0);
     let fwd = cam.forward();
     let right = fwd.cross(DVec3::Z).normalize_or_zero();
     let up = right.cross(fwd);
@@ -175,10 +175,20 @@ fn view_cube(painter: &egui::Painter, rect: egui::Rect, cam: &CameraState) {
         (DVec3::Y, crate::t!("axis-north"), egui::Color32::from_rgb(40, 150, 40)),
         (DVec3::Z, "Z".to_string(), egui::Color32::from_rgb(40, 80, 210)),
     ];
-    painter.circle_filled(center, 34.0, egui::Color32::from_white_alpha(120));
-    for (axis, name, color) in axes {
-        let tip = center + egui::vec2(axis.dot(right) as f32, -axis.dot(up) as f32) * 28.0;
-        painter.line_segment([center, tip], egui::Stroke::new(2.0, color));
-        painter.text(tip, egui::Align2::CENTER_CENTER, name, egui::FontId::proportional(11.0), color);
+    let p = crate::theme::PALETTE;
+    painter.circle_filled(center + egui::vec2(0.0, 1.5), 44.0, egui::Color32::from_black_alpha(20));
+    painter.circle_filled(center, 44.0, p.panel.gamma_multiply(0.92));
+    painter.circle_stroke(center, 44.0, egui::Stroke::new(1.0, p.border));
+    // Draw axes pointing away from the viewer first so nearer ones stay on top.
+    let mut axes: Vec<_> = axes.into_iter().map(|(axis, name, color)| (axis.dot(fwd), axis, name, color)).collect();
+    axes.sort_by(|a, b| b.0.total_cmp(&a.0));
+    for (depth, axis, name, color) in axes {
+        let color = if depth > 0.0 { color.gamma_multiply(0.55) } else { color };
+        let tip = center + egui::vec2(axis.dot(right) as f32, -axis.dot(up) as f32) * 30.0;
+        painter.line_segment([center, tip], egui::Stroke::new(2.5, color));
+        painter.circle_filled(tip, 9.0, color);
+        let font = egui::FontId::new(10.0, crate::theme::semibold());
+        let label: String = name.chars().take(1).collect();
+        painter.text(tip, egui::Align2::CENTER_CENTER, label, font, egui::Color32::WHITE);
     }
 }

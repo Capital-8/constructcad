@@ -1,9 +1,11 @@
 //! 2D view canvas: plans, ceilings, elevations, sections and legends.
 
+use crate::icons::{self, Icon};
 use crate::paint::{PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
+use crate::theme::{self, PALETTE};
 use cc_core::ViewId;
-use egui::{Color32, Rect, Response, Sense, Ui};
+use egui::{Rect, Response, Sense, Ui};
 use glam::DVec2;
 
 /// Pan/zoom state of a 2D view.
@@ -64,7 +66,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     let drawing = state.drawing(view_id).unwrap_or_default();
     let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
     let rect = resp.rect;
-    painter.rect_filled(rect, 0.0, Color32::WHITE);
+    painter.rect_filled(rect, 0.0, PALETTE.canvas);
 
     let st = state.view2d.entry(view_id).or_default();
     if !st.fitted {
@@ -87,4 +89,30 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
         state.cursor = Some(xf.to_world(p));
     }
     crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
+    if view_toolbar(ui, rect, view_id, view.scale)
+        && let Some(st) = state.view2d.get_mut(&view_id)
+    {
+        st.fitted = false;
+    }
+}
+
+/// Floating chip in the view corner with the scale and a zoom-to-fit button.
+/// Returns true when zoom to fit was clicked.
+pub fn view_toolbar(ui: &mut Ui, rect: Rect, view_id: ViewId, scale: u32) -> bool {
+    let painter = ui.painter_at(rect);
+    let size = egui::vec2(96.0, 28.0);
+    let bar = Rect::from_min_size(rect.right_bottom() - size - egui::vec2(12.0, 12.0), size);
+    painter.rect_filled(bar.translate(egui::vec2(0.0, 1.0)), 7.0, egui::Color32::from_black_alpha(18));
+    painter.rect_filled(bar, 7.0, PALETTE.panel);
+    painter.rect_stroke(bar, 7.0, egui::Stroke::new(1.0, PALETTE.border), egui::StrokeKind::Inside);
+    let label = egui::pos2(bar.left() + 12.0, bar.center().y);
+    let font = egui::FontId::new(12.0, theme::semibold());
+    painter.text(label, egui::Align2::LEFT_CENTER, format!("1:{scale}"), font, PALETTE.text_muted);
+    let button = Rect::from_center_size(egui::pos2(bar.right() - 16.0, bar.center().y), egui::vec2(24.0, 22.0));
+    let r = ui.interact(button, egui::Id::new(("zoom-fit", view_id.0)), Sense::click());
+    if r.hovered() {
+        painter.rect_filled(button, theme::RADIUS as f32, PALETTE.hover);
+    }
+    icons::paint(&painter, button.shrink(5.0), Icon::ZoomFit, PALETTE.text_muted);
+    r.on_hover_text(format!("{} (ZE)", crate::t!("action-zoom-fit"))).clicked()
 }

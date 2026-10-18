@@ -38,6 +38,17 @@ ribbon-architecture = Architecture
 ribbon-modify = Modify
 ribbon-view = View
 ribbon-manage = Manage
+group-project = Project
+group-export = Export
+group-settings = Settings
+group-help = Help
+group-build = Build
+group-horizontal = Floors & Roofs
+group-selection = Selection
+group-history = History
+group-create-views = Create
+group-documentation = Documentation
+group-navigate = Navigate
 
 # Tools
 tool-select = Select

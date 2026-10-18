@@ -38,6 +38,17 @@ ribbon-architecture = Arquitetura
 ribbon-modify = Modificar
 ribbon-view = Vista
 ribbon-manage = Gerenciar
+group-project = Projeto
+group-export = Exportar
+group-settings = Preferências
+group-help = Ajuda
+group-build = Construir
+group-horizontal = Pisos e coberturas
+group-selection = Seleção
+group-history = Histórico
+group-create-views = Criar
+group-documentation = Documentação
+group-navigate = Navegar
 
 # Ferramentas
 tool-select = Selecionar

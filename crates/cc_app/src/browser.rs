@@ -2,29 +2,96 @@
 
 use crate::actions;
 use crate::i18n::tr;
+use crate::icons::{self, Icon};
 use crate::state::AppState;
 use crate::t;
+use crate::theme::{self, PALETTE};
 use crate::tools::Tool;
 use cc_core::{Category, ViewCategory, ViewId, ViewKind};
-use egui::{RichText, Ui};
+use egui::{Rect, Response, Sense, Ui, vec2};
+
+const ROW_HEIGHT: f32 = 24.0;
+const INDENT: f32 = 16.0;
+
+pub fn category_icon(category: ViewCategory) -> Icon {
+    match category {
+        ViewCategory::FloorPlan => Icon::FloorPlan,
+        ViewCategory::CeilingPlan => Icon::CeilingPlan,
+        ViewCategory::ThreeD => Icon::View3D,
+        ViewCategory::Elevation => Icon::Elevation,
+        ViewCategory::Section => Icon::Section,
+        ViewCategory::Legend => Icon::Legend,
+        ViewCategory::Schedule => Icon::Schedule,
+        ViewCategory::Sheet => Icon::Sheet,
+    }
+}
 
 pub fn show(ui: &mut Ui, state: &mut AppState) {
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(t!("browser-title")).strong());
-        ui.label(RichText::new(&state.project().info.name).weak());
-    });
-    ui.separator();
+    theme::panel_header(ui, &t!("browser-title"), Some(&state.project().info.name));
     egui::ScrollArea::vertical().id_salt("browser").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        ui.add_space(4.0);
         for category in ViewCategory::ALL {
-            egui::CollapsingHeader::new(tr(category.key()))
-                .id_salt(("browser", category))
-                .default_open(!matches!(category, ViewCategory::Legend))
-                .show(ui, |ui| {
-                    category_items(ui, state, category);
-                    add_button(ui, state, category);
-                });
+            let id = ui.make_persistent_id(("browser-open", category));
+            let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(id, !matches!(category, ViewCategory::Legend)));
+            let count = state.project().views_of(category).count();
+            let label = format!("{}  ", tr(category.key()));
+            let row = tree_row(ui, 0, Some(open), category_icon(category), &label, Some(count), false);
+            if add_button(ui, state, category, &row) {
+                open = true;
+            } else if row.clicked() {
+                open = !open;
+            }
+            ui.data_mut(|d| d.insert_persisted(id, open));
+            if open {
+                category_items(ui, state, category);
+            }
         }
+        ui.add_space(6.0);
     });
+}
+
+/// One row of the tree. `expander` is `Some(open)` for collapsible rows.
+fn tree_row(
+    ui: &mut Ui,
+    depth: usize,
+    expander: Option<bool>,
+    icon: Icon,
+    label: &str,
+    count: Option<usize>,
+    selected: bool,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
+    let painter = ui.painter();
+    let bg = rect.shrink2(vec2(4.0, 1.0));
+    if selected {
+        painter.rect_filled(bg, theme::RADIUS as f32, PALETTE.accent_soft);
+    } else if response.hovered() {
+        painter.rect_filled(bg, theme::RADIUS as f32, PALETTE.hover);
+    }
+    let mut x = rect.left() + 10.0 + depth as f32 * INDENT;
+    let cy = rect.center().y;
+    if let Some(open) = expander {
+        let chevron = Rect::from_center_size(egui::pos2(x + 5.0, cy), vec2(10.0, 10.0));
+        icons::paint(painter, chevron, if open { Icon::ChevronDown } else { Icon::ChevronRight }, PALETTE.text_faint);
+        x += 15.0;
+    }
+    let color = if selected { PALETTE.accent_text } else { PALETTE.text };
+    let icon_color = if selected { PALETTE.accent_text } else { PALETTE.text_muted };
+    icons::paint(painter, Rect::from_center_size(egui::pos2(x + 7.0, cy), vec2(14.0, 14.0)), icon, icon_color);
+    x += 21.0;
+    let family = if expander.is_some() { theme::semibold() } else { egui::FontFamily::Proportional };
+    let galley = painter.layout_no_wrap(label.to_string(), egui::FontId::new(13.0, family), color);
+    let width = galley.size().x;
+    painter.galley(egui::pos2(x, cy - galley.size().y / 2.0), galley, color);
+    if let Some(n) = count {
+        let font = egui::FontId::proportional(11.5);
+        painter.text(egui::pos2(x + width, cy), egui::Align2::LEFT_CENTER, n.to_string(), font, PALETTE.text_faint);
+    }
+    response
 }
 
 fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
@@ -52,22 +119,27 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
     }
 
     for (id, label) in views {
-        if let Some((rid, text)) = &mut state.rename
-            && *rid == id
-        {
-            let r = ui.text_edit_singleline(text);
-            r.request_focus();
-            if r.lost_focus() {
+        if state.rename.as_ref().is_some_and(|(rid, _)| *rid == id) {
+            let finished = ui
+                .horizontal(|ui| {
+                    ui.add_space(10.0 + INDENT + 21.0);
+                    let text = &mut state.rename.as_mut().unwrap().1;
+                    let r = ui.add(egui::TextEdit::singleline(text).desired_width(ui.available_width() - 8.0));
+                    r.request_focus();
+                    r.lost_focus().then(|| !ui.input(|i| i.key_pressed(egui::Key::Escape)))
+                })
+                .inner;
+            if let Some(accept) = finished {
                 let (rid, text) = state.rename.take().unwrap();
-                if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                if accept {
                     actions::rename_view(state, rid, text);
                 }
             }
             continue;
         }
         let active = state.active_view == Some(id);
-        let r = ui.selectable_label(active, &label);
-        if r.double_clicked() || r.clicked() {
+        let r = tree_row(ui, 1, None, category_icon(category), &label, None, active);
+        if r.clicked() {
             state.open_view(id);
         }
         r.context_menu(|ui| {
@@ -102,50 +174,62 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
     }
 }
 
-fn add_button(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
+/// "+" button at the right of a category row. Returns true when it was used.
+fn add_button(ui: &mut Ui, state: &mut AppState, category: ViewCategory, row: &Response) -> bool {
+    if category == ViewCategory::Elevation {
+        return false;
+    }
+    let rect = Rect::from_center_size(egui::pos2(row.rect.right() - 18.0, row.rect.center().y), vec2(20.0, 20.0));
+    let r = ui.interact(rect, row.id.with("add"), Sense::click()).on_hover_text(t!("browser-new"));
+    if r.hovered() {
+        ui.painter().rect_filled(rect, theme::RADIUS as f32, PALETTE.pressed);
+    }
+    if row.hovered() || r.hovered() || r.has_focus() {
+        icons::paint(ui.painter(), rect.shrink(4.0), Icon::Plus, PALETTE.text_muted);
+    }
     let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
+    let mut used = false;
     match category {
         ViewCategory::FloorPlan | ViewCategory::CeilingPlan => {
-            ui.menu_button(RichText::new(t!("browser-new")).small(), |ui| {
+            egui::Popup::menu(&r).show(|ui| {
                 for (id, name) in levels {
                     if ui.button(name).clicked() {
                         actions::new_plan(state, id, category == ViewCategory::CeilingPlan);
-                        ui.close();
+                        used = true;
                     }
                 }
             });
         }
-        ViewCategory::ThreeD => {
-            if ui.small_button(t!("browser-new")).clicked() {
-                actions::new_3d(state);
-            }
-        }
-        ViewCategory::Section => {
-            if ui.small_button(t!("browser-new")).clicked() {
-                state.set_tool(Tool::Section);
-                state.message = t!("msg-section-hint");
-            }
-        }
-        ViewCategory::Legend => {
-            if ui.small_button(t!("browser-new")).clicked() {
-                actions::new_legend(state);
-            }
-        }
         ViewCategory::Schedule => {
-            ui.menu_button(RichText::new(t!("browser-new")).small(), |ui| {
+            egui::Popup::menu(&r).show(|ui| {
                 for c in Category::ALL {
                     if ui.button(actions::t_category(c)).clicked() {
                         actions::new_schedule(state, c);
-                        ui.close();
+                        used = true;
                     }
                 }
             });
         }
-        ViewCategory::Sheet => {
-            if ui.small_button(t!("browser-new")).clicked() {
-                actions::new_sheet(state);
+        _ if r.clicked() => {
+            match category {
+                ViewCategory::ThreeD => {
+                    actions::new_3d(state);
+                }
+                ViewCategory::Section => {
+                    state.set_tool(Tool::Section);
+                    state.message = t!("msg-section-hint");
+                }
+                ViewCategory::Legend => {
+                    actions::new_legend(state);
+                }
+                ViewCategory::Sheet => {
+                    actions::new_sheet(state);
+                }
+                _ => {}
             }
+            used = true;
         }
-        ViewCategory::Elevation => {}
+        _ => {}
     }
+    used || r.clicked()
 }

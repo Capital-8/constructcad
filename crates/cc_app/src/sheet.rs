@@ -61,7 +61,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
     let paper = size.size_mm();
     let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
     let rect = resp.rect;
-    painter.rect_filled(rect, 0.0, Color32::from_gray(150));
+    painter.rect_filled(rect, 0.0, crate::theme::PALETTE.sheet_bg);
 
     let st = state.view2d.entry(sheet_id).or_default();
     if !st.fitted {
