@@ -56,6 +56,9 @@ pub struct WallGeom {
     pub columns: Vec<Column>,
     /// Layer boundaries as `(v_from, v_to, material)`, from the left face inward.
     pub layers: Vec<(f64, f64, String)>,
+    /// Stretches of a face where another wall meets it in a T, as
+    /// `(side, u0, u1)` with side +1 for the left face and -1 for the right.
+    pub face_gaps: Vec<(f64, f64, f64)>,
 }
 
 /// How one end of a wall is cut by a neighbor.
@@ -64,6 +67,8 @@ pub(crate) struct EndJoin {
     /// Distance along the ray (pointing into this wall) of the ray-left and ray-right faces.
     pub ray_left: f64,
     pub ray_right: f64,
+    /// For a T-join, the wall whose face this end meets.
+    pub host: Option<usize>,
 }
 
 /// Minimal wall description used while resolving joins.
@@ -85,6 +90,27 @@ impl WallLine {
 
 const JOIN_TOL: f64 = 0.01;
 
+/// How far short of another wall's face an end may stop and still join it.
+const GAP_TOL: f64 = 0.05;
+
+/// The end of `walls[me]` at `p` (ray `da` into the wall) meeting the face of
+/// `walls[host]`: a T-join cut along that face.
+fn t_join(walls: &[WallLine], me: usize, p: DVec2, da: DVec2, host: usize) -> Option<EndJoin> {
+    let a = walls[me];
+    let b = walls[host];
+    let max_ext = 10.0 * a.half.max(0.05);
+    let clamp = |t: f64| t.clamp(-max_ext, max_ext);
+    let na = da.perp();
+    let db = b.dir();
+    let nb = db.perp();
+    // The face on the side this wall comes from.
+    let side = if da.dot(nb) >= 0.0 { 1.0 } else { -1.0 };
+    let face = b.start + nb * (side * b.half);
+    let left = line_intersect(p + na * a.half, da, face, db)?;
+    let right = line_intersect(p - na * a.half, da, face, db)?;
+    Some(EndJoin { ray_left: clamp(left), ray_right: clamp(right), host: Some(host) })
+}
+
 /// Resolve the join at one end of `walls[me]` (`at_start` selects the end).
 pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Option<EndJoin> {
     let a = walls[me];
@@ -95,8 +121,9 @@ pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Opt
     let max_ext = 10.0 * a.half.max(0.05);
     let clamp = |t: f64| t.clamp(-max_ext, max_ext);
     let na = da.perp();
+    let square = || Some(EndJoin { ray_left: 0.0, ray_right: 0.0, host: None });
 
-    // L-join: exactly one other wall ends at the same point.
+    // Other wall ends at the same point (that allow joining), as rays into each wall.
     let ends: Vec<(usize, DVec2)> = walls
         .iter()
         .enumerate()
@@ -111,23 +138,48 @@ pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Opt
             }
         })
         .collect();
+
+    // L-join: exactly one other wall ends here.
     if ends.len() == 1 {
         let (bi, db) = ends[0];
         if da.perp_dot(db).abs() < 1e-6 {
-            return None; // collinear: plain butt
+            // Collinear: a seamless butt when the thicknesses match.
+            return if (a.half - walls[bi].half).abs() < 1e-4 && da.dot(db) < 0.0 { square() } else { None };
         }
         let hb = walls[bi].half;
         let nb = db.perp();
         // Pair this wall's ray-left face with the neighbor's ray-right face, and vice versa.
         let left = line_intersect(p + na * a.half, da, p - nb * hb, db)?;
         let right = line_intersect(p - na * a.half, da, p + nb * hb, db)?;
-        return Some(EndJoin { ray_left: clamp(left), ray_right: clamp(right) });
-    }
-    if !ends.is_empty() {
-        return None;
+        return Some(EndJoin { ray_left: clamp(left), ray_right: clamp(right), host: None });
     }
 
-    // T-join: the end touches another wall's location line away from its ends.
+    // Three or more ends: the thickest collinear pair runs through, the
+    // others meet its face.
+    if ends.len() >= 2 {
+        let mut all: Vec<(usize, DVec2)> = vec![(me, da)];
+        all.extend(ends.iter().copied());
+        let mut through: Option<(usize, usize, f64)> = None;
+        for (x, &(i, di)) in all.iter().enumerate() {
+            for &(j, dj) in all.iter().skip(x + 1) {
+                if di.dot(dj) < -0.9999 {
+                    let weight = walls[i].half + walls[j].half;
+                    if through.is_none_or(|t| weight > t.2 + 1e-9) {
+                        through = Some((i, j, weight));
+                    }
+                }
+            }
+        }
+        let (i, j, _) = through?;
+        if me == i || me == j {
+            return square();
+        }
+        return t_join(walls, me, p, da, i);
+    }
+
+    // T-join: the end lies on (or within a few centimeters of) another wall,
+    // away from its ends.
+    let mut best: Option<(usize, f64)> = None;
     for (i, b) in walls.iter().enumerate() {
         if i == me {
             continue;
@@ -136,17 +188,15 @@ pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Opt
         let len = b.start.distance(b.end);
         let rel = p - b.start;
         let along = rel.dot(db);
-        if along <= JOIN_TOL || along >= len - JOIN_TOL || rel.dot(db.perp()).abs() > JOIN_TOL {
+        let off = rel.dot(db.perp()).abs();
+        if along <= JOIN_TOL || along >= len - JOIN_TOL || off > b.half + GAP_TOL || da.perp_dot(db).abs() < 1e-6 {
             continue;
         }
-        let nb = db.perp();
-        let side = if da.dot(nb) >= 0.0 { 1.0 } else { -1.0 };
-        let face = b.start + nb * (side * b.half);
-        let left = line_intersect(p + na * a.half, da, face, db)?;
-        let right = line_intersect(p - na * a.half, da, face, db)?;
-        return Some(EndJoin { ray_left: clamp(left), ray_right: clamp(right) });
+        if best.is_none_or(|(_, o)| off < o) {
+            best = Some((i, off));
+        }
     }
-    None
+    best.and_then(|(i, _)| t_join(walls, me, p, da, i))
 }
 
 /// Subtract `cut` from the sorted disjoint `intervals`.
@@ -199,6 +249,7 @@ impl WallGeom {
             openings: Vec::new(),
             columns: Vec::new(),
             layers,
+            face_gaps: Vec::new(),
         }
     }
 
@@ -220,6 +271,20 @@ impl WallGeom {
     /// Range of u where both faces exist (where openings may be placed).
     pub fn inner_range(&self) -> (f64, f64) {
         (self.start_ext.0.max(self.start_ext.1), self.end_ext.0.min(self.end_ext.1))
+    }
+
+    /// The parts of the face on `side` (+1 left, -1 right) between `u0` and
+    /// `u1` that no T-joined wall covers.
+    pub fn face_segments(&self, side: f64, u0: f64, u1: f64) -> Vec<(f64, f64)> {
+        let (lo, hi) = (u0.min(u1), u0.max(u1));
+        let mut parts = vec![(lo, hi)];
+        for &(s, g0, g1) in &self.face_gaps {
+            if s == side {
+                parts = subtract(&parts, (g0, g1));
+            }
+        }
+        parts.retain(|(a, b)| b - a > 1e-6);
+        parts
     }
 
     /// Plan footprint of a column, counter-clockwise.
@@ -431,5 +496,59 @@ mod tests {
         assert!(resolve_join(&walls, 0, false).is_none());
         // The neighbor no longer miters against it either.
         assert!(resolve_join(&walls, 1, true).is_none());
+    }
+
+    #[test]
+    fn ends_at_the_face_or_slightly_short_join_in_a_t() {
+        // Half thickness 0.1: an end at the face (0.1) and one 3 cm short (0.13) both join.
+        for y in [0.0, 0.1, 0.13] {
+            let walls = [line((0.0, 0.0), (6.0, 0.0)), line((3.0, y), (3.0, 2.0))];
+            let j = resolve_join(&walls, 1, true).unwrap_or_else(|| panic!("no join at {y}"));
+            assert_eq!(j.host, Some(0));
+            // Cut along the face y = 0.1, measured from the end along the wall.
+            assert!((j.ray_left - (0.1 - y)).abs() < 1e-9 && (j.ray_right - (0.1 - y)).abs() < 1e-9, "{y}: {j:?}");
+        }
+        // Too far away: no join.
+        let walls = [line((0.0, 0.0), (6.0, 0.0)), line((3.0, 0.3), (3.0, 2.0))];
+        assert!(resolve_join(&walls, 1, true).is_none());
+    }
+
+    #[test]
+    fn junctions_of_three_or_four_walls_run_one_pair_through() {
+        // Collinear pair meeting at (2, 0) plus a wall going up.
+        let walls = [line((0.0, 0.0), (2.0, 0.0)), line((2.0, 0.0), (4.0, 0.0)), line((2.0, 0.0), (2.0, 2.0))];
+        let a = resolve_join(&walls, 0, false).unwrap();
+        let b = resolve_join(&walls, 1, true).unwrap();
+        assert_eq!((a.ray_left, a.ray_right, a.host), (0.0, 0.0, None));
+        assert_eq!((b.ray_left, b.ray_right, b.host), (0.0, 0.0, None));
+        let c = resolve_join(&walls, 2, true).unwrap();
+        assert!(c.host.is_some());
+        assert!((c.ray_left - 0.1).abs() < 1e-9 && (c.ray_right - 0.1).abs() < 1e-9);
+        // A plus: the thicker pair runs through.
+        let mut plus = [
+            line((0.0, 0.0), (2.0, 0.0)),
+            line((2.0, 0.0), (4.0, 0.0)),
+            line((2.0, -2.0), (2.0, 0.0)),
+            line((2.0, 0.0), (2.0, 2.0)),
+        ];
+        plus[2].half = 0.15;
+        plus[3].half = 0.15;
+        assert_eq!(resolve_join(&plus, 2, false).map(|j| j.host), Some(None));
+        assert_eq!(resolve_join(&plus, 0, false).and_then(|j| j.host), Some(2));
+        // Collinear walls of the same thickness meet without a seam; different ones keep it.
+        let pair = [line((0.0, 0.0), (2.0, 0.0)), line((2.0, 0.0), (4.0, 0.0))];
+        assert!(resolve_join(&pair, 0, false).is_some());
+        let mut pair = pair;
+        pair[1].half = 0.2;
+        assert!(resolve_join(&pair, 0, false).is_none());
+    }
+
+    #[test]
+    fn faces_open_where_walls_meet_them() {
+        let walls = [line((0.0, 0.0), (6.0, 0.0)), line((3.0, 0.1), (3.0, 2.0))];
+        let mut host = geom(&walls, 0);
+        host.face_gaps.push((1.0, 2.9, 3.1));
+        assert_eq!(host.face_segments(1.0, 0.0, 6.0), vec![(0.0, 2.9), (3.1, 6.0)]);
+        assert_eq!(host.face_segments(-1.0, 0.0, 6.0), vec![(0.0, 6.0)]);
     }
 }

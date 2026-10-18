@@ -342,6 +342,8 @@ impl ModelGeometry {
                     }
                 })
                 .collect();
+            let mut gaps: Vec<(usize, [DVec2; 2])> = Vec::new();
+            let mut ids = Vec::new();
             for (i, (e, w)) in walls.iter().enumerate() {
                 let base_z = project.wall_base_z(e, w);
                 let top_z = project.wall_top_z(e, w);
@@ -352,15 +354,17 @@ impl ModelGeometry {
                     layers.push((v, v - layer.thickness, layer.material.clone()));
                     v -= layer.thickness;
                 }
-                let mut g = WallGeom::new(
-                    e.id,
-                    lines[i],
-                    base_z,
-                    top_z,
-                    resolve_join(&lines, i, true),
-                    resolve_join(&lines, i, false),
-                    layers,
-                );
+                let (start_join, end_join) = (resolve_join(&lines, i, true), resolve_join(&lines, i, false));
+                let mut g = WallGeom::new(e.id, lines[i], base_z, top_z, start_join, end_join, layers);
+                // Where this wall meets another in a T, that wall's face opens.
+                for (join, u_left, u_right) in
+                    [(start_join, g.start_ext.0, g.start_ext.1), (end_join, g.end_ext.0, g.end_ext.1)]
+                {
+                    if let Some(host) = join.and_then(|j| j.host) {
+                        let pts = [g.world(u_left, g.half), g.world(u_right, -g.half)];
+                        gaps.push((host, pts));
+                    }
+                }
                 let openings = project
                     .hosted_by(e.id)
                     .filter_map(|h| {
@@ -381,7 +385,14 @@ impl ModelGeometry {
                 let mut solid = g.to_solid(project.material_color(material));
                 solid.transparency = project.material_transparency(material);
                 self.solids.push(solid);
+                ids.push(e.id);
                 self.walls.insert(e.id, g);
+            }
+            for (host, pts) in gaps {
+                let Some(g) = ids.get(host).and_then(|id| self.walls.get_mut(id)) else { continue };
+                let us: Vec<f64> = pts.iter().map(|p| (*p - g.origin).dot(g.dir)).collect();
+                let side = if (pts[0] - g.origin).dot(g.normal) >= 0.0 { 1.0 } else { -1.0 };
+                g.face_gaps.push((side, us[0].min(us[1]), us[0].max(us[1])));
             }
         }
     }

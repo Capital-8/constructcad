@@ -258,8 +258,12 @@ fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spa
             }
         }
         if let Some(style) = style_of(state) {
-            d.line(poly[0], poly[1], style, id);
-            d.line(poly[2], poly[3], style, id);
+            // Faces, opened where other walls meet them in a T.
+            for (side, (u0, u1)) in [(-1.0, c.right), (1.0, c.left)] {
+                for (a, b) in g.face_segments(side, u0, u1) {
+                    d.line(g.world(a, side * h), g.world(b, side * h), style, id);
+                }
+            }
         }
         if let Some(&next) = states.get(i + 1)
             && next != state
