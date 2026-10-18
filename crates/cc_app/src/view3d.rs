@@ -16,11 +16,60 @@ pub struct View3DState {
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
     pub fit_requested: bool,
+    /// Camera transition started by the navigation cube.
+    anim: Option<Transition>,
 }
+
+/// Smooth turn of the camera to new angles.
+#[derive(Debug, Clone, Copy)]
+struct Transition {
+    from_yaw: f64,
+    from_pitch: f64,
+    /// Yaw change along the shortest way.
+    delta_yaw: f64,
+    to_pitch: f64,
+    start: f64,
+}
+
+const TRANSITION_SECONDS: f64 = 0.35;
 
 impl View3DState {
     fn new(camera: CameraState) -> Self {
-        Self { camera, renderer: None, texture: None, mesh_key: None, camera_dirty: false, fit_requested: false }
+        Self {
+            camera,
+            renderer: None,
+            texture: None,
+            mesh_key: None,
+            camera_dirty: false,
+            fit_requested: false,
+            anim: None,
+        }
+    }
+
+    fn turn_to(&mut self, yaw: f64, pitch: f64, now: f64) {
+        let delta_yaw = (yaw - self.camera.yaw_deg + 540.0).rem_euclid(360.0) - 180.0;
+        self.anim = Some(Transition {
+            from_yaw: self.camera.yaw_deg,
+            from_pitch: self.camera.pitch_deg,
+            delta_yaw,
+            to_pitch: pitch,
+            start: now,
+        });
+    }
+
+    /// Advance a running transition; returns whether one is running.
+    fn animate(&mut self, now: f64) -> bool {
+        let Some(a) = self.anim else { return false };
+        let t = ((now - a.start) / TRANSITION_SECONDS).clamp(0.0, 1.0);
+        let e = t * t * (3.0 - 2.0 * t);
+        self.camera.yaw_deg = a.from_yaw + a.delta_yaw * e;
+        self.camera.pitch_deg = a.from_pitch + (a.to_pitch - a.from_pitch) * e;
+        self.camera_dirty = true;
+        if t >= 1.0 {
+            self.camera.yaw_deg = self.camera.yaw_deg.rem_euclid(360.0);
+            self.anim = None;
+        }
+        true
     }
 }
 
@@ -72,6 +121,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
 
     // Navigation: left-drag or Shift+middle orbits, middle/right-drag pans, wheel zooms.
+    let now = ui.input(|i| i.time);
+    if v3.animate(now) {
+        ui.ctx().request_repaint();
+    }
+    if resp.dragged() {
+        v3.anim = None;
+    }
     let cam = &mut v3.camera;
     let d = resp.drag_delta();
     let shift = ui.input(|i| i.modifiers.shift);
@@ -149,10 +205,36 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         painter.image(tex, rect, uv, egui::Color32::WHITE);
     }
-    view_cube(&painter, rect, &v3.camera);
+    let cube = crate::view_cube::show(ui, rect, &v3.camera);
+    if let Some(dir) = cube.look_from {
+        let (yaw, pitch) = crate::view_cube::angles_from(dir, v3.camera.yaw_deg);
+        v3.turn_to(yaw, pitch, now);
+        ui.ctx().request_repaint();
+    }
+    if cube.home {
+        let home = CameraState::default();
+        fit_camera(&mut v3.camera, &state.geom, aspect);
+        v3.turn_to(home.yaw_deg, home.pitch_deg, now);
+        ui.ctx().request_repaint();
+    }
+    if let Some(d) = cube.orbit {
+        v3.anim = None;
+        v3.camera.yaw_deg += d.x as f64 * 0.4;
+        v3.camera.pitch_deg = (v3.camera.pitch_deg + d.y as f64 * 0.4).clamp(-89.0, 89.0);
+        v3.camera_dirty = true;
+    }
+    if cube.turn != 0.0 {
+        v3.anim = None;
+        v3.camera.yaw_deg += cube.turn;
+        v3.camera_dirty = true;
+    }
 
     // Persist the camera into the view when the interaction ends (not undoable).
-    let interacting = resp.dragged() || ui.input(|i| i.smooth_scroll_delta.y != 0.0);
+    let interacting = resp.dragged()
+        || v3.anim.is_some()
+        || ui.input(|i| i.smooth_scroll_delta.y != 0.0)
+        || cube.orbit.is_some()
+        || cube.turn != 0.0;
     if v3.camera_dirty && !interacting {
         v3.camera_dirty = false;
         let camera = v3.camera;
@@ -161,34 +243,5 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
                 *c = camera;
             }
         });
-    }
-}
-
-/// Small compass showing the world axes in the corner.
-fn view_cube(painter: &egui::Painter, rect: egui::Rect, cam: &CameraState) {
-    let center = rect.right_top() + egui::vec2(-58.0, 58.0);
-    let fwd = cam.forward();
-    let right = fwd.cross(DVec3::Z).normalize_or_zero();
-    let up = right.cross(fwd);
-    let axes = [
-        (DVec3::X, crate::t!("axis-east"), egui::Color32::from_rgb(200, 50, 50)),
-        (DVec3::Y, crate::t!("axis-north"), egui::Color32::from_rgb(40, 150, 40)),
-        (DVec3::Z, "Z".to_string(), egui::Color32::from_rgb(40, 80, 210)),
-    ];
-    let p = crate::theme::PALETTE;
-    painter.circle_filled(center + egui::vec2(0.0, 1.5), 44.0, egui::Color32::from_black_alpha(20));
-    painter.circle_filled(center, 44.0, p.panel.gamma_multiply(0.92));
-    painter.circle_stroke(center, 44.0, egui::Stroke::new(1.0, p.border));
-    // Draw axes pointing away from the viewer first so nearer ones stay on top.
-    let mut axes: Vec<_> = axes.into_iter().map(|(axis, name, color)| (axis.dot(fwd), axis, name, color)).collect();
-    axes.sort_by(|a, b| b.0.total_cmp(&a.0));
-    for (depth, axis, name, color) in axes {
-        let color = if depth > 0.0 { color.gamma_multiply(0.55) } else { color };
-        let tip = center + egui::vec2(axis.dot(right) as f32, -axis.dot(up) as f32) * 30.0;
-        painter.line_segment([center, tip], egui::Stroke::new(2.5, color));
-        painter.circle_filled(tip, 9.0, color);
-        let font = egui::FontId::new(10.0, crate::theme::semibold());
-        let label: String = name.chars().take(1).collect();
-        painter.text(tip, egui::Align2::CENTER_CENTER, label, font, egui::Color32::WHITE);
     }
 }

@@ -533,6 +533,16 @@ tpl-sheet-plans = Plantas
 # Bússola 3D
 axis-east = L
 axis-north = N
+cube-top = TOPO
+cube-bottom = BASE
+cube-front = FRENTE
+cube-back = FUNDOS
+cube-right = DIREITA
+cube-left = ESQUERDA
+axis-south = S
+axis-west = O
+cube-home = Vista inicial
+cube-hint = Clique numa face, aresta ou canto para orientar; arraste para girar
 
 # Components
 action-edit-component = Editar componente…

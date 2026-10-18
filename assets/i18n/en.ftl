@@ -533,6 +533,16 @@ tpl-sheet-plans = Plans
 # 3D compass
 axis-east = E
 axis-north = N
+cube-top = TOP
+cube-bottom = BOTTOM
+cube-front = FRONT
+cube-back = BACK
+cube-right = RIGHT
+cube-left = LEFT
+axis-south = S
+axis-west = W
+cube-home = Home view
+cube-hint = Click a face, edge or corner to orient; drag to orbit
 
 # Components
 action-edit-component = Edit Component…

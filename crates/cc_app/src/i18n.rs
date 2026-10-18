@@ -201,7 +201,8 @@ mod tests {
             let fields = cc_core::ScheduleField::available(c);
             missing.extend(fields.iter().map(|f| f.key()).filter(|k| !messages.contains_key(*k)).map(String::from));
         }
-        for k in ["value-yes", "value-no"] {
+        let cube = crate::view_cube::KEYS;
+        for k in ["value-yes", "value-no"].into_iter().chain(cube) {
             if !messages.contains_key(k) {
                 missing.push(k.to_string());
             }

@@ -22,6 +22,7 @@ mod thumbnails;
 mod tools;
 mod type_dialog;
 mod view3d;
+mod view_cube;
 
 fn main() -> eframe::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
