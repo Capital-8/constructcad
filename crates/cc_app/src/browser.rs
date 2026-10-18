@@ -10,7 +10,7 @@ use crate::tools::Tool;
 use cc_core::{Category, ViewCategory, ViewId, ViewKind};
 use egui::{Rect, Response, Sense, Ui, vec2};
 
-const ROW_HEIGHT: f32 = 24.0;
+const ROW_HEIGHT: f32 = 21.0;
 const INDENT: f32 = 20.0;
 
 pub fn category_icon(category: ViewCategory) -> Icon {
@@ -103,11 +103,11 @@ fn tree_row(
     icons::paint(painter, Rect::from_center_size(egui::pos2(x + 7.0, cy), vec2(14.0, 14.0)), icon, icon_color);
     x += 21.0;
     let family = if expander.is_some() { theme::semibold() } else { egui::FontFamily::Proportional };
-    let galley = painter.layout_no_wrap(label.to_string(), egui::FontId::new(13.0, family), color);
+    let galley = painter.layout_no_wrap(label.to_string(), egui::FontId::new(12.5, family), color);
     let width = galley.size().x;
     painter.galley(egui::pos2(x, cy - galley.size().y / 2.0), galley, color);
     if let Some(n) = count {
-        let font = egui::FontId::proportional(11.5);
+        let font = egui::FontId::proportional(11.0);
         painter.text(egui::pos2(x + width, cy), egui::Align2::LEFT_CENTER, n.to_string(), font, PALETTE.text_faint);
     }
     response
