@@ -204,7 +204,8 @@ impl ConstructApp {
                 _ => state.delete_selection(),
             }
         }
-        let typing_length = matches!(state.tool, Tool::Wall { .. }) && state.interaction.anchor.is_some();
+        let typing_length = matches!(state.tool, Tool::Wall { .. } | Tool::Move | Tool::Copy | Tool::Array)
+            && state.interaction.anchor.is_some();
         if backspace && typing_length {
             state.length_input.pop();
         }
@@ -235,6 +236,18 @@ impl ConstructApp {
                     }
                     "RM" => Some(Some(Category::Room)),
                     "CL" => Some(Some(Category::Column)),
+                    "MV" | "CO" | "RO" | "MM" | "DM" | "AR" => {
+                        let tool = match state.key_buffer.as_str() {
+                            "MV" => Tool::Move,
+                            "CO" => Tool::Copy,
+                            "RO" => Tool::Rotate,
+                            "MM" => Tool::Mirror { draw: false },
+                            "DM" => Tool::Mirror { draw: true },
+                            _ => Tool::Array,
+                        };
+                        crate::modify::start(state, tool);
+                        Some(None)
+                    }
                     "CM" => Some(Some(Category::Component)),
                     "BM" => Some(Some(Category::Beam)),
                     "ST" => Some(Some(Category::Stair)),

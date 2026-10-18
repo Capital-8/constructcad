@@ -65,6 +65,8 @@ pub struct AppState {
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
+    /// Options of the transform tools.
+    pub modify: crate::modify::ModifyOptions,
     pub active_view: Option<ViewId>,
     pub view2d: HashMap<ViewId, View2DState>,
     pub view3d: HashMap<ViewId, View3DState>,
@@ -121,6 +123,7 @@ impl AppState {
             selection: BTreeSet::new(),
             tool: Tool::Select,
             interaction: Interaction::default(),
+            modify: Default::default(),
             active_view: None,
             view2d: HashMap::new(),
             view3d: HashMap::new(),

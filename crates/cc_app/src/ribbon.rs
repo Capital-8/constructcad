@@ -38,6 +38,12 @@ fn tool_icon(tool: &Tool) -> Icon {
     match tool {
         Tool::Select => Icon::Select,
         Tool::Section => Icon::Section,
+        Tool::Move => Icon::Move,
+        Tool::Copy => Icon::Copy,
+        Tool::Rotate => Icon::Rotate,
+        Tool::Mirror { draw: false } => Icon::MirrorPick,
+        Tool::Mirror { draw: true } => Icon::MirrorDraw,
+        Tool::Array => Icon::Array,
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
 }
@@ -473,6 +479,31 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
             _ => {}
         }
     });
+    group(ui, t!("group-modify"), |ui| {
+        let tip = |key: &str, keys: &str| format!("{} ({keys})", crate::i18n::tr(key));
+        let tools = [
+            (Tool::Move, Icon::Move, tip("tool-move", "MV")),
+            (Tool::Copy, Icon::Copy, tip("tool-copy", "CO")),
+            (Tool::Rotate, Icon::Rotate, tip("tool-rotate", "RO")),
+            (Tool::Mirror { draw: false }, Icon::MirrorPick, tip("tool-mirror-pick", "MM")),
+            (Tool::Mirror { draw: true }, Icon::MirrorDraw, tip("tool-mirror-draw", "DM")),
+            (Tool::Array, Icon::Array, tip("tool-array", "AR")),
+        ];
+        let buttons: Vec<StackButton> = tools
+            .iter()
+            .map(|(tool, icon, tooltip)| StackButton {
+                icon: *icon,
+                tooltip: tooltip.clone(),
+                enabled: has_sel || state.tool == *tool,
+                selected: state.tool == *tool,
+            })
+            .collect();
+        if let Some(i) = stacked(ui, &buttons)
+            && let Some((tool, _, _)) = tools.get(i)
+        {
+            crate::modify::start(state, tool.clone());
+        }
+    });
 }
 
 fn view_tab(ui: &mut Ui, state: &mut AppState) {
@@ -675,6 +706,38 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     *rotation = rotation.rem_euclid(360.0);
                 }
                 ui.label(theme::muted(t!("hint-component")));
+            }
+            Tool::Move => {
+                ui.label(theme::muted(t!("hint-base-point")));
+            }
+            Tool::Copy => {
+                ui.checkbox(&mut state.modify.multiple, t!("opt-multiple"));
+                ui.label(theme::muted(t!("hint-base-point")));
+            }
+            Tool::Array => {
+                ui.label(t!("opt-count"));
+                ui.add(DragValue::new(&mut state.modify.count).range(2..=200));
+                ui.label(theme::muted(t!("hint-array")));
+            }
+            Tool::Rotate => {
+                ui.checkbox(&mut state.modify.rotate_copy, t!("opt-copy"));
+                ui.separator();
+                ui.label(t!("prop-rotation"));
+                ui.add(DragValue::new(&mut state.modify.angle).speed(1.0).suffix("°"));
+                if ui.button(t!("action-apply")).clicked()
+                    && let Some(center) = state.interaction.center
+                {
+                    let targets = state.interaction.targets.iter().copied().collect();
+                    crate::modify::apply_rotation(state, &targets, center, state.modify.angle.to_radians());
+                }
+                if ui.button(t!("opt-set-center")).clicked() {
+                    state.interaction.placing_center = true;
+                }
+                ui.label(theme::muted(t!("hint-rotate")));
+            }
+            Tool::Mirror { draw } => {
+                ui.checkbox(&mut state.modify.mirror_copy, t!("opt-copy"));
+                ui.label(theme::muted(if draw { t!("hint-mirror-draw") } else { t!("hint-mirror-pick") }));
             }
             Tool::Railing { type_id } => {
                 let n = state.interaction.points.len();

@@ -17,18 +17,50 @@ use std::collections::BTreeSet;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tool {
     Select,
-    Wall { type_id: ElementTypeId },
-    Hosted { category: Category, type_id: ElementTypeId },
-    Sketch { category: Category, type_id: ElementTypeId },
+    Wall {
+        type_id: ElementTypeId,
+    },
+    Hosted {
+        category: Category,
+        type_id: ElementTypeId,
+    },
+    Sketch {
+        category: Category,
+        type_id: ElementTypeId,
+    },
     Section,
-    Room { type_id: ElementTypeId },
-    Grid { type_id: ElementTypeId },
-    Dimension { type_id: ElementTypeId },
-    Column { type_id: ElementTypeId },
-    Beam { type_id: ElementTypeId },
-    Stair { type_id: ElementTypeId },
-    Railing { type_id: ElementTypeId },
-    Component { type_id: ElementTypeId },
+    Room {
+        type_id: ElementTypeId,
+    },
+    Grid {
+        type_id: ElementTypeId,
+    },
+    Dimension {
+        type_id: ElementTypeId,
+    },
+    Column {
+        type_id: ElementTypeId,
+    },
+    Beam {
+        type_id: ElementTypeId,
+    },
+    Stair {
+        type_id: ElementTypeId,
+    },
+    Railing {
+        type_id: ElementTypeId,
+    },
+    Component {
+        type_id: ElementTypeId,
+    },
+    Move,
+    Copy,
+    Rotate,
+    /// Mirror across a picked line (`draw: false`) or a drawn axis.
+    Mirror {
+        draw: bool,
+    },
+    Array,
 }
 
 impl Tool {
@@ -51,6 +83,12 @@ impl Tool {
             Tool::Stair { .. } => "tool-stair",
             Tool::Railing { .. } => "tool-railing",
             Tool::Component { .. } => "tool-component",
+            Tool::Move => "tool-move",
+            Tool::Copy => "tool-copy",
+            Tool::Rotate => "tool-rotate",
+            Tool::Mirror { draw: false } => "tool-mirror-pick",
+            Tool::Mirror { draw: true } => "tool-mirror-draw",
+            Tool::Array => "tool-array",
         }
     }
 
@@ -138,6 +176,12 @@ pub struct Interaction {
     pub points: Vec<DVec2>,
     pub flip_hand: bool,
     pub drag: Option<Drag>,
+    /// Elements a transform tool acts on (the selection when it started).
+    pub targets: Vec<ElementId>,
+    /// Rotation center.
+    pub center: Option<DVec2>,
+    /// The next click sets the rotation center.
+    pub placing_center: bool,
     /// Points acquired for alignment guides (see `snap`).
     pub tracked: Vec<DVec2>,
     /// Direction back along the previous segment of a chain (angle reference).
@@ -165,8 +209,8 @@ enum SnapKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Snap {
-    point: DVec2,
+pub(crate) struct Snap {
+    pub(crate) point: DVec2,
     kind: SnapKind,
     /// Dashed guides to draw: from the point that casts them to `point`.
     guides: [Option<(DVec2, DVec2)>; 2],
@@ -184,7 +228,7 @@ const MAX_TRACKED: usize = 6;
 /// Snap through [`snap`] with the interaction's acquired points, and
 /// acquire the point when it is a model point.
 #[allow(clippy::too_many_arguments)]
-fn snap_at(
+pub(crate) fn snap_at(
     state: &mut AppState,
     level: Option<LevelId>,
     raw: DVec2,
@@ -339,7 +383,7 @@ fn on_lines(lines: &[(DVec2, DVec2)], raw: DVec2, r: f64) -> Option<DVec2> {
         .map(|(q, _)| q)
 }
 
-fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
+pub(crate) fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
     let c = xf.to_screen(s.point);
     let stroke = Stroke::new(1.5, PREVIEW);
     for (from, to) in s.guides.iter().flatten() {
@@ -379,7 +423,7 @@ fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
     }
 }
 
-fn label(painter: &Painter, pos: Pos2, text: String) {
+pub(crate) fn label(painter: &Painter, pos: Pos2, text: String) {
     let galley = painter.layout_no_wrap(text, egui::FontId::proportional(13.0), Color32::BLACK);
     let rect = egui::Rect::from_min_size(pos + egui::vec2(12.0, -24.0), galley.size()).expand(3.0);
     painter.rect_filled(rect, 3.0, Color32::from_rgba_unmultiplied(255, 250, 225, 235));
@@ -414,7 +458,15 @@ fn dim_text(painter: &Painter, pos: Pos2, text: String, angle: f32, strong: bool
 /// Temporary dimension of a segment being drawn from `a` to `p`: a
 /// dimension line beside it with its length (or the typed value) and an
 /// arc with the angle to `reference` (the previous segment, or the X axis).
-fn temp_dimension(painter: &Painter, xf: &Xf, a: DVec2, p: DVec2, reference: Option<DVec2>, typed: &str, side: f64) {
+pub(crate) fn temp_dimension(
+    painter: &Painter,
+    xf: &Xf,
+    a: DVec2,
+    p: DVec2,
+    reference: Option<DVec2>,
+    typed: &str,
+    side: f64,
+) {
     let len = a.distance(p);
     let Some(dir) = (p - a).try_normalize() else { return };
     let thin = Stroke::new(1.0, TEMP_DIM);
@@ -464,7 +516,7 @@ fn temp_dimension(painter: &Painter, xf: &Xf, a: DVec2, p: DVec2, reference: Opt
 }
 
 /// Parse the typed length ("3,5" or "3.5").
-fn typed_length(input: &str) -> Option<f64> {
+pub(crate) fn typed_length(input: &str) -> Option<f64> {
     input.trim().replace(',', ".").parse::<f64>().ok().filter(|v| *v > 0.0)
 }
 
@@ -505,6 +557,9 @@ pub fn handle(
         (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Move | Tool::Copy | Tool::Rotate | Tool::Mirror { .. } | Tool::Array, Some(level)) => {
+            crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool)
+        }
         (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
         _ => {}
     }

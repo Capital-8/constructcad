@@ -50,6 +50,11 @@ pub enum Icon {
     Stair,
     Railing,
     Component,
+    Move,
+    Rotate,
+    MirrorPick,
+    MirrorDraw,
+    Array,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -311,6 +316,41 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             seg((0.5, 10.0), (2.5, 8.0), s);
             seg((13.5, 10.0), (15.5, 8.0), s);
             seg((5.5, 6.0), (10.5, 6.0), thin);
+        }
+        Icon::Move => {
+            seg((8.0, 1.5), (8.0, 14.5), s);
+            seg((1.5, 8.0), (14.5, 8.0), s);
+            for (a, b, c) in [
+                ((6.0, 3.5), (8.0, 1.5), (10.0, 3.5)),
+                ((6.0, 12.5), (8.0, 14.5), (10.0, 12.5)),
+                ((3.5, 6.0), (1.5, 8.0), (3.5, 10.0)),
+                ((12.5, 6.0), (14.5, 8.0), (12.5, 10.0)),
+            ] {
+                line(&[a, b, c]);
+            }
+        }
+        Icon::Rotate => {
+            arc(8.0, 8.5, 5.5, 200.0, 500.0);
+            line(&[(1.8, 3.8), (2.6, 7.1), (5.8, 6.0)]);
+        }
+        Icon::MirrorPick | Icon::MirrorDraw => {
+            let dashed = Stroke::new(thin.width, color);
+            for i in 0..5 {
+                let y = 1.0 + i as f32 * 3.0;
+                seg((8.0, y), (8.0, y + 1.6), dashed);
+            }
+            poly(&[(6.5, 3.5), (1.5, 12.5), (6.5, 12.5)], fill);
+            closed(&[(9.5, 3.5), (14.5, 12.5), (9.5, 12.5)]);
+            if icon == Icon::MirrorDraw {
+                seg((11.5, 15.0), (15.0, 11.5), s);
+            }
+        }
+        Icon::Array => {
+            for x in [1.5, 6.0, 10.5] {
+                rect_s(x, 5.5, x + 4.0, 9.5, 0.8);
+            }
+            seg((1.5, 12.5), (14.5, 12.5), thin);
+            line(&[(12.5, 11.0), (14.5, 12.5), (12.5, 14.0)]);
         }
         Icon::Component => {
             // A chair in side view: seat, back and legs.

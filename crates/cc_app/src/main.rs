@@ -11,6 +11,7 @@ mod home;
 mod i18n;
 mod icons;
 mod material_browser;
+mod modify;
 mod paint;
 mod properties;
 mod ribbon;
