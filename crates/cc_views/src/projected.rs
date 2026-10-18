@@ -1,8 +1,13 @@
 //! Orthographic projected views: elevations, sections and axonometrics,
 //! with painter's-algorithm hidden surface removal.
+//!
+//! Faces are painted back to front. The order comes from comparing the depth
+//! of every pair of faces that overlap on screen, at a point inside their
+//! overlap; sorting by centroid depth alone fails for large faces such as roofs.
 
 use crate::{Drawing2D, LineStyle, format, plan::POCHE};
 use cc_core::{CameraState, Direction, ElementId, Project};
+use cc_geom::polygon::signed_area;
 use cc_geom::{ModelGeometry, clip_polygon, face_plane_segments};
 use glam::{DVec2, DVec3};
 
@@ -74,7 +79,11 @@ fn shade(color: [u8; 3], normal: DVec3, frame: &Frame) -> [u8; 4] {
 }
 
 struct ProjectedFace {
+    /// Mean depth of the vertices, used to order unrelated faces and break cycles.
     depth: f64,
+    /// Plane of the face in 3D.
+    normal: DVec3,
+    point: DVec3,
     pts: Vec<DVec2>,
     color: [u8; 4],
     element: ElementId,
@@ -106,6 +115,8 @@ pub fn render(geom: &ModelGeometry, frame: &Frame) -> Drawing2D {
             let depth = verts.iter().map(|v| frame.depth(*v)).sum::<f64>() / verts.len() as f64;
             faces.push(ProjectedFace {
                 depth,
+                normal: face.normal,
+                point: verts[0],
                 pts: verts.iter().map(|v| frame.project(*v)).collect(),
                 color: shade(solid.color, face.normal, frame),
                 element: solid.element,
@@ -113,10 +124,11 @@ pub fn render(geom: &ModelGeometry, frame: &Frame) -> Drawing2D {
             });
         }
     }
-    faces.sort_by(|a, b| b.depth.total_cmp(&a.depth));
+    let order = paint_order(frame, &faces);
+    let mut slots: Vec<Option<ProjectedFace>> = faces.into_iter().map(Some).collect();
 
     let mut d = Drawing2D::default();
-    for f in faces {
+    for f in order.into_iter().filter_map(|i| slots[i].take()) {
         d.fill(f.pts, f.color, Some(f.element));
         for (a, b) in f.edges {
             d.line(a, b, LineStyle::Projection, Some(f.element));
@@ -143,6 +155,114 @@ pub fn render(geom: &ModelGeometry, frame: &Frame) -> Drawing2D {
         }
     }
     d
+}
+
+/// Depth (along the view direction) of the plane of `f` under screen point `s`.
+fn depth_at(frame: &Frame, f: &ProjectedFace, s: DVec2) -> f64 {
+    let base = frame.origin + frame.right * s.x + frame.up * s.y;
+    f.normal.dot(f.point - base) / f.normal.dot(frame.forward)
+}
+
+/// Clip a convex polygon by a counter-clockwise convex polygon.
+fn clip_convex(subject: &[DVec2], clipper: &[DVec2]) -> Vec<DVec2> {
+    let mut out = subject.to_vec();
+    for i in 0..clipper.len() {
+        if out.is_empty() {
+            break;
+        }
+        let (a, b) = (clipper[i], clipper[(i + 1) % clipper.len()]);
+        let side = |p: DVec2| (b - a).perp_dot(p - a);
+        let input = std::mem::take(&mut out);
+        for j in 0..input.len() {
+            let (p, q) = (input[j], input[(j + 1) % input.len()]);
+            let (sp, sq) = (side(p), side(q));
+            if sp >= 0.0 {
+                out.push(p);
+            }
+            if (sp >= 0.0) != (sq >= 0.0) {
+                out.push(p + (q - p) * (sp / (sp - sq)));
+            }
+        }
+    }
+    out
+}
+
+/// Counter-clockwise triangles of a projected face.
+fn triangles(pts: &[DVec2]) -> Vec<[DVec2; 3]> {
+    cc_geom::polygon::triangulate(pts)
+        .into_iter()
+        .map(|[a, b, c]| {
+            let t = [pts[a], pts[b], pts[c]];
+            if signed_area(&t) < 0.0 { [t[0], t[2], t[1]] } else { t }
+        })
+        .collect()
+}
+
+/// A point strictly inside the overlap of two faces on screen: the centroid of
+/// the largest overlap between their triangles.
+fn overlap_point(a: &[[DVec2; 3]], b: &[[DVec2; 3]]) -> Option<DVec2> {
+    const MIN_AREA: f64 = 1e-8;
+    let mut best: Option<(f64, DVec2)> = None;
+    for ta in a {
+        for tb in b {
+            let clipped = clip_convex(ta, tb);
+            if clipped.len() < 3 {
+                continue;
+            }
+            let area = signed_area(&clipped).abs();
+            if area > MIN_AREA && best.is_none_or(|(a, _)| area > a) {
+                let centroid = clipped.iter().copied().sum::<DVec2>() / clipped.len() as f64;
+                best = Some((area, centroid));
+            }
+        }
+    }
+    best.map(|(_, p)| p)
+}
+
+/// Back-to-front painting order: a face is painted after every face it hides.
+fn paint_order(frame: &Frame, faces: &[ProjectedFace]) -> Vec<usize> {
+    const DEPTH_TOL: f64 = 1e-6;
+    let n = faces.len();
+    let boxes: Vec<(DVec2, DVec2)> =
+        faces.iter().map(|f| f.pts.iter().fold((f.pts[0], f.pts[0]), |(lo, hi), p| (lo.min(*p), hi.max(*p)))).collect();
+    let tris: Vec<Vec<[DVec2; 3]>> = faces.iter().map(|f| triangles(&f.pts)).collect();
+    // `before[i]` lists the faces that must be painted after face `i`.
+    let mut before: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut pending = vec![0usize; n];
+    for i in 0..n {
+        for j in i + 1..n {
+            let (a, b) = (boxes[i], boxes[j]);
+            if a.0.x >= b.1.x || b.0.x >= a.1.x || a.0.y >= b.1.y || b.0.y >= a.1.y {
+                continue;
+            }
+            let Some(s) = overlap_point(&tris[i], &tris[j]) else { continue };
+            let (di, dj) = (depth_at(frame, &faces[i], s), depth_at(frame, &faces[j], s));
+            if (di - dj).abs() < DEPTH_TOL {
+                continue;
+            }
+            let (back, front) = if di > dj { (i, j) } else { (j, i) };
+            before[back].push(front);
+            pending[front] += 1;
+        }
+    }
+    // Kahn's algorithm, taking the farthest ready face first; on a cycle the
+    // farthest remaining face is forced.
+    let mut done = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    for _ in 0..n {
+        let farthest = |ready_only: bool| {
+            (0..n)
+                .filter(|&k| !done[k] && (!ready_only || pending[k] == 0))
+                .max_by(|&x, &y| faces[x].depth.total_cmp(&faces[y].depth))
+        };
+        let Some(k) = farthest(true).or_else(|| farthest(false)) else { break };
+        done[k] = true;
+        order.push(k);
+        for &f in &before[k] {
+            pending[f] = pending[f].saturating_sub(1);
+        }
+    }
+    order
 }
 
 /// Join segments end-to-end into closed loops.
@@ -250,6 +370,35 @@ mod tests {
         let d = elevation(&doc.project, &geom, Direction::South);
         assert_eq!(d.hit_test(DVec2::new(2.0, 1.5), 0.0), Some(id));
         assert_eq!(d.hit_test(DVec2::new(2.0, 3.5), 0.0), None);
+    }
+
+    /// A roof slab overhanging a wall, seen from above: every wall face lies
+    /// under the roof, so the roof's top face must be painted after all of them.
+    /// Sorting faces by their centroid depth alone paints the near end of the
+    /// wall over the roof.
+    #[test]
+    fn large_faces_hide_what_is_behind_them() {
+        use cc_geom::Solid;
+        let (roof_id, wall_id) = (ElementId(1), ElementId(2));
+        let mut roof = Solid::new(roof_id, Category::Roof, [200, 80, 60]);
+        roof.add_box(DVec2::ZERO, DVec2::X, DVec2::Y, 0.0, 10.0, -2.0, 12.0, 3.0, 3.2);
+        let mut wall = Solid::new(wall_id, Category::Wall, [200, 200, 200]);
+        wall.add_box(DVec2::ZERO, DVec2::X, DVec2::Y, 4.0, 4.2, 0.0, 10.0, 0.0, 3.0);
+        let geom = ModelGeometry { solids: vec![roof, wall], ..Default::default() };
+        let frame = Frame::looking(DVec3::ZERO, DVec3::new(1.0, 1.0, -1.0));
+        let d = render(&geom, &frame);
+        let fills: Vec<(usize, ElementId, f64)> = d
+            .prims
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| match p {
+                Prim::Fill { pts, element: Some(e), .. } => Some((i, *e, cc_geom::polygon::area(pts))),
+                _ => None,
+            })
+            .collect();
+        let roof_top = fills.iter().filter(|f| f.1 == roof_id).max_by(|a, b| a.2.total_cmp(&b.2)).unwrap().0;
+        let last_wall = fills.iter().filter(|f| f.1 == wall_id).map(|f| f.0).max().unwrap();
+        assert!(roof_top > last_wall, "roof top painted at {roof_top}, a wall face at {last_wall}");
     }
 
     #[test]
