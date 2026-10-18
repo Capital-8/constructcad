@@ -175,9 +175,14 @@ impl ConstructApp {
         if ctx.memory(|m| m.focused().is_some()) {
             return;
         }
-        let (escape, delete, backspace, events) = ctx.input(|i| {
-            (i.key_pressed(Key::Escape), i.key_pressed(Key::Delete), i.key_pressed(Key::Backspace), i.events.clone())
+        let (escape, delete, backspace, space, events) = ctx.input(|i| {
+            let keys = (i.key_pressed(Key::Escape), i.key_pressed(Key::Delete), i.key_pressed(Key::Backspace));
+            (keys.0, keys.1, keys.2, i.key_pressed(Key::Space), i.events.clone())
         });
+        // Space turns or flips the selection (tools use it for their own preview).
+        if space && state.tool == Tool::Select && crate::tools::rotate_selection(state) {
+            state.message = t!("msg-rotated");
+        }
         if escape {
             if !state.length_input.is_empty() {
                 state.length_input.clear();

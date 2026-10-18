@@ -61,7 +61,7 @@ tool-column = Pilar
 tool-beam = Viga
 tool-stair = Escada
 tool-railing = Guarda-corpo
-hint-column = Clique para posicionar o pilar · atrai para pontas de parede e cruzamentos de eixos
+hint-column = Clique para posicionar o pilar · atrai para pontas de parede e cruzamentos de eixos · Espaço gira 90°
 hint-beam = Clique o início e o fim de cada viga (em sequência) · Esc encerra
 hint-stair = Clique o pé da escada e depois a direção da subida · os degraus seguem o tipo
 hint-railing = Clique os pontos do guarda-corpo · Enter, clique duplo ou Concluir encerra
@@ -188,7 +188,7 @@ view-new-sheet = Folha
 # Dicas
 hint-shortcut = Atalho
 hint-copy = Duplica a seleção deslocada 1 m (ou Ctrl + arrastar)
-hint-select = Clique para selecionar · arraste para mover (Ctrl copia) · janela: esquerda-direita seleciona contidos, direita-esquerda seleciona cruzados
+hint-select = Clique para selecionar · arraste para mover (Ctrl copia) · Espaço gira ou inverte · janela: esquerda-direita seleciona contidos, direita-esquerda seleciona cruzados
 hint-wall = Clique o início e os próximos pontos · digite o comprimento + Enter · Shift = ortogonal · Esc encerra
 hint-hosted = Passe o cursor sobre uma parede e clique · Espaço inverte a abertura
 hint-sketch = Clique os vértices · clique no primeiro ponto ou Enter para concluir · Backspace remove o último
@@ -438,6 +438,8 @@ tx-delete = Excluir
 tx-move = Mover
 tx-copy = Copiar
 tx-modify = Modificar
+tx-rotate = Girar
+msg-rotated = Seleção girada (Espaço: componentes e pilares giram 90°, portas e janelas invertem)
 tx-change-type = Alterar tipo
 tx-modify-type = Modificar tipo
 tx-duplicate-type = Duplicar tipo

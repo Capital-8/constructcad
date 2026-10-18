@@ -75,7 +75,7 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | CT | Section | MD | Select |
 | ZE | Zoom to fit | Esc | Cancel / exit tool |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Delete | Delete |
-| Ctrl+S / Ctrl+Shift+S | Save / Save as | Space | Flip door |
+| Ctrl+S / Ctrl+Shift+S | Save / Save as | Space | Rotate / flip (selection or placement) |
 | Ctrl+N / Ctrl+O | New / Open | Ctrl+W | Close project |
 | RM | Room | GR | Grid |
 | DI | Aligned dimension | CL | Column |

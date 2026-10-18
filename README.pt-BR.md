@@ -71,7 +71,7 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 | CT | Corte | MD | Selecionar |
 | ZE | Ajustar zoom | Esc | Cancelar / sair da ferramenta |
 | Ctrl+Z / Ctrl+Y | Desfazer / Refazer | Delete | Excluir |
-| Ctrl+S / Ctrl+Shift+S | Salvar / Salvar como | Espaço | Inverter porta |
+| Ctrl+S / Ctrl+Shift+S | Salvar / Salvar como | Espaço | Girar / inverter (seleção ou ao posicionar) |
 | Ctrl+N / Ctrl+O | Novo / Abrir | Ctrl+W | Fechar projeto |
 | RM | Ambiente | GR | Eixo |
 | DI | Cota alinhada | CL | Pilar |

@@ -61,7 +61,7 @@ tool-column = Column
 tool-beam = Beam
 tool-stair = Stair
 tool-railing = Railing
-hint-column = Click to place a column · snaps to wall ends and grid crossings
+hint-column = Click to place a column · snaps to wall ends and grid crossings · Space rotates 90°
 hint-beam = Click the start and the end of each beam (chained) · Esc ends
 hint-stair = Click the foot of the stair, then the direction of the run · risers follow the type
 hint-railing = Click the points of the railing · Enter, a double click or Finish ends it
@@ -188,7 +188,7 @@ view-new-sheet = Sheet
 # Hints
 hint-shortcut = Shortcut
 hint-copy = Duplicates the selection offset by 1 m (or Ctrl + drag)
-hint-select = Click to select · drag to move (Ctrl copies) · window: left-to-right selects enclosed, right-to-left selects crossing
+hint-select = Click to select · drag to move (Ctrl copies) · Space rotates or flips · window: left-to-right selects enclosed, right-to-left selects crossing
 hint-wall = Click the start and next points · type a length + Enter · Shift = orthogonal · Esc ends
 hint-hosted = Hover over a wall and click · Space flips the opening
 hint-sketch = Click the vertices · click the first point or press Enter to finish · Backspace removes the last one
@@ -438,6 +438,8 @@ tx-delete = Delete
 tx-move = Move
 tx-copy = Copy
 tx-modify = Modify
+tx-rotate = Rotate
+msg-rotated = Selection rotated (Space: components and columns turn 90°, doors and windows flip)
 tx-change-type = Change Type
 tx-modify-type = Modify Type
 tx-duplicate-type = Duplicate Type

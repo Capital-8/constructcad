@@ -527,20 +527,25 @@ fn column_tool(
     type_id: ElementTypeId,
     xf: &Xf,
 ) {
+    if resp.hovered() && ui.input(|i| i.key_pressed(Key::Space)) {
+        state.interaction.rotation = (state.interaction.rotation + 90.0).rem_euclid(360.0);
+    }
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
     let s = snap_at(state, Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(cc_core::TypeData::Column { section, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
-        let outline: Vec<Pos2> =
-            cc_geom::column_outline(*section, s.point, 0.0).iter().map(|p| xf.to_screen(*p)).collect();
+        let outline: Vec<Pos2> = cc_geom::column_outline(*section, s.point, state.interaction.rotation)
+            .iter()
+            .map(|p| xf.to_screen(*p))
+            .collect();
         painter.add(egui::Shape::closed_line(outline, Stroke::new(1.5, PREVIEW)));
     }
     if resp.clicked() {
         let project = state.project();
         let column = cc_core::Column {
             position: s.point,
-            rotation_deg: 0.0,
+            rotation_deg: state.interaction.rotation,
             base_offset: 0.0,
             height: project.level_height(level, 3.0),
             top: default_top(project, level),
@@ -1367,6 +1372,34 @@ pub fn duplicate(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
     state.selection = new_ids.into_iter().collect();
 }
 
+/// Space on a selection: components and columns turn 90° about their
+/// insertion point, doors and windows flip to the other side of the wall.
+/// Returns whether anything changed (one undo step).
+pub fn rotate_selection(state: &mut AppState) -> bool {
+    let ids: Vec<ElementId> = state.selection.iter().copied().collect();
+    let turnable = ids.iter().any(|id| {
+        matches!(
+            state.project().element(*id).map(|e| &e.kind),
+            Some(ElementKind::Component(_) | ElementKind::Column(_) | ElementKind::Door(_) | ElementKind::Window(_))
+        )
+    });
+    if !turnable {
+        return false;
+    }
+    state.doc.edit(t!("tx-rotate"), |e| {
+        for id in ids {
+            let Some(el) = e.element_mut(id) else { continue };
+            match &mut el.kind {
+                ElementKind::Component(c) => c.rotation_deg = (c.rotation_deg + 90.0).rem_euclid(360.0),
+                ElementKind::Column(c) => c.rotation_deg = (c.rotation_deg + 90.0).rem_euclid(360.0),
+                ElementKind::Door(h) | ElementKind::Window(h) => h.flip_facing = !h.flip_facing,
+                _ => {}
+            }
+        }
+    });
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1402,6 +1435,33 @@ mod tests {
         let s = snap(&p, Some(level), raw, Some(anchor), &[], &[DVec2::new(4.0, 9.0)], SCALE, false);
         assert_eq!(s.kind, SnapKind::Alignment);
         assert!(s.point.distance(target) < 1e-9, "{} vs {target}", s.point);
+    }
+
+    #[test]
+    fn space_turns_components_and_flips_doors() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        let pick = |state: &AppState, f: fn(&ElementKind) -> bool| {
+            state.project().elements.values().find(|e| f(&e.kind)).map(|e| e.id).unwrap()
+        };
+        let comp = pick(&state, |k| matches!(k, ElementKind::Component(_)));
+        let door = pick(&state, |k| matches!(k, ElementKind::Door(_)));
+        let wall = pick(&state, |k| matches!(k, ElementKind::Wall(_)));
+        let before = state.project().element(comp).cloned().unwrap();
+        state.selection = [comp, door, wall].into_iter().collect();
+        let depth = state.doc.undo_depth();
+        assert!(rotate_selection(&mut state));
+        assert_eq!(state.doc.undo_depth(), depth + 1);
+        let (ElementKind::Component(a), Some(ElementKind::Component(b))) =
+            (&before.kind, state.project().element(comp).map(|e| &e.kind))
+        else {
+            panic!("component")
+        };
+        assert_eq!(b.rotation_deg, (a.rotation_deg + 90.0).rem_euclid(360.0));
+        assert_eq!(a.position, b.position);
+        assert!(matches!(state.project().element(door).map(|e| &e.kind), Some(ElementKind::Door(h)) if h.flip_facing));
+        // Nothing turnable selected: no undo step.
+        state.selection = [wall].into_iter().collect();
+        assert!(!rotate_selection(&mut state));
     }
 
     #[test]
