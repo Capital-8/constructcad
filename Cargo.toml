@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/cc_core", "crates/cc_geom", "crates/cc_views", "crates/cc_render", "crates/cc_app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["Francis Rebouças <francisreboucas@gmail.com>"]
+repository = "https://github.com/francisreboucas/constructcad"
+
+[workspace.dependencies]
+cc_core = { path = "crates/cc_core" }
+cc_geom = { path = "crates/cc_geom" }
+cc_views = { path = "crates/cc_views" }
+cc_render = { path = "crates/cc_render" }
+
+eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "default_fonts", "persistence", "accesskit"] }
+egui = "0.36.2"
+egui-wgpu = "0.36.2"
+egui_dock = "0.21.1"
+wgpu = "30.0.1"
+glam = { version = "0.34.1", features = ["serde", "bytemuck"] }
+serde = { version = "1", features = ["derive"] }
+ron = "0.12.2"
+earcutr = "0.5.0"
+rfd = "0.17.2"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+thiserror = "2"
+log = "0.4"
+sys-locale = "0.3.2"
+env_logger = "0.11"

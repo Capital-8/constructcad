@@ -1,0 +1,23 @@
+//! Core BIM data model for ConstructCAD.
+//!
+//! The [`Project`] is the single source of truth. Every view, schedule and
+//! sheet is a *query* over it; all geometry is derived. Edits go through
+//! [`Document::edit`], which records a [`Transaction`] for undo/redo.
+
+mod document;
+mod element;
+mod ids;
+mod persist;
+mod project;
+mod types;
+mod view;
+
+pub use document::{Document, EditCtx, Transaction};
+pub use element::{Ceiling, Element, ElementKind, Floor, Hosted, Roof, RoofShape, Wall};
+pub use ids::{ElementId, ElementTypeId, LevelId, ViewId};
+pub use persist::{FORMAT_VERSION, PersistError, from_ron, load, save, to_ron};
+pub use project::{Level, Material, Project, ProjectInfo};
+pub use types::{Category, ElementType, Layer, TypeData};
+pub use view::{CameraState, Direction, SheetSize, View, ViewCategory, ViewKind, Viewport};
+
+pub use glam::{DVec2, DVec3};

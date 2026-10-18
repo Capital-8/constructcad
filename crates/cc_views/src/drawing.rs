@@ -1,0 +1,137 @@
+use cc_core::ElementId;
+use glam::DVec2;
+
+/// Graphic weight of a line, resolved to pen widths by the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LineStyle {
+    /// Element cut by the view plane.
+    Cut,
+    /// Visible element beyond the cut plane.
+    Projection,
+    /// Fine detail (layers, glass, door swings).
+    Thin,
+    /// Dashed: element above the cut plane or hidden.
+    Hidden,
+    /// Levels, section marks, text leaders.
+    Annotation,
+}
+
+/// Drawing primitive, in view coordinates (meters on the view plane).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Prim {
+    Line {
+        a: DVec2,
+        b: DVec2,
+        style: LineStyle,
+        element: Option<ElementId>,
+    },
+    /// Simple polygon fill (any winding, may be concave).
+    Fill {
+        pts: Vec<DVec2>,
+        color: [u8; 4],
+        element: Option<ElementId>,
+    },
+    /// Text with its baseline-left at `pos`; `size` is paper height in millimeters.
+    Text {
+        pos: DVec2,
+        text: String,
+        size: f64,
+    },
+}
+
+/// Ordered list of primitives, painted first to last.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Drawing2D {
+    pub prims: Vec<Prim>,
+}
+
+impl Drawing2D {
+    pub fn line(&mut self, a: DVec2, b: DVec2, style: LineStyle, element: Option<ElementId>) {
+        if a.distance_squared(b) > 1e-14 {
+            self.prims.push(Prim::Line { a, b, style, element });
+        }
+    }
+
+    pub fn polyline(&mut self, pts: &[DVec2], closed: bool, style: LineStyle, element: Option<ElementId>) {
+        for w in pts.windows(2) {
+            self.line(w[0], w[1], style, element);
+        }
+        if closed && pts.len() > 2 {
+            self.line(pts[pts.len() - 1], pts[0], style, element);
+        }
+    }
+
+    pub fn fill(&mut self, pts: Vec<DVec2>, color: [u8; 4], element: Option<ElementId>) {
+        if pts.len() >= 3 {
+            self.prims.push(Prim::Fill { pts, color, element });
+        }
+    }
+
+    pub fn text(&mut self, pos: DVec2, text: impl Into<String>, size: f64) {
+        self.prims.push(Prim::Text { pos, text: text.into(), size });
+    }
+
+    /// Circular arc approximated with line segments.
+    pub fn arc(&mut self, center: DVec2, radius: f64, a0: f64, a1: f64, style: LineStyle, element: Option<ElementId>) {
+        let steps = 16;
+        let pts: Vec<DVec2> = (0..=steps)
+            .map(|i| {
+                let a = a0 + (a1 - a0) * i as f64 / steps as f64;
+                center + DVec2::new(a.cos(), a.sin()) * radius
+            })
+            .collect();
+        self.polyline(&pts, false, style, element);
+    }
+
+    /// Bounding box of geometry (text anchors included).
+    pub fn bounds(&self) -> Option<(DVec2, DVec2)> {
+        let mut it = self.prims.iter().flat_map(|p| match p {
+            Prim::Line { a, b, .. } => vec![*a, *b],
+            Prim::Fill { pts, .. } => pts.clone(),
+            Prim::Text { pos, .. } => vec![*pos],
+        });
+        let first = it.next()?;
+        Some(it.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p))))
+    }
+
+    /// Topmost element under `p` within `tol` (view units).
+    pub fn hit_test(&self, p: DVec2, tol: f64) -> Option<ElementId> {
+        // Lines first: they are thin and drawn over fills.
+        let mut best: Option<(f64, ElementId)> = None;
+        for prim in &self.prims {
+            if let Prim::Line { a, b, element: Some(id), .. } = prim {
+                let (q, _) = cc_geom::polygon::closest_on_segment(*a, *b, p);
+                let d = q.distance(p);
+                if d <= tol && best.is_none_or(|(bd, _)| d < bd) {
+                    best = Some((d, *id));
+                }
+            }
+        }
+        if let Some((_, id)) = best {
+            return Some(id);
+        }
+        self.prims.iter().rev().find_map(|prim| match prim {
+            Prim::Fill { pts, element: Some(id), .. } if cc_geom::polygon::contains(pts, p) => Some(*id),
+            _ => None,
+        })
+    }
+
+    /// Elements with any geometry inside the rectangle `lo`..`hi`.
+    pub fn elements_in(&self, lo: DVec2, hi: DVec2, fully: bool) -> Vec<ElementId> {
+        use std::collections::BTreeMap;
+        let inside = |p: &DVec2| p.x >= lo.x && p.y >= lo.y && p.x <= hi.x && p.y <= hi.y;
+        // Track (any point inside, all points inside) per element.
+        let mut state: BTreeMap<ElementId, (bool, bool)> = BTreeMap::new();
+        for prim in &self.prims {
+            let (pts, id): (Vec<DVec2>, _) = match prim {
+                Prim::Line { a, b, element: Some(id), .. } => (vec![*a, *b], *id),
+                Prim::Fill { pts, element: Some(id), .. } => (pts.clone(), *id),
+                _ => continue,
+            };
+            let s = state.entry(id).or_insert((false, true));
+            s.0 |= pts.iter().any(inside);
+            s.1 &= pts.iter().all(inside);
+        }
+        state.into_iter().filter(|(_, (any, all))| if fully { *all } else { *any }).map(|(id, _)| id).collect()
+    }
+}

@@ -1,0 +1,28 @@
+[package]
+name = "cc_app"
+description = "ConstructCAD desktop application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "constructcad"
+path = "src/main.rs"
+
+[dependencies]
+cc_core.workspace = true
+cc_geom.workspace = true
+cc_views.workspace = true
+cc_render.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui-wgpu.workspace = true
+egui_dock.workspace = true
+wgpu.workspace = true
+glam.workspace = true
+rfd.workspace = true
+log.workspace = true
+sys-locale.workspace = true
+env_logger.workspace = true

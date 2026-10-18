@@ -1,0 +1,13 @@
+[package]
+name = "cc_views"
+description = "ConstructCAD view generation: plans, sections, elevations, legends, schedules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+cc_core.workspace = true
+cc_geom.workspace = true
+glam.workspace = true

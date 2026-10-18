@@ -1,0 +1,184 @@
+//! Interactive 3D view backed by [`cc_render::Renderer3D`].
+
+use crate::state::AppState;
+use cc_core::{CameraState, ViewId, ViewKind};
+use cc_render::{Renderer3D, SceneMesh, pick_ray};
+use egui::{PointerButton, Sense, Ui};
+use glam::DVec3;
+use std::collections::BTreeSet;
+use std::hash::{Hash, Hasher};
+
+pub struct View3DState {
+    pub camera: CameraState,
+    renderer: Option<Renderer3D>,
+    pub texture: Option<egui::TextureId>,
+    mesh_key: Option<(u64, u64)>,
+    /// Camera changed since it was last written back to the model.
+    camera_dirty: bool,
+    pub fit_requested: bool,
+}
+
+impl View3DState {
+    fn new(camera: CameraState) -> Self {
+        Self { camera, renderer: None, texture: None, mesh_key: None, camera_dirty: false, fit_requested: false }
+    }
+}
+
+fn selection_hash(sel: &BTreeSet<cc_core::ElementId>) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    sel.hash(&mut h);
+    h.finish()
+}
+
+/// Zoom the camera to frame the whole model.
+pub fn fit_camera(camera: &mut CameraState, geom: &cc_geom::ModelGeometry, aspect: f32) {
+    let Some((lo, hi)) = geom.bounds() else { return };
+    camera.target = (lo + hi) * 0.5;
+    let radius = ((hi - lo).length() * 0.5).max(1.0);
+    // The narrower of the vertical (45°) and horizontal fields of view limits the fit.
+    let half_v = 22.5f64.to_radians();
+    let half_h = (half_v.tan() * aspect as f64).atan();
+    camera.distance = radius / half_v.min(half_h).sin() * 1.05;
+}
+
+pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Option<&egui_wgpu::RenderState>) {
+    let Some(ViewKind::ThreeD { camera }) = state.project().view(view_id).map(|v| v.kind.clone()) else { return };
+    let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
+    let rect = resp.rect;
+    let aspect = rect.width() / rect.height().max(1.0);
+    let Some(rs) = render_state else {
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            crate::t!("msg-no-gpu"),
+            egui::FontId::proportional(16.0),
+            egui::Color32::GRAY,
+        );
+        return;
+    };
+
+    let geom = &state.geom;
+    let v3 = state.view3d.entry(view_id).or_insert_with(|| {
+        let mut v = View3DState::new(camera);
+        if geom.bounds().is_some() && camera == CameraState::default() {
+            fit_camera(&mut v.camera, geom, aspect);
+        }
+        v
+    });
+    if v3.fit_requested {
+        fit_camera(&mut v3.camera, geom, aspect);
+        v3.fit_requested = false;
+        v3.camera_dirty = true;
+    }
+
+    // Navigation: left-drag or Shift+middle orbits, middle/right-drag pans, wheel zooms.
+    let cam = &mut v3.camera;
+    let d = resp.drag_delta();
+    let shift = ui.input(|i| i.modifiers.shift);
+    if resp.dragged_by(PointerButton::Primary) || (shift && resp.dragged_by(PointerButton::Middle)) {
+        cam.yaw_deg += d.x as f64 * 0.4;
+        cam.pitch_deg = (cam.pitch_deg + d.y as f64 * 0.4).clamp(-89.0, 89.0);
+        v3.camera_dirty = true;
+    } else if resp.dragged_by(PointerButton::Middle) || resp.dragged_by(PointerButton::Secondary) {
+        let fwd = cam.forward();
+        let right = fwd.cross(DVec3::Z).normalize_or_zero();
+        let up = right.cross(fwd);
+        let k = cam.distance * 2.0 * 22.5f64.to_radians().tan() / rect.height().max(1.0) as f64;
+        cam.target += (-right * d.x as f64 + up * d.y as f64) * k;
+        v3.camera_dirty = true;
+    }
+    if resp.hovered() {
+        let scroll = ui.input(|i| i.smooth_scroll_delta.y) as f64;
+        if scroll != 0.0 {
+            cam.distance = (cam.distance * (-scroll * 0.0025).exp()).clamp(0.5, 5000.0);
+            v3.camera_dirty = true;
+        }
+    }
+    if resp.double_clicked_by(PointerButton::Middle) {
+        fit_camera(cam, geom, aspect);
+        v3.camera_dirty = true;
+    }
+
+    // Picking.
+    if resp.clicked()
+        && let Some(pos) = resp.interact_pointer_pos()
+    {
+        let nx = (pos.x - rect.left()) / rect.width() * 2.0 - 1.0;
+        let ny = 1.0 - (pos.y - rect.top()) / rect.height() * 2.0;
+        let ray = pick_ray(&v3.camera, aspect, nx, ny);
+        let ctrl = ui.input(|i| i.modifiers.command);
+        match geom.pick(ray, &[]) {
+            Some((id, _)) if ctrl => {
+                if !state.selection.remove(&id) {
+                    state.selection.insert(id);
+                }
+            }
+            Some((id, _)) => state.selection = BTreeSet::from([id]),
+            None if !ctrl => state.selection.clear(),
+            None => {}
+        }
+    }
+
+    // Upload geometry when the model or selection changed.
+    let key = (state.doc.revision(), selection_hash(&state.selection));
+    let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
+    if v3.mesh_key != Some(key) {
+        renderer.upload(&rs.device, &SceneMesh::build(&state.geom, &state.selection, &[]));
+        v3.mesh_key = Some(key);
+    }
+    let ppp = ui.ctx().pixels_per_point();
+    let size = [(rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32];
+    let (texture_view, recreated) = renderer.render(&rs.device, &rs.queue, size, &v3.camera);
+    {
+        let mut egui_renderer = rs.renderer.write();
+        match v3.texture {
+            None => {
+                v3.texture =
+                    Some(egui_renderer.register_native_texture(&rs.device, texture_view, wgpu::FilterMode::Linear))
+            }
+            Some(id) if recreated => egui_renderer.update_egui_texture_from_wgpu_texture(
+                &rs.device,
+                texture_view,
+                wgpu::FilterMode::Linear,
+                id,
+            ),
+            Some(_) => {}
+        }
+    }
+    if let Some(tex) = v3.texture {
+        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        painter.image(tex, rect, uv, egui::Color32::WHITE);
+    }
+    view_cube(&painter, rect, &v3.camera);
+
+    // Persist the camera into the view when the interaction ends (not undoable).
+    let interacting = resp.dragged() || ui.input(|i| i.smooth_scroll_delta.y != 0.0);
+    if v3.camera_dirty && !interacting {
+        v3.camera_dirty = false;
+        let camera = v3.camera;
+        state.doc.set_untracked(|p| {
+            if let Some(ViewKind::ThreeD { camera: c }) = p.views.get_mut(&view_id).map(|v| &mut v.kind) {
+                *c = camera;
+            }
+        });
+    }
+}
+
+/// Small compass showing the world axes in the corner.
+fn view_cube(painter: &egui::Painter, rect: egui::Rect, cam: &CameraState) {
+    let center = rect.right_bottom() + egui::vec2(-48.0, -48.0);
+    let fwd = cam.forward();
+    let right = fwd.cross(DVec3::Z).normalize_or_zero();
+    let up = right.cross(fwd);
+    let axes = [
+        (DVec3::X, crate::t!("axis-east"), egui::Color32::from_rgb(200, 50, 50)),
+        (DVec3::Y, crate::t!("axis-north"), egui::Color32::from_rgb(40, 150, 40)),
+        (DVec3::Z, "Z".to_string(), egui::Color32::from_rgb(40, 80, 210)),
+    ];
+    painter.circle_filled(center, 34.0, egui::Color32::from_white_alpha(120));
+    for (axis, name, color) in axes {
+        let tip = center + egui::vec2(axis.dot(right) as f32, -axis.dot(up) as f32) * 28.0;
+        painter.line_segment([center, tip], egui::Stroke::new(2.0, color));
+        painter.text(tip, egui::Align2::CENTER_CENTER, name, egui::FontId::proportional(11.0), color);
+    }
+}
