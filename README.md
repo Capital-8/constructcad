@@ -51,14 +51,18 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Types**: Type Properties dialog with duplicate and rename, layer editor with layer functions (core, finishes), wall function and identity data (type mark, manufacturer, model, classification, fire rating, cost…).
 - **3D view** (wgpu, MSAA): orbit, pan, zoom, zoom to fit and click selection.
 - **Elevations and sections**: hidden line removal, cut hatching and annotated levels.
-- **Schedules**:
-  - Doors and windows.
-  - Walls, with length, area and volume.
-  - Floors, ceilings and roofs, with area, perimeter and volume.
-- **Sheets** A0–A4: title block with project data and draggable, scaled viewports.
+- **Schedules** for every model category and rooms: choose and order the fields (instance, type and computed values such as length, area and volume), sort, filter, show totals and export to CSV.
+- **Sheets** A0–A4: title block with project data and draggable, scaled viewports; export to vector PDF and SVG (*File → Export PDF/SVG…*), identical to the screen.
 - **Manage**: project information, levels (each new level creates its plans) and materials.
 - **`.ccad` files**: versioned, human-readable RON; saving is atomic.
 - **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings and roofs as swept solids, with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
+- **IFC import** (*File → Import IFC…*, IFC2X3 and IFC4): storeys become levels; walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams become native elements with matching or new types, materials and colors. Read by ConstructCAD's own STEP parser; unsupported products are counted and skipped.
+
+## Coming from Revit?
+
+ConstructCAD does not read `.rvt` files. To bring a Revit model in, export it to IFC from Revit (*File → Export → IFC*, IFC4 or IFC2x3) and open the file with *File → Import IFC…*. Storeys, walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams come across as native, editable elements with their types and materials; the import message reports anything that was skipped.
+
+If you do not have Revit, independent third-party tools can convert `.rvt` files to IFC; check their coverage and license terms yourself. ConstructCAD neither bundles nor endorses them.
 
 ## Shortcuts
 
@@ -85,9 +89,9 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 crates/
   cc_core    BIM model (elements, types, levels, views), undo/redo transactions, .ccad persistence
   cc_geom    derived geometry: walls with joins and openings, slabs, roofs, cuts, picking
-  cc_views   2D drawing generation (plan, ceiling, elevation, section, axonometric, legend) and schedules
+  cc_views   2D drawing generation (plan, ceiling, elevation, section, axonometric, legend), schedules, sheet composition and PDF/SVG export
   cc_render  offscreen wgpu 3D renderer
-  cc_ifc     IFC4 export: STEP physical file writer and model mapping
+  cc_ifc     IFC4 export and IFC2X3/IFC4 import: STEP writer and parser, model mapping
   cc_app     eframe/egui application: ribbon, browser, properties, tools, sheets
 assets/i18n  translations (pt-BR, en); interface text is never hard-coded
 ```
@@ -114,12 +118,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 
 ## Roadmap
 
-- IFC import.
-- PDF/SVG sheet export.
-- Dimensions and annotations.
 - User-defined parametric components.
-- Grids.
-- Walls attached to the level above.
+- IFC import of stairs, railings, grids and free-form geometry.
+- Everything-is-a-command architecture (scripting and macros).
 - Material textures.
 
 ## Independence

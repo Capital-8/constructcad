@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- IFC import (*File → Import IFC…*): an in-house STEP parser and a mapping of IFC2X3/IFC4 storeys, walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams (extruded solids, B-reps and face sets; millimeter and imperial units) to native elements and types; export → import round trips are tested.
+- Sheet export to vector PDF and SVG (*File → Export PDF/SVG…*); the sheet is composed once in `cc_views`, so the screen and the files match.
+- Configurable schedules: choose and order fields (instance, type and computed values), sort ascending or descending, filter by text, show or hide totals, and export to CSV (semicolon-separated when the decimal comma is used).
 - Gable and hip roofs computed as the lowest of the planes rising from each sloped eave, with ridge and hip lines in plan and faceted B-rep IFC export.
 - Columns (rectangular/round sections, rotation, top constraint), beams, straight stairs and railings, with types, plan symbols (cut columns, dashed beams, stair treads with break line and arrow), legends, schedules and IFC export; new *Structure* tab and CL/BM/ST/RA shortcuts.
 - Rooms: boundary detected from room-bounding walls around a point (openings do not break it), with number, name, height, area, perimeter and volume; room tags in plans, room schedule and `IfcSpace` export with base quantities.
