@@ -141,18 +141,40 @@ fn select_button(ui: &mut Ui, state: &mut AppState) {
 }
 
 pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
-    // Top strip: brand, tab titles and the quick access toolbar.
+    // Quick access toolbar at the top left, where desktop applications keep it.
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.add_space(4.0);
+        ui.spacing_mut().item_spacing.x = 1.0;
+        ui.add_space(2.0);
         let (mark, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
         if let Some(logo) = theme::logo(ui.ctx()) {
             let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
             ui.painter().image(logo.id(), mark, uv, egui::Color32::WHITE);
         }
         ui.add_space(8.0);
-        ui.label(RichText::new("ConstructCAD").family(theme::semibold()).size(13.0).color(PALETTE.text));
-        ui.add_space(18.0);
+        if icon_button(ui, Icon::New, true).on_hover_text(format!("{} (Ctrl+N)", t!("action-new"))).clicked() {
+            actions::guarded(state, PendingAction::New);
+        }
+        if icon_button(ui, Icon::Open, true).on_hover_text(format!("{} (Ctrl+O)", t!("action-open"))).clicked() {
+            actions::guarded(state, PendingAction::Open);
+        }
+        if icon_button(ui, Icon::Save, true).on_hover_text(format!("{} (Ctrl+S)", t!("action-save"))).clicked() {
+            actions::save(state, false);
+        }
+        let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
+        ui.painter().vline(div.center().x, div.y_range(), Stroke::new(1.0, PALETTE.border));
+        let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
+        let undo = icon_button(ui, Icon::Undo, state.doc.can_undo());
+        if undo.on_hover_text(format!("{}{undo_name} (Ctrl+Z)", t!("action-undo"))).clicked() {
+            state.doc.undo();
+        }
+        let redo = icon_button(ui, Icon::Redo, state.doc.can_redo());
+        if redo.on_hover_text(format!("{} (Ctrl+Y)", t!("action-redo"))).clicked() {
+            state.doc.redo();
+        }
+    });
+    // Ribbon tab titles.
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
         for (tab, label) in [
             (RibbonTab::File, t!("ribbon-file")),
             (RibbonTab::Architecture, t!("ribbon-architecture")),
@@ -164,22 +186,6 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
                 state.ribbon_tab = tab;
             }
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            let redo = icon_button(ui, Icon::Redo, state.doc.can_redo());
-            if redo.on_hover_text(format!("{} (Ctrl+Y)", t!("action-redo"))).clicked() {
-                state.doc.redo();
-            }
-            let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
-            let undo = icon_button(ui, Icon::Undo, state.doc.can_undo());
-            if undo.on_hover_text(format!("{}{undo_name} (Ctrl+Z)", t!("action-undo"))).clicked() {
-                state.doc.undo();
-            }
-            let save = icon_button(ui, Icon::Save, true);
-            if save.on_hover_text(format!("{} (Ctrl+S)", t!("action-save"))).clicked() {
-                actions::save(state, false);
-            }
-        });
     });
     let strip_bottom = ui.min_rect().bottom();
     ui.painter().hline(ui.max_rect().x_range(), strip_bottom + 3.0, Stroke::new(1.0, PALETTE.border));
