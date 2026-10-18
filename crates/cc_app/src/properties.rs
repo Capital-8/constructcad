@@ -171,7 +171,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     }
 
     match &el.kind {
-        ElementKind::Component(_) => {}
+        ElementKind::Component(c) => component_props(ui, state, &el, c),
         ElementKind::Wall(w) => {
             section(ui, "constraints", t!("section-constraints"), |ui| wall_constraints(ui, state, &el, w));
             section(ui, "structural", t!("section-structural"), |ui| {
@@ -493,6 +493,81 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
 }
 
 /// Number, name, height and computed area of a room.
+/// Drag value for a component parameter, with the unit of its kind.
+pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
+    match kind {
+        cc_core::ParamKind::Length => DragValue::new(value).speed(0.01).fixed_decimals(3).suffix(" m"),
+        cc_core::ParamKind::Angle => DragValue::new(value).speed(1.0).suffix("°"),
+        cc_core::ParamKind::Number => DragValue::new(value).speed(0.1),
+    }
+}
+
+fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core::Component) {
+    let id = el.id;
+    section(ui, "constraints", t!("section-constraints"), |ui| {
+        level_row(ui, state, el);
+        length_row(ui, state, &t!("prop-base-offset"), id, "comp-base", c.base_offset, |e, v| {
+            if let ElementKind::Component(c) = &mut e.kind {
+                c.base_offset = v;
+            }
+        });
+        let mut rot = c.rotation_deg;
+        let r = row(ui, &t!("prop-rotation"), |ui| ui.add(DragValue::new(&mut rot).speed(1.0).suffix("°")));
+        if r.changed() {
+            modify(state, id, "comp-rotation", |e| {
+                if let ElementKind::Component(c) = &mut e.kind {
+                    c.rotation_deg = rot.rem_euclid(360.0);
+                }
+            });
+        }
+        finish(state, &r);
+    });
+    let Some(cc_core::TypeData::Component { def, .. }) =
+        state.project().element_type(el.type_id).map(|t| t.data.clone())
+    else {
+        return;
+    };
+    let instance: Vec<_> = def.params.iter().filter(|p| p.instance).cloned().collect();
+    if !instance.is_empty() {
+        section(ui, "comp-params", t!("section-instance-params"), |ui| {
+            for p in instance {
+                let current = c.overrides.get(&p.name).copied();
+                let mut v = current.unwrap_or(p.value);
+                let (r, reset) = row(ui, &p.name, |ui| {
+                    ui.horizontal(|ui| {
+                        let r = ui.add(param_value(&mut v, p.kind));
+                        let reset = ui
+                            .add_enabled(current.is_some(), egui::Button::new("↺").small())
+                            .on_hover_text(t!("hint-param-reset"));
+                        (r, reset.clicked())
+                    })
+                    .inner
+                });
+                if r.changed() {
+                    let name = p.name.clone();
+                    modify(state, id, &format!("comp-param-{name}"), |e| {
+                        if let ElementKind::Component(c) = &mut e.kind {
+                            c.overrides.insert(name, v);
+                        }
+                    });
+                }
+                if reset {
+                    let name = p.name.clone();
+                    state.doc.edit(t!("tx-modify"), |e| {
+                        if let Some(ElementKind::Component(c)) = e.element_mut(id).map(|x| &mut x.kind) {
+                            c.overrides.remove(&name);
+                        }
+                    });
+                }
+                finish(state, &r);
+            }
+        });
+    }
+    section(ui, "dimensions", t!("section-dimensions"), |ui| {
+        readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+    });
+}
+
 fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room) {
     let id = el.id;
     section(ui, "identity-room", t!("section-identity"), |ui| {

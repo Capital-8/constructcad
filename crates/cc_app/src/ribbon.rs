@@ -301,6 +301,12 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-room"), |ui| {
         tool_button(ui, state, t!("tool-room"), "RM", Category::Room);
     });
+    group(ui, t!("group-model"), |ui| {
+        tool_button(ui, state, t!("tool-component"), "CM", Category::Component);
+        if big_button(ui, Icon::Plus, &t!("action-new-component"), false, true, false).clicked() {
+            state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
+        }
+    });
     group(ui, t!("group-datum"), |ui| {
         tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
     });
@@ -547,6 +553,14 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Stair { .. } => {
                 ui.label(theme::muted(t!("hint-stair")));
+            }
+            Tool::Component { .. } => {
+                ui.label(t!("prop-rotation"));
+                let rotation = &mut state.interaction.rotation;
+                if ui.add(DragValue::new(rotation).speed(1.0).suffix("°")).changed() {
+                    *rotation = rotation.rem_euclid(360.0);
+                }
+                ui.label(theme::muted(t!("hint-component")));
             }
             Tool::Railing { type_id } => {
                 let n = state.interaction.points.len();

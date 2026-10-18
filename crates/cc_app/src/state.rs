@@ -39,6 +39,8 @@ pub struct Dialogs {
     pub levels: bool,
     pub materials: bool,
     pub type_editor: Option<ElementTypeId>,
+    /// Open component editor (above the type dialog when opened from it).
+    pub component_editor: Option<crate::component_editor::Editor>,
     /// Type name being edited by "Rename" in the type dialog.
     pub type_rename: Option<String>,
     /// The layer editor is expanded in the type dialog.

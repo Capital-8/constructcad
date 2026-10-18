@@ -172,8 +172,43 @@ fn length_row(
     finish(state, &r);
 }
 
+/// Component name and kind, the editor button and this type's parameter values.
+fn component_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
+    let TypeData::Component { component, def } = &ty.data else { return };
+    let tid = ty.id;
+    section(ui, "type-component", t!("section-component"), |ui| {
+        readonly_row(ui, &t!("col-component"), component.clone());
+        readonly_row(ui, &t!("col-component-kind"), tr(def.kind.key()));
+        if row(ui, &t!("comp-definition"), |ui| ui.button(t!("action-edit-component")).clicked()) {
+            state.dialogs.component_editor = crate::component_editor::Editor::open(state, tid);
+        }
+    });
+    section(ui, "type-comp-params", t!("comp-params"), |ui| {
+        for (i, p) in def.params.iter().enumerate() {
+            let mut v = p.value;
+            let label = if p.instance { format!("{} ({})", p.name, t!("comp-param-instance")) } else { p.name.clone() };
+            let r = row(ui, &label, |ui| ui.add(crate::properties::param_value(&mut v, p.kind)));
+            if r.changed() {
+                update(state, tid, &format!("comp-param-{i}"), |t| {
+                    if let TypeData::Component { def, .. } = &mut t.data
+                        && let Some(p) = def.params.get_mut(i)
+                    {
+                        p.value = v;
+                    }
+                });
+            }
+            finish(state, &r);
+        }
+    });
+}
+
 fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let tid = ty.id;
+    if matches!(ty.data, TypeData::Component { .. }) {
+        component_parameters(ui, state, ty);
+        identity(ui, state, tid, &ty.info);
+        return;
+    }
     let layered = !ty.layers().is_empty();
 
     section(ui, "type-construction", t!("section-construction"), |ui| {

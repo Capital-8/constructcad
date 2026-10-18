@@ -26,6 +26,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     levels(ctx, state);
     materials(ctx, state);
     crate::type_dialog::show(ctx, state);
+    crate::component_editor::show(ctx, state);
     crate::schedule_ui::dialog(ctx, state);
     confirm(ctx, state);
     error(ctx, state);

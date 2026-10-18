@@ -230,6 +230,7 @@ impl ConstructApp {
                     }
                     "RM" => Some(Some(Category::Room)),
                     "CL" => Some(Some(Category::Column)),
+                    "CM" => Some(Some(Category::Component)),
                     "BM" => Some(Some(Category::Beam)),
                     "ST" => Some(Some(Category::Stair)),
                     "RA" => Some(Some(Category::Railing)),

@@ -28,6 +28,7 @@ pub enum Tool {
     Beam { type_id: ElementTypeId },
     Stair { type_id: ElementTypeId },
     Railing { type_id: ElementTypeId },
+    Component { type_id: ElementTypeId },
 }
 
 impl Tool {
@@ -49,6 +50,7 @@ impl Tool {
             Tool::Beam { .. } => "tool-beam",
             Tool::Stair { .. } => "tool-stair",
             Tool::Railing { .. } => "tool-railing",
+            Tool::Component { .. } => "tool-component",
         }
     }
 
@@ -63,7 +65,8 @@ impl Tool {
             | Tool::Column { type_id }
             | Tool::Beam { type_id }
             | Tool::Stair { type_id }
-            | Tool::Railing { type_id } => Some(*type_id),
+            | Tool::Railing { type_id }
+            | Tool::Component { type_id } => Some(*type_id),
             _ => None,
         }
     }
@@ -79,6 +82,7 @@ impl Tool {
             Tool::Beam { .. } => Some(Category::Beam),
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Railing { .. } => Some(Category::Railing),
+            Tool::Component { .. } => Some(Category::Component),
             _ => None,
         }
     }
@@ -95,6 +99,7 @@ impl Tool {
             Tool::Beam { .. } => Tool::Beam { type_id: id },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
+            Tool::Component { .. } => Tool::Component { type_id: id },
             t => t,
         }
     }
@@ -113,8 +118,7 @@ impl Tool {
             Category::Beam => Tool::Beam { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
-            // The component tool arrives with the component interface.
-            Category::Component => return None,
+            Category::Component => Tool::Component { type_id },
         })
     }
 }
@@ -134,6 +138,8 @@ pub struct Interaction {
     pub points: Vec<DVec2>,
     pub flip_hand: bool,
     pub drag: Option<Drag>,
+    /// Rotation of the next component, degrees.
+    pub rotation: f64,
 }
 
 impl Interaction {
@@ -306,6 +312,7 @@ pub fn handle(
         (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
         _ => {}
     }
 }
@@ -347,6 +354,43 @@ fn column_tool(
             top: default_top(project, level),
         };
         state.create_element(t!("tx-create-column"), level, type_id, ElementKind::Column(column));
+    }
+}
+
+/// Click to place a component; Space turns it by 90°.
+fn component_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    if resp.hovered() && ui.input(|i| i.key_pressed(Key::Space)) {
+        state.interaction.rotation = (state.interaction.rotation + 90.0).rem_euclid(360.0);
+    }
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap(state.project(), Some(level), raw, None, &[], xf.scale, shift);
+    draw_snap(painter, xf, s);
+    let rotation = state.interaction.rotation;
+    if let Some(cc_core::TypeData::Component { def, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
+        let rot = DVec2::from_angle(rotation.to_radians());
+        let (parts, _) = def.resolve(&Default::default());
+        for part in parts.iter().filter(|p| p.in_plan) {
+            let outline: Vec<Pos2> = part.footprint.iter().map(|p| xf.to_screen(s.point + rot.rotate(*p))).collect();
+            painter.add(egui::Shape::closed_line(outline, Stroke::new(1.5, PREVIEW)));
+        }
+    }
+    if resp.clicked() {
+        let component = cc_core::Component {
+            position: s.point,
+            rotation_deg: rotation,
+            base_offset: 0.0,
+            overrides: Default::default(),
+        };
+        state.create_element(t!("tx-create-component"), level, type_id, ElementKind::Component(component));
     }
 }
 
