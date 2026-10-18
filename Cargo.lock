@@ -634,6 +634,7 @@ dependencies = [
  "env_logger",
  "glam",
  "log",
+ "png",
  "rfd",
  "sys-locale",
  "wgpu",

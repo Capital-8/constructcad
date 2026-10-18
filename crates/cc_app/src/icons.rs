@@ -38,6 +38,8 @@ pub enum Icon {
     ChevronDown,
     ChevronRight,
     Plus,
+    Home,
+    ArrowLeft,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -269,6 +271,14 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         }
         Icon::ChevronRight => {
             line(&[(6.0, 4.0), (10.0, 8.0), (6.0, 12.0)]);
+        }
+        Icon::Home => {
+            closed(&[(8.0, 1.8), (14.5, 7.5), (12.8, 7.5), (12.8, 14.2), (3.2, 14.2), (3.2, 7.5), (1.5, 7.5)]);
+            rect_s(6.6, 9.6, 9.4, 14.2, 0.0);
+        }
+        Icon::ArrowLeft => {
+            seg((13.5, 8.0), (2.5, 8.0), s);
+            line(&[(7.0, 3.5), (2.5, 8.0), (7.0, 12.5)]);
         }
         Icon::Plus => {
             seg((8.0, 2.5), (8.0, 13.5), s);

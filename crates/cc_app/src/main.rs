@@ -5,6 +5,7 @@ mod app;
 mod browser;
 mod canvas;
 mod dialogs;
+mod home;
 mod i18n;
 mod icons;
 mod paint;
@@ -14,6 +15,7 @@ mod schedule_ui;
 mod sheet;
 mod state;
 mod theme;
+mod thumbnails;
 mod tools;
 mod view3d;
 

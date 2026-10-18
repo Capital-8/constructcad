@@ -21,6 +21,8 @@ pub struct Args {
 
 /// eframe storage key of the UI language preference.
 const LANGUAGE_KEY: &str = "language";
+/// eframe storage key of the recent projects (one path per line).
+const RECENT_KEY: &str = "recent_files";
 
 pub struct ConstructApp {
     state: AppState,
@@ -38,8 +40,12 @@ impl ConstructApp {
         let saved = cc.storage.and_then(|s| s.get_string(LANGUAGE_KEY)).and_then(|c| Language::from_code(&c));
         crate::i18n::set_language(language.or(saved).unwrap_or_else(Language::from_system));
         let mut state = AppState::new(Document::new(actions::new_project()));
-        if let Some(path) = path {
-            actions::open_path(&mut state, path);
+        if let Some(recent) = cc.storage.and_then(|s| s.get_string(RECENT_KEY)) {
+            state.recent = recent.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
+        }
+        match path {
+            Some(path) => actions::open_path(&mut state, path),
+            None => state.show_home = true,
         }
         let dock = initial_dock(state.project());
         let dock_generation = state.generation;
@@ -280,6 +286,8 @@ impl ConstructApp {
 impl eframe::App for ConstructApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string(LANGUAGE_KEY, crate::i18n::language().code().to_string());
+        let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        storage.set_string(RECENT_KEY, recent.join("\n"));
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
@@ -292,6 +300,9 @@ impl eframe::App for ConstructApp {
             for tex in self.state.textures_to_free.drain(..) {
                 r.free_texture(&tex);
             }
+        }
+        if let Some(rs) = frame.wgpu_render_state() {
+            crate::thumbnails::process(&mut self.state, rs);
         }
         self.shortcuts(&ctx);
         if self.dock_generation != self.state.generation {
@@ -308,6 +319,11 @@ impl eframe::App for ConstructApp {
         );
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
+        if self.state.show_home {
+            crate::home::show(ui, &mut self.state);
+            dialogs::show(&ctx, &mut self.state);
+            return;
+        }
         let state = &mut self.state;
         let bar = |fill, y| egui::Frame::new().fill(fill).inner_margin(egui::Margin::symmetric(10, y));
         egui::Panel::top("ribbon")

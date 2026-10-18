@@ -24,6 +24,8 @@ pub enum RibbonTab {
 pub enum PendingAction {
     New,
     Open,
+    OpenPath(std::path::PathBuf),
+    OpenSample(&'static str),
     Quit,
 }
 
@@ -73,6 +75,13 @@ pub struct AppState {
     pub textures_to_free: Vec<egui::TextureId>,
     /// Bumped whenever the document is replaced (new/open).
     pub generation: u64,
+    /// The home screen is shown instead of the project.
+    pub show_home: bool,
+    /// Recently opened or saved projects, most recent first.
+    pub recent: Vec<std::path::PathBuf>,
+    pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
+    /// Samples whose thumbnail was already requested this session.
+    pub requested_samples: std::collections::BTreeSet<&'static str>,
 }
 
 impl AppState {
@@ -103,6 +112,10 @@ impl AppState {
             quit_confirmed: false,
             textures_to_free: Vec::new(),
             generation: 0,
+            show_home: false,
+            recent: Vec::new(),
+            thumbnail_jobs: Vec::new(),
+            requested_samples: Default::default(),
         }
     }
 
@@ -113,7 +126,13 @@ impl AppState {
         let mut textures: Vec<_> = self.view3d.values().filter_map(|v| v.texture).collect();
         textures.append(&mut self.textures_to_free);
         let generation = self.generation + 1;
+        let recent = std::mem::take(&mut self.recent);
+        let jobs = std::mem::take(&mut self.thumbnail_jobs);
+        let requested = std::mem::take(&mut self.requested_samples);
         *self = Self::new(doc);
+        self.recent = recent;
+        self.thumbnail_jobs = jobs;
+        self.requested_samples = requested;
         self.textures_to_free = textures;
         self.generation = generation;
         self.message = message;

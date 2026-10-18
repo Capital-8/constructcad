@@ -151,6 +151,9 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             ui.painter().image(logo.id(), mark, uv, egui::Color32::WHITE);
         }
         ui.add_space(8.0);
+        if icon_button(ui, Icon::Home, true).on_hover_text(t!("action-home")).clicked() {
+            state.show_home = true;
+        }
         if icon_button(ui, Icon::New, true).on_hover_text(format!("{} (Ctrl+N)", t!("action-new"))).clicked() {
             actions::guarded(state, PendingAction::New);
         }

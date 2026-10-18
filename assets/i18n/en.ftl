@@ -232,6 +232,14 @@ about-version = Version
 about-text = Free and open source Building Information Modeling (BIM) software.
 about-license = License GPL-3.0-or-later.
 about-icon-credit = Application icon by Magnific – Flaticon.
+action-home = Home
+home-recent = Recent Files
+home-projects = Projects
+home-samples = Samples
+home-empty = No recent projects yet. Open or create a project and it will appear here.
+home-back = Back to the project
+home-missing = File not found
+home-remove = Remove from list
 file-filter = ConstructCAD Project
 file-filter-ifc = IFC File
 

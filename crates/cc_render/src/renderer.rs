@@ -19,6 +19,7 @@ struct Targets {
     size: [u32; 2],
     msaa: wgpu::TextureView,
     depth: wgpu::TextureView,
+    resolve_texture: wgpu::Texture,
     resolve: wgpu::TextureView,
 }
 
@@ -149,29 +150,32 @@ impl Renderer3D {
             return false;
         }
         let texture = |label, format, samples, usage| {
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 },
-                    mip_level_count: 1,
-                    sample_count: samples,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: samples,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage,
+                view_formats: &[],
+            })
         };
+        let view = |t: wgpu::Texture| t.create_view(&Default::default());
+        let resolve_texture = texture(
+            "cc_render resolve",
+            COLOR_FORMAT,
+            1,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+        );
         self.targets = Some(Targets {
             size,
-            msaa: texture("cc_render msaa", COLOR_FORMAT, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT),
-            depth: texture("cc_render depth", DEPTH_FORMAT, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT),
-            resolve: texture(
-                "cc_render resolve",
-                COLOR_FORMAT,
-                1,
-                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            ),
+            msaa: view(texture("cc_render msaa", COLOR_FORMAT, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT)),
+            depth: view(texture("cc_render depth", DEPTH_FORMAT, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT)),
+            resolve: resolve_texture.create_view(&Default::default()),
+            resolve_texture,
         });
         true
     }
@@ -234,5 +238,59 @@ impl Renderer3D {
         }
         queue.submit([encoder.finish()]);
         (&targets.resolve, recreated)
+    }
+
+    /// Render one frame of `size` pixels and read it back as tightly packed
+    /// RGBA bytes (already sRGB encoded), e.g. for thumbnails.
+    pub fn render_to_rgba(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        size: [u32; 2],
+        camera: &CameraState,
+    ) -> Option<Vec<u8>> {
+        let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
+        self.render(device, queue, size, camera);
+        let targets = self.targets.as_ref()?;
+        let row = size[0] * 4;
+        let padded = row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cc_render readback"),
+            size: u64::from(padded) * u64::from(size[1]),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("cc_render readback") });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &targets.resolve_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(size[1]),
+                },
+            },
+            wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 },
+        );
+        queue.submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        let data = slice.get_mapped_range().ok()?;
+        let mut rgba = Vec::with_capacity((row * size[1]) as usize);
+        for y in 0..size[1] as usize {
+            let start = y * padded as usize;
+            rgba.extend_from_slice(&data[start..start + row as usize]);
+        }
+        drop(data);
+        buffer.unmap();
+        Some(rgba)
     }
 }

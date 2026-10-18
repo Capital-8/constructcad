@@ -218,12 +218,23 @@ pub fn guarded(state: &mut AppState, action: PendingAction) {
 }
 
 pub fn run_pending(state: &mut AppState, action: PendingAction) {
+    if action != PendingAction::Quit {
+        state.show_home = false;
+    }
     match action {
         PendingAction::New => {
             state.replace_document(Document::new(new_project()));
             state.message = t!("msg-new-project");
         }
         PendingAction::Open => open(state),
+        PendingAction::OpenPath(path) => open_path(state, path),
+        PendingAction::OpenSample(id) => {
+            if let Some(project) = crate::home::sample_project(id) {
+                let name = project.info.name.clone();
+                state.replace_document(Document::new(project));
+                state.message = t!("msg-opened", "path" => name);
+            }
+        }
         PendingAction::Quit => state.quit_confirmed = true,
     }
 }
@@ -240,6 +251,10 @@ pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
             doc.path = Some(path.clone());
             state.replace_document(doc);
             state.message = t!("msg-opened", "path" => path.display());
+            crate::home::push_recent(&mut state.recent, &path);
+            if crate::thumbnails::project_file(&path).is_some_and(|f| !f.exists()) {
+                state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path));
+            }
         }
         Err(err) => state.dialogs.error = Some(t!("msg-open-failed", "error" => persist_error(&err))),
     }
@@ -278,6 +293,8 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
             state.doc.path = Some(path.clone());
             state.doc.mark_saved();
             state.message = t!("msg-saved", "path" => path.display());
+            crate::home::push_recent(&mut state.recent, &path);
+            state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path.clone()));
             true
         }
         Err(err) => {
