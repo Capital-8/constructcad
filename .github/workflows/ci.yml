@@ -16,7 +16,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -30,7 +30,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -38,12 +38,39 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  ifc:
+    name: IFC validation (IfcOpenShell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install IfcOpenShell (CI only, not a project dependency)
+        run: pip install -r scripts/requirements-ifc.txt
+      - name: Export sample projects
+        run: |
+          mkdir -p target/ifc
+          cargo run --locked -p cc_ifc --example export_ifc -- examples/casa_simples.ccad target/ifc/casa_simples.ifc
+          cargo run --locked -p cc_ifc --example export_ifc -- crates/cc_ifc/tests/fixtures/features.ccad target/ifc/features.ifc
+      - name: Validate
+        run: |
+          python scripts/validate_ifc.py target/ifc/casa_simples.ifc
+          python scripts/validate_ifc.py target/ifc/features.ifc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ifc-exports
+          path: target/ifc/*.ifc
+
   dco:
     name: DCO sign-off
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Check Signed-off-by lines

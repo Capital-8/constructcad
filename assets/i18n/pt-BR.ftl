@@ -54,6 +54,7 @@ action-new = Novo
 action-open = Abrir…
 action-save = Salvar
 action-save-as = Salvar como…
+action-export-ifc = Exportar IFC…
 action-undo = Desfazer
 action-redo = Refazer
 action-copy = Copiar
@@ -106,6 +107,8 @@ msg-opened = Aberto: { $path }
 msg-saved = Salvo: { $path }
 msg-open-failed = Não foi possível abrir o arquivo: { $error }
 msg-save-failed = Não foi possível salvar o arquivo: { $error }
+msg-exported = Exportado: { $path }
+msg-export-failed = Não foi possível exportar o arquivo: { $error }
 msg-no-gpu = A vista 3D requer o renderizador wgpu.
 msg-no-views-open = Abra uma vista no Navegador de projeto.
 
@@ -209,6 +212,7 @@ about-version = Versão
 about-text = Software livre de Modelagem de Informações da Construção (BIM).
 about-license = Licença GPL-3.0-or-later.
 file-filter = Projeto ConstructCAD
+file-filter-ifc = Arquivo IFC
 
 # Nomes padrão
 default-section-name = Corte { $n }

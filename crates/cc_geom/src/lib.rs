@@ -10,7 +10,7 @@ pub mod polygon;
 mod solid;
 mod wall;
 
-pub use build::ModelGeometry;
+pub use build::{FRAME_COLOR, HostedPart, ModelGeometry, hosted_parts};
 pub use cut::{clip_polygon, face_plane_segments};
 pub use solid::{Face, Ray, Solid};
 pub use wall::{Column, Opening, WallGeom};

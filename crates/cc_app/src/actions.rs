@@ -245,6 +245,22 @@ pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
     }
 }
 
+pub fn export_ifc(state: &mut AppState) {
+    let name = format!("{}.ifc", state.project().info.name);
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-ifc"), &["ifc"]).set_file_name(name);
+    let Some(mut path) = dialog.save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension("ifc");
+    }
+    match cc_ifc::export_to_file(state.project(), &path) {
+        Ok(()) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(err) => {
+            let error = t!("err-io", "detail" => err);
+            state.dialogs.error = Some(t!("msg-export-failed", "error" => error));
+        }
+    }
+}
+
 pub fn save(state: &mut AppState, save_as: bool) -> bool {
     let path = match (&state.doc.path, save_as) {
         (Some(p), false) => p.clone(),

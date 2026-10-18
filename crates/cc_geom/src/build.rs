@@ -6,7 +6,51 @@ use glam::{DVec2, DVec3};
 use std::collections::BTreeMap;
 
 const FRAME: f64 = 0.05;
-const FRAME_COLOR: [u8; 3] = [236, 236, 232];
+/// Shading color of door and window frames.
+pub const FRAME_COLOR: [u8; 3] = [236, 236, 232];
+
+/// One box of a door or window, in opening-local coordinates: `x` along the
+/// wall from the start jamb, `y` across the wall (positive on its left), `z`
+/// up from the sill.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostedPart {
+    pub min: DVec3,
+    pub max: DVec3,
+    /// Leaf or glazing (colored with the type material) rather than frame.
+    pub panel: bool,
+}
+
+/// The boxes making up a door or window of `width` x `height` in a wall of
+/// half thickness `half`. Empty for non-hosted types.
+pub fn hosted_parts(data: &TypeData, width: f64, height: f64, half: f64) -> Vec<HostedPart> {
+    let part = |x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64, panel: bool| HostedPart {
+        min: DVec3::new(x0, y0, z0),
+        max: DVec3::new(x1, y1, z1),
+        panel,
+    };
+    let (w, h) = (width, height);
+    match data {
+        TypeData::Door { .. } => vec![
+            part(0.0, FRAME, -half, half, 0.0, h, false),
+            part(w - FRAME, w, -half, half, 0.0, h, false),
+            part(FRAME, w - FRAME, -half, half, h - FRAME, h, false),
+            part(FRAME, w - FRAME, -0.02, 0.02, 0.0, h - FRAME, true),
+        ],
+        TypeData::Window { .. } => {
+            let d = 0.04;
+            vec![
+                part(0.0, FRAME, -d, d, 0.0, h, false),
+                part(w - FRAME, w, -d, d, 0.0, h, false),
+                part(FRAME, w - FRAME, -d, d, 0.0, FRAME, false),
+                part(FRAME, w - FRAME, -d, d, h - FRAME, h, false),
+                // Sill board spanning the wall depth.
+                part(0.0, w, -half - 0.02, half, -0.02, 0.0, false),
+                part(FRAME, w - FRAME, -0.006, 0.006, FRAME, h - FRAME, true),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
 
 /// All derived geometry of a project.
 #[derive(Debug, Clone, Default)]
@@ -83,34 +127,28 @@ impl ModelGeometry {
             for o in &wall.openings {
                 let Some(e) = project.element(o.element) else { continue };
                 let Some(ty) = project.element_type(e.type_id) else { continue };
-                let color = project.material_color(ty.main_material());
-                let (origin, u, v, h) = (wall.origin, wall.dir, wall.normal, wall.half);
-                let (u0, u1, z0, z1) = (o.u0, o.u1, o.z0, o.z1);
-                let mut s = Solid::new(e.id, e.category(), FRAME_COLOR);
-                match ty.data {
-                    TypeData::Door { .. } => {
-                        s.add_box(origin, u, v, u0, u0 + FRAME, -h, h, z0, z1);
-                        s.add_box(origin, u, v, u1 - FRAME, u1, -h, h, z0, z1);
-                        s.add_box(origin, u, v, u0 + FRAME, u1 - FRAME, -h, h, z1 - FRAME, z1);
+                let parts = hosted_parts(&ty.data, o.u1 - o.u0, o.z1 - o.z0, wall.half);
+                let mut frame = Solid::new(e.id, e.category(), FRAME_COLOR);
+                let mut panel = Solid::new(e.id, e.category(), project.material_color(ty.main_material()));
+                for p in &parts {
+                    let s = if p.panel { &mut panel } else { &mut frame };
+                    let (lo, hi) = (p.min, p.max);
+                    s.add_box(
+                        wall.origin,
+                        wall.dir,
+                        wall.normal,
+                        o.u0 + lo.x,
+                        o.u0 + hi.x,
+                        lo.y,
+                        hi.y,
+                        o.z0 + lo.z,
+                        o.z0 + hi.z,
+                    );
+                }
+                for s in [frame, panel] {
+                    if !s.faces.is_empty() {
                         self.solids.push(s);
-                        let mut leaf = Solid::new(e.id, e.category(), color);
-                        leaf.add_box(origin, u, v, u0 + FRAME, u1 - FRAME, -0.02, 0.02, z0, z1 - FRAME);
-                        self.solids.push(leaf);
                     }
-                    TypeData::Window { .. } => {
-                        let d = 0.04;
-                        s.add_box(origin, u, v, u0, u0 + FRAME, -d, d, z0, z1);
-                        s.add_box(origin, u, v, u1 - FRAME, u1, -d, d, z0, z1);
-                        s.add_box(origin, u, v, u0 + FRAME, u1 - FRAME, -d, d, z0, z0 + FRAME);
-                        s.add_box(origin, u, v, u0 + FRAME, u1 - FRAME, -d, d, z1 - FRAME, z1);
-                        // Sill board spanning the wall depth.
-                        s.add_box(origin, u, v, u0, u1, -h - 0.02, h, z0 - 0.02, z0);
-                        self.solids.push(s);
-                        let mut glass = Solid::new(e.id, e.category(), color);
-                        glass.add_box(origin, u, v, u0 + FRAME, u1 - FRAME, -0.006, 0.006, z0 + FRAME, z1 - FRAME);
-                        self.solids.push(glass);
-                    }
-                    _ => {}
                 }
             }
         }
@@ -163,6 +201,9 @@ impl ModelGeometry {
 
     /// Volume of an element's main body (frames/glass excluded for openings).
     pub fn volume(&self, id: ElementId) -> f64 {
+        if let Some(wall) = self.walls.get(&id) {
+            return wall.volume();
+        }
         self.solids_of(id).map(Solid::volume).sum()
     }
 
@@ -248,6 +289,19 @@ mod tests {
         assert!((wall_volume - expected).abs() < 1e-6, "{wall_volume} vs {expected}");
         let (lo, hi) = g.bounds().unwrap();
         assert!(lo.z < 0.0 && (hi.z - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn each_wall_volume_is_exact() {
+        let doc = sample_house();
+        let g = ModelGeometry::build(&doc.project);
+        let door = 0.8 * 2.1 * 0.15;
+        // Mitered corners: each wall is a trapezoid with the centerline length as mean width.
+        let expected = [8.0 * 0.15 * 3.0 - door, 6.0 * 0.15 * 3.0, 8.0 * 0.15 * 3.0, 6.0 * 0.15 * 3.0];
+        for (id, want) in g.walls.keys().zip(expected) {
+            let got = g.volume(*id);
+            assert!((got - want).abs() < 1e-9, "{id}: {got} vs {want}");
+        }
     }
 
     #[test]

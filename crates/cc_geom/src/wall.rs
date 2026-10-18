@@ -270,6 +270,18 @@ impl WallGeom {
         self.openings = openings;
     }
 
+    /// Net volume: each column's plan area times its solid height. Computed
+    /// analytically because the body solid omits end caps at joins.
+    pub fn volume(&self) -> f64 {
+        self.columns
+            .iter()
+            .map(|c| {
+                let height: f64 = c.solid.iter().map(|(z0, z1)| z1 - z0).sum();
+                crate::polygon::area(&self.column_polygon(c)) * height
+            })
+            .sum()
+    }
+
     pub fn column_at(&self, u: f64) -> Option<&Column> {
         self.columns.iter().find(|c| c.left.0.max(c.right.0) <= u && u <= c.left.1.min(c.right.1))
     }

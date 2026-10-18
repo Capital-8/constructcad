@@ -62,10 +62,11 @@ cargo test --workspace
 - **One model, many views.** Every change to the model goes through `Document::edit` so it is recorded as a reversible `Transaction`. Never mutate the document outside a transaction.
 - **No hard-coded interface text.** User-facing strings go in `assets/i18n/*.ftl` and are accessed with `t!`. Add every new key to **all** languages; a test enforces matching keys and placeholders.
 - **File format compatibility.** `.ccad` files are versioned. Changes to persisted structures must keep older files loadable or bump the format version with a migration.
-- **Respect crate boundaries.** `cc_core` does not depend on geometry, views or UI; `cc_geom`, `cc_views` and `cc_render` do not depend on `cc_app`.
+- **Respect crate boundaries.** `cc_core` does not depend on geometry, views or UI; `cc_geom`, `cc_views`, `cc_render` and `cc_ifc` do not depend on `cc_app`.
 - **Tests.** Bug fixes include a regression test where practical; geometry and schedule code is tested against analytic values.
 - **Style.** Code is formatted with `rustfmt` (see `rustfmt.toml`). Code, comments, identifiers and commit messages are written in English.
 - **Dependencies.** New dependencies must be GPL-3.0-compatible and justified in the pull request.
+- **IFC.** IFC support is implemented in `cc_ifc` without third-party IFC libraries. Changes to the export must keep `scripts/validate_ifc.py` passing; IfcOpenShell is used only for that validation, never as a build or runtime dependency.
 
 ## Commits and pull requests
 

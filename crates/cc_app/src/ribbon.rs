@@ -45,6 +45,9 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             if ui.button(t!("action-save-as")).on_hover_text("Ctrl+Shift+S").clicked() {
                 actions::save(state, true);
             }
+            if ui.button(t!("action-export-ifc")).clicked() {
+                actions::export_ifc(state);
+            }
             ui.separator();
             ui.label(t!("settings-language"));
             let mut lang = crate::i18n::language();

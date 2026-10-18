@@ -1,0 +1,13 @@
+[package]
+name = "cc_ifc"
+description = "ConstructCAD IFC export: STEP physical file writer and IFC4 mapping of the BIM model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+cc_core.workspace = true
+cc_geom.workspace = true
+glam.workspace = true

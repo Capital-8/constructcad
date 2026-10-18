@@ -54,6 +54,7 @@ action-new = New
 action-open = Open…
 action-save = Save
 action-save-as = Save As…
+action-export-ifc = Export IFC…
 action-undo = Undo
 action-redo = Redo
 action-copy = Copy
@@ -106,6 +107,8 @@ msg-opened = Opened: { $path }
 msg-saved = Saved: { $path }
 msg-open-failed = Could not open the file: { $error }
 msg-save-failed = Could not save the file: { $error }
+msg-exported = Exported: { $path }
+msg-export-failed = Could not export the file: { $error }
 msg-no-gpu = The 3D view requires the wgpu renderer.
 msg-no-views-open = Open a view from the Project Browser.
 
@@ -209,6 +212,7 @@ about-version = Version
 about-text = Free and open source Building Information Modeling (BIM) software.
 about-license = License GPL-3.0-or-later.
 file-filter = ConstructCAD Project
+file-filter-ifc = IFC File
 
 # Default names
 default-section-name = Section { $n }

@@ -43,6 +43,7 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 - **Folhas** A0–A4: carimbo com dados do projeto e viewports arrastáveis em escala.
 - **Gerenciar**: informações do projeto, níveis (cada nível novo cria suas plantas) e materiais.
 - **Arquivo `.ccad`**: RON versionado e legível; o salvamento é atômico.
+- **Exportação IFC4** (*Arquivo → Exportar IFC…*): pavimentos, paredes com aberturas, portas, janelas, pisos, forros e telhados como sólidos extrudados, com tipos, camadas de materiais, cores e quantitativos. Gerada pelo escritor STEP do próprio ConstructCAD, sem bibliotecas IFC de terceiros.
 
 ## Atalhos
 
@@ -66,6 +67,7 @@ crates/
   cc_geom    geometria derivada: paredes com junções e aberturas, lajes, telhados, cortes, picking
   cc_views   geração de desenhos 2D (planta, forro, elevação, corte, axonometria, legenda) e tabelas
   cc_render  renderizador 3D offscreen em wgpu
+  cc_ifc     exportação IFC4: escritor de arquivos STEP e mapeamento do modelo
   cc_app     aplicativo eframe/egui: ribbon, navegador, propriedades, ferramentas, folhas
 assets/i18n  traduções (pt-BR, en); textos de interface nunca ficam fixos no código
 ```
@@ -80,9 +82,17 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
+Os arquivos IFC exportados são validados na CI com o [IfcOpenShell](https://ifcopenshell.org/), uma referência independente e de código aberto usada apenas nos testes:
+
+```sh
+pip install -r scripts/requirements-ifc.txt
+cargo run -p cc_ifc --example export_ifc -- examples/casa_simples.ccad casa_simples.ifc
+python scripts/validate_ifc.py casa_simples.ifc
+```
+
 ## Próximos passos
 
-- Exportação e importação IFC.
+- Importação IFC.
 - Exportação das folhas em PDF/SVG.
 - Cotas e anotações.
 - Famílias paramétricas do usuário.

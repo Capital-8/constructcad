@@ -47,6 +47,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Sheets** A0–A4: title block with project data and draggable, scaled viewports.
 - **Manage**: project information, levels (each new level creates its plans) and materials.
 - **`.ccad` files**: versioned, human-readable RON; saving is atomic.
+- **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings and roofs as swept solids, with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
 
 ## Shortcuts
 
@@ -70,6 +71,7 @@ crates/
   cc_geom    derived geometry: walls with joins and openings, slabs, roofs, cuts, picking
   cc_views   2D drawing generation (plan, ceiling, elevation, section, axonometric, legend) and schedules
   cc_render  offscreen wgpu 3D renderer
+  cc_ifc     IFC4 export: STEP physical file writer and model mapping
   cc_app     eframe/egui application: ribbon, browser, properties, tools, sheets
 assets/i18n  translations (pt-BR, en); interface text is never hard-coded
 ```
@@ -84,11 +86,19 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
+IFC exports are validated in CI with [IfcOpenShell](https://ifcopenshell.org/), an independent open-source reference used only for testing:
+
+```sh
+pip install -r scripts/requirements-ifc.txt
+cargo run -p cc_ifc --example export_ifc -- examples/casa_simples.ccad casa_simples.ifc
+python scripts/validate_ifc.py casa_simples.ifc
+```
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 
 ## Roadmap
 
-- IFC import and export.
+- IFC import.
 - PDF/SVG sheet export.
 - Dimensions and annotations.
 - User parametric families.

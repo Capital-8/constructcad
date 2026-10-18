@@ -624,6 +624,7 @@ version = "0.1.0"
 dependencies = [
  "cc_core",
  "cc_geom",
+ "cc_ifc",
  "cc_render",
  "cc_views",
  "eframe",
@@ -654,6 +655,15 @@ version = "0.1.0"
 dependencies = [
  "cc_core",
  "earcutr",
+ "glam",
+]
+
+[[package]]
+name = "cc_ifc"
+version = "0.1.0"
+dependencies = [
+ "cc_core",
+ "cc_geom",
  "glam",
 ]
 
