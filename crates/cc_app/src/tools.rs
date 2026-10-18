@@ -138,6 +138,10 @@ pub struct Interaction {
     pub points: Vec<DVec2>,
     pub flip_hand: bool,
     pub drag: Option<Drag>,
+    /// Points acquired for alignment guides (see `snap`).
+    pub tracked: Vec<DVec2>,
+    /// Direction back along the previous segment of a chain (angle reference).
+    pub prev_dir: Option<DVec2>,
     /// Rotation of the next component, degrees.
     pub rotation: f64,
 }
@@ -153,6 +157,10 @@ enum SnapKind {
     Endpoint,
     Midpoint,
     Nearest,
+    /// On a guide from an acquired point.
+    Alignment,
+    /// Where two guides cross.
+    Intersection,
     Free,
 }
 
@@ -160,6 +168,39 @@ enum SnapKind {
 struct Snap {
     point: DVec2,
     kind: SnapKind,
+    /// Dashed guides to draw: from the point that casts them to `point`.
+    guides: [Option<(DVec2, DVec2)>; 2],
+}
+
+impl Snap {
+    fn at(point: DVec2, kind: SnapKind) -> Self {
+        Self { point, kind, guides: [None, None] }
+    }
+}
+
+/// Points acquired for alignment, most recent first.
+const MAX_TRACKED: usize = 6;
+
+/// Snap through [`snap`] with the interaction's acquired points, and
+/// acquire the point when it is a model point.
+#[allow(clippy::too_many_arguments)]
+fn snap_at(
+    state: &mut AppState,
+    level: Option<LevelId>,
+    raw: DVec2,
+    anchor: Option<DVec2>,
+    extra: &[DVec2],
+    scale: f64,
+    ortho: bool,
+) -> Snap {
+    let s = snap(&state.doc.project, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho);
+    if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint) {
+        let tracked = &mut state.interaction.tracked;
+        tracked.retain(|p| p.distance(s.point) > 1e-9);
+        tracked.insert(0, s.point);
+        tracked.truncate(MAX_TRACKED);
+    }
+    s
 }
 
 const SNAP_PX: f64 = 10.0;
@@ -169,12 +210,19 @@ fn round_step(scale: f64) -> f64 {
     [0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0].into_iter().find(|s| s * scale >= 6.0).unwrap_or(10.0)
 }
 
+/// Snap `raw` to model points, wall lines, alignments and angle/length
+/// increments. `tracked` are points acquired by hovering them earlier:
+/// with the anchor and `extra` they cast horizontal, vertical and wall-line
+/// guides; a crossing of two guides, or of a guide with the current
+/// direction from the anchor, is a snap point.
+#[allow(clippy::too_many_arguments)]
 fn snap(
     project: &Project,
     level: Option<LevelId>,
     raw: DVec2,
     anchor: Option<DVec2>,
     extra: &[DVec2],
+    tracked: &[DVec2],
     scale: f64,
     ortho: bool,
 ) -> Snap {
@@ -195,11 +243,50 @@ fn snap(
         pts.iter().map(|p| (*p, p.distance(raw))).filter(|(_, d)| *d <= r).min_by(|a, b| a.1.total_cmp(&b.1))
     };
     if let Some((p, _)) = nearest(&ends) {
-        return Snap { point: p, kind: SnapKind::Endpoint };
+        return Snap::at(p, SnapKind::Endpoint);
     }
     if let Some((p, _)) = nearest(&mids) {
-        return Snap { point: p, kind: SnapKind::Midpoint };
+        return Snap::at(p, SnapKind::Midpoint);
     }
+
+    // Guides (origin, unit direction) passing near the pointer.
+    let mut origins: Vec<DVec2> = tracked.iter().chain(extra).copied().chain(anchor).collect();
+    origins.dedup_by(|a, b| a.distance(*b) < 1e-9);
+    let mut guides: Vec<(DVec2, DVec2)> = Vec::new();
+    for o in &origins {
+        guides.push((*o, DVec2::X));
+        guides.push((*o, DVec2::Y));
+        for (a, b) in &lines {
+            if a.distance(*o) < 1e-9 || b.distance(*o) < 1e-9 {
+                let d = (*b - *a).normalize_or_zero();
+                if d.x.abs() > 1e-6 && d.y.abs() > 1e-6 {
+                    guides.push((*o, d));
+                }
+            }
+        }
+    }
+    let off = |g: &(DVec2, DVec2), q: DVec2| (q - g.0).perp_dot(g.1).abs();
+    guides.retain(|g| off(g, raw) <= r && g.0.distance(raw) > r);
+    // Two guides crossing near the pointer.
+    let mut best: Option<(Snap, f64)> = None;
+    for (i, g) in guides.iter().enumerate() {
+        for h in guides.iter().skip(i + 1) {
+            if g.1.perp_dot(h.1).abs() < 1e-6 {
+                continue;
+            }
+            let Some(t) = polygon::line_intersect(g.0, g.1, h.0, h.1) else { continue };
+            let q = g.0 + g.1 * t;
+            let d = q.distance(raw);
+            if d <= r * 1.5 && best.is_none_or(|b| d < b.1) {
+                let guides = [Some((g.0, q)), Some((h.0, q))];
+                best = Some((Snap { point: q, kind: SnapKind::Intersection, guides }, d));
+            }
+        }
+    }
+    if let Some((s, _)) = best {
+        return s;
+    }
+
     let step = round_step(scale);
     if let Some(a) = anchor {
         let v = raw - a;
@@ -217,14 +304,29 @@ fn snap(
         let p = a + dir * len;
         // Prefer landing exactly on a wall line when close (T-junctions).
         if let Some(q) = on_lines(&lines, raw, r) {
-            return Snap { point: q, kind: SnapKind::Nearest };
+            return Snap::at(q, SnapKind::Nearest);
         }
-        return Snap { point: p, kind: SnapKind::Free };
+        // The current direction meeting a guide from another point.
+        let aligned = guides
+            .iter()
+            .filter(|g| g.0.distance(a) > 1e-9 && dir.perp_dot(g.1).abs() > 1e-6)
+            .filter_map(|g| polygon::line_intersect(a, dir, g.0, g.1).map(|t| (a + dir * t, *g)))
+            .filter(|(q, _)| (*q - a).dot(dir) > 0.0 && q.distance(raw) <= r * 1.5)
+            .min_by(|x, y| x.0.distance(raw).total_cmp(&y.0.distance(raw)));
+        if let Some((q, g)) = aligned {
+            return Snap { point: q, kind: SnapKind::Alignment, guides: [Some((g.0, q)), None] };
+        }
+        return Snap::at(p, SnapKind::Free);
     }
     if let Some(q) = on_lines(&lines, raw, r) {
-        return Snap { point: q, kind: SnapKind::Nearest };
+        return Snap::at(q, SnapKind::Nearest);
     }
-    Snap { point: (raw / step).round() * step, kind: SnapKind::Free }
+    if let Some(g) = guides.iter().min_by(|x, y| off(x, raw).total_cmp(&off(y, raw))) {
+        let t = ((raw - g.0).dot(g.1) / step).round() * step;
+        let q = g.0 + g.1 * t;
+        return Snap { point: q, kind: SnapKind::Alignment, guides: [Some((g.0, q)), None] };
+    }
+    Snap::at((raw / step).round() * step, SnapKind::Free)
 }
 
 fn on_lines(lines: &[(DVec2, DVec2)], raw: DVec2, r: f64) -> Option<DVec2> {
@@ -240,7 +342,21 @@ fn on_lines(lines: &[(DVec2, DVec2)], raw: DVec2, r: f64) -> Option<DVec2> {
 fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
     let c = xf.to_screen(s.point);
     let stroke = Stroke::new(1.5, PREVIEW);
+    for (from, to) in s.guides.iter().flatten() {
+        // Extend the guide a little past the snapped point.
+        let (a, b) = (xf.to_screen(*from), xf.to_screen(*to));
+        let past = b + (b - a).normalized() * 40.0;
+        painter.extend(egui::Shape::dashed_line(&[a, past], Stroke::new(1.0, TEMP_DIM.gamma_multiply(0.7)), 6.0, 4.0));
+        painter.circle_stroke(a, 3.0, Stroke::new(1.0, TEMP_DIM));
+    }
     match s.kind {
+        SnapKind::Intersection => {
+            painter.line_segment([c + egui::vec2(-6.0, -6.0), c + egui::vec2(6.0, 6.0)], Stroke::new(2.0, PREVIEW));
+            painter.line_segment([c + egui::vec2(-6.0, 6.0), c + egui::vec2(6.0, -6.0)], Stroke::new(2.0, PREVIEW));
+        }
+        SnapKind::Alignment => {
+            painter.circle_stroke(c, 4.0, stroke);
+        }
         SnapKind::Endpoint => {
             painter.rect_stroke(
                 egui::Rect::from_center_size(c, egui::vec2(10.0, 10.0)),
@@ -268,6 +384,82 @@ fn label(painter: &Painter, pos: Pos2, text: String) {
     let rect = egui::Rect::from_min_size(pos + egui::vec2(12.0, -24.0), galley.size()).expand(3.0);
     painter.rect_filled(rect, 3.0, Color32::from_rgba_unmultiplied(255, 250, 225, 235));
     painter.galley(rect.min + egui::vec2(3.0, 3.0), galley, Color32::BLACK);
+}
+
+/// Color of temporary dimensions.
+const TEMP_DIM: Color32 = Color32::from_rgb(40, 110, 200);
+
+/// Text on a light background, centered at `pos` and rotated by `angle`
+/// (radians, screen orientation), kept upright.
+fn dim_text(painter: &Painter, pos: Pos2, text: String, angle: f32, strong: bool) {
+    let angle =
+        if angle.abs() > std::f32::consts::FRAC_PI_2 { angle - angle.signum() * std::f32::consts::PI } else { angle };
+    let font =
+        if strong { egui::FontId::new(12.5, crate::theme::semibold()) } else { egui::FontId::proportional(12.0) };
+    let galley = painter.layout_no_wrap(text, font, TEMP_DIM);
+    let size = galley.size();
+    let rot = egui::emath::Rot2::from_angle(angle);
+    let top_left = pos - rot * (size / 2.0);
+    let corners = [
+        egui::vec2(-2.0, -1.0),
+        egui::vec2(size.x + 2.0, -1.0),
+        size + egui::vec2(2.0, 1.0),
+        egui::vec2(-2.0, size.y + 1.0),
+    ];
+    let bg: Vec<Pos2> = corners.iter().map(|c| top_left + rot * *c).collect();
+    painter.add(egui::Shape::convex_polygon(bg, Color32::from_rgba_unmultiplied(255, 255, 255, 230), Stroke::NONE));
+    painter.add(egui::epaint::TextShape::new(top_left, galley, TEMP_DIM).with_angle(angle));
+}
+
+/// Temporary dimension of a segment being drawn from `a` to `p`: a
+/// dimension line beside it with its length (or the typed value) and an
+/// arc with the angle to `reference` (the previous segment, or the X axis).
+fn temp_dimension(painter: &Painter, xf: &Xf, a: DVec2, p: DVec2, reference: Option<DVec2>, typed: &str, side: f64) {
+    let len = a.distance(p);
+    let Some(dir) = (p - a).try_normalize() else { return };
+    let thin = Stroke::new(1.0, TEMP_DIM);
+    // Dimension line, offset to the left of the segment.
+    let n = dir.perp();
+    let offset = (side + 26.0 / xf.scale) * n;
+    let gap = n * (4.0 / xf.scale);
+    let over = n * (5.0 / xf.scale);
+    let (da, dp) = (a + offset, p + offset);
+    for q in [a, p] {
+        painter.line_segment([xf.to_screen(q + n * side + gap), xf.to_screen(q + offset + over)], thin);
+    }
+    painter.line_segment([xf.to_screen(da), xf.to_screen(dp)], thin);
+    // Architectural ticks.
+    let tick = (dir + n).normalize_or_zero() * (5.0 / xf.scale);
+    for q in [da, dp] {
+        painter.line_segment([xf.to_screen(q - tick), xf.to_screen(q + tick)], Stroke::new(1.5, TEMP_DIM));
+    }
+    let text = if typed.is_empty() { format::meters(len) } else { format!("{typed} m ⏎") };
+    let screen_dir = xf.to_screen(dp) - xf.to_screen(da);
+    let mid = xf.to_screen((da + dp) * 0.5) + (xf.to_screen(da + n) - xf.to_screen(da)).normalized() * 9.0;
+    dim_text(painter, mid, text, screen_dir.y.atan2(screen_dir.x), true);
+
+    // Angle to the reference direction.
+    let reference = reference.and_then(|r| r.try_normalize()).unwrap_or(DVec2::X);
+    let angle = reference.angle_to(dir);
+    let degrees = angle.to_degrees();
+    let radius_px = (len * xf.scale * 0.45).clamp(18.0, 70.0);
+    if len * xf.scale < 30.0 || degrees.abs() < 0.5 {
+        return;
+    }
+    let radius = radius_px / xf.scale;
+    painter.extend(egui::Shape::dashed_line(
+        &[xf.to_screen(a), xf.to_screen(a + reference * radius * 1.25)],
+        thin,
+        4.0,
+        3.0,
+    ));
+    let steps = 24;
+    let arc: Vec<Pos2> = (0..=steps)
+        .map(|i| xf.to_screen(a + DVec2::from_angle(angle * i as f64 / steps as f64).rotate(reference) * radius))
+        .collect();
+    painter.add(egui::Shape::line(arc, thin));
+    let label_at = xf.to_screen(a + DVec2::from_angle(angle / 2.0).rotate(reference) * (radius + 14.0 / xf.scale));
+    dim_text(painter, label_at, format!("{}°", format::number(degrees.abs(), 2)), 0.0, false);
 }
 
 /// Parse the typed length ("3,5" or "3.5").
@@ -337,7 +529,7 @@ fn column_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap(state.project(), Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
+    let s = snap_at(state, Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(cc_core::TypeData::Column { section, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
         let outline: Vec<Pos2> =
@@ -372,7 +564,7 @@ fn component_tool(
     }
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap(state.project(), Some(level), raw, None, &[], xf.scale, shift);
+    let s = snap_at(state, Some(level), raw, None, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     let rotation = state.interaction.rotation;
     if let Some(cc_core::TypeData::Component { def, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
@@ -429,15 +621,9 @@ fn beam_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap(
-        state.project(),
-        Some(level),
-        raw,
-        state.interaction.anchor,
-        &grid_crossings(state.project()),
-        xf.scale,
-        shift,
-    );
+    let crossings = grid_crossings(state.project());
+    let anchor = state.interaction.anchor;
+    let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(a) = state.interaction.anchor {
         let width = match state.project().element_type(type_id).map(|t| &t.data) {
@@ -447,7 +633,7 @@ fn beam_tool(
         let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
         let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
         painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
-        label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
+        temp_dimension(painter, xf, a, s.point, None, "", width / 2.0);
     }
     if resp.clicked() {
         match state.interaction.anchor {
@@ -475,7 +661,7 @@ fn stair_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap(state.project(), Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
+    let s = snap_at(state, Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     let project = state.project();
     let Some(cc_core::TypeData::Stair { width, max_riser, tread, .. }) =
@@ -533,7 +719,7 @@ fn railing_tool(
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
     let last = state.interaction.points.last().copied();
-    let s = snap(state.project(), Some(level), raw, last, &state.interaction.points.clone(), xf.scale, shift);
+    let s = snap_at(state, Some(level), raw, last, &state.interaction.points.clone(), xf.scale, shift);
     draw_snap(painter, xf, s);
     let pts: Vec<Pos2> =
         state.interaction.points.iter().map(|p| xf.to_screen(*p)).chain([xf.to_screen(s.point)]).collect();
@@ -612,7 +798,7 @@ fn grid_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap(state.project(), Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
+    let s = snap_at(state, Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(a) = state.interaction.anchor {
         painter.add(egui::Shape::dashed_line(
@@ -621,7 +807,7 @@ fn grid_tool(
             10.0,
             4.0,
         ));
-        label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
+        temp_dimension(painter, xf, a, s.point, None, "", 0.0);
     }
     if resp.clicked() {
         match state.interaction.anchor {
@@ -666,7 +852,7 @@ fn dimension_tool(
         .flatten()
         .collect();
     let anchor = state.interaction.points.last().copied();
-    let s = snap(state.project(), None, raw, anchor, &ends, xf.scale, shift);
+    let s = snap_at(state, None, raw, anchor, &ends, xf.scale, shift);
     let stroke = Stroke::new(1.5, PREVIEW);
     let points = state.interaction.points.clone();
     match points.as_slice() {
@@ -716,7 +902,7 @@ fn wall_tool(
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
     let anchor = state.interaction.anchor;
-    let s = snap(state.project(), Some(level), raw, anchor, &[], xf.scale, shift);
+    let s = snap_at(state, Some(level), raw, anchor, &[], xf.scale, shift);
     let mut p = s.point;
     draw_snap(painter, xf, s);
 
@@ -730,12 +916,7 @@ fn wall_tool(
         painter.line_segment([xf.to_screen(a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
         painter.line_segment([xf.to_screen(a + n), xf.to_screen(p + n)], stroke);
         painter.line_segment([xf.to_screen(a - n), xf.to_screen(p - n)], stroke);
-        let text = if state.length_input.is_empty() {
-            format::meters(a.distance(p))
-        } else {
-            format!("{} m [Enter]", state.length_input)
-        };
-        label(painter, xf.to_screen(p), text);
+        temp_dimension(painter, xf, a, p, state.interaction.prev_dir, &state.length_input, half);
     }
 
     let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.length_input.is_empty();
@@ -758,6 +939,8 @@ fn wall_tool(
                 };
                 state.create_element(t!("tx-create-wall"), level, type_id, ElementKind::Wall(wall));
                 state.interaction.anchor = Some(p);
+                // The next wall's angle is measured from this one (as an interior angle).
+                state.interaction.prev_dir = Some(a - p);
                 state.length_input.clear();
             }
             _ => {}
@@ -869,11 +1052,12 @@ fn sketch_tool(
     let mut point = None;
     if let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) {
         let shift = ui.input(|i| i.modifiers.shift);
-        let s = snap(state.project(), Some(level), raw, pts.last().copied(), &pts, xf.scale, shift);
+        let s = snap_at(state, Some(level), raw, pts.last().copied(), &pts, xf.scale, shift);
         draw_snap(painter, xf, s);
         if let Some(last) = pts.last() {
             painter.line_segment([xf.to_screen(*last), xf.to_screen(s.point)], Stroke::new(1.0, PREVIEW));
-            label(painter, xf.to_screen(s.point), format::meters(last.distance(s.point)));
+            let previous = pts.len().checked_sub(2).and_then(|i| pts.get(i)).map(|q| *q - *last);
+            temp_dimension(painter, xf, *last, s.point, previous, "", 0.0);
         }
         if pts.len() >= 2 {
             painter.extend(egui::Shape::dashed_line(
@@ -970,7 +1154,7 @@ pub fn walls_loop(project: &Project, level: LevelId, outward: f64) -> Option<Vec
 fn section_tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, level: Option<LevelId>, xf: &Xf) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap(state.project(), level, raw, state.interaction.anchor, &[], xf.scale, shift);
+    let s = snap_at(state, level, raw, state.interaction.anchor, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(a) = state.interaction.anchor {
         let stroke = Stroke::new(1.5, PREVIEW);
@@ -1181,4 +1365,54 @@ pub fn duplicate(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
         created
     });
     state.selection = new_ids.into_iter().collect();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 100 px per meter: the snap radius is 0.1 m.
+    const SCALE: f64 = 100.0;
+
+    fn empty() -> (Project, LevelId) {
+        let p = crate::actions::new_project();
+        let level = p.levels[0].id;
+        (p, level)
+    }
+
+    #[test]
+    fn two_guides_cross_at_an_alignment() {
+        let (p, level) = empty();
+        // Acquired points (0, 0) and (5, 3): their vertical and horizontal guides cross at (5, 0) and (0, 3).
+        let tracked = [DVec2::new(0.0, 0.0), DVec2::new(5.0, 3.0)];
+        let s = snap(&p, Some(level), DVec2::new(5.04, 0.03), None, &[], &tracked, SCALE, false);
+        assert_eq!(s.kind, SnapKind::Intersection);
+        assert!(s.point.distance(DVec2::new(5.0, 0.0)) < 1e-12, "{}", s.point);
+        assert!(s.guides.iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn the_drawing_direction_meets_a_guide() {
+        let (p, level) = empty();
+        // Drawing from (0, 0) at 30°: the line meets the vertical guide of (4, 9) at x = 4.
+        let anchor = DVec2::ZERO;
+        let dir = DVec2::from_angle(30f64.to_radians());
+        let target = anchor + dir * (4.0 / dir.x);
+        let raw = target + dir.perp() * 0.02 + DVec2::new(0.03, 0.0);
+        let s = snap(&p, Some(level), raw, Some(anchor), &[], &[DVec2::new(4.0, 9.0)], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Alignment);
+        assert!(s.point.distance(target) < 1e-9, "{} vs {target}", s.point);
+    }
+
+    #[test]
+    fn far_from_guides_the_pointer_is_free() {
+        let (p, level) = empty();
+        let s = snap(&p, Some(level), DVec2::new(2.33, 1.71), None, &[], &[DVec2::new(5.0, 5.0)], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Free);
+        assert!(s.guides.iter().all(Option::is_none));
+        // Endpoints still win over alignments.
+        let s =
+            snap(&p, Some(level), DVec2::new(5.01, 5.0), None, &[DVec2::new(5.0, 5.0)], &[DVec2::ZERO], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Endpoint);
+    }
 }
