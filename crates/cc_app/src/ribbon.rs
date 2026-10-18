@@ -165,7 +165,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     });
 }
 
-/// Context options for the active tool (Revit's "options bar").
+/// Context options for the active tool (options bar).
 pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(crate::i18n::tr(state.tool.key())).strong());

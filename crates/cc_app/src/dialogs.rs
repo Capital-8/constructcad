@@ -320,7 +320,7 @@ fn type_editor(ctx: &Context, state: &mut AppState) {
                 let new_id = state.doc.edit(t!("tx-duplicate-type"), |e| {
                     let id = ElementTypeId(e.alloc_id());
                     e.add_type(ElementType { id, name: t!("copy-of", "name" => ty.name), data: ty.data.clone() });
-                    // Like Revit, the selected instances switch to the new type.
+                    // The selected instances switch to the new type.
                     for el in selection {
                         if let Some(x) = e.element_mut(el).filter(|x| x.type_id == tid) {
                             x.type_id = id;

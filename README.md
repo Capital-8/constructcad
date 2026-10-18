@@ -1,6 +1,6 @@
 # ConstructCAD
 
-Software livre de **Modelagem de Informações da Construção (BIM)**, inspirado no Revit, escrito em Rust.
+Software livre de **Modelagem de Informações da Construção (BIM)**, escrito em Rust e independente de qualquer fornecedor comercial.
 
 Um único modelo paramétrico é a fonte da verdade. Plantas, forros, cortes, elevações, vistas 3D, legendas, tabelas e folhas são *consultas* sobre esse modelo e se atualizam automaticamente a cada alteração.
 
@@ -89,6 +89,12 @@ cargo fmt --all -- --check
 - Telhados de duas e quatro águas.
 - Paredes amarradas ao nível superior.
 - Texturas de materiais.
+
+## Independência
+
+O ConstructCAD é um projeto independente. O comportamento do programa foi projetado com base em documentação pública, convenções gerais de CAD e retorno dos usuários. Os testes de referência usam valores analíticos e ferramentas de código aberto. O ConstructCAD não tem afiliação com a Autodesk, nem é patrocinado ou endossado por ela. Autodesk e Revit são marcas registradas da Autodesk, Inc.
+
+> ConstructCAD is independent. Behaviour is designed from public documentation, general CAD conventions and user feedback. Reference tests use analytic values and open-source tools. ConstructCAD is not affiliated with, sponsored by or endorsed by Autodesk. Autodesk and Revit are trademarks of Autodesk, Inc.
 
 ## Licença
 
