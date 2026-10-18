@@ -5,6 +5,7 @@
 //! computes tables.
 
 mod annotate;
+mod cut;
 mod drawing;
 pub mod export;
 pub mod format;
@@ -31,12 +32,12 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
     let mut d = match &view.kind {
         ViewKind::FloorPlan { level, cut_height } | ViewKind::CeilingPlan { level, cut_height } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
-            let mut d = plan(project, geom, *level, *cut_height, ceiling);
+            let mut d = plan(project, geom, *level, *cut_height, ceiling, view.scale);
             annotate::plan_annotations(&mut d, project, geom, *level, ceiling, view.scale);
             d
         }
         ViewKind::Elevation { direction } => elevation(project, geom, *direction),
-        ViewKind::Section { start, end, depth } => section(project, geom, *start, *end, *depth),
+        ViewKind::Section { start, end, depth } => section(project, geom, *start, *end, *depth, view.scale),
         ViewKind::ThreeD { camera } => axonometric(project, geom, camera),
         ViewKind::Legend { types } => legend(project, types, view.scale),
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
@@ -177,7 +178,7 @@ mod tests {
             );
         assert!((hi - lo - glam::DVec3::new(0.8, 1.2, 0.75)).abs().max_element() < 1e-9, "{lo} {hi}");
         // In plan only the top (marked for plans) is drawn: one closed outline of 4 lines.
-        let d = plan::plan(&project, &geom, level, 1.2, false);
+        let d = plan::plan(&project, &geom, level, 1.2, false, 50);
         let lines = d.prims.iter().filter(|p| matches!(p, Prim::Line { element: Some(e), .. } if *e == id)).count();
         assert_eq!(lines, 4);
         assert_eq!(d.hit_test(DVec2::new(2.4, 3.0), 0.05), Some(id));

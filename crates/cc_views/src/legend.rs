@@ -1,4 +1,4 @@
-use crate::{Drawing2D, LineStyle, plan::POCHE};
+use crate::{Drawing2D, LineStyle, cut::POCHE};
 use cc_core::{ElementTypeId, Project, TypeData};
 use glam::DVec2;
 

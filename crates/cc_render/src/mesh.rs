@@ -15,6 +15,8 @@ pub struct Vertex {
 pub struct SceneMesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    /// Triangles of transparent solids, drawn last with blending.
+    pub transparent_indices: Vec<u32>,
     pub edges: Vec<Vertex>,
 }
 
@@ -31,14 +33,17 @@ impl SceneMesh {
         for solid in geom.solids.iter().filter(|s| !hidden.contains(&s.category)) {
             let sel = selected.contains(&solid.element);
             let base = if sel { SELECTED } else { solid.color };
-            let color = [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), 1.0];
+            // Selected solids stay opaque so they read clearly.
+            let alpha = if sel { 1.0 } else { (1.0 - solid.transparency as f32).clamp(0.08, 1.0) };
+            let color = [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), alpha];
+            let target = if alpha < 0.999 { &mut mesh.transparent_indices } else { &mut mesh.indices };
             let edge_color = if sel { [0.02, 0.15, 0.6, 1.0] } else { [0.02, 0.02, 0.025, 1.0] };
             for face in &solid.faces {
                 let start = mesh.vertices.len() as u32;
                 let normal = face.normal.as_vec3().to_array();
                 mesh.vertices.extend(face.verts.iter().map(|p| Vertex { pos: p.as_vec3().to_array(), normal, color }));
                 for [a, b, c] in face.triangulate() {
-                    mesh.indices.extend([start + a as u32, start + b as u32, start + c as u32]);
+                    target.extend([start + a as u32, start + b as u32, start + c as u32]);
                 }
             }
             for (face, edges) in solid.faces.iter().zip(solid.feature_edges()) {
@@ -50,5 +55,27 @@ impl SceneMesh {
             }
         }
         mesh
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transparent_materials_go_to_the_blended_pass() {
+        let project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
+        let geom = ModelGeometry::build(&project);
+        let mesh = SceneMesh::build(&geom, &BTreeSet::new(), &[]);
+        // Window glass (60 % transparent in the template) is blended; walls are not.
+        assert!(!mesh.transparent_indices.is_empty());
+        assert!(!mesh.indices.is_empty());
+        let glass: Vec<&Vertex> =
+            mesh.transparent_indices.iter().filter_map(|i| mesh.vertices.get(*i as usize)).collect();
+        assert!(glass.iter().all(|v| (v.color[3] - 0.4).abs() < 1e-6));
+        // A selected window is drawn opaque.
+        let window = project.elements.values().find(|e| matches!(e.kind, cc_core::ElementKind::Window(_))).unwrap().id;
+        let sel = SceneMesh::build(&geom, &BTreeSet::from([window]), &[]);
+        assert!(sel.transparent_indices.len() < mesh.transparent_indices.len());
     }
 }

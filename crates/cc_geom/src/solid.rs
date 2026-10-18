@@ -50,6 +50,8 @@ pub struct Solid {
     pub element: ElementId,
     pub category: Category,
     pub color: [u8; 3],
+    /// 0 (opaque) to 1 (invisible), from the material.
+    pub transparency: f64,
     pub faces: Vec<Face>,
 }
 
@@ -61,7 +63,15 @@ pub struct Ray {
 
 impl Solid {
     pub fn new(element: ElementId, category: Category, color: [u8; 3]) -> Self {
-        Self { element, category, color, faces: Vec::new() }
+        Self { element, category, color, transparency: 0.0, faces: Vec::new() }
+    }
+
+    /// An empty solid colored and made transparent like material `name`.
+    pub fn of_material(element: ElementId, category: Category, project: &cc_core::Project, name: &str) -> Self {
+        Self {
+            transparency: project.material_transparency(name),
+            ..Self::new(element, category, project.material_color(name))
+        }
     }
 
     pub fn bounds(&self) -> Option<(DVec3, DVec3)> {

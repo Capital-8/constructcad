@@ -273,6 +273,19 @@ impl TypeData {
         }
     }
 
+    /// Material shown where the type is cut as a whole (sections): the first
+    /// structure layer of layered types (else the thickest), or the main material.
+    pub fn cut_material(&self) -> &str {
+        match self {
+            TypeData::Wall { layers, .. } | TypeData::Floor { layers } | TypeData::Roof { layers } => layers
+                .iter()
+                .find(|l| l.function == LayerFunction::Structure)
+                .or_else(|| layers.iter().max_by(|a, b| a.thickness.total_cmp(&b.thickness)))
+                .map_or("", |l| l.material.as_str()),
+            other => other.materials().first().copied().unwrap_or(""),
+        }
+    }
+
     pub fn uses_material(&self, name: &str) -> bool {
         self.materials().contains(&name)
     }

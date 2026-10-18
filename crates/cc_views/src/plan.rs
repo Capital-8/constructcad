@@ -4,7 +4,7 @@ use cc_geom::{Column, ModelGeometry, WallGeom, polygon};
 use glam::DVec2;
 use std::f64::consts::{PI, TAU};
 
-pub(crate) const POCHE: [u8; 4] = [196, 196, 192, 255];
+pub(crate) use crate::cut::POCHE;
 const CEILING_GRID: f64 = 0.625;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,7 +33,15 @@ fn style_of(state: ColumnCut) -> Option<LineStyle> {
 }
 
 /// Floor plan (`ceiling == false`) or reflected ceiling plan of `level`.
-pub fn plan(project: &Project, geom: &ModelGeometry, level: LevelId, cut_height: f64, ceiling: bool) -> Drawing2D {
+pub fn plan(
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    cut_height: f64,
+    ceiling: bool,
+    scale: u32,
+) -> Drawing2D {
+    let spacing = crate::cut::spacing(scale);
     let mut d = Drawing2D::default();
     let level_z = project.level_elevation(level);
     let cut_z = level_z + cut_height;
@@ -60,13 +68,13 @@ pub fn plan(project: &Project, geom: &ModelGeometry, level: LevelId, cut_height:
         }
     }
     if !ceiling {
-        draw_structure(&mut d, project, level, cut_z);
+        draw_structure(&mut d, project, level, cut_z, spacing);
     }
     draw_components(&mut d, project, level, cut_z, ceiling);
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level) {
         if let Some(g) = geom.walls.get(&e.id) {
-            draw_wall(&mut d, g, cut_z);
+            draw_wall(&mut d, project, g, cut_z, spacing);
             draw_openings(&mut d, project, g, ceiling);
         }
     }
@@ -141,7 +149,7 @@ fn draw_components(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: 
     }
 }
 
-fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64) {
+fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, spacing: f64) {
     for e in project.elements.values().filter(|e| e.level == level) {
         let id = Some(e.id);
         let data = project.element_type(e.type_id).map(|t| &t.data);
@@ -150,7 +158,8 @@ fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f
                 let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
                 let (base, top) = project.column_span(e, c);
                 if base <= cut_z && cut_z <= top {
-                    d.fill(outline.clone(), POCHE, id);
+                    let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
+                    crate::cut::cut_fill(d, project, material, outline.clone(), spacing, id);
                     d.polyline(&outline, true, LineStyle::Cut, id);
                 } else {
                     let style = if base > cut_z { LineStyle::Hidden } else { LineStyle::Projection };
@@ -219,7 +228,7 @@ fn draw_stair(d: &mut Drawing2D, g: &cc_geom::StairGeom, cut_z: f64, element: cc
     d.line(p(0.0, 0.0) - foot, p(0.0, 0.0) + foot, LineStyle::Annotation, id);
 }
 
-fn draw_wall(d: &mut Drawing2D, g: &WallGeom, cut_z: f64) {
+fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spacing: f64) {
     let id = Some(g.element);
     let h = g.half;
     let states: Vec<ColumnCut> = g.columns.iter().map(|c| column_state(c, cut_z)).collect();
@@ -227,7 +236,19 @@ fn draw_wall(d: &mut Drawing2D, g: &WallGeom, cut_z: f64) {
         let poly = g.column_polygon(c);
         let state = states[i];
         if state == ColumnCut::Cut {
-            d.fill(poly.to_vec(), POCHE, id);
+            // Each layer with its material's cut pattern.
+            if g.layers.is_empty() {
+                d.fill(poly.to_vec(), POCHE, id);
+            }
+            for (v0, v1, material) in &g.layers {
+                let at = |v: f64| {
+                    let s = (v + h) / (2.0 * h);
+                    (c.right.0 + (c.left.0 - c.right.0) * s, c.right.1 + (c.left.1 - c.right.1) * s)
+                };
+                let ((a0, a1), (b0, b1)) = (at(*v0), at(*v1));
+                let strip = vec![g.world(a0, *v0), g.world(a1, *v0), g.world(b1, *v1), g.world(b0, *v1)];
+                crate::cut::cut_fill(d, project, material, strip, spacing, id);
+            }
             // Interior layer boundaries; the outer faces are drawn below.
             for &(_, v, _) in g.layers.iter().take(g.layers.len().saturating_sub(1)) {
                 let s = (v + h) / (2.0 * h);
@@ -375,10 +396,14 @@ mod tests {
             (w, dr)
         });
         let geom = ModelGeometry::build(&doc.project);
-        let d = plan(&doc.project, &geom, level, 1.2, false);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 50);
         let fills =
             d.prims.iter().filter(|p| matches!(p, Prim::Fill { element: Some(id), .. } if *id == wall_id)).count();
-        assert_eq!(fills, 2, "wall poche split by the door");
+        // One fill per layer on each side of the door.
+        let layers = geom.walls[&wall_id].layers.len();
+        assert_eq!(fills, 2 * layers, "wall cut split by the door");
+        // The template's masonry core is hatched.
+        assert!(d.prims.iter().any(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: None, .. })));
         assert_eq!(d.hit_test(DVec2::new(1.0, 0.0), 0.01), Some(wall_id));
         // On the open leaf, drawn from the hinge at u = 2.1 on the left face.
         assert_eq!(d.hit_test(DVec2::new(2.12, 0.5), 0.05), Some(door_id));

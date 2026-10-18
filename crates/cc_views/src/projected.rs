@@ -5,7 +5,7 @@
 //! of every pair of faces that overlap on screen, at a point inside their
 //! overlap; sorting by centroid depth alone fails for large faces such as roofs.
 
-use crate::{Drawing2D, LineStyle, format, plan::POCHE};
+use crate::{Drawing2D, LineStyle, cut::POCHE, format};
 use cc_core::{CameraState, Direction, ElementId, Project};
 use cc_geom::polygon::signed_area;
 use cc_geom::{ModelGeometry, clip_polygon, face_plane_segments};
@@ -90,8 +90,15 @@ struct ProjectedFace {
     edges: Vec<(DVec2, DVec2)>,
 }
 
-/// Render all solids through `frame`.
-pub fn render(geom: &ModelGeometry, frame: &Frame) -> Drawing2D {
+/// How section cuts are filled: the project's materials at a hatch spacing.
+#[derive(Clone, Copy)]
+pub struct CutStyle<'a> {
+    pub project: &'a Project,
+    pub spacing: f64,
+}
+
+/// Render all solids through `frame`; section cuts use `cut` (else the neutral poche).
+pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>) -> Drawing2D {
     let planes = frame.planes();
     let mut faces = Vec::new();
     for solid in &geom.solids {
@@ -118,7 +125,12 @@ pub fn render(geom: &ModelGeometry, frame: &Frame) -> Drawing2D {
                 normal: face.normal,
                 point: verts[0],
                 pts: verts.iter().map(|v| frame.project(*v)).collect(),
-                color: shade(solid.color, face.normal, frame),
+                color: {
+                    // Transparent materials let what is behind show through (never fully: alpha 0 means "no hit").
+                    let mut c = shade(solid.color, face.normal, frame);
+                    c[3] = ((1.0 - solid.transparency.clamp(0.0, 1.0)) * 255.0).round().clamp(40.0, 255.0) as u8;
+                    c
+                },
                 element: solid.element,
                 edges,
             });
@@ -147,7 +159,14 @@ pub fn render(geom: &ModelGeometry, frame: &Frame) -> Drawing2D {
                 .map(|(a, b)| (frame.project(a), frame.project(b)))
                 .collect();
             for pts in chain_loops(&segs) {
-                d.fill(pts, POCHE, Some(solid.element));
+                match cut {
+                    Some(c) => {
+                        let ty = c.project.element(solid.element).and_then(|e| c.project.element_type(e.type_id));
+                        let material = ty.map_or("", |t| t.data.cut_material());
+                        crate::cut::cut_fill(&mut d, c.project, material, pts, c.spacing, Some(solid.element));
+                    }
+                    None => d.fill(pts, POCHE, Some(solid.element)),
+                }
             }
             for (a, b) in segs {
                 d.line(a, b, LineStyle::Cut, Some(solid.element));
@@ -311,12 +330,12 @@ fn level_lines(d: &mut Drawing2D, project: &Project, frame: &Frame) {
 pub fn elevation(project: &Project, geom: &ModelGeometry, direction: Direction) -> Drawing2D {
     let look = direction.look();
     let frame = Frame::looking(DVec3::ZERO, DVec3::new(look.x, look.y, 0.0));
-    let mut d = render(geom, &frame);
+    let mut d = render(geom, &frame, None);
     level_lines(&mut d, project, &frame);
     d
 }
 
-pub fn section(project: &Project, geom: &ModelGeometry, start: DVec2, end: DVec2, depth: f64) -> Drawing2D {
+pub fn section(project: &Project, geom: &ModelGeometry, start: DVec2, end: DVec2, depth: f64, scale: u32) -> Drawing2D {
     let dir = (end - start).normalize_or_zero();
     let look = -dir.perp();
     let mut frame = Frame::looking(DVec3::new(start.x, start.y, 0.0), DVec3::new(look.x, look.y, 0.0));
@@ -324,13 +343,14 @@ pub fn section(project: &Project, geom: &ModelGeometry, start: DVec2, end: DVec2
     frame.near = Some(0.0);
     frame.far = Some(depth.max(0.01));
     frame.crop_x = Some((xe.min(0.0), xe.max(0.0)));
-    let mut d = render(geom, &frame);
+    let cut = CutStyle { project, spacing: crate::cut::spacing(scale) };
+    let mut d = render(geom, &frame, Some(cut));
     level_lines(&mut d, project, &frame);
     d
 }
 
 pub fn axonometric(_project: &Project, geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
-    render(geom, &Frame::looking(DVec3::ZERO, camera.forward()))
+    render(geom, &Frame::looking(DVec3::ZERO, camera.forward()), None)
 }
 
 #[cfg(test)]
@@ -387,7 +407,7 @@ mod tests {
         wall.add_box(DVec2::ZERO, DVec2::X, DVec2::Y, 4.0, 4.2, 0.0, 10.0, 0.0, 3.0);
         let geom = ModelGeometry { solids: vec![roof, wall], ..Default::default() };
         let frame = Frame::looking(DVec3::ZERO, DVec3::new(1.0, 1.0, -1.0));
-        let d = render(&geom, &frame);
+        let d = render(&geom, &frame, None);
         let fills: Vec<(usize, ElementId, f64)> = d
             .prims
             .iter()
@@ -407,11 +427,15 @@ mod tests {
         let (doc, id) = one_wall();
         let geom = ModelGeometry::build(&doc.project);
         // Section line along X at x = 2, looking -Y... crossing the wall north to south.
-        let d = section(&doc.project, &geom, DVec2::new(2.0, 2.0), DVec2::new(2.0, -2.0), 5.0);
+        let d = section(&doc.project, &geom, DVec2::new(2.0, 2.0), DVec2::new(2.0, -2.0), 5.0, 50);
         let cut = d.prims.iter().filter(|p| matches!(p, Prim::Line { style: LineStyle::Cut, .. })).count();
         assert_eq!(cut, 4);
-        let poche = d.prims.iter().filter(|p| matches!(p, Prim::Fill { color, .. } if *color == POCHE)).count();
-        assert_eq!(poche, 1);
+        // The cut is filled with the core material's pattern (the template's masonry hatch).
+        let fills = d.prims.iter().filter(|p| matches!(p, Prim::Fill { element: Some(e), .. } if *e == id)).count();
+        assert!(fills >= 1);
+        let hatch =
+            d.prims.iter().filter(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: None, .. })).count();
+        assert!(hatch > 0);
         assert!(d.elements_in(DVec2::splat(-100.0), DVec2::splat(100.0), false).contains(&id));
     }
 }

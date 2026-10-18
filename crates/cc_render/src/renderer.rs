@@ -27,6 +27,8 @@ struct Buffers {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     index_count: u32,
+    transparent: wgpu::Buffer,
+    transparent_count: u32,
     edges: wgpu::Buffer,
     edge_count: u32,
 }
@@ -34,6 +36,8 @@ struct Buffers {
 /// Draws a [`SceneMesh`] into an offscreen, multisampled texture.
 pub struct Renderer3D {
     faces: wgpu::RenderPipeline,
+    /// Blended faces that do not write depth (transparent materials).
+    blended: wgpu::RenderPipeline,
     edges: wgpu::RenderPipeline,
     uniforms: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
@@ -83,44 +87,47 @@ impl Renderer3D {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &attributes,
         };
-        let pipeline = |label: &str, topology, fs: &str, bias: wgpu::DepthBiasState| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: Default::default(),
-                    buffers: &[Some(vertex_layout.clone())],
-                },
-                primitive: wgpu::PrimitiveState { topology, cull_mode: None, ..Default::default() },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                    stencil: Default::default(),
-                    bias,
-                }),
-                multisample: wgpu::MultisampleState { count: SAMPLES, ..Default::default() },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(fs),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: COLOR_FORMAT,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
+        let pipeline =
+            |label: &str, topology, fs: &str, bias: wgpu::DepthBiasState, blend: Option<wgpu::BlendState>| {
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(&layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some("vs_main"),
+                        compilation_options: Default::default(),
+                        buffers: &[Some(vertex_layout.clone())],
+                    },
+                    primitive: wgpu::PrimitiveState { topology, cull_mode: None, ..Default::default() },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: DEPTH_FORMAT,
+                        depth_write_enabled: Some(blend.is_none()),
+                        depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                        stencil: Default::default(),
+                        bias,
+                    }),
+                    multisample: wgpu::MultisampleState { count: SAMPLES, ..Default::default() },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some(fs),
+                        compilation_options: Default::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: COLOR_FORMAT,
+                            blend,
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                })
+            };
         // Push faces slightly back so coplanar edges win the depth test.
         let face_bias = wgpu::DepthBiasState { constant: 2, slope_scale: 1.5, clamp: 0.0 };
-        let faces = pipeline("cc_render faces", wgpu::PrimitiveTopology::TriangleList, "fs_face", face_bias);
-        let edges = pipeline("cc_render edges", wgpu::PrimitiveTopology::LineList, "fs_edge", Default::default());
-        Self { faces, edges, uniforms, bind_group, buffers: None, targets: None }
+        let tri = wgpu::PrimitiveTopology::TriangleList;
+        let faces = pipeline("cc_render faces", tri, "fs_face", face_bias, None);
+        let blended = pipeline("cc_render blended", tri, "fs_face", face_bias, Some(wgpu::BlendState::ALPHA_BLENDING));
+        let edges = pipeline("cc_render edges", wgpu::PrimitiveTopology::LineList, "fs_edge", Default::default(), None);
+        Self { faces, blended, edges, uniforms, bind_group, buffers: None, targets: None }
     }
 
     pub fn upload(&mut self, device: &wgpu::Device, mesh: &SceneMesh) {
@@ -136,10 +143,14 @@ impl Renderer3D {
         let verts: &[Vertex] = if mesh.vertices.is_empty() { &pad } else { &mesh.vertices };
         let edges: &[Vertex] = if mesh.edges.is_empty() { &pad } else { &mesh.edges };
         let indices: &[u32] = if mesh.indices.is_empty() { &[0, 0, 0] } else { &mesh.indices };
+        let transparent: &[u32] =
+            if mesh.transparent_indices.is_empty() { &[0, 0, 0] } else { &mesh.transparent_indices };
         self.buffers = Some(Buffers {
             vertices: init("cc_render vertices", bytemuck::cast_slice(verts), wgpu::BufferUsages::VERTEX),
             indices: init("cc_render indices", bytemuck::cast_slice(indices), wgpu::BufferUsages::INDEX),
             index_count: mesh.indices.len() as u32,
+            transparent: init("cc_render transparent", bytemuck::cast_slice(transparent), wgpu::BufferUsages::INDEX),
+            transparent_count: mesh.transparent_indices.len() as u32,
             edges: init("cc_render edges", bytemuck::cast_slice(edges), wgpu::BufferUsages::VERTEX),
             edge_count: mesh.edges.len() as u32,
         });
@@ -238,6 +249,13 @@ impl Renderer3D {
                     pass.set_pipeline(&self.edges);
                     pass.set_vertex_buffer(0, b.edges.slice(..));
                     pass.draw(0..b.edge_count, 0..1);
+                }
+                // Transparent faces last, over everything opaque.
+                if b.transparent_count > 0 {
+                    pass.set_pipeline(&self.blended);
+                    pass.set_vertex_buffer(0, b.vertices.slice(..));
+                    pass.set_index_buffer(b.transparent.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..b.transparent_count, 0, 0..1);
                 }
             }
         }

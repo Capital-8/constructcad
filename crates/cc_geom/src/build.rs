@@ -246,7 +246,7 @@ impl ModelGeometry {
         for e in project.elements.values() {
             let ElementKind::Component(c) = &e.kind else { continue };
             for part in component_parts(project, e, c) {
-                let mut s = Solid::new(e.id, e.category(), project.material_color(&part.material));
+                let mut s = Solid::of_material(e.id, e.category(), project, &part.material);
                 s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
                 if !s.faces.is_empty() {
                     self.solids.push(s);
@@ -259,8 +259,7 @@ impl ModelGeometry {
     fn build_structure(&mut self, project: &Project) {
         for e in project.elements.values() {
             let Some(ty) = project.element_type(e.type_id) else { continue };
-            let color = project.material_color(ty.main_material());
-            let mut s = Solid::new(e.id, e.category(), color);
+            let mut s = Solid::of_material(e.id, e.category(), project, ty.main_material());
             match (&e.kind, &ty.data) {
                 (ElementKind::Column(c), TypeData::Column { section, .. }) => {
                     let (base, top) = project.column_span(e, c);
@@ -372,8 +371,10 @@ impl ModelGeometry {
                     })
                     .collect();
                 g.set_openings(openings);
-                let color = ty.map_or([200; 3], |t| project.material_color(t.main_material()));
-                self.solids.push(g.to_solid(color));
+                let material = ty.map_or("", |t| t.main_material());
+                let mut solid = g.to_solid(project.material_color(material));
+                solid.transparency = project.material_transparency(material);
+                self.solids.push(solid);
                 self.walls.insert(e.id, g);
             }
         }
@@ -386,7 +387,7 @@ impl ModelGeometry {
                 let Some(ty) = project.element_type(e.type_id) else { continue };
                 let parts = hosted_parts(&ty.data, o.u1 - o.u0, o.z1 - o.z0, wall.half);
                 let mut frame = Solid::new(e.id, e.category(), FRAME_COLOR);
-                let mut panel = Solid::new(e.id, e.category(), project.material_color(ty.main_material()));
+                let mut panel = Solid::of_material(e.id, e.category(), project, ty.main_material());
                 for p in &parts {
                     let s = if p.panel { &mut panel } else { &mut frame };
                     let (lo, hi) = (p.min, p.max);
@@ -416,8 +417,7 @@ impl ModelGeometry {
             let Some(ty) = project.element_type(e.type_id) else { continue };
             let level_z = project.level_elevation(e.level);
             let thk = ty.thickness();
-            let color = project.material_color(ty.main_material());
-            let mut s = Solid::new(e.id, e.category(), color);
+            let mut s = Solid::of_material(e.id, e.category(), project, ty.main_material());
             match &e.kind {
                 ElementKind::Floor(f) => {
                     let top = level_z + f.height_offset;

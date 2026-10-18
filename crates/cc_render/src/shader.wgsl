@@ -42,7 +42,7 @@ fn fs_face(i: VsOut) -> @location(0) vec4<f32> {
     // Hemispheric ambient keeps faces turned away from the sun readable.
     let sky = 0.5 + 0.5 * n.z;
     let k = 0.30 + 0.60 * diffuse + 0.25 * sky;
-    return vec4<f32>(gamma_from_linear(i.color.rgb * k), 1.0);
+    return vec4<f32>(gamma_from_linear(i.color.rgb * k), i.color.a);
 }
 
 @fragment

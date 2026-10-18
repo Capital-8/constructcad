@@ -432,6 +432,11 @@ impl Project {
         self.material(name).map_or([200, 200, 200], |m| m.shading_color())
     }
 
+    /// Transparency of material `name` (0 opaque, 1 invisible).
+    pub fn material_transparency(&self, name: &str) -> f64 {
+        self.material(name).map_or(0.0, |m| m.graphics.transparency.clamp(0.0, 1.0))
+    }
+
     pub fn material(&self, name: &str) -> Option<&Material> {
         self.materials.iter().find(|m| m.name == name)
     }

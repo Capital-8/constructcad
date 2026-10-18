@@ -443,13 +443,13 @@ impl<'a> Exporter<'a> {
     }
 
     /// Surface style named after `name` with the given shading color.
-    fn style(&mut self, name: &str, color: [u8; 3]) -> Id {
+    fn style(&mut self, name: &str, color: [u8; 3], transparency: f64) -> Id {
         if let Some(&id) = self.styles.get(name) {
             return id;
         }
         let [r, g, b] = color.map(|c| c as f64 / 255.0);
         let rgb = self.w.add("IFCCOLOURRGB", args![name, r, g, b]);
-        let shading = self.w.add("IFCSURFACESTYLESHADING", args![rgb, 0.0]);
+        let shading = self.w.add("IFCSURFACESTYLESHADING", args![rgb, transparency.clamp(0.0, 1.0)]);
         let style = self.w.add("IFCSURFACESTYLE", args![name, Value::Enum("BOTH"), vec![shading]]);
         self.styles.insert(name.to_string(), style);
         style
@@ -461,7 +461,8 @@ impl<'a> Exporter<'a> {
 
     fn material_style(&mut self, material: &str) -> Id {
         let color = self.project.material_color(material);
-        self.style(material, color)
+        let transparency = self.project.material_transparency(material);
+        self.style(material, color, transparency)
     }
 
     /// Product shape from body items and an optional 2D axis curve.
@@ -648,7 +649,7 @@ impl<'a> Exporter<'a> {
                 let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, part.z0)));
                 let item = self.extrude_polygon(&profile, position, self.dir_z, part.z1 - part.z0);
                 let style = if part.material.is_empty() {
-                    self.style("Generic", [200, 200, 200])
+                    self.style("Generic", [200, 200, 200], 0.0)
                 } else {
                     self.material_style(&part.material)
                 };
@@ -952,7 +953,7 @@ impl<'a> Exporter<'a> {
 
         // The filling shares the opening's frame.
         let fill_placement = self.local_placement(Some(placement), Frame::at(DVec3::ZERO));
-        let frame_style = self.style("Frame", FRAME_COLOR);
+        let frame_style = self.style("Frame", FRAME_COLOR, 0.0);
         let panel_style = self.material_style(ty.main_material());
         let parts: Vec<HostedPart> = hosted_parts(&ty.data, width, height, g.half);
         let mut items = Vec::new();
