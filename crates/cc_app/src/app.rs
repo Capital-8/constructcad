@@ -70,6 +70,14 @@ fn initial_dock(project: &Project) -> DockState<ViewId> {
     dock
 }
 
+/// Active tab of the focused leaf, if any.
+fn active_tab(dock: &mut DockState<ViewId>) -> Option<ViewId> {
+    // With no tabs left the main surface has no tree, and egui_dock's focus
+    // lookups panic on it, so only ask when a tab exists.
+    dock.iter_all_tabs().next()?;
+    dock.find_active_focused().map(|(_, tab)| *tab)
+}
+
 /// Zoom the active view to fit its contents.
 pub fn zoom_fit(state: &mut AppState) {
     let Some(view) = state.active_view else { return };
@@ -265,7 +273,7 @@ impl ConstructApp {
                 None => self.dock.push_to_focused_leaf(id),
             }
         }
-        state.active_view = self.dock.find_active_focused().map(|(_, tab)| *tab);
+        state.active_view = active_tab(&mut self.dock);
     }
 }
 
@@ -342,3 +350,22 @@ impl eframe::App for ConstructApp {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closing_the_last_tab_leaves_no_active_view() {
+        let mut dock = DockState::new(vec![ViewId(1)]);
+        let path = dock.find_tab(&ViewId(1)).unwrap();
+        dock.set_focused_node_and_surface(path.node_path());
+        assert_eq!(active_tab(&mut dock), Some(ViewId(1)));
+        dock.remove_tab(path);
+        // `sync_dock` prunes tabs every frame, which turns the emptied main surface into `Empty`.
+        dock.retain_tabs(|_| true);
+        assert_eq!(active_tab(&mut dock), None);
+        // Opening a view again recreates the tree.
+        dock.push_to_focused_leaf(ViewId(2));
+        assert_eq!(active_tab(&mut dock), Some(ViewId(2)));
+    }
+}
