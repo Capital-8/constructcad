@@ -10,6 +10,7 @@ mod document;
 mod element;
 pub mod expr;
 mod ids;
+pub mod material;
 mod persist;
 mod project;
 mod repair;
@@ -25,10 +26,11 @@ pub use element::{
     Roof, RoofShape, Room, Stair, Wall, WallTop,
 };
 pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
+pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
-pub use project::{Level, Material, Project, ProjectInfo};
+pub use project::{Level, Project, ProjectInfo};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use types::{
     Category, ColumnSection, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction, stair_layout,

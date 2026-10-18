@@ -252,6 +252,25 @@ impl<'a> EditCtx<'a> {
         &mut self.project.materials
     }
 
+    /// Rename a material and every type reference to it. Returns false
+    /// (and changes nothing) when `new` is empty or already taken.
+    pub fn rename_material(&mut self, old: &str, new: &str) -> bool {
+        let new = new.trim();
+        if new.is_empty() || old == new || self.project.material(new).is_some() || self.project.material(old).is_none()
+        {
+            return false;
+        }
+        for id in self.project.material_users(old) {
+            if let Some(t) = self.type_mut(id) {
+                t.data.rename_material(old, new);
+            }
+        }
+        if let Some(m) = self.materials_mut().iter_mut().find(|m| m.name == old) {
+            m.name = new.to_string();
+        }
+        true
+    }
+
     pub fn units_mut(&mut self) -> &mut crate::Units {
         self.touch_settings();
         &mut self.project.units
@@ -552,5 +571,22 @@ mod tests {
         });
         assert_eq!(doc.revision(), rev);
         assert!(!doc.can_undo());
+    }
+
+    #[test]
+    fn renaming_a_material_updates_types_in_one_step() {
+        let mut doc = Document::new(Project::from_template());
+        let old = "Madeira";
+        let users = doc.project.material_users(old);
+        assert!(!users.is_empty());
+        assert!(doc.edit("rename", |e| e.rename_material(old, "Carvalho")));
+        assert!(doc.project.material(old).is_none());
+        assert_eq!(doc.project.material_users("Carvalho"), users);
+        // Taken or empty names are refused.
+        assert!(!doc.edit("rename", |e| e.rename_material("Carvalho", "Concreto")));
+        assert!(!doc.edit("rename", |e| e.rename_material("Carvalho", "  ")));
+        doc.undo();
+        assert_eq!(doc.project.material_users(old), users);
+        assert!(doc.project.material("Carvalho").is_none());
     }
 }

@@ -1,3 +1,4 @@
+use crate::material::Material;
 use crate::{
     CameraState, Category, ColumnSection, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId,
     Layer, LayerFunction, LevelId, SheetSize, TypeData, View, ViewCategory, ViewId, ViewKind, Viewport, WallFunction,
@@ -24,13 +25,6 @@ pub struct Level {
     pub name: String,
     /// Elevation in meters.
     pub elevation: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Material {
-    pub name: String,
-    /// sRGB shading color.
-    pub color: [u8; 3],
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -87,20 +81,25 @@ impl Project {
             Level { id: ground, name: n("tpl-level-ground"), elevation: 0.0 },
             Level { id: first, name: n("tpl-level-first"), elevation: 3.0 },
         ];
+        use crate::material::MaterialClass as C;
         p.materials = [
-            (&n("tpl-mat-masonry"), [196, 120, 92]),
-            (&n("tpl-mat-plaster"), [232, 226, 214]),
-            (&n("tpl-mat-concrete"), [170, 170, 165]),
-            (&n("tpl-mat-wood"), [150, 104, 62]),
-            (&n("tpl-mat-glass"), [150, 200, 225]),
-            (&n("tpl-mat-gypsum"), [245, 245, 240]),
-            (&n("tpl-mat-roof-tile"), [168, 70, 48]),
-            (&n("tpl-mat-screed"), [190, 185, 175]),
-            (&n("tpl-mat-fabric"), [120, 132, 150]),
-            (&n("tpl-mat-porcelain"), [240, 240, 236]),
+            (&n("tpl-mat-masonry"), [196, 120, 92], C::Masonry),
+            (&n("tpl-mat-plaster"), [232, 226, 214], C::Mortar),
+            (&n("tpl-mat-concrete"), [170, 170, 165], C::Concrete),
+            (&n("tpl-mat-wood"), [150, 104, 62], C::Wood),
+            (&n("tpl-mat-glass"), [150, 200, 225], C::Glass),
+            (&n("tpl-mat-gypsum"), [245, 245, 240], C::Gypsum),
+            (&n("tpl-mat-roof-tile"), [168, 70, 48], C::Ceramic),
+            (&n("tpl-mat-screed"), [190, 185, 175], C::Mortar),
+            (&n("tpl-mat-fabric"), [120, 132, 150], C::Fabric),
+            (&n("tpl-mat-porcelain"), [240, 240, 236], C::Ceramic),
         ]
         .into_iter()
-        .map(|(name, color)| Material { name: name.into(), color })
+        .map(|(name, color, class)| {
+            let mut m = Material::new(name.as_str(), color);
+            crate::material::template_properties(&mut m, class);
+            m
+        })
         .collect();
 
         let layer = |m: &str, t: f64| Layer { material: m.into(), thickness: t, function: LayerFunction::Structure };
@@ -298,10 +297,15 @@ impl Project {
         // Projects created before components get the default library.
         if self.default_type(Category::Component).is_none() {
             let n = |key: &str| template_default(key).to_string();
-            for (key, color) in [("tpl-mat-fabric", [120, 132, 150]), ("tpl-mat-porcelain", [240, 240, 236])] {
+            use crate::material::MaterialClass as C;
+            for (key, color, class) in
+                [("tpl-mat-fabric", [120, 132, 150], C::Fabric), ("tpl-mat-porcelain", [240, 240, 236], C::Ceramic)]
+            {
                 let name = n(key);
                 if !self.materials.iter().any(|m| m.name == name) {
-                    self.materials.push(Material { name, color });
+                    let mut m = Material::new(name, color);
+                    crate::material::template_properties(&mut m, class);
+                    self.materials.push(m);
                 }
             }
             for (component, name, def) in crate::component::library(&n) {
@@ -425,7 +429,16 @@ impl Project {
     }
 
     pub fn material_color(&self, name: &str) -> [u8; 3] {
-        self.materials.iter().find(|m| m.name == name).map_or([200, 200, 200], |m| m.color)
+        self.material(name).map_or([200, 200, 200], |m| m.shading_color())
+    }
+
+    pub fn material(&self, name: &str) -> Option<&Material> {
+        self.materials.iter().find(|m| m.name == name)
+    }
+
+    /// Types that use the material `name`.
+    pub fn material_users(&self, name: &str) -> Vec<ElementTypeId> {
+        self.types.values().filter(|t| t.data.uses_material(name)).map(|t| t.id).collect()
     }
 
     /// Doors and windows hosted by `wall`.

@@ -64,6 +64,7 @@ impl Project {
     /// Remove or reset invalid data; returns the number of repairs made.
     pub fn repair(&mut self) -> usize {
         let mut repairs = usize::from(self.units.repair());
+        repairs += self.materials.iter_mut().map(|m| m.repair()).sum::<usize>();
         for level in &mut self.levels {
             if !level.elevation.is_finite() {
                 level.elevation = 0.0;

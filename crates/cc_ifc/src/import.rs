@@ -692,7 +692,7 @@ impl<'a> Importer<'a> {
     fn material(&mut self, name: &str, fallback: Option<[u8; 3]>) -> String {
         if !self.p.materials.iter().any(|m| m.name == name) {
             let color = self.style_colors.get(name).copied().or(fallback).unwrap_or([200, 200, 200]);
-            self.p.materials.push(Material { name: name.to_string(), color });
+            self.p.materials.push(Material::new(name, color));
         }
         name.to_string()
     }

@@ -233,8 +233,7 @@ fn materials(ctx: &Context, state: &mut AppState) {
             if ui.button(t!("material-add")).clicked() {
                 let n = mats.len() + 1;
                 state.doc.edit(t!("tx-modify-material"), |e| {
-                    e.materials_mut()
-                        .push(Material { name: t!("default-material-name", "n" => n), color: [180, 180, 180] });
+                    e.materials_mut().push(Material::new(t!("default-material-name", "n" => n), [180, 180, 180]));
                 });
             }
         },

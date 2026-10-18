@@ -221,7 +221,7 @@ mod tests {
         if let Some(TypeData::Component { def, .. }) = source.types.get_mut(&table).map(|t| &mut t.data) {
             def.items[0].material = "Nogueira".into();
         }
-        source.materials.push(Material { name: "Nogueira".into(), color: [90, 60, 40] });
+        source.materials.push(Material::new("Nogueira", [90, 60, 40]));
         let mut wide = source.types[&table].clone();
         wide.id = ElementTypeId(source.alloc_id());
         wide.name = "Mesa 200 x 90".into();
@@ -254,7 +254,7 @@ mod tests {
             .collect();
         assert_eq!(widths, vec![1.2, 2.0]);
         // Only the material the target lacks is added.
-        assert_eq!(materials, vec![Material { name: "Nogueira".into(), color: [90, 60, 40] }]);
+        assert_eq!(materials, vec![Material::new("Nogueira", [90, 60, 40])]);
         assert!(matches!(extract(&target, "Nope"), Err(ComponentFileError::NotFound(_))));
     }
 

@@ -254,6 +254,53 @@ pub enum TypeData {
     },
 }
 
+impl TypeData {
+    /// Material names referenced by this type.
+    pub fn materials(&self) -> Vec<&str> {
+        match self {
+            TypeData::Wall { layers, .. } | TypeData::Floor { layers } | TypeData::Roof { layers } => {
+                layers.iter().map(|l| l.material.as_str()).collect()
+            }
+            TypeData::Door { material, .. }
+            | TypeData::Window { material, .. }
+            | TypeData::Ceiling { material, .. }
+            | TypeData::Column { material, .. }
+            | TypeData::Beam { material, .. }
+            | TypeData::Stair { material, .. }
+            | TypeData::Railing { material, .. } => vec![material.as_str()],
+            TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => Vec::new(),
+        }
+    }
+
+    pub fn uses_material(&self, name: &str) -> bool {
+        self.materials().contains(&name)
+    }
+
+    /// Point references to material `old` at `new`.
+    pub fn rename_material(&mut self, old: &str, new: &str) {
+        let fix = |m: &mut String| {
+            if m == old {
+                *m = new.to_string();
+            }
+        };
+        match self {
+            TypeData::Wall { layers, .. } | TypeData::Floor { layers } | TypeData::Roof { layers } => {
+                layers.iter_mut().for_each(|l| fix(&mut l.material))
+            }
+            TypeData::Door { material, .. }
+            | TypeData::Window { material, .. }
+            | TypeData::Ceiling { material, .. }
+            | TypeData::Column { material, .. }
+            | TypeData::Beam { material, .. }
+            | TypeData::Stair { material, .. }
+            | TypeData::Railing { material, .. } => fix(material),
+            TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => {}
+        }
+    }
+}
+
 /// Cross-section of a column type.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ColumnSection {
