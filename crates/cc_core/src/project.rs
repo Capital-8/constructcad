@@ -202,7 +202,7 @@ impl Project {
             (&n("tpl-schedule-walls"), Category::Wall),
             (&n("tpl-schedule-rooms"), Category::Room),
         ] {
-            add_view(&mut p, name, 1, ViewKind::Schedule { category });
+            add_view(&mut p, name, 1, ViewKind::Schedule { category, def: Default::default() });
         }
         add_view(
             &mut p,

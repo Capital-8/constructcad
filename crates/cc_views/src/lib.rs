@@ -17,7 +17,7 @@ pub use drawing::{Anchor, Drawing2D, LineStyle, Prim};
 pub use legend::legend;
 pub use plan::plan;
 pub use projected::{Frame, axonometric, elevation, section};
-pub use schedule::{Row, Table, schedule};
+pub use schedule::{Cell, Row, Table, schedule, to_csv};
 
 use cc_core::{Project, View, ViewKind};
 use cc_geom::ModelGeometry;
@@ -86,10 +86,10 @@ mod tests {
     #[test]
     fn room_schedule_lists_enclosed_rooms() {
         let (project, geom) = sample();
-        let table = schedule(&project, &geom, Category::Room);
+        let table = schedule(&project, &geom, Category::Room, &Default::default());
         assert_eq!(table.rows.len(), 2);
         // Interior of the left room: 5 m minus half walls, by 6 m minus half walls.
         let area = (5.0 - 0.075 - 0.075) * (6.0 - 0.15);
-        assert_eq!(table.rows[0].cells[3], format::number(area, 2));
+        assert_eq!(table.rows[0].cells[3], Cell::Text(format::number(area, 2)));
     }
 }

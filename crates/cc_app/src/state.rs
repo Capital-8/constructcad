@@ -46,6 +46,8 @@ pub struct Dialogs {
     pub edit_start: Option<usize>,
     /// Level waiting for delete confirmation.
     pub delete_level: Option<LevelId>,
+    /// Schedule whose definition dialog is open.
+    pub schedule_def: Option<ViewId>,
     pub confirm: Option<PendingAction>,
     pub error: Option<String>,
     pub about: bool,

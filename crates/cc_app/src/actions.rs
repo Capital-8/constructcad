@@ -46,7 +46,7 @@ pub fn new_legend(state: &mut AppState) -> ViewId {
 
 pub fn new_schedule(state: &mut AppState, category: Category) -> ViewId {
     let name = t!("default-schedule-name", "category" => t_category(category));
-    add_view(state, t!("tx-new-view"), name, 1, ViewKind::Schedule { category })
+    add_view(state, t!("tx-new-view"), name, 1, ViewKind::Schedule { category, def: Default::default() })
 }
 
 pub fn new_sheet(state: &mut AppState) -> ViewId {

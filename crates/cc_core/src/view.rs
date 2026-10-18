@@ -160,6 +160,8 @@ pub enum ViewKind {
     },
     Schedule {
         category: Category,
+        #[serde(default)]
+        def: crate::ScheduleDef,
     },
     Sheet {
         number: String,

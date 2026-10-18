@@ -1,250 +1,338 @@
-use crate::format;
-use cc_core::{Category, Element, ElementKind, Project};
-use cc_geom::{ModelGeometry, polygon};
+//! Schedules: one row per element of a category, one column per field of the
+//! schedule definition, with filtering, sorting and totals.
 
-/// A computed schedule. Headers and the footer label are translation keys.
+use crate::format;
+use cc_core::{Category, Element, ElementKind, Project, ScheduleDef, ScheduleField, TypeData};
+use cc_geom::{ModelGeometry, polygon};
+use std::cmp::Ordering;
+
+/// A cell: plain text, or a translation key for the application to resolve.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Cell {
+    Text(String),
+    Key(&'static str),
+}
+
+impl Cell {
+    /// The text, or the key itself for untranslated cells.
+    pub fn raw(&self) -> &str {
+        match self {
+            Cell::Text(s) => s,
+            Cell::Key(k) => k,
+        }
+    }
+}
+
+/// A computed schedule. Headers are translation keys.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Table {
     pub headers: Vec<&'static str>,
     pub rows: Vec<Row>,
-    /// Totals row aligned with `headers` (empty cells are blank).
+    /// Totals row aligned with `headers` (the first cell holds the row count);
+    /// empty when totals are hidden.
     pub totals: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub element: cc_core::ElementId,
-    pub cells: Vec<String>,
+    pub cells: Vec<Cell>,
 }
 
-fn mark_order(a: &Element, b: &Element) -> std::cmp::Ordering {
-    match (a.mark.parse::<u64>(), b.mark.parse::<u64>()) {
-        (Ok(x), Ok(y)) => x.cmp(&y),
-        _ => a.mark.cmp(&b.mark).then(a.id.cmp(&b.id)),
+/// A field value before formatting, used for sorting and totals.
+#[derive(Debug, Clone, PartialEq)]
+enum Value {
+    Text(String),
+    Key(&'static str),
+    Count(usize),
+    Length(f64),
+    Area(f64),
+    Volume(f64),
+    Money(f64),
+    Missing,
+}
+
+impl Value {
+    fn cell(&self) -> Cell {
+        match self {
+            Value::Text(s) => Cell::Text(s.clone()),
+            Value::Key(k) => Cell::Key(k),
+            Value::Count(n) => Cell::Text(n.to_string()),
+            Value::Length(v) => Cell::Text(format::meters(*v)),
+            Value::Area(v) | Value::Money(v) => Cell::Text(format::number(*v, 2)),
+            Value::Volume(v) => Cell::Text(format::number(*v, 3)),
+            Value::Missing => Cell::Text(String::new()),
+        }
+    }
+
+    fn number(&self) -> Option<f64> {
+        match self {
+            Value::Count(n) => Some(*n as f64),
+            Value::Length(v) | Value::Area(v) | Value::Volume(v) | Value::Money(v) => Some(*v),
+            _ => None,
+        }
     }
 }
 
-pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category) -> Table {
-    let mut elements: Vec<&Element> = project.elements_of(category).collect();
-    elements.sort_by(|a, b| mark_order(a, b));
-    let count = elements.len().to_string();
-    let ty = |e: &Element| project.type_name(e.type_id).to_string();
-    let level = |e: &Element| project.level_name(e.level).to_string();
+/// Natural order: numbers numerically (so "10" follows "9"), then text.
+fn natural(a: &str, b: &str) -> Ordering {
+    match (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {
+        (Ok(x), Ok(y)) => x.total_cmp(&y),
+        (Ok(_), Err(_)) => Ordering::Less,
+        (Err(_), Ok(_)) => Ordering::Greater,
+        _ => a.cmp(b),
+    }
+}
 
-    match category {
-        Category::Door | Category::Window => {
-            let mut headers = vec!["col-mark", "col-type", "col-width", "col-height"];
-            if category == Category::Window {
-                headers.push("col-sill");
+fn compare(a: &Value, b: &Value) -> Ordering {
+    match (a.number(), b.number()) {
+        (Some(x), Some(y)) => x.total_cmp(&y),
+        _ => natural(&text_of(a), &text_of(b)),
+    }
+}
+
+fn text_of(v: &Value) -> String {
+    v.cell().raw().to_string()
+}
+
+/// Whether a field's values add up in the totals row.
+fn summable(field: ScheduleField) -> bool {
+    matches!(field, ScheduleField::Length | ScheduleField::Area | ScheduleField::Volume | ScheduleField::Cost)
+}
+
+/// Net side area of a wall: length x height minus its openings.
+fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall) -> f64 {
+    let openings: f64 = project
+        .hosted_by(e.id)
+        .filter_map(|h| project.element_type(h.type_id)?.opening_size())
+        .map(|(w, h)| w * h)
+        .sum();
+    (w.length() * project.wall_height(e, w) - openings).max(0.0)
+}
+
+fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField) -> Value {
+    use ScheduleField as F;
+    let ty = project.element_type(e.type_id);
+    let info = ty.map(|t| &t.info);
+    let text = |s: &str| if s.is_empty() { Value::Missing } else { Value::Text(s.to_string()) };
+    let room_boundary = geom.rooms.get(&e.id);
+    match field {
+        F::Mark => text(&e.mark),
+        F::Type => text(project.type_name(e.type_id)),
+        F::Level => text(project.level_name(e.level)),
+        F::Comments => text(&e.comments),
+        F::TypeMark => info.map_or(Value::Missing, |i| text(&i.type_mark)),
+        F::Description => info.map_or(Value::Missing, |i| text(&i.description)),
+        F::Manufacturer => info.map_or(Value::Missing, |i| text(&i.manufacturer)),
+        F::Model => info.map_or(Value::Missing, |i| text(&i.model)),
+        F::FireRating => info.map_or(Value::Missing, |i| text(&i.fire_rating)),
+        F::Cost => info.and_then(|i| i.cost).map_or(Value::Missing, Value::Money),
+        F::Length => match &e.kind {
+            ElementKind::Wall(w) => Value::Length(w.length()),
+            ElementKind::Beam(b) => Value::Length(b.length()),
+            ElementKind::Railing(r) => Value::Length(r.length()),
+            _ => Value::Missing,
+        },
+        F::Height => match (&e.kind, ty.map(|t| &t.data)) {
+            (ElementKind::Wall(w), _) => Value::Length(project.wall_height(e, w)),
+            (ElementKind::Column(c), _) => {
+                let (base, top) = project.column_span(e, c);
+                Value::Length(top - base)
             }
-            headers.extend(["col-level", "col-host", "col-comments"]);
-            let rows = elements
-                .iter()
-                .map(|e| {
-                    let (w, h) = project.element_type(e.type_id).and_then(|t| t.opening_size()).unwrap_or_default();
-                    let hosted = e.as_hosted();
-                    let mut cells = vec![e.mark.clone(), ty(e), format::meters(w), format::meters(h)];
-                    if category == Category::Window {
-                        cells.push(format::meters(hosted.map_or(0.0, |h| h.sill_height)));
-                    }
-                    let host = hosted
-                        .and_then(|h| project.element(h.host))
-                        .map(|w| if w.mark.is_empty() { w.id.to_string() } else { w.mark.clone() })
-                        .unwrap_or_default();
-                    cells.extend([level(e), host, e.comments.clone()]);
-                    Row { element: e.id, cells }
-                })
-                .collect();
-            let mut totals = vec![String::new(); headers.len()];
-            totals[0] = count;
-            Table { headers, rows, totals }
-        }
-        Category::Wall => {
-            let headers = vec![
-                "col-mark",
-                "col-type",
-                "col-level",
-                "col-length",
-                "col-height",
-                "col-thickness",
-                "col-area",
-                "col-volume",
-            ];
-            let (mut area_sum, mut volume_sum, mut length_sum) = (0.0, 0.0, 0.0);
-            let rows = elements
-                .iter()
-                .filter_map(|e| {
-                    let ElementKind::Wall(w) = &e.kind else { return None };
-                    let openings: f64 = project
-                        .hosted_by(e.id)
-                        .filter_map(|h| project.element_type(h.type_id)?.opening_size())
-                        .map(|(w, h)| w * h)
-                        .sum();
-                    let height = project.wall_height(e, w);
-                    let area = (w.length() * height - openings).max(0.0);
-                    let volume = geom.volume(e.id);
-                    area_sum += area;
-                    volume_sum += volume;
-                    length_sum += w.length();
-                    Some(Row {
-                        element: e.id,
-                        cells: vec![
-                            e.mark.clone(),
-                            ty(e),
-                            level(e),
-                            format::meters(w.length()),
-                            format::meters(height),
-                            format::meters(project.thickness_of(e)),
-                            format::number(area, 2),
-                            format::number(volume, 3),
-                        ],
-                    })
-                })
-                .collect();
-            let totals = vec![
-                count,
-                String::new(),
-                String::new(),
-                format::meters(length_sum),
-                String::new(),
-                String::new(),
-                format::number(area_sum, 2),
-                format::number(volume_sum, 3),
-            ];
-            Table { headers, rows, totals }
-        }
-        Category::Floor | Category::Ceiling | Category::Roof => {
-            let headers = vec!["col-mark", "col-type", "col-level", "col-area", "col-perimeter", "col-volume"];
-            let (mut area_sum, mut volume_sum) = (0.0, 0.0);
-            let rows = elements
-                .iter()
-                .filter_map(|e| {
-                    let sketch = e.sketch()?;
-                    let area = polygon::area(sketch);
-                    let volume = geom.volume(e.id);
-                    area_sum += area;
-                    volume_sum += volume;
-                    Some(Row {
-                        element: e.id,
-                        cells: vec![
-                            e.mark.clone(),
-                            ty(e),
-                            level(e),
-                            format::number(area, 2),
-                            format::meters(polygon::perimeter(sketch)),
-                            format::number(volume, 3),
-                        ],
-                    })
-                })
-                .collect();
-            let totals = vec![
-                count,
-                String::new(),
-                String::new(),
-                format::number(area_sum, 2),
-                String::new(),
-                format::number(volume_sum, 3),
-            ];
-            Table { headers, rows, totals }
-        }
-        Category::Room => {
-            let headers = vec!["col-number", "col-name", "col-level", "col-area", "col-perimeter"];
-            let mut rooms: Vec<(&Element, &cc_core::Room)> = elements
-                .iter()
-                .filter_map(|e| match &e.kind {
-                    ElementKind::Room(r) => Some((*e, r)),
-                    _ => None,
-                })
-                .collect();
-            rooms.sort_by(|a, b| match (a.1.number.parse::<u64>(), b.1.number.parse::<u64>()) {
-                (Ok(x), Ok(y)) => x.cmp(&y),
-                _ => a.1.number.cmp(&b.1.number),
-            });
-            let mut area_sum = 0.0;
-            let rows = rooms
-                .iter()
-                .map(|(e, r)| {
-                    // Rooms that are not enclosed have no area.
-                    let (area, perimeter) = match geom.rooms.get(&e.id) {
-                        Some(b) => {
-                            area_sum += polygon::area(b);
-                            (format::number(polygon::area(b), 2), format::meters(polygon::perimeter(b)))
-                        }
-                        None => ("—".to_string(), "—".to_string()),
-                    };
-                    Row { element: e.id, cells: vec![r.number.clone(), r.name.clone(), level(e), area, perimeter] }
-                })
-                .collect();
-            let totals = vec![count, String::new(), String::new(), format::number(area_sum, 2), String::new()];
-            Table { headers, rows, totals }
-        }
-        Category::Column | Category::Beam | Category::Stair | Category::Railing => {
-            structure_schedule(project, geom, category, &elements)
-        }
-        Category::Grid | Category::Dimension => Table::default(),
+            (ElementKind::Room(r), _) => Value::Length(r.height),
+            (_, Some(TypeData::Door { height, .. } | TypeData::Window { height, .. })) => Value::Length(*height),
+            (_, Some(TypeData::Railing { height, .. })) => Value::Length(*height),
+            _ => Value::Missing,
+        },
+        F::Width => match ty.map(|t| &t.data) {
+            Some(TypeData::Door { width, .. } | TypeData::Window { width, .. } | TypeData::Stair { width, .. }) => {
+                Value::Length(*width)
+            }
+            _ => Value::Missing,
+        },
+        F::Thickness => match ty {
+            Some(t) if t.thickness() > 0.0 => Value::Length(t.thickness()),
+            _ => Value::Missing,
+        },
+        F::Area => match &e.kind {
+            ElementKind::Wall(w) => Value::Area(wall_area(project, e, w)),
+            ElementKind::Room(_) => room_boundary.map_or(Value::Missing, |b| Value::Area(polygon::area(b))),
+            _ => e.sketch().map_or(Value::Missing, |s| Value::Area(polygon::area(s))),
+        },
+        F::Perimeter => match &e.kind {
+            ElementKind::Room(_) => room_boundary.map_or(Value::Missing, |b| Value::Length(polygon::perimeter(b))),
+            _ => e.sketch().map_or(Value::Missing, |s| Value::Length(polygon::perimeter(s))),
+        },
+        F::Volume => match &e.kind {
+            ElementKind::Room(r) => {
+                room_boundary.map_or(Value::Missing, |b| Value::Volume(polygon::area(b) * r.height))
+            }
+            _ => Value::Volume(geom.volume(e.id)),
+        },
+        F::Sill => e.as_hosted().map_or(Value::Missing, |h| Value::Length(h.sill_height)),
+        F::Host => e
+            .as_hosted()
+            .and_then(|h| project.element(h.host))
+            .map_or(Value::Missing, |w| text(&if w.mark.is_empty() { w.id.to_string() } else { w.mark.clone() })),
+        F::Function => ty.and_then(|t| t.wall_function()).map_or(Value::Missing, |f| Value::Key(f.key())),
+        F::Structural => match &e.kind {
+            ElementKind::Wall(w) => Value::Key(if w.structural { "value-yes" } else { "value-no" }),
+            _ => Value::Missing,
+        },
+        F::Number => match &e.kind {
+            ElementKind::Room(r) => text(&r.number),
+            _ => Value::Missing,
+        },
+        F::Name => match &e.kind {
+            ElementKind::Room(r) => text(&r.name),
+            _ => Value::Missing,
+        },
+        F::Risers | F::RiserHeight | F::Run => match &e.kind {
+            ElementKind::Stair(s) => match cc_geom::stair_geom(project, e, s) {
+                Some(g) if field == F::Risers => Value::Count(g.risers),
+                Some(g) if field == F::RiserHeight => Value::Length(g.riser),
+                Some(g) => Value::Length(g.run()),
+                None => Value::Missing,
+            },
+            _ => Value::Missing,
+        },
     }
 }
 
-/// Columns (height), beams (length), stairs (risers and run) and railings (length).
-fn structure_schedule(project: &Project, geom: &ModelGeometry, category: Category, elements: &[&Element]) -> Table {
-    let measure = match category {
-        Category::Column => "col-height",
-        Category::Stair => "col-risers",
-        _ => "col-length",
+/// Default row order: by mark (rooms by number), naturally, then by id.
+fn default_order(a: &Element, b: &Element) -> Ordering {
+    let key = |e: &Element| match &e.kind {
+        ElementKind::Room(r) => r.number.clone(),
+        _ => e.mark.clone(),
     };
-    let mut headers = vec!["col-mark", "col-type", "col-level", measure];
-    if category == Category::Stair {
-        headers.extend(["col-riser-height", "col-run"]);
+    natural(&key(a), &key(b)).then(a.id.cmp(&b.id))
+}
+
+pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category, def: &ScheduleDef) -> Table {
+    let fields = def.fields_for(category);
+    let mut elements: Vec<&Element> = project.elements_of(category).collect();
+    elements.sort_by(|a, b| default_order(a, b));
+
+    let mut rows: Vec<(&Element, Vec<Value>)> =
+        elements.into_iter().map(|e| (e, fields.iter().map(|&f| value(project, geom, e, f)).collect())).collect();
+
+    if let Some((field, needle)) = &def.filter {
+        let needle = needle.trim().to_lowercase();
+        if !needle.is_empty() {
+            rows.retain(|(e, _)| text_of(&value(project, geom, e, *field)).to_lowercase().contains(&needle));
+        }
     }
-    if category != Category::Railing {
-        headers.push("col-volume");
+    if let Some(field) = def.sort_by {
+        // Stable: ties keep the default order.
+        rows.sort_by(|(a, _), (b, _)| {
+            let order = compare(&value(project, geom, a, field), &value(project, geom, b, field));
+            if def.descending { order.reverse() } else { order }
+        });
     }
-    let (mut volume_sum, mut length_sum) = (0.0, 0.0);
-    let rows = elements
-        .iter()
-        .map(|e| {
-            let mut cells =
-                vec![e.mark.clone(), project.type_name(e.type_id).to_string(), project.level_name(e.level).to_string()];
-            match &e.kind {
-                ElementKind::Column(c) => {
-                    let (base, top) = project.column_span(e, c);
-                    cells.push(format::meters(top - base));
+
+    let totals = if def.hide_totals {
+        Vec::new()
+    } else {
+        let mut totals: Vec<String> = fields
+            .iter()
+            .enumerate()
+            .map(|(i, &f)| {
+                if !summable(f) {
+                    return String::new();
                 }
-                ElementKind::Beam(b) => {
-                    length_sum += b.length();
-                    cells.push(format::meters(b.length()));
+                let sum: f64 = rows.iter().filter_map(|(_, values)| values.get(i)?.number()).sum();
+                match f {
+                    ScheduleField::Length => format::meters(sum),
+                    ScheduleField::Volume => format::number(sum, 3),
+                    _ => format::number(sum, 2),
                 }
-                ElementKind::Stair(s) => match cc_geom::stair_geom(project, e, s) {
-                    Some(g) => cells.extend([g.risers.to_string(), format::meters(g.riser), format::meters(g.run())]),
-                    None => cells.extend(["—".to_string(), "—".to_string(), "—".to_string()]),
-                },
-                ElementKind::Railing(r) => {
-                    length_sum += r.length();
-                    cells.push(format::meters(r.length()));
-                }
-                _ => {}
-            }
-            if category != Category::Railing {
-                let volume = geom.volume(e.id);
-                volume_sum += volume;
-                cells.push(format::number(volume, 3));
-            }
-            Row { element: e.id, cells }
-        })
-        .collect();
-    let mut totals = vec![String::new(); headers.len()];
-    if let Some(first) = totals.first_mut() {
-        *first = elements.len().to_string();
+            })
+            .collect();
+        if let Some(first) = totals.first_mut() {
+            *first = rows.len().to_string();
+        }
+        totals
+    };
+
+    Table {
+        headers: fields.iter().map(|f| f.key()).collect(),
+        rows: rows
+            .into_iter()
+            .map(|(e, values)| Row { element: e.id, cells: values.iter().map(Value::cell).collect() })
+            .collect(),
+        totals,
     }
-    if matches!(category, Category::Beam | Category::Railing)
-        && let Some(cell) = totals.get_mut(3)
-    {
-        *cell = format::meters(length_sum);
+}
+
+/// The table as CSV: `;`-separated when the decimal separator is a comma, so
+/// spreadsheets in those locales open it directly. `header` and `cell`
+/// translate keys.
+pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cell) -> String) -> String {
+    let sep = if format::number(0.5, 1).contains(',') { ';' } else { ',' };
+    let quote = |s: &str| {
+        if s.contains(sep) || s.contains('"') || s.contains('\n') {
+            format!("\"{}\"", s.replace('"', "\"\""))
+        } else {
+            s.to_string()
+        }
+    };
+    let mut out = String::new();
+    let mut line = |cells: Vec<String>| {
+        out.push_str(&cells.iter().map(|c| quote(c)).collect::<Vec<_>>().join(&sep.to_string()));
+        out.push_str("\r\n");
+    };
+    line(table.headers.iter().map(|h| header(h)).collect());
+    for row in &table.rows {
+        line(row.cells.iter().map(&cell).collect());
     }
-    if category != Category::Railing
-        && let Some(cell) = totals.last_mut()
-    {
-        *cell = format::number(volume_sum, 3);
+    if !table.totals.is_empty() {
+        line(table.totals.clone());
     }
-    Table { headers, rows, totals }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> (Project, ModelGeometry) {
+        let project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
+        let geom = ModelGeometry::build(&project);
+        (project, geom)
+    }
+
+    #[test]
+    fn sorting_filtering_and_totals() {
+        let (project, geom) = sample();
+        let def = ScheduleDef {
+            fields: vec![ScheduleField::Mark, ScheduleField::Width, ScheduleField::Area],
+            sort_by: Some(ScheduleField::Mark),
+            descending: true,
+            ..Default::default()
+        };
+        let t = schedule(&project, &geom, Category::Window, &def);
+        assert_eq!(t.headers, vec!["col-mark", "col-width", "col-area"]);
+        assert_eq!(t.rows.len(), 4);
+        // Marks 1..4, descending; windows have no area (empty cell).
+        let marks: Vec<&str> = t.rows.iter().map(|r| r.cells[0].raw()).collect();
+        assert_eq!(marks, ["4", "3", "2", "1"]);
+        assert_eq!(t.rows[0].cells[1], Cell::Text(format::meters(1.2)));
+        assert_eq!(t.totals[0], "4");
+
+        let filtered = ScheduleDef { filter: Some((ScheduleField::Mark, "3".into())), ..def };
+        let t = schedule(&project, &geom, Category::Window, &filtered);
+        assert_eq!(t.rows.len(), 1);
+        assert_eq!(t.totals[0], "1");
+    }
+
+    #[test]
+    fn csv_quotes_and_separates() {
+        let table = Table {
+            headers: vec!["a", "b"],
+            rows: vec![Row { element: cc_core::ElementId(1), cells: vec![Cell::Text("x;y".into()), Cell::Key("k")] }],
+            totals: vec!["1".into(), String::new()],
+        };
+        let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
+        assert_eq!(csv, "A;B\r\n\"x;y\";k\r\n1;\r\n");
+    }
 }

@@ -10,6 +10,7 @@ mod ids;
 mod persist;
 mod project;
 mod repair;
+mod schedule;
 mod types;
 mod view;
 
@@ -23,6 +24,7 @@ pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
 pub use project::{Level, Material, Project, ProjectInfo};
+pub use schedule::{ScheduleDef, ScheduleField};
 pub use types::{
     Category, ColumnSection, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction, stair_layout,
 };

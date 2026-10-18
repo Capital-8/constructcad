@@ -193,10 +193,17 @@ mod tests {
         let project = cc_core::Project::from_template();
         let geom = cc_geom::ModelGeometry::build(&project);
         for c in cc_core::Category::ALL {
-            for h in cc_views::schedule(&project, &geom, c).headers {
+            for h in cc_views::schedule(&project, &geom, c, &Default::default()).headers {
                 if !messages.contains_key(h) {
                     missing.push(h.to_string());
                 }
+            }
+            let fields = cc_core::ScheduleField::available(c);
+            missing.extend(fields.iter().map(|f| f.key()).filter(|k| !messages.contains_key(*k)).map(String::from));
+        }
+        for k in ["value-yes", "value-no"] {
+            if !messages.contains_key(k) {
+                missing.push(k.to_string());
             }
         }
         missing.sort();

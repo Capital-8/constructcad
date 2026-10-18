@@ -813,7 +813,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 }
             });
         }
-        ViewKind::Schedule { category } => {
+        ViewKind::Schedule { category, .. } => {
             section(ui, "graphics", t!("section-graphics"), |ui| {
                 readonly_row(ui, &t!("prop-category"), actions::t_category(*category));
             });
