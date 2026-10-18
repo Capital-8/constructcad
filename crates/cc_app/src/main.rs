@@ -14,9 +14,11 @@ mod ribbon;
 mod schedule_ui;
 mod sheet;
 mod state;
+mod table;
 mod theme;
 mod thumbnails;
 mod tools;
+mod type_dialog;
 mod view3d;
 
 fn main() -> eframe::Result<()> {

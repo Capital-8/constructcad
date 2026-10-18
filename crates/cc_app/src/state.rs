@@ -36,6 +36,10 @@ pub struct Dialogs {
     pub levels: bool,
     pub materials: bool,
     pub type_editor: Option<ElementTypeId>,
+    /// Type name being edited by "Rename" in the type dialog.
+    pub type_rename: Option<String>,
+    /// The layer editor is expanded in the type dialog.
+    pub type_layers_open: bool,
     pub confirm: Option<PendingAction>,
     pub error: Option<String>,
     pub about: bool,
@@ -70,6 +74,10 @@ pub struct AppState {
     pub length_input: String,
     /// Default height for new walls.
     pub wall_height: f64,
+    /// Location line for new walls.
+    pub wall_location_line: cc_core::LocationLine,
+    /// Level new walls rise to (`None`: unconnected, `wall_height` tall).
+    pub wall_top_level: Option<LevelId>,
     /// Allow the window to close after the user confirmed.
     pub quit_confirmed: bool,
     /// egui textures of closed 3D views, freed by the app when the GPU is available.
@@ -113,6 +121,8 @@ impl AppState {
             key_buffer: String::new(),
             length_input: String::new(),
             wall_height: 3.0,
+            wall_location_line: Default::default(),
+            wall_top_level: None,
             quit_confirmed: false,
             textures_to_free: Vec::new(),
             generation: 0,

@@ -404,10 +404,38 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("hint-select")));
             }
             Tool::Wall { .. } => {
-                ui.label(t!("prop-height"));
-                ui.add(
-                    DragValue::new(&mut state.wall_height).speed(0.01).range(0.1..=50.0).fixed_decimals(2).suffix(" m"),
-                );
+                ui.label(t!("prop-top-constraint"));
+                let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
+                let current = match state.wall_top_level.and_then(|id| levels.iter().find(|l| l.0 == id)) {
+                    Some((_, name)) => t!("top-up-to", "level" => name),
+                    None => t!("top-unconnected"),
+                };
+                egui::ComboBox::from_id_salt("wall_top").selected_text(current).width(170.0).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut state.wall_top_level, None, t!("top-unconnected"));
+                    for (id, name) in &levels {
+                        ui.selectable_value(&mut state.wall_top_level, Some(*id), t!("top-up-to", "level" => name));
+                    }
+                });
+                if state.wall_top_level.is_none() {
+                    ui.add(
+                        DragValue::new(&mut state.wall_height)
+                            .speed(0.01)
+                            .range(0.1..=50.0)
+                            .fixed_decimals(2)
+                            .suffix(" m"),
+                    );
+                }
+                ui.separator();
+                ui.label(t!("prop-location-line"));
+                let location = &mut state.wall_location_line;
+                egui::ComboBox::from_id_salt("wall_location")
+                    .selected_text(crate::i18n::tr(location.key()))
+                    .width(170.0)
+                    .show_ui(ui, |ui| {
+                        for l in cc_core::LocationLine::ALL {
+                            ui.selectable_value(location, l, crate::i18n::tr(l.key()));
+                        }
+                    });
                 ui.separator();
                 ui.label(theme::muted(t!("hint-wall")));
             }

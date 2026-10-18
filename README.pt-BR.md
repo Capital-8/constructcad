@@ -39,7 +39,8 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
   - Pisos, forros e telhados (plano ou de uma água, com beiral) por esboço ou "Das paredes".
 - **Snapping**: extremidades, pontos médios, sobre a parede, ângulos de 15°, Shift para ortogonal, comprimento digitado + Enter.
 - **Edição**: seleção por clique ou janela (contida ou cruzada), mover arrastando, copiar com Ctrl+arrastar, excluir. Desfazer e refazer cobrem todas as edições.
-- **Propriedades**: parâmetros de instância e da vista, troca de tipo e editor de tipos (camadas, materiais, dimensões, duplicar).
+- **Propriedades**: parâmetros de instância e da vista em seções recolhíveis; paredes com restrição de base e de topo (altura desconectada ou até um nível), linha de localização, delimitação de ambientes e estrutural.
+- **Tipos**: diálogo de propriedades do tipo com duplicar e renomear, editor de camadas com função (núcleo, acabamentos), função da parede e dados de identidade (marca de tipo, fabricante, modelo, classificação, resistência ao fogo, custo…).
 - **Vista 3D** (wgpu, MSAA): orbitar, pan, zoom, ajustar ao modelo e seleção por clique.
 - **Elevações e cortes**: remoção de linhas ocultas, hachura de corte e níveis anotados.
 - **Tabelas**:
@@ -102,7 +103,7 @@ python scripts/validate_ifc.py casa_simples.ifc
 - Importação IFC.
 - Exportação das folhas em PDF/SVG.
 - Cotas e anotações.
-- Famílias paramétricas do usuário.
+- Componentes paramétricos definidos pelo usuário.
 - Escadas e guarda-corpos.
 - Eixos (grids).
 - Telhados de duas e quatro águas.

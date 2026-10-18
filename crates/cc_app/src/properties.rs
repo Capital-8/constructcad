@@ -8,19 +8,14 @@ use crate::i18n::tr;
 use crate::icons::{self, Icon};
 use crate::state::AppState;
 use crate::t;
+use crate::table::{header_block, padded, readonly_row, row, section};
 use crate::theme::{self, PALETTE};
 use cc_core::{Category, Element, ElementId, ElementKind, RoofShape, SheetSize, ViewId, ViewKind};
 use cc_views::format;
-use egui::{Align, DragValue, Layout, Rect, Response, RichText, Sense, Stroke, Ui, UiBuilder, vec2};
+use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
 use std::hash::{Hash, Hasher};
 
 const SCALES: [u32; 9] = [10, 20, 25, 50, 75, 100, 200, 500, 1000];
-
-/// Height of a table row and of a section header.
-const ROW_H: f32 = 22.0;
-/// Share of the table width taken by the label column.
-const LABEL_SHARE: f32 = 0.46;
-const FONT_SIZE: f32 = 12.5;
 
 fn key(parts: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -40,81 +35,6 @@ fn modify(state: &mut AppState, id: ElementId, field: &str, f: impl FnOnce(&mut 
         if let Some(el) = e.element_mut(id) {
             f(el);
         }
-    });
-}
-
-// --- Table primitives ---
-
-/// Collapsible section header; `add` draws the rows while it is open.
-fn section(ui: &mut Ui, id: &str, title: String, add: impl FnOnce(&mut Ui)) {
-    let state_id = ui.make_persistent_id(("prop-section", id));
-    let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(state_id, true));
-    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
-    let painter = ui.painter();
-    let fill = if response.hovered() { PALETTE.hover } else { PALETTE.surface };
-    painter.rect_filled(rect, 0.0, fill);
-    painter.hline(rect.x_range(), rect.bottom() - 0.5, Stroke::new(1.0, PALETTE.border));
-    let chevron = Rect::from_center_size(egui::pos2(rect.left() + 11.0, rect.center().y), vec2(9.0, 9.0));
-    icons::paint(painter, chevron, if open { Icon::ChevronDown } else { Icon::ChevronRight }, PALETTE.text_muted);
-    let font = egui::FontId::new(FONT_SIZE, theme::semibold());
-    painter.text(egui::pos2(rect.left() + 22.0, rect.center().y), egui::Align2::LEFT_CENTER, title, font, PALETTE.text);
-    if response.clicked() {
-        open = !open;
-        ui.data_mut(|d| d.insert_persisted(state_id, open));
-    }
-    if open {
-        add(ui);
-    }
-}
-
-/// One table row: a label cell and a value cell filled by `add`.
-fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
-    let width = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::hover());
-    let split = (rect.left() + width * LABEL_SHARE).round();
-    let painter = ui.painter();
-    let grid = Stroke::new(1.0, PALETTE.border);
-    painter.hline(rect.x_range(), rect.bottom() - 0.5, grid);
-    painter.vline(split + 0.5, rect.y_range(), grid);
-    let label_rect = Rect::from_min_max(rect.min, egui::pos2(split, rect.bottom()));
-    let font = egui::FontId::proportional(FONT_SIZE);
-    ui.painter_at(label_rect.shrink2(vec2(6.0, 0.0))).text(
-        egui::pos2(label_rect.left() + 10.0, rect.center().y),
-        egui::Align2::LEFT_CENTER,
-        label,
-        font,
-        PALETTE.text_muted,
-    );
-    let label_hover = ui.interact(label_rect, ui.id().with(("prop-label", label)), Sense::hover());
-    label_hover.on_hover_text(label);
-
-    let value_rect = Rect::from_min_max(egui::pos2(split + 2.0, rect.top() + 1.0), rect.max - vec2(2.0, 2.0));
-    let builder = UiBuilder::new().max_rect(value_rect).layout(Layout::left_to_right(Align::Center));
-    ui.scope_builder(builder, |ui| {
-        let w = value_rect.width();
-        let s = ui.spacing_mut();
-        s.interact_size = vec2(w, ROW_H - 4.0);
-        s.combo_width = w - 8.0;
-        s.text_edit_width = w - 4.0;
-        s.button_padding = vec2(6.0, 1.0);
-        s.item_spacing = vec2(4.0, 0.0);
-        // Flat cells: borders appear only on hover and focus.
-        let v = ui.visuals_mut();
-        v.widgets.inactive.bg_stroke = Stroke::NONE;
-        v.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-        v.extreme_bg_color = egui::Color32::TRANSPARENT;
-        ui.style_mut().override_font_id = Some(egui::FontId::proportional(FONT_SIZE));
-        add(ui)
-    })
-    .inner
-}
-
-/// A row whose value cannot be edited (shown dimmed).
-fn readonly_row(ui: &mut Ui, label: &str, value: String) {
-    row(ui, label, |ui| {
-        ui.add_space(4.0);
-        ui.label(RichText::new(value).color(PALETTE.text_faint));
     });
 }
 
@@ -164,30 +84,6 @@ fn text_row(ui: &mut Ui, label: &str, value: String) -> (Response, String) {
     (r, text)
 }
 
-// --- Header block ---
-
-/// Header with a large icon tile, a title and a subtitle.
-fn header_block(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
-    ui.horizontal(|ui| {
-        let (tile, _) = ui.allocate_exact_size(vec2(42.0, 42.0), Sense::hover());
-        ui.painter().rect_filled(tile, theme::RADIUS as f32, egui::Color32::WHITE);
-        ui.painter().rect_stroke(
-            tile,
-            theme::RADIUS as f32,
-            Stroke::new(1.0, PALETTE.border),
-            egui::StrokeKind::Inside,
-        );
-        icons::paint(ui.painter(), tile.shrink(10.0), icon, PALETTE.accent_text);
-        ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing.y = 1.0;
-            ui.add_space(3.0);
-            ui.label(RichText::new(title).family(theme::semibold()).size(13.5).color(PALETTE.text));
-            ui.label(RichText::new(subtitle).size(12.0).color(PALETTE.text_faint));
-        });
-    });
-    ui.add_space(6.0);
-}
-
 /// Panel entry point.
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     theme::panel_header(ui, &t!("props-title"), None);
@@ -215,18 +111,6 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
             n => multi_props(ui, state, n),
         }
     });
-}
-
-/// Content with the panel's side padding (headers, buttons, lists).
-fn padded<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
-    egui::Frame::new()
-        .inner_margin(egui::Margin::symmetric(10, 8))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.spacing_mut().item_spacing.y = 6.0;
-            add(ui)
-        })
-        .inner
 }
 
 fn multi_props(ui: &mut Ui, state: &mut AppState, n: usize) {
@@ -265,7 +149,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         ui.horizontal(|ui| {
             let button_w = 96.0;
             egui::ComboBox::from_id_salt(("type", id.0))
-                .width(ui.available_width() - button_w - 8.0)
+                .width(ui.available_width() - button_w - 30.0)
                 .selected_text(type_name.clone())
                 .show_ui(ui, |ui| {
                     for (tid, name) in &types {
@@ -287,18 +171,16 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
 
     match &el.kind {
         ElementKind::Wall(w) => {
-            section(ui, "constraints", t!("section-constraints"), |ui| {
-                level_row(ui, state, &el);
-                length_row(ui, state, &t!("prop-base-offset"), id, "base", w.base_offset, |e, v| {
-                    if let ElementKind::Wall(w) = &mut e.kind {
-                        w.base_offset = v;
-                    }
-                });
-                length_row(ui, state, &t!("prop-height"), id, "height", w.height, |e, v| {
-                    if let ElementKind::Wall(w) = &mut e.kind {
-                        w.height = v.max(0.1);
-                    }
-                });
+            section(ui, "constraints", t!("section-constraints"), |ui| wall_constraints(ui, state, &el, w));
+            section(ui, "structural", t!("section-structural"), |ui| {
+                let mut on = w.structural;
+                if row(ui, &t!("prop-structural"), |ui| ui.checkbox(&mut on, "")).changed() {
+                    modify(state, id, "structural", |e| {
+                        if let ElementKind::Wall(w) = &mut e.kind {
+                            w.structural = on;
+                        }
+                    });
+                }
             });
             section(ui, "geometry", t!("section-geometry"), |ui| {
                 for (label, field, value) in [
@@ -321,6 +203,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(w.length())));
+                let height = state.project().wall_height(&el, w);
+                readonly_row(ui, &t!("prop-height"), format!("{} m", format::meters(height)));
                 let thickness = state.project().thickness_of(&el);
                 readonly_row(ui, &t!("prop-thickness"), format!("{} m", format::meters(thickness)));
                 readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
@@ -427,11 +311,107 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             finish(state, &r);
         }
     });
+    section(ui, "ifc", t!("section-ifc"), |ui| {
+        readonly_row(ui, &t!("prop-ifc-guid"), cc_ifc::guid::encode(el.uid.0));
+    });
     padded(ui, |ui| {
         if ui.button(t!("action-delete")).clicked() {
             state.delete_selection();
         }
     });
+}
+
+/// Base and top constraints, location line and room bounding of a wall.
+fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core::Wall) {
+    use cc_core::{LocationLine, WallTop};
+    let id = el.id;
+    let set = |state: &mut AppState, field: &str, f: &dyn Fn(&mut cc_core::Wall)| {
+        modify(state, id, field, |e| {
+            if let ElementKind::Wall(w) = &mut e.kind {
+                f(w);
+            }
+        });
+    };
+
+    let mut location = w.location_line;
+    row(ui, &t!("prop-location-line"), |ui| {
+        egui::ComboBox::from_id_salt(("loc", id.0)).selected_text(tr(location.key())).show_ui(ui, |ui| {
+            for l in LocationLine::ALL {
+                ui.selectable_value(&mut location, l, tr(l.key()));
+            }
+        });
+    });
+    if location != w.location_line {
+        set(state, "loc", &|w| w.location_line = location);
+        state.doc.break_merge();
+    }
+
+    level_row(ui, state, el);
+    length_row(ui, state, &t!("prop-base-offset"), id, "base", w.base_offset, |e, v| {
+        if let ElementKind::Wall(w) = &mut e.kind {
+            w.base_offset = v;
+        }
+    });
+
+    // Top: unconnected (explicit height) or attached to a level.
+    let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
+    let top_label = |top: WallTop| match top {
+        WallTop::Unconnected => t!("top-unconnected"),
+        WallTop::Level { level, .. } => {
+            t!("top-up-to", "level" => levels.iter().find(|l| l.0 == level).map_or("?", |l| l.1.as_str()))
+        }
+    };
+    let mut top_level = match w.top {
+        WallTop::Level { level, .. } => Some(level),
+        WallTop::Unconnected => None,
+    };
+    let before = top_level;
+    row(ui, &t!("prop-top-constraint"), |ui| {
+        egui::ComboBox::from_id_salt(("top", id.0)).selected_text(top_label(w.top)).show_ui(ui, |ui| {
+            ui.selectable_value(&mut top_level, None, t!("top-unconnected"));
+            for (lid, _) in &levels {
+                let label = top_label(WallTop::Level { level: *lid, offset: 0.0 });
+                ui.selectable_value(&mut top_level, Some(*lid), label);
+            }
+        });
+    });
+    if top_level != before {
+        // Keep the wall's current top when switching to unconnected.
+        let height = state.project().wall_height(el, w);
+        set(state, "top", &|w| {
+            w.top = match top_level {
+                Some(level) => WallTop::Level { level, offset: 0.0 },
+                None => WallTop::Unconnected,
+            };
+            if top_level.is_none() {
+                w.height = height;
+            }
+        });
+        state.doc.break_merge();
+    }
+    match w.top {
+        WallTop::Level { level, offset } => {
+            length_row(ui, state, &t!("prop-top-offset"), id, "top-offset", offset, move |e, v| {
+                if let ElementKind::Wall(w) = &mut e.kind {
+                    w.top = WallTop::Level { level, offset: v };
+                }
+            });
+            let height = state.project().wall_height(el, w);
+            readonly_row(ui, &t!("prop-unconnected-height"), format!("{} m", format::meters(height)));
+        }
+        WallTop::Unconnected => {
+            length_row(ui, state, &t!("prop-unconnected-height"), id, "height", w.height, |e, v| {
+                if let ElementKind::Wall(w) = &mut e.kind {
+                    w.height = v.max(0.1);
+                }
+            });
+        }
+    }
+
+    let mut bounding = w.room_bounding;
+    if row(ui, &t!("prop-room-bounding"), |ui| ui.checkbox(&mut bounding, "")).changed() {
+        set(state, "bounding", &|w| w.room_bounding = bounding);
+    }
 }
 
 fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof) {

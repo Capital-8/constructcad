@@ -43,7 +43,8 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
   - Floors, ceilings and roofs (flat or single-slope, with overhang) by sketch or "From walls".
 - **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
 - **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
-- **Properties**: instance and view parameters, type switching and a type editor (layers, materials, dimensions, duplicate).
+- **Properties**: instance and view parameters in collapsible sections; walls with base and top constraints (unconnected height or up to a level), location line, room bounding and structural flags.
+- **Types**: Type Properties dialog with duplicate and rename, layer editor with layer functions (core, finishes), wall function and identity data (type mark, manufacturer, model, classification, fire rating, cost…).
 - **3D view** (wgpu, MSAA): orbit, pan, zoom, zoom to fit and click selection.
 - **Elevations and sections**: hidden line removal, cut hatching and annotated levels.
 - **Schedules**:
@@ -108,7 +109,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 - IFC import.
 - PDF/SVG sheet export.
 - Dimensions and annotations.
-- User parametric families.
+- User-defined parametric components.
 - Stairs and railings.
 - Grids.
 - Gable and hip roofs.
