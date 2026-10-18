@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Modify tools: Move (MV), Copy (CO, multiple), Rotate (RO, with center and typed angle), Mirror by picking an axis (MM) or drawing it (DM), linear Array (AR), Trim/Extend to Corner (TR) or to a reference (TX), Split (SL), Offset (OF), Align (AL), allow/disallow joins at wall ends, and Pin/Unpin (PN/UP); previews, snapping and one undo step per edit. Walls take their doors and windows along; mirrored openings swap their hinge side.
+- Ribbon: long labels wrap onto two lines, and panels with many tools stack small icon buttons with tooltips.
 - Material browser (*Manage → Materials*): searchable list with swatches and four tabs — identity (description, class, keywords, manufacturer, model, cost, URL, keynote, mark), graphics (shading color, transparency, surface and cut patterns), appearance (render color, finish) and physical properties (thermal and mechanical); new, duplicate, rename (updating every type) and delete (refused while in use).
 - Material cut patterns in plans (per wall layer, columns) and sections, at a constant paper size; transparent materials blended in 3D, elevations and sections, and exported to IFC surface styles.
 - Project units (*Manage → Project Units*): unit, decimals and symbol for lengths, areas, volumes, angles and slopes, a currency symbol and the decimal symbol / digit grouping, applied to dimensions, tags, schedules, properties and length fields.
