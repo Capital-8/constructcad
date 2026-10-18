@@ -6,11 +6,13 @@
 
 mod annotate;
 mod drawing;
+pub mod export;
 pub mod format;
 mod legend;
 mod plan;
 mod projected;
 mod schedule;
+mod sheet;
 
 pub use annotate::HIGHLIGHT_ONLY;
 pub use drawing::{Anchor, Drawing2D, LineStyle, Prim};
@@ -18,6 +20,7 @@ pub use legend::legend;
 pub use plan::plan;
 pub use projected::{Frame, axonometric, elevation, section};
 pub use schedule::{Cell, Row, Table, schedule, to_csv};
+pub use sheet::{MARGIN, PlacedViewport, Sheet, TITLE_H, TITLE_W, TitleLabels, compose as compose_sheet};
 
 use cc_core::{Project, View, ViewKind};
 use cc_geom::ModelGeometry;
@@ -45,6 +48,7 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
 mod tests {
     use super::*;
     use cc_core::{Category, ViewCategory};
+    use glam::DVec2;
 
     fn sample() -> (Project, ModelGeometry) {
         let project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
@@ -91,5 +95,45 @@ mod tests {
         // Interior of the left room: 5 m minus half walls, by 6 m minus half walls.
         let area = (5.0 - 0.075 - 0.075) * (6.0 - 0.15);
         assert_eq!(table.rows[0].cells[3], Cell::Text(format::number(area, 2)));
+    }
+
+    #[test]
+    fn sheet_places_views_at_scale_and_exports() {
+        let (project, geom) = sample();
+        let sheet = project.views_of(ViewCategory::Sheet).next().unwrap().clone();
+        let ViewKind::Sheet { viewports, .. } = &sheet.kind else { panic!("not a sheet") };
+        assert!(!viewports.is_empty());
+        let labels = TitleLabels { project: "Projeto".into(), ..Default::default() };
+        let composed = compose_sheet(&project, &sheet, &labels, |id| {
+            project.view(id).and_then(|v| generate(&project, &geom, v)).map(std::rc::Rc::new)
+        })
+        .unwrap();
+        assert_eq!(composed.paper, DVec2::new(420.0, 297.0));
+        assert_eq!(composed.viewports.len(), viewports.len());
+        // Each viewport keeps its view's extent at the view scale.
+        for placed in &composed.viewports {
+            let view = project.view(placed.view).unwrap();
+            let (lo, hi) = generate(&project, &geom, view).unwrap().bounds().unwrap();
+            let k = 1000.0 / view.scale as f64;
+            assert!(((hi - lo) * 0.5 * k - placed.half).abs().max_element() < 1e-9);
+        }
+        let texts: Vec<&str> = composed
+            .drawing
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.contains(&"Projeto"));
+        assert!(texts.contains(&project.info.name.as_str()));
+        // Everything lies on the paper.
+        let (lo, hi) = composed.drawing.bounds().unwrap();
+        assert!(lo.min_element() >= 0.0 && hi.x <= 420.0 && hi.y <= 297.0, "{lo} {hi}");
+        let svg = export::to_svg(&composed.drawing, composed.paper);
+        assert!(svg.matches("<line ").count() > 100);
+        let pdf = export::to_pdf(&composed.drawing, composed.paper);
+        assert!(pdf.starts_with(b"%PDF") && pdf.ends_with(b"%%EOF\n"));
     }
 }

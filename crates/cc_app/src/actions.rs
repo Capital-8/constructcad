@@ -320,6 +320,51 @@ pub fn export_ifc(state: &mut AppState) {
     }
 }
 
+/// Vector formats a sheet can be exported to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SheetFormat {
+    Pdf,
+    Svg,
+}
+
+/// The active view when it is a sheet.
+pub fn active_sheet(state: &AppState) -> Option<ViewId> {
+    let id = state.active_view?;
+    matches!(state.project().view(id)?.kind, ViewKind::Sheet { .. }).then_some(id)
+}
+
+/// Export the active sheet as PDF or SVG.
+pub fn export_sheet(state: &mut AppState, format: SheetFormat) {
+    let Some(id) = active_sheet(state) else { return };
+    let Some(view) = state.project().view(id) else { return };
+    let (ext, filter) = match format {
+        SheetFormat::Pdf => ("pdf", t!("file-filter-pdf")),
+        SheetFormat::Svg => ("svg", t!("file-filter-svg")),
+    };
+    let name = match &view.kind {
+        ViewKind::Sheet { number, .. } => format!("{number} - {}.{ext}", view.name),
+        _ => format!("{}.{ext}", view.name),
+    };
+    let dialog = rfd::FileDialog::new().add_filter(filter, &[ext]).set_file_name(name);
+    let Some(mut path) = dialog.save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension(ext);
+    }
+    let Some(sheet) = state.sheet(id) else { return };
+    let bytes = guard(|| match format {
+        SheetFormat::Pdf => cc_views::export::to_pdf(&sheet.drawing, sheet.paper),
+        SheetFormat::Svg => cc_views::export::to_svg(&sheet.drawing, sheet.paper).into_bytes(),
+    });
+    match bytes.map(|b| std::fs::write(&path, b)) {
+        Ok(Ok(())) => state.message = t!("msg-exported", "path" => path.display()),
+        Ok(Err(err)) => {
+            let error = t!("err-io", "detail" => err);
+            state.dialogs.error = Some(t!("msg-export-failed", "error" => error));
+        }
+        Err(message) => state.dialogs.error = Some(t!("msg-export-failed", "error" => message)),
+    }
+}
+
 pub fn save(state: &mut AppState, save_as: bool) -> bool {
     let path = match (&state.doc.path, save_as) {
         (Some(p), false) => p.clone(),

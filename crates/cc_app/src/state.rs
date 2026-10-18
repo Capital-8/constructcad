@@ -3,7 +3,7 @@
 use crate::canvas::View2DState;
 use crate::tools::{Interaction, Tool};
 use crate::view3d::View3DState;
-use cc_core::{Category, Document, Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, ViewId};
+use cc_core::{Category, Document, Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, ViewId, ViewKind};
 use cc_geom::ModelGeometry;
 use cc_views::Drawing2D;
 use std::collections::{BTreeSet, HashMap};
@@ -64,6 +64,7 @@ pub struct AppState {
     pub view2d: HashMap<ViewId, View2DState>,
     pub view3d: HashMap<ViewId, View3DState>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
+    sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
     /// Views the dock should open (or focus) this frame.
     pub open_requests: Vec<ViewId>,
     pub dialogs: Dialogs,
@@ -119,6 +120,7 @@ impl AppState {
             view2d: HashMap::new(),
             view3d: HashMap::new(),
             drawings: HashMap::new(),
+            sheets: HashMap::new(),
             open_requests: Vec::new(),
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
@@ -198,6 +200,33 @@ impl AppState {
     /// Drop cached drawings (e.g. after a language change alters their text).
     pub fn invalidate_drawings(&mut self) {
         self.drawings.clear();
+        self.sheets.clear();
+    }
+
+    /// Cached composition of a sheet view (paper millimeters).
+    pub fn sheet(&mut self, view: ViewId) -> Option<Rc<cc_views::Sheet>> {
+        let rev = self.doc.revision();
+        if let Some((r, s)) = self.sheets.get(&view)
+            && *r == rev
+        {
+            return Some(s.clone());
+        }
+        let sheet_view = self.doc.project.view(view)?.clone();
+        let labels = cc_views::TitleLabels {
+            project: crate::t!("title-project"),
+            sheet: crate::t!("title-sheet"),
+            client: crate::t!("title-client"),
+            number: crate::t!("title-number"),
+            project_number: crate::t!("title-project-number"),
+            author: crate::t!("title-author"),
+        };
+        let ViewKind::Sheet { viewports, .. } = &sheet_view.kind else { return None };
+        let drawings: HashMap<ViewId, Rc<Drawing2D>> =
+            viewports.iter().filter_map(|vp| Some((vp.view, self.drawing(vp.view)?))).collect();
+        let s =
+            Rc::new(cc_views::compose_sheet(&self.doc.project, &sheet_view, &labels, |v| drawings.get(&v).cloned())?);
+        self.sheets.insert(view, (rev, s.clone()));
+        Some(s)
     }
 
     pub fn open_view(&mut self, view: ViewId) {

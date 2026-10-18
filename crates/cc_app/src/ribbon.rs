@@ -246,6 +246,16 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
         if big_button(ui, Icon::Export, &t!("action-export-ifc"), false, true, false).clicked() {
             actions::export_ifc(state);
         }
+        let sheet = actions::active_sheet(state).is_some();
+        for (label, format) in
+            [(t!("action-export-pdf"), actions::SheetFormat::Pdf), (t!("action-export-svg"), actions::SheetFormat::Svg)]
+        {
+            let r = big_button(ui, Icon::Sheet, &label, false, sheet, false);
+            let r = if sheet { r } else { r.on_hover_text(t!("hint-export-sheet")) };
+            if sheet && r.clicked() {
+                actions::export_sheet(state, format);
+            }
+        }
     });
     group(ui, t!("group-settings"), |ui| {
         ui.allocate_ui_with_layout(vec2(170.0, BUTTON_HEIGHT), Layout::top_down(Align::Min), |ui| {

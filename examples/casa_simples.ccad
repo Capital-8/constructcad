@@ -957,7 +957,7 @@
       (21): (
         id: (21),
         name: "Térreo",
-        scale: 50,
+        scale: 75,
         kind: FloorPlan(
           level: (1),
           cut_height: 1.2,

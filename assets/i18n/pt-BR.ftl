@@ -149,6 +149,9 @@ action-save = Salvar
 action-save-as = Salvar como…
 action-close-project = Fechar projeto
 action-export-ifc = Exportar IFC…
+action-export-pdf = Exportar PDF…
+action-export-svg = Exportar SVG…
+hint-export-sheet = Abra uma folha para exportá-la
 action-undo = Desfazer
 action-redo = Refazer
 action-copy = Copiar
@@ -391,6 +394,8 @@ about-independence = O ConstructCAD é independente e não é afiliado, patrocin
 about-open-repository = Abrir repositório
 file-filter = Projeto ConstructCAD
 file-filter-ifc = Arquivo IFC
+file-filter-pdf = Documento PDF
+file-filter-svg = Imagem SVG
 
 # Nomes padrão
 default-section-name = Corte { $n }

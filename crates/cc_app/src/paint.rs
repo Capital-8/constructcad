@@ -28,11 +28,6 @@ impl Xf {
     pub fn to_world(self, s: Pos2) -> DVec2 {
         self.origin + DVec2::new((s.x - self.screen.x) as f64, (self.screen.y - s.y) as f64) / self.scale
     }
-
-    /// Compose with a drawing-to-drawing placement `p ↦ center + (p - from) * k`.
-    pub fn then_place(&self, from: DVec2, center: DVec2, k: f64) -> Xf {
-        Xf { screen: self.to_screen(center), origin: from, scale: self.scale * k }
-    }
 }
 
 pub fn stroke_for(style: LineStyle, highlighted: bool) -> Stroke {
