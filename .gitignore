@@ -1,3 +1,6 @@
 /target
 *.ccad.bak
 __pycache__/
+
+# Third-party sample IFC files kept locally only (not redistributable).
+examples/sample-models/
