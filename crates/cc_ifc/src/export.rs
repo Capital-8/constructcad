@@ -1,9 +1,9 @@
 //! Mapping of the ConstructCAD model to IFC4 entities.
 
 use crate::args;
-use crate::guid::guid;
+use crate::guid::{encode, guid};
 use crate::step::{Header, Id, StepWriter, Value, opt_str, reals};
-use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData};
+use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData, Uid};
 use cc_geom::{FRAME_COLOR, HostedPart, ModelGeometry, WallGeom, hosted_parts, polygon};
 use glam::{DVec2, DVec3};
 use std::collections::{BTreeMap, HashMap};
@@ -109,7 +109,8 @@ impl<'a> Exporter<'a> {
             w,
             project,
             geom,
-            seed: format!("{}\u{1f}{}", info.number, info.name),
+            // Ids of derived objects (relationships, openings…) hash the project id with a tag.
+            seed: if info.uid.is_nil() { format!("{}\u{1f}{}", info.number, info.name) } else { info.uid.to_string() },
             origin3,
             origin2,
             dir_z,
@@ -132,6 +133,27 @@ impl<'a> Exporter<'a> {
 
     fn guid(&self, tag: &str) -> Value {
         Value::Str(guid(&self.seed, tag))
+    }
+
+    /// GlobalId of an object with a persistent id, falling back to a derived one.
+    fn guid_of(&self, uid: Uid, tag: &str) -> Value {
+        if uid.is_nil() { self.guid(tag) } else { Value::Str(encode(uid.0)) }
+    }
+
+    /// `Pset_*` property set with single values, attached to `objects`.
+    fn property_set(&mut self, tag: &str, name: &str, objects: Vec<Id>, props: Vec<(&str, Value)>) {
+        if props.is_empty() || objects.is_empty() {
+            return;
+        }
+        let n = Value::Null;
+        let props: Vec<Id> = props
+            .into_iter()
+            .map(|(name, value)| self.w.add("IFCPROPERTYSINGLEVALUE", args![name, n.clone(), value, n.clone()]))
+            .collect();
+        let gid = self.guid(&format!("pset-{tag}"));
+        let set = self.w.add("IFCPROPERTYSET", args![gid, n.clone(), name, n.clone(), props]);
+        let gid = self.guid(&format!("pset-rel-{tag}"));
+        self.w.add("IFCRELDEFINESBYPROPERTIES", args![gid, n.clone(), n.clone(), n, objects, set]);
     }
 
     fn write_all(&mut self) {
@@ -193,7 +215,7 @@ impl<'a> Exporter<'a> {
         self.axis_ctx = sub(w, "Axis", "GRAPH_VIEW");
         let info = &self.project.info;
         let name = if info.name.is_empty() { "ConstructCAD" } else { info.name.as_str() };
-        let gid = self.guid("project");
+        let gid = self.guid_of(self.project.info.uid, "project");
         self.w.add(
             "IFCPROJECT",
             args![
@@ -455,10 +477,11 @@ impl<'a> Exporter<'a> {
             return Some(id);
         }
         let ty = self.project.element_type(type_id)?.clone();
-        let gid = self.guid(&format!("type-{type_id}"));
+        let gid = self.guid_of(ty.uid, &format!("type-{type_id}"));
         let n = Value::Null;
+        let description = opt_str(&ty.info.description);
         let base =
-            args![gid, n.clone(), ty.name.as_str(), n.clone(), n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
+            args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             TypeData::Wall { .. } => ("IFCWALLTYPE", args![Value::Enum("STANDARD")]),
             TypeData::Floor { .. } => ("IFCSLABTYPE", args![Value::Enum("FLOOR")]),
@@ -473,6 +496,14 @@ impl<'a> Exporter<'a> {
         };
         let id = self.w.add(entity, base.into_iter().chain(extra).collect());
         self.types.insert(type_id, id);
+        let info = &ty.info;
+        let label = |s: &str| Value::Typed("IFCLABEL", Box::new(s.into()));
+        let manufacturer: Vec<(&str, Value)> = [("Manufacturer", &info.manufacturer), ("ModelLabel", &info.model)]
+            .into_iter()
+            .filter(|(_, v)| !v.is_empty())
+            .map(|(k, v)| (k, label(v)))
+            .collect();
+        self.property_set(&format!("mfr-{type_id}"), "Pset_ManufacturerTypeInformation", vec![id], manufacturer);
         let material = match &ty.data {
             TypeData::Door { material, .. }
             | TypeData::Window { material, .. }
@@ -500,7 +531,7 @@ impl<'a> Exporter<'a> {
 
     /// Common leading attributes of an element occurrence.
     fn element_args(&self, e: &Element, placement: Id, shape: Id) -> Vec<Value> {
-        let gid = self.guid(&format!("element-{}", e.id));
+        let gid = self.guid_of(e.uid, &format!("element-{}", e.id));
         let name = self.project.type_name(e.type_id);
         args![gid, Value::Null, name, opt_str(&e.comments), Value::Null, placement, shape, opt_str(&e.mark)]
     }
@@ -574,17 +605,31 @@ impl<'a> Exporter<'a> {
         // Layers are listed from the left face (+Y) towards the right.
         self.layer_usage(e.type_id, product, "AXIS2", h);
 
+        let ty = project.element_type(e.type_id);
+        let mut props = vec![
+            ("Reference", Value::Typed("IFCIDENTIFIER", Box::new(project.type_name(e.type_id).into()))),
+            ("LoadBearing", Value::Typed("IFCBOOLEAN", Box::new(wall.structural.into()))),
+        ];
+        if let Some(function) = ty.and_then(|t| t.wall_function()) {
+            props.push(("IsExternal", Value::Typed("IFCBOOLEAN", Box::new(function.is_external().into()))));
+        }
+        if let Some(rating) = ty.map(|t| t.info.fire_rating.clone()).filter(|r| !r.is_empty()) {
+            props.push(("FireRating", Value::Typed("IFCLABEL", Box::new(rating.into()))));
+        }
+        self.property_set(&format!("wall-{}", e.id), "Pset_WallCommon", vec![product], props);
+
         let opening_area: f64 = g.openings.iter().map(|o| (o.u1 - o.u0) * (o.z1 - o.z0)).sum();
         let thickness = 2.0 * h;
+        let height = project.wall_height(e, wall);
         self.quantities(
             e,
             "Qto_WallBaseQuantities",
             &[
                 ("Length", Quantity::Length(wall.length())),
-                ("Height", Quantity::Length(wall.height)),
+                ("Height", Quantity::Length(height)),
                 ("Width", Quantity::Length(thickness)),
-                ("GrossSideArea", Quantity::Area(wall.length() * wall.height)),
-                ("NetSideArea", Quantity::Area((wall.length() * wall.height - opening_area).max(0.0))),
+                ("GrossSideArea", Quantity::Area(wall.length() * height)),
+                ("NetSideArea", Quantity::Area((wall.length() * height - opening_area).max(0.0))),
                 ("NetVolume", Quantity::Volume(self.geom.volume(e.id))),
             ],
         );
@@ -909,6 +954,16 @@ mod tests {
                 i += 1;
             }
         }
+    }
+
+    #[test]
+    fn global_ids_come_from_persistent_ids() {
+        let project = sample();
+        let text = export(&project, &ExportOptions::default());
+        let wall = project.elements_of(Category::Wall).next().unwrap();
+        assert!(text.contains(&format!("IFCWALL('{}'", encode(wall.uid.0))));
+        assert!(text.contains(&format!("IFCPROJECT('{}'", encode(project.info.uid.0))));
+        assert!(text.contains("'Pset_WallCommon'"));
     }
 
     #[test]

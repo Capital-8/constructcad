@@ -8,7 +8,7 @@
 //! third-party IFC libraries.
 
 mod export;
-mod guid;
+pub mod guid;
 pub mod step;
 
 pub use export::{ExportOptions, export, export_to_file};
