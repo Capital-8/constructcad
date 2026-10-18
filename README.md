@@ -118,4 +118,4 @@ Copyright © Francis Rebouças <francisreboucas@gmail.com>.
 
 ConstructCAD is licensed under the [GNU General Public License v3.0 or later](LICENSE) (GPL-3.0-or-later).
 
-The bundled [Inter](https://rsms.me/inter/) typeface is © The Inter Project Authors and licensed under the [SIL Open Font License 1.1](assets/fonts/OFL-Inter.txt).
+The application icon is by [Magnific – Flaticon](https://www.flaticon.com/) (see `assets/icons/FLATICON.txt`). The bundled [Inter](https://rsms.me/inter/) typeface is © The Inter Project Authors and licensed under the [SIL Open Font License 1.1](assets/fonts/OFL-Inter.txt).

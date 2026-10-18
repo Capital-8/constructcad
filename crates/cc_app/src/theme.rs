@@ -54,6 +54,23 @@ pub const PALETTE: Palette = Palette {
     warning: Color32::from_rgb(0xB2, 0x6B, 0x00),
 };
 
+/// The application icon (256 px PNG).
+pub const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/icons/app-icon-256.png");
+
+/// Texture of the application icon, loaded by [`apply`] for the ribbon.
+pub fn logo(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+    ctx.data(|d| d.get_temp(egui::Id::new("app-logo")))
+}
+
+fn load_logo(ctx: &egui::Context) {
+    let Ok(icon) = eframe::icon_data::from_png_bytes(APP_ICON_PNG) else { return };
+    let size = [icon.width as usize, icon.height as usize];
+    let image = egui::ColorImage::from_rgba_unmultiplied(size, &icon.rgba);
+    let options = egui::TextureOptions::LINEAR.with_mipmap_mode(Some(egui::TextureFilter::Linear));
+    let texture = ctx.load_texture("app-logo", image, options);
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("app-logo"), texture));
+}
+
 /// Corner radius of buttons, fields and popups.
 pub const RADIUS: u8 = 5;
 
@@ -95,6 +112,7 @@ pub fn muted(text: impl Into<String>) -> RichText {
 /// Install fonts, text styles, spacing and colors.
 pub fn apply(ctx: &egui::Context) {
     ctx.set_fonts(fonts());
+    load_logo(ctx);
     ctx.set_theme(egui::ThemePreference::Light);
     ctx.style_mut_of(egui::Theme::Light, |style| {
         style.visuals = visuals();

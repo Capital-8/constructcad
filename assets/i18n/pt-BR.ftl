@@ -222,6 +222,7 @@ type-duplicate = Duplicar tipo
 about-version = Versão
 about-text = Software livre de Modelagem de Informações da Construção (BIM).
 about-license = Licença GPL-3.0-or-later.
+about-icon-credit = Ícone do aplicativo por Magnific – Flaticon.
 file-filter = Projeto ConstructCAD
 file-filter-ifc = Arquivo IFC
 

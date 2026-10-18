@@ -145,9 +145,11 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.add_space(4.0);
-        let (mark, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
-        ui.painter().rect_filled(mark, 4.0, PALETTE.accent);
-        icons::paint(ui.painter(), mark.shrink(3.0), Icon::View3D, egui::Color32::WHITE);
+        let (mark, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
+        if let Some(logo) = theme::logo(ui.ctx()) {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(logo.id(), mark, uv, egui::Color32::WHITE);
+        }
         ui.add_space(8.0);
         ui.label(RichText::new("ConstructCAD").family(theme::semibold()).size(13.0).color(PALETTE.text));
         ui.add_space(18.0);

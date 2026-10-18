@@ -389,6 +389,8 @@ fn about(ctx: &Context, state: &mut AppState) {
         ui.label(t!("about-text"));
         ui.label(t!("about-license"));
         ui.label(env!("CARGO_PKG_AUTHORS"));
+        ui.add_space(6.0);
+        ui.label(crate::theme::muted(t!("about-icon-credit")).size(11.5));
     });
     state.dialogs.about = open;
 }

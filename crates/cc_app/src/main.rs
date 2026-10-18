@@ -24,11 +24,17 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([900.0, 600.0])
-            .with_title("ConstructCAD"),
+            .with_title("ConstructCAD")
+            .with_icon(app_icon()),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
     eframe::run_native("ConstructCAD", options, Box::new(|cc| Ok(Box::new(app::ConstructApp::new(cc, args)))))
+}
+
+/// Window and taskbar icon.
+fn app_icon() -> egui::IconData {
+    eframe::icon_data::from_png_bytes(theme::APP_ICON_PNG).unwrap_or_default()
 }
 
 /// `constructcad [project.ccad] [--view NAME]... [--lang pt-BR|en]`
