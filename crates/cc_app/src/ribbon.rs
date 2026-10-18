@@ -11,7 +11,7 @@ use cc_views::format;
 use egui::{Align, Button, DragValue, Layout, Response, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
 
 /// Height of the large ribbon buttons.
-const BUTTON_HEIGHT: f32 = 56.0;
+const BUTTON_HEIGHT: f32 = 66.0;
 const ICON_SIZE: f32 = 22.0;
 
 /// Icon of a model category, shared by the ribbon, options bar and browser.
@@ -42,12 +42,38 @@ fn tool_icon(tool: &Tool) -> Icon {
     }
 }
 
-/// A large ribbon button: icon above a label. `dropdown` adds a chevron.
+/// Labels wider than this (points) wrap onto two lines at a space.
+const WRAP_WIDTH: f32 = 64.0;
+
+/// Split `label` into one or two lines: long labels break at the space
+/// that best balances the two lines.
+fn label_lines(ui: &Ui, label: &str, font: &egui::FontId) -> Vec<String> {
+    let width = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), PALETTE.text).size().x;
+    if width(label) <= WRAP_WIDTH || !label.contains(' ') {
+        return vec![label.to_string()];
+    }
+    let best = label
+        .match_indices(' ')
+        .map(|(i, _)| (i, width(&label[..i]).max(width(&label[i + 1..]))))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(i, _)| i);
+    match best {
+        Some(i) => vec![label[..i].to_string(), label[i + 1..].to_string()],
+        None => vec![label.to_string()],
+    }
+}
+
+/// A large ribbon button: icon above a label of up to two lines. `dropdown` adds a chevron.
 fn big_button(ui: &mut Ui, icon: Icon, label: &str, selected: bool, enabled: bool, dropdown: bool) -> Response {
     let text_color = if enabled { PALETTE.text } else { PALETTE.text_faint };
-    let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::proportional(12.0), text_color);
+    let font = egui::FontId::proportional(12.0);
+    let galleys: Vec<_> = label_lines(ui, label, &font)
+        .into_iter()
+        .map(|line| ui.painter().layout_no_wrap(line, font.clone(), text_color))
+        .collect();
     let chevron = if dropdown { 11.0 } else { 0.0 };
-    let width = (galley.size().x + chevron + 16.0).max(54.0);
+    let text_w = galleys.iter().map(|g| g.size().x).fold(0.0, f32::max);
+    let width = (text_w + chevron + 14.0).max(50.0);
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, response) = ui.allocate_exact_size(vec2(width, BUTTON_HEIGHT), sense);
     if ui.is_rect_visible(rect) {
@@ -66,22 +92,75 @@ fn big_button(ui: &mut Ui, icon: Icon, label: &str, selected: bool, enabled: boo
             (true, true) => PALETTE.accent_text,
             (true, false) => PALETTE.text,
         };
-        let icon_center = egui::pos2(rect.center().x, rect.top() + 7.0 + ICON_SIZE / 2.0);
+        let icon_center = egui::pos2(rect.center().x, rect.top() + 6.0 + ICON_SIZE / 2.0);
         icons::paint(painter, egui::Rect::from_center_size(icon_center, vec2(ICON_SIZE, ICON_SIZE)), icon, icon_color);
-        let text_size = galley.size();
-        let text_pos = egui::pos2(rect.center().x - (text_size.x + chevron) / 2.0, rect.bottom() - 7.0 - text_size.y);
-        if dropdown {
-            let side = text_size.y - 3.0;
-            let c = egui::Rect::from_min_size(
-                egui::pos2(text_pos.x + text_size.x + 2.0, text_pos.y + 2.0),
-                vec2(side, side),
-            );
-            icons::paint(painter, c, Icon::ChevronDown, icon_color);
-        }
+        // Lines start right under the icon, each centered; the chevron follows the last one.
         let text_color = if selected { PALETTE.accent_text } else { text_color };
-        painter.galley_with_override_text_color(text_pos, galley, text_color);
+        let mut y = rect.top() + 6.0 + ICON_SIZE + 3.0;
+        let n = galleys.len();
+        for (k, galley) in galleys.into_iter().enumerate() {
+            let size = galley.size();
+            let extra = if k + 1 == n { chevron } else { 0.0 };
+            let pos = egui::pos2(rect.center().x - (size.x + extra) / 2.0, y);
+            if dropdown && k + 1 == n {
+                let side = size.y - 3.0;
+                let c = egui::Rect::from_min_size(egui::pos2(pos.x + size.x + 2.0, pos.y + 2.0), vec2(side, side));
+                icons::paint(painter, c, Icon::ChevronDown, icon_color);
+            }
+            painter.galley_with_override_text_color(pos, galley, text_color);
+            y += size.y - 1.0;
+        }
     }
     if enabled { response.on_hover_cursor(egui::CursorIcon::PointingHand) } else { response }
+}
+
+/// A small icon-only ribbon button for stacks; its name is the tooltip.
+pub struct StackButton {
+    pub icon: Icon,
+    pub tooltip: String,
+    pub enabled: bool,
+    pub selected: bool,
+}
+
+/// Columns of up to three small icon buttons, for panels with many tools.
+/// Returns the index of the clicked button.
+fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
+    let mut clicked = None;
+    let size = vec2(26.0, (BUTTON_HEIGHT - 4.0) / 3.0);
+    for (column, chunk) in buttons.chunks(3).enumerate() {
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            for (row, b) in chunk.iter().enumerate() {
+                let sense = if b.enabled { Sense::click() } else { Sense::hover() };
+                let (rect, r) = ui.allocate_exact_size(size, sense);
+                let painter = ui.painter();
+                let radius = theme::RADIUS as f32;
+                if b.selected {
+                    painter.rect_filled(rect, radius, PALETTE.accent_soft);
+                    painter.rect_stroke(
+                        rect,
+                        radius,
+                        Stroke::new(1.0, PALETTE.accent.gamma_multiply(0.55)),
+                        StrokeKind::Inside,
+                    );
+                } else if b.enabled && r.hovered() {
+                    let fill = if r.is_pointer_button_down_on() { PALETTE.pressed } else { PALETTE.hover };
+                    painter.rect_filled(rect, radius, fill);
+                }
+                let color = match (b.enabled, b.selected) {
+                    (false, _) => PALETTE.text_faint,
+                    (true, true) => PALETTE.accent_text,
+                    (true, false) => PALETTE.text,
+                };
+                icons::paint(painter, egui::Rect::from_center_size(rect.center(), vec2(15.0, 15.0)), b.icon, color);
+                let r = if b.enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
+                if r.on_hover_text(&b.tooltip).clicked() && b.enabled {
+                    clicked = Some(column * 3 + row);
+                }
+            }
+        });
+    }
+    clicked
 }
 
 /// Small square icon button (quick access toolbar).
@@ -357,25 +436,41 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     let has_sel = !state.selection.is_empty();
     group(ui, t!("group-selection"), |ui| {
         select_button(ui, state);
-        let copy = big_button(ui, Icon::Copy, &t!("action-copy"), false, has_sel, false);
-        if copy.on_hover_text(t!("hint-copy")).clicked() {
-            let ids: Vec<_> = state.selection.iter().copied().collect();
-            crate::tools::duplicate(state, &ids, glam::DVec2::new(1.0, -1.0));
-        }
-        let delete = big_button(ui, Icon::Delete, &t!("action-delete"), false, has_sel, false);
-        if delete.on_hover_text("Delete").clicked() {
-            state.delete_selection();
-        }
-    });
-    group(ui, t!("group-history"), |ui| {
         let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
-        let undo = big_button(ui, Icon::Undo, &t!("action-undo"), false, state.doc.can_undo(), false);
-        if undo.on_hover_text(format!("{}{undo_name} (Ctrl+Z)", t!("action-undo"))).clicked() {
-            state.doc.undo();
-        }
-        let redo = big_button(ui, Icon::Redo, &t!("action-redo"), false, state.doc.can_redo(), false);
-        if redo.on_hover_text("Ctrl+Y").clicked() {
-            state.doc.redo();
+        let buttons = [
+            StackButton { icon: Icon::Copy, tooltip: t!("hint-copy"), enabled: has_sel, selected: false },
+            StackButton {
+                icon: Icon::Delete,
+                tooltip: format!("{} (Delete)", t!("action-delete")),
+                enabled: has_sel,
+                selected: false,
+            },
+            StackButton {
+                icon: Icon::Undo,
+                tooltip: format!("{}{undo_name} (Ctrl+Z)", t!("action-undo")),
+                enabled: state.doc.can_undo(),
+                selected: false,
+            },
+            StackButton {
+                icon: Icon::Redo,
+                tooltip: format!("{} (Ctrl+Y)", t!("action-redo")),
+                enabled: state.doc.can_redo(),
+                selected: false,
+            },
+        ];
+        match stacked(ui, &buttons) {
+            Some(0) => {
+                let ids: Vec<_> = state.selection.iter().copied().collect();
+                crate::tools::duplicate(state, &ids, glam::DVec2::new(1.0, -1.0));
+            }
+            Some(1) => state.delete_selection(),
+            Some(2) => {
+                state.doc.undo();
+            }
+            Some(3) => {
+                state.doc.redo();
+            }
+            _ => {}
         }
     });
 }
@@ -626,4 +721,42 @@ pub fn status_bar(ui: &mut Ui, state: &AppState) {
             ui.label(RichText::new(format!("{file}{dirty}")).color(PALETTE.text_faint));
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn long_labels_wrap_on_two_balanced_lines() {
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        let mut lines = Vec::new();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let font = egui::FontId::proportional(12.0);
+            lines = [
+                "Níveis",
+                "Unidades do projeto",
+                "Informações do projeto",
+                "Relatório de perda de pressão da tubulação",
+                "Supercalifragilístico",
+            ]
+            .map(|l| label_lines(ui, l, &font))
+            .to_vec();
+        });
+        out.textures_delta.clear();
+        assert_eq!(lines[0], vec!["Níveis"]);
+        // Long labels break at a space into two lines that keep all the words.
+        for (i, label) in [
+            (1, "Unidades do projeto"),
+            (2, "Informações do projeto"),
+            (3, "Relatório de perda de pressão da tubulação"),
+        ] {
+            assert_eq!(lines[i].len(), 2, "{label}");
+            assert_eq!(lines[i].join(" "), label);
+            assert!(lines[i].iter().all(|l| l.len() < label.len()));
+        }
+        // A single long word cannot wrap.
+        assert_eq!(lines[4], vec!["Supercalifragilístico"]);
+    }
 }
