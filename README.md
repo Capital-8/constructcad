@@ -1,76 +1,82 @@
 # ConstructCAD
 
-Software livre de **Modelagem de Informações da Construção (BIM)**, escrito em Rust e independente de qualquer fornecedor comercial.
+Free and open source **Building Information Modeling (BIM)** software, written in Rust and independent of any commercial vendor.
 
-Um único modelo paramétrico é a fonte da verdade. Plantas, forros, cortes, elevações, vistas 3D, legendas, tabelas e folhas são *consultas* sobre esse modelo e se atualizam automaticamente a cada alteração.
+A single parametric model is the source of truth. Floor plans, ceiling plans, sections, elevations, 3D views, legends, schedules and sheets are *queries* over that model and update automatically after every change.
 
-## Executar
+[Português (Brasil)](README.pt-BR.md) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md)
+
+## Running
+
+Requires a recent stable Rust toolchain (edition 2024).
 
 ```sh
-cargo run --release -p cc_app                                    # projeto novo
-cargo run --release -p cc_app -- examples/casa_simples.ccad      # abrir um projeto
+cargo run --release -p cc_app                                    # new project
+cargo run --release -p cc_app -- examples/casa_simples.ccad      # open a project
 cargo run --release -p cc_app -- examples/casa_simples.ccad --view "Elevação: Sul"
-cargo run --release -p cc_app -- --lang en                       # interface em inglês
-cargo run -p cc_core --example casa_simples                      # regenerar o exemplo
+cargo run --release -p cc_app -- --lang en                       # English interface
+cargo run -p cc_core --example casa_simples                      # regenerate the example
 ```
 
-## Idiomas
+The bundled example project was authored in Portuguese, so its view names are in Portuguese.
 
-A interface está disponível em **português (Brasil)** e **inglês**, com troca em *Arquivo → Idioma*. A escolha fica salva entre sessões. Na primeira execução vale o idioma do sistema, e `--lang pt-BR|en` força um idioma.
+## Languages
 
-Projetos novos recebem os nomes de níveis, materiais, tipos e vistas no idioma ativo. Projetos existentes mantêm seus nomes, pois eles fazem parte dos dados. O separador decimal acompanha o idioma (vírgula ou ponto).
+The interface is available in **English** and **Portuguese (Brazil)**, switchable under *File → Language*. The choice is saved between sessions. On first run the system language is used, and `--lang pt-BR|en` forces a language.
 
-As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiomas têm as mesmas chaves e os mesmos placeholders. Para adicionar um idioma, crie o `.ftl` e registre-o em `Language` (`crates/cc_app/src/i18n.rs`).
+New projects get level, material, type and view names in the active language. Existing projects keep their names, since they are part of the data. The decimal separator follows the language (comma or point).
 
-## Funcionalidades (MVP)
+Translations live in `assets/i18n/*.ftl`. A test ensures every language has the same keys and placeholders. To add a language, create the `.ftl` file and register it in `Language` (`crates/cc_app/src/i18n.rs`).
 
-- **Navegador de projeto**: Plantas de piso, Plantas de forro, Vistas 3D, Elevações (N/S/L/O), Cortes, Legendas, Tabelas e Folhas. Pelo menu de contexto é possível abrir, renomear, duplicar, excluir e inserir na folha ativa.
-- **Modelagem em planta**:
-  - Paredes em cadeia, com junções automáticas em L (meia-esquadria) e T.
-  - Portas e janelas hospedadas na parede, com abertura recortada automaticamente.
-  - Pisos, forros e telhados (plano ou de uma água, com beiral) por esboço ou "Das paredes".
-- **Snapping**: extremidades, pontos médios, sobre a parede, ângulos de 15°, Shift para ortogonal, comprimento digitado + Enter.
-- **Edição**: seleção por clique ou janela (contida ou cruzada), mover arrastando, copiar com Ctrl+arrastar, excluir. Desfazer e refazer cobrem todas as edições.
-- **Propriedades**: parâmetros de instância e da vista, troca de tipo e editor de tipos (camadas, materiais, dimensões, duplicar).
-- **Vista 3D** (wgpu, MSAA): orbitar, pan, zoom, ajustar ao modelo e seleção por clique.
-- **Elevações e cortes**: remoção de linhas ocultas, hachura de corte e níveis anotados.
-- **Tabelas**:
-  - Portas e janelas.
-  - Paredes, com comprimento, área e volume.
-  - Pisos, forros e telhados, com área, perímetro e volume.
-- **Folhas** A0–A4: carimbo com dados do projeto e viewports arrastáveis em escala.
-- **Gerenciar**: informações do projeto, níveis (cada nível novo cria suas plantas) e materiais.
-- **Arquivo `.ccad`**: RON versionado e legível; o salvamento é atômico.
+## Features (MVP)
 
-## Atalhos
+- **Project browser**: Floor Plans, Ceiling Plans, 3D Views, Elevations (N/S/E/W), Sections, Legends, Schedules and Sheets. The context menu opens, renames, duplicates, deletes and places views on the active sheet.
+- **Plan modeling**:
+  - Chained walls with automatic L (mitered) and T joins.
+  - Wall-hosted doors and windows, with openings cut automatically.
+  - Floors, ceilings and roofs (flat or single-slope, with overhang) by sketch or "From walls".
+- **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
+- **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
+- **Properties**: instance and view parameters, type switching and a type editor (layers, materials, dimensions, duplicate).
+- **3D view** (wgpu, MSAA): orbit, pan, zoom, zoom to fit and click selection.
+- **Elevations and sections**: hidden line removal, cut hatching and annotated levels.
+- **Schedules**:
+  - Doors and windows.
+  - Walls, with length, area and volume.
+  - Floors, ceilings and roofs, with area, perimeter and volume.
+- **Sheets** A0–A4: title block with project data and draggable, scaled viewports.
+- **Manage**: project information, levels (each new level creates its plans) and materials.
+- **`.ccad` files**: versioned, human-readable RON; saving is atomic.
 
-| Tecla | Ação | Tecla | Ação |
+## Shortcuts
+
+| Key | Action | Key | Action |
 |---|---|---|---|
-| WA | Parede | SB | Piso |
-| DR | Porta | FO | Forro |
-| WN | Janela | TE | Telhado |
-| CT | Corte | MD | Selecionar |
-| ZE | Ajustar zoom | Esc | Cancelar / sair da ferramenta |
-| Ctrl+Z / Ctrl+Y | Desfazer / Refazer | Delete | Excluir |
-| Ctrl+S / Ctrl+Shift+S | Salvar / Salvar como | Espaço | Inverter porta |
+| WA | Wall | SB | Floor |
+| DR | Door | FO | Ceiling |
+| WN | Window | TE | Roof |
+| CT | Section | MD | Select |
+| ZE | Zoom to fit | Esc | Cancel / exit tool |
+| Ctrl+Z / Ctrl+Y | Undo / Redo | Delete | Delete |
+| Ctrl+S / Ctrl+Shift+S | Save / Save as | Space | Flip door |
 
-Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
+2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 
-## Arquitetura
+## Architecture
 
 ```
 crates/
-  cc_core    modelo BIM (elementos, tipos, níveis, vistas), transações undo/redo, persistência .ccad
-  cc_geom    geometria derivada: paredes com junções e aberturas, lajes, telhados, cortes, picking
-  cc_views   geração de desenhos 2D (planta, forro, elevação, corte, axonometria, legenda) e tabelas
-  cc_render  renderizador 3D offscreen em wgpu
-  cc_app     aplicativo eframe/egui: ribbon, navegador, propriedades, ferramentas, folhas
-assets/i18n  traduções (pt-BR, en); textos de interface nunca ficam fixos no código
+  cc_core    BIM model (elements, types, levels, views), undo/redo transactions, .ccad persistence
+  cc_geom    derived geometry: walls with joins and openings, slabs, roofs, cuts, picking
+  cc_views   2D drawing generation (plan, ceiling, elevation, section, axonometric, legend) and schedules
+  cc_render  offscreen wgpu 3D renderer
+  cc_app     eframe/egui application: ribbon, browser, properties, tools, sheets
+assets/i18n  translations (pt-BR, en); interface text is never hard-coded
 ```
 
-Toda alteração passa por `Document::edit`, que registra uma `Transaction` reversível. As edições contínuas (arrastar valores) são agrupadas em um único passo de desfazer.
+Every change goes through `Document::edit`, which records a reversible `Transaction`. Continuous edits (dragging values) are merged into a single undo step.
 
-## Desenvolvimento
+## Development
 
 ```sh
 cargo test --workspace
@@ -78,24 +84,26 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-## Próximos passos
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 
-- Exportação e importação IFC.
-- Exportação das folhas em PDF/SVG.
-- Cotas e anotações.
-- Famílias paramétricas do usuário.
-- Escadas e guarda-corpos.
-- Eixos (grids).
-- Telhados de duas e quatro águas.
-- Paredes amarradas ao nível superior.
-- Texturas de materiais.
+## Roadmap
 
-## Independência
+- IFC import and export.
+- PDF/SVG sheet export.
+- Dimensions and annotations.
+- User parametric families.
+- Stairs and railings.
+- Grids.
+- Gable and hip roofs.
+- Walls attached to the level above.
+- Material textures.
 
-O ConstructCAD é um projeto independente. O comportamento do programa foi projetado com base em documentação pública, convenções gerais de CAD e retorno dos usuários. Os testes de referência usam valores analíticos e ferramentas de código aberto. O ConstructCAD não tem afiliação com a Autodesk, nem é patrocinado ou endossado por ela. Autodesk e Revit são marcas registradas da Autodesk, Inc.
+## Independence
 
-> ConstructCAD is independent. Behaviour is designed from public documentation, general CAD conventions and user feedback. Reference tests use analytic values and open-source tools. ConstructCAD is not affiliated with, sponsored by or endorsed by Autodesk. Autodesk and Revit are trademarks of Autodesk, Inc.
+ConstructCAD is independent. Behaviour is designed from public documentation, general CAD conventions and user feedback. Reference tests use analytic values and open-source tools. ConstructCAD is not affiliated with, sponsored by or endorsed by Autodesk. Autodesk and Revit are trademarks of Autodesk, Inc.
 
-## Licença
+## License
 
-GPL-3.0-or-later © Francis Rebouças <francisreboucas@gmail.com>.
+Copyright © Francis Rebouças <francisreboucas@gmail.com>.
+
+ConstructCAD is licensed under the [GNU General Public License v3.0 or later](LICENSE) (GPL-3.0-or-later).

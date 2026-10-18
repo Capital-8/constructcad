@@ -1,0 +1,51 @@
+name: Bug report
+description: Report something that does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please search existing issues first.
+        Security vulnerabilities must be reported privately; see SECURITY.md.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a new project
+        2. Select the Wall tool (WA)
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots or project file
+      description: Attach screenshots or a minimal `.ccad` file (zipped) that reproduces the problem.
+  - type: input
+    id: version
+    attributes:
+      label: ConstructCAD version or commit
+      placeholder: 0.1.0 / 0e8b1bb
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and GPU
+      placeholder: Windows 11, NVIDIA RTX 3060
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output from running with `RUST_LOG=debug`, if relevant.
+      render: text
