@@ -94,7 +94,7 @@ mod tests {
         assert_eq!(table.rows.len(), 2);
         // Interior of the left room: 5 m minus half walls, by 6 m minus half walls.
         let area = (5.0 - 0.075 - 0.075) * (6.0 - 0.15);
-        assert_eq!(table.rows[0].cells[3], Cell::Text(format::number(area, 2)));
+        assert_eq!(table.rows[0].cells[3], Cell::Text(format::area(area)));
     }
 
     #[test]

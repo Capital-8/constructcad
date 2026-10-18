@@ -13,17 +13,19 @@ struct Settings {
     info: ProjectInfo,
     levels: Vec<Level>,
     materials: Vec<Material>,
+    units: crate::Units,
 }
 
 impl Settings {
     fn of(p: &Project) -> Self {
-        Self { info: p.info.clone(), levels: p.levels.clone(), materials: p.materials.clone() }
+        Self { info: p.info.clone(), levels: p.levels.clone(), materials: p.materials.clone(), units: p.units.clone() }
     }
 
     fn restore(self, p: &mut Project) {
         p.info = self.info;
         p.levels = self.levels;
         p.materials = self.materials;
+        p.units = self.units;
     }
 }
 
@@ -248,6 +250,11 @@ impl<'a> EditCtx<'a> {
     pub fn materials_mut(&mut self) -> &mut Vec<Material> {
         self.touch_settings();
         &mut self.project.materials
+    }
+
+    pub fn units_mut(&mut self) -> &mut crate::Units {
+        self.touch_settings();
+        &mut self.project.units
     }
 
     /// Fill in "after" states and drop no-op entries.

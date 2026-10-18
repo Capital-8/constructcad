@@ -48,7 +48,7 @@ fn length_row(
     set: impl FnOnce(&mut Element, f64),
 ) {
     let mut v = value;
-    let r = row(ui, label, |ui| ui.add(DragValue::new(&mut v).speed(0.01).fixed_decimals(3).suffix(" m")));
+    let r = row(ui, label, |ui| ui.add(crate::properties::length_drag(&mut v).speed(0.01)));
     if r.changed() {
         modify(state, id, field, |el| set(el, v));
     }
@@ -204,12 +204,12 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(w.length())));
+                readonly_row(ui, &t!("prop-length"), format::length(w.length()));
                 let height = state.project().wall_height(&el, w);
-                readonly_row(ui, &t!("prop-height"), format!("{} m", format::meters(height)));
+                readonly_row(ui, &t!("prop-height"), format::length(height));
                 let thickness = state.project().thickness_of(&el);
-                readonly_row(ui, &t!("prop-thickness"), format!("{} m", format::meters(thickness)));
-                readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+                readonly_row(ui, &t!("prop-thickness"), format::length(thickness));
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
             });
         }
         ElementKind::Door(h) | ElementKind::Window(h) => {
@@ -250,8 +250,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             if let Some((w, hh)) = state.project().element_type(el.type_id).and_then(|t| t.opening_size()) {
                 section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                    readonly_row(ui, &t!("col-width"), format!("{} m", format::meters(w)));
-                    readonly_row(ui, &t!("col-height"), format!("{} m", format::meters(hh)));
+                    readonly_row(ui, &t!("col-width"), format::length(w));
+                    readonly_row(ui, &t!("col-height"), format::length(hh));
                 });
             }
         }
@@ -278,8 +278,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let (base, top) = state.project().column_span(&el, c);
-                readonly_row(ui, &t!("prop-height"), format!("{} m", format::meters(top - base)));
-                readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+                readonly_row(ui, &t!("prop-height"), format::length(top - base));
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
             });
         }
         ElementKind::Beam(b) => {
@@ -292,8 +292,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(b.length())));
-                readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+                readonly_row(ui, &t!("prop-length"), format::length(b.length()));
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
             });
         }
         ElementKind::Stair(st) => {
@@ -309,9 +309,9 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             if let Some(g) = cc_geom::stair_geom(state.project(), &el, st) {
                 section(ui, "dimensions", t!("section-dimensions"), |ui| {
                     readonly_row(ui, &t!("col-risers"), g.risers.to_string());
-                    readonly_row(ui, &t!("col-riser-height"), format!("{} m", format::number(g.riser, 3)));
-                    readonly_row(ui, &t!("col-tread"), format!("{} m", format::meters(g.tread)));
-                    readonly_row(ui, &t!("col-run"), format!("{} m", format::meters(g.run())));
+                    readonly_row(ui, &t!("col-riser-height"), format::length(g.riser));
+                    readonly_row(ui, &t!("col-tread"), format::length(g.tread));
+                    readonly_row(ui, &t!("col-run"), format::length(g.run()));
                 });
             }
         }
@@ -325,7 +325,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(r.length())));
+                readonly_row(ui, &t!("prop-length"), format::length(r.length()));
             });
         }
         ElementKind::Grid(g) => {
@@ -341,12 +341,12 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 finish(state, &resp);
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format!("{} m", format::meters(g.start.distance(g.end))));
+                readonly_row(ui, &t!("prop-length"), format::length(g.start.distance(g.end)));
             });
         }
         ElementKind::Dimension(d) => {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-value"), format!("{} m", format::number(d.length(), 3)));
+                readonly_row(ui, &t!("prop-value"), format::length(d.length()));
                 let view = state.project().view(d.view).map(|v| v.name.clone()).unwrap_or_default();
                 readonly_row(ui, &t!("prop-view"), view);
                 length_row(ui, state, &t!("prop-dimension-offset"), id, "dim-offset", d.offset, |e, v| {
@@ -367,7 +367,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let area = cc_geom::polygon::area(&f.boundary);
-                readonly_row(ui, &t!("col-area"), format!("{} m²", format::number(area, 2)));
+                readonly_row(ui, &t!("col-area"), format::area(area));
             });
         }
         ElementKind::Ceiling(c) => {
@@ -381,7 +381,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let area = cc_geom::polygon::area(&c.boundary);
-                readonly_row(ui, &t!("col-area"), format!("{} m²", format::number(area, 2)));
+                readonly_row(ui, &t!("col-area"), format::area(area));
             });
         }
         ElementKind::Roof(r) => {
@@ -493,10 +493,25 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
 }
 
 /// Number, name, height and computed area of a room.
+/// Drag value for a length stored in meters, shown and typed in the
+/// project's length unit (a typed unit symbol overrides it).
+pub fn length_drag(value: &mut f64) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    let unit = units.length.unit;
+    let decimals = units.length.decimals as usize;
+    let per_meter = unit.per_meter();
+    let parse_units = units.clone();
+    DragValue::new(value)
+        .speed(0.005)
+        .custom_formatter(move |v, _| format::number_with(&units, comma, v * per_meter, decimals))
+        .custom_parser(move |s| format::parse_length_with(&parse_units, s))
+        .suffix(format!(" {}", unit.symbol()))
+}
+
 /// Drag value for a component parameter, with the unit of its kind.
 pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
     match kind {
-        cc_core::ParamKind::Length => DragValue::new(value).speed(0.01).fixed_decimals(3).suffix(" m"),
+        cc_core::ParamKind::Length => crate::properties::length_drag(value).speed(0.01),
         cc_core::ParamKind::Angle => DragValue::new(value).speed(1.0).suffix("°"),
         cc_core::ParamKind::Number => DragValue::new(value).speed(0.1),
     }
@@ -564,7 +579,7 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
         });
     }
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
-        readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(state.geom.volume(id), 3)));
+        readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
     });
 }
 
@@ -600,13 +615,9 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
     section(ui, "dimensions", t!("section-dimensions"), |ui| match state.geom.rooms.get(&id).cloned() {
         Some(boundary) => {
             let area = cc_geom::polygon::area(&boundary);
-            readonly_row(ui, &t!("col-area"), format!("{} m²", format::number(area, 2)));
-            readonly_row(
-                ui,
-                &t!("col-perimeter"),
-                format!("{} m", format::meters(cc_geom::polygon::perimeter(&boundary))),
-            );
-            readonly_row(ui, &t!("prop-volume"), format!("{} m³", format::number(area * r.height, 2)));
+            readonly_row(ui, &t!("col-area"), format::area(area));
+            readonly_row(ui, &t!("col-perimeter"), format::length(cc_geom::polygon::perimeter(&boundary)));
+            readonly_row(ui, &t!("prop-volume"), format::volume(area * r.height));
         }
         None => readonly_row(ui, &t!("col-area"), t!("room-not-enclosed")),
     });
@@ -688,7 +699,7 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
                 }
             });
             let height = state.project().wall_height(el, w);
-            readonly_row(ui, &t!("prop-unconnected-height"), format!("{} m", format::meters(height)));
+            readonly_row(ui, &t!("prop-unconnected-height"), format::length(height));
         }
         WallTop::Unconnected => {
             length_row(ui, state, &t!("prop-unconnected-height"), id, "height", w.height, |e, v| {
@@ -852,7 +863,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 readonly_row(ui, &t!("prop-level"), state.project().level_name(*level).to_string());
                 let mut h = *cut_height;
                 let r = row(ui, &t!("prop-cut-height"), |ui| {
-                    ui.add(DragValue::new(&mut h).speed(0.01).range(0.0..=20.0).fixed_decimals(2).suffix(" m"))
+                    ui.add(crate::properties::length_drag(&mut h).speed(0.01).range(0.0..=20.0))
                 });
                 if r.changed() {
                     state.doc.edit_merged(t!("tx-modify-view"), key((id, "cut")), |e| {
@@ -870,7 +881,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             section(ui, "extents", t!("section-extents"), |ui| {
                 let mut d = *depth;
                 let r = row(ui, &t!("prop-depth"), |ui| {
-                    ui.add(DragValue::new(&mut d).speed(0.05).range(0.1..=500.0).fixed_decimals(2).suffix(" m"))
+                    ui.add(crate::properties::length_drag(&mut d).speed(0.05).range(0.1..=500.0))
                 });
                 if r.changed() {
                     state.doc.edit_merged(t!("tx-modify-view"), key((id, "depth")), |e| {

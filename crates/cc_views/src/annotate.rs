@@ -33,7 +33,7 @@ pub fn plan_annotations(
             ElementKind::Room(room) if e.level == level => {
                 if let Some(boundary) = geom.rooms.get(&e.id) {
                     d.fill(boundary.clone(), HIGHLIGHT_ONLY, Some(e.id));
-                    let area = format!("{} m²", format::number(polygon::area(boundary), 2));
+                    let area = format::area(polygon::area(boundary));
                     room_tag(d, room.position, &room.name, &room.number, &area, mm, e.id);
                 } else {
                     // Not enclosed: the tag is crossed out.
@@ -151,6 +151,6 @@ pub fn dimensions(d: &mut Drawing2D, project: &Project, view: ViewId, scale: u32
             up = -n;
         }
         let mid = (a + b) / 2.0 + up * 0.8 * mm;
-        d.text_at(mid, format::number(dim.length(), 2), text_size, Anchor::CenterBottom, angle);
+        d.text_at(mid, format::meters(dim.length()), text_size, Anchor::CenterBottom, angle);
     }
 }

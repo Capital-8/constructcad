@@ -6,7 +6,7 @@ use crate::state::AppState;
 use crate::t;
 use crate::theme::{self, PALETTE};
 use cc_core::Material;
-use egui::{Context, DragValue, RichText, Ui};
+use egui::{Context, RichText, Ui};
 use std::hash::{Hash, Hasher};
 
 fn key(parts: impl Hash) -> u64 {
@@ -23,6 +23,7 @@ fn done(state: &mut AppState, r: &egui::Response) {
 
 pub fn show(ctx: &Context, state: &mut AppState) {
     project_info(ctx, state);
+    crate::units_dialog::show(ctx, state);
     levels(ctx, state);
     materials(ctx, state);
     crate::type_dialog::show(ctx, state);
@@ -134,7 +135,7 @@ fn levels(ctx: &Context, state: &mut AppState) {
                     }
                     done(state, &r);
                     let mut elev = level.elevation;
-                    let r = ui.add(DragValue::new(&mut elev).speed(0.01).fixed_decimals(2).suffix(" m"));
+                    let r = ui.add(crate::properties::length_drag(&mut elev).speed(0.01));
                     if r.changed() {
                         state.doc.edit_merged(t!("tx-modify-level"), key((level.id, "elev")), |e| {
                             if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {

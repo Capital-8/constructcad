@@ -36,6 +36,7 @@ pub enum PendingAction {
 #[derive(Default)]
 pub struct Dialogs {
     pub project_info: bool,
+    pub units: bool,
     pub levels: bool,
     pub materials: bool,
     pub type_editor: Option<ElementTypeId>,
@@ -169,6 +170,8 @@ impl AppState {
 
     /// Rebuild derived geometry after model changes and drop stale selection.
     pub fn sync(&mut self) {
+        // Drawings, schedules and fields format quantities with the project units.
+        cc_views::format::set_units(&self.doc.project.units);
         if self.geom_revision != self.doc.revision() {
             self.geom = ModelGeometry::build(&self.doc.project);
             self.geom_revision = self.doc.revision();

@@ -21,6 +21,7 @@ mod theme;
 mod thumbnails;
 mod tools;
 mod type_dialog;
+mod units_dialog;
 mod view3d;
 mod view_cube;
 

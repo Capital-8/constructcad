@@ -59,8 +59,9 @@ impl Value {
             Value::Key(k) => Cell::Key(k),
             Value::Count(n) => Cell::Text(n.to_string()),
             Value::Length(v) => Cell::Text(format::meters(*v)),
-            Value::Area(v) | Value::Money(v) => Cell::Text(format::number(*v, 2)),
-            Value::Volume(v) => Cell::Text(format::number(*v, 3)),
+            Value::Area(v) => Cell::Text(format::area(*v)),
+            Value::Money(v) => Cell::Text(format::money(*v)),
+            Value::Volume(v) => Cell::Text(format::volume(*v)),
             Value::Missing => Cell::Text(String::new()),
         }
     }
@@ -272,7 +273,9 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category, def
                 let sum: f64 = rows.iter().filter_map(|(_, values)| values.get(i)?.number()).sum();
                 match f {
                     ScheduleField::Length => format::meters(sum),
-                    ScheduleField::Volume => format::number(sum, 3),
+                    ScheduleField::Volume => format::volume(sum),
+                    ScheduleField::Area => format::area(sum),
+                    ScheduleField::Cost => format::money(sum),
                     _ => format::number(sum, 2),
                 }
             })

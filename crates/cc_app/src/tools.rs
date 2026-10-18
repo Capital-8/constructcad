@@ -433,7 +433,8 @@ fn temp_dimension(painter: &Painter, xf: &Xf, a: DVec2, p: DVec2, reference: Opt
     for q in [da, dp] {
         painter.line_segment([xf.to_screen(q - tick), xf.to_screen(q + tick)], Stroke::new(1.5, TEMP_DIM));
     }
-    let text = if typed.is_empty() { format::meters(len) } else { format!("{typed} m ⏎") };
+    let unit = format::current().0.length.unit.symbol();
+    let text = if typed.is_empty() { format::length(len) } else { format!("{typed} {unit} ⏎") };
     let screen_dir = xf.to_screen(dp) - xf.to_screen(da);
     let mid = xf.to_screen((da + dp) * 0.5) + (xf.to_screen(da + n) - xf.to_screen(da)).normalized() * 9.0;
     dim_text(painter, mid, text, screen_dir.y.atan2(screen_dir.x), true);
@@ -459,7 +460,7 @@ fn temp_dimension(painter: &Painter, xf: &Xf, a: DVec2, p: DVec2, reference: Opt
         .collect();
     painter.add(egui::Shape::line(arc, thin));
     let label_at = xf.to_screen(a + DVec2::from_angle(angle / 2.0).rotate(reference) * (radius + 14.0 / xf.scale));
-    dim_text(painter, label_at, format!("{}°", format::number(degrees.abs(), 2)), 0.0, false);
+    dim_text(painter, label_at, format::angle(degrees.abs()), 0.0, false);
 }
 
 /// Parse the typed length ("3,5" or "3.5").
@@ -865,7 +866,7 @@ fn dimension_tool(
         [a] => {
             draw_snap(painter, xf, s);
             painter.line_segment([xf.to_screen(*a), xf.to_screen(s.point)], stroke);
-            label(painter, xf.to_screen(s.point), format::number(a.distance(s.point), 2));
+            label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
         }
         [a, b, ..] => {
             let n = (*b - *a).normalize_or_zero().perp();
@@ -874,7 +875,7 @@ fn dimension_tool(
             painter.line_segment([xf.to_screen(*a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
             painter.line_segment([xf.to_screen(*b), xf.to_screen(q)], Stroke::new(1.0, PREVIEW));
             painter.line_segment([xf.to_screen(p), xf.to_screen(q)], stroke);
-            label(painter, xf.to_screen((p + q) * 0.5), format::number(a.distance(*b), 2));
+            label(painter, xf.to_screen((p + q) * 0.5), format::meters(a.distance(*b)));
         }
     }
     if resp.clicked() {
@@ -1251,7 +1252,7 @@ fn select(
             let opts = PaintOptions { highlight: &only, px_per_mm: 0.0, mono: Some(PREVIEW), only: Some(&only) };
             paint_drawing(painter, drawing, &ghost, &opts);
             let verb = if *copy { t!("label-copy") } else { t!("label-move") };
-            label(painter, xf.to_screen(raw), format!("{verb} {} m", format::meters(delta.length())));
+            label(painter, xf.to_screen(raw), format!("{verb} {}", format::length(delta.length())));
         }
         (Some(Drag::Box { start }), _) => {
             if let Some(cur) = resp.interact_pointer_pos().or(resp.hover_pos()) {

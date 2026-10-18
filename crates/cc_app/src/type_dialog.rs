@@ -163,9 +163,7 @@ fn length_row(
     set: impl FnOnce(&mut TypeData, f64),
 ) {
     let mut v = value;
-    let r = row(ui, label, |ui| {
-        ui.add(DragValue::new(&mut v).speed(0.005).range(0.001..=20.0).fixed_decimals(3).suffix(" m"))
-    });
+    let r = row(ui, label, |ui| ui.add(crate::properties::length_drag(&mut v).speed(0.005).range(0.001..=20.0)));
     if r.changed() {
         update(state, tid, field, |t| set(&mut t.data, v));
     }
@@ -257,7 +255,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 });
             }
             _ if layered => {
-                readonly_row(ui, &t!("prop-thickness"), format!("{} m", format::meters(ty.thickness())));
+                readonly_row(ui, &t!("prop-thickness"), format::length(ty.thickness()));
             }
             _ => {}
         }
@@ -399,7 +397,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     state.doc.break_merge();
                 }
                 let mut thk = layer.thickness;
-                let r = ui.add(DragValue::new(&mut thk).speed(0.002).range(0.001..=2.0).fixed_decimals(3).suffix(" m"));
+                let r = ui.add(crate::properties::length_drag(&mut thk).speed(0.002).range(0.001..=2.0));
                 if r.changed() {
                     let mut l = layers.clone();
                     l[i].thickness = thk;
@@ -438,7 +436,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 set_layers(state, "ladd", l);
                 state.doc.break_merge();
             }
-            let total = format!("{}: {} m", t!("type-total-thickness"), format::number(ty.thickness(), 3));
+            let total = format!("{}: {}", t!("type-total-thickness"), format::length(ty.thickness()));
             ui.label(theme::muted(total));
         });
     });

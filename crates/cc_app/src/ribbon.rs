@@ -424,6 +424,9 @@ fn manage_tab(ui: &mut Ui, state: &mut AppState) {
         if big_button(ui, Icon::ProjectInfo, &t!("dlg-project-info"), false, true, false).clicked() {
             state.dialogs.project_info = true;
         }
+        if big_button(ui, Icon::Dimension, &t!("dlg-units"), false, true, false).clicked() {
+            state.dialogs.units = true;
+        }
         if big_button(ui, Icon::Levels, &t!("dlg-levels"), false, true, false).clicked() {
             state.dialogs.levels = true;
         }
@@ -485,13 +488,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     }
                 });
                 if state.wall_top_level.is_none() {
-                    ui.add(
-                        DragValue::new(&mut state.wall_height)
-                            .speed(0.01)
-                            .range(0.1..=50.0)
-                            .fixed_decimals(2)
-                            .suffix(" m"),
-                    );
+                    ui.add(crate::properties::length_drag(&mut state.wall_height).speed(0.01).range(0.1..=50.0));
                 }
                 ui.separator();
                 ui.label(t!("prop-location-line"));
@@ -584,7 +581,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
 pub fn status_bar(ui: &mut Ui, state: &AppState) {
     ui.horizontal(|ui| {
         if let Some(c) = state.cursor {
-            let coords = format!("X {:>9}  Y {:>9}", format::number(c.x, 3), format::number(c.y, 3));
+            let coords = format!("X {:>9}  Y {:>9}", format::meters(c.x), format::meters(c.y));
             ui.label(RichText::new(coords).monospace().color(PALETTE.text_muted));
             ui.separator();
         }

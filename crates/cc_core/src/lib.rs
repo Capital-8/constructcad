@@ -15,6 +15,7 @@ mod project;
 mod repair;
 mod schedule;
 mod types;
+pub mod units;
 mod view;
 
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
@@ -32,6 +33,7 @@ pub use schedule::{ScheduleDef, ScheduleField};
 pub use types::{
     Category, ColumnSection, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction, stair_layout,
 };
+pub use units::{AreaUnit, LengthUnit, NumberStyle, SlopeUnit, Units, VolumeUnit};
 pub use view::{CameraState, Direction, SheetSize, View, ViewCategory, ViewKind, Viewport};
 
 pub use glam::{DVec2, DVec3};

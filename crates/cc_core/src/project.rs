@@ -42,6 +42,9 @@ pub struct Project {
     pub types: BTreeMap<ElementTypeId, ElementType>,
     pub elements: BTreeMap<ElementId, Element>,
     pub views: BTreeMap<ViewId, View>,
+    /// How quantities are displayed and typed.
+    #[serde(default)]
+    pub units: crate::Units,
     next_id: u64,
 }
 
@@ -55,6 +58,7 @@ impl Project {
             types: BTreeMap::new(),
             elements: BTreeMap::new(),
             views: BTreeMap::new(),
+            units: crate::Units::default(),
             next_id: 1,
         }
     }

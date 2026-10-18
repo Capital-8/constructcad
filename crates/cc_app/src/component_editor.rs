@@ -505,7 +505,7 @@ fn preview(ui: &mut Ui, ed: &Editor) {
             painter
                 .add(egui::Shape::closed_line(screen, Stroke::new(if *item == selected { 2.0 } else { 1.0 }, color)));
         }
-        let dims = format!("{} × {} m", cc_views::format::number(extent.x, 2), cc_views::format::number(extent.y, 2));
+        let dims = format!("{} × {}", cc_views::format::length(extent.x), cc_views::format::length(extent.y));
         painter.text(
             rect.right_bottom() - vec2(6.0, 4.0),
             egui::Align2::RIGHT_BOTTOM,
