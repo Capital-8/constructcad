@@ -186,6 +186,25 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         if redo.on_hover_text(format!("{} (Ctrl+Y)", t!("action-redo"))).clicked() {
             state.doc.redo();
         }
+        // Frequent commands that already live in the ribbon.
+        let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
+        ui.painter().vline(div.center().x, div.y_range(), Stroke::new(1.0, PALETTE.border));
+        let sheet = actions::active_sheet(state).is_some();
+        let pdf_hint = if sheet { t!("action-export-pdf") } else { t!("hint-export-sheet") };
+        if icon_button(ui, Icon::Export, sheet).on_hover_text(pdf_hint).clicked() {
+            actions::export_sheet(state, actions::SheetFormat::Pdf);
+        }
+        let dim = format!("{} (DI)", t!("tool-dimension"));
+        if icon_button(ui, Icon::Dimension, true).on_hover_text(dim).clicked() {
+            actions::activate_category_tool(state, Category::Dimension);
+        }
+        if icon_button(ui, Icon::View3D, true).on_hover_text(t!("action-default-3d")).clicked() {
+            actions::open_default_3d(state);
+        }
+        if icon_button(ui, Icon::Section, true).on_hover_text(format!("{} (CT)", t!("tool-section"))).clicked() {
+            state.set_tool(Tool::Section);
+            state.message = t!("msg-section-hint");
+        }
     });
     // Ribbon tab titles.
     ui.horizontal(|ui| {

@@ -179,6 +179,16 @@ pub fn delete_level(state: &mut AppState, level: LevelId) {
     });
 }
 
+/// Open the project's first 3D view, creating one when there is none.
+pub fn open_default_3d(state: &mut AppState) {
+    let existing = state.project().views_of(ViewCategory::ThreeD).next().map(|v| v.id);
+    let id = match existing {
+        Some(id) => id,
+        None => new_3d(state),
+    };
+    state.open_view(id);
+}
+
 pub fn activate_category_tool(state: &mut AppState, category: Category) {
     match Tool::for_category(state.project(), category) {
         Some(tool) => {

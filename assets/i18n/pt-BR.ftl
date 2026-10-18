@@ -634,3 +634,4 @@ unit-cubic-meter = Metros cúbicos (m³)
 unit-liter = Litros (L)
 unit-percent = Porcentagem (%)
 unit-degrees = Graus (°)
+action-default-3d = Vista 3D padrão
