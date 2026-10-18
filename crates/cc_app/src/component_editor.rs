@@ -611,3 +611,26 @@ mod tests {
         assert_eq!(def_of(&state, type_id).0, "Bancada");
     }
 }
+
+#[cfg(test)]
+mod file_tests {
+    use super::*;
+    use cc_core::{Category, Document};
+
+    #[test]
+    fn loading_a_component_file_adds_renamed_types_in_one_step() {
+        let mut state = AppState::new(Document::new(crate::actions::new_project()));
+        let file = cc_core::component_file::extract(state.project(), "Mesa").unwrap();
+        let text = cc_core::component_file::to_ron(&file).unwrap();
+        let file = cc_core::component_file::from_ron(&text).unwrap();
+        let before = state.project().types_of(Category::Component).count();
+        let depth = state.doc.undo_depth();
+        let first = crate::actions::add_component_types(&mut state, &file).unwrap();
+        assert_eq!(state.doc.undo_depth(), depth + 1);
+        assert_eq!(state.project().types_of(Category::Component).count(), before + 1);
+        assert_eq!(state.project().type_name(first), "Mesa 120 x 80 (2)");
+        assert!(matches!(state.tool, crate::tools::Tool::Component { type_id } if type_id == first));
+        state.doc.undo();
+        assert_eq!(state.project().types_of(Category::Component).count(), before);
+    }
+}

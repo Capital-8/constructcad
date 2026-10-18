@@ -304,6 +304,83 @@ pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
     }
 }
 
+fn component_file_error(err: cc_core::component_file::ComponentFileError) -> String {
+    use cc_core::component_file::ComponentFileError as E;
+    match err {
+        E::Io(e) => t!("err-io", "detail" => e),
+        E::Parse(e) => t!("err-component-parse", "detail" => e),
+        E::Serialize(e) => t!("err-serialize", "detail" => e),
+        E::Version(v) => t!("err-version", "version" => v, "max" => cc_core::component_file::COMPONENT_FORMAT_VERSION),
+        E::Invalid(detail) => t!("err-component-invalid", "detail" => detail),
+        E::NotFound(name) => t!("err-component-invalid", "detail" => name),
+    }
+}
+
+/// Save the component `name` (all its types) to a `.ccomp` file.
+pub fn save_component(state: &mut AppState, name: &str) {
+    let file = match cc_core::component_file::extract(state.project(), name) {
+        Ok(file) => file,
+        Err(err) => {
+            state.dialogs.error = Some(t!("msg-component-save-failed", "error" => component_file_error(err)));
+            return;
+        }
+    };
+    let dialog = rfd::FileDialog::new()
+        .add_filter(t!("file-filter-component"), &["ccomp"])
+        .set_file_name(format!("{name}.ccomp"));
+    let Some(mut path) = dialog.save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension("ccomp");
+    }
+    match guard(|| cc_core::component_file::save(&file, &path)) {
+        Ok(Ok(())) => state.message = t!("msg-exported", "path" => path.display()),
+        Ok(Err(err)) => {
+            state.dialogs.error = Some(t!("msg-component-save-failed", "error" => component_file_error(err)));
+        }
+        Err(message) => state.dialogs.error = Some(t!("msg-component-save-failed", "error" => message)),
+    }
+}
+
+/// Load a `.ccomp` file: its types (and missing materials) join the project
+/// in one undo step, and the component tool picks the first type.
+pub fn load_component(state: &mut AppState) {
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-component"), &["ccomp"]);
+    let Some(path) = dialog.pick_file() else { return };
+    let file = match guard(|| cc_core::component_file::load(&path)) {
+        Ok(Ok(file)) => file,
+        Ok(Err(err)) => {
+            state.dialogs.error = Some(t!("msg-component-load-failed", "error" => component_file_error(err)));
+            return;
+        }
+        Err(message) => {
+            state.dialogs.error = Some(t!("msg-component-load-failed", "error" => message));
+            return;
+        }
+    };
+    add_component_types(state, &file);
+}
+
+/// Add the types of a component file to the project; returns the first new type.
+pub fn add_component_types(
+    state: &mut AppState,
+    file: &cc_core::component_file::ComponentFile,
+) -> Option<cc_core::ElementTypeId> {
+    let first = state.doc.edit(t!("tx-load-component"), |e| {
+        let mut ids: Vec<u64> = (0..file.types.len()).map(|_| e.alloc_id()).collect();
+        ids.reverse();
+        let (types, materials) = cc_core::component_file::types_for(e.project(), file, || ids.pop().unwrap_or(0));
+        e.materials_mut().extend(materials);
+        let first = types.first().map(|t| t.id);
+        for t in types {
+            e.add_type(t);
+        }
+        first
+    })?;
+    state.set_tool(crate::tools::Tool::Component { type_id: first });
+    state.message = t!("msg-component-loaded", "name" => file.component);
+    Some(first)
+}
+
 /// Replace the document with a project imported from an IFC file. The
 /// result has no file path: saving asks where to write the `.ccad`.
 fn import_ifc(state: &mut AppState) {

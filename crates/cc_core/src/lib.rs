@@ -5,6 +5,7 @@
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
 pub mod component;
+pub mod component_file;
 mod document;
 mod element;
 pub mod expr;

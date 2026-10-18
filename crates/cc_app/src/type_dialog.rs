@@ -179,8 +179,17 @@ fn component_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     section(ui, "type-component", t!("section-component"), |ui| {
         readonly_row(ui, &t!("col-component"), component.clone());
         readonly_row(ui, &t!("col-component-kind"), tr(def.kind.key()));
-        if row(ui, &t!("comp-definition"), |ui| ui.button(t!("action-edit-component")).clicked()) {
+        let (edit, save) = row(ui, &t!("comp-definition"), |ui| {
+            ui.horizontal(|ui| {
+                (ui.button(t!("action-edit-component")).clicked(), ui.button(t!("action-save-component")).clicked())
+            })
+            .inner
+        });
+        if edit {
             state.dialogs.component_editor = crate::component_editor::Editor::open(state, tid);
+        }
+        if save {
+            actions::save_component(state, component);
         }
     });
     section(ui, "type-comp-params", t!("comp-params"), |ui| {

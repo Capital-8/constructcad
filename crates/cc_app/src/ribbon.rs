@@ -306,6 +306,9 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
         if big_button(ui, Icon::Plus, &t!("action-new-component"), false, true, false).clicked() {
             state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
         }
+        if big_button(ui, Icon::Open, &t!("action-load-component"), false, true, false).clicked() {
+            actions::load_component(state);
+        }
     });
     group(ui, t!("group-datum"), |ui| {
         tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
