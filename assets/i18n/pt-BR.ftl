@@ -187,7 +187,6 @@ view-new-sheet = Folha
 
 # Dicas
 hint-shortcut = Atalho
-hint-copy = Duplica a seleção deslocada 1 m (ou Ctrl + arrastar)
 hint-select = Clique para selecionar · arraste para mover (Ctrl copia) · Espaço gira ou inverte · janela: esquerda-direita seleciona contidos, direita-esquerda seleciona cruzados
 hint-wall = Clique o início e os próximos pontos · digite o comprimento + Enter · Shift = ortogonal · Esc encerra
 hint-hosted = Passe o cursor sobre uma parede e clique · Espaço inverte a abertura
@@ -775,3 +774,20 @@ action-pin = Fixar
 action-unpin = Liberar
 tool-toggle-join = Permitir/impedir união
 hint-toggle-join = Clique perto da extremidade de uma parede para permitir ou impedir a união
+group-clipboard = Área de transferência
+action-paste = Colar
+action-cut = Recortar
+paste-click = Colar (clique para posicionar)
+paste-same-place = Alinhado ao mesmo local
+paste-current-level = Alinhado ao nível atual
+tool-match-type = Corresponder propriedades de tipo
+hint-paste = Clique para posicionar os elementos copiados (o centro deles segue o cursor)
+hint-match-type = Clique no elemento cujo tipo será aplicado
+hint-match-type-apply = Clique nos elementos para aplicar o tipo "{ $type }"; clique no vazio para escolher outro
+msg-copied = { $count } elemento(s) copiado(s) para a área de transferência.
+msg-pasted = { $count } elemento(s) colado(s).
+msg-paste-nothing = Nada foi colado: os tipos, níveis ou paredes dos elementos copiados não existem mais.
+msg-clipboard-empty = A área de transferência está vazia: copie ou recorte elementos primeiro.
+msg-match-type-category = Escolha um elemento da mesma categoria.
+clipboard-note = { $count } elemento(s) do ConstructCAD
+tx-paste = Colar

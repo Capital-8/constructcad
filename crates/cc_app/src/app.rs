@@ -209,6 +209,16 @@ impl ConstructApp {
         if backspace && typing_length {
             state.length_input.pop();
         }
+        for event in &events {
+            match event {
+                Event::Copy => {
+                    crate::clipboard::copy(ctx, state);
+                }
+                Event::Cut => crate::clipboard::cut(ctx, state),
+                Event::Paste(_) => crate::clipboard::paste(state),
+                _ => {}
+            }
+        }
         for event in events {
             let Event::Text(text) = event else { continue };
             for ch in text.chars() {
@@ -262,6 +272,10 @@ impl ConstructApp {
                             _ => Tool::Array,
                         };
                         crate::modify::start(state, tool);
+                        Some(None)
+                    }
+                    "MA" => {
+                        crate::clipboard::start_match_type(state);
                         Some(None)
                     }
                     "CM" => Some(Some(Category::Component)),

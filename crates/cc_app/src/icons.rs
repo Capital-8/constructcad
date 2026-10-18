@@ -63,6 +63,9 @@ pub enum Icon {
     Pin,
     Unpin,
     Join,
+    Cut,
+    Paste,
+    MatchType,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -455,6 +458,27 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Plus => {
             seg((8.0, 2.5), (8.0, 13.5), s);
             seg((2.5, 8.0), (13.5, 8.0), s);
+        }
+        Icon::Cut => {
+            // Scissors: two crossing blades over two finger rings.
+            seg((4.5, 1.5), (10.2, 10.0), s);
+            seg((11.5, 1.5), (5.8, 10.0), s);
+            painter.circle_stroke(g.p(4.5, 12.2), 2.3 * scale, s);
+            painter.circle_stroke(g.p(11.5, 12.2), 2.3 * scale, s);
+        }
+        Icon::Paste => {
+            // A clipboard with its clip and a sheet on it.
+            line(&[(5.5, 2.8), (3.0, 2.8), (3.0, 14.5), (13.0, 14.5), (13.0, 2.8), (10.5, 2.8)]);
+            rect_s(5.5, 1.5, 10.5, 4.0, 0.5);
+            poly(&[(6.0, 7.0), (11.0, 7.0), (11.0, 12.5), (6.0, 12.5)], fill);
+            seg((7.5, 9.0), (9.5, 9.0), thin);
+            seg((7.5, 10.8), (9.5, 10.8), thin);
+        }
+        Icon::MatchType => {
+            // A paint brush: handle, ferrule and bristles.
+            seg((14.0, 2.0), (9.0, 7.0), s);
+            poly(&[(9.6, 5.0), (11.0, 6.4), (8.0, 9.4), (6.6, 8.0)], fill);
+            closed(&[(6.6, 8.0), (8.0, 9.4), (5.0, 14.5), (1.5, 14.5), (1.5, 11.0)]);
         }
     }
 }

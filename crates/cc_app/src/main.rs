@@ -4,6 +4,7 @@ mod actions;
 mod app;
 mod browser;
 mod canvas;
+mod clipboard;
 mod component_editor;
 mod dialog;
 mod dialogs;

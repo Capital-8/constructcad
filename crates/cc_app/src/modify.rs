@@ -85,7 +85,13 @@ fn ghost(drawing: &Drawing2D, ids: &BTreeSet<ElementId>, t: &PlanTransform) -> D
     d
 }
 
-fn paint_ghost(painter: &Painter, xf: &Xf, drawing: &Drawing2D, ids: &BTreeSet<ElementId>, t: &PlanTransform) {
+pub(crate) fn paint_ghost(
+    painter: &Painter,
+    xf: &Xf,
+    drawing: &Drawing2D,
+    ids: &BTreeSet<ElementId>,
+    t: &PlanTransform,
+) {
     let g = ghost(drawing, ids, t);
     let opts = PaintOptions { highlight: ids, px_per_mm: 0.0, mono: Some(PREVIEW), only: None };
     paint_drawing(painter, &g, xf, &opts);

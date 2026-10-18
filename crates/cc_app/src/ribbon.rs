@@ -52,6 +52,8 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Offset => Icon::Offset,
         Tool::Align => Icon::Align,
         Tool::ToggleJoin => Icon::Join,
+        Tool::Paste => Icon::Paste,
+        Tool::MatchType => Icon::MatchType,
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
 }
@@ -462,22 +464,14 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     let has_sel = !state.selection.is_empty();
     group(ui, t!("group-selection"), |ui| {
         select_button(ui, state);
-        let edit = [
-            StackButton { icon: Icon::Copy, tooltip: t!("hint-copy"), enabled: has_sel, selected: false },
-            StackButton {
-                icon: Icon::Delete,
-                tooltip: format!("{} (Delete)", t!("action-delete")),
-                enabled: has_sel,
-                selected: false,
-            },
-        ];
-        match stacked(ui, &edit) {
-            Some(0) => {
-                let ids: Vec<_> = state.selection.iter().copied().collect();
-                crate::tools::duplicate(state, &ids, glam::DVec2::new(1.0, -1.0));
-            }
-            Some(1) => state.delete_selection(),
-            _ => {}
+        let edit = [StackButton {
+            icon: Icon::Delete,
+            tooltip: format!("{} (Delete)", t!("action-delete")),
+            enabled: has_sel,
+            selected: false,
+        }];
+        if stacked(ui, &edit).is_some() {
+            state.delete_selection();
         }
         let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
         let history = [
@@ -504,6 +498,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
             _ => {}
         }
     });
+    group(ui, t!("group-clipboard"), |ui| clipboard_group(ui, state, has_sel));
     group(ui, t!("group-modify"), |ui| {
         let tip = |key: &str, keys: &str| format!("{} ({keys})", crate::i18n::tr(key));
         let tools = [
@@ -561,6 +556,53 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
             _ => {}
         }
     });
+}
+
+/// Paste (a menu of where to paste), then cut, copy and match type.
+fn clipboard_group(ui: &mut Ui, state: &mut AppState, has_sel: bool) {
+    let can_paste = !state.clipboard.is_empty();
+    let pasting = state.tool == Tool::Paste;
+    let r = big_button(ui, Icon::Paste, &t!("action-paste"), pasting, can_paste, true);
+    egui::Popup::menu(&r).show(|ui| {
+        if ui.button(format!("{} (Ctrl+V)", t!("paste-click"))).clicked() {
+            crate::clipboard::paste(state);
+        }
+        if ui.button(t!("paste-same-place")).clicked() {
+            crate::clipboard::paste_aligned(state, false);
+        }
+        let plan = state.active_level().is_some();
+        if ui.add_enabled(plan, Button::new(t!("paste-current-level"))).clicked() {
+            crate::clipboard::paste_aligned(state, true);
+        }
+    });
+    let buttons = [
+        StackButton {
+            icon: Icon::Cut,
+            tooltip: format!("{} (Ctrl+X)", t!("action-cut")),
+            enabled: has_sel,
+            selected: false,
+        },
+        StackButton {
+            icon: Icon::Copy,
+            tooltip: format!("{} (Ctrl+C)", t!("action-copy")),
+            enabled: has_sel,
+            selected: false,
+        },
+        StackButton {
+            icon: Icon::MatchType,
+            tooltip: format!("{} (MA)", t!("tool-match-type")),
+            enabled: true,
+            selected: state.tool == Tool::MatchType,
+        },
+    ];
+    match stacked(ui, &buttons) {
+        Some(0) => crate::clipboard::cut(ui.ctx(), state),
+        Some(1) => {
+            crate::clipboard::copy(ui.ctx(), state);
+        }
+        Some(2) => crate::clipboard::start_match_type(state),
+        _ => {}
+    }
 }
 
 fn view_tab(ui: &mut Ui, state: &mut AppState) {
@@ -806,6 +848,12 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     _ => "hint-align",
                 };
                 ui.label(theme::muted(crate::i18n::tr(key)));
+            }
+            Tool::Paste => {
+                ui.label(theme::muted(t!("hint-paste")));
+            }
+            Tool::MatchType => {
+                ui.label(theme::muted(t!("hint-match-type")));
             }
             Tool::Mirror { draw } => {
                 ui.checkbox(&mut state.modify.mirror_copy, t!("opt-copy"));

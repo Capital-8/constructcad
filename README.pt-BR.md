@@ -46,7 +46,7 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 - **Componentes paramétricos**: mobiliário, louças e marcenaria feitos de caixas, cilindros e perfis extrudados cujas medidas são expressões sobre parâmetros nomeados (do tipo ou da instância). Editor de componentes com verificação imediata e pré-visualização em planta e vista frontal, biblioteca inicial (mesa, cadeira, cama, sofá, bacia sanitária, lavatório, armário), ferramenta *Componente* (CM), tabelas e legendas, arquivos `.ccomp` para compartilhar e exportação/importação IFC como `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` ou `IfcBuildingElementProxy`.
 - **Materiais**: navegador com identidade, gráficos (sombreamento, transparência, padrões de superfície e de corte), aparência e propriedades físicas; os padrões de corte aparecem em plantas e cortes, a transparência no 3D.
 - **Unidades do projeto**: milímetros, centímetros ou metros (e formatos de área, volume, ângulo, inclinação e moeda) com casas decimais, símbolos e agrupamento de dígitos.
-- **Ferramentas de modificação**: mover, copiar, girar, espelhar, matriz, aparar/estender, dividir, deslocar, alinhar, controle de união de paredes e fixação.
+- **Ferramentas de modificação**: mover, copiar, girar, espelhar, matriz, aparar/estender, dividir, deslocar, alinhar, controle de união de paredes e fixação; recortar, copiar e colar, e corresponder propriedades de tipo.
 - **Navegação e auxílios de desenho**: cubo de navegação 3D, cotas temporárias com ângulo, linhas de alinhamento, Espaço para girar ou inverter.
 - **Propriedades**: parâmetros de instância e da vista em seções recolhíveis; paredes com restrição de base e de topo (altura desconectada ou até um nível), linha de localização, delimitação de ambientes e estrutural.
 - **Tipos**: diálogo de propriedades do tipo com duplicar e renomear, editor de camadas com função (núcleo, acabamentos), função da parede e dados de identidade (marca de tipo, fabricante, modelo, classificação, resistência ao fogo, custo…).
@@ -85,7 +85,8 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 | MM / DM | Espelhar (escolher / desenhar eixo) | AR | Matriz |
 | TR / TX | Aparar/estender para canto / até referência | SL | Dividir |
 | OF | Deslocamento paralelo | AL | Alinhar |
-| PN / UP | Fixar / Liberar | | |
+| PN / UP | Fixar / Liberar | MA | Corresponder propriedades de tipo |
+| Ctrl+X / Ctrl+C | Recortar / Copiar | Ctrl+V | Colar |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 

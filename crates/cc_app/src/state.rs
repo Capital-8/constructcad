@@ -110,6 +110,8 @@ pub struct AppState {
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
     /// Samples whose thumbnail was already requested this session.
     pub requested_samples: std::collections::BTreeSet<&'static str>,
+    /// Cut or copied elements of this document.
+    pub clipboard: crate::clipboard::Clipboard,
 }
 
 impl AppState {
@@ -149,6 +151,7 @@ impl AppState {
             recent: Vec::new(),
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),
+            clipboard: Default::default(),
         }
     }
 

@@ -187,7 +187,6 @@ view-new-sheet = Sheet
 
 # Hints
 hint-shortcut = Shortcut
-hint-copy = Duplicates the selection offset by 1 m (or Ctrl + drag)
 hint-select = Click to select · drag to move (Ctrl copies) · Space rotates or flips · window: left-to-right selects enclosed, right-to-left selects crossing
 hint-wall = Click the start and next points · type a length + Enter · Shift = orthogonal · Esc ends
 hint-hosted = Hover over a wall and click · Space flips the opening
@@ -775,3 +774,20 @@ action-pin = Pin
 action-unpin = Unpin
 tool-toggle-join = Allow/Disallow Join
 hint-toggle-join = Click near a wall end to allow or disallow its join
+group-clipboard = Clipboard
+action-paste = Paste
+action-cut = Cut
+paste-click = Paste (click to place)
+paste-same-place = Aligned to Same Place
+paste-current-level = Aligned to Current Level
+tool-match-type = Match Type Properties
+hint-paste = Click to place the copied elements (their center follows the cursor)
+hint-match-type = Click the element whose type will be applied
+hint-match-type-apply = Click elements to give them the type "{ $type }"; click empty space to pick another
+msg-copied = { $count } element(s) copied to the clipboard.
+msg-pasted = { $count } element(s) pasted.
+msg-paste-nothing = Nothing was pasted: the copied elements' types, levels or walls no longer exist.
+msg-clipboard-empty = The clipboard is empty: copy or cut elements first.
+msg-match-type-category = Pick an element of the same category.
+clipboard-note = { $count } ConstructCAD element(s)
+tx-paste = Paste

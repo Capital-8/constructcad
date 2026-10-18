@@ -68,6 +68,10 @@ pub enum Tool {
     Align,
     /// Click near a wall end to allow or disallow its join.
     ToggleJoin,
+    /// Place the clipboard with a click.
+    Paste,
+    /// Pick an element, then click others to give them its type.
+    MatchType,
 }
 
 impl Tool {
@@ -102,6 +106,8 @@ impl Tool {
             Tool::Offset => "tool-offset",
             Tool::Align => "tool-align",
             Tool::ToggleJoin => "tool-toggle-join",
+            Tool::Paste => "action-paste",
+            Tool::MatchType => "tool-match-type",
         }
     }
 
@@ -558,6 +564,8 @@ pub fn handle(
     let tool = state.tool.clone();
     match (&tool, view.level()) {
         (Tool::Select, _) => select(ui, resp, painter, state, is_plan, xf, drawing),
+        // Matching types works in any 2D view.
+        (Tool::MatchType, _) => crate::clipboard::match_type_tool(resp, painter, state, xf, drawing),
         // Dimensions work in any 2D view.
         (Tool::Dimension { type_id }, level) => {
             dimension_tool(ui, resp, painter, state, view, level, *type_id, xf, drawing)
@@ -596,6 +604,7 @@ pub fn handle(
             | Tool::ToggleJoin,
             Some(level),
         ) => crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool),
+        (Tool::Paste, Some(level)) => crate::clipboard::paste_tool(ui, resp, painter, state, view.id, level, xf),
         (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
         _ => {}
     }

@@ -190,47 +190,96 @@ impl crate::EditCtx<'_> {
     }
 }
 
+impl crate::Project {
+    /// The elements a copy of `ids` takes: the non-hosted ones, plus the
+    /// doors and windows of copied walls and any selected hosted element.
+    /// The snapshot stays valid after the originals are deleted (cut).
+    pub fn copy_set(&self, ids: &[ElementId]) -> Vec<Element> {
+        let set: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
+        let mut out: Vec<Element> =
+            set.iter().filter_map(|id| self.element(*id)).filter(|e| e.as_hosted().is_none()).cloned().collect();
+        out.extend(
+            self.elements
+                .values()
+                .filter(|e| e.as_hosted().is_some_and(|h| set.contains(&h.host) || set.contains(&e.id)))
+                .cloned(),
+        );
+        out
+    }
+
+    /// Whether a copied element still fits this project: its type, level,
+    /// view (dimensions) and wall (hosted elements, when not copied along)
+    /// may have been deleted since it was copied.
+    fn accepts(&self, e: &Element, set: &[Element]) -> bool {
+        let type_ok = self.element_type(e.type_id).is_some_and(|t| t.category() == e.category());
+        let other_ok = match &e.kind {
+            ElementKind::Door(h) | ElementKind::Window(h) => set
+                .iter()
+                .find(|w| w.id == h.host)
+                .or_else(|| self.element(h.host))
+                .is_some_and(|w| w.as_wall().is_some()),
+            ElementKind::Dimension(d) => self.view(d.view).is_some(),
+            _ => true,
+        };
+        type_ok && other_ok && self.level(e.level).is_some()
+    }
+}
+
 impl crate::EditCtx<'_> {
     /// Copy `ids` once per transform (arrays pass several). Copied walls take
     /// copies of their doors and windows along; a hosted element copied
     /// without its wall stays on that wall, shifted along it. Returns the
     /// new ids.
     pub fn copy_elements(&mut self, ids: &[ElementId], transforms: &[PlanTransform]) -> Vec<ElementId> {
-        let project = self.project();
-        let set: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
-        let originals: Vec<Element> = ids.iter().filter_map(|id| project.element(*id).cloned()).collect();
-        // Doors and windows of copied walls come along even when not selected.
-        let mut hosted: Vec<Element> = project
-            .elements
-            .values()
-            .filter(|e| {
-                e.as_hosted().is_some_and(|h| set.contains(&h.host)) || (set.contains(&e.id) && e.as_hosted().is_some())
-            })
-            .cloned()
-            .collect();
-        hosted.dedup_by_key(|e| e.id);
+        let set = self.project().copy_set(ids);
+        self.paste_elements(&set, transforms, None)
+    }
+
+    /// Add copies of `set` (from [`crate::Project::copy_set`]) once per
+    /// transform, on `level` when given (hosted elements whose wall was not
+    /// copied stay on that wall's level). Elements whose type, level, view
+    /// or wall no longer exist are skipped, and walls attached to a missing
+    /// level become unconnected. Returns the new ids.
+    pub fn paste_elements(
+        &mut self,
+        set: &[Element],
+        transforms: &[PlanTransform],
+        level: Option<crate::LevelId>,
+    ) -> Vec<ElementId> {
+        let accepted: Vec<&Element> = set.iter().filter(|e| self.project().accepts(e, set)).collect();
         let mut created = Vec::new();
         for t in transforms {
             let mut remap = std::collections::BTreeMap::new();
-            for el in originals.iter().filter(|el| el.as_hosted().is_none()) {
-                let mut c = el.clone();
+            for el in accepted.iter().filter(|el| el.as_hosted().is_none()) {
+                let mut c = (*el).clone();
                 c.id = ElementId(self.alloc_id());
                 c.uid = Default::default();
                 c.transform(t);
+                if let Some(level) = level {
+                    c.level = level;
+                }
+                self.detach_missing_top(&mut c);
                 remap.insert(el.id, c.id);
                 created.push(self.add_element(c));
             }
-            for el in &hosted {
+            for el in accepted.iter().filter(|el| el.as_hosted().is_some()) {
                 let Some(h) = el.as_hosted() else { continue };
-                let mut c = el.clone();
+                let mut c = (*el).clone();
                 c.id = ElementId(self.alloc_id());
                 c.uid = Default::default();
                 c.mark = self.project().next_mark(c.category());
-                let host =
-                    self.project().element(h.host).and_then(|w| w.as_wall()).map(|w| (w.length(), w.direction()));
+                let host = set
+                    .iter()
+                    .find(|w| w.id == h.host)
+                    .or_else(|| self.project().element(h.host))
+                    .and_then(|w| w.as_wall())
+                    .map(|w| (w.length(), w.direction()));
                 match (remap.get(&h.host), host) {
                     (Some(new_host), Some((len, _))) => {
                         c.transform(t);
+                        if let Some(level) = level {
+                            c.level = level;
+                        }
                         if let Some(ch) = c.as_hosted_mut() {
                             ch.host = *new_host;
                             if t.mirror {
@@ -238,7 +287,8 @@ impl crate::EditCtx<'_> {
                             }
                         }
                     }
-                    (None, Some((_, dir))) => {
+                    // The wall must still be there to host a lone copy.
+                    (None, Some((_, dir))) if self.project().element(h.host).is_some() => {
                         if let Some(ch) = c.as_hosted_mut() {
                             ch.offset += t.translation.dot(dir);
                         }
@@ -249,6 +299,22 @@ impl crate::EditCtx<'_> {
             }
         }
         created
+    }
+
+    /// A pasted wall, column or stair attached to a deleted level keeps its
+    /// height, unconnected (as [`crate::Project::repair`] does on load).
+    fn detach_missing_top(&self, e: &mut Element) {
+        let top = match &mut e.kind {
+            ElementKind::Wall(w) => &mut w.top,
+            ElementKind::Column(c) => &mut c.top,
+            ElementKind::Stair(s) => &mut s.top,
+            _ => return,
+        };
+        if let crate::WallTop::Level { level, .. } = *top
+            && self.project().level(level).is_none()
+        {
+            *top = crate::WallTop::Unconnected;
+        }
     }
 }
 
@@ -326,6 +392,43 @@ mod tests {
         for id in new.iter().filter(|id| doc.project.element(**id).is_some_and(|e| e.as_wall().is_some())) {
             assert_eq!(doc.project.hosted_by(*id).count(), openings);
         }
+        assert_eq!(doc.project.repair(), 0);
+    }
+    #[test]
+    fn a_cut_set_pastes_after_its_originals_are_gone() {
+        let mut doc =
+            crate::Document::new(crate::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap());
+        let wall = doc.project.elements.values().find_map(|e| e.as_hosted().map(|h| h.host)).unwrap();
+        let openings = doc.project.hosted_by(wall).count();
+        let set = doc.project.copy_set(&[wall]);
+        assert_eq!(set.len(), 1 + openings);
+        doc.edit("cut", |e| e.remove_element(wall));
+        assert!(doc.project.element(wall).is_none());
+        let new = doc.edit("paste", |e| e.paste_elements(&set, &[PlanTransform::IDENTITY], None));
+        assert_eq!(new.len(), 1 + openings);
+        let copy = new.iter().copied().find(|id| doc.project.element(*id).is_some_and(|e| e.as_wall().is_some()));
+        assert_eq!(doc.project.hosted_by(copy.unwrap()).count(), openings);
+        assert_eq!(doc.project.repair(), 0);
+    }
+
+    #[test]
+    fn pasting_skips_elements_whose_references_are_gone() {
+        let mut doc =
+            crate::Document::new(crate::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap());
+        let wall = doc.project.elements.values().find_map(|e| e.as_hosted().map(|h| h.host)).unwrap();
+        let mut set = doc.project.copy_set(&[wall]);
+        // The wall's type was deleted since the copy: its openings would have
+        // no new wall, and the original is gone too, so nothing is pasted.
+        set[0].type_id = crate::ElementTypeId(u64::MAX);
+        doc.edit("cut", |e| e.remove_element(wall));
+        let new = doc.edit("paste", |e| e.paste_elements(&set, &[PlanTransform::IDENTITY], None));
+        assert!(new.is_empty());
+        // A missing level skips the element as well.
+        let other = doc.project.walls().next().map(|(e, _)| e.id).unwrap();
+        let mut set = doc.project.copy_set(&[other]);
+        set.retain(|e| e.id == other);
+        set[0].level = crate::LevelId(u64::MAX);
+        assert!(doc.edit("paste", |e| e.paste_elements(&set, &[PlanTransform::IDENTITY], None)).is_empty());
         assert_eq!(doc.project.repair(), 0);
     }
 }

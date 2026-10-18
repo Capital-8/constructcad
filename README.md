@@ -48,7 +48,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Parametric components**: furniture, fixtures and casework made of boxes, cylinders and extruded profiles whose sizes are expressions over named parameters (type or instance). A component editor with live checking and plan/front previews, a starter library (table, chair, bed, sofa, toilet, washbasin, wardrobe), the *Component* tool (CM), schedules and legends, `.ccomp` files to share them, and IFC export/import as `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` or `IfcBuildingElementProxy`.
 - **Materials**: browser with identity, graphics (shading, transparency, surface and cut patterns), render appearance and physical properties; cut patterns show in plans and sections, transparency in 3D.
 - **Project units**: millimeters, centimeters or meters (and area, volume, angle, slope and currency formats) with decimals, symbols and digit grouping.
-- **Modify tools**: move, copy, rotate, mirror, array, trim/extend, split, offset, align, wall join control and pinning.
+- **Modify tools**: move, copy, rotate, mirror, array, trim/extend, split, offset, align, wall join control and pinning; cut, copy and paste, and match type properties.
 - **Navigation and drawing aids**: 3D navigation cube, temporary dimensions with angles, alignment guides, Space to rotate or flip.
 - **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
 - **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
@@ -89,7 +89,8 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | MM / DM | Mirror (pick / draw axis) | AR | Array |
 | TR / TX | Trim/extend to corner / to reference | SL | Split |
 | OF | Offset | AL | Align |
-| PN / UP | Pin / Unpin | | |
+| PN / UP | Pin / Unpin | MA | Match type properties |
+| Ctrl+X / Ctrl+C | Cut / Copy | Ctrl+V | Paste |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 
