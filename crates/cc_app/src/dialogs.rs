@@ -5,7 +5,6 @@ use crate::dialog::{Dialog, Kind, session};
 use crate::state::AppState;
 use crate::t;
 use crate::theme::{self, PALETTE};
-use cc_core::Material;
 use egui::{Context, RichText, Ui};
 use std::hash::{Hash, Hasher};
 
@@ -25,7 +24,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     project_info(ctx, state);
     crate::units_dialog::show(ctx, state);
     levels(ctx, state);
-    materials(ctx, state);
+    crate::material_browser::show(ctx, state);
     crate::type_dialog::show(ctx, state);
     crate::component_editor::show(ctx, state);
     crate::schedule_ui::dialog(ctx, state);
@@ -198,52 +197,6 @@ fn delete_level(ctx: &Context, state: &mut AppState) {
     }
     if response.clicked.is_some() || response.dismissed {
         state.dialogs.delete_level = None;
-    }
-}
-
-fn materials(ctx: &Context, state: &mut AppState) {
-    if !state.dialogs.materials {
-        return;
-    }
-    session::begin(state);
-    let mut ok = 0;
-    let response = Dialog::new("materials", t!("dlg-materials")).width(400.0).show(
-        ctx,
-        |ui| {
-            let mats = state.project().materials.clone();
-            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                egui::Grid::new("materials").num_columns(2).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
-                    for (i, m) in mats.iter().enumerate() {
-                        let mut color = m.color;
-                        let r = ui.color_edit_button_srgb(&mut color);
-                        if r.changed() {
-                            state.doc.edit_merged(t!("tx-modify-material"), key(("mat", i)), |e| {
-                                if let Some(m) = e.materials_mut().get_mut(i) {
-                                    m.color = color;
-                                }
-                            });
-                        }
-                        // Names are referenced by layers, so they stay fixed here.
-                        ui.label(&m.name);
-                        ui.end_row();
-                    }
-                });
-            });
-            ui.add_space(4.0);
-            if ui.button(t!("material-add")).clicked() {
-                let n = mats.len() + 1;
-                state.doc.edit(t!("tx-modify-material"), |e| {
-                    e.materials_mut().push(Material::new(t!("default-material-name", "n" => n), [180, 180, 180]));
-                });
-            }
-        },
-        |f| {
-            ok = f.primary(t!("action-ok"));
-            f.secondary(t!("action-cancel"));
-        },
-    );
-    if ok_cancel(state, &response, ok) {
-        state.dialogs.materials = false;
     }
 }
 

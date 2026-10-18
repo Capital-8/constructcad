@@ -202,7 +202,13 @@ mod tests {
             missing.extend(fields.iter().map(|f| f.key()).filter(|k| !messages.contains_key(*k)).map(String::from));
         }
         let cube = crate::view_cube::KEYS;
-        for k in ["value-yes", "value-no"].into_iter().chain(cube) {
+        let materials = crate::material_browser::KEYS
+            .into_iter()
+            .chain(cc_core::MaterialClass::ALL.map(|c| c.key()))
+            .chain(cc_core::Pattern::ALL.map(|p| p.key()))
+            .chain(cc_core::material::Finish::ALL.map(|f| f.key()))
+            .chain(cc_core::material::Behavior::ALL.map(|b| b.key()));
+        for k in ["value-yes", "value-no"].into_iter().chain(cube).chain(materials) {
             if !messages.contains_key(k) {
                 missing.push(k.to_string());
             }

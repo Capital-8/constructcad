@@ -1,0 +1,650 @@
+//! Material browser: the project's materials in a searchable list and the
+//! selected one's identity, graphics, appearance and physical properties
+//! in tabs. Edits are undoable and the dialog's Cancel reverts them all.
+
+use crate::dialog::{Dialog, session};
+use crate::i18n::tr;
+use crate::state::AppState;
+use crate::t;
+use crate::theme::{self, PALETTE};
+use cc_core::Material;
+use cc_core::material::{Behavior, Finish, MaterialClass, Pattern, PatternFill};
+use egui::{Color32, Context, DragValue, Pos2, Rect, RichText, Sense, Stroke, Ui, vec2};
+use glam::DVec2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tab {
+    #[default]
+    Identity,
+    Graphics,
+    Appearance,
+    Physical,
+}
+
+/// Browser state kept between frames.
+#[derive(Debug, Clone, Default)]
+pub struct Browser {
+    pub selected: Option<String>,
+    pub tab: Tab,
+    pub search: String,
+    /// Name being typed, committed on Enter or when the field loses focus.
+    pub name_edit: Option<String>,
+    pub error: Option<String>,
+}
+
+fn key(parts: impl std::hash::Hash) -> u64 {
+    use std::hash::Hasher;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    parts.hash(&mut h);
+    h.finish()
+}
+
+/// Change material `name`, merging consecutive edits of one field.
+fn update(state: &mut AppState, name: &str, field: &str, f: impl FnOnce(&mut Material)) {
+    state.doc.edit_merged(t!("tx-modify-material"), key((name, field)), |e| {
+        if let Some(m) = e.materials_mut().iter_mut().find(|m| m.name == name) {
+            f(m);
+        }
+    });
+}
+
+fn done(state: &mut AppState, r: &egui::Response) {
+    if r.drag_stopped() || r.lost_focus() {
+        state.doc.break_merge();
+    }
+}
+
+pub fn show(ctx: &Context, state: &mut AppState) {
+    if !state.dialogs.materials {
+        return;
+    }
+    session::begin(state);
+    let mut ok = 0;
+    let title = match &state.dialogs.material_browser.selected {
+        Some(name) => format!("{} — {name}", t!("dlg-materials")),
+        None => t!("dlg-materials"),
+    };
+    let response = Dialog::new("materials", title).width(880.0).show(
+        ctx,
+        |ui| body(ui, state),
+        |f| {
+            ok = f.primary(t!("action-ok"));
+            f.secondary(t!("action-cancel"));
+        },
+    );
+    if crate::dialogs::ok_cancel(state, &response, ok) {
+        state.dialogs.materials = false;
+        state.dialogs.material_browser.name_edit = None;
+        state.dialogs.material_browser.error = None;
+    }
+}
+
+fn body(ui: &mut Ui, state: &mut AppState) {
+    // Keep a valid selection.
+    let exists =
+        |state: &AppState, n: &Option<String>| n.as_ref().is_some_and(|n| state.project().material(n).is_some());
+    if !exists(state, &state.dialogs.material_browser.selected) {
+        state.dialogs.material_browser.selected = state.project().materials.first().map(|m| m.name.clone());
+    }
+    let height = 520.0;
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui(vec2(270.0, height), |ui| {
+            ui.set_min_size(vec2(270.0, height));
+            list(ui, state);
+        });
+        ui.separator();
+        ui.allocate_ui(vec2(ui.available_width(), height), |ui| {
+            ui.set_min_height(height);
+            let selected = state.dialogs.material_browser.selected.clone();
+            match selected.and_then(|n| state.project().material(&n).cloned()) {
+                Some(m) => details(ui, state, &m),
+                None => {
+                    ui.label(theme::muted(t!("mat-none")));
+                }
+            }
+        });
+    });
+}
+
+/// Small swatch: the shading color with the surface pattern over it.
+fn swatch(painter: &egui::Painter, rect: Rect, m: &Material) {
+    let [r, g, b] = m.shading_color();
+    painter.rect_filled(rect, 3.0, Color32::from_rgb(r, g, b));
+    let fill = if m.graphics.surface.is_empty() { &m.graphics.cut } else { &m.graphics.surface };
+    paint_pattern(&painter.with_clip_rect(rect), rect.shrink(1.0), fill, 6.0, false);
+    painter.rect_stroke(rect, 3.0, Stroke::new(1.0, PALETTE.border_strong), egui::StrokeKind::Inside);
+}
+
+/// Paint a pattern fill into `rect` with lines `spacing` points apart.
+fn paint_pattern(painter: &egui::Painter, rect: Rect, fill: &PatternFill, spacing: f64, background: bool) {
+    let poly: Vec<DVec2> = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()]
+        .iter()
+        .map(|p| DVec2::new(p.x as f64, p.y as f64))
+        .collect();
+    let layer = |pattern: Pattern, color: [u8; 3]| {
+        let c = Color32::from_rgb(color[0], color[1], color[2]);
+        if pattern == Pattern::Solid {
+            painter.rect_filled(rect, 0.0, c);
+            return;
+        }
+        for (a, b) in cc_views::hatch::hatch(pattern, &poly, spacing) {
+            painter.line_segment(
+                [Pos2::new(a.x as f32, a.y as f32), Pos2::new(b.x as f32, b.y as f32)],
+                Stroke::new(1.0, c),
+            );
+        }
+    };
+    if background {
+        painter.rect_filled(rect, 0.0, Color32::WHITE);
+    }
+    layer(fill.background, fill.background_color);
+    layer(fill.foreground, fill.foreground_color);
+}
+
+fn list(ui: &mut Ui, state: &mut AppState) {
+    let b = &mut state.dialogs.material_browser;
+    ui.add(egui::TextEdit::singleline(&mut b.search).hint_text(t!("mat-search")).desired_width(f32::INFINITY));
+    ui.add_space(4.0);
+    let query = b.search.trim().to_lowercase();
+    let selected = b.selected.clone();
+    let mats: Vec<Material> = state
+        .project()
+        .materials
+        .iter()
+        .filter(|m| {
+            query.is_empty()
+                || m.name.to_lowercase().contains(&query)
+                || m.identity.keywords.to_lowercase().contains(&query)
+                || tr(m.identity.class.key()).to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect();
+    let mut pick = None;
+    egui::Frame::new().stroke(Stroke::new(1.0, PALETTE.border)).show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("mat-list").max_height(420.0).auto_shrink([false, false]).show(ui, |ui| {
+            for m in &mats {
+                let is_sel = selected.as_deref() == Some(m.name.as_str());
+                let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+                if is_sel {
+                    ui.painter().rect_filled(rect, 0.0, PALETTE.accent_soft);
+                } else if r.hovered() {
+                    ui.painter().rect_filled(rect, 0.0, PALETTE.hover);
+                }
+                let sw = Rect::from_min_size(rect.left_top() + vec2(6.0, 5.0), vec2(24.0, 24.0));
+                swatch(ui.painter(), sw, m);
+                ui.painter().text(
+                    rect.left_center() + vec2(38.0, -6.0),
+                    egui::Align2::LEFT_CENTER,
+                    &m.name,
+                    egui::FontId::proportional(13.0),
+                    PALETTE.text,
+                );
+                ui.painter().text(
+                    rect.left_center() + vec2(38.0, 8.0),
+                    egui::Align2::LEFT_CENTER,
+                    tr(m.identity.class.key()),
+                    egui::FontId::proportional(10.5),
+                    PALETTE.text_faint,
+                );
+                if r.clicked() {
+                    pick = Some(m.name.clone());
+                }
+            }
+        });
+    });
+    if let Some(name) = pick {
+        let b = &mut state.dialogs.material_browser;
+        b.selected = Some(name);
+        b.name_edit = None;
+        b.error = None;
+    }
+    ui.add_space(6.0);
+    let users = selected.as_deref().map_or(0, |n| state.project().material_users(n).len());
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t!("mat-new")).clicked() {
+            let name = unique_name(state, &t!("mat-new-name"));
+            state.doc.edit(t!("tx-modify-material"), |e| {
+                e.materials_mut().push(Material::new(name.clone(), [190, 190, 190]))
+            });
+            state.dialogs.material_browser.selected = Some(name);
+        }
+        if ui.add_enabled(selected.is_some(), egui::Button::new(t!("mat-duplicate"))).clicked()
+            && let Some(src) = selected.as_deref().and_then(|n| state.project().material(n).cloned())
+        {
+            let name = unique_name(state, &t!("copy-of", "name" => src.name));
+            let copy = Material { name: name.clone(), ..src };
+            state.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().push(copy));
+            state.dialogs.material_browser.selected = Some(name);
+        }
+        let delete = ui.add_enabled(selected.is_some() && users == 0, egui::Button::new(t!("mat-delete")));
+        let delete = if users > 0 { delete.on_disabled_hover_text(t!("mat-in-use", "count" => users)) } else { delete };
+        if delete.clicked()
+            && let Some(name) = selected
+        {
+            state.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().retain(|m| m.name != name));
+            state.dialogs.material_browser.selected = None;
+        }
+    });
+}
+
+fn unique_name(state: &AppState, base: &str) -> String {
+    let mut name = base.to_string();
+    let mut n = 2;
+    while state.project().material(&name).is_some() {
+        name = format!("{base} {n}");
+        n += 1;
+    }
+    name
+}
+
+fn details(ui: &mut Ui, state: &mut AppState, m: &Material) {
+    ui.horizontal(|ui| {
+        for (tab, k) in [
+            (Tab::Identity, "mat-tab-identity"),
+            (Tab::Graphics, "mat-tab-graphics"),
+            (Tab::Appearance, "mat-tab-appearance"),
+            (Tab::Physical, "mat-tab-physical"),
+        ] {
+            let on = state.dialogs.material_browser.tab == tab;
+            let text = RichText::new(tr(k)).family(if on { theme::semibold() } else { egui::FontFamily::Proportional });
+            if ui.selectable_label(on, text).clicked() {
+                state.dialogs.material_browser.tab = tab;
+            }
+        }
+    });
+    ui.separator();
+    egui::ScrollArea::vertical().id_salt("mat-details").max_height(480.0).auto_shrink([false, false]).show(ui, |ui| {
+        match state.dialogs.material_browser.tab {
+            Tab::Identity => identity(ui, state, m),
+            Tab::Graphics => graphics(ui, state, m),
+            Tab::Appearance => appearance(ui, state, m),
+            Tab::Physical => physical(ui, state, m),
+        }
+    });
+}
+
+fn heading(ui: &mut Ui, text: String) {
+    ui.add_space(6.0);
+    ui.label(RichText::new(text).family(theme::semibold()).color(PALETTE.text));
+    ui.add_space(2.0);
+}
+
+fn grid(ui: &mut Ui, id: &str, add: impl FnOnce(&mut Ui)) {
+    egui::Grid::new(id).num_columns(2).spacing([12.0, 6.0]).min_col_width(150.0).show(ui, add);
+}
+
+fn text_row(
+    ui: &mut Ui,
+    state: &mut AppState,
+    m: &Material,
+    label: String,
+    field: &str,
+    get: fn(&Material) -> &String,
+    set: fn(&mut Material, String),
+) {
+    ui.label(theme::muted(label));
+    let mut text = get(m).clone();
+    let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(320.0));
+    if r.changed() {
+        update(state, &m.name, field, |x| set(x, text));
+    }
+    done(state, &r);
+    ui.end_row();
+}
+
+fn identity(ui: &mut Ui, state: &mut AppState, m: &Material) {
+    grid(ui, "mat-name", |ui| {
+        ui.label(theme::muted(t!("mat-name")));
+        let b = &mut state.dialogs.material_browser;
+        let mut name = b.name_edit.clone().unwrap_or_else(|| m.name.clone());
+        let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(320.0));
+        if r.changed() {
+            b.name_edit = Some(name.clone());
+        }
+        let enter = r.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter));
+        if enter && let Some(new) = state.dialogs.material_browser.name_edit.take() {
+            let new = new.trim().to_string();
+            if new != m.name {
+                let old = m.name.clone();
+                let renamed = state.doc.edit(t!("tx-rename-material"), |e| e.rename_material(&old, &new));
+                let b = &mut state.dialogs.material_browser;
+                if renamed {
+                    b.selected = Some(new);
+                    b.error = None;
+                } else {
+                    b.error = Some(t!("mat-name-taken"));
+                }
+            }
+        }
+        ui.end_row();
+    });
+    if let Some(e) = &state.dialogs.material_browser.error {
+        ui.label(RichText::new(e).color(PALETTE.danger));
+    }
+    heading(ui, t!("mat-descriptive"));
+    grid(ui, "mat-desc", |ui| {
+        text_row(
+            ui,
+            state,
+            m,
+            t!("info-description"),
+            "desc",
+            |m| &m.identity.description,
+            |m, v| m.identity.description = v,
+        );
+        ui.label(theme::muted(t!("mat-class")));
+        let mut class = m.identity.class;
+        egui::ComboBox::from_id_salt("mat-class").selected_text(tr(class.key())).width(200.0).show_ui(ui, |ui| {
+            for c in MaterialClass::ALL {
+                ui.selectable_value(&mut class, c, tr(c.key()));
+            }
+        });
+        if class != m.identity.class {
+            update(state, &m.name, "class", |x| x.identity.class = class);
+        }
+        ui.end_row();
+        text_row(
+            ui,
+            state,
+            m,
+            t!("info-comments"),
+            "comments",
+            |m| &m.identity.comments,
+            |m, v| m.identity.comments = v,
+        );
+        text_row(
+            ui,
+            state,
+            m,
+            t!("mat-keywords"),
+            "keywords",
+            |m| &m.identity.keywords,
+            |m, v| m.identity.keywords = v,
+        );
+    });
+    heading(ui, t!("mat-product"));
+    grid(ui, "mat-product", |ui| {
+        text_row(
+            ui,
+            state,
+            m,
+            t!("info-manufacturer"),
+            "mfr",
+            |m| &m.identity.manufacturer,
+            |m, v| m.identity.manufacturer = v,
+        );
+        text_row(ui, state, m, t!("info-model"), "model", |m| &m.identity.model, |m, v| m.identity.model = v);
+        ui.label(theme::muted(t!("info-cost")));
+        optional_value(ui, state, m, "cost", m.identity.cost, "", |m, v| m.identity.cost = v);
+        ui.end_row();
+        text_row(ui, state, m, t!("info-url"), "url", |m| &m.identity.url, |m, v| m.identity.url = v);
+    });
+    heading(ui, t!("mat-annotation"));
+    grid(ui, "mat-annotation", |ui| {
+        text_row(ui, state, m, t!("info-keynote"), "keynote", |m| &m.identity.keynote, |m, v| m.identity.keynote = v);
+        text_row(ui, state, m, t!("col-mark"), "mark", |m| &m.identity.mark, |m, v| m.identity.mark = v);
+    });
+}
+
+/// A number that may be unset: a checkbox plus a value.
+fn optional_value(
+    ui: &mut Ui,
+    state: &mut AppState,
+    m: &Material,
+    field: &str,
+    value: Option<f64>,
+    unit: &str,
+    set: fn(&mut Material, Option<f64>),
+) {
+    ui.horizontal(|ui| {
+        let mut on = value.is_some();
+        if ui.checkbox(&mut on, "").changed() {
+            update(state, &m.name, field, |x| set(x, if on { Some(value.unwrap_or(0.0)) } else { None }));
+        }
+        if let Some(mut v) = value {
+            let speed = (v.abs() * 0.01).max(1e-6);
+            let small = v != 0.0 && v.abs() < 1e-3;
+            let mut drag = DragValue::new(&mut v).speed(speed);
+            if small {
+                drag = drag
+                    .custom_formatter(|n, _| format!("{n:.3e}"))
+                    .custom_parser(|s| s.trim().replace(',', ".").parse().ok());
+            } else {
+                drag = drag.max_decimals(4);
+            }
+            if !unit.is_empty() {
+                drag = drag.suffix(format!(" {unit}"));
+            }
+            let r = ui.add(drag);
+            if r.changed() {
+                update(state, &m.name, field, |x| set(x, Some(v)));
+            }
+            done(state, &r);
+        } else {
+            ui.label(theme::muted(t!("mat-unset")));
+        }
+    });
+}
+
+fn color_row(
+    ui: &mut Ui,
+    state: &mut AppState,
+    m: &Material,
+    label: String,
+    field: &str,
+    value: [u8; 3],
+    set: fn(&mut Material, [u8; 3]),
+) {
+    ui.label(theme::muted(label));
+    let mut c = value;
+    ui.horizontal(|ui| {
+        let r = ui.color_edit_button_srgb(&mut c);
+        ui.label(theme::muted(format!("RGB {} {} {}", c[0], c[1], c[2])));
+        if r.changed() {
+            update(state, &m.name, field, |x| set(x, c));
+        }
+    });
+    ui.end_row();
+}
+
+fn pattern_rows(
+    ui: &mut Ui,
+    state: &mut AppState,
+    m: &Material,
+    which: &str,
+    fill: PatternFill,
+    set: fn(&mut Material, PatternFill),
+) {
+    for (layer, label) in [(0, t!("mat-foreground")), (1, t!("mat-background"))] {
+        ui.label(RichText::new(label).color(PALETTE.text_muted).italics());
+        ui.end_row();
+        let (pattern, color) = if layer == 0 {
+            (fill.foreground, fill.foreground_color)
+        } else {
+            (fill.background, fill.background_color)
+        };
+        ui.label(theme::muted(t!("mat-pattern")));
+        let mut p = pattern;
+        egui::ComboBox::from_id_salt((which, layer)).selected_text(tr(p.key())).width(200.0).show_ui(ui, |ui| {
+            for option in Pattern::ALL {
+                ui.selectable_value(&mut p, option, tr(option.key()));
+            }
+        });
+        if p != pattern {
+            let mut f = fill;
+            if layer == 0 {
+                f.foreground = p
+            } else {
+                f.background = p
+            }
+            update(state, &m.name, &format!("{which}-{layer}-pattern"), |x| set(x, f));
+        }
+        ui.end_row();
+        ui.label(theme::muted(t!("mat-color")));
+        let mut c = color;
+        if ui.color_edit_button_srgb(&mut c).changed() {
+            let mut f = fill;
+            if layer == 0 {
+                f.foreground_color = c
+            } else {
+                f.background_color = c
+            }
+            update(state, &m.name, &format!("{which}-{layer}-color"), |x| set(x, f));
+        }
+        ui.end_row();
+    }
+    ui.label(theme::muted(t!("mat-preview")));
+    let (rect, _) = ui.allocate_exact_size(vec2(200.0, 60.0), Sense::hover());
+    paint_pattern(&ui.painter().with_clip_rect(rect), rect, &fill, 7.0, true);
+    ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.0, PALETTE.border_strong), egui::StrokeKind::Inside);
+    ui.end_row();
+}
+
+fn graphics(ui: &mut Ui, state: &mut AppState, m: &Material) {
+    heading(ui, t!("mat-shading"));
+    grid(ui, "mat-shading", |ui| {
+        ui.label("");
+        let mut use_app = m.graphics.use_appearance;
+        if ui.checkbox(&mut use_app, t!("mat-use-appearance")).changed() {
+            update(state, &m.name, "use-app", |x| x.graphics.use_appearance = use_app);
+        }
+        ui.end_row();
+        color_row(ui, state, m, t!("mat-color"), "color", m.color, |x, c| x.color = c);
+        ui.label(theme::muted(t!("mat-transparency")));
+        let mut pct = m.graphics.transparency * 100.0;
+        let r = ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").integer());
+        if r.changed() {
+            update(state, &m.name, "transparency", |x| x.graphics.transparency = (pct / 100.0).clamp(0.0, 1.0));
+        }
+        done(state, &r);
+        ui.end_row();
+    });
+    heading(ui, t!("mat-surface-pattern"));
+    grid(ui, "mat-surface", |ui| {
+        pattern_rows(ui, state, m, "surface", m.graphics.surface, |x, f| x.graphics.surface = f)
+    });
+    heading(ui, t!("mat-cut-pattern"));
+    grid(ui, "mat-cut", |ui| pattern_rows(ui, state, m, "cut", m.graphics.cut, |x, f| x.graphics.cut = f));
+}
+
+/// A shaded sphere in the appearance color, with a highlight by finish.
+fn sphere(ui: &mut Ui, color: [u8; 3], finish: Finish) {
+    let (rect, _) = ui.allocate_exact_size(vec2(120.0, 120.0), Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 4.0, Color32::from_gray(70));
+    let c = rect.center();
+    let radius = 46.0f32;
+    let light = vec2(-0.45, -0.5);
+    let steps = 40;
+    for i in (1..=steps).rev() {
+        let t = i as f32 / steps as f32;
+        let r = radius * t;
+        // Larger circles are darker (rim), centers shifted towards the light.
+        let shade = 0.25 + 0.75 * (1.0 - t * t).sqrt().max(0.0) * 0.9 + 0.1 * (1.0 - t);
+        let col = Color32::from_rgb(
+            (color[0] as f32 * shade).min(255.0) as u8,
+            (color[1] as f32 * shade).min(255.0) as u8,
+            (color[2] as f32 * shade).min(255.0) as u8,
+        );
+        painter.circle_filled(c + light * (radius - r), r, col);
+    }
+    let shine = finish.shininess() as f32;
+    if shine > 0.0 {
+        for i in 0..8 {
+            let r = 4.0 + i as f32 * 2.5 * (1.2 - shine);
+            let a = (shine * 180.0 * (1.0 - i as f32 / 8.0)) as u8;
+            painter.circle_filled(c + light * radius * 0.55, r, Color32::from_white_alpha(a / 3));
+        }
+    }
+}
+
+fn appearance(ui: &mut Ui, state: &mut AppState, m: &Material) {
+    ui.add_space(6.0);
+    sphere(ui, m.appearance.color, m.appearance.finish);
+    heading(ui, t!("mat-appearance"));
+    grid(ui, "mat-appearance", |ui| {
+        color_row(ui, state, m, t!("mat-color"), "app-color", m.appearance.color, |x, c| x.appearance.color = c);
+        ui.label(theme::muted(t!("mat-finish")));
+        let mut f = m.appearance.finish;
+        egui::ComboBox::from_id_salt("mat-finish").selected_text(tr(f.key())).width(200.0).show_ui(ui, |ui| {
+            for o in Finish::ALL {
+                ui.selectable_value(&mut f, o, tr(o.key()));
+            }
+        });
+        if f != m.appearance.finish {
+            update(state, &m.name, "finish", |x| x.appearance.finish = f);
+        }
+        ui.end_row();
+        text_row(
+            ui,
+            state,
+            m,
+            t!("info-description"),
+            "app-desc",
+            |m| &m.appearance.description,
+            |m, v| m.appearance.description = v,
+        );
+    });
+}
+
+/// A physical property row: key, value, unit and setter.
+type PhysicalRow = (&'static str, Option<f64>, &'static str, fn(&mut Material, Option<f64>));
+
+/// Keys used at runtime (checked by the i18n tests).
+#[cfg(test)]
+pub const KEYS: [&str; 12] = [
+    "mat-tab-identity",
+    "mat-tab-graphics",
+    "mat-tab-appearance",
+    "mat-tab-physical",
+    "phys-density",
+    "phys-conductivity",
+    "phys-specific-heat",
+    "phys-expansion",
+    "phys-youngs",
+    "phys-poisson",
+    "phys-compressive",
+    "phys-tensile",
+];
+
+fn physical(ui: &mut Ui, state: &mut AppState, m: &Material) {
+    heading(ui, t!("mat-behavior"));
+    grid(ui, "mat-behavior", |ui| {
+        ui.label(theme::muted(t!("mat-behavior")));
+        let mut b = m.physical.behavior;
+        egui::ComboBox::from_id_salt("mat-behavior-combo").selected_text(tr(b.key())).width(200.0).show_ui(ui, |ui| {
+            for o in Behavior::ALL {
+                ui.selectable_value(&mut b, o, tr(o.key()));
+            }
+        });
+        if b != m.physical.behavior {
+            update(state, &m.name, "behavior", |x| x.physical.behavior = b);
+        }
+        ui.end_row();
+    });
+    let p = &m.physical;
+    let thermal: [PhysicalRow; 4] = [
+        ("phys-density", p.density, "kg/m³", |x, v| x.physical.density = v),
+        ("phys-conductivity", p.thermal_conductivity, "W/(m·K)", |x, v| x.physical.thermal_conductivity = v),
+        ("phys-specific-heat", p.specific_heat, "J/(kg·K)", |x, v| x.physical.specific_heat = v),
+        ("phys-expansion", p.thermal_expansion, "1/K", |x, v| x.physical.thermal_expansion = v),
+    ];
+    let mechanical: [PhysicalRow; 4] = [
+        ("phys-youngs", p.youngs_modulus, "MPa", |x, v| x.physical.youngs_modulus = v),
+        ("phys-poisson", p.poisson, "", |x, v| x.physical.poisson = v),
+        ("phys-compressive", p.compressive_strength, "MPa", |x, v| x.physical.compressive_strength = v),
+        ("phys-tensile", p.tensile_strength, "MPa", |x, v| x.physical.tensile_strength = v),
+    ];
+    for (title, rows, id) in
+        [(t!("mat-thermal"), thermal, "mat-thermal"), (t!("mat-mechanical"), mechanical, "mat-mech")]
+    {
+        heading(ui, title);
+        grid(ui, id, |ui| {
+            for (k, v, unit, set) in rows {
+                ui.label(theme::muted(tr(k)));
+                optional_value(ui, state, m, k, v, unit, set);
+                ui.end_row();
+            }
+        });
+    }
+}

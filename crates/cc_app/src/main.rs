@@ -10,6 +10,7 @@ mod dialogs;
 mod home;
 mod i18n;
 mod icons;
+mod material_browser;
 mod paint;
 mod properties;
 mod ribbon;

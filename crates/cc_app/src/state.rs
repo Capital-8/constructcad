@@ -37,6 +37,7 @@ pub enum PendingAction {
 pub struct Dialogs {
     pub project_info: bool,
     pub units: bool,
+    pub material_browser: crate::material_browser::Browser,
     pub levels: bool,
     pub materials: bool,
     pub type_editor: Option<ElementTypeId>,

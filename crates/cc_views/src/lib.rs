@@ -8,6 +8,7 @@ mod annotate;
 mod drawing;
 pub mod export;
 pub mod format;
+pub mod hatch;
 mod legend;
 mod plan;
 mod projected;
