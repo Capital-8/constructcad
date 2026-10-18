@@ -187,6 +187,11 @@ pub struct Wall {
     /// The wall is load-bearing.
     #[serde(default)]
     pub structural: bool,
+    /// The start (end) may join other walls; when off it stays square.
+    #[serde(default = "yes")]
+    pub join_start: bool,
+    #[serde(default = "yes")]
+    pub join_end: bool,
 }
 
 impl Default for Wall {
@@ -200,6 +205,8 @@ impl Default for Wall {
             location_line: LocationLine::Centerline,
             room_bounding: true,
             structural: false,
+            join_start: true,
+            join_end: true,
         }
     }
 }

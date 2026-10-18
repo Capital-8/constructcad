@@ -418,6 +418,11 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             }
             finish(state, &r);
         }
+        let mut pinned = state.project().is_pinned(id);
+        if row(ui, &t!("prop-pinned"), |ui| ui.checkbox(&mut pinned, "")).changed() {
+            let name = if pinned { t!("tx-pin") } else { t!("tx-unpin") };
+            state.doc.edit(name, |e| e.set_pinned(&[id], pinned));
+        }
     });
     section(ui, "ifc", t!("section-ifc"), |ui| {
         readonly_row(ui, &t!("prop-ifc-guid"), cc_ifc::guid::encode(el.uid.0));
@@ -646,6 +651,22 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
     if location != w.location_line {
         set(state, "loc", &|w| w.location_line = location);
         state.doc.break_merge();
+    }
+    for (label, at_start, value) in
+        [(t!("prop-join-start"), true, w.join_start), (t!("prop-join-end"), false, w.join_end)]
+    {
+        let mut on = value;
+        if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+            state.doc.edit(t!("tx-wall-join"), |e| {
+                if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
+                    if at_start {
+                        w.join_start = on;
+                    } else {
+                        w.join_end = on;
+                    }
+                }
+            });
+        }
     }
 
     level_row(ui, state, el);

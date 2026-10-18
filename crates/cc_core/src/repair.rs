@@ -149,6 +149,11 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
+        // Pins of missing elements go.
+        let before = self.pinned.len();
+        let elements = &self.elements;
+        self.pinned.retain(|id| elements.contains_key(id));
+        repairs += before - self.pinned.len();
         // Component overrides must be finite.
         for e in self.elements.values_mut() {
             if let ElementKind::Component(c) = &mut e.kind {

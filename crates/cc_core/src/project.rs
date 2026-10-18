@@ -39,6 +39,9 @@ pub struct Project {
     /// How quantities are displayed and typed.
     #[serde(default)]
     pub units: crate::Units,
+    /// Elements protected from moving and deleting.
+    #[serde(default)]
+    pub pinned: std::collections::BTreeSet<ElementId>,
     next_id: u64,
 }
 
@@ -53,6 +56,7 @@ impl Project {
             elements: BTreeMap::new(),
             views: BTreeMap::new(),
             units: crate::Units::default(),
+            pinned: Default::default(),
             next_id: 1,
         }
     }
@@ -401,6 +405,10 @@ impl Project {
 
     pub fn level_name(&self, id: LevelId) -> &str {
         self.level(id).map_or("?", |l| l.name.as_str())
+    }
+
+    pub fn is_pinned(&self, id: ElementId) -> bool {
+        self.pinned.contains(&id)
     }
 
     pub fn element(&self, id: ElementId) -> Option<&Element> {

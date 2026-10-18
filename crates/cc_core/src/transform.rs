@@ -85,6 +85,7 @@ impl Element {
                 // A mirror would put the exterior (left) face inside: walk the wall the other way.
                 if t.mirror {
                     std::mem::swap(&mut w.start, &mut w.end);
+                    std::mem::swap(&mut w.join_start, &mut w.join_end);
                 }
             }
             ElementKind::Door(h) | ElementKind::Window(h) => {

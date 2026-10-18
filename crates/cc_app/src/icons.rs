@@ -60,6 +60,9 @@ pub enum Icon {
     Split,
     Offset,
     Align,
+    Pin,
+    Unpin,
+    Join,
 }
 
 /// Maps the 16 x 16 design grid into a screen rectangle.
@@ -390,6 +393,17 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             rect_s(5.0, 3.0, 13.5, 6.5, 0.5);
             rect_s(5.0, 9.5, 10.5, 13.0, 0.5);
             line(&[(4.5, 7.0), (2.5, 8.0), (4.5, 9.0)]);
+        }
+        Icon::Pin | Icon::Unpin => {
+            poly(&[(6.0, 2.0), (10.0, 2.0), (9.5, 6.5), (11.5, 9.0), (4.5, 9.0), (6.5, 6.5)], fill);
+            seg((8.0, 9.0), (8.0, 15.0), s);
+            if icon == Icon::Unpin {
+                seg((2.0, 14.0), (14.0, 2.0), s);
+            }
+        }
+        Icon::Join => {
+            closed(&[(2.0, 2.0), (9.0, 2.0), (9.0, 7.0), (14.0, 7.0), (14.0, 14.0), (2.0, 14.0)]);
+            seg((2.0, 7.0), (9.0, 7.0), thin);
         }
         Icon::Component => {
             // A chair in side view: seat, back and legs.

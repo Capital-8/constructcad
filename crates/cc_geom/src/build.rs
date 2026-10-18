@@ -333,7 +333,13 @@ impl ModelGeometry {
                 .iter()
                 .map(|(e, w)| {
                     let (start, end) = project.wall_axis(e, w);
-                    WallLine { start, end, half: project.thickness_of(e) * 0.5 }
+                    WallLine {
+                        start,
+                        end,
+                        half: project.thickness_of(e) * 0.5,
+                        join_start: w.join_start,
+                        join_end: w.join_end,
+                    }
                 })
                 .collect();
             for (i, (e, w)) in walls.iter().enumerate() {

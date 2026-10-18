@@ -72,6 +72,9 @@ pub(crate) struct WallLine {
     pub start: DVec2,
     pub end: DVec2,
     pub half: f64,
+    /// Whether each end may join (a disallowed end stays square and is ignored by neighbors).
+    pub join_start: bool,
+    pub join_end: bool,
 }
 
 impl WallLine {
@@ -85,6 +88,9 @@ const JOIN_TOL: f64 = 0.01;
 /// Resolve the join at one end of `walls[me]` (`at_start` selects the end).
 pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Option<EndJoin> {
     let a = walls[me];
+    if !(if at_start { a.join_start } else { a.join_end }) {
+        return None;
+    }
     let (p, da) = if at_start { (a.start, a.dir()) } else { (a.end, -a.dir()) };
     let max_ext = 10.0 * a.half.max(0.05);
     let clamp = |t: f64| t.clamp(-max_ext, max_ext);
@@ -96,9 +102,9 @@ pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Opt
         .enumerate()
         .filter(|&(i, _)| i != me)
         .filter_map(|(i, b)| {
-            if b.start.distance(p) < JOIN_TOL {
+            if b.start.distance(p) < JOIN_TOL && b.join_start {
                 Some((i, b.dir()))
-            } else if b.end.distance(p) < JOIN_TOL {
+            } else if b.end.distance(p) < JOIN_TOL && b.join_end {
                 Some((i, -b.dir()))
             } else {
                 None
@@ -365,7 +371,7 @@ mod tests {
     use super::*;
 
     fn line(a: (f64, f64), b: (f64, f64)) -> WallLine {
-        WallLine { start: DVec2::new(a.0, a.1), end: DVec2::new(b.0, b.1), half: 0.1 }
+        WallLine { start: DVec2::new(a.0, a.1), end: DVec2::new(b.0, b.1), half: 0.1, join_start: true, join_end: true }
     }
 
     fn geom(walls: &[WallLine], i: usize) -> WallGeom {
@@ -413,5 +419,17 @@ mod tests {
         assert_eq!(g.columns[1].solid, vec![(0.0, 1.0), (2.0, 3.0)]);
         let v = g.to_solid([0; 3]).volume();
         assert!((v - (3.0 - 0.2)).abs() < 1e-9, "{v}");
+    }
+
+    #[test]
+    fn disallowed_ends_stay_square_and_neighbors_ignore_them() {
+        // An L corner at (4, 0).
+        let mut walls = [line((0.0, 0.0), (4.0, 0.0)), line((4.0, 0.0), (4.0, 3.0))];
+        assert!(resolve_join(&walls, 0, false).is_some());
+        assert!(resolve_join(&walls, 1, true).is_some());
+        walls[0].join_end = false;
+        assert!(resolve_join(&walls, 0, false).is_none());
+        // The neighbor no longer miters against it either.
+        assert!(resolve_join(&walls, 1, true).is_none());
     }
 }

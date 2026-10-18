@@ -258,7 +258,12 @@ impl AppState {
         if self.selection.is_empty() {
             return;
         }
-        let ids: Vec<_> = self.selection.iter().copied().collect();
+        let (ids, pinned): (Vec<_>, Vec<_>) =
+            self.selection.iter().copied().partition(|id| !self.doc.project.is_pinned(*id));
+        if ids.is_empty() {
+            self.message = crate::t!("msg-pinned-skipped", "count" => pinned.len());
+            return;
+        }
         let n = ids.len();
         self.doc.edit(crate::t!("tx-delete"), |e| {
             for id in ids {

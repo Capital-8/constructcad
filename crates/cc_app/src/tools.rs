@@ -66,6 +66,8 @@ pub enum Tool {
     Split,
     Offset,
     Align,
+    /// Click near a wall end to allow or disallow its join.
+    ToggleJoin,
 }
 
 impl Tool {
@@ -99,6 +101,7 @@ impl Tool {
             Tool::Split => "tool-split",
             Tool::Offset => "tool-offset",
             Tool::Align => "tool-align",
+            Tool::ToggleJoin => "tool-toggle-join",
         }
     }
 
@@ -577,7 +580,8 @@ pub fn handle(
             | Tool::TrimExtend
             | Tool::Split
             | Tool::Offset
-            | Tool::Align,
+            | Tool::Align
+            | Tool::ToggleJoin,
             Some(level),
         ) => crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool),
         (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
@@ -1398,6 +1402,13 @@ pub fn transform_selection(state: &mut AppState, ids: &[ElementId], t: &cc_core:
     if t.is_identity() {
         return;
     }
+    // Pinned elements stay where they are.
+    let free: Vec<ElementId> = ids.iter().copied().filter(|id| !state.project().is_pinned(*id)).collect();
+    let pinned = ids.len() - free.len();
+    if pinned > 0 {
+        state.message = t!("msg-pinned-skipped", "count" => pinned);
+    }
+    let ids = free.as_slice();
     state.doc.edit(name, |e| e.transform_elements(ids, t));
 }
 

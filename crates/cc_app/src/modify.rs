@@ -60,6 +60,7 @@ fn hint_key(tool: &Tool) -> &'static str {
         Tool::Split => "hint-split",
         Tool::Offset => "hint-offset",
         Tool::Align => "hint-align",
+        Tool::ToggleJoin => "hint-toggle-join",
         Tool::Move | Tool::Copy | Tool::Array => "hint-base-point",
         Tool::Rotate => "hint-rotate",
         Tool::Mirror { draw: false } => "hint-mirror-pick",
@@ -117,7 +118,8 @@ pub fn handle(
     drawing: &Drawing2D,
     tool: &Tool,
 ) {
-    if matches!(tool, Tool::TrimCorner | Tool::TrimExtend | Tool::Split | Tool::Offset | Tool::Align) {
+    if matches!(tool, Tool::TrimCorner | Tool::TrimExtend | Tool::Split | Tool::Offset | Tool::Align | Tool::ToggleJoin)
+    {
         pick_tool(resp, painter, state, xf, drawing, tool);
         return;
     }
@@ -375,6 +377,17 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
     lit.extend(hovered.map(|h| h.0));
     paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
     let clicked = resp.clicked();
+    // Pinned elements are not edited (offset only copies, so it may pick them).
+    let pinned = |state: &AppState, id: ElementId| state.project().is_pinned(id);
+    if clicked
+        && *tool != Tool::Offset
+        && let Some((id, _)) = hovered
+        && pinned(state, id)
+        && !(matches!(tool, Tool::TrimExtend | Tool::Align) && first.is_none())
+    {
+        state.message = t!("msg-pinned-skipped", "count" => 1);
+        return;
+    }
     match tool {
         Tool::TrimCorner | Tool::Align | Tool::TrimExtend => {
             let Some((id, _)) = hovered else { return };
@@ -422,6 +435,23 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                 report(state, result);
             }
         }
+        Tool::ToggleJoin => {
+            let Some((id, (a, b))) = hovered else { return };
+            let at_start = raw.distance(a) <= raw.distance(b);
+            let end = if at_start { a } else { b };
+            painter.circle_stroke(xf.to_screen(end), 7.0, Stroke::new(2.0, PREVIEW));
+            if clicked && state.project().element(id).is_some_and(|e| e.as_wall().is_some()) {
+                state.doc.edit(t!("tx-wall-join"), |e| {
+                    if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
+                        if at_start {
+                            w.join_start = !w.join_start;
+                        } else {
+                            w.join_end = !w.join_end;
+                        }
+                    }
+                });
+            }
+        }
         Tool::Offset => {
             let Some((id, (a, b))) = hovered else { return };
             let n = (b - a).normalize_or_zero().perp();
@@ -441,6 +471,18 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
         }
         _ => {}
     }
+}
+
+/// Pin or unpin the selection (one undo step).
+pub fn set_pinned(state: &mut AppState, pinned: bool) {
+    let ids: Vec<ElementId> = state.selection.iter().copied().collect();
+    if ids.is_empty() {
+        state.message = t!("msg-select-first");
+        return;
+    }
+    let name = if pinned { t!("tx-pin") } else { t!("tx-unpin") };
+    let n = state.doc.edit(name, |e| e.set_pinned(&ids, pinned));
+    state.message = if pinned { t!("msg-pinned", "count" => n) } else { t!("msg-unpinned", "count" => n) };
 }
 
 #[cfg(test)]
@@ -483,5 +525,26 @@ mod tests {
         assert!(state.project().elements.len() > before);
         assert!(!state.selection.contains(&id));
         assert_eq!(state.project().element(id).and_then(|e| e.as_wall()).map(|w| w.start), Some(moved));
+    }
+
+    #[test]
+    fn pinned_elements_resist_moves_and_deletes() {
+        let mut state = sample();
+        let wall = state.project().walls().next().map(|(e, _)| e.id).unwrap();
+        state.selection = [wall].into_iter().collect();
+        set_pinned(&mut state, true);
+        assert!(state.project().is_pinned(wall));
+        let before = state.project().element(wall).cloned();
+        crate::tools::move_elements(&mut state, &[wall], DVec2::new(1.0, 0.0));
+        assert_eq!(state.project().element(wall).cloned(), before);
+        state.delete_selection();
+        assert!(state.project().element(wall).is_some());
+        // Unpin (undoable) and it moves again.
+        set_pinned(&mut state, false);
+        crate::tools::move_elements(&mut state, &[wall], DVec2::new(1.0, 0.0));
+        assert_ne!(state.project().element(wall).cloned(), before);
+        state.doc.undo();
+        state.doc.undo();
+        assert!(state.project().is_pinned(wall));
     }
 }

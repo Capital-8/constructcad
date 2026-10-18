@@ -236,6 +236,11 @@ impl ConstructApp {
                     }
                     "RM" => Some(Some(Category::Room)),
                     "CL" => Some(Some(Category::Column)),
+                    "PN" | "UP" => {
+                        let pin = state.key_buffer == "PN";
+                        crate::modify::set_pinned(state, pin);
+                        Some(None)
+                    }
                     "TR" | "TX" | "SL" | "OF" | "AL" => {
                         let tool = match state.key_buffer.as_str() {
                             "TR" => Tool::TrimCorner,

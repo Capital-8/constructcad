@@ -49,6 +49,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Split => Icon::Split,
         Tool::Offset => Icon::Offset,
         Tool::Align => Icon::Align,
+        Tool::ToggleJoin => Icon::Join,
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
 }
@@ -515,6 +516,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
             (Tool::TrimCorner, Icon::TrimCorner, tip("tool-trim-corner", "TR")),
             (Tool::TrimExtend, Icon::TrimExtend, tip("tool-trim-extend", "TX")),
             (Tool::Split, Icon::Split, tip("tool-split", "SL")),
+            (Tool::ToggleJoin, Icon::Join, crate::i18n::tr("tool-toggle-join")),
         ];
         let buttons: Vec<StackButton> = picks
             .iter()
@@ -529,6 +531,15 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
             && let Some((tool, _, _)) = picks.get(i)
         {
             crate::modify::start_pick(state, tool.clone());
+        }
+        let pins = [
+            StackButton { icon: Icon::Pin, tooltip: tip("action-pin", "PN"), enabled: has_sel, selected: false },
+            StackButton { icon: Icon::Unpin, tooltip: tip("action-unpin", "UP"), enabled: has_sel, selected: false },
+        ];
+        match stacked(ui, &pins) {
+            Some(0) => crate::modify::set_pinned(state, true),
+            Some(1) => crate::modify::set_pinned(state, false),
+            _ => {}
         }
     });
 }
@@ -767,11 +778,12 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.add(crate::properties::length_drag(&mut state.modify.offset).range(0.001..=100.0));
                 ui.label(theme::muted(t!("hint-offset")));
             }
-            Tool::TrimCorner | Tool::TrimExtend | Tool::Split | Tool::Align => {
+            Tool::TrimCorner | Tool::TrimExtend | Tool::Split | Tool::Align | Tool::ToggleJoin => {
                 let key = match state.tool {
                     Tool::TrimCorner => "hint-trim-corner",
                     Tool::TrimExtend => "hint-trim-extend",
                     Tool::Split => "hint-split",
+                    Tool::ToggleJoin => "hint-toggle-join",
                     _ => "hint-align",
                 };
                 ui.label(theme::muted(crate::i18n::tr(key)));

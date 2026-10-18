@@ -14,11 +14,18 @@ struct Settings {
     levels: Vec<Level>,
     materials: Vec<Material>,
     units: crate::Units,
+    pinned: std::collections::BTreeSet<ElementId>,
 }
 
 impl Settings {
     fn of(p: &Project) -> Self {
-        Self { info: p.info.clone(), levels: p.levels.clone(), materials: p.materials.clone(), units: p.units.clone() }
+        Self {
+            info: p.info.clone(),
+            levels: p.levels.clone(),
+            materials: p.materials.clone(),
+            units: p.units.clone(),
+            pinned: p.pinned.clone(),
+        }
     }
 
     fn restore(self, p: &mut Project) {
@@ -26,6 +33,7 @@ impl Settings {
         p.levels = self.levels;
         p.materials = self.materials;
         p.units = self.units;
+        p.pinned = self.pinned;
     }
 }
 
@@ -269,6 +277,27 @@ impl<'a> EditCtx<'a> {
             m.name = new.to_string();
         }
         true
+    }
+
+    /// Pin or unpin elements; returns how many changed.
+    pub fn set_pinned(&mut self, ids: &[ElementId], pinned: bool) -> usize {
+        let existing: Vec<ElementId> = ids
+            .iter()
+            .copied()
+            .filter(|id| self.project.element(*id).is_some() && self.project.is_pinned(*id) != pinned)
+            .collect();
+        if existing.is_empty() {
+            return 0;
+        }
+        self.touch_settings();
+        for id in &existing {
+            if pinned {
+                self.project.pinned.insert(*id);
+            } else {
+                self.project.pinned.remove(id);
+            }
+        }
+        existing.len()
     }
 
     pub fn units_mut(&mut self) -> &mut crate::Units {
