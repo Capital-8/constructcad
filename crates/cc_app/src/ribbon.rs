@@ -462,42 +462,7 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
 
 fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     let has_sel = !state.selection.is_empty();
-    group(ui, t!("group-selection"), |ui| {
-        select_button(ui, state);
-        let edit = [StackButton {
-            icon: Icon::Delete,
-            tooltip: format!("{} (Delete)", t!("action-delete")),
-            enabled: has_sel,
-            selected: false,
-        }];
-        if stacked(ui, &edit).is_some() {
-            state.delete_selection();
-        }
-        let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
-        let history = [
-            StackButton {
-                icon: Icon::Undo,
-                tooltip: format!("{}{undo_name} (Ctrl+Z)", t!("action-undo")),
-                enabled: state.doc.can_undo(),
-                selected: false,
-            },
-            StackButton {
-                icon: Icon::Redo,
-                tooltip: format!("{} (Ctrl+Y)", t!("action-redo")),
-                enabled: state.doc.can_redo(),
-                selected: false,
-            },
-        ];
-        match stacked(ui, &history) {
-            Some(0) => {
-                state.doc.undo();
-            }
-            Some(1) => {
-                state.doc.redo();
-            }
-            _ => {}
-        }
-    });
+    group(ui, t!("group-selection"), |ui| select_button(ui, state));
     group(ui, t!("group-clipboard"), |ui| clipboard_group(ui, state, has_sel));
     group(ui, t!("group-modify"), |ui| {
         let tip = |key: &str, keys: &str| format!("{} ({keys})", crate::i18n::tr(key));
@@ -549,10 +514,17 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
         let pins = [
             StackButton { icon: Icon::Pin, tooltip: tip("action-pin", "PN"), enabled: has_sel, selected: false },
             StackButton { icon: Icon::Unpin, tooltip: tip("action-unpin", "UP"), enabled: has_sel, selected: false },
+            StackButton {
+                icon: Icon::Delete,
+                tooltip: format!("{} (Delete)", t!("action-delete")),
+                enabled: has_sel,
+                selected: false,
+            },
         ];
         match stacked(ui, &pins) {
             Some(0) => crate::modify::set_pinned(state, true),
             Some(1) => crate::modify::set_pinned(state, false),
+            Some(2) => state.delete_selection(),
             _ => {}
         }
     });
