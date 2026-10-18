@@ -87,13 +87,21 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         state.dialogs.material_browser.selected = state.project().materials.first().map(|m| m.name.clone());
     }
     let height = 520.0;
+    // Two fixed-width, top-down columns. (A plain `allocate_ui` here would
+    // inherit the row's horizontal layout and line every field up side by
+    // side, making the dialog far wider than the screen.)
+    let list_w = 270.0;
+    let details_w = (ui.available_width() - list_w - 16.0).max(300.0);
+    let column = egui::Layout::top_down(egui::Align::Min);
     ui.horizontal_top(|ui| {
-        ui.allocate_ui(vec2(270.0, height), |ui| {
-            ui.set_min_size(vec2(270.0, height));
+        ui.allocate_ui_with_layout(vec2(list_w, height), column, |ui| {
+            ui.set_width(list_w);
+            ui.set_min_height(height);
             list(ui, state);
         });
         ui.separator();
-        ui.allocate_ui(vec2(ui.available_width(), height), |ui| {
+        ui.allocate_ui_with_layout(vec2(details_w, height), column, |ui| {
+            ui.set_width(details_w);
             ui.set_min_height(height);
             let selected = state.dialogs.material_browser.selected.clone();
             match selected.and_then(|n| state.project().material(&n).cloned()) {
@@ -646,5 +654,60 @@ fn physical(ui: &mut Ui, state: &mut AppState, m: &Material) {
                 ui.end_row();
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Texts painted in one headless frame of the browser.
+    fn frame_texts(state: &mut AppState) -> Vec<String> {
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1280.0, 800.0))),
+            ..Default::default()
+        };
+        let mut texts = Vec::new();
+        let mut last_bounds = Rect::NOTHING;
+        // Two frames: the first lays out, the second paints with known sizes.
+        for _ in 0..2 {
+            let mut out = ctx.run_ui(input.clone(), |ui| show(&ui.ctx().clone(), state));
+            out.textures_delta.clear();
+            let mut bounds = Rect::NOTHING;
+            // Texts only: the modal's dimmed backdrop covers the whole screen.
+            for c in out.shapes.iter().filter(|c| matches!(c.shape, egui::Shape::Text(_))) {
+                bounds = bounds.union(c.shape.visual_bounding_rect());
+            }
+            last_bounds = bounds;
+            texts = out
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect();
+        }
+        // Regression: the dialog once grew far wider than the screen and showed up blank.
+        assert!(last_bounds.width() < 1000.0 && last_bounds.left() >= 0.0, "dialog bounds {last_bounds:?}");
+        texts
+    }
+
+    #[test]
+    fn browser_shows_the_list_and_the_selected_material() {
+        let mut state = AppState::new(cc_core::Document::new(crate::actions::new_project()));
+        state.dialogs.materials = true;
+        let texts = frame_texts(&mut state);
+        let first = state.project().materials[0].name.clone();
+        assert!(texts.iter().any(|t| t == &first), "list missing: {texts:?}");
+        for tab in ["mat-tab-identity", "mat-tab-graphics", "mat-tab-appearance", "mat-tab-physical"] {
+            assert!(texts.iter().any(|t| *t == tr(tab)), "tab {tab} missing: {texts:?}");
+        }
+        for tab in [Tab::Graphics, Tab::Appearance, Tab::Physical] {
+            state.dialogs.material_browser.tab = tab;
+            assert!(frame_texts(&mut state).len() > 10, "{tab:?} empty");
+        }
     }
 }
