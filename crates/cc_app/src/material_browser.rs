@@ -86,7 +86,8 @@ fn body(ui: &mut Ui, state: &mut AppState) {
     if !exists(state, &state.dialogs.material_browser.selected) {
         state.dialogs.material_browser.selected = state.project().materials.first().map(|m| m.name.clone());
     }
-    let height = 520.0;
+    // Fit the window: header, footer, margins and the gap around the dialog take about 280 points.
+    let height = (ui.ctx().content_rect().height() - 280.0).clamp(300.0, 560.0);
     // Two fixed-width, top-down columns. (A plain `allocate_ui` here would
     // inherit the row's horizontal layout and line every field up side by
     // side, making the dialog far wider than the screen.)
@@ -97,15 +98,18 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         ui.allocate_ui_with_layout(vec2(list_w, height), column, |ui| {
             ui.set_width(list_w);
             ui.set_min_height(height);
-            list(ui, state);
+            list(ui, state, height);
         });
-        ui.separator();
+        // A fixed-height divider: `ui.separator()` in a row stretches to the
+        // available height, which is unbounded in a modal.
+        let (divider, _) = ui.allocate_exact_size(vec2(9.0, height), Sense::hover());
+        ui.painter().vline(divider.center().x, divider.y_range(), Stroke::new(1.0, PALETTE.border));
         ui.allocate_ui_with_layout(vec2(details_w, height), column, |ui| {
             ui.set_width(details_w);
             ui.set_min_height(height);
             let selected = state.dialogs.material_browser.selected.clone();
             match selected.and_then(|n| state.project().material(&n).cloned()) {
-                Some(m) => details(ui, state, &m),
+                Some(m) => details(ui, state, &m, height),
                 None => {
                     ui.label(theme::muted(t!("mat-none")));
                 }
@@ -149,7 +153,7 @@ fn paint_pattern(painter: &egui::Painter, rect: Rect, fill: &PatternFill, spacin
     layer(fill.foreground, fill.foreground_color);
 }
 
-fn list(ui: &mut Ui, state: &mut AppState) {
+fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
     let b = &mut state.dialogs.material_browser;
     ui.add(egui::TextEdit::singleline(&mut b.search).hint_text(t!("mat-search")).desired_width(f32::INFINITY));
     ui.add_space(4.0);
@@ -169,36 +173,39 @@ fn list(ui: &mut Ui, state: &mut AppState) {
         .collect();
     let mut pick = None;
     egui::Frame::new().stroke(Stroke::new(1.0, PALETTE.border)).show(ui, |ui| {
-        egui::ScrollArea::vertical().id_salt("mat-list").max_height(420.0).auto_shrink([false, false]).show(ui, |ui| {
-            for m in &mats {
-                let is_sel = selected.as_deref() == Some(m.name.as_str());
-                let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
-                if is_sel {
-                    ui.painter().rect_filled(rect, 0.0, PALETTE.accent_soft);
-                } else if r.hovered() {
-                    ui.painter().rect_filled(rect, 0.0, PALETTE.hover);
+        egui::ScrollArea::vertical().id_salt("mat-list").max_height(height - 80.0).auto_shrink([false, false]).show(
+            ui,
+            |ui| {
+                for m in &mats {
+                    let is_sel = selected.as_deref() == Some(m.name.as_str());
+                    let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+                    if is_sel {
+                        ui.painter().rect_filled(rect, 0.0, PALETTE.accent_soft);
+                    } else if r.hovered() {
+                        ui.painter().rect_filled(rect, 0.0, PALETTE.hover);
+                    }
+                    let sw = Rect::from_min_size(rect.left_top() + vec2(6.0, 5.0), vec2(24.0, 24.0));
+                    swatch(ui.painter(), sw, m);
+                    ui.painter().text(
+                        rect.left_center() + vec2(38.0, -6.0),
+                        egui::Align2::LEFT_CENTER,
+                        &m.name,
+                        egui::FontId::proportional(13.0),
+                        PALETTE.text,
+                    );
+                    ui.painter().text(
+                        rect.left_center() + vec2(38.0, 8.0),
+                        egui::Align2::LEFT_CENTER,
+                        tr(m.identity.class.key()),
+                        egui::FontId::proportional(10.5),
+                        PALETTE.text_faint,
+                    );
+                    if r.clicked() {
+                        pick = Some(m.name.clone());
+                    }
                 }
-                let sw = Rect::from_min_size(rect.left_top() + vec2(6.0, 5.0), vec2(24.0, 24.0));
-                swatch(ui.painter(), sw, m);
-                ui.painter().text(
-                    rect.left_center() + vec2(38.0, -6.0),
-                    egui::Align2::LEFT_CENTER,
-                    &m.name,
-                    egui::FontId::proportional(13.0),
-                    PALETTE.text,
-                );
-                ui.painter().text(
-                    rect.left_center() + vec2(38.0, 8.0),
-                    egui::Align2::LEFT_CENTER,
-                    tr(m.identity.class.key()),
-                    egui::FontId::proportional(10.5),
-                    PALETTE.text_faint,
-                );
-                if r.clicked() {
-                    pick = Some(m.name.clone());
-                }
-            }
-        });
+            },
+        );
     });
     if let Some(name) = pick {
         let b = &mut state.dialogs.material_browser;
@@ -245,7 +252,7 @@ fn unique_name(state: &AppState, base: &str) -> String {
     name
 }
 
-fn details(ui: &mut Ui, state: &mut AppState, m: &Material) {
+fn details(ui: &mut Ui, state: &mut AppState, m: &Material, height: f32) {
     ui.horizontal(|ui| {
         for (tab, k) in [
             (Tab::Identity, "mat-tab-identity"),
@@ -261,14 +268,15 @@ fn details(ui: &mut Ui, state: &mut AppState, m: &Material) {
         }
     });
     ui.separator();
-    egui::ScrollArea::vertical().id_salt("mat-details").max_height(480.0).auto_shrink([false, false]).show(ui, |ui| {
-        match state.dialogs.material_browser.tab {
+    egui::ScrollArea::vertical().id_salt("mat-details").max_height(height - 40.0).auto_shrink([false, false]).show(
+        ui,
+        |ui| match state.dialogs.material_browser.tab {
             Tab::Identity => identity(ui, state, m),
             Tab::Graphics => graphics(ui, state, m),
             Tab::Appearance => appearance(ui, state, m),
             Tab::Physical => physical(ui, state, m),
-        }
-    });
+        },
+    );
 }
 
 fn heading(ui: &mut Ui, text: String) {
@@ -661,37 +669,31 @@ fn physical(ui: &mut Ui, state: &mut AppState, m: &Material) {
 mod tests {
     use super::*;
 
-    /// Texts painted in one headless frame of the browser.
+    /// Texts visible (inside the screen and their clip rect) in a headless
+    /// frame of the browser.
     fn frame_texts(state: &mut AppState) -> Vec<String> {
         let ctx = egui::Context::default();
         crate::theme::apply(&ctx);
-        let input = egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1280.0, 800.0))),
-            ..Default::default()
-        };
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1280.0, 800.0));
+        let input = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
         let mut texts = Vec::new();
-        let mut last_bounds = Rect::NOTHING;
-        // Two frames: the first lays out, the second paints with known sizes.
-        for _ in 0..2 {
+        // Many frames: a layout feedback loop once grew the dialog a little each frame.
+        for _ in 0..30 {
             let mut out = ctx.run_ui(input.clone(), |ui| show(&ui.ctx().clone(), state));
             out.textures_delta.clear();
-            let mut bounds = Rect::NOTHING;
-            // Texts only: the modal's dimmed backdrop covers the whole screen.
-            for c in out.shapes.iter().filter(|c| matches!(c.shape, egui::Shape::Text(_))) {
-                bounds = bounds.union(c.shape.visual_bounding_rect());
-            }
-            last_bounds = bounds;
             texts = out
                 .shapes
                 .iter()
-                .filter_map(|s| match &s.shape {
-                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                .filter_map(|c| match &c.shape {
+                    egui::Shape::Text(t) => {
+                        let visible = c.shape.visual_bounding_rect().intersect(c.clip_rect).intersect(screen);
+                        (visible.is_positive() && visible.area() > 0.5 * c.shape.visual_bounding_rect().area())
+                            .then(|| t.galley.text().to_string())
+                    }
                     _ => None,
                 })
                 .collect();
         }
-        // Regression: the dialog once grew far wider than the screen and showed up blank.
-        assert!(last_bounds.width() < 1000.0 && last_bounds.left() >= 0.0, "dialog bounds {last_bounds:?}");
         texts
     }
 
@@ -702,6 +704,12 @@ mod tests {
         let texts = frame_texts(&mut state);
         let first = state.project().materials[0].name.clone();
         assert!(texts.iter().any(|t| t == &first), "list missing: {texts:?}");
+        // Regression: the dialog once grew past the screen (first sideways,
+        // then downwards) and showed only blank space.
+        for key in ["action-ok", "action-cancel", "mat-name"] {
+            assert!(texts.iter().any(|t| *t == tr(key)), "{key} not visible: {texts:?}");
+        }
+        assert!(texts.iter().any(|t| t.starts_with(&t!("dlg-materials"))), "title not visible: {texts:?}");
         for tab in ["mat-tab-identity", "mat-tab-graphics", "mat-tab-appearance", "mat-tab-physical"] {
             assert!(texts.iter().any(|t| *t == tr(tab)), "tab {tab} missing: {texts:?}");
         }
