@@ -382,15 +382,69 @@ fn error(ctx: &Context, state: &mut AppState) {
 }
 
 fn about(ctx: &Context, state: &mut AppState) {
-    let mut open = state.dialogs.about;
-    egui::Window::new(t!("dlg-about")).open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
-        ui.heading("ConstructCAD");
-        ui.label(format!("{} {}", t!("about-version"), env!("CARGO_PKG_VERSION")));
+    use crate::theme::{self, PALETTE};
+    use egui::RichText;
+    if !state.dialogs.about {
+        return;
+    }
+    let repository = env!("CARGO_PKG_REPOSITORY");
+    let modal = egui::Modal::new(egui::Id::new("about")).frame(
+        egui::Frame::popup(&ctx.style_of(egui::Theme::Light)).inner_margin(egui::Margin::same(24)).corner_radius(10),
+    );
+    let response = modal.show(ctx, |ui| {
+        ui.set_width(440.0);
+        ui.horizontal(|ui| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
+            if let Some(logo) = theme::logo(ui.ctx()) {
+                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                ui.painter().image(logo.id(), rect, uv, egui::Color32::WHITE);
+            }
+            ui.add_space(8.0);
+            ui.vertical(|ui| {
+                ui.add_space(6.0);
+                ui.label(RichText::new("ConstructCAD").family(theme::semibold()).size(22.0).color(PALETTE.text));
+                let version = format!("{} {}", t!("about-version"), env!("CARGO_PKG_VERSION"));
+                ui.label(RichText::new(version).color(PALETTE.text_muted));
+            });
+        });
+        ui.add_space(12.0);
         ui.label(t!("about-text"));
-        ui.label(t!("about-license"));
-        ui.label(env!("CARGO_PKG_AUTHORS"));
-        ui.add_space(6.0);
-        ui.label(crate::theme::muted(t!("about-icon-credit")).size(11.5));
+        ui.label(RichText::new(t!("about-familiar")).color(PALETTE.text_muted));
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(8.0);
+        egui::Grid::new("about-info").num_columns(2).striped(false).spacing([16.0, 6.0]).show(ui, |ui| {
+            ui.label(theme::muted(t!("about-author")));
+            ui.label(env!("CARGO_PKG_AUTHORS"));
+            ui.end_row();
+            ui.label(theme::muted(t!("about-license-label")));
+            ui.hyperlink_to("GPL-3.0-or-later", "https://www.gnu.org/licenses/gpl-3.0.html");
+            ui.end_row();
+            ui.label(theme::muted(t!("about-repository")));
+            ui.hyperlink_to(repository.trim_start_matches("https://"), repository);
+            ui.end_row();
+        });
+        ui.add_space(12.0);
+        ui.label(theme::title(t!("about-credits")));
+        ui.add_space(2.0);
+        for line in [t!("about-built-with"), t!("about-font-credit"), t!("about-icon-credit")] {
+            ui.label(RichText::new(line).size(12.0).color(PALETTE.text_muted));
+        }
+        ui.add_space(12.0);
+        ui.label(RichText::new(t!("about-independence")).size(11.5).color(PALETTE.text_faint));
+        ui.add_space(16.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let close = ui.add(
+                egui::Button::new(RichText::new(t!("action-close")).color(egui::Color32::WHITE)).fill(PALETTE.accent),
+            );
+            if ui.button(t!("about-open-repository")).clicked() {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(repository));
+            }
+            close.clicked()
+        })
+        .inner
     });
-    state.dialogs.about = open;
+    if response.inner || response.should_close() {
+        state.dialogs.about = false;
+    }
 }
