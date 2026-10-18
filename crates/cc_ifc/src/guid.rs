@@ -29,6 +29,23 @@ pub fn encode(n: u128) -> String {
     s
 }
 
+/// Decode a 22-character GlobalId (`None` if malformed).
+pub fn decode(s: &str) -> Option<u128> {
+    let bytes = s.as_bytes();
+    if bytes.len() != 22 {
+        return None;
+    }
+    let mut n: u128 = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        let v = ALPHABET.iter().position(|&a| a == b)? as u128;
+        if i == 0 && v > 3 {
+            return None;
+        }
+        n = (n << if i == 0 { 0 } else { 6 }) | v;
+    }
+    Some(n)
+}
+
 /// Deterministic GlobalId for the object named `tag` within the project
 /// identified by `seed`, so repeated exports keep the same ids.
 pub fn guid(seed: &str, tag: &str) -> String {
@@ -44,6 +61,16 @@ mod tests {
         assert_eq!(encode(0), "0000000000000000000000");
         assert_eq!(encode(u128::MAX), "3$$$$$$$$$$$$$$$$$$$$$");
         assert_eq!(encode(64), "0000000000000000000010");
+    }
+
+    #[test]
+    fn decode_inverts_encode() {
+        for n in [0, 1, 64, u128::MAX, 0x0123_4567_89ab_cdef_fedc_ba98_7654_3210] {
+            assert_eq!(decode(&encode(n)), Some(n));
+        }
+        assert_eq!(decode("short"), None);
+        assert_eq!(decode("4$$$$$$$$$$$$$$$$$$$$$"), None);
+        assert_eq!(decode("000000000000000000000!"), None);
     }
 
     #[test]

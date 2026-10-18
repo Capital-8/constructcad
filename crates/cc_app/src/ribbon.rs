@@ -242,6 +242,11 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
             actions::guarded(state, PendingAction::Close);
         }
     });
+    group(ui, t!("group-import"), |ui| {
+        if big_button(ui, Icon::Open, &t!("action-import-ifc"), false, true, false).clicked() {
+            actions::guarded(state, PendingAction::ImportIfc);
+        }
+    });
     group(ui, t!("group-export"), |ui| {
         if big_button(ui, Icon::Export, &t!("action-export-ifc"), false, true, false).clicked() {
             actions::export_ifc(state);

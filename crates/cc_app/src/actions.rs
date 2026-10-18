@@ -245,6 +245,7 @@ pub fn run_pending(state: &mut AppState, action: PendingAction) {
                 state.message = t!("msg-opened", "path" => name);
             }
         }
+        PendingAction::ImportIfc => import_ifc(state),
         PendingAction::Close => close_project(state),
         PendingAction::Quit => state.quit_confirmed = true,
     }
@@ -300,6 +301,33 @@ pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
             }
         }
         Err(err) => state.dialogs.error = Some(t!("msg-open-failed", "error" => persist_error(&err))),
+    }
+}
+
+/// Replace the document with a project imported from an IFC file. The
+/// result has no file path: saving asks where to write the `.ccad`.
+fn import_ifc(state: &mut AppState) {
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-ifc"), &["ifc"]);
+    let Some(path) = dialog.pick_file() else { return };
+    match guard(|| cc_ifc::import_file(&path, new_project())) {
+        Ok(Ok((project, report))) => {
+            state.replace_document(Document::new(project));
+            let skipped = report.skipped_total();
+            state.message = if skipped == 0 {
+                t!("msg-imported", "path" => path.display(), "count" => report.imported_total())
+            } else {
+                t!("msg-imported-skipped", "path" => path.display(), "count" => report.imported_total(), "skipped" => skipped)
+            };
+        }
+        Ok(Err(err)) => {
+            let error = match err {
+                cc_ifc::ImportError::Io(e) => t!("err-io", "detail" => e),
+                cc_ifc::ImportError::Parse(e) => t!("err-ifc-parse", "detail" => e),
+                cc_ifc::ImportError::NotIfc => t!("err-not-ifc"),
+            };
+            state.dialogs.error = Some(t!("msg-import-failed", "error" => error));
+        }
+        Err(message) => state.dialogs.error = Some(t!("msg-import-failed", "error" => message)),
     }
 }
 
