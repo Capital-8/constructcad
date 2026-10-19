@@ -1065,7 +1065,7 @@ fn dimension_tool(
     let points = state.interaction.points.clone();
     let place = |state: &mut AppState, dim: cc_core::Dimension| {
         // In plans the ends follow the elements they were placed on.
-        let dim = cc_core::Dimension { refs: crate::dim_edit::associate(state, drawing, &dim), ..dim };
+        let dim = crate::dim_edit::associate(state, drawing, &dim);
         let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
         if let Some(level) = level {
             state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(dim));
@@ -1155,7 +1155,7 @@ fn dimension_tool(
                         ray(*p1, *q1, *p1),
                         ray(*p2, *q2, *p2),
                         (raw - vertex).length(),
-                        DimensionKind::Angular { vertex },
+                        DimensionKind::Angular { vertex, rays: Default::default() },
                     );
                     paint_dimension(painter, xf, &d, scale);
                     if resp.clicked() && d.value() > 1e-6 {

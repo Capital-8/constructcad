@@ -113,43 +113,68 @@ fn from_local(position: DVec2, rotation_deg: f64, x: f64, y: f64) -> DVec2 {
 
 impl crate::EditCtx<'_> {
     /// Move the referenced ends of every dimension to their elements'
-    /// current points; references to deleted elements are dropped (the end
-    /// stays where it was). Only changed dimensions are touched.
+    /// current points (and an angle's vertex to the intersection of its
+    /// lines); references to deleted elements are dropped (the end stays
+    /// where it was). Only changed dimensions are touched.
     pub(crate) fn sync_dimensions(&mut self) {
-        let updates: Vec<(ElementId, [Option<DimRef>; 2], DVec2, DVec2)> = self
-            .project()
+        let project = self.project();
+        let updates: Vec<(ElementId, crate::Dimension)> = project
             .elements
             .values()
             .filter_map(|e| {
                 let ElementKind::Dimension(d) = &e.kind else { return None };
-                if d.refs.iter().all(Option::is_none) {
+                if !d.is_associated() {
                     return None;
                 }
-                let mut refs = d.refs;
-                let mut ends = [d.a, d.b];
-                for (r, end) in refs.iter_mut().zip(ends.iter_mut()) {
+                let mut n = d.clone();
+                for (r, end) in n.refs.iter_mut().zip([&mut n.a, &mut n.b]) {
                     let Some(reference) = r else { continue };
-                    match self.project().resolve_dim_ref(reference) {
+                    match project.resolve_dim_ref(reference) {
                         Some(p) => *end = p,
                         None => *r = None,
                     }
                 }
-                let changed = refs != d.refs || ends[0].distance(d.a) > 1e-12 || ends[1].distance(d.b) > 1e-12;
-                changed.then_some((e.id, refs, ends[0], ends[1]))
+                let (a, b) = (n.a, n.b);
+                if let crate::DimensionKind::Angular { vertex, rays } = &mut n.kind {
+                    let mut lines = [None, None];
+                    for ((r, line), end) in rays.iter_mut().zip(lines.iter_mut()).zip([a, b]) {
+                        let Some(reference) = r else { continue };
+                        match project.resolve_dim_ref(reference) {
+                            Some(p) => *line = Some((end, p)),
+                            None => *r = None,
+                        }
+                    }
+                    if let [Some(l1), Some(l2)] = lines
+                        && let Some(v) = intersect(l1, l2)
+                    {
+                        *vertex = v;
+                    }
+                }
+                // A linear dimension keeps its line where it was placed.
+                if let Some(dir) = n.direction() {
+                    n.offset += (d.a - n.a).dot(dir.perp());
+                }
+                (n != *d).then_some((e.id, n))
             })
             .collect();
-        for (id, refs, a, b) in updates {
+        for (id, n) in updates {
             if let Some(ElementKind::Dimension(d)) = self.element_mut(id).map(|e| &mut e.kind) {
-                // A linear dimension keeps its line where it was placed.
-                if let Some(dir) = d.direction() {
-                    d.offset += (d.a - a).dot(dir.perp());
-                }
-                d.refs = refs;
-                d.a = a;
-                d.b = b;
+                *d = n;
             }
         }
     }
+}
+
+/// Intersection of the lines through `(p1, q1)` and `(p2, q2)` (`None`
+/// when either is degenerate or they are parallel).
+fn intersect((p1, q1): (DVec2, DVec2), (p2, q2): (DVec2, DVec2)) -> Option<DVec2> {
+    let (d1, d2) = (q1 - p1, q2 - p2);
+    let den = d1.perp_dot(d2);
+    if den.abs() <= 1e-9 * d1.length() * d2.length() || d1.length() < 1e-9 || d2.length() < 1e-9 {
+        return None;
+    }
+    let v = p1 + d1 * ((p2 - p1).perp_dot(d2) / den);
+    v.is_finite().then_some(v)
 }
 
 #[cfg(test)]
@@ -241,5 +266,58 @@ mod tests {
             x.start -= (x.end - x.start).normalize();
         }
         assert!(stretched.resolve_dim_ref(&r).unwrap().distance(near_end) < 1e-9);
+    }
+
+    #[test]
+    fn angular_dimensions_follow_a_rotated_wall() {
+        let mut doc = sample();
+        // Two walls meeting at a corner: one along X, one along Y.
+        let walls: Vec<_> = doc.project.walls().map(|(e, w)| (e.id, w.start, w.end)).collect();
+        let (wx, sx, ex) = *walls.iter().find(|(_, s, e)| (s.y - e.y).abs() < 1e-9).unwrap();
+        let (wy, sy, ey) = *walls
+            .iter()
+            .find(|(_, s, e)| {
+                (s.x - e.x).abs() < 1e-9
+                    && (s.distance(sx) < 1e-9
+                        || e.distance(sx) < 1e-9
+                        || s.distance(ex) < 1e-9
+                        || e.distance(ex) < 1e-9)
+            })
+            .unwrap();
+        let corner = [sx, ex].into_iter().find(|p| p.distance(sy) < 1e-9 || p.distance(ey) < 1e-9).unwrap();
+        let along_x = if sx.distance(corner) < 1e-9 { ex } else { sx };
+        let along_y = if sy.distance(corner) < 1e-9 { ey } else { sy };
+        let a = corner + (along_x - corner).normalize();
+        let b = corner + (along_y - corner).normalize();
+        let p = &doc.project;
+        let refs = [p.dim_ref_at(wx, a), p.dim_ref_at(wy, b)];
+        let rays = [p.dim_ref_at(wx, corner), p.dim_ref_at(wy, corner)];
+        let view = *p.views.keys().next().unwrap();
+        let level = p.levels[0].id;
+        let ty = p.default_type(crate::Category::Dimension).unwrap();
+        let dim = Dimension { view, a, b, offset: 0.5, kind: DimensionKind::Angular { vertex: corner, rays }, refs };
+        let id = doc.edit("dim", |e| {
+            e.add_element(crate::Element {
+                id: crate::ElementId(0),
+                level,
+                type_id: ty,
+                mark: String::new(),
+                comments: String::new(),
+                kind: ElementKind::Dimension(dim),
+                uid: Default::default(),
+            })
+        });
+        assert!((self::dim(&doc, id).value().to_degrees() - 90.0).abs() < 1e-9);
+        // Turn the Y wall by 30 degrees about its far end: the angle opens to 60 or 120.
+        let far = along_y;
+        doc.edit("rotate", |e| e.transform_elements(&[wy], &PlanTransform::rotate_about(far, 30f64.to_radians())));
+        let d = self::dim(&doc, id);
+        let deg = d.value().to_degrees();
+        assert!((deg - 60.0).abs() < 1e-6 || (deg - 120.0).abs() < 1e-6, "{deg}");
+        // The vertex is where the X wall's line meets the turned wall's line.
+        let DimensionKind::Angular { vertex, .. } = d.kind else { panic!() };
+        assert!((vertex.y - corner.y).abs() < 1e-9, "{vertex}");
+        doc.undo();
+        assert!((self::dim(&doc, id).value().to_degrees() - 90.0).abs() < 1e-9);
     }
 }

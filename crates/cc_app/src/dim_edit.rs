@@ -211,21 +211,61 @@ pub fn apply_text(state: &mut AppState, target: &Target, text: &str) -> Result<(
 /// follows the element whose linework passes through it, preferring lines
 /// across the measured direction (the faces being measured) and, among
 /// those, walls, columns and grids. Radial and diameter dimensions follow
-/// the element of their arc; angular ones stay free.
-pub fn associate(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Option<cc_core::DimRef>; 2] {
-    let plan = state
+/// the element of their arc; angular ones follow the elements whose
+/// linework lies along each measured line (the vertex too, as a second
+/// point of each line).
+pub fn associate(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> Dimension {
+    let mut out = Dimension { refs: end_refs(state, drawing, dim), ..dim.clone() };
+    if let DimensionKind::Angular { vertex, rays } = &mut out.kind
+        && in_plan(state, dim)
+    {
+        let p = state.project();
+        for (ray, end) in rays.iter_mut().zip([dim.a, dim.b]) {
+            *ray = line_element(state, drawing, end, *vertex).and_then(|e| p.dim_ref_at(e, *vertex));
+        }
+    }
+    out
+}
+
+fn in_plan(state: &AppState, dim: &Dimension) -> bool {
+    state
         .project()
         .view(dim.view)
-        .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }));
-    if !plan {
-        return [None, None];
-    }
-    let rank = |c: Category| match c {
+        .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }))
+}
+
+fn rank(c: Category) -> u8 {
+    match c {
         Category::Wall | Category::Column | Category::Grid => 0,
         Category::Beam | Category::Door | Category::Window => 1,
         Category::Component => 2,
         _ => 9,
-    };
+    }
+}
+
+/// The element (best ranked) with linework along the line through `p` and `q`.
+fn line_element(state: &AppState, drawing: &Drawing2D, p: DVec2, q: DVec2) -> Option<ElementId> {
+    let mut found: Vec<(u8, ElementId)> = drawing
+        .prims
+        .iter()
+        .filter_map(|prim| match prim {
+            Prim::Line { a, b, element: Some(e), .. } => {
+                let u = (*b - *a).try_normalize()?;
+                let off = |x: DVec2| (x - *a).perp_dot(u).abs();
+                let r = rank(state.project().element(*e)?.category());
+                (off(p) < 1e-4 && off(q) < 1e-4 && r < 9).then_some((r, *e))
+            }
+            _ => None,
+        })
+        .collect();
+    found.sort();
+    found.first().map(|f| f.1)
+}
+
+fn end_refs(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Option<cc_core::DimRef>; 2] {
+    if !in_plan(state, dim) {
+        return [None, None];
+    }
     // Elements with linework through `p` (within `tol`), best first.
     let at = |p: DVec2, tol: f64, across: Option<DVec2>| -> Option<cc_core::DimRef> {
         let mut found: Vec<(f64, u8, ElementId)> = drawing
@@ -254,7 +294,10 @@ pub fn associate(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Opt
             let Some(rim) = at(dim.b, 0.02 * r + 1e-4, None) else { return [None, None] };
             [state.project().dim_ref_at(rim.element, dim.a), Some(rim)]
         }
-        DimensionKind::Angular { .. } => [None, None],
+        DimensionKind::Angular { vertex, .. } => {
+            let end = |p: DVec2| line_element(state, drawing, p, vertex).and_then(|e| state.project().dim_ref_at(e, p));
+            [end(dim.a), end(dim.b)]
+        }
     }
 }
 
@@ -347,7 +390,7 @@ pub fn set_dimension_value(state: &mut AppState, id: ElementId, value: f64) -> R
             });
             result.map_err(|_| t!("msg-degenerate"))
         }
-        DimensionKind::Angular { vertex } => {
+        DimensionKind::Angular { vertex, .. } => {
             if value >= std::f64::consts::PI {
                 return Err(t!("msg-invalid-value"));
             }
@@ -496,7 +539,7 @@ mod tests {
             kind: DimensionKind::Linear { dir: DVec2::X },
             refs: Default::default(),
         };
-        let refs = associate(&state, &drawing, &dim);
+        let refs = associate(&state, &drawing, &dim).refs;
         assert!(refs[0].is_none() && refs[1].is_some_and(|r| r.element == cid));
         let ty = state.project().default_type(Category::Dimension).unwrap();
         let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(Dimension { refs, ..dim }));
@@ -507,6 +550,56 @@ mod tests {
         assert!(
             matches!(&state.project().element(cid).unwrap().kind, ElementKind::Column(c) if (c.position.x - 50.0).abs() < 1e-9)
         );
+    }
+
+    #[test]
+    fn angular_dimensions_follow_the_walls_they_measure() {
+        let mut state = sample();
+        let view = plan(&state);
+        let walls: Vec<_> = state.project().walls().map(|(e, w)| (e.id, w.start, w.end)).collect();
+        // The wall along y = 0 and the one along x = 0.
+        let wx = walls.iter().find(|(_, s, e)| s.y.abs() < 1e-9 && e.y.abs() < 1e-9).unwrap().0;
+        let wy = walls.iter().find(|(_, s, e)| s.x.abs() < 1e-9 && e.x.abs() < 1e-9).unwrap().0;
+        let drawing = state.drawing(view).unwrap();
+        // One cut face line of each.
+        let face = |id: ElementId, horizontal: bool| {
+            drawing
+                .prims
+                .iter()
+                .find_map(|p| match p {
+                    Prim::Line { a, b, element: Some(e), style: cc_views::LineStyle::Cut }
+                        if *e == id && ((a.y - b.y).abs() < 1e-9) == horizontal && a.distance(*b) > 1.0 =>
+                    {
+                        Some((*a, *b))
+                    }
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let (fx, fy) = (face(wx, true), face(wy, false));
+        let vertex = DVec2::new(fy.0.x, fx.0.y);
+        let a = DVec2::new(vertex.x + 2.0, vertex.y);
+        let b = DVec2::new(vertex.x, vertex.y + 2.0);
+        let dim = Dimension {
+            view,
+            a,
+            b,
+            offset: 1.0,
+            kind: DimensionKind::Angular { vertex, rays: Default::default() },
+            refs: Default::default(),
+        };
+        let dim = associate(&state, &drawing, &dim);
+        assert!(dim.refs.iter().all(Option::is_some), "{:?}", dim.refs);
+        assert!(matches!(dim.kind, DimensionKind::Angular { rays: [Some(_), Some(_)], .. }));
+        let level = state.project().levels[0].id;
+        let ty = state.project().default_type(Category::Dimension).unwrap();
+        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(dim));
+        // Move the Y wall (and its face) half a meter along X: the vertex follows.
+        crate::tools::move_elements(&mut state, &[wy], DVec2::new(0.5, 0.0));
+        let d = dimension(&state, id).unwrap();
+        let DimensionKind::Angular { vertex: moved, .. } = d.kind else { panic!("{:?}", d.kind) };
+        assert!((moved - vertex - DVec2::new(0.5, 0.0)).length() < 1e-9, "{moved}");
+        assert!((d.value().to_degrees() - 90.0).abs() < 1e-9);
     }
 
     #[test]

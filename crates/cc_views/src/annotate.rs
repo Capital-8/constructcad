@@ -177,7 +177,7 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
             let (angle, up) = upright(u);
             (format::meters(dim.value()), (pa + pb) / 2.0 + up * 0.8 * mm, angle)
         }
-        DimensionKind::Angular { vertex } => {
+        DimensionKind::Angular { vertex, .. } => {
             let (r1, r2) = ((dim.a - vertex).try_normalize()?, (dim.b - vertex).try_normalize()?);
             let sweep = r1.angle_to(r2);
             if sweep.abs() < 1e-9 {
@@ -284,7 +284,8 @@ mod tests {
 
     #[test]
     fn angular_radial_and_diameter_values() {
-        let d = dim((2.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Angular { vertex: DVec2::ZERO });
+        let d =
+            dim((2.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Angular { vertex: DVec2::ZERO, rays: Default::default() });
         assert!((d.value().to_degrees() - 90.0).abs() < 1e-9);
         assert!(dimension_layout(&d, 50).is_some_and(|l| l.lines.len() > 30));
         let r = dim((1.0, 1.0), (1.0, 3.0), 0.0, DimensionKind::Radial);

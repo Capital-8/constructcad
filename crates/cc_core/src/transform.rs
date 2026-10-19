@@ -112,7 +112,7 @@ impl Element {
                 p(&mut d.a);
                 p(&mut d.b);
                 match &mut d.kind {
-                    crate::DimensionKind::Angular { vertex } => p(vertex),
+                    crate::DimensionKind::Angular { vertex, .. } => p(vertex),
                     // Directions turn (and mirror) without the translation.
                     crate::DimensionKind::Linear { dir } => {
                         *dir = (t.apply(*dir) - t.apply(DVec2::ZERO)).normalize_or(DVec2::X);
@@ -177,7 +177,7 @@ impl crate::EditCtx<'_> {
             el.transform(t);
             // A dimension moved without what it measures lets go of it.
             if let ElementKind::Dimension(d) = &mut el.kind {
-                for r in &mut d.refs {
+                for r in d.all_refs_mut() {
                     if r.is_some_and(|r| !set.contains(&r.element)) {
                         *r = None;
                     }
@@ -281,7 +281,7 @@ impl crate::EditCtx<'_> {
             // Copied dimensions follow the copies of what they measure, or nothing.
             for id in &created {
                 let Some(ElementKind::Dimension(d)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
-                for r in d.refs.iter_mut() {
+                for r in d.all_refs_mut() {
                     *r = r.and_then(|r| remap.get(&r.element).map(|e| crate::DimRef { element: *e, ..r }));
                 }
             }

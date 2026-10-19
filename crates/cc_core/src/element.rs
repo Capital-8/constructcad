@@ -106,7 +106,7 @@ impl Element {
             ElementKind::Dimension(d) => {
                 d.a += delta;
                 d.b += delta;
-                if let DimensionKind::Angular { vertex } = &mut d.kind {
+                if let DimensionKind::Angular { vertex, .. } = &mut d.kind {
                     *vertex += delta;
                 }
             }
@@ -348,7 +348,13 @@ pub enum DimensionKind {
     /// horizontal or vertical when placed).
     Linear { dir: DVec2 },
     /// Angle at `vertex` between the rays through `a` and through `b`.
-    Angular { vertex: DVec2 },
+    /// `rays` hold a second point of each measured line (the vertex, in the
+    /// frame of that line's element), so the vertex follows the elements.
+    Angular {
+        vertex: DVec2,
+        #[serde(default)]
+        rays: [Option<crate::DimRef>; 2],
+    },
     /// Radius of the arc centered at `a` through `b`.
     Radial,
     /// Diameter of the circle centered at `a` through `b`.
@@ -369,12 +375,30 @@ impl Dimension {
         }
     }
 
+    /// Every element reference: the ends and, for angles, the rays.
+    pub fn all_refs_mut(&mut self) -> impl Iterator<Item = &mut Option<crate::DimRef>> {
+        let rays: &mut [Option<crate::DimRef>] = match &mut self.kind {
+            DimensionKind::Angular { rays, .. } => rays,
+            _ => &mut [],
+        };
+        self.refs.iter_mut().chain(rays.iter_mut())
+    }
+
+    /// Whether any end or ray follows an element.
+    pub fn is_associated(&self) -> bool {
+        let rays = match &self.kind {
+            DimensionKind::Angular { rays, .. } => rays.iter().any(Option::is_some),
+            _ => false,
+        };
+        rays || self.refs.iter().any(Option::is_some)
+    }
+
     /// The measured value: meters for lengths, radians for angles.
     pub fn value(&self) -> f64 {
         match self.kind {
             DimensionKind::Aligned => self.length(),
             DimensionKind::Linear { dir } => (self.b - self.a).dot(dir.normalize_or_zero()).abs(),
-            DimensionKind::Angular { vertex } => (self.a - vertex).angle_to(self.b - vertex).abs(),
+            DimensionKind::Angular { vertex, .. } => (self.a - vertex).angle_to(self.b - vertex).abs(),
             DimensionKind::Radial => self.length(),
             DimensionKind::Diameter => 2.0 * self.length(),
         }

@@ -41,7 +41,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Dimension(d) => {
             let kind = match d.kind {
                 crate::DimensionKind::Linear { dir } => dir.is_finite() && dir.length() > 1e-9,
-                crate::DimensionKind::Angular { vertex } => vertex.is_finite(),
+                crate::DimensionKind::Angular { vertex, .. } => vertex.is_finite(),
                 _ => true,
             };
             kind && d.offset.is_finite() && finite_points(&[d.a, d.b])
@@ -160,7 +160,7 @@ impl Project {
         let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
         for e in self.elements.values_mut() {
             let ElementKind::Dimension(d) = &mut e.kind else { continue };
-            for r in d.refs.iter_mut() {
+            for r in d.all_refs_mut() {
                 if r.is_some_and(|r| !ids.contains(&r.element) || !r.anchor_is_finite()) {
                     *r = None;
                     repairs += 1;
