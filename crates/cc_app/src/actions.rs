@@ -8,6 +8,13 @@ use cc_engine::Ref;
 use cc_engine::commands::{io, levels, project, views};
 
 /// Run an engine command; failures go to the status bar.
+pub fn run_command<C: cc_engine::Command + serde::Serialize>(
+    state: &mut AppState,
+    command: C,
+) -> Option<serde_json::Value> {
+    run(state, command)
+}
+
 fn run<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, command: C) -> Option<serde_json::Value> {
     match state.session.run(command) {
         Ok(out) => Some(out),

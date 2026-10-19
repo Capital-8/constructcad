@@ -3,7 +3,7 @@
 use crate::canvas::View2DState;
 use crate::tools::{Interaction, Tool};
 use crate::view3d::View3DState;
-use cc_core::{Category, Document, Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, ViewId};
+use cc_core::{Document, ElementId, ElementTypeId, LevelId, Project, ViewId};
 use cc_engine::Session;
 use cc_views::Drawing2D;
 use std::collections::{BTreeSet, HashMap};
@@ -263,15 +263,17 @@ impl AppState {
         self.message = crate::t!("msg-deleted", "count" => n);
     }
 
-    /// Create an element in one transaction and select it.
+    /// Create an element in one transaction and select it (test setup; the
+    /// tools create elements through engine commands).
+    #[cfg(test)]
     pub fn create_element(
         &mut self,
         name: String,
         level: LevelId,
         type_id: ElementTypeId,
-        kind: ElementKind,
+        kind: cc_core::ElementKind,
     ) -> ElementId {
-        let category = Element {
+        let category = cc_core::Element {
             id: ElementId(0),
             level,
             type_id,
@@ -282,13 +284,21 @@ impl AppState {
         }
         .category();
         let id = self.session.doc.edit(name, |e| {
-            let mark = if matches!(category, Category::Door | Category::Window) {
+            let mark = if matches!(category, cc_core::Category::Door | cc_core::Category::Window) {
                 e.project().next_mark(category)
             } else {
                 String::new()
             };
             let id = ElementId(e.alloc_id());
-            e.add_element(Element { id, level, type_id, mark, comments: String::new(), kind, uid: Default::default() })
+            e.add_element(cc_core::Element {
+                id,
+                level,
+                type_id,
+                mark,
+                comments: String::new(),
+                kind,
+                uid: Default::default(),
+            })
         });
         self.selection = BTreeSet::from([id]);
         id

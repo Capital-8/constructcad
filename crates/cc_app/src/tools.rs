@@ -5,11 +5,12 @@ use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
 use cc_core::{
-    Category, Ceiling, DimensionKind, ElementId, ElementKind, ElementTypeId, Floor, Hosted, LevelId, Project, Roof,
-    RoofShape, View, ViewId, ViewKind, Wall,
+    Category, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId, ViewKind,
 };
+use cc_engine::Ref;
+use cc_engine::commands::{create, views};
+use cc_engine::default_top;
 pub use cc_engine::walls_loop;
-use cc_engine::{default_roof_base, default_top, next_number};
 use cc_geom::{ModelGeometry, polygon};
 use cc_views::{Drawing2D, format};
 use egui::{Color32, Key, Painter, Pos2, Response, Stroke, Ui};
@@ -726,6 +727,13 @@ pub fn handle(
     }
 }
 
+/// Run a creating command: the new element is selected; a refusal goes to the status bar.
+fn run_create<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, command: C) -> Option<ElementId> {
+    let id = crate::actions::run_command(state, command)?["id"].as_u64().map(ElementId)?;
+    state.selection = std::collections::BTreeSet::from([id]);
+    Some(id)
+}
+
 /// Click to place a column (snaps to wall ends and grid crossings through the usual snaps).
 fn column_tool(
     ui: &Ui,
@@ -751,15 +759,14 @@ fn column_tool(
         painter.add(egui::Shape::closed_line(outline, Stroke::new(1.5, PREVIEW)));
     }
     if resp.clicked() {
-        let project = state.project();
-        let column = cc_core::Column {
-            position: s.point,
-            rotation_deg: state.interaction.rotation,
-            base_offset: 0.0,
-            height: project.level_height(level, 3.0),
-            top: default_top(project, level),
+        let command = create::ColumnCreate {
+            position: s.point.to_array(),
+            rotation: Some(state.interaction.rotation),
+            level: Some(Ref::Id(level.0)),
+            type_ref: Some(Ref::Id(type_id.0)),
+            ..Default::default()
         };
-        state.create_element(t!("tx-create-column"), level, type_id, ElementKind::Column(column));
+        run_create(state, command);
     }
 }
 
@@ -790,14 +797,14 @@ fn component_tool(
         }
     }
     if resp.clicked() {
-        let component = cc_core::Component {
-            position: s.point,
-            rotation_deg: rotation,
-            base_offset: 0.0,
-            overrides: Default::default(),
-            properties: Vec::new(),
+        let command = create::ComponentPlace {
+            position: s.point.to_array(),
+            type_ref: Ref::Id(type_id.0),
+            rotation: Some(rotation),
+            level: Some(Ref::Id(level.0)),
+            base_offset: None,
         };
-        state.create_element(t!("tx-create-component"), level, type_id, ElementKind::Component(component));
+        run_create(state, command);
     }
 }
 
@@ -854,9 +861,14 @@ fn beam_tool(
         match state.interaction.anchor {
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.05 => {
-                let beam =
-                    cc_core::Beam { start: a, end: s.point, top_offset: state.project().level_height(level, 3.0) };
-                state.create_element(t!("tx-create-beam"), level, type_id, ElementKind::Beam(beam));
+                let command = create::BeamCreate {
+                    start: a.to_array(),
+                    end: s.point.to_array(),
+                    level: Some(Ref::Id(level.0)),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    ..Default::default()
+                };
+                run_create(state, command);
                 state.interaction.anchor = Some(s.point);
             }
             _ => {}
@@ -906,14 +918,14 @@ fn stair_tool(
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.05 => {
                 let d = s.point - a;
-                let stair = cc_core::Stair {
-                    start: a,
-                    direction_deg: d.y.atan2(d.x).to_degrees(),
-                    base_offset: 0.0,
-                    height,
-                    top: default_top(state.project(), level),
+                let command = create::StairCreate {
+                    start: a.to_array(),
+                    direction: Some(d.y.atan2(d.x).to_degrees()),
+                    level: Some(Ref::Id(level.0)),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    ..Default::default()
                 };
-                state.create_element(t!("tx-create-stair"), level, type_id, ElementKind::Stair(stair));
+                run_create(state, command);
                 state.interaction.anchor = None;
             }
             _ => {}
@@ -955,8 +967,13 @@ pub fn finish_railing(state: &mut AppState, level: LevelId, type_id: ElementType
     let mut path = std::mem::take(&mut state.interaction.points);
     path.dedup_by(|a, b| a.distance(*b) < 1e-3);
     if path.len() >= 2 {
-        let railing = cc_core::Railing { path, base_offset: 0.0 };
-        state.create_element(t!("tx-create-railing"), level, type_id, ElementKind::Railing(railing));
+        let command = create::RailingCreate {
+            path: path.iter().map(|p| p.to_array()).collect(),
+            level: Some(Ref::Id(level.0)),
+            type_ref: Some(Ref::Id(type_id.0)),
+            ..Default::default()
+        };
+        run_create(state, command);
     }
 }
 
@@ -981,18 +998,9 @@ fn room_tool(
             state.message = t!("msg-room-not-enclosed");
             return;
         }
-        let project = state.project();
-        let number = next_number(project.elements.values().filter_map(|e| match &e.kind {
-            ElementKind::Room(r) => Some(r.number.as_str()),
-            _ => None,
-        }));
-        let room = cc_core::Room {
-            position: p,
-            number,
-            name: t!("room-default-name"),
-            height: project.level_height(level, 3.0),
-        };
-        state.create_element(t!("tx-create-room"), level, type_id, ElementKind::Room(room));
+        let _ = type_id;
+        let command = create::RoomCreate { point: p.to_array(), level: Some(Ref::Id(level.0)), ..Default::default() };
+        run_create(state, command);
     }
 }
 
@@ -1023,12 +1031,14 @@ fn grid_tool(
         match state.interaction.anchor {
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.1 => {
-                let name = next_number(state.project().elements.values().filter_map(|e| match &e.kind {
-                    ElementKind::Grid(g) => Some(g.name.as_str()),
-                    _ => None,
-                }));
-                let grid = cc_core::Grid { start: a, end: s.point, name };
-                state.create_element(t!("tx-create-grid"), level, type_id, ElementKind::Grid(grid));
+                let _ = type_id;
+                let command = create::GridCreate {
+                    start: a.to_array(),
+                    end: s.point.to_array(),
+                    level: Some(Ref::Id(level.0)),
+                    ..Default::default()
+                };
+                run_create(state, command);
                 state.interaction.anchor = None;
             }
             _ => {}
@@ -1391,20 +1401,19 @@ fn wall_tool(
         match anchor {
             None => state.interaction.anchor = Some(p),
             Some(a) if a.distance(p) > 0.01 => {
-                let top = match state.wall_top_level {
-                    Some(level) => cc_core::WallTop::Level { level, offset: 0.0 },
-                    None => cc_core::WallTop::Unconnected,
-                };
-                let wall = Wall {
-                    start: a,
-                    end: p,
-                    base_offset: 0.0,
-                    height: state.wall_height,
-                    top,
-                    location_line: state.wall_location_line,
+                let location_line =
+                    serde_json::to_value(state.wall_location_line).ok().and_then(|v| v.as_str().map(str::to_string));
+                let command = create::WallCreate {
+                    start: a.to_array(),
+                    end: p.to_array(),
+                    level: Some(Ref::Id(level.0)),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    height: Some(state.wall_height),
+                    top_level: state.wall_top_level.map(|l| Ref::Id(l.0)),
+                    location_line,
                     ..Default::default()
                 };
-                state.create_element(t!("tx-create-wall"), level, type_id, ElementKind::Wall(wall));
+                run_create(state, command);
                 state.interaction.anchor = Some(p);
                 // The next wall's angle is measured from this one (as an interior angle).
                 state.interaction.prev_dir = Some(a - p);
@@ -1485,14 +1494,20 @@ fn hosted_tool(
     label(painter, xf.to_screen(raw), format!("{} {}", t!("label-offset"), format::meters(offset)));
 
     if resp.clicked() {
-        let hosted = Hosted { host, offset, sill_height: sill, flip_facing, flip_hand: state.interaction.flip_hand };
-        let host_level = project.element(host).map_or(level, |e| e.level);
-        let (kind, name) = if category == Category::Door {
-            (ElementKind::Door(hosted), t!("tx-create-door"))
-        } else {
-            (ElementKind::Window(hosted), t!("tx-create-window"))
+        let args = create::HostedArgs {
+            wall: host.0,
+            offset: Some(offset),
+            sill: Some(sill),
+            type_ref: Some(Ref::Id(type_id.0)),
+            flip_facing: Some(flip_facing),
+            flip_hand: Some(state.interaction.flip_hand),
+            point: None,
         };
-        state.create_element(name, host_level, type_id, kind);
+        if category == Category::Door {
+            run_create(state, create::DoorCreate { args });
+        } else {
+            run_create(state, create::WindowCreate { args });
+        }
     }
 }
 
@@ -1562,18 +1577,17 @@ pub fn finish_sketch(
         state.message = t!("msg-sketch-invalid");
         return;
     }
-    let (kind, name) = match category {
-        Category::Floor => (ElementKind::Floor(Floor { boundary: pts, height_offset: 0.0 }), t!("tx-create-floor")),
-        Category::Ceiling => {
-            (ElementKind::Ceiling(Ceiling { boundary: pts, height_offset: 2.6 }), t!("tx-create-ceiling"))
-        }
-        _ => {
-            let base_offset = default_roof_base(state.project(), level);
-            let roof = Roof { footprint: pts, base_offset, overhang: 0.5, shape: RoofShape::Flat };
-            (ElementKind::Roof(roof), t!("tx-create-roof"))
-        }
+    let sketch = create::SketchArgs {
+        boundary: Some(pts.iter().map(|p| p.to_array()).collect()),
+        level: Some(Ref::Id(level.0)),
+        type_ref: Some(Ref::Id(type_id.0)),
+        ..Default::default()
     };
-    state.create_element(name, level, type_id, kind);
+    match category {
+        Category::Floor => run_create(state, create::FloorCreate { sketch }),
+        Category::Ceiling => run_create(state, create::CeilingCreate { sketch }),
+        _ => run_create(state, create::RoofCreate { sketch, overhang: None }),
+    };
     state.interaction.points.clear();
 }
 
@@ -1594,16 +1608,16 @@ fn section_tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppStat
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.1 => {
                 let end = s.point;
-                let id = state.session.doc.edit(t!("tx-create-section"), |e| {
-                    let n = e.project().views_of(cc_core::ViewCategory::Section).count() + 1;
-                    let id = ViewId(e.alloc_id());
-                    e.add_view(View {
-                        id,
-                        name: t!("default-section-name", "n" => n),
-                        scale: 50,
-                        kind: ViewKind::Section { start: a, end, depth: 8.0 },
-                    })
-                });
+                let command = views::ViewCreate {
+                    kind: "section".into(),
+                    start: Some(a.to_array()),
+                    end: Some(end.to_array()),
+                    ..Default::default()
+                };
+                let Some(id) = crate::actions::run_command(state, command).and_then(|o| o["id"].as_u64()) else {
+                    return;
+                };
+                let id = ViewId(id);
                 state.set_tool(Tool::Select);
                 state.open_view(id);
             }

@@ -20,7 +20,7 @@ fn level_out(s: &Session, id: LevelId) -> Value {
 
 /// Add a level (default: 3 m above the highest, named "Level n") with its
 /// floor and ceiling plans.
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct LevelCreate {
     #[serde(default)]

@@ -20,7 +20,7 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 /// `section` (with `start`, `end` and optional `depth`), `elevation` (with
 /// `direction`: north, south, east or west), `three_d`, `legend` (all types),
 /// `schedule` (with `category`) or `sheet` (A3, numbered after the others).
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
     pub kind: String,
