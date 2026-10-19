@@ -1495,7 +1495,7 @@ fn hosted_tool(
 
     if resp.clicked() {
         let args = create::HostedArgs {
-            wall: host.0,
+            wall: Some(host.0),
             offset: Some(offset),
             sill: Some(sill),
             type_ref: Some(Ref::Id(type_id.0)),

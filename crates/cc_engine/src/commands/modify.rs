@@ -40,6 +40,7 @@ fn copy(s: &mut Session, ids: &[u64], transforms: &[PlanTransform], tx: String) 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsDelete {
+    /// Element ids.
     pub ids: Vec<u64>,
 }
 
@@ -64,6 +65,7 @@ impl Command for ElementsDelete {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsMove {
+    /// Element ids.
     pub ids: Vec<u64>,
     /// Displacement `[dx, dy]` in meters.
     pub delta: Point,
@@ -82,7 +84,9 @@ impl Command for ElementsMove {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsCopy {
+    /// Element ids.
     pub ids: Vec<u64>,
+    /// Displacement `[dx, dy]` of the first copy, meters (the next ones repeat it).
     pub delta: Point,
     /// Number of copies (default 1, at most 1000).
     #[serde(default)]
@@ -132,10 +136,14 @@ fn center_of(s: &mut Session, ids: &[ElementId]) -> Option<DVec2> {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsRotate {
+    /// Element ids.
     pub ids: Vec<u64>,
+    /// Angle in degrees, counter-clockwise.
     pub angle: f64,
+    /// Center of rotation (default: the center of the elements' extents).
     #[serde(default)]
     pub center: Option<Point>,
+    /// Rotate copies, keeping the originals.
     #[serde(default)]
     pub copy: bool,
 }
@@ -159,6 +167,7 @@ impl Command for ElementsRotate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsMirror {
+    /// Element ids.
     pub ids: Vec<u64>,
     /// Two points of the axis.
     #[serde(default)]
@@ -205,6 +214,7 @@ impl Command for ElementsMirror {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsPin {
+    /// Element ids.
     pub ids: Vec<u64>,
     /// `true` to pin, `false` to unpin.
     pub pinned: bool,
@@ -225,9 +235,12 @@ impl Command for ElementsPin {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementFlip {
+    /// Id of the door or window.
     pub id: u64,
+    /// Flip to the other side of the wall.
     #[serde(default)]
     pub facing: bool,
+    /// Flip the hinge to the other jamb.
     #[serde(default)]
     pub hand: bool,
 }
@@ -255,9 +268,11 @@ impl Command for ElementFlip {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WallJoin {
+    /// Wall id.
     pub id: u64,
     /// `start` or `end`.
     pub end: String,
+    /// `true` to allow joining at that end, `false` to keep it free.
     pub joined: bool,
 }
 
@@ -291,9 +306,13 @@ impl Command for WallJoin {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimCorner {
+    /// First element id.
     pub a: u64,
+    /// A point on the part of `a` to keep.
     pub pick_a: Point,
+    /// Second element id.
     pub b: u64,
+    /// A point on the part of `b` to keep.
     pub pick_b: Point,
 }
 
@@ -315,7 +334,9 @@ impl Command for TrimCorner {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimExtend {
+    /// Element to trim or extend.
     pub id: u64,
+    /// A point on the part to keep.
     pub pick: Point,
     /// Id of the element whose line is the boundary.
     pub reference: u64,
@@ -344,7 +365,9 @@ impl Command for TrimExtend {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementSplit {
+    /// Element id.
     pub id: u64,
+    /// Where to split (projected on the element's line).
     pub point: Point,
 }
 
@@ -364,7 +387,9 @@ impl Command for ElementSplit {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementOffset {
+    /// Element id.
     pub id: u64,
+    /// Offset distance, meters: positive to the left of start→end, negative to the right.
     pub distance: f64,
 }
 
@@ -383,7 +408,9 @@ impl Command for ElementOffset {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementAlign {
+    /// Element to move.
     pub id: u64,
+    /// Element whose line it moves onto.
     pub reference: u64,
 }
 
@@ -403,9 +430,11 @@ impl Command for ElementAlign {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementMoveEnd {
+    /// Element id.
     pub id: u64,
     /// `start` or `end`.
     pub end: String,
+    /// New position of that end.
     pub point: Point,
 }
 
@@ -428,6 +457,7 @@ impl Command for ElementMoveEnd {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsTurn {
+    /// Element ids.
     pub ids: Vec<u64>,
 }
 
@@ -473,6 +503,7 @@ impl Command for ElementsTurn {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsExport {
+    /// Element ids.
     pub ids: Vec<u64>,
 }
 
@@ -494,8 +525,10 @@ impl Command for ElementsExport {
 pub struct ElementsPaste {
     /// The `elements` of an `elements_export` result.
     pub elements: Value,
+    /// Displacement `[dx, dy]`, meters (default: none).
     #[serde(default)]
     pub delta: Option<Point>,
+    /// Level id or name to paste on (default: each element's own level).
     #[serde(default)]
     pub level: Option<crate::refs::Ref>,
 }

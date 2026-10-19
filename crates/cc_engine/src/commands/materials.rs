@@ -31,6 +31,7 @@ fn material_out(s: &Session, name: &str) -> Value {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialCreate {
+    /// Name (default: "Material"; a number is added when taken).
     #[serde(default)]
     pub name: Option<String>,
     /// Shading color `[r, g, b]`, 0–255 (default light gray).
@@ -57,6 +58,7 @@ impl Command for MaterialCreate {
 #[serde(deny_unknown_fields)]
 pub struct MaterialDuplicate {
     pub material: Ref,
+    /// Name of the copy (default: "<name> (copy)").
     #[serde(default)]
     pub name: Option<String>,
 }
@@ -85,6 +87,7 @@ impl Command for MaterialDuplicate {
 #[serde(deny_unknown_fields)]
 pub struct MaterialRename {
     pub material: Ref,
+    /// New name.
     pub name: String,
 }
 
@@ -117,6 +120,7 @@ impl Command for MaterialRename {
 #[serde(deny_unknown_fields)]
 pub struct MaterialSet {
     pub material: Ref,
+    /// Fields to change, shaped like the result of `material_get`.
     pub values: Value,
 }
 

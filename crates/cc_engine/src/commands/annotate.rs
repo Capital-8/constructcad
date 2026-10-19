@@ -15,27 +15,29 @@ use serde_json::Value;
 /// Place a dimension in a 2D view (points in the view's drawing coordinates:
 /// plan X/Y in plans; horizontal position and height in elevations and
 /// sections). Its ends follow the elements (or level lines) their points
-/// lie on, so it keeps measuring them. `kind`:
-/// - `aligned` (default): from `a` to `b`;
-/// - `linear`: along `direction` (`horizontal` or `vertical`, default by the larger extent);
-/// - `angular`: between the rays from `vertex` through `a` and through `b`;
-/// - `radial` / `diameter`: `a` is the arc's center and `b` a point on it.
-///
-/// `offset` places the dimension line: its distance from `a` (positive to
-/// the left of a→b) or, for angular dimensions, the arc's radius.
+/// lie on, so it keeps measuring them. Aligned dimensions measure from `a`
+/// to `b`, linear ones along a horizontal or vertical `direction`, angular
+/// ones the angle at `vertex` between the rays through `a` and `b`, radial
+/// and diameter ones the arc centered at `a` through `b`.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DimensionCreate {
     /// View id or name.
     pub view: Ref,
+    /// First point (center for radial and diameter).
     pub a: Point,
+    /// Second point (a point on the arc for radial and diameter).
     pub b: Point,
+    /// `aligned` (default), `linear`, `angular`, `radial` or `diameter`.
     #[serde(default)]
     pub kind: Option<String>,
+    /// Distance of the dimension line from `a` (left of a→b positive), or the arc radius for angular ones (default 1).
     #[serde(default)]
     pub offset: Option<f64>,
+    /// Vertex of an angular dimension.
     #[serde(default)]
     pub vertex: Option<Point>,
+    /// Linear dimensions: `horizontal` or `vertical` (default: the larger extent).
     #[serde(default)]
     pub direction: Option<String>,
     /// Dimension type id or name (default: the default dimension type).
@@ -100,7 +102,9 @@ impl Command for DimensionCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DimensionSetValue {
+    /// Dimension element id.
     pub id: u64,
+    /// New value: meters, or degrees for angular dimensions.
     pub value: f64,
 }
 

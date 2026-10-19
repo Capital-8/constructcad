@@ -19,13 +19,18 @@ use serde_json::{Value, json};
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementSet {
+    /// Element id.
     pub id: u64,
+    /// New level id or name.
     #[serde(default)]
     pub level: Option<Ref>,
+    /// New type id or name (same category).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
+    /// New mark.
     #[serde(default)]
     pub mark: Option<String>,
+    /// New comments.
     #[serde(default)]
     pub comments: Option<String>,
     /// Fields of the element's parameters to change.
@@ -78,6 +83,7 @@ impl Command for ElementSet {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsSetType {
+    /// Element ids.
     pub ids: Vec<u64>,
     /// Type id or name.
     #[serde(rename = "type")]

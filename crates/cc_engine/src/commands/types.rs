@@ -46,10 +46,13 @@ fn type_out(s: &Session, id: ElementTypeId) -> Value {
 pub struct TypeSet {
     #[serde(rename = "type")]
     pub type_ref: Ref,
+    /// New name (unique in its category).
     #[serde(default)]
     pub name: Option<String>,
+    /// Fields of the type's parameters to change, shaped like `params` in `type_get`.
     #[serde(default)]
     pub params: Option<Value>,
+    /// Fields of the identity data to change, shaped like `info` in `type_get`.
     #[serde(default)]
     pub info: Option<Value>,
     /// Component parameters renamed by a new `def`, as `[old, new]` pairs in
@@ -148,6 +151,7 @@ impl Command for TypeSet {
 pub struct TypeDuplicate {
     #[serde(rename = "type")]
     pub type_ref: Ref,
+    /// Name of the copy (default: "<name> (copy)").
     #[serde(default)]
     pub name: Option<String>,
     /// Elements of the type to switch to the copy.
@@ -225,6 +229,7 @@ impl Command for TypeDelete {
 pub struct ComponentCreate {
     /// Name of the component and of its first type.
     pub name: String,
+    /// The definition: `params` (name, value, kind, instance) and `items` (pieces), shaped like a component type's `params.def` in `type_get`.
     pub def: Value,
 }
 

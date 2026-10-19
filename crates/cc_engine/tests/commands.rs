@@ -398,3 +398,19 @@ fn recording_a_macro() {
     let replayed = run(&mut other, "element_get", json!({"id": walls[0]["id"]}));
     assert_eq!(replayed["params"]["height"], 3.3);
 }
+
+/// The example macro in `examples/` keeps working.
+#[test]
+fn the_example_macro_builds_a_house() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/small_house.ccmacro");
+    let steps = cc_engine::script::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut s = Session::default();
+    cc_engine::script::run(&mut s, &steps).unwrap_or_else(|(_, e)| panic!("step {}: {}", e.index + 1, e.error));
+    let count = |s: &mut Session, c: &str| run(s, "elements_list", json!({"category": c})).as_array().unwrap().len();
+    assert_eq!(
+        [count(&mut s, "wall"), count(&mut s, "door"), count(&mut s, "window"), count(&mut s, "room")],
+        [5, 2, 3, 2]
+    );
+    let room = run(&mut s, "elements_list", json!({"category": "room"}))[0]["id"].clone();
+    assert!(run(&mut s, "element_get", json!({"id": room}))["derived"]["area"].as_f64().unwrap() > 20.0);
+}

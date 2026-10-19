@@ -136,6 +136,7 @@ impl Command for TypeGet {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsList {
+    /// Category name (`wall`, `door`, `component`…); see `categories_list`.
     #[serde(default)]
     pub category: Option<String>,
     /// Level id or name.
@@ -216,6 +217,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementGet {
+    /// Element id.
     pub id: u64,
 }
 

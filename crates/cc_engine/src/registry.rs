@@ -32,12 +32,14 @@ pub trait Command: DeserializeOwned + JsonSchema {
 pub struct CommandInfo {
     pub name: &'static str,
     pub kind: CommandKind,
+    /// Area of the catalog (project, queries, elements…).
+    pub group: &'static str,
     pub description: String,
     /// JSON Schema (draft 7, no references) of the parameters object.
     pub input_schema: Value,
 }
 
-fn info<C: Command>() -> CommandInfo {
+fn info<C: Command>(group: &'static str) -> CommandInfo {
     let generator = schemars::generate::SchemaSettings::draft07()
         .with(|s| {
             s.inline_subschemas = true;
@@ -56,7 +58,7 @@ fn info<C: Command>() -> CommandInfo {
         o.remove("description");
         o.entry("properties").or_insert_with(|| serde_json::json!({}));
     }
-    CommandInfo { name: C::NAME, kind: C::KIND, description, input_schema }
+    CommandInfo { name: C::NAME, kind: C::KIND, group, description, input_schema }
 }
 
 fn run<C: Command>(session: &mut Session, args: Value) -> Result<Value> {
@@ -66,18 +68,18 @@ fn run<C: Command>(session: &mut Session, args: Value) -> Result<Value> {
 }
 
 macro_rules! registry {
-    ($($c:ty),* $(,)?) => {
-        /// Every command, in catalog order.
+    ($($group:literal => [$($c:ty),* $(,)?]),* $(,)?) => {
+        /// Every command, in catalog order (grouped by area).
         pub fn catalog() -> Vec<CommandInfo> {
-            vec![$(info::<$c>()),*]
+            vec![$($(info::<$c>($group)),*),*]
         }
 
         pub(crate) fn dispatch(session: &mut Session, name: &str, args: Value) -> Result<Value> {
-            $(
+            $($(
                 if name == <$c as Command>::NAME {
                     return run::<$c>(session, args);
                 }
-            )*
+            )*)*
             Err(EngineError::new(ErrorCode::UnknownCommand, format!("unknown command: {name}")))
         }
     };
@@ -89,89 +91,97 @@ pub fn describe(name: &str) -> Option<CommandInfo> {
 }
 
 registry![
-    // Project and files
-    project::ProjectNew,
-    project::ProjectOpen,
-    project::ProjectSave,
-    project::ProjectInfoGet,
-    project::ProjectInfoSet,
-    project::Undo,
-    project::Redo,
-    project::UnitsGet,
-    project::UnitsSet,
-    project::LanguageSet,
-    io::IfcImport,
-    io::IfcExport,
-    io::SheetExport,
-    io::ScheduleExportCsv,
-    io::ComponentLoad,
-    io::ComponentSave,
-    // Queries
-    query::CategoriesList,
-    query::LevelsList,
-    query::TypesList,
-    query::TypeGet,
-    query::ElementsList,
-    query::ElementGet,
-    query::ViewsList,
-    query::ViewGet,
-    query::MaterialsList,
-    query::MaterialGet,
-    query::ScheduleTable,
-    // Creating elements
-    create::WallCreate,
-    create::DoorCreate,
-    create::WindowCreate,
-    create::FloorCreate,
-    create::CeilingCreate,
-    create::RoofCreate,
-    create::RoomCreate,
-    create::GridCreate,
-    create::ColumnCreate,
-    create::BeamCreate,
-    create::StairCreate,
-    create::RailingCreate,
-    create::ComponentPlace,
-    annotate::DimensionCreate,
-    annotate::DimensionSetValue,
-    // Modifying elements
-    modify::ElementsDelete,
-    modify::ElementsMove,
-    modify::ElementsCopy,
-    modify::ElementsRotate,
-    modify::ElementsMirror,
-    modify::ElementsPin,
-    modify::ElementFlip,
-    modify::ElementsTurn,
-    modify::ElementsExport,
-    modify::ElementsPaste,
-    modify::WallJoin,
-    modify::TrimCorner,
-    modify::TrimExtend,
-    modify::ElementSplit,
-    modify::ElementOffset,
-    modify::ElementAlign,
-    modify::ElementMoveEnd,
-    edit::ElementSet,
-    edit::ElementsSetType,
-    // Types, components, materials
-    types::TypeSet,
-    types::TypeDuplicate,
-    types::TypeDelete,
-    types::ComponentCreate,
-    materials::MaterialCreate,
-    materials::MaterialDuplicate,
-    materials::MaterialRename,
-    materials::MaterialSet,
-    materials::MaterialDelete,
-    // Levels and views
-    levels::LevelCreate,
-    levels::LevelSet,
-    levels::LevelDelete,
-    views::ViewCreate,
-    views::ViewSet,
-    views::ViewDuplicate,
-    views::ViewDelete,
-    views::SheetPlaceView,
-    views::SheetRemoveViewport,
+    "Project and files" => [
+        project::ProjectNew,
+        project::ProjectOpen,
+        project::ProjectSave,
+        project::ProjectInfoGet,
+        project::ProjectInfoSet,
+        project::Undo,
+        project::Redo,
+        project::UnitsGet,
+        project::UnitsSet,
+        project::LanguageSet,
+        io::IfcImport,
+        io::IfcExport,
+        io::SheetExport,
+        io::ScheduleExportCsv,
+        io::ComponentLoad,
+        io::ComponentSave,
+    ],
+    "Queries" => [
+        query::CategoriesList,
+        query::LevelsList,
+        query::TypesList,
+        query::TypeGet,
+        query::ElementsList,
+        query::ElementGet,
+        query::ViewsList,
+        query::ViewGet,
+        query::MaterialsList,
+        query::MaterialGet,
+        query::ScheduleTable,
+    ],
+    "Creating elements" => [
+        create::WallCreate,
+        create::DoorCreate,
+        create::WindowCreate,
+        create::FloorCreate,
+        create::CeilingCreate,
+        create::RoofCreate,
+        create::RoomCreate,
+        create::GridCreate,
+        create::ColumnCreate,
+        create::BeamCreate,
+        create::StairCreate,
+        create::RailingCreate,
+        create::ComponentPlace,
+    ],
+    "Modifying elements" => [
+        modify::ElementsDelete,
+        modify::ElementsMove,
+        modify::ElementsCopy,
+        modify::ElementsRotate,
+        modify::ElementsMirror,
+        modify::ElementsPin,
+        modify::ElementFlip,
+        modify::ElementsTurn,
+        modify::ElementsExport,
+        modify::ElementsPaste,
+        modify::WallJoin,
+        modify::TrimCorner,
+        modify::TrimExtend,
+        modify::ElementSplit,
+        modify::ElementOffset,
+        modify::ElementAlign,
+        modify::ElementMoveEnd,
+        edit::ElementSet,
+        edit::ElementsSetType,
+    ],
+    "Dimensions" => [
+        annotate::DimensionCreate,
+        annotate::DimensionSetValue,
+    ],
+    "Types, components, materials" => [
+        types::TypeSet,
+        types::TypeDuplicate,
+        types::TypeDelete,
+        types::ComponentCreate,
+        materials::MaterialCreate,
+        materials::MaterialDuplicate,
+        materials::MaterialRename,
+        materials::MaterialSet,
+        materials::MaterialDelete,
+    ],
+    "Levels and views" => [
+        levels::LevelCreate,
+        levels::LevelSet,
+        levels::LevelDelete,
+        views::ViewCreate,
+        views::ViewSet,
+        views::ViewDuplicate,
+        views::ViewDelete,
+        views::SheetPlaceView,
+        views::SheetRemoveViewport,
+    ],
 ];

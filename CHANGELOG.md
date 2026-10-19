@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - MCP server (`ccad mcp`): an in-house Model Context Protocol server over stdio exposing every engine command as a tool, so AI agents can build and edit models.
 - Deleting a type that no element uses (`type_delete`); creating elevations and levels at a given elevation and name from commands.
 - Dimensions as engine commands: `dimension_create` (associated with the elements or level lines its ends lie on) and `dimension_set_value` (drives what it measures); `elements_turn` (the Space key), `elements_export` and `elements_paste` (element sets between sessions).
+- Documentation of the engine, the command line, scripts, macros and MCP (`docs/automation.md`, `docs/automacao.md`), a command reference generated from the catalog (`docs/commands.md`, `ccad reference`; a test keeps it current) and an example script (`examples/small_house.ccmacro`).
+- Doors and windows can be placed by a point near a wall, without its id; sheets can be referred to by number.
 - Macros (*Manage → Macros*): record the changes you make as a script of engine commands (`.ccmacro`, dragged values recorded once, cancelled dialogs left out) and play macros back; `ccad script` runs the same files.
 
 ### Changed

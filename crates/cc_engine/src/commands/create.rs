@@ -46,7 +46,9 @@ fn create(
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct WallCreate {
+    /// Start point of the wall line.
     pub start: Point,
+    /// End point of the wall line.
     pub end: Point,
     /// Level id or name (default: the lowest level).
     #[serde(default)]
@@ -60,6 +62,7 @@ pub struct WallCreate {
     /// Level the top is attached to, instead of a height.
     #[serde(default)]
     pub top_level: Option<Ref>,
+    /// Offset of the top from `top_level`, meters.
     #[serde(default)]
     pub top_offset: Option<f64>,
     /// Base offset from the level, meters.
@@ -102,8 +105,9 @@ impl Command for WallCreate {
 /// Parameters shared by doors and windows.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 pub struct HostedArgs {
-    /// Id of the host wall.
-    pub wall: u64,
+    /// Id of the host wall; omit it to use the wall nearest `point`.
+    #[serde(default)]
+    pub wall: Option<u64>,
     /// Distance along the wall from its start to the opening's center, meters.
     #[serde(default)]
     pub offset: Option<f64>,
@@ -127,9 +131,13 @@ pub struct HostedArgs {
 fn place_hosted(s: &mut Session, a: HostedArgs, category: Category) -> Result<Value> {
     let p = s.project();
     let type_id = refs::type_of(p, category, a.type_ref.as_ref())?;
-    let host = refs::element(p, a.wall)?;
+    let host = match (a.wall, a.point) {
+        (Some(w), _) => refs::element(p, w)?,
+        (None, Some(q)) => nearest_wall(p, point(q)?)?,
+        (None, None) => return Err(EngineError::invalid("give the wall or a point near it")),
+    };
     let host_el = p.element(host).ok_or_else(|| EngineError::not_found("wall"))?;
-    let wall = host_el.as_wall().ok_or_else(|| EngineError::invalid(format!("element {} is not a wall", a.wall)))?;
+    let wall = host_el.as_wall().ok_or_else(|| EngineError::invalid(format!("element {} is not a wall", host.0)))?;
     let ty = p.element_type(type_id).ok_or_else(|| EngineError::not_found("type"))?;
     let (width, _) = ty.opening_size().ok_or_else(|| EngineError::invalid("not a door or window type"))?;
     let default_sill = match ty.data {
@@ -166,6 +174,19 @@ fn place_hosted(s: &mut Session, a: HostedArgs, category: Category) -> Result<Va
     };
     let id = edit(s, tx, |e| Ok(super::add_element(e, level, type_id, kind)))?;
     Ok(created(s, id))
+}
+
+/// The wall whose axis passes nearest `q` (within half its thickness plus 0.5 m).
+fn nearest_wall(p: &Project, q: DVec2) -> Result<cc_core::ElementId> {
+    p.walls()
+        .map(|(e, w)| {
+            let (a, b) = p.wall_axis(e, w);
+            (e.id, polygon::closest_on_segment(a, b, q).0.distance(q), p.thickness_of(e))
+        })
+        .filter(|(_, d, t)| *d <= t / 2.0 + 0.5)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(id, _, _)| id)
+        .ok_or_else(|| EngineError::not_found("no wall near the point"))
 }
 
 /// Place a door in a wall (centered on the wall unless `offset` or `point` is given).
@@ -207,8 +228,10 @@ pub struct SketchArgs {
     /// Follow the loop of walls of the level (exterior faces; interior faces for ceilings).
     #[serde(default)]
     pub from_walls: bool,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
     /// Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6).
@@ -306,7 +329,9 @@ impl Command for RoofCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct RoomCreate {
+    /// A point inside the room.
     pub point: Point,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
     /// Default: the room default name.
@@ -347,10 +372,14 @@ impl Command for RoomCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct GridCreate {
+    /// Start point (where the bubble is).
     pub start: Point,
+    /// End point.
     pub end: Point,
+    /// Grid name (default: the next free number).
     #[serde(default)]
     pub name: Option<String>,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
 }
@@ -379,19 +408,24 @@ impl Command for GridCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ColumnCreate {
+    /// Center of the column in plan.
     pub position: Point,
     /// Rotation in plan, degrees.
     #[serde(default)]
     pub rotation: Option<f64>,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
     /// Unconnected height (default: the level's height).
     #[serde(default)]
     pub height: Option<f64>,
+    /// Level the top is attached to (default: the level above).
     #[serde(default)]
     pub top_level: Option<Ref>,
+    /// Offset of the top from `top_level`, meters.
     #[serde(default)]
     pub top_offset: Option<f64>,
 }
@@ -418,12 +452,17 @@ impl Command for ColumnCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct BeamCreate {
+    /// Start of the beam axis.
     pub start: Point,
+    /// End of the beam axis.
     pub end: Point,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
+    /// Top of the beam above the level, meters (default: the level height).
     #[serde(default)]
     pub top_offset: Option<f64>,
 }
@@ -449,17 +488,21 @@ impl Command for BeamCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct StairCreate {
+    /// Start of the run (center of the first step's edge).
     pub start: Point,
     /// Direction of the run in plan, degrees counter-clockwise from +X.
     #[serde(default)]
     pub direction: Option<f64>,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
     /// Height when there is no level above (default 3).
     #[serde(default)]
     pub height: Option<f64>,
+    /// Level the stair rises to (default: the level above).
     #[serde(default)]
     pub top_level: Option<Ref>,
 }
@@ -490,11 +533,15 @@ impl Command for StairCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct RailingCreate {
+    /// Points of the railing path (at least 2).
     pub path: Vec<Point>,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
+    /// Base above the level, meters.
     #[serde(default)]
     pub base_offset: Option<f64>,
 }
@@ -519,6 +566,7 @@ impl Command for RailingCreate {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentPlace {
+    /// Insertion point in plan.
     pub position: Point,
     /// Component type id or name.
     #[serde(rename = "type")]
@@ -526,8 +574,10 @@ pub struct ComponentPlace {
     /// Rotation in plan, degrees.
     #[serde(default)]
     pub rotation: Option<f64>,
+    /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Base above the level, meters.
     #[serde(default)]
     pub base_offset: Option<f64>,
 }

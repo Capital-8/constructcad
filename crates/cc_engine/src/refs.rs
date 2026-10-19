@@ -99,7 +99,20 @@ pub fn view(p: &Project, r: &Ref) -> Result<ViewId> {
         Ref::Id(id) => {
             p.view(ViewId(*id)).map(|v| v.id).ok_or_else(|| EngineError::not_found(format!("no view with id {id}")))
         }
-        Ref::Name(n) => unique("view", n, p.views.values().filter(|v| matches(&v.name, n)).map(|v| v.id).collect()),
+        Ref::Name(n) => {
+            let named: Vec<ViewId> = p.views.values().filter(|v| matches(&v.name, n)).map(|v| v.id).collect();
+            if !named.is_empty() {
+                return unique("view", n, named);
+            }
+            // Sheets also by their number.
+            let numbered = p
+                .views
+                .values()
+                .filter(|v| matches!(&v.kind, cc_core::ViewKind::Sheet { number, .. } if matches(number, n)))
+                .map(|v| v.id)
+                .collect();
+            unique("view", n, numbered)
+        }
     }
 }
 

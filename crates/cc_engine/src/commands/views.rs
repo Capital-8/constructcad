@@ -23,20 +23,27 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
+    /// `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`, `legend`, `schedule` or `sheet`.
     pub kind: String,
+    /// View name (default: by kind).
     #[serde(default)]
     pub name: Option<String>,
+    /// Plans: level id or name (default: the lowest).
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Schedules: the category scheduled (default `wall`).
     #[serde(default)]
     pub category: Option<String>,
+    /// Sections: start of the cut line.
     #[serde(default)]
     pub start: Option<Point>,
+    /// Sections: end of the cut line.
     #[serde(default)]
     pub end: Option<Point>,
     /// Section depth beyond the cut line, meters (default 8).
     #[serde(default)]
     pub depth: Option<f64>,
+    /// Elevations: `north`, `south` (default), `east` or `west`.
     #[serde(default)]
     pub direction: Option<String>,
     /// Scale denominator (e.g. 50 for 1:50).
@@ -140,10 +147,13 @@ fn capitalized(s: &str) -> String {
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
     pub view: Ref,
+    /// New name.
     #[serde(default)]
     pub name: Option<String>,
+    /// Scale denominator (e.g. 100 for 1:100).
     #[serde(default)]
     pub scale: Option<u32>,
+    /// Fields of the view's parameters to change, shaped like `params` in `view_get`.
     #[serde(default)]
     pub params: Option<Value>,
 }
@@ -252,6 +262,7 @@ fn sheet(p: &Project, r: &Ref) -> Result<ViewId> {
 pub struct SheetPlaceView {
     pub sheet: Ref,
     pub view: Ref,
+    /// Center of the viewport on the sheet, paper millimeters.
     #[serde(default)]
     pub center: Option<Point>,
 }

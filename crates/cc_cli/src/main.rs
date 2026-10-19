@@ -16,6 +16,7 @@ ccad - ConstructCAD without a GUI
 Usage:
   ccad [options] commands             list the commands
   ccad [options] schema <command>     the JSON Schema of a command's parameters
+  ccad reference                      the command reference in Markdown
   ccad [options] run <command> [args] run one command
   ccad [options] script <file|->      run a script of commands
   ccad [options] mcp                  serve the commands over MCP (stdio)
@@ -158,6 +159,10 @@ fn main() -> ExitCode {
                 .map(|c| json!({"name": c.name, "kind": c.kind, "description": c.description}))
                 .collect();
             print(&json!(list));
+            ExitCode::SUCCESS
+        }
+        "reference" => {
+            print!("{}", cc_engine::reference::markdown());
             ExitCode::SUCCESS
         }
         "schema" => match rest.first().and_then(|n| cc_engine::describe(n)) {

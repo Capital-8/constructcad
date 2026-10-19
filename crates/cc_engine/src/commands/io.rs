@@ -21,6 +21,7 @@ fn write(path: &Path, bytes: &[u8]) -> Result<()> {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct IfcImport {
+    /// Path of the .ifc file.
     pub path: PathBuf,
 }
 
@@ -46,6 +47,7 @@ impl Command for IfcImport {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct IfcExport {
+    /// Path of the .ifc file to write.
     pub path: PathBuf,
 }
 
@@ -64,6 +66,7 @@ impl Command for IfcExport {
 pub struct SheetExport {
     /// Sheet id or name.
     pub sheet: Ref,
+    /// Path of the file to write (.pdf or .svg).
     pub path: PathBuf,
     /// `pdf` or `svg`.
     #[serde(default)]
@@ -97,6 +100,7 @@ impl Command for SheetExport {
 pub struct ScheduleExportCsv {
     /// Schedule view id or name.
     pub view: Ref,
+    /// Path of the .csv file to write.
     pub path: PathBuf,
 }
 
@@ -121,6 +125,7 @@ impl Command for ScheduleExportCsv {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentLoad {
+    /// Path of the .ccomp file.
     pub path: PathBuf,
 }
 
@@ -146,6 +151,7 @@ impl Command for ComponentLoad {
 pub struct ComponentSave {
     /// Component name (as in a component type's `params.component`).
     pub component: String,
+    /// Path of the .ccomp file to write.
     pub path: PathBuf,
 }
 

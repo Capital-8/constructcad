@@ -23,6 +23,7 @@ fn level_out(s: &Session, id: LevelId) -> Value {
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct LevelCreate {
+    /// Level name (default: "Level n").
     #[serde(default)]
     pub name: Option<String>,
     /// Elevation in meters.
@@ -70,8 +71,10 @@ impl Command for LevelCreate {
 #[serde(deny_unknown_fields)]
 pub struct LevelSet {
     pub level: Ref,
+    /// New name.
     #[serde(default)]
     pub name: Option<String>,
+    /// New elevation, meters.
     #[serde(default)]
     pub elevation: Option<f64>,
 }

@@ -108,14 +108,19 @@ fn summary(s: &Session) -> Value {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectInfoSet {
+    /// Project name.
     #[serde(default)]
     pub name: Option<String>,
+    /// Project number.
     #[serde(default)]
     pub number: Option<String>,
+    /// Client name.
     #[serde(default)]
     pub client: Option<String>,
+    /// Project address.
     #[serde(default)]
     pub address: Option<String>,
+    /// Author of the drawings.
     #[serde(default)]
     pub author: Option<String>,
 }
@@ -219,6 +224,7 @@ impl Command for UnitsSet {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LanguageSet {
+    /// Language code: `en` or `pt-BR`.
     pub language: String,
 }
 

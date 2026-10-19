@@ -107,7 +107,7 @@ Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3
 
 ## Automação (linha de comando e MCP)
 
-Tudo o que o ConstructCAD faz deve poder ser acionado sem a interface. O motor (`cc_engine`) expõe as operações como comandos nomeados com parâmetros JSON e um esquema JSON cada; a ferramenta `ccad` os executa pela linha de comando, por scripts ou, para agentes de IA, como servidor [MCP](https://modelcontextprotocol.io/). O mesmo catálogo atende os três.
+Tudo o que o ConstructCAD faz deve poder ser acionado sem a interface. O motor (`cc_engine`) expõe as operações como comandos nomeados com parâmetros JSON e um esquema JSON cada; a ferramenta `ccad` os executa pela linha de comando, por scripts ou, para agentes de IA, como servidor [MCP](https://modelcontextprotocol.io/). O mesmo catálogo atende os três. O [guia de automação](docs/automacao.md) explica tudo em detalhe e a [referência de comandos](docs/commands.md) lista cada comando com seus parâmetros.
 
 ```sh
 ccad commands                                   # lista os comandos
