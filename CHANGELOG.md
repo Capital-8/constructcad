@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-19
+
 ### Added
 
 - Modify tools: Move (MV), Copy (CO, multiple), Rotate (RO, with center and typed angle), Mirror by picking an axis (MM) or drawing it (DM), linear Array (AR), Trim/Extend to Corner (TR) or to a reference (TX), Split (SL), Offset (OF), Align (AL), allow/disallow joins at wall ends, and Pin/Unpin (PN/UP); previews, snapping and one undo step per edit. Walls take their doors and windows along; mirrored openings swap their hinge side.
@@ -63,3 +65,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Stray lines on roofs and other large faces in 3D sheet views, elevations and sections: faces are now ordered by comparing depths where they overlap.
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
+
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/francisreboucas/constructcad/releases/tag/v0.1.0

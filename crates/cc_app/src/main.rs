@@ -1,5 +1,8 @@
 //! ConstructCAD — open source BIM authoring.
 
+// Release builds on Windows open no console window.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod actions;
 mod app;
 mod browser;
