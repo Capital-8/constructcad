@@ -138,6 +138,10 @@ fn draw_components(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: 
     for e in project.elements.values().filter(|e| e.level == level) {
         let ElementKind::Component(c) = &e.kind else { continue };
         for part in cc_geom::component_parts(project, e, c).into_iter().filter(|p| p.in_plan) {
+            if !part.faces.is_empty() {
+                draw_mesh(d, &part.faces, cut_z, ceiling, e.id);
+                continue;
+            }
             let above = part.z0 >= cut_z;
             let style = match (ceiling, above) {
                 (false, false) | (true, true) => LineStyle::Projection,
@@ -147,6 +151,20 @@ fn draw_components(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: 
             d.polyline(&part.footprint, true, style, Some(e.id));
         }
     }
+}
+
+/// A mesh piece: its section at the cut plane, the edges seen below it and,
+/// dashed, those above (in ceiling plans only the edges above).
+fn draw_mesh(d: &mut Drawing2D, faces: &[Vec<glam::DVec3>], cut_z: f64, ceiling: bool, id: cc_core::ElementId) {
+    let plan = cc_geom::mesh_plan(faces, cut_z);
+    let id = Some(id);
+    if ceiling {
+        plan.above.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Projection, id));
+        return;
+    }
+    plan.cut.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Cut, id));
+    plan.below.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Projection, id));
+    plan.above.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Hidden, id));
 }
 
 fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, spacing: f64) {

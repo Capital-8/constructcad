@@ -61,6 +61,7 @@ impl Editor {
         };
         let def = ComponentDef {
             kind: ComponentKind::Generic,
+            ifc: None,
             params: vec![param(&w, 1.0), param(&d, 0.6), param(&h, 0.9)],
             items: vec![ComponentItem {
                 name: t!("tpl-part-body"),
@@ -436,6 +437,11 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
                 let last = points.last().cloned().unwrap_or_else(|| ("0".into(), "0".into()));
                 points.push(last);
             }
+            ui.end_row();
+        }
+        ComponentShape::Mesh { vertices, faces } => {
+            ui.label(theme::muted(t!("comp-field-mesh")));
+            ui.label(t!("comp-mesh-size", "vertices" => vertices.len(), "faces" => faces.len()));
             ui.end_row();
         }
     });

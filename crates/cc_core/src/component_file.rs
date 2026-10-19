@@ -15,6 +15,7 @@ const MAX_PARAMS: usize = 256;
 const MAX_ITEMS: usize = 1024;
 const MAX_POINTS: usize = 1024;
 const MAX_TYPES: usize = 256;
+const MAX_MESH_VERTICES: usize = 1 << 20;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentFile {
@@ -127,6 +128,11 @@ fn validate(file: &ComponentFile) -> Result<(), ComponentFileError> {
             && points.len() > MAX_POINTS
         {
             return bad("too many profile points");
+        }
+        if let crate::ComponentShape::Mesh { vertices, faces } = &item.shape
+            && (vertices.len() > MAX_MESH_VERTICES || faces.iter().map(Vec::len).sum::<usize>() > 4 * MAX_MESH_VERTICES)
+        {
+            return bad("mesh too large");
         }
     }
     for t in &file.types {

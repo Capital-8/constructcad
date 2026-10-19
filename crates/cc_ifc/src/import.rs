@@ -1573,7 +1573,7 @@ impl<'a> Importer<'a> {
             };
             items.push(ComponentItem { name, shape, material: material.clone(), in_plan: true });
         }
-        let def = ComponentDef { kind, params: Vec::new(), items };
+        let def = ComponentDef { kind, params: Vec::new(), items, ifc: None };
         let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
         // Instance parameter values written by ConstructCAD.
         let overrides: std::collections::BTreeMap<String, f64> = self

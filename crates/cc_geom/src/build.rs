@@ -223,6 +223,11 @@ pub fn component_parts(
             p.footprint = p.footprint.iter().map(|q| component.position + rot.rotate(*q)).collect();
             p.z0 += z;
             p.z1 += z;
+            for face in &mut p.faces {
+                for v in face.iter_mut() {
+                    *v = (component.position + rot.rotate(v.truncate())).extend(v.z + z);
+                }
+            }
             p
         })
         .filter(|p| p.footprint.iter().all(|q| q.is_finite()) && p.z0.is_finite() && p.z1.is_finite())
@@ -247,7 +252,11 @@ impl ModelGeometry {
             let ElementKind::Component(c) = &e.kind else { continue };
             for part in component_parts(project, e, c) {
                 let mut s = Solid::of_material(e.id, e.category(), project, &part.material);
-                s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
+                if part.faces.is_empty() {
+                    s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
+                } else {
+                    s.add_polygons(part.faces);
+                }
                 if !s.faces.is_empty() {
                     self.solids.push(s);
                 }

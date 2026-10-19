@@ -75,6 +75,32 @@ pub fn triangulate(poly: &[DVec2]) -> Vec<[usize; 3]> {
     }
 }
 
+/// Triangulate a polygon with holes; triangles keep the winding of `outer`.
+pub fn triangulate_with_holes(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Vec<[DVec2; 3]> {
+    let mut pts: Vec<DVec2> = outer.to_vec();
+    let mut starts = Vec::new();
+    for h in holes.iter().filter(|h| h.len() >= 3) {
+        starts.push(pts.len());
+        pts.extend_from_slice(h);
+    }
+    if outer.len() < 3 || pts.iter().any(|p| !p.is_finite()) {
+        return Vec::new();
+    }
+    let flat: Vec<f64> = pts.iter().flat_map(|p| [p.x, p.y]).collect();
+    let indices = earcutr::earcut(&flat, &starts, 2).unwrap_or_default();
+    let ccw = signed_area(outer) >= 0.0;
+    indices
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .filter_map(|t| {
+            let [a, b, c] = [pts.get(t[0])?, pts.get(t[1])?, pts.get(t[2])?];
+            let up = (*b - *a).perp_dot(*c - *a) >= 0.0;
+            Some(if up == ccw { [*a, *b, *c] } else { [*a, *c, *b] })
+        })
+        .collect()
+}
+
 /// Parts of the infinite line `origin + t*dir` inside `poly`, as `(t0, t1)` pairs.
 pub fn clip_line(poly: &[DVec2], origin: DVec2, dir: DVec2) -> Vec<(f64, f64)> {
     let n = poly.len();
@@ -134,6 +160,16 @@ mod tests {
         let parts = clip_line(&square(), DVec2::new(-1.0, 2.0), DVec2::X);
         assert_eq!(parts.len(), 1);
         assert!((parts[0].0 - 1.0).abs() < 1e-9 && (parts[0].1 - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn triangulates_around_holes() {
+        let sq = |c: f64, h: f64| {
+            vec![DVec2::new(c - h, c - h), DVec2::new(c + h, c - h), DVec2::new(c + h, c + h), DVec2::new(c - h, c + h)]
+        };
+        let tris = triangulate_with_holes(&sq(0.0, 2.0), &[sq(0.0, 1.0).into_iter().rev().collect()]);
+        let total: f64 = tris.iter().map(|t| signed_area(t)).sum();
+        assert!((total - 12.0).abs() < 1e-9, "{total}");
     }
 
     #[test]

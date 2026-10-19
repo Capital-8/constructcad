@@ -8,9 +8,13 @@
 //! back, Z up, meters. Types of the same component share the definition and
 //! differ in parameter values; parameters marked `instance` can be
 //! overridden per element.
+//!
+//! Pieces brought in from other tools (IFC import) may be fixed polyhedral
+//! meshes instead, and the definition then remembers the IFC class the
+//! object had, so it is written back as the same class.
 
 use crate::expr::{self, ExprError};
-use glam::DVec2;
+use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -90,6 +94,9 @@ pub enum ComponentShape {
     Cylinder { x: String, y: String, z: String, radius: String, height: String },
     /// Closed profile in plan extruded upwards from `z`.
     Extrusion { points: Vec<(String, String)>, z: String, height: String },
+    /// Fixed polyhedral surface (not parametric): vertices in the component
+    /// frame and faces as counter-clockwise (seen from outside) index loops.
+    Mesh { vertices: Vec<[f64; 3]>, faces: Vec<Vec<u32>> },
 }
 
 impl ComponentShape {
@@ -109,6 +116,7 @@ impl ComponentShape {
                 out.push(("height", height));
                 out
             }
+            ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
 
@@ -122,6 +130,7 @@ impl ComponentShape {
                 out.push(height);
                 out
             }
+            ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
 }
@@ -150,10 +159,27 @@ pub struct ComponentDef {
     pub params: Vec<ComponentParam>,
     #[serde(default)]
     pub items: Vec<ComponentItem>,
+    /// IFC class of objects imported from IFC, written back on export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ifc: Option<IfcClass>,
+}
+
+/// An IFC entity class with its predefined and object types.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct IfcClass {
+    /// Entity name as written in IFC files, e.g. `IFCPIPESEGMENT`.
+    pub entity: String,
+    /// `PredefinedType` enumeration value (without dots); empty if unset.
+    #[serde(default)]
+    pub predefined: String,
+    /// `ObjectType` (the user-defined type when `predefined` is `USERDEFINED`).
+    #[serde(default)]
+    pub object_type: String,
 }
 
 /// A resolved piece: a prism of `footprint` between `z0` and `z1`, in the
-/// component's local frame.
+/// component's local frame. Mesh pieces carry their faces, with the convex
+/// hull of the vertices as footprint and their height range.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComponentPart {
     pub item: usize,
@@ -162,6 +188,8 @@ pub struct ComponentPart {
     pub z1: f64,
     pub material: String,
     pub in_plan: bool,
+    /// Faces of a mesh piece (empty for prisms).
+    pub faces: Vec<Vec<DVec3>>,
 }
 
 /// Why a piece could not be resolved.
@@ -211,14 +239,19 @@ impl ComponentDef {
         let mut parts = Vec::new();
         let mut errors = Vec::new();
         for (i, item) in self.items.iter().enumerate() {
-            match resolve_shape(&item.shape, &lookup) {
-                Ok((footprint, z0, z1)) => parts.push(ComponentPart {
+            let resolved = match &item.shape {
+                ComponentShape::Mesh { vertices, faces } => resolve_mesh(vertices, faces),
+                shape => resolve_shape(shape, &lookup).map(|(footprint, z0, z1)| (footprint, z0, z1, Vec::new())),
+            };
+            match resolved {
+                Ok((footprint, z0, z1, faces)) => parts.push(ComponentPart {
                     item: i,
                     footprint,
                     z0,
                     z1,
                     material: item.material.clone(),
                     in_plan: item.in_plan,
+                    faces,
                 }),
                 Err(e) => errors.push((i, e)),
             }
@@ -274,6 +307,52 @@ fn replace_name(text: &str, old: &str, new: &str) -> String {
     out
 }
 
+/// Faces of a mesh piece, its footprint hull and height range. Faces with
+/// fewer than three valid vertices are left out.
+type ResolvedMesh = (Vec<DVec2>, f64, f64, Vec<Vec<DVec3>>);
+
+fn resolve_mesh(vertices: &[[f64; 3]], faces: &[Vec<u32>]) -> Result<ResolvedMesh, PartError> {
+    let point = |i: &u32| {
+        let v = vertices.get(*i as usize)?;
+        let p = DVec3::from_array(*v);
+        p.is_finite().then_some(p)
+    };
+    let faces: Vec<Vec<DVec3>> =
+        faces.iter().map(|f| f.iter().filter_map(point).collect::<Vec<_>>()).filter(|f| f.len() >= 3).collect();
+    let all: Vec<DVec3> = faces.iter().flatten().copied().collect();
+    let (z0, z1) = all.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
+    let footprint = convex_hull(&all.iter().map(|p| p.truncate()).collect::<Vec<_>>());
+    if faces.is_empty() || !(z0.is_finite() && z1.is_finite()) {
+        return Err(PartError::Degenerate);
+    }
+    Ok((footprint, z0, z1, faces))
+}
+
+/// Convex hull of plan points (counter-clockwise; fewer than 3 points when degenerate).
+pub fn convex_hull(points: &[DVec2]) -> Vec<DVec2> {
+    let mut pts: Vec<DVec2> = points.iter().copied().filter(|p| p.is_finite()).collect();
+    pts.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    pts.dedup_by(|a, b| a.distance(*b) < 1e-9);
+    if pts.len() < 3 {
+        return pts;
+    }
+    let cross = |o: DVec2, a: DVec2, b: DVec2| (a - o).perp_dot(b - o);
+    let mut hull: Vec<DVec2> = Vec::new();
+    for pass in 0..2 {
+        let start = hull.len();
+        let iter: Box<dyn Iterator<Item = &DVec2>> =
+            if pass == 0 { Box::new(pts.iter()) } else { Box::new(pts.iter().rev()) };
+        for &p in iter {
+            while hull.len() >= start + 2 && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 1e-12 {
+                hull.pop();
+            }
+            hull.push(p);
+        }
+        hull.pop();
+    }
+    hull
+}
+
 fn resolve_shape(
     shape: &ComponentShape,
     lookup: &dyn Fn(&str) -> Option<f64>,
@@ -317,6 +396,7 @@ fn resolve_shape(
             }
             Ok((footprint, z, z + h))
         }
+        ComponentShape::Mesh { .. } => Err(PartError::Degenerate),
     }
 }
 
@@ -381,6 +461,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     items.extend(legs("0.05", format!("{h} - 0.03"), &wood));
     let table = ComponentDef {
         kind: ComponentKind::Furniture,
+        ifc: None,
         params: vec![length(&w, 1.2), length(&d, 0.8), length(&h, 0.75)],
         items,
     };
@@ -413,6 +494,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     ));
     let chair = ComponentDef {
         kind: ComponentKind::Furniture,
+        ifc: None,
         params: vec![length(&w, 0.45), length(&d, 0.5), length(&h, 0.9), length(&seat, 0.45)],
         items,
     };
@@ -421,6 +503,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Bed: mattress base and headboard at the back.
     let bed = ComponentDef {
         kind: ComponentKind::Furniture,
+        ifc: None,
         params: vec![length(&w, 1.4), length(&d, 1.9), length(&h, 0.5)],
         items: vec![
             bx(
@@ -453,6 +536,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let arm = "0.15";
     let sofa = ComponentDef {
         kind: ComponentKind::Furniture,
+        ifc: None,
         params: vec![length(&w, 2.0), length(&d, 0.9), length(&h, 0.8), length(&seat, 0.42)],
         items: vec![
             bx(
@@ -506,6 +590,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Toilet: bowl in front of the tank, against the wall at the back.
     let toilet = ComponentDef {
         kind: ComponentKind::Plumbing,
+        ifc: None,
         params: vec![length(&w, 0.38), length(&d, 0.65), length(&h, 0.78)],
         items: vec![
             ComponentItem {
@@ -538,6 +623,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Washbasin: basin slab on a pedestal.
     let basin = ComponentDef {
         kind: ComponentKind::Plumbing,
+        ifc: None,
         params: vec![length(&w, 0.55), length(&d, 0.45), length(&h, 0.85)],
         items: vec![
             bx(
@@ -570,6 +656,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Wardrobe: one box.
     let wardrobe = ComponentDef {
         kind: ComponentKind::Casework,
+        ifc: None,
         params: vec![length(&w, 1.6), length(&d, 0.6), length(&h, 2.2)],
         items: vec![bx(
             &n("tpl-part-body"),
@@ -655,6 +742,35 @@ mod tests {
             matches!(&errors[0].1, PartError::Expr { field: "width", error: ExprError::UnknownName(n) } if n == "Largur")
         );
         assert_eq!(errors[1], (2, PartError::Degenerate));
+    }
+
+    #[test]
+    fn mesh_pieces_resolve_to_faces_and_hull() {
+        let item = ComponentItem {
+            name: "m".into(),
+            shape: ComponentShape::Mesh {
+                vertices: vec![
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 2.0],
+                    [f64::NAN, 0.0, 0.0],
+                ],
+                // The last face has a bad vertex and an index out of range: it drops to nothing.
+                faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3], vec![4, 9, 4]],
+            },
+            material: String::new(),
+            in_plan: true,
+        };
+        let def = ComponentDef { items: vec![item.clone()], ..Default::default() };
+        let (parts, errors) = def.resolve(&BTreeMap::new());
+        assert!(errors.is_empty());
+        assert_eq!(parts[0].faces.len(), 4);
+        assert_eq!(parts[0].footprint.len(), 3);
+        assert_eq!((parts[0].z0, parts[0].z1), (0.0, 2.0));
+        let empty = ComponentShape::Mesh { vertices: vec![], faces: vec![vec![0, 1, 2]] };
+        let def = ComponentDef { items: vec![ComponentItem { shape: empty, ..item }], ..Default::default() };
+        assert_eq!(def.resolve(&BTreeMap::new()).1.len(), 1);
     }
 
     #[test]

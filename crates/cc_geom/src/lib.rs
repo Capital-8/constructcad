@@ -6,6 +6,7 @@
 
 mod build;
 mod cut;
+mod mesh;
 pub mod polygon;
 pub mod roofs;
 mod rooms;
@@ -17,6 +18,7 @@ pub use build::{
     railing_parts, stair_geom,
 };
 pub use cut::{clip_polygon, face_plane_segments};
+pub use mesh::{MeshPlan, mesh_plan, plan_edges};
 pub use rooms::room_boundary;
 pub use solid::{Face, Ray, Solid};
 pub use wall::{Column, Opening, WallGeom};

@@ -149,6 +149,23 @@ impl Solid {
         best
     }
 
+    /// Append planar polygons, each with the normal of its winding (Newell's
+    /// method); degenerate polygons are dropped.
+    pub fn add_polygons(&mut self, polygons: impl IntoIterator<Item = Vec<DVec3>>) {
+        for verts in polygons {
+            let n = verts.len();
+            let normal: DVec3 = (0..n)
+                .map(|i| {
+                    let (a, b) = (verts[i], verts[(i + 1) % n]);
+                    DVec3::new((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))
+                })
+                .sum();
+            if n >= 3 && normal.length_squared() > 1e-20 && normal.is_finite() {
+                self.faces.push(Face::new(verts, normal));
+            }
+        }
+    }
+
     /// Append an axis-aligned (in the local frame) box.
     ///
     /// `origin` is the frame origin, `u`/`v` horizontal unit axes, Z is up.
