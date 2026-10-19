@@ -2,6 +2,7 @@
 
 use crate::args;
 use crate::guid::{encode, guid};
+use crate::schema::{ElementClass, TypeLayout, element_class};
 use crate::step::{Header, Id, StepWriter, Value, opt_str, reals};
 use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData, Uid};
 use cc_geom::{FRAME_COLOR, HostedPart, ModelGeometry, WallGeom, hosted_parts, polygon};
@@ -517,6 +518,38 @@ impl<'a> Exporter<'a> {
         self.w.add("IFCFACETEDBREP", args![shell])
     }
 
+    /// Polygons as an `IfcPolygonalFaceSet` (shared corners share a point).
+    fn face_set(&mut self, faces: &[Vec<DVec3>]) -> Option<Id> {
+        let mut coords: Vec<Value> = Vec::new();
+        let mut index: HashMap<(i64, i64, i64), i64> = HashMap::new();
+        let mut ifc_faces = Vec::new();
+        for face in faces {
+            let mut ids: Vec<i64> = Vec::with_capacity(face.len());
+            for p in face.iter().filter(|p| p.is_finite()) {
+                let key = ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64, (p.z * 1e6).round() as i64);
+                let i = *index.entry(key).or_insert_with(|| {
+                    coords.push(reals(&[p.x, p.y, p.z]));
+                    coords.len() as i64
+                });
+                if ids.last() != Some(&i) {
+                    ids.push(i);
+                }
+            }
+            if ids.len() > 1 && ids.first() == ids.last() {
+                ids.pop();
+            }
+            if ids.len() >= 3 {
+                let ids: Vec<Value> = ids.into_iter().map(Value::Int).collect();
+                ifc_faces.push(self.w.add("IFCINDEXEDPOLYGONALFACE", args![ids]));
+            }
+        }
+        if ifc_faces.is_empty() {
+            return None;
+        }
+        let points = self.w.add("IFCCARTESIANPOINTLIST3D", args![coords]);
+        Some(self.w.add("IFCPOLYGONALFACESET", args![points, Value::Null, ifc_faces, Value::Null]))
+    }
+
     /// Columns, beams, stairs and railings.
     fn write_structure(&mut self) {
         let project = self.project;
@@ -640,14 +673,28 @@ impl<'a> Exporter<'a> {
                 Frame::horizontal(DVec3::new(c.position.x, c.position.y, c.base_offset), rot),
             );
             let (parts, _) = def.resolve(&c.overrides);
+            // Shapes mix no representation types: with any mesh piece, all pieces are face sets.
+            let tessellated = parts.iter().any(|p| !p.faces.is_empty());
             let mut items = Vec::new();
             for part in parts {
-                let profile = polygon::ccw(&part.footprint);
-                if profile.len() < 3 || part.z1 - part.z0 < 1e-6 {
-                    continue;
-                }
-                let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, part.z0)));
-                let item = self.extrude_polygon(&profile, position, self.dir_z, part.z1 - part.z0);
+                let item = if tessellated {
+                    let faces = if part.faces.is_empty() {
+                        let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
+                        s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
+                        s.faces.into_iter().map(|f| f.verts).collect()
+                    } else {
+                        part.faces
+                    };
+                    let Some(item) = self.face_set(&faces) else { continue };
+                    item
+                } else {
+                    let profile = polygon::ccw(&part.footprint);
+                    if profile.len() < 3 || part.z1 - part.z0 < 1e-6 {
+                        continue;
+                    }
+                    let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, part.z0)));
+                    self.extrude_polygon(&profile, position, self.dir_z, part.z1 - part.z0)
+                };
                 let style = if part.material.is_empty() {
                     self.style("Generic", [200, 200, 200], 0.0)
                 } else {
@@ -659,11 +706,18 @@ impl<'a> Exporter<'a> {
             if items.is_empty() {
                 continue;
             }
-            let shape = self.shape(items, None);
-            let (entity, kind) = component_entity(def.kind);
+            let shape =
+                if tessellated { self.shape_of_type(items, None, "Tessellation") } else { self.shape(items, None) };
+            let class = component_class(def);
             let mut attrs = self.element_args(e, placement, shape);
-            attrs.push(Value::Enum(kind));
-            let product = self.w.add(entity, attrs);
+            attrs.resize(class.attrs, Value::Null);
+            if !class.object_type.is_empty() {
+                attrs[4] = Value::Str(class.object_type.clone());
+            }
+            if let Some(i) = class.predefined {
+                attrs[i] = class.predefined_value();
+            }
+            let product = self.w.add(class.entity, attrs);
             self.products.insert(e.id, product);
             self.register(e, product);
             // Instance parameter values, so importers can restore overrides.
@@ -747,24 +801,27 @@ impl<'a> Exporter<'a> {
         let gid = self.guid_of(ty.uid, &format!("type-{type_id}"));
         let n = Value::Null;
         let description = opt_str(&ty.info.description);
-        let base =
+        let mut base =
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             // Rooms, grids and dimensions have no IFC type object.
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => return None,
             TypeData::Component { ref def, .. } => {
-                let (entity, kind) = component_entity(def.kind);
-                let entity = match entity {
-                    "IFCFURNITURE" => "IFCFURNITURETYPE",
-                    "IFCSANITARYTERMINAL" => "IFCSANITARYTERMINALTYPE",
-                    "IFCLIGHTFIXTURE" => "IFCLIGHTFIXTURETYPE",
-                    _ => "IFCBUILDINGELEMENTPROXYTYPE",
-                };
-                // Furniture types also state where they are assembled.
-                let extra = if entity == "IFCFURNITURETYPE" {
-                    args![Value::Enum("NOTDEFINED"), Value::Enum(kind)]
-                } else {
-                    args![Value::Enum(kind)]
+                let class = component_class(def);
+                // Classes whose schema type object is abstract go untyped.
+                let (entity, layout) = class.type_entity?;
+                let predefined = class.predefined_value();
+                if matches!(&predefined, Value::EnumName(p) if p == "USERDEFINED") {
+                    base[8] = Value::Str(class.object_type.clone());
+                }
+                let extra = match layout {
+                    TypeLayout::Predefined => vec![predefined],
+                    TypeLayout::Plain => Vec::new(),
+                    // Furniture types also state where they are assembled.
+                    TypeLayout::Furniture => vec![Value::Enum("NOTDEFINED"), predefined],
+                    TypeLayout::Door | TypeLayout::Window => {
+                        vec![predefined, Value::Enum("NOTDEFINED"), Value::Null, Value::Null]
+                    }
                 };
                 (entity, extra)
             }
@@ -1205,6 +1262,61 @@ enum Quantity {
 pub const COMPONENT_PSET: &str = "ConstructCAD_Parameters";
 
 /// IFC entity and predefined type of a component kind.
+/// How a component is written: its stored IFC class when the schema table
+/// knows it, a proxy naming the class otherwise, or a class from its kind.
+struct WrittenClass {
+    entity: &'static str,
+    attrs: usize,
+    predefined: Option<usize>,
+    /// Predefined type to write (empty: `NOTDEFINED`).
+    value: String,
+    object_type: String,
+    type_entity: Option<(&'static str, TypeLayout)>,
+}
+
+impl WrittenClass {
+    fn predefined_value(&self) -> Value {
+        // A user-defined type must name itself in the object type.
+        if self.value.is_empty() || (self.value == "USERDEFINED" && self.object_type.is_empty()) {
+            Value::Enum("NOTDEFINED")
+        } else {
+            Value::EnumName(self.value.clone())
+        }
+    }
+}
+
+fn component_class(def: &cc_core::ComponentDef) -> WrittenClass {
+    let written = |class: &ElementClass, value: &str, object_type: &str| WrittenClass {
+        entity: class.entity,
+        attrs: class.attrs,
+        predefined: class.predefined,
+        value: value.to_string(),
+        object_type: object_type.to_string(),
+        type_entity: class.type_entity,
+    };
+    let proxy = element_class("IFCBUILDINGELEMENTPROXY");
+    match (&def.ifc, proxy) {
+        (Some(ifc), _) if let Some(class) = element_class(&ifc.entity) => {
+            written(class, &ifc.predefined, &ifc.object_type)
+        }
+        (Some(ifc), Some(proxy)) => written(proxy, "USERDEFINED", &crate::schema::display_name(&ifc.entity)),
+        _ => {
+            let (entity, kind) = component_entity(def.kind);
+            match element_class(entity) {
+                Some(class) => written(class, kind, ""),
+                None => WrittenClass {
+                    entity,
+                    attrs: 9,
+                    predefined: Some(8),
+                    value: kind.to_string(),
+                    object_type: String::new(),
+                    type_entity: None,
+                },
+            }
+        }
+    }
+}
+
 fn component_entity(kind: cc_core::ComponentKind) -> (&'static str, &'static str) {
     match kind {
         cc_core::ComponentKind::Furniture | cc_core::ComponentKind::Casework => ("IFCFURNITURE", "NOTDEFINED"),

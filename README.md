@@ -75,12 +75,12 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Sheets** A0–A4: title block with project data and draggable, scaled viewports; export to vector PDF and SVG (*File → Export PDF/SVG…*), identical to the screen.
 - **Manage**: project information, levels (each new level creates its plans) and materials.
 - **`.ccad` files**: versioned, human-readable RON; saving is atomic.
-- **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings, roofs, structure and components as swept solids, with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
-- **IFC import** (*File → Import IFC…*, IFC2X3 and IFC4): storeys become levels; walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams become native elements with matching or new types, materials and colors. Read by ConstructCAD's own STEP parser; unsupported products are counted and skipped.
+- **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings, roofs, structure and components as swept solids (imported objects as polygonal face sets in their original class), with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
+- **IFC import** (*File → Import IFC…*, IFC2X3 and IFC4) with no class left behind: storeys become levels and grids grid lines; walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams become native elements with matching or new types, materials and colors whenever a native element can hold their geometry exactly. Every other physical object — stairs, railings, members, plates, curtain walls, MEP segments and fittings, terrain, classes from other schemas — comes in as a generic component that keeps its IFC class, predefined type and exact geometry, and is exported back as the same class. Geometry is read by ConstructCAD's own engine: extrusions (with voids), revolutions, swept disks and profiles, CSG primitives and booleans, half-space clipping, faceted and advanced B-reps, face sets, mapped items, every parametric profile and curves with arcs, conics and B-splines.
 
 ## Coming from Revit?
 
-ConstructCAD does not read `.rvt` files. To bring a Revit model in, export it to IFC from Revit (*File → Export → IFC*, IFC4 or IFC2x3) and open the file with *File → Import IFC…*. Storeys, walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams come across as native, editable elements with their types and materials; the import message reports anything that was skipped.
+ConstructCAD does not read `.rvt` files. To bring a Revit model in, export it to IFC from Revit (*File → Export → IFC*, IFC4 or IFC2x3) and open the file with *File → Import IFC…*. Storeys, walls, doors, windows, slabs, ceilings, roofs, spaces, columns and beams come across as native, editable elements with their types and materials; everything else comes across as generic objects with their IFC class and geometry, and the import message reports how many.
 
 If you do not have Revit, independent third-party tools can convert `.rvt` files to IFC; check their coverage and license terms yourself. ConstructCAD neither bundles nor endorses them.
 
@@ -145,7 +145,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 ## Roadmap
 
 - Component arrays, nested components and hosted components (on walls and ceilings).
-- IFC import of stairs, railings, grids and free-form geometry.
+- Native (editable) import of stairs and railings; openings cut from imported generic objects.
 - Everything-is-a-command architecture (scripting and macros).
 - Material textures.
 

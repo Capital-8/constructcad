@@ -430,4 +430,69 @@ mod tests {
         // On the open leaf, drawn from the hinge at u = 2.1 on the left face.
         assert_eq!(d.hit_test(DVec2::new(2.12, 0.5), 0.05), Some(door_id));
     }
+
+    /// A mesh piece (as imported from IFC) is cut at the plan's cut plane.
+    #[test]
+    fn plan_cuts_mesh_pieces() {
+        use cc_core::{Component, ComponentDef, ComponentItem, ComponentShape, ElementType, ElementTypeId, TypeData};
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        // A 1 m cube standing on the level, rotated 90° and moved to (5, 0).
+        let v = |i: u32| [f64::from(i & 1), f64::from((i >> 1) & 1), f64::from((i >> 2) & 1)];
+        let faces = vec![
+            vec![0, 2, 3, 1],
+            vec![4, 5, 7, 6],
+            vec![0, 1, 5, 4],
+            vec![1, 3, 7, 5],
+            vec![3, 2, 6, 7],
+            vec![2, 0, 4, 6],
+        ];
+        let shape = ComponentShape::Mesh { vertices: (0..8).map(v).collect(), faces };
+        let item = ComponentItem { name: "m".into(), shape, material: String::new(), in_plan: true };
+        let id = doc.edit("t", |e| {
+            let type_id = ElementTypeId(e.alloc_id());
+            let def = ComponentDef { items: vec![item], ..Default::default() };
+            let data = TypeData::Component { component: "Mesh".into(), def };
+            e.add_type(ElementType {
+                id: type_id,
+                name: "Mesh".into(),
+                data,
+                info: Default::default(),
+                uid: Default::default(),
+            });
+            let id = ElementId(e.alloc_id());
+            let kind = ElementKind::Component(Component {
+                position: DVec2::new(5.0, 0.0),
+                rotation_deg: 90.0,
+                base_offset: 0.0,
+                overrides: Default::default(),
+            });
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind,
+            });
+            id
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        assert!((geom.volume(id) - 1.0).abs() < 1e-9);
+        let d = plan(&doc.project, &geom, level, 0.5, false, 50);
+        let cut: Vec<_> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Line { a, b, style: LineStyle::Cut, element: Some(e) } if *e == id => Some((*a, *b)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cut.len(), 4);
+        // Rotated about the insertion point: the square spans x 4..5, y 0..1.
+        assert!(cut.iter().all(|(a, b)| {
+            [a, b].iter().all(|p| (4.0 - 1e-9..=5.0 + 1e-9).contains(&p.x) && (-1e-9..=1.0 + 1e-9).contains(&p.y))
+        }));
+    }
 }

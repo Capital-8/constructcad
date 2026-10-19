@@ -19,6 +19,9 @@ pub enum Value {
     Str(String),
     /// Enumeration literal, written as `.NAME.`.
     Enum(&'static str),
+    /// Enumeration literal read from data; anything but `A-Z`, `0-9` and `_`
+    /// is written as `NOTDEFINED`.
+    EnumName(String),
     Ref(Id),
     List(Vec<Value>),
     /// Typed value for SELECT attributes, such as `IFCLABEL('x')`.
@@ -185,6 +188,10 @@ fn write_value(out: &mut String, v: &Value) {
         Value::Str(s) => encode_string(out, s),
         Value::Enum(e) => {
             let _ = write!(out, ".{e}.");
+        }
+        Value::EnumName(e) => {
+            let valid = !e.is_empty() && e.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+            let _ = write!(out, ".{}.", if valid { e.as_str() } else { "NOTDEFINED" });
         }
         Value::Ref(id) => {
             let _ = write!(out, "#{}", id.0);

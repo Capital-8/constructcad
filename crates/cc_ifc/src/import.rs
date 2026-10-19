@@ -8,20 +8,21 @@
 //! elements with matching or new types. Products that cannot be interpreted
 //! are counted in the report instead of failing the import.
 
+use crate::geometry::{Extrusion, Geometry, ProfileKind, Solid, affine, clean_loop};
 use crate::guid;
 use crate::parse::{Entity, Param, ParseError, StepFile, parse};
+use cc_core::component::IfcClass;
+use cc_core::component::convex_hull;
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
-    ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Hosted, Layer, LayerFunction,
-    Level, LevelId, Material, Project, Roof, RoofShape, Room, TypeData, Uid, View, ViewId, ViewKind, Wall,
-    WallFunction, WallTop,
+    ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
+    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, TypeData, Uid, View, ViewId, ViewKind,
+    Wall, WallFunction, WallTop,
 };
 use cc_geom::polygon;
-use glam::{DAffine3, DMat3, DVec2, DVec3};
+use glam::{DAffine3, DVec2, DVec3};
 use std::collections::{BTreeMap, HashMap};
 
-const MAX_PLACEMENT_DEPTH: usize = 64;
-const MAX_ITEM_DEPTH: usize = 16;
 const MAX_PARENT_DEPTH: usize = 16;
 /// Length tolerance when matching types (meters).
 const TYPE_TOL: f64 = 0.001;
@@ -33,6 +34,8 @@ pub struct ImportReport {
     pub schema: String,
     pub levels: usize,
     pub imported: BTreeMap<Category, usize>,
+    /// Objects brought in as generic components keeping their IFC class, by class.
+    pub generic: BTreeMap<String, usize>,
     /// Products that were not imported, by IFC entity name.
     pub skipped: BTreeMap<String, usize>,
 }
@@ -84,81 +87,6 @@ pub fn import(text: &str, base: Project) -> Result<(Project, ImportReport), Impo
     Ok((im.p, im.report))
 }
 
-/// An extruded profile in its plane: the polygon and, for parametric
-/// profiles, its exact parameters.
-#[derive(Debug, Clone)]
-struct Profile {
-    pts: Vec<DVec2>,
-    kind: ProfileKind,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum ProfileKind {
-    /// Rectangle `w` x `h` centered at `center`, with its width along `x`.
-    Rect {
-        center: DVec2,
-        x: DVec2,
-        w: f64,
-        h: f64,
-    },
-    Circle {
-        center: DVec2,
-        r: f64,
-    },
-    Poly,
-}
-
-impl Profile {
-    /// Exact rectangle or circle, else the bounding rectangle of the polygon.
-    fn rect(&self) -> (DVec2, DVec2, f64, f64) {
-        match self.kind {
-            ProfileKind::Rect { center, x, w, h } => (center, x, w, h),
-            ProfileKind::Circle { center, r } => (center, DVec2::X, 2.0 * r, 2.0 * r),
-            ProfileKind::Poly => {
-                let (lo, hi) = bounds2(&self.pts);
-                ((lo + hi) * 0.5, DVec2::X, hi.x - lo.x, hi.y - lo.y)
-            }
-        }
-    }
-}
-
-/// A body item resolved to world coordinates.
-#[derive(Debug, Clone)]
-struct Solid {
-    /// Extruded profile, when the item is an extrusion.
-    extrusion: Option<Extrusion>,
-    /// World points of the item (both caps of an extrusion; B-rep vertices).
-    points: Vec<DVec3>,
-}
-
-#[derive(Debug, Clone)]
-struct Extrusion {
-    profile: Profile,
-    /// Profile plane to world.
-    xf: DAffine3,
-    /// Extrusion vector in world coordinates (direction times depth).
-    vector: DVec3,
-}
-
-impl Extrusion {
-    fn is_vertical(&self) -> bool {
-        self.vector.length() > 1e-9 && self.vector.normalize().z.abs() > 0.999
-    }
-
-    /// World XY of the profile polygon (the bottom cap of a vertical extrusion).
-    fn footprint(&self) -> Vec<DVec2> {
-        self.profile.pts.iter().map(|p| self.xf.transform_point3(p.extend(0.0)).truncate()).collect()
-    }
-
-    fn plane_point(&self, p: DVec2) -> DVec3 {
-        self.xf.transform_point3(p.extend(0.0))
-    }
-
-    fn plane_vector(&self, v: DVec2) -> DVec3 {
-        self.xf.transform_vector3(v.extend(0.0))
-    }
-}
-
 /// Body and axis of a product, in world coordinates.
 #[derive(Debug, Clone, Default)]
 struct Body {
@@ -182,10 +110,54 @@ impl Body {
         let mut all = self.solids.iter().filter_map(|s| s.extrusion.as_ref());
         if vertical { all.find(|e| e.is_vertical()) } else { all.next() }
     }
+
+    /// The extrusion of a body that is nothing but one uncut extrusion of a
+    /// solid profile (what slabs, columns and beams can hold exactly).
+    fn sole_extrusion(&self) -> Option<&Extrusion> {
+        match self.solids.as_slice() {
+            [s] if !s.clipped => s.extrusion.as_ref().filter(|e| e.profile.closed && e.profile.holes.is_empty()),
+            _ => None,
+        }
+    }
+}
+
+/// Entities that are not physical objects: spatial structure, zones,
+/// features cut from their hosts, ports, annotations and analysis models.
+fn is_non_physical(name: &str) -> bool {
+    matches!(
+        name,
+        "IFCPROJECT"
+            | "IFCBUILDING"
+            | "IFCBUILDINGSTOREY"
+            | "IFCSPATIALZONE"
+            | "IFCEXTERNALSPATIALELEMENT"
+            | "IFCOPENINGELEMENT"
+            | "IFCOPENINGSTANDARDCASE"
+            | "IFCVOIDINGFEATURE"
+            | "IFCSURFACEFEATURE"
+            | "IFCANNOTATION"
+            | "IFCPORT"
+            | "IFCDISTRIBUTIONPORT"
+            | "IFCVIRTUALELEMENT"
+            | "IFCREFERENT"
+    ) || name.starts_with("IFCSTRUCTURAL")
+        || name.starts_with("IFCALIGNMENT")
+        || name.starts_with("IFCFACILITY")
+}
+
+/// Component kind of a generic object, by IFC class.
+fn kind_of_class(name: &str) -> ComponentKind {
+    match name {
+        "IFCFURNITURE" | "IFCFURNISHINGELEMENT" | "IFCSYSTEMFURNITUREELEMENT" => ComponentKind::Furniture,
+        "IFCSANITARYTERMINAL" | "IFCWASTETERMINAL" => ComponentKind::Plumbing,
+        "IFCLIGHTFIXTURE" | "IFCLAMP" => ComponentKind::Lighting,
+        _ => ComponentKind::Generic,
+    }
 }
 
 struct Importer<'a> {
     f: &'a StepFile,
+    g: Geometry<'a>,
     p: Project,
     report: ImportReport,
     project_id: u32,
@@ -203,49 +175,16 @@ struct Importer<'a> {
     /// Surface style colors by style name and by styled item.
     style_colors: HashMap<String, [u8; 3]>,
     item_colors: HashMap<u32, [u8; 3]>,
+    /// Surface style name of styled items.
+    item_styles: HashMap<u32, String>,
     /// Imported walls by IFC instance.
     walls: HashMap<u32, ElementId>,
     /// Products with parts aggregated into them (e.g. roofs made of slabs).
     has_parts: HashMap<u32, usize>,
 }
 
-fn bounds2(pts: &[DVec2]) -> (DVec2, DVec2) {
-    pts.iter()
-        .fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(lo, hi), p| (lo.min(*p), hi.max(*p)))
-}
-
-/// Convex hull (counter-clockwise), for footprints of B-rep bodies.
-fn convex_hull(points: &[DVec2]) -> Vec<DVec2> {
-    let mut pts: Vec<DVec2> = points.iter().copied().filter(|p| p.is_finite()).collect();
-    pts.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
-    pts.dedup_by(|a, b| a.distance(*b) < 1e-9);
-    if pts.len() < 3 {
-        return pts;
-    }
-    let cross = |o: DVec2, a: DVec2, b: DVec2| (a - o).perp_dot(b - o);
-    let mut hull: Vec<DVec2> = Vec::new();
-    for pass in 0..2 {
-        let start = hull.len();
-        let iter: Box<dyn Iterator<Item = &DVec2>> =
-            if pass == 0 { Box::new(pts.iter()) } else { Box::new(pts.iter().rev()) };
-        for &p in iter {
-            while hull.len() >= start + 2 && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 1e-12 {
-                hull.pop();
-            }
-            hull.push(p);
-        }
-        hull.pop();
-    }
-    hull
-}
-
-/// Drop a repeated closing point and consecutive duplicates.
-fn clean_polygon(mut pts: Vec<DVec2>) -> Vec<DVec2> {
-    pts.dedup_by(|a, b| a.distance(*b) < 1e-9);
-    if pts.len() > 1 && pts.first().zip(pts.last()).is_some_and(|(a, b)| a.distance(*b) < 1e-9) {
-        pts.pop();
-    }
-    pts
+fn clean_polygon(pts: Vec<DVec2>) -> Vec<DVec2> {
+    clean_loop(pts, |a, b| a.distance(*b) < 1e-9)
 }
 
 /// Type names from other tools often end in an instance number ("Wall:Generic 200mm:123456").
@@ -257,25 +196,11 @@ fn clean_name(name: &str) -> String {
     }
 }
 
-fn affine(x: DVec3, y: DVec3, z: DVec3, origin: DVec3) -> DAffine3 {
-    DAffine3 { matrix3: DMat3::from_cols(x, y, z), translation: origin }
-}
-
-/// A right-handed frame from a Z axis and an approximate X axis.
-fn frame(z: Option<DVec3>, x: Option<DVec3>, origin: DVec3) -> DAffine3 {
-    let z = z.and_then(|z| z.try_normalize()).unwrap_or(DVec3::Z);
-    let fallback = if z.x.abs() < 0.9 { DVec3::X } else { DVec3::Y };
-    let x = x
-        .and_then(|x| (x - z * x.dot(z)).try_normalize())
-        .or_else(|| (fallback - z * fallback.dot(z)).try_normalize())
-        .unwrap_or(DVec3::X);
-    affine(x, z.cross(x), z, origin)
-}
-
 impl<'a> Importer<'a> {
     fn new(f: &'a StepFile, base: Project, project_id: u32) -> Self {
         let mut im = Self {
             f,
+            g: Geometry::new(f, 1.0, 1.0),
             p: base,
             report: ImportReport { schema: f.schema.clone(), ..Default::default() },
             project_id,
@@ -289,10 +214,12 @@ impl<'a> Importer<'a> {
             opening_of_filler: HashMap::new(),
             style_colors: HashMap::new(),
             item_colors: HashMap::new(),
+            item_styles: HashMap::new(),
             walls: HashMap::new(),
             has_parts: HashMap::new(),
         };
-        im.scale = im.length_unit();
+        im.scale = im.unit("LENGTHUNIT");
+        im.g = Geometry::new(f, im.scale, im.unit("PLANEANGLEUNIT"));
         im.index_relationships();
         im.index_styles();
         im
@@ -303,64 +230,68 @@ impl<'a> Importer<'a> {
         self.read_project_info();
         self.read_storeys();
         let f = self.f;
-        let mut handled = std::collections::HashSet::new();
         // Walls first: doors and windows need their hosts.
         for (id, e) in f.entities.iter() {
-            let ok = match e.name.as_str() {
-                "IFCWALL" | "IFCWALLSTANDARDCASE" | "IFCWALLELEMENTEDCASE" => Some(self.import_wall(*id, e)),
-                _ => None,
-            };
-            if let Some(ok) = ok {
-                handled.insert(*id);
-                if !ok {
-                    self.skip(e);
-                }
+            if matches!(e.name.as_str(), "IFCWALL" | "IFCWALLSTANDARDCASE" | "IFCWALLELEMENTEDCASE") {
+                let ok = self.import_wall(*id, e);
+                self.or_generic(*id, e, ok);
             }
         }
         for (id, e) in f.entities.iter() {
-            let ok = match e.name.as_str() {
-                "IFCDOOR" | "IFCDOORSTANDARDCASE" => Some(self.import_filler(*id, e, true)),
-                "IFCWINDOW" | "IFCWINDOWSTANDARDCASE" => Some(self.import_filler(*id, e, false)),
-                "IFCSLAB" | "IFCSLABSTANDARDCASE" | "IFCSLABELEMENTEDCASE" => Some(self.import_slab(*id, e)),
-                "IFCCOVERING" => Some(self.import_covering(*id, e)),
-                "IFCROOF" => Some(self.import_roof(*id, e)),
-                "IFCSPACE" => Some(self.import_space(*id, e)),
-                "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => Some(self.import_column(*id, e)),
-                "IFCBEAM" | "IFCBEAMSTANDARDCASE" => Some(self.import_beam(*id, e)),
-                "IFCFURNITURE" | "IFCFURNISHINGELEMENT" | "IFCSYSTEMFURNITUREELEMENT" => {
-                    Some(self.import_component(*id, e, ComponentKind::Furniture))
+            let (id, name) = (*id, e.name.as_str());
+            let ok = match name {
+                "IFCWALL" | "IFCWALLSTANDARDCASE" | "IFCWALLELEMENTEDCASE" => continue,
+                "IFCDOOR" | "IFCDOORSTANDARDCASE" => self.import_filler(id, e, true),
+                "IFCWINDOW" | "IFCWINDOWSTANDARDCASE" => self.import_filler(id, e, false),
+                "IFCSLAB" | "IFCSLABSTANDARDCASE" | "IFCSLABELEMENTEDCASE" => self.import_slab(id, e),
+                "IFCCOVERING" => self.import_covering(id, e),
+                "IFCROOF" => self.import_roof(id, e),
+                "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => self.import_column(id, e),
+                "IFCBEAM" | "IFCBEAMSTANDARDCASE" => self.import_beam(id, e),
+                "IFCSPACE" => {
+                    if !self.import_space(id, e) {
+                        self.skip(e);
+                    }
+                    continue;
                 }
-                "IFCSANITARYTERMINAL" => Some(self.import_component(*id, e, ComponentKind::Plumbing)),
-                "IFCLIGHTFIXTURE" => Some(self.import_component(*id, e, ComponentKind::Lighting)),
-                "IFCBUILDINGELEMENTPROXY" | "IFCFLOWTERMINAL" => {
-                    Some(self.import_component(*id, e, ComponentKind::Generic))
+                "IFCGRID" => {
+                    self.import_grid(id, e);
+                    continue;
                 }
-                _ => None,
+                // Terrain and other site geometry.
+                "IFCSITE" => {
+                    if self.is_shaped(e) {
+                        self.import_generic(id, e);
+                    }
+                    continue;
+                }
+                _ if is_non_physical(name) || !self.is_product(e) => continue,
+                // Every other physical object keeps its class and geometry.
+                _ => false,
             };
-            if let Some(ok) = ok {
-                handled.insert(*id);
-                if !ok {
-                    self.skip(e);
-                }
-            }
-        }
-        // Any other placed product with a shape is reported as skipped.
-        for (id, e) in f.entities.iter() {
-            if handled.contains(id)
-                || matches!(
-                    e.name.as_str(),
-                    "IFCOPENINGELEMENT" | "IFCSITE" | "IFCBUILDING" | "IFCBUILDINGSTOREY" | "IFCANNOTATION" | "IFCGRID"
-                )
-            {
-                continue;
-            }
-            let placed = f.deref(e.arg(5)).is_some_and(|p| p.name == "IFCLOCALPLACEMENT");
-            let shaped = f.deref(e.arg(6)).is_some_and(|s| s.name == "IFCPRODUCTDEFINITIONSHAPE");
-            if placed && shaped {
-                self.skip(e);
-            }
+            self.or_generic(id, e, ok);
         }
         self.finish();
+    }
+
+    /// After a native import attempt: anything not imported natively comes in
+    /// as a generic object, and is reported only when it has no usable geometry.
+    fn or_generic(&mut self, id: u32, e: &Entity, native: bool) {
+        if !native && !self.import_generic(id, e) {
+            self.skip(e);
+        }
+    }
+
+    /// A placed object with a shape (an `IfcProduct` with geometry).
+    fn is_product(&self, e: &Entity) -> bool {
+        let placed = self.f.deref(e.arg(5)).is_some_and(|p| {
+            matches!(p.name.as_str(), "IFCLOCALPLACEMENT" | "IFCGRIDPLACEMENT" | "IFCLINEARPLACEMENT")
+        });
+        placed && self.is_shaped(e)
+    }
+
+    fn is_shaped(&self, e: &Entity) -> bool {
+        self.f.deref(e.arg(6)).is_some_and(|s| s.name == "IFCPRODUCTDEFINITIONSHAPE")
     }
 
     fn skip(&mut self, e: &Entity) {
@@ -395,8 +326,8 @@ impl<'a> Importer<'a> {
         }
     }
 
-    /// Meters per length unit of the file.
-    fn length_unit(&self) -> f64 {
+    /// SI value of one file unit of `kind` (`LENGTHUNIT`: meters; `PLANEANGLEUNIT`: radians).
+    fn unit(&self, kind: &str) -> f64 {
         let f = self.f;
         let assignment = f
             .get(self.project_id)
@@ -404,18 +335,24 @@ impl<'a> Importer<'a> {
             .or_else(|| f.of_type("IFCUNITASSIGNMENT").next().map(|(_, e)| e));
         let Some(units) = assignment else { return 1.0 };
         for unit in units.arg(0).as_list().iter().filter_map(|u| f.deref(u)) {
-            if unit.arg(1).as_enum() != Some("LENGTHUNIT") {
+            if unit.arg(1).as_enum() != Some(kind) {
                 continue;
             }
             match unit.name.as_str() {
                 "IFCSIUNIT" => return si_prefix(unit.arg(2).as_enum()),
-                "IFCCONVERSIONBASEDUNIT" => {
+                "IFCCONVERSIONBASEDUNIT" | "IFCCONVERSIONBASEDUNITWITHOFFSET" => {
                     let Some(measure) = f.deref(unit.arg(3)) else { continue };
                     let value = measure.arg(0).as_f64().unwrap_or(1.0);
                     let base = f.deref(measure.arg(1)).map_or(1.0, |u| si_prefix(u.arg(2).as_enum()));
                     let factor = value * base;
                     if factor.is_finite() && factor > 0.0 {
                         return factor;
+                    }
+                    // Degrees without a usable conversion factor.
+                    if kind == "PLANEANGLEUNIT"
+                        && unit.arg(2).as_str().is_some_and(|n| n.eq_ignore_ascii_case("degree"))
+                    {
+                        return std::f64::consts::PI / 180.0;
                     }
                 }
                 _ => {}
@@ -512,8 +449,12 @@ impl<'a> Importer<'a> {
                     styles.push(s);
                 }
             }
-            if let Some(color) = styles.iter().filter(|s| s.name == "IFCSURFACESTYLE").find_map(|s| color_of_style(s)) {
+            let surface = styles.iter().filter(|s| s.name == "IFCSURFACESTYLE");
+            if let Some((style, color)) = surface.clone().find_map(|s| Some((s, color_of_style(s)?))) {
                 self.item_colors.insert(item, color);
+                if let Some(name) = style.arg(0).as_str().filter(|n| !n.trim().is_empty()) {
+                    self.item_styles.insert(item, name.to_string());
+                }
             }
         }
     }
@@ -522,7 +463,7 @@ impl<'a> Importer<'a> {
         let f = self.f;
         let mut storeys: Vec<(u32, String, f64)> = Vec::new();
         for (id, e) in f.of_type("IFCBUILDINGSTOREY") {
-            let world = self.placement(e.arg(5), 0);
+            let world = self.g.placement(e.arg(5));
             let attr = e.arg(9).as_f64().map(|z| z * self.scale);
             let z = world.translation.z;
             // Prefer the placement (consistent with element coordinates).
@@ -795,252 +736,6 @@ impl<'a> Importer<'a> {
         e.arg(7).as_str().unwrap_or_default().to_string()
     }
 
-    // --- Geometry ---
-
-    fn point(&self, param: &Param) -> Option<DVec3> {
-        let e = self.f.deref(param)?;
-        if e.name != "IFCCARTESIANPOINT" {
-            return None;
-        }
-        let c: Vec<f64> = e.arg(0).as_list().iter().filter_map(Param::as_f64).collect();
-        let p = match c.as_slice() {
-            [x, y] => DVec3::new(*x, *y, 0.0),
-            [x, y, z, ..] => DVec3::new(*x, *y, *z),
-            _ => return None,
-        } * self.scale;
-        p.is_finite().then_some(p)
-    }
-
-    fn direction(&self, param: &Param) -> Option<DVec3> {
-        let e = self.f.deref(param)?;
-        if e.name != "IFCDIRECTION" {
-            return None;
-        }
-        let c: Vec<f64> = e.arg(0).as_list().iter().filter_map(Param::as_f64).collect();
-        let d = match c.as_slice() {
-            [x, y] => DVec3::new(*x, *y, 0.0),
-            [x, y, z, ..] => DVec3::new(*x, *y, *z),
-            _ => return None,
-        };
-        d.try_normalize()
-    }
-
-    /// `IfcAxis2Placement3D` / `2D` as an affine transform (identity if unset).
-    fn axis_placement(&self, param: &Param) -> DAffine3 {
-        let Some(e) = self.f.deref(param) else { return DAffine3::IDENTITY };
-        let origin = self.point(e.arg(0)).unwrap_or(DVec3::ZERO);
-        match e.name.as_str() {
-            "IFCAXIS2PLACEMENT3D" => frame(self.direction(e.arg(1)), self.direction(e.arg(2)), origin),
-            "IFCAXIS2PLACEMENT2D" => frame(None, self.direction(e.arg(1)), origin),
-            _ => DAffine3::from_translation(origin),
-        }
-    }
-
-    /// World transform of an `IfcLocalPlacement` chain.
-    fn placement(&self, param: &Param, depth: usize) -> DAffine3 {
-        if depth > MAX_PLACEMENT_DEPTH {
-            return DAffine3::IDENTITY;
-        }
-        let Some(e) = self.f.deref(param) else { return DAffine3::IDENTITY };
-        if e.name != "IFCLOCALPLACEMENT" {
-            return DAffine3::IDENTITY;
-        }
-        let parent = if e.arg(0).as_ref().is_some() { self.placement(e.arg(0), depth + 1) } else { DAffine3::IDENTITY };
-        parent * self.axis_placement(e.arg(1))
-    }
-
-    /// 2D placement of a profile: origin and X axis.
-    fn placement2(&self, param: &Param) -> (DVec2, DVec2) {
-        let xf = self.axis_placement(param);
-        (xf.translation.truncate(), xf.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X))
-    }
-
-    fn curve_points(&self, param: &Param, depth: usize) -> Vec<DVec2> {
-        let f = self.f;
-        let Some(e) = f.deref(param) else { return Vec::new() };
-        if depth > MAX_ITEM_DEPTH {
-            return Vec::new();
-        }
-        match e.name.as_str() {
-            "IFCPOLYLINE" => e.arg(0).as_list().iter().filter_map(|p| self.point(p)).map(|p| p.truncate()).collect(),
-            "IFCINDEXEDPOLYCURVE" => {
-                let Some(list) = f.deref(e.arg(0)) else { return Vec::new() };
-                list.arg(0)
-                    .as_list()
-                    .iter()
-                    .filter_map(|c| {
-                        let c: Vec<f64> = c.as_list().iter().filter_map(Param::as_f64).collect();
-                        (c.len() >= 2).then(|| DVec2::new(c[0], c[1]) * self.scale)
-                    })
-                    .collect()
-            }
-            "IFCCOMPOSITECURVE" => e
-                .arg(0)
-                .as_list()
-                .iter()
-                .filter_map(|s| f.deref(s))
-                .flat_map(|seg| self.curve_points(seg.arg(2), depth + 1))
-                .collect(),
-            _ => Vec::new(),
-        }
-    }
-
-    fn profile(&self, param: &Param, depth: usize) -> Option<Profile> {
-        let e = self.f.deref(param)?;
-        if depth > MAX_ITEM_DEPTH {
-            return None;
-        }
-        let len = |i: usize| e.arg(i).as_f64().map(|v| v * self.scale).filter(|v| v.is_finite() && *v > 0.0);
-        let rect = |center: DVec2, x: DVec2, w: f64, h: f64| {
-            let y = x.perp();
-            let pts = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
-                .iter()
-                .map(|(a, b)| center + x * (a * w / 2.0) + y * (b * h / 2.0))
-                .collect();
-            Profile { pts, kind: ProfileKind::Rect { center, x, w, h } }
-        };
-        let name = e.name.as_str();
-        if name.starts_with("IFCRECTANGLE") {
-            let (center, x) = self.placement2(e.arg(2));
-            return Some(rect(center, x, len(3)?, len(4)?));
-        }
-        if name.starts_with("IFCCIRCLE") {
-            let (center, _) = self.placement2(e.arg(2));
-            let r = len(3)?;
-            let pts =
-                (0..24).map(|i| center + DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU) * r).collect();
-            return Some(Profile { pts, kind: ProfileKind::Circle { center, r } });
-        }
-        match name {
-            "IFCARBITRARYCLOSEDPROFILEDEF" | "IFCARBITRARYPROFILEDEFWITHVOIDS" => {
-                let pts = clean_polygon(self.curve_points(e.arg(2), 0));
-                (pts.len() >= 3).then_some(Profile { pts, kind: ProfileKind::Poly })
-            }
-            // Steel sections: their bounding rectangle.
-            "IFCISHAPEPROFILEDEF" | "IFCASYMMETRICISHAPEPROFILEDEF" => {
-                let (center, x) = self.placement2(e.arg(2));
-                Some(rect(center, x, len(3)?, len(4)?))
-            }
-            "IFCLSHAPEPROFILEDEF"
-            | "IFCTSHAPEPROFILEDEF"
-            | "IFCUSHAPEPROFILEDEF"
-            | "IFCCSHAPEPROFILEDEF"
-            | "IFCZSHAPEPROFILEDEF" => {
-                let (center, x) = self.placement2(e.arg(2));
-                Some(rect(center, x, len(4)?, len(3)?))
-            }
-            "IFCDERIVEDPROFILEDEF" => self.profile(e.arg(2), depth + 1),
-            _ => None,
-        }
-    }
-
-    /// Resolve a representation item into world solids.
-    fn items(&self, param: &Param, xf: DAffine3, depth: usize, out: &mut Vec<Solid>) {
-        let f = self.f;
-        let Some(e) = f.deref(param) else { return };
-        if depth > MAX_ITEM_DEPTH {
-            return;
-        }
-        match e.name.as_str() {
-            "IFCEXTRUDEDAREASOLID" | "IFCEXTRUDEDAREASOLIDTAPERED" => {
-                let Some(profile) = self.profile(e.arg(0), 0) else { return };
-                let position = xf * self.axis_placement(e.arg(1));
-                let Some(depth) = e.arg(3).as_f64().map(|d| d * self.scale).filter(|d| d.is_finite() && *d > 0.0)
-                else {
-                    return;
-                };
-                let dir = self.direction(e.arg(2)).unwrap_or(DVec3::Z);
-                let vector = position.transform_vector3(dir * depth);
-                let mut points = Vec::with_capacity(profile.pts.len() * 2);
-                for p in &profile.pts {
-                    let b = position.transform_point3(p.extend(0.0));
-                    points.push(b);
-                    points.push(b + vector);
-                }
-                out.push(Solid { extrusion: Some(Extrusion { profile, xf: position, vector }), points });
-            }
-            "IFCBOOLEANCLIPPINGRESULT" | "IFCBOOLEANRESULT" => self.items(e.arg(1), xf, depth + 1, out),
-            "IFCMAPPEDITEM" => {
-                let Some(source) = f.deref(e.arg(0)) else { return };
-                let origin = self.axis_placement(source.arg(0));
-                let target = self.operator(e.arg(1));
-                let Some(rep) = f.deref(source.arg(1)) else { return };
-                for item in rep.arg(3).as_list() {
-                    self.items(item, xf * target * origin, depth + 1, out);
-                }
-            }
-            "IFCFACETEDBREP" | "IFCFACETEDBREPWITHVOIDS" => {
-                let mut points = Vec::new();
-                self.shell_points(e.arg(0), xf, &mut points);
-                if !points.is_empty() {
-                    out.push(Solid { extrusion: None, points });
-                }
-            }
-            "IFCSHELLBASEDSURFACEMODEL" => {
-                let mut points = Vec::new();
-                for shell in e.arg(0).as_list() {
-                    self.shell_points(shell, xf, &mut points);
-                }
-                if !points.is_empty() {
-                    out.push(Solid { extrusion: None, points });
-                }
-            }
-            "IFCPOLYGONALFACESET" | "IFCTRIANGULATEDFACESET" => {
-                let Some(list) = f.deref(e.arg(0)) else { return };
-                let points: Vec<DVec3> = list
-                    .arg(0)
-                    .as_list()
-                    .iter()
-                    .filter_map(|c| {
-                        let c: Vec<f64> = c.as_list().iter().filter_map(Param::as_f64).collect();
-                        (c.len() >= 3).then(|| xf.transform_point3(DVec3::new(c[0], c[1], c[2]) * self.scale))
-                    })
-                    .collect();
-                if !points.is_empty() {
-                    out.push(Solid { extrusion: None, points });
-                }
-            }
-            "IFCBOUNDINGBOX" => {
-                let Some(corner) = self.point(e.arg(0)) else { return };
-                let size = DVec3::new(
-                    e.arg(1).as_f64().unwrap_or(0.0),
-                    e.arg(2).as_f64().unwrap_or(0.0),
-                    e.arg(3).as_f64().unwrap_or(0.0),
-                ) * self.scale;
-                let points = (0..8)
-                    .map(|i| {
-                        let pick = DVec3::new((i & 1) as f64, ((i >> 1) & 1) as f64, ((i >> 2) & 1) as f64);
-                        xf.transform_point3(corner + size * pick)
-                    })
-                    .collect();
-                out.push(Solid { extrusion: None, points });
-            }
-            _ => {}
-        }
-    }
-
-    fn shell_points(&self, param: &Param, xf: DAffine3, out: &mut Vec<DVec3>) {
-        let f = self.f;
-        let Some(shell) = f.deref(param) else { return };
-        for face in shell.arg(0).as_list().iter().filter_map(|x| f.deref(x)) {
-            for bound in face.arg(0).as_list().iter().filter_map(|x| f.deref(x)) {
-                let Some(lp) = f.deref(bound.arg(0)) else { continue };
-                out.extend(lp.arg(0).as_list().iter().filter_map(|p| self.point(p)).map(|p| xf.transform_point3(p)));
-            }
-        }
-    }
-
-    /// `IfcCartesianTransformationOperator3D` as an affine transform.
-    fn operator(&self, param: &Param) -> DAffine3 {
-        let Some(e) = self.f.deref(param) else { return DAffine3::IDENTITY };
-        let x = self.direction(e.arg(0)).unwrap_or(DVec3::X);
-        let y = self.direction(e.arg(1)).unwrap_or(DVec3::Y);
-        let origin = self.point(e.arg(2)).unwrap_or(DVec3::ZERO);
-        let scale = e.arg(3).as_f64().filter(|s| s.is_finite() && *s > 0.0).unwrap_or(1.0);
-        let z = self.direction(e.arg(4)).unwrap_or_else(|| x.cross(y).try_normalize().unwrap_or(DVec3::Z));
-        affine(x * scale, y * scale, z * scale, origin)
-    }
-
     /// Body solids and axis of a product placed at `world`.
     fn body(&self, e: &Entity, world: DAffine3) -> Body {
         let f = self.f;
@@ -1056,8 +751,8 @@ impl<'a> Importer<'a> {
                     .arg(3)
                     .as_list()
                     .iter()
-                    .flat_map(|c| self.curve_points(c, 0))
-                    .map(|p| world.transform_point3(p.extend(0.0)).truncate())
+                    .flat_map(|c| self.g.curve(c, 0))
+                    .map(|p| world.transform_point3(p).truncate())
                     .collect();
                 if let (Some(a), Some(b)) = (pts.first(), pts.last())
                     && a.distance(*b) > 1e-6
@@ -1073,7 +768,7 @@ impl<'a> Importer<'a> {
             };
             if usable {
                 for item in rep.arg(3).as_list() {
-                    self.items(item, world, 0, &mut body.solids);
+                    self.g.items(item, world, &mut body.solids);
                 }
             }
         }
@@ -1081,7 +776,7 @@ impl<'a> Importer<'a> {
             // Last resort: a bounding box representation.
             for rep in reps.iter().filter(|r| id(r) == "box") {
                 for item in rep.arg(3).as_list() {
-                    self.items(item, world, 0, &mut body.solids);
+                    self.g.items(item, world, &mut body.solids);
                 }
             }
         }
@@ -1089,7 +784,7 @@ impl<'a> Importer<'a> {
     }
 
     fn product(&self, e: &Entity) -> (DAffine3, Body) {
-        let world = self.placement(e.arg(5), 0);
+        let world = self.g.placement(e.arg(5));
         let body = self.body(e, world);
         (world, body)
     }
@@ -1127,6 +822,13 @@ impl<'a> Importer<'a> {
             (u0, u1, v0, v1) = along(dir);
         }
         let thickness = v1 - v0;
+        let on_a_face = |p: &DVec2| {
+            let v = (*p - origin).dot(dir.perp());
+            (v - v0).abs() < 1e-3 || (v - v1).abs() < 1e-3
+        };
+        if !footprint.iter().all(on_a_face) {
+            return false;
+        }
         let n = dir.perp() * ((v0 + v1) / 2.0);
         let (start, end) = match body.axis {
             // The axis keeps its own length (body ends include joins).
@@ -1255,12 +957,14 @@ impl<'a> Importer<'a> {
         true
     }
 
-    /// Footprint, z range and vertical thickness of a sketched body.
-    fn sketch(body: &Body) -> Option<(Vec<DVec2>, f64, f64, f64)> {
+    /// Footprint, z range and vertical thickness of a body that is one
+    /// vertical extrusion; with `approximate`, other bodies give their hull.
+    fn sketch(body: &Body, approximate: bool) -> Option<(Vec<DVec2>, f64, f64, f64)> {
         let (z0, z1) = body.z_range()?;
-        let (footprint, thickness) = match body.extrusion(true) {
+        let (footprint, thickness) = match body.sole_extrusion().filter(|e| e.is_vertical()) {
             Some(ex) => (ex.footprint(), ex.vector.z.abs()),
-            None => (convex_hull(&body.points().map(|p| p.truncate()).collect::<Vec<_>>()), z1 - z0),
+            None if approximate => (convex_hull(&body.points().map(|p| p.truncate()).collect::<Vec<_>>()), z1 - z0),
+            None => return None,
         };
         let footprint = clean_polygon(footprint);
         (footprint.len() >= 3 && polygon::area(&footprint) > 1e-4).then_some((footprint, z0, z1, thickness))
@@ -1269,7 +973,7 @@ impl<'a> Importer<'a> {
     fn import_slab(&mut self, id: u32, e: &Entity) -> bool {
         let kind = e.arg(8).as_enum().unwrap_or("NOTDEFINED");
         let (_, body) = self.product(e);
-        let Some((boundary, z0, z1, thickness)) = Self::sketch(&body) else { return false };
+        let Some((boundary, z0, z1, thickness)) = Self::sketch(&body, false) else { return false };
         if kind == "ROOF" {
             return self.add_roof(id, e, boundary, z0, thickness, RoofShape::Flat);
         }
@@ -1295,7 +999,7 @@ impl<'a> Importer<'a> {
             return false;
         }
         let (_, body) = self.product(e);
-        let Some((boundary, z0, _, thickness)) = Self::sketch(&body) else { return false };
+        let Some((boundary, z0, _, thickness)) = Self::sketch(&body, false) else { return false };
         let (level, elevation) = self.level_for(id, z0);
         let name = self.type_name(id, e);
         let material = self.main_material(id, e);
@@ -1323,7 +1027,7 @@ impl<'a> Importer<'a> {
         let (layers, _) = self.materials(id);
         let layered: f64 = layers.iter().map(|l| l.1).sum();
         let tilted = |ex: &&Extrusion| ex.xf.matrix3.z_axis.try_normalize().is_some_and(|n| n.z.abs() < 0.9999);
-        if let Some(ex) = body.solids.iter().filter_map(|s| s.extrusion.as_ref()).find(tilted) {
+        if let Some(ex) = body.sole_extrusion().filter(tilted) {
             // A sloped profile extruded vertically: the slope runs along the
             // steepest direction of the profile plane.
             let normal = ex.xf.matrix3.z_axis.normalize_or_zero();
@@ -1344,12 +1048,16 @@ impl<'a> Importer<'a> {
             }
             return self.add_roof(id, e, footprint, z0, thickness, shape);
         }
-        if body.extrusion(true).is_some() {
-            let Some((footprint, z0, _, thickness)) = Self::sketch(&body) else { return false };
+        if let Some((footprint, z0, _, thickness)) = Self::sketch(&body, false) {
             return self.add_roof(id, e, footprint, z0, thickness, RoofShape::Flat);
         }
-        // B-rep or other: footprint hull, slope from the rise over the half width.
-        let Some((footprint, z0, z1, _)) = Self::sketch(&body) else { return false };
+        // Pitched roofs as written by this program (one body with the roof
+        // shape named): footprint hull, slope from the rise over the half width.
+        // Other bodies keep their exact geometry as generic objects.
+        if !matches!(predefined, "GABLE_ROOF" | "HIP_ROOF") || body.solids.len() != 1 {
+            return false;
+        }
+        let Some((footprint, z0, z1, _)) = Self::sketch(&body, true) else { return false };
         let thickness = if layered > 0.0 { layered } else { 0.15 };
         let shape = match predefined {
             "GABLE_ROOF" | "HIP_ROOF" => {
@@ -1417,7 +1125,7 @@ impl<'a> Importer<'a> {
     fn import_space(&mut self, id: u32, e: &Entity) -> bool {
         let (world, body) = self.product(e);
         let (z0, z1) = body.z_range().unwrap_or((world.translation.z, world.translation.z));
-        let outline = Self::sketch(&body).map(|s| s.0).unwrap_or_default();
+        let outline = Self::sketch(&body, true).map(|s| s.0).unwrap_or_default();
         // A point inside the outline: its centroid when inside, else the
         // centroid of one of its triangles.
         let position = if outline.len() >= 3 {
@@ -1463,7 +1171,9 @@ impl<'a> Importer<'a> {
 
     fn import_column(&mut self, id: u32, e: &Entity) -> bool {
         let (_, body) = self.product(e);
-        let Some(ex) = body.extrusion(true).cloned() else { return false };
+        let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical() && e.profile.is_simple()).cloned() else {
+            return false;
+        };
         let Some((z0, z1)) = body.z_range() else { return false };
         let (section, center, rotation) = match ex.profile.kind {
             ProfileKind::Circle { center, r } => {
@@ -1513,10 +1223,44 @@ impl<'a> Importer<'a> {
         true
     }
 
-    /// Furniture, fixtures and proxies: pieces in the product's own frame
-    /// (extrusions as profiles, anything else as its bounding box). An
-    /// existing component type with the same name and size is reused, so
-    /// parametric components survive a round trip.
+    /// Any physical object without a native counterpart (or whose geometry
+    /// a native element cannot hold): a component that keeps its IFC class.
+    fn import_generic(&mut self, id: u32, e: &Entity) -> bool {
+        let ok = self.import_component(id, e, kind_of_class(&e.name));
+        if ok {
+            *self.report.generic.entry(crate::schema::display_name(&e.name)).or_default() += 1;
+        }
+        ok
+    }
+
+    /// IFC class, predefined type and object type of a product.
+    fn ifc_class(&self, e: &Entity) -> IfcClass {
+        // Site geometry (terrain) is written back as a geographic element.
+        if e.name == "IFCSITE" {
+            return IfcClass {
+                entity: "IFCGEOGRAPHICELEMENT".into(),
+                predefined: "TERRAIN".into(),
+                object_type: String::new(),
+            };
+        }
+        // Predefined types are read from IFC4 files only (IFC2X3 enumerations differ).
+        let predefined = crate::schema::element_class(&e.name)
+            .and_then(|c| c.predefined)
+            .filter(|_| self.report.schema.starts_with("IFC4"))
+            .and_then(|i| e.arg(i).as_enum())
+            .unwrap_or_default();
+        IfcClass {
+            entity: e.name.clone(),
+            predefined: predefined.to_string(),
+            object_type: e.arg(4).as_str().unwrap_or_default().to_string(),
+        }
+    }
+
+    /// Furniture, fixtures and any other object: pieces in the product's own
+    /// frame (vertical extrusions as profiles, anything else as a fixed mesh),
+    /// colored by their item styles. An existing component type with the
+    /// same name and size is reused, so parametric components survive a
+    /// round trip.
     fn import_component(&mut self, id: u32, e: &Entity, kind: ComponentKind) -> bool {
         let (world, body) = self.product(e);
         if body.solids.is_empty() {
@@ -1528,12 +1272,24 @@ impl<'a> Importer<'a> {
         // Plan frame of the component: origin and rotation in plan, Z up.
         let frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
         let inv = frame.inverse();
-        let material = self.main_material(id, e);
+        let main = self.main_material(id, e);
         let n = |v: f64| literal(v);
+        let base_name = self.type_name(id, e).unwrap_or_else(|| crate::schema::display_name(&e.name));
         let mut items = Vec::new();
         for (i, solid) in body.solids.iter().enumerate() {
-            let name = format!("{} {}", self.type_name(id, e).unwrap_or_else(|| "IFC".into()), i + 1);
-            let shape = match solid.extrusion.as_ref().filter(|ex| ex.is_vertical()) {
+            let name = format!("{base_name} {}", i + 1);
+            let material = match self.item_styles.get(&solid.item).cloned() {
+                Some(style) => {
+                    let color = self.item_colors.get(&solid.item).copied();
+                    self.material(&style, color)
+                }
+                None => main.clone(),
+            };
+            let plain = solid
+                .extrusion
+                .as_ref()
+                .filter(|ex| !solid.clipped && ex.is_vertical() && ex.profile.closed && ex.profile.holes.is_empty());
+            let shape = match plain {
                 Some(ex) => {
                     let pts: Vec<DVec2> =
                         ex.profile.pts.iter().map(|p| inv.transform_point3(ex.plane_point(*p)).truncate()).collect();
@@ -1551,29 +1307,14 @@ impl<'a> Importer<'a> {
                     ComponentShape::Extrusion { points, z: n(z0), height: n(ex.vector.z.abs()) }
                 }
                 None => {
-                    let local: Vec<DVec3> = solid.points.iter().map(|p| inv.transform_point3(*p)).collect();
-                    let Some((lo, hi)) = local.iter().fold(None, |acc: Option<(DVec3, DVec3)>, p| {
-                        Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
-                    }) else {
-                        continue;
-                    };
-                    let size = hi - lo;
-                    if size.min_element() < 1e-4 {
-                        continue;
-                    }
-                    ComponentShape::Box {
-                        x: n(lo.x),
-                        y: n(lo.y),
-                        z: n(lo.z),
-                        width: n(size.x),
-                        depth: n(size.y),
-                        height: n(size.z),
-                    }
+                    let Some(mesh) = local_mesh(&solid.mesh, &inv) else { continue };
+                    mesh
                 }
             };
-            items.push(ComponentItem { name, shape, material: material.clone(), in_plan: true });
+            items.push(ComponentItem { name, shape, material, in_plan: true });
         }
-        let def = ComponentDef { kind, params: Vec::new(), items, ifc: None };
+        let ifc = Some(self.ifc_class(e));
+        let def = ComponentDef { kind, params: Vec::new(), items, ifc };
         let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
         // Instance parameter values written by ConstructCAD.
         let overrides: std::collections::BTreeMap<String, f64> = self
@@ -1592,7 +1333,7 @@ impl<'a> Importer<'a> {
         let check = overrides.clone();
         let (level, elevation) = self.level_for(id, origin.z + lo.z);
         let name = self.type_name(id, e);
-        let fallback = format!("{} {}", e.name.trim_start_matches("IFC").to_lowercase(), id);
+        let fallback = format!("{} {}", crate::schema::display_name(&e.name), id);
         let uid = self.type_uid(id);
         let component = name.clone().unwrap_or_else(|| fallback.clone());
         // Same name and same size: the existing (possibly parametric) type.
@@ -1623,10 +1364,48 @@ impl<'a> Importer<'a> {
         true
     }
 
+    /// Grid axes of an `IfcGrid` as grid lines.
+    fn import_grid(&mut self, id: u32, e: &Entity) {
+        let f = self.f;
+        let world = self.g.placement(e.arg(5));
+        let Some(type_id) = self.p.default_type(Category::Grid).or_else(|| {
+            self.p.ensure_annotation_types();
+            self.p.default_type(Category::Grid)
+        }) else {
+            return;
+        };
+        let (level, _) = self.level_for(id, world.translation.z);
+        for axis in (7..10).flat_map(|i| e.arg(i).as_list().iter()).filter_map(|a| f.deref(a)) {
+            let pts = self.g.curve(axis.arg(1), 0);
+            let (Some(a), Some(b)) = (pts.first(), pts.last()) else { continue };
+            let (mut start, mut end) = (world.transform_point3(*a).truncate(), world.transform_point3(*b).truncate());
+            if axis.arg(2).as_bool() == Some(false) {
+                std::mem::swap(&mut start, &mut end);
+            }
+            if start.distance(end) < 1e-6 || !(start.is_finite() && end.is_finite()) {
+                continue;
+            }
+            let name = axis.arg(0).as_str().unwrap_or_default().to_string();
+            let element = ElementId(self.p.alloc_id());
+            let grid = Grid { start, end, name };
+            let el = Element {
+                id: element,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind: ElementKind::Grid(grid),
+                uid: Uid::default(),
+            };
+            *self.report.imported.entry(Category::Grid).or_default() += 1;
+            self.p.elements.insert(element, el);
+        }
+    }
+
     fn import_beam(&mut self, id: u32, e: &Entity) -> bool {
         let (_, body) = self.product(e);
         let Some((_, z1)) = body.z_range() else { return false };
-        let Some(ex) = body.extrusion(false).cloned() else { return false };
+        let Some(ex) = body.sole_extrusion().filter(|e| e.profile.is_simple()).cloned() else { return false };
         let (center, x, w, h) = ex.profile.rect();
         let (start, end, width, height) = if ex.is_vertical() {
             // Plan rectangle extruded upwards: the long side is the beam.
@@ -1663,6 +1442,38 @@ impl<'a> Importer<'a> {
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
         true
     }
+}
+
+/// A world mesh as a fixed component piece in the frame `inv` maps to.
+fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
+    let mut vertices: Vec<[f64; 3]> = Vec::new();
+    let mut index: HashMap<[i64; 3], u32> = HashMap::new();
+    let mut faces = Vec::with_capacity(mesh.len());
+    for face in mesh {
+        let mut f: Vec<u32> = Vec::with_capacity(face.len());
+        for p in face {
+            let q = inv.transform_point3(*p);
+            if !q.is_finite() {
+                continue;
+            }
+            // Snap to 1/100 mm so shared corners share a vertex.
+            let key = [(q.x * 1e5).round() as i64, (q.y * 1e5).round() as i64, (q.z * 1e5).round() as i64];
+            let i = *index.entry(key).or_insert_with(|| {
+                vertices.push([q.x, q.y, q.z]);
+                (vertices.len() - 1) as u32
+            });
+            if f.last() != Some(&i) {
+                f.push(i);
+            }
+        }
+        if f.len() > 1 && f.first() == f.last() {
+            f.pop();
+        }
+        if f.len() >= 3 {
+            faces.push(f);
+        }
+    }
+    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
 }
 
 /// A number as an expression literal.
@@ -1775,5 +1586,63 @@ END-ISO-10303-21;
         assert_eq!(report.imported.get(&Category::Component), Some(&1));
         assert!(report.skipped.is_empty(), "{:?}", report.skipped);
         assert!(p.views_of(cc_core::ViewCategory::FloorPlan).count() == 1);
+    }
+
+    /// Geometry a hostile file can throw at the importer: cyclic booleans and
+    /// mapped items, out-of-range and negative indices, absurd knot
+    /// multiplicities and angles, empty paths. Nothing may panic or hang.
+    #[test]
+    fn hostile_geometry_is_survived() {
+        let text = "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Hostile',$,$,$,$,$,$);
+#2=IFCLOCALPLACEMENT($,#3);
+#3=IFCAXIS2PLACEMENT3D(#4,$,$);
+#4=IFCCARTESIANPOINT((0.,0.,0.));
+#10=IFCPIPESEGMENT('1',$,'A',$,$,#2,#11,$,.RIGIDSEGMENT.);
+#11=IFCPRODUCTDEFINITIONSHAPE($,$,(#12));
+#12=IFCSHAPEREPRESENTATION($,'Body','X',(#13,#14,#15,#16,#17,#18,#19,#20,#21,#22));
+#13=IFCBOOLEANRESULT(.UNION.,#13,#13);
+#14=IFCMAPPEDITEM(#30,$);
+#30=IFCREPRESENTATIONMAP(#3,#31);
+#31=IFCSHAPEREPRESENTATION($,'Body','X',(#14));
+#15=IFCPOLYGONALFACESET(#32,$,(#33,#34),(0,-5,99999999999));
+#32=IFCCARTESIANPOINTLIST3D(((0.,0.,0.),(1.,0.,0.),(0.,1.,0.)));
+#33=IFCINDEXEDPOLYGONALFACE((1,2,3));
+#34=IFCINDEXEDPOLYGONALFACE((-1,0,1E300));
+#16=IFCSWEPTDISKSOLID(#35,10.,$,$,$);
+#35=IFCBSPLINECURVEWITHKNOTS(3,(#4,#4,#4,#4),.UNSPECIFIED.,.F.,.F.,(1E30,1E30),(0.,1.),.UNSPECIFIED.);
+#17=IFCREVOLVEDAREASOLID(#36,$,#37,1E308);
+#36=IFCCIRCLEPROFILEDEF(.AREA.,$,$,-5.);
+#37=IFCAXIS1PLACEMENT(#4,$);
+#18=IFCEXTRUDEDAREASOLID(#38,$,$,1.);
+#38=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#39);
+#39=IFCCOMPOSITECURVE((#40),.F.);
+#40=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#39);
+#19=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#21,#41);
+#41=IFCHALFSPACESOLID(#42,.T.);
+#42=IFCPLANE($);
+#20=IFCSWEPTDISKSOLID(#43,1.,$,$,$);
+#43=IFCPOLYLINE((#4,#4,#4));
+#21=IFCBLOCK($,1.,1.,1.);
+#22=IFCFACETEDBREP(#44);
+#44=IFCCLOSEDSHELL((#45));
+#45=IFCFACE((#46));
+#46=IFCFACEOUTERBOUND(#47,.T.);
+#47=IFCEDGELOOP((#48));
+#48=IFCORIENTEDEDGE(*,*,#49,.T.);
+#49=IFCEDGECURVE(#50,#50,#51,.T.);
+#50=IFCVERTEXPOINT(#4);
+#51=IFCCIRCLE(#3,0.);
+ENDSEC;
+END-ISO-10303-21;
+";
+        let (p, report) = import(text, Project::from_template()).unwrap();
+        // The block (clipped to nothing or not) still makes an object.
+        assert_eq!(report.imported_total(), p.elements.len());
+        assert!(report.generic.contains_key("IfcPipeSegment") || !report.skipped.is_empty());
     }
 }

@@ -573,6 +573,17 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
     else {
         return;
     };
+    if let Some(ifc) = &def.ifc {
+        section(ui, "comp-ifc", t!("section-ifc"), |ui| {
+            readonly_row(ui, &t!("prop-ifc-class"), cc_ifc::display_name(&ifc.entity));
+            if !ifc.predefined.is_empty() {
+                readonly_row(ui, &t!("prop-ifc-predefined"), ifc.predefined.clone());
+            }
+            if !ifc.object_type.is_empty() {
+                readonly_row(ui, &t!("prop-ifc-object-type"), ifc.object_type.clone());
+            }
+        });
+    }
     let instance: Vec<_> = def.params.iter().filter(|p| p.instance).cloned().collect();
     if !instance.is_empty() {
         section(ui, "comp-params", t!("section-instance-params"), |ui| {

@@ -9,11 +9,14 @@
 //! project (see the `import` module).
 
 mod export;
+mod geometry;
 pub mod guid;
 mod import;
 pub mod parse;
+mod schema;
 pub mod step;
 
 pub use export::{ExportOptions, export, export_to_file};
 pub use guid::guid;
 pub use import::{ImportError, ImportReport, import, import_file};
+pub use schema::display_name;

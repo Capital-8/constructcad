@@ -71,12 +71,12 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 - **Folhas** A0–A4: carimbo com dados do projeto e viewports arrastáveis em escala; exportação vetorial para PDF e SVG (*Arquivo → Exportar PDF/SVG…*), idêntica à tela.
 - **Gerenciar**: informações do projeto, níveis (cada nível novo cria suas plantas) e materiais.
 - **Arquivo `.ccad`**: RON versionado e legível; o salvamento é atômico.
-- **Exportação IFC4** (*Arquivo → Exportar IFC…*): pavimentos, paredes com aberturas, portas, janelas, pisos, forros, telhados, estrutura e componentes como sólidos extrudados, com tipos, camadas de materiais, cores e quantitativos. Gerada pelo escritor STEP do próprio ConstructCAD, sem bibliotecas IFC de terceiros.
-- **Importação IFC** (*Arquivo → Importar IFC…*, IFC2X3 e IFC4): pavimentos viram níveis; paredes, portas, janelas, lajes, forros, telhados, ambientes, pilares, vigas, mobiliário e louças viram elementos nativos com tipos (existentes ou novos), materiais e cores. Lida pelo leitor STEP do próprio ConstructCAD; produtos não suportados são contados e ignorados.
+- **Exportação IFC4** (*Arquivo → Exportar IFC…*): pavimentos, paredes com aberturas, portas, janelas, pisos, forros, telhados, estrutura e componentes como sólidos extrudados (objetos importados como conjuntos de faces na classe original), com tipos, camadas de materiais, cores e quantitativos. Gerada pelo escritor STEP do próprio ConstructCAD, sem bibliotecas IFC de terceiros.
+- **Importação IFC** (*Arquivo → Importar IFC…*, IFC2X3 e IFC4) sem ignorar classes: pavimentos viram níveis e eixos viram eixos; paredes, portas, janelas, lajes, forros, telhados, ambientes, pilares e vigas viram elementos nativos com tipos (existentes ou novos), materiais e cores sempre que um elemento nativo representa a geometria exatamente. Todo outro objeto físico — escadas, guarda-corpos, perfis, chapas, fachadas-cortina, tubos e conexões de instalações, terreno, classes de outros esquemas — chega como componente genérico que mantém sua classe IFC, tipo predefinido e geometria exata, e é exportado de volta na mesma classe. A geometria é lida pelo motor do próprio ConstructCAD: extrusões (com vazios), revoluções, varreduras de disco e de perfil, primitivas e booleanas CSG, recortes por semiespaço, B-reps facetados e avançados, conjuntos de faces, itens mapeados, todos os perfis paramétricos e curvas com arcos, cônicas e B-splines.
 
 ## Vindo do Revit?
 
-O ConstructCAD não lê arquivos `.rvt`. Para trazer um modelo do Revit, exporte-o para IFC no próprio Revit (*File → Export → IFC*, IFC4 ou IFC2x3) e abra o arquivo em *Arquivo → Importar IFC…*. Pavimentos, paredes, portas, janelas, lajes, forros, telhados, ambientes, pilares e vigas chegam como elementos nativos e editáveis, com seus tipos e materiais; a mensagem da importação informa o que foi ignorado.
+O ConstructCAD não lê arquivos `.rvt`. Para trazer um modelo do Revit, exporte-o para IFC no próprio Revit (*File → Export → IFC*, IFC4 ou IFC2x3) e abra o arquivo em *Arquivo → Importar IFC…*. Pavimentos, paredes, portas, janelas, lajes, forros, telhados, ambientes, pilares e vigas chegam como elementos nativos e editáveis, com seus tipos e materiais; todo o resto chega como objetos genéricos com sua classe IFC e geometria, e a mensagem da importação informa quantos.
 
 Quem não tem o Revit pode usar ferramentas independentes de terceiros que convertem `.rvt` para IFC; verifique por conta própria a cobertura e a licença delas. O ConstructCAD não as inclui nem as endossa.
 
@@ -139,7 +139,7 @@ python scripts/validate_ifc.py casa_simples.ifc
 ## Próximos passos
 
 - Componentes em série, aninhados e hospedados (em paredes e forros).
-- Importação IFC de escadas, guarda-corpos, eixos e geometria livre.
+- Importação nativa (editável) de escadas e guarda-corpos; aberturas recortadas em objetos genéricos importados.
 - Arquitetura em que tudo é um comando (scripts e macros).
 - Texturas de materiais.
 

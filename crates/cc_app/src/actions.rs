@@ -405,6 +405,10 @@ fn import_ifc(state: &mut AppState) {
             } else {
                 t!("msg-imported-skipped", "path" => path.display(), "count" => report.imported_total(), "skipped" => skipped)
             };
+            let generic: usize = report.generic.values().sum();
+            if generic > 0 {
+                state.message = format!("{} {}", state.message, t!("msg-imported-generic", "count" => generic));
+            }
         }
         Ok(Err(err)) => {
             let error = match err {
