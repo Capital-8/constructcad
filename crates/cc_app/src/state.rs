@@ -247,20 +247,22 @@ impl AppState {
         if self.selection.is_empty() {
             return;
         }
-        let (ids, pinned): (Vec<_>, Vec<_>) =
-            self.selection.iter().copied().partition(|id| !self.session.doc.project.is_pinned(*id));
-        if ids.is_empty() {
-            self.message = crate::t!("msg-pinned-skipped", "count" => pinned.len());
-            return;
-        }
-        let n = ids.len();
-        self.session.doc.edit(crate::t!("tx-delete"), |e| {
-            for id in ids {
-                e.remove_element(id);
+        let ids = self.selection.iter().map(|i| i.0).collect();
+        match self.session.run(cc_engine::commands::modify::ElementsDelete { ids }) {
+            Ok(out) => {
+                let count = |k: &str| out[k].as_array().map_or(0, Vec::len);
+                let (deleted, pinned) = (count("deleted"), count("pinned_skipped"));
+                self.message = if deleted == 0 {
+                    crate::t!("msg-pinned-skipped", "count" => pinned)
+                } else {
+                    crate::t!("msg-deleted", "count" => deleted)
+                };
+                if deleted > 0 {
+                    self.selection.clear();
+                }
             }
-        });
-        self.selection.clear();
-        self.message = crate::t!("msg-deleted", "count" => n);
+            Err(e) => self.message = e.message,
+        }
     }
 
     /// Create an element in one transaction and select it (test setup; the

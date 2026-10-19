@@ -8,7 +8,7 @@ use cc_core::{
     Category, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId, ViewKind,
 };
 use cc_engine::Ref;
-use cc_engine::commands::{create, views};
+use cc_engine::commands::{create, modify as modify_cmd, views};
 use cc_engine::default_top;
 pub use cc_engine::walls_loop;
 use cc_geom::{ModelGeometry, polygon};
@@ -1727,10 +1727,9 @@ fn select(
         temp_dimension(painter, xf, fixed, s.point, None, None, 0.0);
         if resp.drag_stopped() {
             state.interaction.drag = None;
-            let result = state.session.doc.edit(t!("tx-modify"), |e| e.move_endpoint(id, at_start, s.point));
-            if result.is_err() {
-                state.message = t!("msg-degenerate");
-            }
+            let end = if at_start { "start" } else { "end" };
+            let command = modify_cmd::ElementMoveEnd { id: id.0, end: end.into(), point: s.point.to_array() };
+            crate::actions::run_command(state, command);
         }
         return;
     }
@@ -1806,35 +1805,87 @@ fn select(
     }
 }
 
-/// Translate elements; hosted elements slide along their host unless it moves too.
-pub fn move_elements(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
-    transform_selection(state, ids, &cc_core::PlanTransform::translate(delta), t!("tx-move"));
+fn raw_ids(ids: &[ElementId]) -> Vec<u64> {
+    ids.iter().map(|i| i.0).collect()
 }
 
-/// Move, rotate or mirror `ids` in one undo step (walls take their openings).
-pub fn transform_selection(state: &mut AppState, ids: &[ElementId], t: &cc_core::PlanTransform, name: String) {
-    if t.is_identity() {
-        return;
-    }
-    // Pinned elements stay where they are.
-    let free: Vec<ElementId> = ids.iter().copied().filter(|id| !state.project().is_pinned(*id)).collect();
-    let pinned = ids.len() - free.len();
+fn ids_of(v: &serde_json::Value) -> Vec<ElementId> {
+    v.as_array().map(|a| a.iter().filter_map(serde_json::Value::as_u64).map(ElementId).collect()).unwrap_or_default()
+}
+
+/// After a move, rotate or mirror: tell how many pinned elements stayed.
+fn note_pinned(state: &mut AppState, out: &serde_json::Value) {
+    let pinned = ids_of(&out["pinned_skipped"]).len();
     if pinned > 0 {
         state.message = t!("msg-pinned-skipped", "count" => pinned);
     }
-    let ids = free.as_slice();
-    state.session.doc.edit(name, |e| e.transform_elements(ids, t));
+}
+
+/// Translate elements; hosted elements slide along their host unless it moves too.
+pub fn move_elements(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
+    let command = modify_cmd::ElementsMove { ids: raw_ids(ids), delta: delta.to_array() };
+    if let Some(out) = crate::actions::run_command(state, command) {
+        note_pinned(state, &out);
+    }
+}
+
+/// Copy elements by `delta`, `count` times (an array); the copies are selected and returned.
+pub fn copy_elements(state: &mut AppState, ids: &[ElementId], delta: DVec2, count: u32) -> Vec<ElementId> {
+    let command = modify_cmd::ElementsCopy { ids: raw_ids(ids), delta: delta.to_array(), count: Some(count) };
+    let created = crate::actions::run_command(state, command).map(|o| ids_of(&o["created"])).unwrap_or_default();
+    state.selection = created.iter().copied().collect();
+    created
 }
 
 /// Copy elements by `delta`; hosted elements follow copied hosts.
 pub fn duplicate(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
-    copy_transformed(state, ids, &[cc_core::PlanTransform::translate(delta)], t!("tx-copy"));
+    copy_elements(state, ids, delta, 1);
 }
 
-/// Copy `ids` once per transform and select the copies.
-pub fn copy_transformed(state: &mut AppState, ids: &[ElementId], transforms: &[cc_core::PlanTransform], name: String) {
-    let new_ids = state.session.doc.edit(name, |e| e.copy_elements(ids, transforms));
-    state.selection = new_ids.into_iter().collect();
+/// Rotate (or copy rotated) by `angle` radians about `center`; returns the
+/// elements rotated or created (copies are selected).
+pub fn rotate_elements(
+    state: &mut AppState,
+    ids: &[ElementId],
+    center: DVec2,
+    angle: f64,
+    copy: bool,
+) -> Vec<ElementId> {
+    let command = modify_cmd::ElementsRotate {
+        ids: raw_ids(ids),
+        angle: angle.to_degrees(),
+        center: Some(center.to_array()),
+        copy,
+    };
+    let Some(out) = crate::actions::run_command(state, command) else { return Vec::new() };
+    if copy {
+        let created = ids_of(&out["created"]);
+        state.selection = created.iter().copied().collect();
+        created
+    } else {
+        note_pinned(state, &out);
+        ids_of(&out["changed"])
+    }
+}
+
+/// Mirror (or copy mirrored) across the line through `a` and `b`; returns the
+/// elements mirrored or created (copies are selected).
+pub fn mirror_elements(state: &mut AppState, ids: &[ElementId], a: DVec2, b: DVec2, copy: bool) -> Vec<ElementId> {
+    let command = modify_cmd::ElementsMirror {
+        ids: raw_ids(ids),
+        axis: Some([a.to_array(), b.to_array()]),
+        axis_element: None,
+        copy: Some(copy),
+    };
+    let Some(out) = crate::actions::run_command(state, command) else { return Vec::new() };
+    if copy {
+        let created = ids_of(&out["created"]);
+        state.selection = created.iter().copied().collect();
+        created
+    } else {
+        note_pinned(state, &out);
+        ids_of(&out["changed"])
+    }
 }
 
 /// Space on a selection: components and columns turn 90° about their
@@ -1842,27 +1893,11 @@ pub fn copy_transformed(state: &mut AppState, ids: &[ElementId], transforms: &[c
 /// Returns whether anything changed (one undo step).
 pub fn rotate_selection(state: &mut AppState) -> bool {
     let ids: Vec<ElementId> = state.selection.iter().copied().collect();
-    let turnable = ids.iter().any(|id| {
-        matches!(
-            state.project().element(*id).map(|e| &e.kind),
-            Some(ElementKind::Component(_) | ElementKind::Column(_) | ElementKind::Door(_) | ElementKind::Window(_))
-        )
-    });
-    if !turnable {
+    if ids.is_empty() {
         return false;
     }
-    state.session.doc.edit(t!("tx-rotate"), |e| {
-        for id in ids {
-            let Some(el) = e.element_mut(id) else { continue };
-            match &mut el.kind {
-                ElementKind::Component(c) => c.rotation_deg = (c.rotation_deg + 90.0).rem_euclid(360.0),
-                ElementKind::Column(c) => c.rotation_deg = (c.rotation_deg + 90.0).rem_euclid(360.0),
-                ElementKind::Door(h) | ElementKind::Window(h) => h.flip_facing = !h.flip_facing,
-                _ => {}
-            }
-        }
-    });
-    true
+    let out = state.session.run(modify_cmd::ElementsTurn { ids: raw_ids(&ids) });
+    out.is_ok_and(|o| !ids_of(&o["changed"]).is_empty())
 }
 
 #[cfg(test)]

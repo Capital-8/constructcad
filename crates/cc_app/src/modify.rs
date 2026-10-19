@@ -8,6 +8,7 @@ use crate::state::AppState;
 use crate::t;
 use crate::tools::{Tool, draw_snap, label, snap_at, temp_dimension};
 use cc_core::{ElementId, ElementKind, LevelId, PlanTransform};
+use cc_engine::commands::modify as cmd;
 use cc_views::{Drawing2D, Prim, format};
 use egui::{Key, Painter, Response, Stroke, Ui};
 use glam::DVec2;
@@ -192,11 +193,11 @@ fn base_target(
     state.typed.clear();
     match tool {
         Tool::Move => {
-            crate::tools::transform_selection(state, &ids, &step, t!("tx-move"));
+            crate::tools::move_elements(state, &ids, p - a);
             finish(state, ids);
         }
         Tool::Copy => {
-            crate::tools::copy_transformed(state, &ids, &[step], t!("tx-copy"));
+            crate::tools::copy_elements(state, &ids, p - a, 1);
             if state.modify.multiple {
                 // Keep copying the same selection from the same base point.
                 state.interaction.targets = ids;
@@ -207,7 +208,7 @@ fn base_target(
             }
         }
         _ => {
-            crate::tools::copy_transformed(state, &ids, &steps, t!("tx-array"));
+            crate::tools::copy_elements(state, &ids, p - a, count - 1);
             let mut all = ids;
             all.extend(state.selection.iter().copied());
             finish(state, all);
@@ -271,15 +272,9 @@ fn rotate(
 /// Rotate (or copy rotated) by `angle` radians about `center`, and finish.
 pub fn apply_rotation(state: &mut AppState, targets: &BTreeSet<ElementId>, center: DVec2, angle: f64) {
     let ids: Vec<ElementId> = targets.iter().copied().collect();
-    let t = PlanTransform::rotate_about(center, angle);
-    if state.modify.rotate_copy {
-        crate::tools::copy_transformed(state, &ids, &[t], t!("tx-rotate"));
-        let copies: Vec<ElementId> = state.selection.iter().copied().collect();
-        finish(state, copies);
-    } else {
-        crate::tools::transform_selection(state, &ids, &t, t!("tx-rotate"));
-        finish(state, ids);
-    }
+    let copy = state.modify.rotate_copy;
+    let result = crate::tools::rotate_elements(state, &ids, center, angle, copy);
+    finish(state, if copy { result } else { ids });
 }
 
 /// The line of a model element usable as a mirror axis (walls, grids, beams).
@@ -339,14 +334,9 @@ fn mirror(
     paint_ghost(painter, xf, drawing, targets, &t);
     if resp.clicked() {
         let ids: Vec<ElementId> = targets.iter().copied().collect();
-        if state.modify.mirror_copy {
-            crate::tools::copy_transformed(state, &ids, &[t], t!("tx-mirror"));
-            let copies: Vec<ElementId> = state.selection.iter().copied().collect();
-            finish(state, copies);
-        } else {
-            crate::tools::transform_selection(state, &ids, &t, t!("tx-mirror"));
-            finish(state, ids);
-        }
+        let copy = state.modify.mirror_copy;
+        let result = crate::tools::mirror_elements(state, &ids, a, b, copy);
+        finish(state, if copy { result } else { ids });
     }
 }
 
@@ -357,18 +347,9 @@ fn linear_at(state: &AppState, drawing: &Drawing2D, raw: DVec2, tol: f64) -> Opt
     Some((id, line))
 }
 
-fn edit_message(e: cc_core::wall_ops::EditError) -> String {
-    match e {
-        cc_core::wall_ops::EditError::NotLinear => t!("msg-pick-linear"),
-        cc_core::wall_ops::EditError::Parallel => t!("msg-parallel"),
-        cc_core::wall_ops::EditError::Degenerate => t!("msg-degenerate"),
-    }
-}
-
-fn report(state: &mut AppState, result: Result<(), cc_core::wall_ops::EditError>) {
-    if let Err(e) = result {
-        state.message = edit_message(e);
-    }
+/// Run a wall edit; a refusal goes to the status bar.
+fn report<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, command: C) {
+    crate::actions::run_command(state, command);
 }
 
 /// Trim/extend to corner or to a reference, split, offset and align.
@@ -411,18 +392,14 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                     });
                 }
                 (Some(a), Some(pick_a)) if a != id => {
-                    let reference = state.project().element(a).and_then(cc_core::wall_ops::line_of);
-                    let result = match (tool, reference) {
-                        (Tool::TrimCorner, _) => {
-                            state.session.doc.edit(t!("tx-trim"), |e| e.trim_corner(a, pick_a, id, raw))
-                        }
-                        (Tool::Align, Some((r0, r1))) => {
-                            state.session.doc.edit(t!("tx-align"), |e| e.align_to(id, r0, r1))
-                        }
-                        (_, Some((r0, r1))) => state.session.doc.edit(t!("tx-trim"), |e| e.trim_to(id, raw, r0, r1)),
-                        _ => Err(cc_core::wall_ops::EditError::NotLinear),
-                    };
-                    report(state, result);
+                    match tool {
+                        Tool::TrimCorner => report(
+                            state,
+                            cmd::TrimCorner { a: a.0, pick_a: pick_a.to_array(), b: id.0, pick_b: raw.to_array() },
+                        ),
+                        Tool::Align => report(state, cmd::ElementAlign { id: id.0, reference: a.0 }),
+                        _ => report(state, cmd::TrimExtend { id: id.0, pick: raw.to_array(), reference: a.0 }),
+                    }
                     // Trim/extend keeps its reference for more elements.
                     if *tool != Tool::TrimExtend {
                         state.interaction.targets.clear();
@@ -441,8 +418,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
             painter.line_segment([xf.to_screen(p - n), xf.to_screen(p + n)], Stroke::new(2.0, PREVIEW));
             label(painter, xf.to_screen(p), format::length(a.distance(p)));
             if clicked {
-                let result = state.session.doc.edit(t!("tx-split"), |e| e.split(id, p).map(|_| ()));
-                report(state, result);
+                report(state, cmd::ElementSplit { id: id.0, point: p.to_array() });
             }
         }
         Tool::ToggleJoin => {
@@ -450,16 +426,13 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
             let at_start = raw.distance(a) <= raw.distance(b);
             let end = if at_start { a } else { b };
             painter.circle_stroke(xf.to_screen(end), 7.0, Stroke::new(2.0, PREVIEW));
-            if clicked && state.project().element(id).is_some_and(|e| e.as_wall().is_some()) {
-                state.session.doc.edit(t!("tx-wall-join"), |e| {
-                    if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
-                        if at_start {
-                            w.join_start = !w.join_start;
-                        } else {
-                            w.join_end = !w.join_end;
-                        }
-                    }
-                });
+            let joined = match state.project().element(id).map(|e| &e.kind) {
+                Some(ElementKind::Wall(w)) => Some(if at_start { w.join_start } else { w.join_end }),
+                _ => None,
+            };
+            if clicked && let Some(joined) = joined {
+                let end = if at_start { "start" } else { "end" };
+                report(state, cmd::WallJoin { id: id.0, end: end.into(), joined: !joined });
             }
         }
         Tool::Offset => {
@@ -475,8 +448,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                 4.0,
             ));
             if clicked {
-                let result = state.session.doc.edit(t!("tx-offset"), |e| e.offset_copy(id, d).map(|_| ()));
-                report(state, result);
+                report(state, cmd::ElementOffset { id: id.0, distance: d });
             }
         }
         _ => {}
@@ -490,8 +462,9 @@ pub fn set_pinned(state: &mut AppState, pinned: bool) {
         state.message = t!("msg-select-first");
         return;
     }
-    let name = if pinned { t!("tx-pin") } else { t!("tx-unpin") };
-    let n = state.session.doc.edit(name, |e| e.set_pinned(&ids, pinned));
+    let command = cmd::ElementsPin { ids: ids.iter().map(|i| i.0).collect(), pinned };
+    let Some(out) = crate::actions::run_command(state, command) else { return };
+    let n = out["changed"].as_u64().unwrap_or(0);
     state.message = if pinned { t!("msg-pinned", "count" => n) } else { t!("msg-unpinned", "count" => n) };
 }
 

@@ -110,9 +110,9 @@ impl From<cc_core::wall_ops::EditError> for EngineError {
     fn from(e: cc_core::wall_ops::EditError) -> Self {
         use cc_core::wall_ops::EditError as E;
         Self::rejected(match e {
-            E::NotLinear => "the element has no location line",
-            E::Parallel => "the lines are parallel",
-            E::Degenerate => "the result would have no length",
+            E::NotLinear => crate::t!("msg-pick-linear"),
+            E::Parallel => crate::t!("msg-parallel"),
+            E::Degenerate => crate::t!("msg-degenerate"),
         })
     }
 }

@@ -302,3 +302,24 @@ fn dimensions_follow_and_drive_what_they_measure() {
         ErrorCode::InvalidArguments
     );
 }
+
+#[test]
+fn turning_and_pinned_elements() {
+    let mut s = Session::default();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));
+    let door = run(&mut s, "door_create", json!({"wall": wall["id"]}));
+    let column = run(&mut s, "column_create", json!({"position": [3, 3], "rotation": 300}));
+    let out = run(&mut s, "elements_turn", json!({"ids": [door["id"], column["id"], wall["id"]]}));
+    assert_eq!(out["changed"].as_array().unwrap().len(), 2, "walls do not turn");
+    assert_eq!(run(&mut s, "element_get", json!({"id": column["id"]}))["params"]["rotation_deg"], 30.0);
+    assert_eq!(run(&mut s, "element_get", json!({"id": door["id"]}))["params"]["flip_facing"], true);
+    // Pinned elements refuse direct edits and stay out of group ones.
+    run(&mut s, "elements_pin", json!({"ids": [wall["id"]], "pinned": true}));
+    assert_eq!(fails(&mut s, "element_split", json!({"id": wall["id"], "point": [3, 0]})), ErrorCode::Rejected);
+    assert_eq!(
+        fails(&mut s, "element_move_end", json!({"id": wall["id"], "end": "end", "point": [8, 0]})),
+        ErrorCode::Rejected
+    );
+    let moved = run(&mut s, "elements_move", json!({"ids": [wall["id"], column["id"]], "delta": [1, 0]}));
+    assert_eq!(moved["pinned_skipped"], json!([wall["id"]]));
+}

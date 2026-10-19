@@ -13,6 +13,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+/// Refuse to edit a pinned element.
+fn not_pinned(p: &Project, id: ElementId) -> Result<()> {
+    if p.is_pinned(id) { Err(EngineError::rejected(t!("msg-pinned-skipped", "count" => 1))) } else { Ok(()) }
+}
+
 /// Split `ids` into free and pinned elements (pinned ones are not changed).
 fn unpinned(p: &Project, ids: Vec<ElementId>) -> (Vec<ElementId>, Vec<ElementId>) {
     ids.into_iter().partition(|id| !p.is_pinned(*id))
@@ -232,6 +237,7 @@ impl Command for ElementFlip {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
+        not_pinned(s.project(), id)?;
         edit(s, t!("tx-modify"), |e| {
             let h = e
                 .element_mut(id)
@@ -296,6 +302,8 @@ impl Command for TrimCorner {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let (a, b) = (refs::element(s.project(), self.a)?, refs::element(s.project(), self.b)?);
+        not_pinned(s.project(), a)?;
+        not_pinned(s.project(), b)?;
         let (pa, pb) = (point(self.pick_a)?, point(self.pick_b)?);
         edit(s, t!("tx-trim"), |e| Ok(e.trim_corner(a, pa, b, pb)?))?;
         Ok(json!({ "changed": [a.0, b.0] }))
@@ -324,6 +332,7 @@ impl Command for TrimExtend {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
+        not_pinned(s.project(), id)?;
         let (r0, r1) = line(s, self.reference)?;
         let pick = point(self.pick)?;
         edit(s, t!("tx-trim"), |e| Ok(e.trim_to(id, pick, r0, r1)?))?;
@@ -344,6 +353,7 @@ impl Command for ElementSplit {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
+        not_pinned(s.project(), id)?;
         let at = point(self.point)?;
         let new = edit(s, t!("tx-split"), |e| Ok(e.split(id, at)?))?;
         Ok(json!({ "original": id.0, "created": new.0 }))
@@ -382,6 +392,7 @@ impl Command for ElementAlign {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
+        not_pinned(s.project(), id)?;
         let (r0, r1) = line(s, self.reference)?;
         edit(s, t!("tx-align"), |e| Ok(e.align_to(id, r0, r1)?))?;
         Ok(super::created(s, id))
@@ -403,9 +414,55 @@ impl Command for ElementMoveEnd {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
+        not_pinned(s.project(), id)?;
         let start = at_start(&self.end)?;
         let to = point(self.point)?;
         edit(s, t!("tx-modify"), |e| Ok(e.move_endpoint(id, start, to)?))?;
         Ok(super::created(s, id))
+    }
+}
+
+/// Turn elements a quarter: components and columns rotate 90° about their
+/// insertion point; doors and windows flip to the other side of their wall
+/// (the Space key on a selection). Others and pinned elements are left alone.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ElementsTurn {
+    pub ids: Vec<u64>,
+}
+
+impl Command for ElementsTurn {
+    const NAME: &'static str = "elements_turn";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let ids = refs::elements(s.project(), &self.ids)?;
+        let (free, pinned) = unpinned(s.project(), ids);
+        let turnable: Vec<ElementId> = free
+            .into_iter()
+            .filter(|id| {
+                matches!(
+                    s.project().element(*id).map(|e| &e.kind),
+                    Some(
+                        ElementKind::Component(_)
+                            | ElementKind::Column(_)
+                            | ElementKind::Door(_)
+                            | ElementKind::Window(_)
+                    )
+                )
+            })
+            .collect();
+        edit(s, t!("tx-rotate"), |e| {
+            for id in &turnable {
+                let Some(el) = e.element_mut(*id) else { continue };
+                match &mut el.kind {
+                    ElementKind::Component(c) => c.rotation_deg = (c.rotation_deg + 90.0).rem_euclid(360.0),
+                    ElementKind::Column(c) => c.rotation_deg = (c.rotation_deg + 90.0).rem_euclid(360.0),
+                    ElementKind::Door(h) | ElementKind::Window(h) => h.flip_facing = !h.flip_facing,
+                    _ => {}
+                }
+            }
+            Ok(())
+        })?;
+        Ok(json!({ "changed": ids_json(&turnable), "pinned_skipped": ids_json(&pinned) }))
     }
 }

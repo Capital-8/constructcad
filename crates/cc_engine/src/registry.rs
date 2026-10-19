@@ -142,6 +142,7 @@ registry![
     modify::ElementsMirror,
     modify::ElementsPin,
     modify::ElementFlip,
+    modify::ElementsTurn,
     modify::WallJoin,
     modify::TrimCorner,
     modify::TrimExtend,

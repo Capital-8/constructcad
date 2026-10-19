@@ -12,7 +12,7 @@
 use crate::paint::Xf;
 use crate::state::AppState;
 use crate::t;
-use cc_core::{Category, Dimension, DimensionKind, ElementId, ElementKind, PlanTransform, ViewId, ViewKind};
+use cc_core::{Category, Dimension, DimensionKind, ElementId, ElementKind, ViewId, ViewKind};
 use cc_views::{Drawing2D, Prim, format};
 use egui::{Painter, Pos2, Response, Ui};
 use glam::DVec2;
@@ -200,8 +200,7 @@ pub fn apply_text(state: &mut AppState, target: &Target, text: &str) -> Result<(
         Target::Offset { ids, dir, current } => {
             let value = format::parse_length(text).filter(|v| v.is_finite() && *v >= 0.0);
             let value = value.ok_or_else(|| t!("msg-invalid-value"))?;
-            let t = PlanTransform::translate(*dir * (value - current));
-            crate::tools::transform_selection(state, ids, &t, t!("tx-dim-value"));
+            crate::tools::move_elements(state, ids, *dir * (value - current));
             Ok(())
         }
     }

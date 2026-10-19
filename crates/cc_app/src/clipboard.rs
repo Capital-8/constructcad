@@ -227,11 +227,9 @@ pub fn match_type_tool(resp: &Response, painter: &Painter, state: &mut AppState,
     }
     let type_id = from.type_id;
     if to.type_id != type_id {
-        state.session.doc.edit(t!("tx-change-type"), |e| {
-            if let Some(x) = e.element_mut(target) {
-                x.type_id = type_id;
-            }
-        });
+        let command =
+            cc_engine::commands::edit::ElementsSetType { ids: vec![target.0], type_ref: cc_engine::Ref::Id(type_id.0) };
+        crate::actions::run_command(state, command);
     }
 }
 
