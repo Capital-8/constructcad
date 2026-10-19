@@ -225,18 +225,25 @@ fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
 }
 
 /// A ribbon tab title in the top strip.
-fn tab_title(ui: &mut Ui, label: &str, active: bool) -> Response {
-    let family = if active { theme::semibold() } else { egui::FontFamily::Proportional };
+/// Font of a ribbon tab title (semibold when active).
+fn tab_font(active: bool) -> egui::FontId {
+    egui::FontId::new(13.0, if active { theme::semibold() } else { egui::FontFamily::Proportional })
+}
+
+/// A tab title in a cell of `width`, its text centered.
+fn tab_title(ui: &mut Ui, label: &str, active: bool, width: f32) -> Response {
     let color = if active { PALETTE.accent_text } else { PALETTE.text_muted };
-    let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::new(13.0, family), color);
-    let (rect, response) = ui.allocate_exact_size(galley.size() + vec2(20.0, 12.0), Sense::click());
+    let galley = ui.painter().layout_no_wrap(label.to_string(), tab_font(active), color);
+    let (rect, response) = ui.allocate_exact_size(vec2(width, galley.size().y + 12.0), Sense::click());
     if response.hovered() && !active {
         ui.painter().rect_filled(rect.shrink2(vec2(2.0, 3.0)), theme::RADIUS as f32, PALETTE.hover);
     }
+    let text_w = galley.size().x;
     ui.painter().galley(rect.center() - galley.size() / 2.0, galley, color);
     if active {
         let y = rect.bottom() - 1.0;
-        let line = [egui::pos2(rect.left() + 8.0, y), egui::pos2(rect.right() - 8.0, y)];
+        let half = text_w / 2.0 + 4.0;
+        let line = [egui::pos2(rect.center().x - half, y), egui::pos2(rect.center().x + half, y)];
         ui.painter().line_segment(line, Stroke::new(2.0, PALETTE.accent));
     }
     response
@@ -313,19 +320,25 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             state.message = t!("msg-section-hint");
         }
     });
-    // Ribbon tab titles.
+    // Ribbon tab titles, all as wide as the widest (measured bold, as when active).
+    let tabs = [
+        (RibbonTab::File, t!("ribbon-file")),
+        (RibbonTab::Architecture, t!("ribbon-architecture")),
+        (RibbonTab::Structure, t!("ribbon-structure")),
+        (RibbonTab::Modify, t!("ribbon-modify")),
+        (RibbonTab::Annotate, t!("ribbon-annotate")),
+        (RibbonTab::View, t!("ribbon-view")),
+        (RibbonTab::Manage, t!("ribbon-manage")),
+    ];
+    let width = tabs
+        .iter()
+        .map(|(_, label)| ui.painter().layout_no_wrap(label.clone(), tab_font(true), PALETTE.text).size().x)
+        .fold(0.0, f32::max)
+        + 28.0;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        for (tab, label) in [
-            (RibbonTab::File, t!("ribbon-file")),
-            (RibbonTab::Architecture, t!("ribbon-architecture")),
-            (RibbonTab::Structure, t!("ribbon-structure")),
-            (RibbonTab::Modify, t!("ribbon-modify")),
-            (RibbonTab::Annotate, t!("ribbon-annotate")),
-            (RibbonTab::View, t!("ribbon-view")),
-            (RibbonTab::Manage, t!("ribbon-manage")),
-        ] {
-            if tab_title(ui, &label, state.ribbon_tab == tab).clicked() {
+        for (tab, label) in tabs {
+            if tab_title(ui, &label, state.ribbon_tab == tab, width).clicked() {
                 state.ribbon_tab = tab;
             }
         }
