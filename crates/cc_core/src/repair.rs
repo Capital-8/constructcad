@@ -38,7 +38,14 @@ fn element_is_valid(e: &Element) -> bool {
         }
         ElementKind::Room(r) => r.height.is_finite() && r.position.is_finite(),
         ElementKind::Grid(g) => finite_points(&[g.start, g.end]),
-        ElementKind::Dimension(d) => d.offset.is_finite() && finite_points(&[d.a, d.b]),
+        ElementKind::Dimension(d) => {
+            let kind = match d.kind {
+                crate::DimensionKind::Linear { dir } => dir.is_finite() && dir.length() > 1e-9,
+                crate::DimensionKind::Angular { vertex } => vertex.is_finite(),
+                _ => true,
+            };
+            kind && d.offset.is_finite() && finite_points(&[d.a, d.b])
+        }
         ElementKind::Column(c) => {
             finite(&[c.rotation_deg, c.base_offset, c.height]) && c.position.is_finite() && top_ok(c.top)
         }

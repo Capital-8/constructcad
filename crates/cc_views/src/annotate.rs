@@ -4,7 +4,7 @@
 
 use crate::drawing::Anchor;
 use crate::{Drawing2D, LineStyle, format};
-use cc_core::{ElementKind, LevelId, Project, TypeData, ViewId};
+use cc_core::{Dimension, DimensionKind, ElementKind, LevelId, Project, TypeData, ViewId};
 use cc_geom::{ModelGeometry, polygon};
 use glam::DVec2;
 
@@ -117,40 +117,174 @@ fn opening_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, leve
 
 /// Dimensions placed in `view`, in its drawing coordinates.
 pub fn dimensions(d: &mut Drawing2D, project: &Project, view: ViewId, scale: u32) {
-    let mm = mm(scale);
     for e in project.elements.values() {
         let ElementKind::Dimension(dim) = &e.kind else { continue };
-        if dim.view != view || dim.length() < 1e-9 {
+        if dim.view != view {
             continue;
         }
         let text_size = match project.element_type(e.type_id).map(|t| &t.data) {
             Some(TypeData::Dimension { text_size }) => *text_size,
             _ => 2.5,
         };
+        let Some(layout) = dimension_layout(dim, scale) else { continue };
         let id = Some(e.id);
-        let u = (dim.b - dim.a) / dim.length();
-        let n = u.perp();
-        let side = if dim.offset >= 0.0 { 1.0 } else { -1.0 };
-        let (a, b) = (dim.a + n * dim.offset, dim.b + n * dim.offset);
-        // Witness lines leave a small gap at the measured points and pass the dimension line.
-        for p in [dim.a, dim.b] {
-            let from = p + n * side * (1.0 * mm).min(dim.offset.abs());
-            d.line(from, p + n * (dim.offset + side * 1.5 * mm), LineStyle::Annotation, id);
+        for (a, b, style) in layout.lines {
+            d.line(a, b, style, id);
         }
-        d.line(a - u * 1.5 * mm, b + u * 1.5 * mm, LineStyle::Annotation, id);
-        // Architectural ticks.
-        let tick = (u + n) * std::f64::consts::FRAC_1_SQRT_2 * 1.3 * mm;
-        for p in [a, b] {
-            d.line(p - tick, p + tick, LineStyle::Cut, id);
+        d.text_at(layout.text_pos, layout.text, text_size, Anchor::CenterBottom, layout.text_angle);
+    }
+}
+
+/// Linework and text of a dimension, in its view's drawing coordinates.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DimensionLayout {
+    pub lines: Vec<(DVec2, DVec2, LineStyle)>,
+    pub text: String,
+    /// Bottom center of the text, which is rotated by `text_angle` (radians).
+    pub text_pos: DVec2,
+    pub text_angle: f64,
+}
+
+/// Lay out a dimension at a view `scale`; `None` when it measures nothing.
+pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> {
+    let mm = mm(scale);
+    let mut lines = Vec::new();
+    let (text, text_pos, text_angle) = match dim.kind {
+        DimensionKind::Aligned | DimensionKind::Linear { .. } => {
+            let dir = dim.direction()?;
+            let n = dir.perp();
+            let measured = (dim.b - dim.a).dot(dir);
+            if measured.abs() < 1e-9 {
+                return None;
+            }
+            let pa = dim.a + n * dim.offset;
+            let pb = pa + dir * measured;
+            // Witness lines leave a small gap at the measured points and pass the dimension line.
+            let side = if dim.offset >= 0.0 { 1.0 } else { -1.0 };
+            for (p, q) in [(dim.a, pa), (dim.b, pb)] {
+                let v = q - p;
+                let out = v.try_normalize().unwrap_or(n * side);
+                let from = p + out * (1.0 * mm).min(v.length());
+                lines.push((from, q + out * 1.5 * mm, LineStyle::Annotation));
+            }
+            let u = dir * measured.signum();
+            lines.push((pa - u * 1.5 * mm, pb + u * 1.5 * mm, LineStyle::Annotation));
+            // Architectural ticks.
+            let tick = (u + u.perp()) * std::f64::consts::FRAC_1_SQRT_2 * 1.3 * mm;
+            for p in [pa, pb] {
+                lines.push((p - tick, p + tick, LineStyle::Cut));
+            }
+            let (angle, up) = upright(u);
+            (format::meters(dim.value()), (pa + pb) / 2.0 + up * 0.8 * mm, angle)
         }
-        // Text above the line, kept upright.
-        let mut angle = u.y.atan2(u.x);
-        let mut up = n;
-        if angle > std::f64::consts::FRAC_PI_2 + 1e-9 || angle <= -std::f64::consts::FRAC_PI_2 + 1e-9 {
-            angle += std::f64::consts::PI;
-            up = -n;
+        DimensionKind::Angular { vertex } => {
+            let (r1, r2) = ((dim.a - vertex).try_normalize()?, (dim.b - vertex).try_normalize()?);
+            let sweep = r1.angle_to(r2);
+            if sweep.abs() < 1e-9 {
+                return None;
+            }
+            let radius = dim.offset.abs().max(2.0 * mm);
+            let at = |t: f64| vertex + DVec2::from_angle(sweep * t).rotate(r1) * radius;
+            let steps = 32;
+            for i in 0..steps {
+                lines.push((at(i as f64 / steps as f64), at((i + 1) as f64 / steps as f64), LineStyle::Annotation));
+            }
+            // Witness lines along the rays when the arc lies beyond the measured points.
+            for (r, p) in [(r1, dim.a), (r2, dim.b)] {
+                let reach = (p - vertex).length();
+                if radius > reach + 1.0 * mm {
+                    lines.push((
+                        vertex + r * (reach + 1.0 * mm),
+                        vertex + r * (radius + 1.5 * mm),
+                        LineStyle::Annotation,
+                    ));
+                }
+            }
+            for (r, t) in [(r1, 0.0), (r2, 1.0)] {
+                let p = at(t);
+                let tick = (r + r.perp()) * std::f64::consts::FRAC_1_SQRT_2 * 1.3 * mm;
+                lines.push((p - tick, p + tick, LineStyle::Cut));
+            }
+            let mid = DVec2::from_angle(sweep / 2.0).rotate(r1);
+            let (angle, up) = upright(mid.perp());
+            // The text sits outside the arc.
+            let out = if up.dot(mid) >= 0.0 { 0.8 * mm } else { 0.8 * mm + 2.5 * mm };
+            (format::angle(dim.value().to_degrees()), vertex + mid * (radius + out), angle)
         }
-        let mid = (a + b) / 2.0 + up * 0.8 * mm;
-        d.text_at(mid, format::meters(dim.length()), text_size, Anchor::CenterBottom, angle);
+        DimensionKind::Radial | DimensionKind::Diameter => {
+            let center = dim.a;
+            let r = (dim.b - center).length();
+            let u = (dim.b - center).try_normalize()?;
+            let diameter = matches!(dim.kind, DimensionKind::Diameter);
+            let start = if diameter { center - u * r } else { center };
+            lines.push((start, dim.b, LineStyle::Annotation));
+            let mut tips = vec![(dim.b, u)];
+            if diameter {
+                tips.push((start, -u));
+            }
+            for (tip, dir) in tips {
+                for side in [-1.0, 1.0] {
+                    let back = DVec2::from_angle(side * 0.33).rotate(-dir) * 2.5 * mm;
+                    lines.push((tip, tip + back, LineStyle::Annotation));
+                }
+            }
+            // Center mark.
+            let c = 1.0 * mm;
+            lines.push((center - DVec2::X * c, center + DVec2::X * c, LineStyle::Annotation));
+            lines.push((center - DVec2::Y * c, center + DVec2::Y * c, LineStyle::Annotation));
+            let (angle, up) = upright(u);
+            let prefix = if diameter { "\u{d8}" } else { "R" };
+            let mid = if diameter { center + u * r * 0.5 } else { (center + dim.b) / 2.0 };
+            (format!("{prefix} {}", format::meters(dim.value())), mid + up * 0.8 * mm, angle)
+        }
+    };
+    Some(DimensionLayout { lines, text, text_pos, text_angle })
+}
+
+/// Text angle that keeps text along `u` upright, and the side "above" it.
+fn upright(u: DVec2) -> (f64, DVec2) {
+    let mut angle = u.y.atan2(u.x);
+    let mut up = u.perp();
+    if angle > std::f64::consts::FRAC_PI_2 + 1e-9 || angle <= -std::f64::consts::FRAC_PI_2 + 1e-9 {
+        angle += std::f64::consts::PI;
+        up = -up;
+    }
+    (angle, up)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cc_core::{Dimension, ViewId};
+
+    fn dim(a: (f64, f64), b: (f64, f64), offset: f64, kind: DimensionKind) -> Dimension {
+        Dimension { view: ViewId(1), a: DVec2::new(a.0, a.1), b: DVec2::new(b.0, b.1), offset, kind }
+    }
+
+    #[test]
+    fn linear_dimensions_measure_along_their_direction() {
+        let d = dim((0.0, 0.0), (3.0, 4.0), 1.0, DimensionKind::Linear { dir: DVec2::X });
+        assert!((d.value() - 3.0).abs() < 1e-12);
+        let d = dim((0.0, 0.0), (3.0, 4.0), 1.0, DimensionKind::Linear { dir: DVec2::Y });
+        assert!((d.value() - 4.0).abs() < 1e-12);
+        let layout = dimension_layout(&d, 100).unwrap();
+        // The dimension line is vertical, one meter to the left of the points (x = -1).
+        assert!(layout.lines.iter().any(|(a, b, _)| (a.x + 1.0).abs() < 1e-9 && (b.x + 1.0).abs() < 1e-9));
+        assert!(
+            dimension_layout(&dim((0.0, 0.0), (0.0, 4.0), 1.0, DimensionKind::Linear { dir: DVec2::X }), 100).is_none()
+        );
+    }
+
+    #[test]
+    fn angular_radial_and_diameter_values() {
+        let d = dim((2.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Angular { vertex: DVec2::ZERO });
+        assert!((d.value().to_degrees() - 90.0).abs() < 1e-9);
+        assert!(dimension_layout(&d, 50).is_some_and(|l| l.lines.len() > 30));
+        let r = dim((1.0, 1.0), (1.0, 3.0), 0.0, DimensionKind::Radial);
+        assert!((r.value() - 2.0).abs() < 1e-12);
+        assert!(dimension_layout(&r, 50).unwrap().text.starts_with('R'));
+        let d = Dimension { kind: DimensionKind::Diameter, ..r };
+        assert!((d.value() - 4.0).abs() < 1e-12);
+        assert!(dimension_layout(&d, 50).unwrap().text.starts_with('\u{d8}'));
     }
 }

@@ -24,8 +24,8 @@ pub mod wall_ops;
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
-    Beam, Ceiling, Column, Component, Dimension, Element, ElementKind, Floor, Grid, Hosted, LocationLine, Railing,
-    Roof, RoofShape, Room, Stair, Wall, WallTop,
+    Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted,
+    LocationLine, Railing, Roof, RoofShape, Room, Stair, Wall, WallTop,
 };
 pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};

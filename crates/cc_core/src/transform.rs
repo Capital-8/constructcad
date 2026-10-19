@@ -111,6 +111,14 @@ impl Element {
             ElementKind::Dimension(d) => {
                 p(&mut d.a);
                 p(&mut d.b);
+                match &mut d.kind {
+                    crate::DimensionKind::Angular { vertex } => p(vertex),
+                    // Directions turn (and mirror) without the translation.
+                    crate::DimensionKind::Linear { dir } => {
+                        *dir = (t.apply(*dir) - t.apply(DVec2::ZERO)).normalize_or(DVec2::X);
+                    }
+                    _ => {}
+                }
                 if t.mirror {
                     d.offset = -d.offset;
                 }

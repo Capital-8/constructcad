@@ -5,7 +5,7 @@ use crate::icons::{self, Icon};
 use crate::state::{AppState, PendingAction, RibbonTab};
 use crate::t;
 use crate::theme::{self, PALETTE};
-use crate::tools::{Tool, walls_loop};
+use crate::tools::{DimensionMode, Tool, walls_loop};
 use cc_core::{Category, ViewCategory};
 use cc_views::format;
 use egui::{Align, Button, DragValue, Layout, Response, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
@@ -53,6 +53,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Align => Icon::Align,
         Tool::ToggleJoin => Icon::Join,
         Tool::Paste => Icon::Paste,
+        Tool::Dimension { mode, .. } => dimension_icon(*mode),
         Tool::MatchType => Icon::MatchType,
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
@@ -466,9 +467,30 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-selection"), |ui| select_button(ui, state));
 }
 
+fn dimension_icon(mode: DimensionMode) -> Icon {
+    match mode {
+        DimensionMode::Aligned => Icon::Dimension,
+        DimensionMode::Linear => Icon::DimLinear,
+        DimensionMode::Angular => Icon::DimAngular,
+        DimensionMode::Radial => Icon::DimRadial,
+        DimensionMode::Diameter => Icon::DimDiameter,
+    }
+}
+
 fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-dimension"), |ui| {
-        tool_button(ui, state, t!("tool-dimension"), "DI", Category::Dimension);
+        for mode in DimensionMode::ALL {
+            let active = matches!(state.tool, Tool::Dimension { mode: m, .. } if m == mode);
+            let label = crate::i18n::tr(mode.key());
+            let r = big_button(ui, dimension_icon(mode), &label, active, true, false);
+            let r = if mode == DimensionMode::Aligned { r.on_hover_text(format!("{label} (DI)")) } else { r };
+            if r.clicked()
+                && let Some(Tool::Dimension { type_id, .. }) = Tool::for_category(state.project(), Category::Dimension)
+            {
+                state.set_tool(Tool::Dimension { type_id, mode });
+                state.message = crate::i18n::tr(mode.hint_key());
+            }
+        }
     });
     group(ui, t!("group-selection"), |ui| select_button(ui, state));
 }
@@ -771,8 +793,8 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Grid { .. } => {
                 ui.label(theme::muted(t!("hint-grid")));
             }
-            Tool::Dimension { .. } => {
-                ui.label(theme::muted(t!("hint-dimension")));
+            Tool::Dimension { mode, .. } => {
+                ui.label(theme::muted(crate::i18n::tr(mode.hint_key())));
             }
             Tool::Column { .. } => {
                 ui.label(theme::muted(t!("hint-column")));

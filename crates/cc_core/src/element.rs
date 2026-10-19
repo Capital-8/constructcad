@@ -106,6 +106,9 @@ impl Element {
             ElementKind::Dimension(d) => {
                 d.a += delta;
                 d.b += delta;
+                if let DimensionKind::Angular { vertex } = &mut d.kind {
+                    *vertex += delta;
+                }
             }
             ElementKind::Column(c) => c.position += delta,
             ElementKind::Beam(b) => {
@@ -318,20 +321,60 @@ pub struct Grid {
     pub name: String,
 }
 
-/// An aligned linear dimension between two points of one view, in that
-/// view's drawing coordinates.
+/// A dimension in one view, in that view's drawing coordinates. What `a`,
+/// `b` and `offset` mean depends on the [`DimensionKind`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Dimension {
     pub view: ViewId,
     pub a: DVec2,
     pub b: DVec2,
-    /// Distance of the dimension line from `a`-`b`, positive on the left.
+    /// Linear kinds: distance of the dimension line from `a`, positive on
+    /// the left of the measured direction. Angular: radius of the arc.
     pub offset: f64,
+    #[serde(default)]
+    pub kind: DimensionKind,
+}
+
+/// How a dimension measures.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum DimensionKind {
+    /// Distance from `a` to `b`, along `a`-`b`.
+    #[default]
+    Aligned,
+    /// Distance from `a` to `b` measured along `dir` (a unit vector,
+    /// horizontal or vertical when placed).
+    Linear { dir: DVec2 },
+    /// Angle at `vertex` between the rays through `a` and through `b`.
+    Angular { vertex: DVec2 },
+    /// Radius of the arc centered at `a` through `b`.
+    Radial,
+    /// Diameter of the circle centered at `a` through `b`.
+    Diameter,
 }
 
 impl Dimension {
     pub fn length(&self) -> f64 {
         self.a.distance(self.b)
+    }
+
+    /// Direction the dimension measures along (linear kinds), if defined.
+    pub fn direction(&self) -> Option<DVec2> {
+        match self.kind {
+            DimensionKind::Linear { dir } => dir.try_normalize(),
+            DimensionKind::Aligned => (self.b - self.a).try_normalize(),
+            _ => None,
+        }
+    }
+
+    /// The measured value: meters for lengths, radians for angles.
+    pub fn value(&self) -> f64 {
+        match self.kind {
+            DimensionKind::Aligned => self.length(),
+            DimensionKind::Linear { dir } => (self.b - self.a).dot(dir.normalize_or_zero()).abs(),
+            DimensionKind::Angular { vertex } => (self.a - vertex).angle_to(self.b - vertex).abs(),
+            DimensionKind::Radial => self.length(),
+            DimensionKind::Diameter => 2.0 * self.length(),
+        }
     }
 }
 

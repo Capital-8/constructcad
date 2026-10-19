@@ -148,7 +148,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for (a, b, offset) in
             [((0.0, 0.0), (5.0, 0.0), -1.2), ((5.0, 0.0), (9.0, 0.0), -1.2), ((0.0, 0.0), (9.0, 0.0), -1.9)]
         {
-            let dim = Dimension { view: ground_plan, a: DVec2::new(a.0, a.1), b: DVec2::new(b.0, b.1), offset };
+            let dim = Dimension {
+                view: ground_plan,
+                a: DVec2::new(a.0, a.1),
+                b: DVec2::new(b.0, b.1),
+                offset,
+                kind: Default::default(),
+            };
             add(e, dim_t, "", ElementKind::Dimension(dim));
         }
 

@@ -69,11 +69,15 @@ pub enum Icon {
     Cut,
     Paste,
     MatchType,
+    DimLinear,
+    DimAngular,
+    DimRadial,
+    DimDiameter,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 60] = [
+    pub const ALL: [Icon; 64] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -134,6 +138,10 @@ impl Icon {
         Icon::Cut,
         Icon::Paste,
         Icon::MatchType,
+        Icon::DimLinear,
+        Icon::DimAngular,
+        Icon::DimRadial,
+        Icon::DimDiameter,
     ];
 
     /// The icon's SVG source.
@@ -199,6 +207,10 @@ impl Icon {
             Icon::Cut => include_str!("../../../assets/icons/ui/cut.svg"),
             Icon::Paste => include_str!("../../../assets/icons/ui/paste.svg"),
             Icon::MatchType => include_str!("../../../assets/icons/ui/match-type.svg"),
+            Icon::DimLinear => include_str!("../../../assets/icons/ui/dim-linear.svg"),
+            Icon::DimAngular => include_str!("../../../assets/icons/ui/dim-angular.svg"),
+            Icon::DimRadial => include_str!("../../../assets/icons/ui/dim-radial.svg"),
+            Icon::DimDiameter => include_str!("../../../assets/icons/ui/dim-diameter.svg"),
         }
     }
 }

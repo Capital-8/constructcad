@@ -16,7 +16,7 @@ mod projected;
 mod schedule;
 mod sheet;
 
-pub use annotate::HIGHLIGHT_ONLY;
+pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout};
 pub use drawing::{Anchor, Drawing2D, LineStyle, Prim};
 pub use legend::legend;
 pub use plan::plan;

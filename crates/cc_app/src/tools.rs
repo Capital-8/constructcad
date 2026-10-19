@@ -5,8 +5,8 @@ use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
 use cc_core::{
-    Category, Ceiling, Element, ElementId, ElementKind, ElementTypeId, Floor, Hosted, LevelId, Project, Roof,
-    RoofShape, View, ViewId, ViewKind, Wall,
+    Category, Ceiling, DimensionKind, Element, ElementId, ElementKind, ElementTypeId, Floor, Hosted, LevelId, Project,
+    Roof, RoofShape, View, ViewId, ViewKind, Wall,
 };
 use cc_geom::{ModelGeometry, polygon};
 use cc_views::{Drawing2D, format};
@@ -37,6 +37,7 @@ pub enum Tool {
     },
     Dimension {
         type_id: ElementTypeId,
+        mode: DimensionMode,
     },
     Column {
         type_id: ElementTypeId,
@@ -88,7 +89,7 @@ impl Tool {
             Tool::Section => "tool-section",
             Tool::Room { .. } => "tool-room",
             Tool::Grid { .. } => "tool-grid",
-            Tool::Dimension { .. } => "tool-dimension",
+            Tool::Dimension { mode, .. } => mode.key(),
             Tool::Column { .. } => "tool-column",
             Tool::Beam { .. } => "tool-beam",
             Tool::Stair { .. } => "tool-stair",
@@ -118,7 +119,7 @@ impl Tool {
             | Tool::Sketch { type_id, .. }
             | Tool::Room { type_id }
             | Tool::Grid { type_id }
-            | Tool::Dimension { type_id }
+            | Tool::Dimension { type_id, .. }
             | Tool::Column { type_id }
             | Tool::Beam { type_id }
             | Tool::Stair { type_id }
@@ -151,7 +152,7 @@ impl Tool {
             Tool::Sketch { category, .. } => Tool::Sketch { category, type_id: id },
             Tool::Room { .. } => Tool::Room { type_id: id },
             Tool::Grid { .. } => Tool::Grid { type_id: id },
-            Tool::Dimension { .. } => Tool::Dimension { type_id: id },
+            Tool::Dimension { mode, .. } => Tool::Dimension { type_id: id, mode },
             Tool::Column { .. } => Tool::Column { type_id: id },
             Tool::Beam { .. } => Tool::Beam { type_id: id },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
@@ -170,13 +171,54 @@ impl Tool {
             Category::Floor | Category::Ceiling | Category::Roof => Tool::Sketch { category, type_id },
             Category::Room => Tool::Room { type_id },
             Category::Grid => Tool::Grid { type_id },
-            Category::Dimension => Tool::Dimension { type_id },
+            Category::Dimension => Tool::Dimension { type_id, mode: DimensionMode::Aligned },
             Category::Column => Tool::Column { type_id },
             Category::Beam => Tool::Beam { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
             Category::Component => Tool::Component { type_id },
         })
+    }
+}
+
+/// What the dimension tool places.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DimensionMode {
+    #[default]
+    Aligned,
+    /// Horizontal or vertical, chosen by where the line is placed.
+    Linear,
+    Angular,
+    Radial,
+    Diameter,
+}
+
+impl DimensionMode {
+    pub const ALL: [DimensionMode; 5] = [
+        DimensionMode::Aligned,
+        DimensionMode::Linear,
+        DimensionMode::Angular,
+        DimensionMode::Radial,
+        DimensionMode::Diameter,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            DimensionMode::Aligned => "tool-dimension",
+            DimensionMode::Linear => "tool-dim-linear",
+            DimensionMode::Angular => "tool-dim-angular",
+            DimensionMode::Radial => "tool-dim-radial",
+            DimensionMode::Diameter => "tool-dim-diameter",
+        }
+    }
+
+    pub fn hint_key(self) -> &'static str {
+        match self {
+            DimensionMode::Aligned => "hint-dimension",
+            DimensionMode::Linear => "hint-dim-linear",
+            DimensionMode::Angular => "hint-dim-angular",
+            DimensionMode::Radial | DimensionMode::Diameter => "hint-dim-radial",
+        }
     }
 }
 
@@ -567,8 +609,8 @@ pub fn handle(
         // Matching types works in any 2D view.
         (Tool::MatchType, _) => crate::clipboard::match_type_tool(resp, painter, state, xf, drawing),
         // Dimensions work in any 2D view.
-        (Tool::Dimension { type_id }, level) => {
-            dimension_tool(ui, resp, painter, state, view, level, *type_id, xf, drawing)
+        (Tool::Dimension { type_id, mode }, level) => {
+            dimension_tool(ui, resp, painter, state, view, level, (*type_id, *mode), xf, drawing)
         }
         (_, None) | (_, Some(_)) if !is_plan => {
             if resp.clicked() {
@@ -941,59 +983,282 @@ fn dimension_tool(
     state: &mut AppState,
     view: &View,
     level: Option<LevelId>,
-    type_id: ElementTypeId,
+    (type_id, mode): (ElementTypeId, DimensionMode),
     xf: &Xf,
     drawing: &Drawing2D,
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
-    let shift = ui.input(|i| i.modifiers.shift);
-    // Snap to the visible linework of the view.
-    let ends: Vec<DVec2> = drawing
+    let scale = view.scale.max(1);
+    let tol = 6.0 / xf.scale;
+    let points = state.interaction.points.clone();
+    let place = |state: &mut AppState, dim: cc_core::Dimension| {
+        let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
+        if let Some(level) = level {
+            state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(dim));
+        }
+        state.interaction.points.clear();
+    };
+    let dim =
+        |a: DVec2, b: DVec2, offset: f64, kind: DimensionKind| cc_core::Dimension { view: view.id, a, b, offset, kind };
+    match mode {
+        DimensionMode::Aligned | DimensionMode::Linear => {
+            let shift = ui.input(|i| i.modifiers.shift);
+            // Snap to the visible linework of the view.
+            let ends: Vec<DVec2> = drawing
+                .prims
+                .iter()
+                .filter_map(|p| match p {
+                    cc_views::Prim::Line { a, b, .. } => Some([*a, *b]),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            let anchor = points.last().copied();
+            let s = snap_at(state, None, raw, anchor, &ends, xf.scale, shift);
+            match points.as_slice() {
+                [] => {
+                    draw_snap(painter, xf, s);
+                    if resp.clicked() {
+                        state.interaction.points.push(s.point);
+                    }
+                }
+                [a] => {
+                    draw_snap(painter, xf, s);
+                    painter.line_segment([xf.to_screen(*a), xf.to_screen(s.point)], Stroke::new(1.5, PREVIEW));
+                    label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
+                    if resp.clicked() && a.distance(s.point) > 1e-3 {
+                        state.interaction.points.push(s.point);
+                    }
+                }
+                [a, b, ..] => {
+                    let kind = if mode == DimensionMode::Linear {
+                        DimensionKind::Linear { dir: linear_direction(*a, *b, raw) }
+                    } else {
+                        DimensionKind::Aligned
+                    };
+                    let d = dim(*a, *b, 0.0, kind);
+                    let n = d.direction().unwrap_or(DVec2::X).perp();
+                    let d = cc_core::Dimension { offset: (raw - *a).dot(n), ..d };
+                    paint_dimension(painter, xf, &d, scale);
+                    if resp.clicked() {
+                        if d.value() > 1e-6 {
+                            place(state, d);
+                        } else {
+                            state.message = t!("msg-dimension-zero");
+                        }
+                    }
+                }
+            }
+        }
+        DimensionMode::Angular => {
+            let hovered = line_at(drawing, raw, tol);
+            if let Some((p, q)) = hovered
+                && points.len() < 4
+            {
+                painter.line_segment([xf.to_screen(p), xf.to_screen(q)], Stroke::new(2.5, PREVIEW));
+            }
+            // points: [pick on line 1, its other end, pick on line 2, its other end].
+            match points.as_slice() {
+                [p1, q1, p2, q2] => {
+                    let Some(vertex) = line_intersection(*p1, *q1, *p2, *q2) else {
+                        state.interaction.points.clear();
+                        state.message = t!("msg-lines-parallel");
+                        return;
+                    };
+                    // The quadrant holding the cursor picks the rays.
+                    let ray = |p: DVec2, q: DVec2, pick: DVec2| {
+                        let dir = (q - p).normalize_or(DVec2::X);
+                        let toward = if (raw - vertex).dot(dir) >= 0.0 { dir } else { -dir };
+                        vertex + toward * (pick - vertex).length().max(1e-3)
+                    };
+                    let d = dim(
+                        ray(*p1, *q1, *p1),
+                        ray(*p2, *q2, *p2),
+                        (raw - vertex).length(),
+                        DimensionKind::Angular { vertex },
+                    );
+                    paint_dimension(painter, xf, &d, scale);
+                    if resp.clicked() && d.value() > 1e-6 {
+                        place(state, d);
+                    }
+                }
+                _ => {
+                    if resp.clicked() {
+                        match hovered {
+                            Some((p, q)) => {
+                                let pick = closest_on_segment(p, q, raw);
+                                let other = if pick.distance(p) > pick.distance(q) { p } else { q };
+                                state.interaction.points.extend([pick, other]);
+                                if state.interaction.points.len() == 2 {
+                                    state.message = t!("hint-dim-angular-second");
+                                }
+                            }
+                            None => state.message = t!("hint-dim-angular"),
+                        }
+                    }
+                }
+            }
+        }
+        DimensionMode::Radial | DimensionMode::Diameter => {
+            let picked = match points.as_slice() {
+                [center, rim] => Some((*center, center.distance(*rim))),
+                _ => arc_at(drawing, raw, tol),
+            };
+            let Some((center, r)) = picked else {
+                if resp.clicked() {
+                    state.message = t!("msg-pick-arc");
+                }
+                return;
+            };
+            let b = center + (raw - center).normalize_or(DVec2::X) * r;
+            let kind = if mode == DimensionMode::Radial { DimensionKind::Radial } else { DimensionKind::Diameter };
+            let d = dim(center, b, 0.0, kind);
+            if points.is_empty() {
+                painter.circle_stroke(xf.to_screen(center), (r * xf.scale) as f32, Stroke::new(2.5, PREVIEW));
+            }
+            paint_dimension(painter, xf, &d, scale);
+            if resp.clicked() {
+                if points.is_empty() {
+                    // Keep the arc while the leader is placed.
+                    state.interaction.points = vec![center, b];
+                    state.message = t!("hint-dim-radial-place");
+                } else {
+                    place(state, d);
+                }
+            }
+        }
+    }
+}
+
+/// Horizontal or vertical measuring direction for a linear dimension from
+/// `a` to `b`, by where the cursor places the line: above or below the
+/// points' box measures horizontally, beside it vertically.
+pub(crate) fn linear_direction(a: DVec2, b: DVec2, cursor: DVec2) -> DVec2 {
+    let (lo, hi) = (a.min(b), a.max(b));
+    let outside = |v: f64, lo: f64, hi: f64| (lo - v).max(v - hi).max(0.0);
+    let (ox, oy) = (outside(cursor.x, lo.x, hi.x), outside(cursor.y, lo.y, hi.y));
+    let horizontal = if ox == oy { (b - a).x.abs() >= (b - a).y.abs() } else { oy > ox };
+    if horizontal { DVec2::X } else { DVec2::Y }
+}
+
+/// Paint a dimension being placed, as it will be drawn.
+fn paint_dimension(painter: &Painter, xf: &Xf, d: &cc_core::Dimension, scale: u32) {
+    let Some(layout) = cc_views::dimension_layout(d, scale) else { return };
+    let stroke = Stroke::new(1.25, PREVIEW);
+    for (a, b, _) in &layout.lines {
+        painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], stroke);
+    }
+    let up = DVec2::from_angle(layout.text_angle).perp();
+    let at = xf.to_screen(layout.text_pos + up * (2.0 * scale as f64 / 1000.0));
+    dim_text(painter, at, layout.text, -layout.text_angle as f32, true);
+}
+
+/// The linework segment (of an element) nearest to `p` within `tol`.
+pub(crate) fn line_at(drawing: &Drawing2D, p: DVec2, tol: f64) -> Option<(DVec2, DVec2)> {
+    drawing
         .prims
         .iter()
-        .filter_map(|p| match p {
-            cc_views::Prim::Line { a, b, .. } => Some([*a, *b]),
+        .filter_map(|prim| match prim {
+            cc_views::Prim::Line { a, b, element: Some(_), .. } => Some((*a, *b)),
             _ => None,
         })
-        .flatten()
+        .map(|(a, b)| (closest_on_segment(a, b, p).distance(p), (a, b)))
+        .filter(|(d, _)| *d <= tol)
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|(_, l)| l)
+}
+
+fn closest_on_segment(a: DVec2, b: DVec2, p: DVec2) -> DVec2 {
+    let ab = b - a;
+    let t = if ab.length_squared() > 1e-18 { ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+    a + ab * t
+}
+
+/// Intersection of the infinite lines `p1`-`q1` and `p2`-`q2` (`None` when parallel).
+fn line_intersection(p1: DVec2, q1: DVec2, p2: DVec2, q2: DVec2) -> Option<DVec2> {
+    let (d1, d2) = (q1 - p1, q2 - p2);
+    let den = d1.perp_dot(d2);
+    if den.abs() < 1e-12 * d1.length() * d2.length() {
+        return None;
+    }
+    Some(p1 + d1 * ((p2 - p1).perp_dot(d2) / den))
+}
+
+/// An arc or circle drawn as a chain of short segments near `p`: its
+/// center and radius. Needs four consecutive points of one element on a
+/// common circle (corners of straight linework do not qualify).
+pub(crate) fn arc_at(drawing: &Drawing2D, p: DVec2, tol: f64) -> Option<(DVec2, f64)> {
+    let (hit, element) = drawing
+        .prims
+        .iter()
+        .filter_map(|prim| match prim {
+            cc_views::Prim::Line { a, b, element: Some(e), .. } => Some(((*a, *b), *e)),
+            _ => None,
+        })
+        .map(|(l, e)| (closest_on_segment(l.0, l.1, p).distance(p), l, e))
+        .filter(|(d, _, _)| *d <= tol)
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|(_, l, e)| (l, e))?;
+    let segments: Vec<(DVec2, DVec2)> = drawing
+        .prims
+        .iter()
+        .filter_map(|prim| match prim {
+            cc_views::Prim::Line { a, b, element: Some(e), .. } if *e == element => Some((*a, *b)),
+            _ => None,
+        })
         .collect();
-    let anchor = state.interaction.points.last().copied();
-    let s = snap_at(state, None, raw, anchor, &ends, xf.scale, shift);
-    let stroke = Stroke::new(1.5, PREVIEW);
-    let points = state.interaction.points.clone();
-    match points.as_slice() {
-        [] => draw_snap(painter, xf, s),
-        [a] => {
-            draw_snap(painter, xf, s);
-            painter.line_segment([xf.to_screen(*a), xf.to_screen(s.point)], stroke);
-            label(painter, xf.to_screen(s.point), format::meters(a.distance(s.point)));
-        }
-        [a, b, ..] => {
-            let n = (*b - *a).normalize_or_zero().perp();
-            let offset = (raw - *a).dot(n);
-            let (p, q) = (*a + n * offset, *b + n * offset);
-            painter.line_segment([xf.to_screen(*a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
-            painter.line_segment([xf.to_screen(*b), xf.to_screen(q)], Stroke::new(1.0, PREVIEW));
-            painter.line_segment([xf.to_screen(p), xf.to_screen(q)], stroke);
-            label(painter, xf.to_screen((p + q) * 0.5), format::meters(a.distance(*b)));
-        }
-    }
-    if resp.clicked() {
-        match points.as_slice() {
-            [] => state.interaction.points.push(s.point),
-            [a] if a.distance(s.point) > 1e-3 => state.interaction.points.push(s.point),
-            [a, b] => {
-                let n = (*b - *a).normalize_or_zero().perp();
-                let dim = cc_core::Dimension { view: view.id, a: *a, b: *b, offset: (raw - *a).dot(n) };
-                let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
-                if let Some(level) = level {
-                    state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(dim));
-                }
-                state.interaction.points.clear();
+    let eps = 1e-6;
+    // The far end of a segment touching `at`, other than `not`.
+    let next = |at: DVec2, not: DVec2| {
+        segments.iter().find_map(|(a, b)| {
+            if a.distance(at) < eps && b.distance(not) > eps {
+                Some(*b)
+            } else if b.distance(at) < eps && a.distance(not) > eps {
+                Some(*a)
+            } else {
+                None
             }
-            _ => {}
+        })
+    };
+    let (a, b) = hit;
+    let mut chain = vec![a, b];
+    if let Some(c) = next(b, a) {
+        chain.push(c);
+        if let Some(d) = next(c, b) {
+            chain.push(d);
         }
     }
+    if chain.len() < 4
+        && let Some(z) = next(a, b)
+    {
+        chain.insert(0, z);
+        if chain.len() < 4
+            && let Some(y) = next(z, a)
+        {
+            chain.insert(0, y);
+        }
+    }
+    if chain.len() < 4 {
+        return None;
+    }
+    let center = circumcenter(chain[0], chain[1], chain[2])?;
+    let r = center.distance(chain[0]);
+    // Short segments of a real arc, all on the circle.
+    let on_circle = chain.iter().all(|q| (q.distance(center) - r).abs() <= 1e-3 * r.max(1e-3));
+    let short = chain.windows(2).all(|w| w[0].distance(w[1]) < r);
+    (on_circle && short && r.is_finite() && r > 1e-6).then_some((center, r))
+}
+
+fn circumcenter(a: DVec2, b: DVec2, c: DVec2) -> Option<DVec2> {
+    let d = 2.0 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let (a2, b2, c2) = (a.length_squared(), b.length_squared(), c.length_squared());
+    Some(DVec2::new(
+        (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d,
+        (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d,
+    ))
 }
 
 fn wall_tool(
@@ -1537,6 +1802,35 @@ mod tests {
 
     /// 100 px per meter: the snap radius is 0.1 m.
     const SCALE: f64 = 100.0;
+
+    #[test]
+    fn linear_dimensions_follow_the_cursor_side() {
+        let (a, b) = (DVec2::new(0.0, 0.0), DVec2::new(4.0, 3.0));
+        // Above the points' box: horizontal; beside it: vertical.
+        assert_eq!(linear_direction(a, b, DVec2::new(2.0, 5.0)), DVec2::X);
+        assert_eq!(linear_direction(a, b, DVec2::new(6.0, 1.0)), DVec2::Y);
+        assert_eq!(
+            line_intersection(a, DVec2::X, DVec2::new(2.0, 5.0), DVec2::new(2.0, 1.0)),
+            Some(DVec2::new(2.0, 0.0))
+        );
+        assert_eq!(line_intersection(a, DVec2::X, DVec2::Y, DVec2::new(1.0, 1.0)), None);
+    }
+
+    #[test]
+    fn arcs_are_found_on_curved_linework_only() {
+        let mut d = Drawing2D::default();
+        let (c, r) = (DVec2::new(2.0, 1.0), 0.5);
+        let pts: Vec<DVec2> =
+            (0..24).map(|i| c + DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU) * r).collect();
+        d.polyline(&pts, true, cc_views::LineStyle::Cut, Some(ElementId(7)));
+        // A rectangle's corner is not an arc.
+        let rect = [DVec2::new(5.0, 0.0), DVec2::new(7.0, 0.0), DVec2::new(7.0, 2.0), DVec2::new(5.0, 2.0)];
+        d.polyline(&rect, true, cc_views::LineStyle::Cut, Some(ElementId(8)));
+        let (center, radius) = arc_at(&d, c + DVec2::new(r, 0.01), 0.05).unwrap();
+        assert!(center.distance(c) < 1e-9 && (radius - r).abs() < 1e-9);
+        assert!(arc_at(&d, DVec2::new(7.0, 1.0), 0.05).is_none());
+        assert_eq!(line_at(&d, DVec2::new(7.01, 1.0), 0.05), Some((DVec2::new(7.0, 0.0), DVec2::new(7.0, 2.0))));
+    }
 
     fn empty() -> (Project, LevelId) {
         let p = crate::actions::new_project();
