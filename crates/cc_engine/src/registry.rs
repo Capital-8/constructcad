@@ -132,6 +132,8 @@ registry![
     create::StairCreate,
     create::RailingCreate,
     create::ComponentPlace,
+    annotate::DimensionCreate,
+    annotate::DimensionSetValue,
     // Modifying elements
     modify::ElementsDelete,
     modify::ElementsMove,

@@ -253,3 +253,52 @@ fn queries_change_nothing() {
     }
     assert_eq!(s.doc.revision(), revision);
 }
+
+#[test]
+fn dimensions_follow_and_drive_what_they_measure() {
+    let mut s = Session::default();
+    let sample = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/casa_simples.ccad");
+    run(&mut s, "project_open", json!({"path": sample}));
+    let plan = run(&mut s, "views_list", json!({"category": "floor_plan"}))[0]["id"].clone();
+    // A 20 cm column far from the house; measure from 4 m left of it to its left face.
+    let column = run(&mut s, "column_create", json!({"position": [50.0, 50.0]}));
+    let face = [49.9, 50.0];
+    let dim = run(&mut s, "dimension_create", json!({"view": plan, "a": [45.9, 50.0], "b": face, "kind": "linear"}));
+    let refs = &dim["params"]["refs"];
+    assert!(refs[0].is_null() && refs[1]["target"]["Element"] == column["id"], "{refs}");
+    // The dimension follows the column...
+    run(&mut s, "elements_move", json!({"ids": [column["id"]], "delta": [1.5, 0.0]}));
+    let value = |s: &mut Session| {
+        let d = run(s, "element_get", json!({"id": dim["id"]}));
+        (d["params"]["b"][0].as_f64().unwrap() - d["params"]["a"][0].as_f64().unwrap()).abs()
+    };
+    assert!((value(&mut s) - 5.5).abs() < 1e-9);
+    // ...and drives it: 4 m puts it back.
+    run(&mut s, "dimension_set_value", json!({"id": dim["id"], "value": 4.0}));
+    let x = run(&mut s, "element_get", json!({"id": column["id"]}))["params"]["position"][0].as_f64().unwrap();
+    assert!((x - 50.0).abs() < 1e-9, "{x}");
+    assert_eq!(
+        fails(&mut s, "dimension_set_value", json!({"id": dim["id"], "value": -1.0})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(&mut s, "dimension_set_value", json!({"id": column["id"], "value": 1.0})),
+        ErrorCode::InvalidArguments
+    );
+    // A free dimension just takes the value; zero-length ones are refused.
+    let free = run(&mut s, "dimension_create", json!({"view": plan, "a": [100.0, 100.0], "b": [103.0, 100.0]}));
+    run(&mut s, "dimension_set_value", json!({"id": free["id"], "value": 5.0}));
+    assert!(
+        (run(&mut s, "element_get", json!({"id": free["id"]}))["params"]["b"][0].as_f64().unwrap() - 105.0).abs()
+            < 1e-9
+    );
+    assert_eq!(
+        fails(&mut s, "dimension_create", json!({"view": plan, "a": [1.0, 1.0], "b": [1.0, 1.0]})),
+        ErrorCode::InvalidArguments
+    );
+    let three_d = run(&mut s, "view_create", json!({"kind": "three_d"}));
+    assert_eq!(
+        fails(&mut s, "dimension_create", json!({"view": three_d["id"], "a": [0, 0], "b": [1, 0]})),
+        ErrorCode::InvalidArguments
+    );
+}

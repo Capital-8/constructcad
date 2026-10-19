@@ -1,6 +1,7 @@
 //! The commands, by area. Each is a parameter struct implementing
 //! [`crate::Command`]; [`crate::catalog`] lists them all.
 
+pub mod annotate;
 pub mod create;
 pub mod edit;
 pub mod io;

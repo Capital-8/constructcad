@@ -207,253 +207,13 @@ pub fn apply_text(state: &mut AppState, target: &Target, text: &str) -> Result<(
     }
 }
 
-/// References for the ends of a dimension being placed in a plan: each end
-/// follows the element whose linework passes through it, preferring lines
-/// across the measured direction (the faces being measured) and, among
-/// those, walls, columns and grids. Radial and diameter dimensions follow
-/// the element of their arc; angular ones follow the elements whose
-/// linework lies along each measured line (the vertex too, as a second
-/// point of each line).
-pub fn associate(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> Dimension {
-    let mut out = Dimension { refs: end_refs(state, drawing, dim), ..dim.clone() };
-    if let DimensionKind::Angular { vertex, rays } = &mut out.kind
-        && let Some(view) = model_view(state, dim)
-    {
-        let p = state.project();
-        for (ray, end) in rays.iter_mut().zip([dim.a, dim.b]) {
-            *ray = line_element(state, drawing, end, *vertex).and_then(|e| p.dim_ref_in_view(view, e, *vertex));
-        }
-    }
-    out
-}
-
-/// The dimension's view when it shows the model in known coordinates
-/// (plans, elevations and sections).
-fn model_view<'a>(state: &'a AppState, dim: &Dimension) -> Option<&'a cc_core::View> {
-    state.project().view(dim.view).filter(|v| v.is_plan() || v.projection().is_some())
-}
-
-fn rank(c: Category) -> u8 {
-    match c {
-        Category::Wall | Category::Column | Category::Grid => 0,
-        Category::Beam | Category::Door | Category::Window => 1,
-        Category::Component => 2,
-        _ => 9,
-    }
-}
-
-/// The element (best ranked) with linework along the line through `p` and `q`.
-fn line_element(state: &AppState, drawing: &Drawing2D, p: DVec2, q: DVec2) -> Option<ElementId> {
-    let mut found: Vec<(u8, ElementId)> = drawing
-        .prims
-        .iter()
-        .filter_map(|prim| match prim {
-            Prim::Line { a, b, element: Some(e), .. } => {
-                let u = (*b - *a).try_normalize()?;
-                let off = |x: DVec2| (x - *a).perp_dot(u).abs();
-                let r = rank(state.project().element(*e)?.category());
-                (off(p) < 1e-4 && off(q) < 1e-4 && r < 9).then_some((r, *e))
-            }
-            _ => None,
-        })
-        .collect();
-    found.sort();
-    found.first().map(|f| f.1)
-}
-
-fn end_refs(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Option<cc_core::DimRef>; 2] {
-    let Some(view) = model_view(state, dim) else { return [None, None] };
-    let project = state.project();
-    // Elements with linework through `p` (within `tol`), best first.
-    let at = |p: DVec2, tol: f64, across: Option<DVec2>| -> Option<cc_core::DimRef> {
-        let mut found: Vec<(f64, u8, ElementId)> = drawing
-            .prims
-            .iter()
-            .filter_map(|prim| match prim {
-                Prim::Line { a, b, element: Some(e), .. } if crate::tools::point_on_segment(*a, *b, p, tol) => {
-                    let along = across.zip((*b - *a).try_normalize()).map_or(0.0, |(d, u)| u.dot(d).abs());
-                    let category = state.project().element(*e)?.category();
-                    (rank(category) < 9).then_some((along, rank(category), *e))
-                }
-                _ => None,
-            })
-            .collect();
-        found.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
-        let element = found.iter().find_map(|(_, _, e)| project.dim_ref_in_view(view, *e, p));
-        // In elevations and sections an end on a level line follows the level.
-        let level = || {
-            let level = project.levels.iter().find(|l| (l.elevation - p.y).abs() < 1e-4)?;
-            project.level_ref(view, level.id)
-        };
-        element.or_else(level)
-    };
-    match dim.kind {
-        DimensionKind::Aligned | DimensionKind::Linear { .. } => {
-            let dir = dim.direction();
-            [at(dim.a, 1e-4, dir), at(dim.b, 1e-4, dir)]
-        }
-        DimensionKind::Radial | DimensionKind::Diameter => {
-            // The leader end lies on the true circle, a little off its chords.
-            let r = dim.length();
-            let Some(rim) = at(dim.b, 0.02 * r + 1e-4, None) else { return [None, None] };
-            let center = rim.element().and_then(|e| project.dim_ref_in_view(view, e, dim.a));
-            [center, Some(rim)]
-        }
-        DimensionKind::Angular { vertex, .. } => {
-            let end =
-                |p: DVec2| line_element(state, drawing, p, vertex).and_then(|e| project.dim_ref_in_view(view, e, p));
-            [end(dim.a), end(dim.b)]
-        }
-    }
-}
-
-/// A vertical dimension on level lines (elevations and sections): the
-/// level at the moving end (the upper one between two levels, else the
-/// referenced one) rises or drops so the dimension measures `value`.
-fn set_level_by_dimension(state: &mut AppState, dim: &Dimension, value: f64) -> Result<(), String> {
-    let level_of = |r: &Option<cc_core::DimRef>| match r.map(|r| r.target) {
-        Some(cc_core::RefTarget::Level(l)) => Some(l),
-        _ => None,
-    };
-    let (at_b, level) = match (level_of(&dim.refs[0]), level_of(&dim.refs[1])) {
-        // Between two levels the upper one moves (floor-to-floor heights).
-        (Some(la), Some(lb)) => {
-            if dim.b.y >= dim.a.y {
-                (true, lb)
-            } else {
-                (false, la)
-            }
-        }
-        (_, Some(l)) => (true, l),
-        (Some(l), None) => (false, l),
-        (None, None) => return Err(t!("msg-invalid-value")),
-    };
-    let dir = dim.direction().filter(|d| d.y.abs() > 0.99).ok_or_else(|| t!("msg-dim-level-vertical"))?;
-    let measured = (dim.b - dim.a).dot(dir);
-    let target = value * if measured < 0.0 { -1.0 } else { 1.0 };
-    let dz = dir.y * (target - measured) * if at_b { 1.0 } else { -1.0 };
-    state.session.doc.edit(t!("tx-dim-value"), |e| {
-        if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level) {
-            l.elevation += dz;
-        }
-    });
-    Ok(())
-}
-
-/// Elements (not dimensions, not `me`) whose linework in `drawing` passes
-/// through `p` but not through `other`.
-fn attached(drawing: &Drawing2D, state: &AppState, me: ElementId, p: DVec2, other: DVec2) -> Vec<ElementId> {
-    let tol = 1e-3;
-    let through = |q: DVec2| -> BTreeSet<ElementId> {
-        drawing
-            .prims
-            .iter()
-            .filter_map(|prim| match prim {
-                Prim::Line { a, b, element: Some(e), .. } if crate::tools::point_on_segment(*a, *b, q, tol) => Some(*e),
-                _ => None,
-            })
-            .filter(|e| *e != me)
-            .filter(|e| state.project().element(*e).is_some_and(|x| x.category() != Category::Dimension))
-            .collect()
-    };
-    let far = through(other);
-    through(p).into_iter().filter(|e| !far.contains(e)).collect()
-}
-
-/// Give dimension `id` the measured `value` (meters, or radians for angles),
-/// moving what its moving end touches (see the module docs).
+/// Give dimension `id` the measured `value` (meters, or radians for angles)
+/// through the engine's `dimension_set_value`.
 pub fn set_dimension_value(state: &mut AppState, id: ElementId, value: f64) -> Result<(), String> {
-    let dim = dimension(state, id).ok_or_else(|| t!("msg-invalid-value"))?;
-    if !value.is_finite() || value <= 1e-6 {
-        return Err(t!("msg-invalid-value"));
-    }
-    let plan = state
-        .project()
-        .view(dim.view)
-        .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }));
-    let drawing = state.drawing(dim.view).unwrap_or_default();
-    // The end that moves, the other one, and the elements to take along.
-    // The referenced element of an end moves first; otherwise what the
-    // view's linework shows at the ends.
-    let element_end = |r: &Option<cc_core::DimRef>| r.and_then(|r| r.element());
-    let (at_b, ids) = match (element_end(&dim.refs[0]), element_end(&dim.refs[1])) {
-        (_, Some(e)) => (true, vec![e]),
-        (Some(e), None) => (false, vec![e]),
-        // Ends on levels only: the moving end's level changes elevation.
-        (None, None) if dim.refs.iter().any(Option::is_some) => return set_level_by_dimension(state, &dim, value),
-        (None, None) => {
-            let b_side = attached(&drawing, state, id, dim.b, dim.a);
-            let a_side = attached(&drawing, state, id, dim.a, dim.b);
-            if !b_side.is_empty() || a_side.is_empty() { (true, b_side) } else { (false, a_side) }
-        }
-    };
-    if !ids.is_empty() && !plan {
-        return Err(t!("msg-dim-edit-plan"));
-    }
-    let (free, pinned): (Vec<_>, Vec<_>) = ids.into_iter().partition(|e| !state.project().is_pinned(*e));
-    if free.is_empty() && !pinned.is_empty() {
-        return Err(t!("msg-pinned-skipped", "count" => pinned.len()));
-    }
-    let moving = if at_b { dim.b } else { dim.a };
-    match dim.kind {
-        DimensionKind::Aligned | DimensionKind::Linear { .. } => {
-            let dir = dim.direction().ok_or_else(|| t!("msg-invalid-value"))?;
-            let measured = (dim.b - dim.a).dot(dir);
-            let target = value * if measured < 0.0 { -1.0 } else { 1.0 };
-            let shift = dir * (target - measured) * if at_b { 1.0 } else { -1.0 };
-            let result = state.session.doc.edit(t!("tx-dim-value"), |e| {
-                let mut translate = Vec::new();
-                let mut result = Ok(());
-                for el in &free {
-                    let line = e.project().element(*el).and_then(cc_core::wall_ops::line_of);
-                    let along =
-                        line.and_then(|(s, t)| (t - s).try_normalize()).is_some_and(|u| u.dot(dir).abs() > 0.99);
-                    match line {
-                        // Along the move: stretch the end at the dimension point.
-                        Some((s, t)) if along => {
-                            let at_start = s.distance(moving) <= t.distance(moving);
-                            let end = if at_start { s } else { t };
-                            if end.distance(moving) <= 1.0 {
-                                result = result.and(e.move_endpoint(*el, at_start, end + shift).map_err(|_| ()));
-                            }
-                        }
-                        _ => translate.push(*el),
-                    }
-                }
-                e.transform_elements(&translate, &PlanTransform::translate(shift));
-                if let Some(ElementKind::Dimension(d)) = e.element_mut(id).map(|x| &mut x.kind) {
-                    if at_b {
-                        d.b += shift;
-                    } else {
-                        d.a += shift;
-                    }
-                }
-                result
-            });
-            result.map_err(|_| t!("msg-degenerate"))
-        }
-        DimensionKind::Angular { vertex, .. } => {
-            if value >= std::f64::consts::PI {
-                return Err(t!("msg-invalid-value"));
-            }
-            let sweep = (dim.a - vertex).angle_to(dim.b - vertex);
-            let target = value * if sweep < 0.0 { -1.0 } else { 1.0 };
-            let turn = (target - sweep) * if at_b { 1.0 } else { -1.0 };
-            let t = PlanTransform::rotate_about(vertex, turn);
-            state.session.doc.edit(t!("tx-dim-value"), |e| {
-                e.transform_elements(&free, &t);
-                if let Some(ElementKind::Dimension(d)) = e.element_mut(id).map(|x| &mut x.kind) {
-                    if at_b {
-                        d.b = t.apply(d.b);
-                    } else {
-                        d.a = t.apply(d.a);
-                    }
-                }
-            });
-            Ok(())
-        }
-        DimensionKind::Radial | DimensionKind::Diameter => Err(t!("msg-dim-measured")),
-    }
+    let angular = dimension(state, id).is_some_and(|d| matches!(d.kind, DimensionKind::Angular { .. }));
+    let value = if angular { value.to_degrees() } else { value };
+    let command = cc_engine::commands::annotate::DimensionSetValue { id: id.0, value };
+    state.session.run(command).map(|_| ()).map_err(|e| e.message)
 }
 
 #[cfg(test)]
@@ -581,7 +341,7 @@ mod tests {
             kind: DimensionKind::Linear { dir: DVec2::X },
             refs: Default::default(),
         };
-        let refs = associate(&state, &drawing, &dim).refs;
+        let refs = cc_engine::dimensions::associate(state.project(), &drawing, &dim).refs;
         assert!(refs[0].is_none() && refs[1].is_some_and(|r| r.element() == Some(cid)));
         let ty = state.project().default_type(Category::Dimension).unwrap();
         let id =
@@ -631,7 +391,7 @@ mod tests {
             kind: DimensionKind::Angular { vertex, rays: Default::default() },
             refs: Default::default(),
         };
-        let dim = associate(&state, &drawing, &dim);
+        let dim = cc_engine::dimensions::associate(state.project(), &drawing, &dim);
         assert!(dim.refs.iter().all(Option::is_some), "{:?}", dim.refs);
         assert!(matches!(dim.kind, DimensionKind::Angular { rays: [Some(_), Some(_)], .. }));
         let level = state.project().levels[0].id;
@@ -664,7 +424,7 @@ mod tests {
             kind: DimensionKind::Linear { dir: DVec2::Y },
             refs: Default::default(),
         };
-        let dim = associate(&state, &drawing, &dim);
+        let dim = cc_engine::dimensions::associate(state.project(), &drawing, &dim);
         let targets: Vec<_> = dim.refs.iter().map(|r| r.map(|r| r.target)).collect();
         assert_eq!(targets, vec![Some(cc_core::RefTarget::Level(high)), Some(cc_core::RefTarget::Level(low))]);
         let ty = state.project().default_type(Category::Dimension).unwrap();

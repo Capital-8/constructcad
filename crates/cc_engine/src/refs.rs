@@ -5,10 +5,10 @@ use crate::error::{EngineError, Result};
 use cc_core::{Category, ElementId, ElementTypeId, LevelId, Project, ViewId};
 use glam::DVec2;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// A level, type, view or material: its numeric id or its name.
-#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Ref {
     Id(u64),

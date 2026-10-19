@@ -683,8 +683,8 @@ pub fn handle(
         // Matching types works in any 2D view.
         (Tool::MatchType, _) => crate::clipboard::match_type_tool(resp, painter, state, xf, drawing),
         // Dimensions work in any 2D view.
-        (Tool::Dimension { type_id, mode }, level) => {
-            dimension_tool(ui, resp, painter, state, view, level, (*type_id, *mode), xf, drawing)
+        (Tool::Dimension { type_id, mode }, _) => {
+            dimension_tool(ui, resp, painter, state, view, (*type_id, *mode), xf, drawing)
         }
         (_, None) | (_, Some(_)) if !is_plan => {
             if resp.clicked() {
@@ -1044,7 +1044,6 @@ fn dimension_tool(
     painter: &Painter,
     state: &mut AppState,
     view: &View,
-    level: Option<LevelId>,
     (type_id, mode): (ElementTypeId, DimensionMode),
     xf: &Xf,
     drawing: &Drawing2D,
@@ -1054,11 +1053,33 @@ fn dimension_tool(
     let tol = 6.0 / xf.scale;
     let points = state.interaction.points.clone();
     let place = |state: &mut AppState, dim: cc_core::Dimension| {
-        // In plans the ends follow the elements they were placed on.
-        let dim = crate::dim_edit::associate(state, drawing, &dim);
-        let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
-        if let Some(level) = level {
-            state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(Box::new(dim)));
+        // The engine places it; its ends follow the elements they were placed on.
+        let (kind, direction, vertex) = match dim.kind {
+            DimensionKind::Aligned => ("aligned", None, None),
+            DimensionKind::Linear { dir } => {
+                ("linear", Some(if dir.x.abs() >= dir.y.abs() { "horizontal" } else { "vertical" }), None)
+            }
+            DimensionKind::Angular { vertex, .. } => ("angular", None, Some(vertex.to_array())),
+            DimensionKind::Radial => ("radial", None, None),
+            DimensionKind::Diameter => ("diameter", None, None),
+        };
+        let command = cc_engine::commands::annotate::DimensionCreate {
+            view: cc_engine::Ref::Id(dim.view.0),
+            a: dim.a.to_array(),
+            b: dim.b.to_array(),
+            kind: Some(kind.to_string()),
+            offset: Some(dim.offset),
+            vertex,
+            direction: direction.map(str::to_string),
+            type_ref: Some(cc_engine::Ref::Id(type_id.0)),
+        };
+        match state.session.run(command) {
+            Ok(out) => {
+                if let Some(id) = out["id"].as_u64() {
+                    state.selection = std::collections::BTreeSet::from([ElementId(id)]);
+                }
+            }
+            Err(e) => state.message = e.message,
         }
         state.interaction.points.clear();
     };

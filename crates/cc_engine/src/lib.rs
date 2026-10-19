@@ -14,6 +14,7 @@
 //! elements by id.
 
 mod defaults;
+pub mod dimensions;
 mod error;
 pub mod i18n;
 mod refs;

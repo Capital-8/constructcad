@@ -144,6 +144,13 @@ impl Session {
         Some(cc_views::schedule(&self.doc.project, &self.geom, category, &def))
     }
 
+    /// Run a typed command (the way the GUI calls the engine): it goes
+    /// through [`Session::execute`] like a command from the CLI or MCP.
+    pub fn run<C: crate::Command + serde::Serialize>(&mut self, command: C) -> Result<Value> {
+        let args = serde_json::to_value(&command).map_err(|e| EngineError::invalid(e.to_string()))?;
+        self.execute(C::NAME, args)
+    }
+
     /// Run the command `name` with JSON `args`. A panic inside the command
     /// becomes an internal error and the document is kept.
     pub fn execute(&mut self, name: &str, args: Value) -> Result<Value> {
