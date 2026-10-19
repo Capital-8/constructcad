@@ -19,6 +19,14 @@ Os menus, atalhos, painéis e ferramentas que suas mãos já conhecem. Produtivo
 
 O ConstructCAD segue as convenções comuns às ferramentas CAD e BIM de desktop: barra de acesso rápido no canto superior esquerdo, ribbon com abas, paleta de propriedades e navegador de projeto encaixados na lateral, e atalhos de teclado padrão e de duas letras. São convenções gerais; o ConstructCAD não copia ícones, arte ou textos de nenhum produto (veja [Independência](#independência)).
 
+## Capturas de tela
+
+![Planta e vista 3D do projeto de exemplo](docs/screenshots/plan-3d.png)
+
+| Corte | Folha | Tabela |
+|---|---|---|
+| [![Corte com hachura e níveis](docs/screenshots/section.png)](docs/screenshots/section.png) | [![Folha A3 com uma elevação e um corte](docs/screenshots/sheet.png)](docs/screenshots/sheet.png) | [![Tabela de portas](docs/screenshots/schedule.png)](docs/screenshots/schedule.png) |
+
 ## Executar
 
 ```sh

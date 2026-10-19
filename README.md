@@ -19,6 +19,14 @@ The menus, shortcuts, panels and tools your hands already know. Productive on da
 
 ConstructCAD follows the conventions shared by desktop CAD and BIM tools: the quick access toolbar at the top left, a ribbon of tabs, the properties palette and project browser docked at the side, and standard and two-letter keyboard shortcuts. These are general conventions; ConstructCAD does not copy any product's icons, artwork or wording (see [Independence](#independence)).
 
+## Screenshots
+
+![Floor plan and 3D view of the example project](docs/screenshots/plan-3d.png)
+
+| Section | Sheet | Schedule |
+|---|---|---|
+| [![Section with cut hatching and levels](docs/screenshots/section.png)](docs/screenshots/section.png) | [![A3 sheet with an elevation and a section](docs/screenshots/sheet.png)](docs/screenshots/sheet.png) | [![Door schedule](docs/screenshots/schedule.png)](docs/screenshots/schedule.png) |
+
 ## Running
 
 Requires a recent stable Rust toolchain (edition 2024).
