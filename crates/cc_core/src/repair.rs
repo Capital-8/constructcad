@@ -158,10 +158,15 @@ impl Project {
         }
         // Dimension ends referencing missing elements or bad numbers become free.
         let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
+        let level_ids: Vec<_> = self.levels.iter().map(|l| l.id).collect();
+        let exists = |t: crate::RefTarget| match t {
+            crate::RefTarget::Element(id) => ids.contains(&id),
+            crate::RefTarget::Level(id) => level_ids.contains(&id),
+        };
         for e in self.elements.values_mut() {
             let ElementKind::Dimension(d) = &mut e.kind else { continue };
             for r in d.all_refs_mut() {
-                if r.is_some_and(|r| !ids.contains(&r.element) || !r.anchor_is_finite()) {
+                if r.is_some_and(|r| !exists(r.target) || !r.is_finite()) {
                     *r = None;
                     repairs += 1;
                 }

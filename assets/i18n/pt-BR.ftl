@@ -128,6 +128,7 @@ msg-dimension-zero = A cota mediria zero nessa direção.
 msg-invalid-value = Digite um número positivo.
 msg-dim-edit-plan = Cotas presas a elementos só podem ser editadas em plantas.
 msg-dim-measured = Cotas radiais e de diâmetro mostram o tamanho do arco: altere o elemento.
+msg-dim-level-vertical = Só cotas verticais entre níveis alteram a elevação de um nível.
 tx-dim-value = Valor de cota
 category-room = Ambientes
 category-grid = Eixos

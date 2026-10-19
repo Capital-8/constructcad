@@ -3,7 +3,7 @@
   generator: "ConstructCAD 0.1.0",
   project: (
     info: (
-      uid: "f796b01365f64e21b371568f433f85f8",
+      uid: "b5aaf993e2ad47e9a2d05a9a84d9c843",
       name: "Casa simples",
       number: "0001",
       client: "Exemplo",
@@ -540,7 +540,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "846c65e05f9f411f9e1ba335c4d187fb",
+        uid: "102b2b1215214797a484b738b25e0250",
       ),
       (4): (
         id: (4),
@@ -577,7 +577,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "a42a6cf96131402ca5d46402bd86ba5d",
+        uid: "e5af4973239f4c7c975465c0e1713c73",
       ),
       (5): (
         id: (5),
@@ -604,7 +604,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "a75b47664ea4411b9fbf4e015f80d0ce",
+        uid: "0f403d58ad2048acbe365cb57438cf03",
       ),
       (6): (
         id: (6),
@@ -626,7 +626,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "a2a1d2c5c9f342b1b7a48fdf5a000fe6",
+        uid: "095b299ce6ab40d6a5b7a96a15938027",
       ),
       (7): (
         id: (7),
@@ -648,7 +648,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "5a45a6c5e3104cbdb0d7aa5412ffe34e",
+        uid: "77a34332af2c44b8bad5c0850f884dcb",
       ),
       (8): (
         id: (8),
@@ -671,7 +671,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "a927a0ec0b924ffab85ae84bf783712e",
+        uid: "82fe384af8314fc88744862a3fea12e5",
       ),
       (9): (
         id: (9),
@@ -694,7 +694,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "a64f3cbf89ba408690385cfbd9930e19",
+        uid: "ec25f94e14934d138a8ab8784f1ccb77",
       ),
       (10): (
         id: (10),
@@ -725,7 +725,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "fe129be9cec143c3a205b9260386ec66",
+        uid: "242edac92a354500bb68374b797f7bbb",
       ),
       (11): (
         id: (11),
@@ -746,7 +746,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "28c60f503f2c4f4f9bb7e7cee43b6d28",
+        uid: "86188aa4c84445ad97eda7d4fb03bda4",
       ),
       (12): (
         id: (12),
@@ -770,7 +770,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "8931dced5d9f451da3283eeea4889968",
+        uid: "1957b5081353463f9d7b6844c4e53c6c",
       ),
       (13): (
         id: (13),
@@ -793,7 +793,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "f92b32afc2b4493d97b1c3dd4ab0cc30",
+        uid: "411a435628b24db3915b7c2d70d049d9",
       ),
       (14): (
         id: (14),
@@ -815,7 +815,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "68b7b33e2e894eff8fa0a1ccd52849be",
+        uid: "0f0273319410443f8536cf8659728356",
       ),
       (15): (
         id: (15),
@@ -838,7 +838,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "f7c93353968f4636a61bd1e95a667f05",
+        uid: "f8595db6ac0447f69084276827660b21",
       ),
       (16): (
         id: (16),
@@ -860,7 +860,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "80400f7dcbbc4d89815712c98969b6c0",
+        uid: "c9515f3187494822a4368b42cc7ab6b3",
       ),
       (17): (
         id: (17),
@@ -878,7 +878,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "70d8da85550945a8a93be9ad466b3138",
+        uid: "38af6a364fc04671903c8d3ddf6a6d99",
       ),
       (18): (
         id: (18),
@@ -898,7 +898,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "fe3f6f86b5244c0289995c5a2a8e7371",
+        uid: "cd091d3a1a594dc5a016bf446bdec964",
       ),
       (19): (
         id: (19),
@@ -918,7 +918,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "336a9a9bd5a54b5aac712a420e2686f8",
+        uid: "7213b86146344f3787f7555496e13082",
       ),
       (20): (
         id: (20),
@@ -949,7 +949,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "3d7a25642dce4bcb9ea92070f8ab28bb",
+        uid: "934121c607314ce0a5fe996c3a651175",
       ),
       (21): (
         id: (21),
@@ -1024,7 +1024,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "c9b44a4387374590ba971f8116e34f6d",
+        uid: "1a3af28000fb4d679a64251d5e26ba80",
       ),
       (22): (
         id: (22),
@@ -1111,7 +1111,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "deb743c4ed9a4ebd8346322546e88861",
+        uid: "094a533e2ba847338a3ea111f99b8004",
       ),
       (23): (
         id: (23),
@@ -1168,7 +1168,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "e923938ef0b84abfac1cf24abe498700",
+        uid: "a8b1352992d247e784e8b5a95a4abf1c",
       ),
       (24): (
         id: (24),
@@ -1243,7 +1243,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "92bd644dbe604239a5cfc65f5cad03af",
+        uid: "3bcf03512d2a42d2bc1a1a563cb615ea",
       ),
       (25): (
         id: (25),
@@ -1300,7 +1300,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "5363cfb2854e4615863587ad08e4be1a",
+        uid: "1946854c95e34f5cbfe9d31e705c4845",
       ),
       (26): (
         id: (26),
@@ -1357,7 +1357,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "dd2ccd3d94474d6eab72b650f6e66221",
+        uid: "b1be40d691704802b3196133c0b228d1",
       ),
       (27): (
         id: (27),
@@ -1408,7 +1408,7 @@
           comments: "",
           cost: None,
         ),
-        uid: "d079aa94fd24484d8c4d7e67d02adcb9",
+        uid: "ca916a8c03414e8abc6f0e37d7b4edef",
       ),
     },
     elements: {
@@ -1433,7 +1433,7 @@
           join_start: true,
           join_end: true,
         )),
-        uid: "83a60cd07ec94cf0a6adcb8880bd25ac",
+        uid: "f6c5766225f94b4daa08758f3f9fc896",
       ),
       (44): (
         id: (44),
@@ -1456,7 +1456,7 @@
           join_start: true,
           join_end: true,
         )),
-        uid: "c2e04c8c3a5943a4a666f5d5268a4a3c",
+        uid: "b7997d6985b34223b8f94b4b0fc4caaf",
       ),
       (45): (
         id: (45),
@@ -1479,7 +1479,7 @@
           join_start: true,
           join_end: true,
         )),
-        uid: "d82cc573a2ee4300976000905c6d8c40",
+        uid: "a4989c60b0dd4100a7744df8f1ab9aa1",
       ),
       (46): (
         id: (46),
@@ -1502,7 +1502,7 @@
           join_start: true,
           join_end: true,
         )),
-        uid: "42f354f51ee3473ebb2ef4d259097a50",
+        uid: "076ab2ab315348548d7f75412c8b50ea",
       ),
       (47): (
         id: (47),
@@ -1522,7 +1522,7 @@
           join_start: true,
           join_end: true,
         )),
-        uid: "450bb4e94e934f888968ed5636b2c368",
+        uid: "3aa5595ad74d4702ba5d0bbcfff75d5a",
       ),
       (48): (
         id: (48),
@@ -1537,7 +1537,7 @@
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "cddadb8e056045c2adcdae8b50912c07",
+        uid: "39a721c003d34904891bc1c6cab721b8",
       ),
       (49): (
         id: (49),
@@ -1552,7 +1552,7 @@
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "9a2489545d1b49ff8ffd9bab4ae802d6",
+        uid: "be1ea7c1a3284c058f5176b83873d208",
       ),
       (50): (
         id: (50),
@@ -1567,7 +1567,7 @@
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "ef3d1e5483e54fd4b9f69880cd0fd568",
+        uid: "6d98a9c470924b118f971be9389a26cc",
       ),
       (51): (
         id: (51),
@@ -1582,7 +1582,7 @@
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "c32c19731e6845549e3e2469169841f3",
+        uid: "f0c79a0a58314e9bbcf49ea5905d1c06",
       ),
       (52): (
         id: (52),
@@ -1597,7 +1597,7 @@
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "533e00c38957489ea9c25135c11a291e",
+        uid: "e970eece1b3e45e982141ff3718c7bea",
       ),
       (53): (
         id: (53),
@@ -1612,7 +1612,7 @@
           flip_facing: false,
           flip_hand: false,
         )),
-        uid: "71cca39e302a4b27ad5ffbb9c9504000",
+        uid: "6f74a330fb124e9e9867e55e1f785a03",
       ),
       (54): (
         id: (54),
@@ -1629,7 +1629,7 @@
           ],
           height_offset: 0.0,
         )),
-        uid: "e6fd5e46b18d4fbcac3f4b6545b40a32",
+        uid: "b4d9afa6294c44258a3b5d6e89186ae2",
       ),
       (55): (
         id: (55),
@@ -1650,7 +1650,7 @@
             slope: 0.35,
           ),
         )),
-        uid: "1c1f8d76fb8e4d2e8e8fc3250266fba2",
+        uid: "65ebc223e8ec4d5e8eacef29d608a704",
       ),
       (56): (
         id: (56),
@@ -1668,7 +1668,7 @@
             offset: 0.0,
           ),
         )),
-        uid: "0e7db34d52c646758d1e5a35e6df3cf1",
+        uid: "6f5bf5fc3858440d9f4646fb6cfdf7e9",
       ),
       (57): (
         id: (57),
@@ -1686,7 +1686,7 @@
             offset: 0.0,
           ),
         )),
-        uid: "ca08de68944d4ac985334a12f56a73fc",
+        uid: "28513bff08e341468967030af8b1e521",
       ),
       (58): (
         id: (58),
@@ -1704,7 +1704,7 @@
             offset: 0.0,
           ),
         )),
-        uid: "672f37f14e5d49e794fe80d2a1e5fac0",
+        uid: "7f01807bbb4749f28be0ef3eb8c685dd",
       ),
       (59): (
         id: (59),
@@ -1717,7 +1717,7 @@
           end: (7.0, -2.5),
           top_offset: 3.0,
         )),
-        uid: "ceb005b07996413b9c8153d466c8ba38",
+        uid: "e13e2b08360a40b0b959ed3ccbac4d60",
       ),
       (60): (
         id: (60),
@@ -1732,7 +1732,7 @@
           ],
           base_offset: 0.0,
         )),
-        uid: "2ed682af7aa14c89aed2d807c25556f5",
+        uid: "5405cedc3c25490aa9c23573936cded6",
       ),
       (61): (
         id: (61),
@@ -1746,7 +1746,7 @@
           base_offset: 0.0,
           overrides: {},
         )),
-        uid: "c170990f5ebf4f8a8f26da39da6ff606",
+        uid: "3e9682f846694eb8b54c1036dc02f97b",
       ),
       (62): (
         id: (62),
@@ -1760,7 +1760,7 @@
           base_offset: 0.0,
           overrides: {},
         )),
-        uid: "f331a2a1d8de49f192c8b88b87e16d7e",
+        uid: "5934554e07ef451183fac56df8c4f3dc",
       ),
       (63): (
         id: (63),
@@ -1774,7 +1774,7 @@
           base_offset: 0.0,
           overrides: {},
         )),
-        uid: "3cc334e3fc1e4c3488fdc2b8506ebdec",
+        uid: "ed2f6be564a44854bac6b1cc3df55a35",
       ),
       (64): (
         id: (64),
@@ -1788,7 +1788,7 @@
           base_offset: 0.0,
           overrides: {},
         )),
-        uid: "58ac53af244249b1b5e28292e3512b87",
+        uid: "89c7d18265bf4136850ae26c74dba34b",
       ),
       (65): (
         id: (65),
@@ -1802,7 +1802,7 @@
           base_offset: 0.0,
           overrides: {},
         )),
-        uid: "31b4360f90014dfd8a931966ed8340ac",
+        uid: "7cdaddead67a43089cff95a438eaa6bf",
       ),
       (66): (
         id: (66),
@@ -1816,7 +1816,7 @@
           base_offset: 0.0,
           overrides: {},
         )),
-        uid: "4cdbd919bab248929b41f8db4d77bbec",
+        uid: "b4aceaed2bd74ca59d31b0e308aa0319",
       ),
       (67): (
         id: (67),
@@ -1830,7 +1830,7 @@
           name: "Sala",
           height: 3.0,
         )),
-        uid: "f6c841b2dfd94cb1967b06321b847268",
+        uid: "2deb41737b394e0cafaf908373b7892f",
       ),
       (68): (
         id: (68),
@@ -1844,7 +1844,7 @@
           name: "Quarto",
           height: 3.0,
         )),
-        uid: "c5f0cab9a74249799d3973dfddfc3a7f",
+        uid: "0cff992a19f74c7dbcf24bab8b68119d",
       ),
       (69): (
         id: (69),
@@ -1857,7 +1857,7 @@
           end: (0.0, 7.5),
           name: "1",
         )),
-        uid: "132308dde64749ec9d7b23112fc1aa81",
+        uid: "67fb79728ec24ffc980b7b711e9e3334",
       ),
       (70): (
         id: (70),
@@ -1870,7 +1870,7 @@
           end: (5.0, 7.5),
           name: "2",
         )),
-        uid: "6a096051f5d448b59595bdf7d0f8da51",
+        uid: "985f708397b84ef591d3c89d5663e248",
       ),
       (71): (
         id: (71),
@@ -1883,7 +1883,7 @@
           end: (9.0, 7.5),
           name: "3",
         )),
-        uid: "3b93fcdcc86144d79c1728715d1a6dbd",
+        uid: "cdb43563df094a2490d31e6b85a69467",
       ),
       (72): (
         id: (72),
@@ -1896,7 +1896,7 @@
           end: (10.5, 0.0),
           name: "A",
         )),
-        uid: "3954e776bd2e402d8736ddfcf595747b",
+        uid: "2cab50cf8b524e96ae80216e7cb628e9",
       ),
       (73): (
         id: (73),
@@ -1909,7 +1909,7 @@
           end: (10.5, 6.0),
           name: "B",
         )),
-        uid: "8a40843675c54c4f9b36f2f28ecf361b",
+        uid: "c566a96157ad44ff9f51b79212a629ba",
       ),
       (74): (
         id: (74),
@@ -1924,22 +1924,24 @@
           offset: -1.2,
           kind: Aligned,
           refs: (Some((
-            element: (69),
+            target: Element((69)),
             anchor: Line(
               from_end: false,
               along: 1.5,
               across: 0.0,
             ),
+            z: None,
           )), Some((
-            element: (70),
+            target: Element((70)),
             anchor: Line(
               from_end: false,
               along: 1.5,
               across: 0.0,
             ),
+            z: None,
           ))),
         )),
-        uid: "da6b2bf84a3548a6b13208f5d23151ee",
+        uid: "4805c323f2774d1aba63ed6c7bd3a317",
       ),
       (75): (
         id: (75),
@@ -1954,22 +1956,24 @@
           offset: -1.2,
           kind: Aligned,
           refs: (Some((
-            element: (70),
+            target: Element((70)),
             anchor: Line(
               from_end: false,
               along: 1.5,
               across: 0.0,
             ),
+            z: None,
           )), Some((
-            element: (71),
+            target: Element((71)),
             anchor: Line(
               from_end: false,
               along: 1.5,
               across: 0.0,
             ),
+            z: None,
           ))),
         )),
-        uid: "6f26cf560e914b0b938b285490c97acc",
+        uid: "3f9980f55bf741008fc2326f476efb00",
       ),
       (76): (
         id: (76),
@@ -1984,22 +1988,24 @@
           offset: -1.9,
           kind: Aligned,
           refs: (Some((
-            element: (69),
+            target: Element((69)),
             anchor: Line(
               from_end: false,
               along: 1.5,
               across: 0.0,
             ),
+            z: None,
           )), Some((
-            element: (71),
+            target: Element((71)),
             anchor: Line(
               from_end: false,
               along: 1.5,
               across: 0.0,
             ),
+            z: None,
           ))),
         )),
-        uid: "d6bffac0feb2422ca779e6200b9366e5",
+        uid: "e2150a9f7a6846ddbd2bcd414d746793",
       ),
     },
     views: {

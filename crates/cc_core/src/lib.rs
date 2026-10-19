@@ -23,7 +23,7 @@ mod view;
 pub mod wall_ops;
 
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
-pub use dim_refs::{DimRef, RefAnchor};
+pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
     Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted,

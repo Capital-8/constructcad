@@ -54,7 +54,7 @@ pub fn open(state: &mut AppState, view: ViewId, target: Target, at: Pos2) {
 
 fn dimension(state: &AppState, id: ElementId) -> Option<Dimension> {
     match state.project().element(id).map(|e| &e.kind) {
-        Some(ElementKind::Dimension(d)) => Some(d.clone()),
+        Some(ElementKind::Dimension(d)) => Some((**d).clone()),
         _ => None,
     }
 }
@@ -217,21 +217,20 @@ pub fn apply_text(state: &mut AppState, target: &Target, text: &str) -> Result<(
 pub fn associate(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> Dimension {
     let mut out = Dimension { refs: end_refs(state, drawing, dim), ..dim.clone() };
     if let DimensionKind::Angular { vertex, rays } = &mut out.kind
-        && in_plan(state, dim)
+        && let Some(view) = model_view(state, dim)
     {
         let p = state.project();
         for (ray, end) in rays.iter_mut().zip([dim.a, dim.b]) {
-            *ray = line_element(state, drawing, end, *vertex).and_then(|e| p.dim_ref_at(e, *vertex));
+            *ray = line_element(state, drawing, end, *vertex).and_then(|e| p.dim_ref_in_view(view, e, *vertex));
         }
     }
     out
 }
 
-fn in_plan(state: &AppState, dim: &Dimension) -> bool {
-    state
-        .project()
-        .view(dim.view)
-        .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }))
+/// The dimension's view when it shows the model in known coordinates
+/// (plans, elevations and sections).
+fn model_view<'a>(state: &'a AppState, dim: &Dimension) -> Option<&'a cc_core::View> {
+    state.project().view(dim.view).filter(|v| v.is_plan() || v.projection().is_some())
 }
 
 fn rank(c: Category) -> u8 {
@@ -263,9 +262,8 @@ fn line_element(state: &AppState, drawing: &Drawing2D, p: DVec2, q: DVec2) -> Op
 }
 
 fn end_refs(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Option<cc_core::DimRef>; 2] {
-    if !in_plan(state, dim) {
-        return [None, None];
-    }
+    let Some(view) = model_view(state, dim) else { return [None, None] };
+    let project = state.project();
     // Elements with linework through `p` (within `tol`), best first.
     let at = |p: DVec2, tol: f64, across: Option<DVec2>| -> Option<cc_core::DimRef> {
         let mut found: Vec<(f64, u8, ElementId)> = drawing
@@ -281,7 +279,13 @@ fn end_refs(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Option<c
             })
             .collect();
         found.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
-        found.iter().find_map(|(_, _, e)| state.project().dim_ref_at(*e, p))
+        let element = found.iter().find_map(|(_, _, e)| project.dim_ref_in_view(view, *e, p));
+        // In elevations and sections an end on a level line follows the level.
+        let level = || {
+            let level = project.levels.iter().find(|l| (l.elevation - p.y).abs() < 1e-4)?;
+            project.level_ref(view, level.id)
+        };
+        element.or_else(level)
     };
     match dim.kind {
         DimensionKind::Aligned | DimensionKind::Linear { .. } => {
@@ -292,13 +296,48 @@ fn end_refs(state: &AppState, drawing: &Drawing2D, dim: &Dimension) -> [Option<c
             // The leader end lies on the true circle, a little off its chords.
             let r = dim.length();
             let Some(rim) = at(dim.b, 0.02 * r + 1e-4, None) else { return [None, None] };
-            [state.project().dim_ref_at(rim.element, dim.a), Some(rim)]
+            let center = rim.element().and_then(|e| project.dim_ref_in_view(view, e, dim.a));
+            [center, Some(rim)]
         }
         DimensionKind::Angular { vertex, .. } => {
-            let end = |p: DVec2| line_element(state, drawing, p, vertex).and_then(|e| state.project().dim_ref_at(e, p));
+            let end =
+                |p: DVec2| line_element(state, drawing, p, vertex).and_then(|e| project.dim_ref_in_view(view, e, p));
             [end(dim.a), end(dim.b)]
         }
     }
+}
+
+/// A vertical dimension on level lines (elevations and sections): the
+/// level at the moving end (the upper one between two levels, else the
+/// referenced one) rises or drops so the dimension measures `value`.
+fn set_level_by_dimension(state: &mut AppState, dim: &Dimension, value: f64) -> Result<(), String> {
+    let level_of = |r: &Option<cc_core::DimRef>| match r.map(|r| r.target) {
+        Some(cc_core::RefTarget::Level(l)) => Some(l),
+        _ => None,
+    };
+    let (at_b, level) = match (level_of(&dim.refs[0]), level_of(&dim.refs[1])) {
+        // Between two levels the upper one moves (floor-to-floor heights).
+        (Some(la), Some(lb)) => {
+            if dim.b.y >= dim.a.y {
+                (true, lb)
+            } else {
+                (false, la)
+            }
+        }
+        (_, Some(l)) => (true, l),
+        (Some(l), None) => (false, l),
+        (None, None) => return Err(t!("msg-invalid-value")),
+    };
+    let dir = dim.direction().filter(|d| d.y.abs() > 0.99).ok_or_else(|| t!("msg-dim-level-vertical"))?;
+    let measured = (dim.b - dim.a).dot(dir);
+    let target = value * if measured < 0.0 { -1.0 } else { 1.0 };
+    let dz = dir.y * (target - measured) * if at_b { 1.0 } else { -1.0 };
+    state.doc.edit(t!("tx-dim-value"), |e| {
+        if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level) {
+            l.elevation += dz;
+        }
+    });
+    Ok(())
 }
 
 /// Elements (not dimensions, not `me`) whose linework in `drawing` passes
@@ -336,10 +375,13 @@ pub fn set_dimension_value(state: &mut AppState, id: ElementId, value: f64) -> R
     // The end that moves, the other one, and the elements to take along.
     // The referenced element of an end moves first; otherwise what the
     // view's linework shows at the ends.
-    let (at_b, ids) = match dim.refs {
-        [_, Some(r)] => (true, vec![r.element]),
-        [Some(r), None] => (false, vec![r.element]),
-        [None, None] => {
+    let element_end = |r: &Option<cc_core::DimRef>| r.and_then(|r| r.element());
+    let (at_b, ids) = match (element_end(&dim.refs[0]), element_end(&dim.refs[1])) {
+        (_, Some(e)) => (true, vec![e]),
+        (Some(e), None) => (false, vec![e]),
+        // Ends on levels only: the moving end's level changes elevation.
+        (None, None) if dim.refs.iter().any(Option::is_some) => return set_level_by_dimension(state, &dim, value),
+        (None, None) => {
             let b_side = attached(&drawing, state, id, dim.b, dim.a);
             let a_side = attached(&drawing, state, id, dim.a, dim.b);
             if !b_side.is_empty() || a_side.is_empty() { (true, b_side) } else { (false, a_side) }
@@ -444,7 +486,7 @@ mod tests {
             kind: Default::default(),
             refs: Default::default(),
         };
-        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(dim));
+        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(Box::new(dim)));
         state.sync();
         set_dimension_value(&mut state, id, 5.0).unwrap();
         assert!((dimension(&state, id).unwrap().value() - 5.0).abs() < 1e-9);
@@ -489,7 +531,7 @@ mod tests {
             kind: DimensionKind::Linear { dir: DVec2::X },
             refs: Default::default(),
         };
-        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(dim));
+        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(Box::new(dim)));
         state.sync();
         set_dimension_value(&mut state, id, 6.0).unwrap();
         let moved = match &state.project().element(cid).unwrap().kind {
@@ -540,9 +582,10 @@ mod tests {
             refs: Default::default(),
         };
         let refs = associate(&state, &drawing, &dim).refs;
-        assert!(refs[0].is_none() && refs[1].is_some_and(|r| r.element == cid));
+        assert!(refs[0].is_none() && refs[1].is_some_and(|r| r.element() == Some(cid)));
         let ty = state.project().default_type(Category::Dimension).unwrap();
-        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(Dimension { refs, ..dim }));
+        let id =
+            state.create_element("dim".into(), level, ty, ElementKind::Dimension(Box::new(Dimension { refs, ..dim })));
         crate::tools::move_elements(&mut state, &[cid], DVec2::new(1.5, 0.0));
         assert!((dimension(&state, id).unwrap().value() - 5.5).abs() < 1e-9);
         // Editing the value moves the referenced column back.
@@ -593,13 +636,44 @@ mod tests {
         assert!(matches!(dim.kind, DimensionKind::Angular { rays: [Some(_), Some(_)], .. }));
         let level = state.project().levels[0].id;
         let ty = state.project().default_type(Category::Dimension).unwrap();
-        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(dim));
+        let id = state.create_element("dim".into(), level, ty, ElementKind::Dimension(Box::new(dim)));
         // Move the Y wall (and its face) half a meter along X: the vertex follows.
         crate::tools::move_elements(&mut state, &[wy], DVec2::new(0.5, 0.0));
         let d = dimension(&state, id).unwrap();
         let DimensionKind::Angular { vertex: moved, .. } = d.kind else { panic!("{:?}", d.kind) };
         assert!((moved - vertex - DVec2::new(0.5, 0.0)).length() < 1e-9, "{moved}");
         assert!((d.value().to_degrees() - 90.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn elevation_dimensions_between_levels_drive_the_upper_level() {
+        let mut state = sample();
+        let elevation = state.project().views.values().find(|v| v.projection().is_some()).map(|v| v.id).unwrap();
+        let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.elevation)).collect();
+        let [(low, z0), (high, z1), ..] = levels[..] else { panic!("the sample has two levels") };
+        let drawing = state.drawing(elevation).unwrap();
+        // Left of everything drawn, where only the level lines reach.
+        let (lo, _) = drawing.bounds().unwrap();
+        let x = lo.x + 0.2;
+        let dim = Dimension {
+            view: elevation,
+            // Picked from the upper level down: the upper one still moves.
+            a: DVec2::new(x, z1),
+            b: DVec2::new(x, z0),
+            offset: 0.5,
+            kind: DimensionKind::Linear { dir: DVec2::Y },
+            refs: Default::default(),
+        };
+        let dim = associate(&state, &drawing, &dim);
+        let targets: Vec<_> = dim.refs.iter().map(|r| r.map(|r| r.target)).collect();
+        assert_eq!(targets, vec![Some(cc_core::RefTarget::Level(high)), Some(cc_core::RefTarget::Level(low))]);
+        let ty = state.project().default_type(Category::Dimension).unwrap();
+        let id = state.create_element("dim".into(), low, ty, ElementKind::Dimension(Box::new(dim)));
+        set_dimension_value(&mut state, id, 3.5).unwrap();
+        let upper = state.project().level(high).unwrap().elevation;
+        assert!((upper - (z0 + 3.5)).abs() < 1e-9, "{upper}");
+        assert_eq!(state.project().level(low).unwrap().elevation, z0);
+        assert!((dimension(&state, id).unwrap().value() - 3.5).abs() < 1e-9);
     }
 
     #[test]

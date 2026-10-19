@@ -1068,7 +1068,7 @@ fn dimension_tool(
         let dim = crate::dim_edit::associate(state, drawing, &dim);
         let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
         if let Some(level) = level {
-            state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(dim));
+            state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(Box::new(dim)));
         }
         state.interaction.points.clear();
     };

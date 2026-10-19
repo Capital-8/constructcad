@@ -157,7 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let refs = [on_grid(e, a), on_grid(e, b)];
             let dim = Dimension { view: ground_plan, a, b, offset, kind: Default::default(), refs };
-            add(e, dim_t, "", ElementKind::Dimension(dim));
+            add(e, dim_t, "", ElementKind::Dimension(Box::new(dim)));
         }
 
         // At 1:75 the ground plan, with its grids, fits the A3 sheet.

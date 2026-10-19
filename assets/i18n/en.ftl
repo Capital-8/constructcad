@@ -128,6 +128,7 @@ msg-dimension-zero = The dimension would measure zero in that direction.
 msg-invalid-value = Type a positive number.
 msg-dim-edit-plan = Dimensions touching elements can be edited in plans only.
 msg-dim-measured = Radial and diameter dimensions show the arc's size: change the element instead.
+msg-dim-level-vertical = Only vertical dimensions between levels change a level's elevation.
 tx-dim-value = Dimension Value
 category-room = Rooms
 category-grid = Grids

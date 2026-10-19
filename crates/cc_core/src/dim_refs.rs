@@ -1,18 +1,29 @@
 //! Associative dimensions: each end of a dimension may reference a point
-//! of an element, stored in that element's own frame. Every edit ends by
-//! recomputing referenced ends ([`crate::EditCtx`]), inside the same
-//! transaction, so dimensions follow moved, rotated or stretched elements
-//! and undo restores both together.
+//! of an element (stored in that element's own frame, plus a height in
+//! elevations and sections) or a level. Every edit ends by recomputing
+//! referenced ends ([`crate::EditCtx`]), inside the same transaction, so
+//! dimensions follow moved, rotated, stretched or raised elements and
+//! levels, and undo restores both together.
 
-use crate::{ElementId, ElementKind, Project};
+use crate::{Element, ElementId, ElementKind, LevelId, Project, View, ViewKind};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
 
-/// A point of an element that a dimension end follows.
+/// What a dimension end follows.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct DimRef {
-    pub element: ElementId,
+    pub target: RefTarget,
     pub anchor: RefAnchor,
+    /// Height in elevations and sections (`None` in plans).
+    #[serde(default)]
+    pub z: Option<RefHeight>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RefTarget {
+    Element(ElementId),
+    /// A level line of an elevation or section (only its height counts).
+    Level(LevelId),
 }
 
 /// Where the point sits in the element's frame.
@@ -27,21 +38,43 @@ pub enum RefAnchor {
     /// On a door or window: `along` its wall from the opening center,
     /// `across` to the left of the wall's line.
     Hosted { along: f64, across: f64 },
+    /// A level: the end keeps its position along the view.
+    Level,
+}
+
+/// Height of a referenced point: `dz` above the element's base, or above
+/// its top when `from_top` (walls), so it follows height changes.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RefHeight {
+    pub from_top: bool,
+    pub dz: f64,
 }
 
 impl DimRef {
-    pub(crate) fn anchor_is_finite(&self) -> bool {
-        self.anchor.is_finite()
+    /// The referenced element, if the target is one.
+    pub fn element(&self) -> Option<ElementId> {
+        match self.target {
+            RefTarget::Element(id) => Some(id),
+            RefTarget::Level(_) => None,
+        }
     }
-}
 
-impl RefAnchor {
-    fn is_finite(&self) -> bool {
-        match *self {
+    pub(crate) fn is_finite(&self) -> bool {
+        let anchor = match self.anchor {
             RefAnchor::Line { along, across, .. } | RefAnchor::Hosted { along, across } => {
                 along.is_finite() && across.is_finite()
             }
             RefAnchor::Local { x, y } => x.is_finite() && y.is_finite(),
+            RefAnchor::Level => true,
+        };
+        anchor && self.z.is_none_or(|h| h.dz.is_finite())
+    }
+
+    /// Whether the target still exists in `project`.
+    pub(crate) fn target_exists(&self, project: &Project) -> bool {
+        match self.target {
+            RefTarget::Element(id) => project.element(id).is_some(),
+            RefTarget::Level(id) => project.level(id).is_some(),
         }
     }
 }
@@ -50,6 +83,37 @@ impl RefAnchor {
 fn frame(a: DVec2, b: DVec2) -> Option<(DVec2, DVec2)> {
     let u = (b - a).try_normalize()?;
     Some((u, u.perp()))
+}
+
+/// How elevations and sections map the model: x along `right` from
+/// `origin` (plan), y the height.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Projection {
+    pub origin: DVec2,
+    pub right: DVec2,
+}
+
+impl Projection {
+    pub fn project(&self, p: DVec2, z: f64) -> DVec2 {
+        DVec2::new((p - self.origin).dot(self.right), z)
+    }
+}
+
+impl View {
+    /// The projection of an elevation or section view.
+    pub fn projection(&self) -> Option<Projection> {
+        let (origin, look) = match &self.kind {
+            ViewKind::Elevation { direction } => (DVec2::ZERO, direction.look()),
+            ViewKind::Section { start, end, .. } => (*start, -(*end - *start).try_normalize()?.perp()),
+            _ => return None,
+        };
+        // The view's right: the look direction crossed with up.
+        Some(Projection { origin, right: DVec2::new(look.y, -look.x) })
+    }
+
+    pub fn is_plan(&self) -> bool {
+        matches!(self.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. })
+    }
 }
 
 impl Project {
@@ -75,13 +139,40 @@ impl Project {
             }
             _ => return None,
         };
-        anchor.is_finite().then_some(DimRef { element: id, anchor })
+        let r = DimRef { target: RefTarget::Element(id), anchor, z: None };
+        r.is_finite().then_some(r)
     }
 
-    /// The current plan point of a reference (`None` when the element is
-    /// gone or no longer fits the anchor).
+    /// The reference of point `p` (in `view`'s drawing coordinates) on
+    /// element `id`: in plans as [`Project::dim_ref_at`]; in elevations and
+    /// sections a plan point of the element that projects to `p.x`, and a
+    /// height from the element's base or top (whichever is nearer).
+    pub fn dim_ref_in_view(&self, view: &View, id: ElementId, p: DVec2) -> Option<DimRef> {
+        let Some(projection) = view.projection() else {
+            return if view.is_plan() { self.dim_ref_at(id, p) } else { None };
+        };
+        let e = self.element(id)?;
+        let c = self.base_point(e)?;
+        let plan = c + projection.right * (p.x - projection.project(c, 0.0).x);
+        let base = self.base_z(e);
+        let z = match self.top_z(e) {
+            Some(top) if (p.y - top).abs() < (p.y - base).abs() => RefHeight { from_top: true, dz: p.y - top },
+            _ => RefHeight { from_top: false, dz: p.y - base },
+        };
+        let r = DimRef { z: Some(z), ..self.dim_ref_at(id, plan)? };
+        r.is_finite().then_some(r)
+    }
+
+    /// A level as a reference in an elevation or section.
+    pub fn level_ref(&self, view: &View, level: LevelId) -> Option<DimRef> {
+        view.projection()?;
+        self.level(level)?;
+        Some(DimRef { target: RefTarget::Level(level), anchor: RefAnchor::Level, z: None })
+    }
+
+    /// The current plan point of an element reference.
     pub fn resolve_dim_ref(&self, r: &DimRef) -> Option<DVec2> {
-        let e = self.element(r.element)?;
+        let e = self.element(r.element()?)?;
         let p = match (r.anchor, &e.kind) {
             (RefAnchor::Line { from_end, along, across }, _) => {
                 let (a, b) = crate::wall_ops::line_of(e)?;
@@ -100,6 +191,65 @@ impl Project {
         };
         p.is_finite().then_some(p)
     }
+
+    /// The current point of a reference in `view`'s drawing coordinates;
+    /// `current` is the end's present position (levels keep its x).
+    pub fn resolve_in_view(&self, r: &DimRef, view: &View, current: DVec2) -> Option<DVec2> {
+        let projection = view.projection();
+        let p = match (r.target, projection, r.z) {
+            (RefTarget::Level(id), Some(_), _) => DVec2::new(current.x, self.level(id)?.elevation),
+            (RefTarget::Element(id), Some(projection), Some(h)) => {
+                let e = self.element(id)?;
+                let z = if h.from_top { self.top_z(e)? } else { self.base_z(e) } + h.dz;
+                projection.project(self.resolve_dim_ref(r)?, z)
+            }
+            (RefTarget::Element(_), None, None) if view.is_plan() => self.resolve_dim_ref(r)?,
+            _ => return None,
+        };
+        p.is_finite().then_some(p)
+    }
+
+    /// A plan point that moves with the element (its line's middle, its
+    /// position or its opening's center).
+    fn base_point(&self, e: &Element) -> Option<DVec2> {
+        match &e.kind {
+            ElementKind::Wall(_) | ElementKind::Beam(_) | ElementKind::Grid(_) => {
+                crate::wall_ops::line_of(e).map(|(a, b)| (a + b) / 2.0)
+            }
+            ElementKind::Column(c) => Some(c.position),
+            ElementKind::Component(c) => Some(c.position),
+            ElementKind::Door(h) | ElementKind::Window(h) => {
+                let w = self.element(h.host)?.as_wall()?;
+                Some(w.start + (w.end - w.start).normalize_or_zero() * h.offset)
+            }
+            _ => None,
+        }
+    }
+
+    /// Height of an element's base, the reference for heights in views.
+    fn base_z(&self, e: &Element) -> f64 {
+        let level = self.level_elevation(e.level);
+        match &e.kind {
+            ElementKind::Wall(w) => self.wall_base_z(e, w),
+            ElementKind::Column(c) => level + c.base_offset,
+            ElementKind::Component(c) => level + c.base_offset,
+            ElementKind::Beam(b) => level + b.top_offset,
+            ElementKind::Door(h) | ElementKind::Window(h) => {
+                let host = self.element(h.host);
+                let wall_base = host.and_then(|x| x.as_wall().map(|w| self.wall_base_z(x, w))).unwrap_or(level);
+                wall_base + h.sill_height
+            }
+            _ => level,
+        }
+    }
+
+    /// Height of an element's top, where it has one that can change.
+    fn top_z(&self, e: &Element) -> Option<f64> {
+        match &e.kind {
+            ElementKind::Wall(w) => Some(self.wall_top_z(e, w)),
+            _ => None,
+        }
+    }
 }
 
 fn local(position: DVec2, rotation_deg: f64, p: DVec2) -> RefAnchor {
@@ -112,13 +262,13 @@ fn from_local(position: DVec2, rotation_deg: f64, x: f64, y: f64) -> DVec2 {
 }
 
 impl crate::EditCtx<'_> {
-    /// Move the referenced ends of every dimension to their elements'
+    /// Move the referenced ends of every dimension to their targets'
     /// current points (and an angle's vertex to the intersection of its
-    /// lines); references to deleted elements are dropped (the end stays
+    /// lines); references to deleted targets are dropped (the end stays
     /// where it was). Only changed dimensions are touched.
     pub(crate) fn sync_dimensions(&mut self) {
         let project = self.project();
-        let updates: Vec<(ElementId, crate::Dimension)> = project
+        let updates: Vec<(ElementId, Box<crate::Dimension>)> = project
             .elements
             .values()
             .filter_map(|e| {
@@ -126,12 +276,14 @@ impl crate::EditCtx<'_> {
                 if !d.is_associated() {
                     return None;
                 }
+                let view = project.view(d.view)?;
                 let mut n = d.clone();
                 for (r, end) in n.refs.iter_mut().zip([&mut n.a, &mut n.b]) {
                     let Some(reference) = r else { continue };
-                    match project.resolve_dim_ref(reference) {
+                    match project.resolve_in_view(reference, view, *end) {
                         Some(p) => *end = p,
-                        None => *r = None,
+                        None if !reference.target_exists(project) => *r = None,
+                        None => {}
                     }
                 }
                 let (a, b) = (n.a, n.b);
@@ -139,9 +291,10 @@ impl crate::EditCtx<'_> {
                     let mut lines = [None, None];
                     for ((r, line), end) in rays.iter_mut().zip(lines.iter_mut()).zip([a, b]) {
                         let Some(reference) = r else { continue };
-                        match project.resolve_dim_ref(reference) {
+                        match project.resolve_in_view(reference, view, *vertex) {
                             Some(p) => *line = Some((end, p)),
-                            None => *r = None,
+                            None if !reference.target_exists(project) => *r = None,
+                            None => {}
                         }
                     }
                     if let [Some(l1), Some(l2)] = lines
@@ -192,7 +345,7 @@ mod tests {
             doc.project.walls().map(|(e, w)| (e.id, w.clone())).find(|(_, w)| w.start.x == w.end.x).unwrap();
         let p = (w.start + w.end) / 2.0 + DVec2::new(0.075, 0.0);
         let r = doc.project.dim_ref_at(wall, p).unwrap();
-        let view = *doc.project.views.keys().next().unwrap();
+        let view = doc.project.views.values().find(|v| v.is_plan()).map(|v| v.id).unwrap();
         let level = doc.project.levels[0].id;
         let ty = doc.project.default_type(crate::Category::Dimension).unwrap();
         let dim = Dimension {
@@ -210,7 +363,7 @@ mod tests {
                 type_id: ty,
                 mark: String::new(),
                 comments: String::new(),
-                kind: ElementKind::Dimension(dim),
+                kind: ElementKind::Dimension(Box::new(dim)),
                 uid: Default::default(),
             };
             e.add_element(el)
@@ -220,7 +373,7 @@ mod tests {
 
     fn dim(doc: &Document, id: crate::ElementId) -> Dimension {
         match &doc.project.element(id).unwrap().kind {
-            ElementKind::Dimension(d) => d.clone(),
+            ElementKind::Dimension(d) => (**d).clone(),
             other => panic!("{other:?}"),
         }
     }
@@ -292,7 +445,7 @@ mod tests {
         let p = &doc.project;
         let refs = [p.dim_ref_at(wx, a), p.dim_ref_at(wy, b)];
         let rays = [p.dim_ref_at(wx, corner), p.dim_ref_at(wy, corner)];
-        let view = *p.views.keys().next().unwrap();
+        let view = p.views.values().find(|v| v.is_plan()).map(|v| v.id).unwrap();
         let level = p.levels[0].id;
         let ty = p.default_type(crate::Category::Dimension).unwrap();
         let dim = Dimension { view, a, b, offset: 0.5, kind: DimensionKind::Angular { vertex: corner, rays }, refs };
@@ -303,7 +456,7 @@ mod tests {
                 type_id: ty,
                 mark: String::new(),
                 comments: String::new(),
-                kind: ElementKind::Dimension(dim),
+                kind: ElementKind::Dimension(Box::new(dim)),
                 uid: Default::default(),
             })
         });
@@ -319,5 +472,69 @@ mod tests {
         assert!((vertex.y - corner.y).abs() < 1e-9, "{vertex}");
         doc.undo();
         assert!((self::dim(&doc, id).value().to_degrees() - 90.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn elevation_dimensions_follow_wall_heights_and_levels() {
+        let mut doc = sample();
+        let elevation = doc.project.views.values().find(|v| v.projection().is_some()).cloned().unwrap();
+        let projection = elevation.projection().unwrap();
+        // A wall seen in this elevation (its line across the view's depth).
+        let (wall, top, mid) = doc
+            .project
+            .walls()
+            .filter(|(_, w)| (w.end - w.start).normalize().dot(projection.right).abs() > 0.99)
+            .map(|(e, w)| (e.id, doc.project.wall_top_z(e, w), (w.start + w.end) / 2.0))
+            .next()
+            .unwrap();
+        let level = doc.project.levels[0].id;
+        let x = projection.project(mid, 0.0).x;
+        let p = &doc.project;
+        // From the level line to the wall's top.
+        let refs = [p.level_ref(&elevation, level), p.dim_ref_in_view(&elevation, wall, DVec2::new(x, top))];
+        assert!(refs[1].is_some_and(|r| r.z.is_some_and(|h| h.from_top)));
+        let base = p.level_elevation(level);
+        let ty = p.default_type(crate::Category::Dimension).unwrap();
+        let dim = Dimension {
+            view: elevation.id,
+            a: DVec2::new(x, base),
+            b: DVec2::new(x, top),
+            offset: 1.0,
+            kind: DimensionKind::Linear { dir: DVec2::Y },
+            refs,
+        };
+        let id = doc.edit("dim", |e| {
+            e.add_element(crate::Element {
+                id: crate::ElementId(0),
+                level,
+                type_id: ty,
+                mark: String::new(),
+                comments: String::new(),
+                kind: ElementKind::Dimension(Box::new(dim)),
+                uid: Default::default(),
+            })
+        });
+        let height = |doc: &Document| self::dim(doc, id).value();
+        let before = height(&doc);
+        assert!((before - (top - base)).abs() < 1e-9);
+        // A taller wall: the dimension follows its top.
+        doc.edit("taller", |e| {
+            if let Some(ElementKind::Wall(w)) = e.element_mut(wall).map(|x| &mut x.kind) {
+                w.top = crate::WallTop::Unconnected;
+                w.height += 0.5;
+            }
+        });
+        let raised = doc.project.element(wall).and_then(|e| e.as_wall().map(|w| doc.project.wall_top_z(e, w))).unwrap();
+        assert!((height(&doc) - (raised - base)).abs() < 1e-9);
+        // Moving the wall along the view keeps the dimension on it.
+        doc.edit("move", |e| e.transform_elements(&[wall], &PlanTransform::translate(projection.right * 0.4)));
+        assert!((self::dim(&doc, id).b.x - (x + 0.4)).abs() < 1e-9);
+        // Lowering the level moves the other end.
+        doc.edit("level", |e| {
+            if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level) {
+                l.elevation -= 0.25;
+            }
+        });
+        assert!((self::dim(&doc, id).a.y - (base - 0.25)).abs() < 1e-9);
     }
 }

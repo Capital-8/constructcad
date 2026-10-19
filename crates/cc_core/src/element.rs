@@ -29,7 +29,7 @@ pub enum ElementKind {
     Roof(Roof),
     Room(Room),
     Grid(Grid),
-    Dimension(Dimension),
+    Dimension(Box<Dimension>),
     Column(Column),
     Beam(Beam),
     Stair(Stair),

@@ -178,7 +178,8 @@ impl crate::EditCtx<'_> {
             // A dimension moved without what it measures lets go of it.
             if let ElementKind::Dimension(d) = &mut el.kind {
                 for r in d.all_refs_mut() {
-                    if r.is_some_and(|r| !set.contains(&r.element)) {
+                    // Levels do not move with elements: those ends stay attached.
+                    if r.is_some_and(|r| r.element().is_some_and(|e| !set.contains(&e))) {
                         *r = None;
                     }
                 }
@@ -282,7 +283,10 @@ impl crate::EditCtx<'_> {
             for id in &created {
                 let Some(ElementKind::Dimension(d)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 for r in d.all_refs_mut() {
-                    *r = r.and_then(|r| remap.get(&r.element).map(|e| crate::DimRef { element: *e, ..r }));
+                    *r = r.and_then(|r| match r.element() {
+                        Some(e) => remap.get(&e).map(|n| crate::DimRef { target: crate::RefTarget::Element(*n), ..r }),
+                        None => Some(r),
+                    });
                 }
             }
             for el in accepted.iter().filter(|el| el.as_hosted().is_some()) {
