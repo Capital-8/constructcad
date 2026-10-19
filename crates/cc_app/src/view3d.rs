@@ -1,5 +1,6 @@
 //! Interactive 3D view backed by [`cc_render::Renderer3D`].
 
+use crate::canvas::{ZoomCommand, ZoomNav};
 use crate::state::AppState;
 use cc_core::{CameraState, ViewId, ViewKind};
 use cc_render::{Renderer3D, SceneMesh, pick_ray};
@@ -15,10 +16,23 @@ pub struct View3DState {
     mesh_key: Option<(u64, u64)>,
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
-    pub fit_requested: bool,
+    fit_requested: bool,
     /// Camera transition started by the navigation cube.
     anim: Option<Transition>,
+    /// Earlier and undone cameras for "previous" / "next" pan/zoom.
+    back: Vec<CameraState>,
+    forward: Vec<CameraState>,
+    /// Time of the last wheel zoom: a pause starts a new history step.
+    last_wheel: f64,
+    /// "Zoom in region" waits for a window; the drag's start once it began.
+    zoom_region: bool,
+    region_start: Option<egui::Pos2>,
 }
+
+/// Cameras kept for "previous" and "next".
+const HISTORY: usize = 50;
+/// Half the vertical field of view.
+const HALF_FOV_DEG: f64 = 22.5;
 
 /// Smooth turn of the camera to new angles.
 #[derive(Debug, Clone, Copy)]
@@ -43,7 +57,110 @@ impl View3DState {
             camera_dirty: false,
             fit_requested: false,
             anim: None,
+            back: Vec::new(),
+            forward: Vec::new(),
+            last_wheel: f64::NEG_INFINITY,
+            zoom_region: false,
+            region_start: None,
         }
+    }
+
+    /// Remember the camera before changing it.
+    fn remember(&mut self) {
+        if self.back.last() != Some(&self.camera) {
+            self.back.push(self.camera);
+            if self.back.len() > HISTORY {
+                self.back.remove(0);
+            }
+        }
+        self.forward.clear();
+    }
+
+    /// Frame the model on the next frame, remembering the camera.
+    pub fn request_fit(&mut self) {
+        self.remember();
+        self.fit_requested = true;
+    }
+
+    pub fn nav(&self) -> ZoomNav {
+        ZoomNav { back: !self.back.is_empty(), forward: !self.forward.is_empty(), sheet_size: false }
+    }
+
+    /// Run a zoom command of the view toolbar ("fit all" is handled by the caller).
+    pub fn apply(&mut self, cmd: ZoomCommand) {
+        self.anim = None;
+        match cmd {
+            ZoomCommand::Region => {
+                self.zoom_region = true;
+                self.region_start = None;
+            }
+            ZoomCommand::OutTwo => {
+                self.remember();
+                self.camera.distance = (self.camera.distance * 2.0).clamp(0.5, 5000.0);
+            }
+            ZoomCommand::Fit | ZoomCommand::FitAll => self.request_fit(),
+            // No paper scale in 3D.
+            ZoomCommand::SheetSize => return,
+            ZoomCommand::Previous | ZoomCommand::Next => {
+                let (from, to) = if cmd == ZoomCommand::Previous {
+                    (&mut self.back, &mut self.forward)
+                } else {
+                    (&mut self.forward, &mut self.back)
+                };
+                let Some(camera) = from.pop() else { return };
+                to.push(self.camera);
+                self.camera = camera;
+            }
+        }
+        self.camera_dirty = true;
+    }
+
+    /// Zoom so that `window` (screen) fills the view: its center becomes the
+    /// target (moved in the plane through the target facing the camera) and
+    /// the distance shrinks with the window.
+    fn zoom_to_window(&mut self, window: egui::Rect, view: egui::Rect) {
+        let cam = &mut self.camera;
+        let fwd = cam.forward();
+        let right = fwd.cross(DVec3::Z).normalize_or_zero();
+        let up = right.cross(fwd);
+        let k = cam.distance * 2.0 * HALF_FOV_DEG.to_radians().tan() / view.height().max(1.0) as f64;
+        let d = window.center() - view.center();
+        cam.target += (right * d.x as f64 - up * d.y as f64) * k;
+        let fraction = (window.width() / view.width().max(1.0)).max(window.height() / view.height().max(1.0));
+        cam.distance = (cam.distance * fraction as f64).clamp(0.5, 5000.0);
+        self.camera_dirty = true;
+    }
+
+    /// "Zoom in region": drag a window; a click or Esc cancels. Returns true
+    /// while it takes the pointer (orbit and picking wait meanwhile).
+    fn region(&mut self, ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: egui::Rect) -> bool {
+        if !self.zoom_region {
+            return false;
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked() {
+            self.zoom_region = false;
+            self.region_start = None;
+            return true;
+        }
+        if resp.drag_started_by(PointerButton::Primary) {
+            self.region_start = ui.input(|i| i.pointer.press_origin());
+        }
+        let (Some(a), Some(b)) = (self.region_start, resp.interact_pointer_pos().or(resp.hover_pos())) else {
+            return true;
+        };
+        let window = egui::Rect::from_two_pos(a, b);
+        let accent = crate::theme::PALETTE.accent;
+        painter.rect_filled(window, 0.0, accent.gamma_multiply(0.08));
+        painter.rect_stroke(window, 0.0, egui::Stroke::new(1.0, accent), egui::StrokeKind::Middle);
+        if resp.drag_stopped() {
+            self.zoom_region = false;
+            self.region_start = None;
+            if window.width() > 4.0 && window.height() > 4.0 {
+                self.remember();
+                self.zoom_to_window(window, rect);
+            }
+        }
+        true
     }
 
     fn turn_to(&mut self, yaw: f64, pitch: f64, now: f64) {
@@ -85,7 +202,7 @@ pub fn fit_camera(camera: &mut CameraState, geom: &cc_geom::ModelGeometry, aspec
     camera.target = (lo + hi) * 0.5;
     let radius = ((hi - lo).length() * 0.5).max(1.0);
     // The narrower of the vertical (45°) and horizontal fields of view limits the fit.
-    let half_v = 22.5f64.to_radians();
+    let half_v = HALF_FOV_DEG.to_radians();
     let half_h = (half_v.tan() * aspect as f64).atan();
     camera.distance = radius / half_v.min(half_h).sin() * 1.05;
 }
@@ -125,13 +242,29 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if v3.animate(now) {
         ui.ctx().request_repaint();
     }
+    let zooming = v3.region(ui, &resp, &painter, rect);
     if resp.dragged() {
         v3.anim = None;
+    }
+    if resp.drag_started() && !zooming {
+        v3.remember();
+    }
+    let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) as f64 } else { 0.0 };
+    if scroll != 0.0 {
+        if now - v3.last_wheel > 0.6 {
+            v3.remember();
+        }
+        v3.last_wheel = now;
+    }
+    if resp.double_clicked_by(PointerButton::Middle) {
+        v3.remember();
     }
     let cam = &mut v3.camera;
     let d = resp.drag_delta();
     let shift = ui.input(|i| i.modifiers.shift);
-    if resp.dragged_by(PointerButton::Primary) || (shift && resp.dragged_by(PointerButton::Middle)) {
+    if zooming {
+        // The window drag is not an orbit.
+    } else if resp.dragged_by(PointerButton::Primary) || (shift && resp.dragged_by(PointerButton::Middle)) {
         cam.yaw_deg += d.x as f64 * 0.4;
         cam.pitch_deg = (cam.pitch_deg + d.y as f64 * 0.4).clamp(-89.0, 89.0);
         v3.camera_dirty = true;
@@ -139,16 +272,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let fwd = cam.forward();
         let right = fwd.cross(DVec3::Z).normalize_or_zero();
         let up = right.cross(fwd);
-        let k = cam.distance * 2.0 * 22.5f64.to_radians().tan() / rect.height().max(1.0) as f64;
+        let k = cam.distance * 2.0 * HALF_FOV_DEG.to_radians().tan() / rect.height().max(1.0) as f64;
         cam.target += (-right * d.x as f64 + up * d.y as f64) * k;
         v3.camera_dirty = true;
     }
-    if resp.hovered() {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y) as f64;
-        if scroll != 0.0 {
-            cam.distance = (cam.distance * (-scroll * 0.0025).exp()).clamp(0.5, 5000.0);
-            v3.camera_dirty = true;
-        }
+    if scroll != 0.0 {
+        cam.distance = (cam.distance * (-scroll * 0.0025).exp()).clamp(0.5, 5000.0);
+        v3.camera_dirty = true;
     }
     if resp.double_clicked_by(PointerButton::Middle) {
         fit_camera(cam, geom, aspect);
@@ -157,6 +287,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
 
     // Picking.
     if resp.clicked()
+        && !zooming
         && let Some(pos) = resp.interact_pointer_pos()
     {
         let nx = (pos.x - rect.left()) / rect.width() * 2.0 - 1.0;
@@ -206,6 +337,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         painter.image(tex, rect, uv, egui::Color32::WHITE);
     }
     let cube = crate::view_cube::show(ui, rect, &v3.camera);
+    if cube.look_from.is_some() || cube.home {
+        v3.remember();
+    }
     if let Some(dir) = cube.look_from {
         let (yaw, pitch) = crate::view_cube::angles_from(dir, v3.camera.yaw_deg);
         v3.turn_to(yaw, pitch, now);
@@ -229,6 +363,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         v3.camera_dirty = true;
     }
 
+    if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, view_id, None, v3.nav()) {
+        crate::canvas::zoom(state, view_id, cmd, 1.0);
+        ui.ctx().request_repaint();
+    }
+    let Some(v3) = state.view3d.get_mut(&view_id) else { return };
+
     // Persist the camera into the view when the interaction ends (not undoable).
     let interacting = resp.dragged()
         || v3.anim.is_some()
@@ -243,5 +383,34 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
                 *c = camera;
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zoom_commands_move_the_camera_and_walk_back() {
+        let mut v = View3DState::new(CameraState::default());
+        let start = v.camera;
+        v.apply(ZoomCommand::OutTwo);
+        assert!((v.camera.distance - start.distance * 2.0).abs() < 1e-9);
+        // A window around the view center halves the distance, keeping the target.
+        let view = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0));
+        v.remember();
+        v.zoom_to_window(egui::Rect::from_center_size(view.center(), egui::vec2(400.0, 300.0)), view);
+        assert!((v.camera.distance - start.distance).abs() < 1e-9);
+        assert!(v.camera.target.distance(start.target) < 1e-9);
+        v.apply(ZoomCommand::Previous);
+        v.apply(ZoomCommand::Previous);
+        assert_eq!(v.camera, start);
+        assert!(!v.nav().back && v.nav().forward);
+        v.apply(ZoomCommand::Next);
+        assert!((v.camera.distance - start.distance * 2.0).abs() < 1e-9);
+        // No paper scale in 3D.
+        v.apply(ZoomCommand::SheetSize);
+        assert!((v.camera.distance - start.distance * 2.0).abs() < 1e-9);
+        assert!(!v.nav().sheet_size);
     }
 }

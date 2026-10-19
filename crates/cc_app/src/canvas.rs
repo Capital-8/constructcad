@@ -60,6 +60,15 @@ impl ZoomCommand {
     }
 }
 
+/// What the zoom menu can offer in a view.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ZoomNav {
+    pub back: bool,
+    pub forward: bool,
+    /// The view has a paper scale ("zoom sheet size").
+    pub sheet_size: bool,
+}
+
 /// Pan/zoom state of a 2D view.
 #[derive(Debug, Clone)]
 pub struct View2DState {
@@ -110,12 +119,8 @@ impl View2DState {
         self.forward.clear();
     }
 
-    pub fn can_go_back(&self) -> bool {
-        !self.back.is_empty()
-    }
-
-    pub fn can_go_forward(&self) -> bool {
-        !self.forward.is_empty()
+    pub fn nav(&self) -> ZoomNav {
+        ZoomNav { back: !self.back.is_empty(), forward: !self.forward.is_empty(), sheet_size: true }
     }
 
     /// Step back (or forward) through the pan/zoom history.
@@ -242,15 +247,17 @@ pub fn zoom(state: &mut AppState, view: ViewId, cmd: ZoomCommand, mm_scale: f64)
             v.request_fit();
         }
         for v in state.view3d.values_mut() {
-            v.fit_requested = true;
+            v.request_fit();
         }
         return;
     }
     if let Some(st) = state.view2d.get_mut(&view) {
         st.apply(cmd, mm_scale);
-        if cmd == ZoomCommand::Region {
-            state.message = crate::t!("hint-zoom-region");
-        }
+    } else if let Some(v3) = state.view3d.get_mut(&view) {
+        v3.apply(cmd);
+    }
+    if cmd == ZoomCommand::Region {
+        state.message = crate::t!("hint-zoom-region");
     }
 }
 
@@ -286,7 +293,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     if !zooming {
         crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
     }
-    if let Some(cmd) = view_toolbar(ui, state, rect, view_id, Some(view.scale)) {
+    let nav = state.view2d.get(&view_id).map(View2DState::nav).unwrap_or_default();
+    if let Some(cmd) = view_toolbar(ui, state.zoom_default, rect, view_id, Some(view.scale), nav) {
         zoom(state, view_id, cmd, 1000.0 / view.scale.max(1) as f64);
     }
 }
@@ -296,10 +304,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
 /// menu of all of them. Returns the command to run.
 pub fn view_toolbar(
     ui: &mut Ui,
-    state: &AppState,
+    default: ZoomCommand,
     rect: Rect,
     view_id: ViewId,
     scale: Option<u32>,
+    nav: ZoomNav,
 ) -> Option<ZoomCommand> {
     let painter = ui.painter_at(rect);
     let size = egui::vec2(if scale.is_some() { 110.0 } else { 52.0 }, 28.0);
@@ -312,7 +321,6 @@ pub fn view_toolbar(
         let font = egui::FontId::new(12.0, theme::semibold());
         painter.text(label, egui::Align2::LEFT_CENTER, format!("1:{scale}"), font, PALETTE.text_muted);
     }
-    let default = state.zoom_default;
     let button = Rect::from_center_size(egui::pos2(bar.right() - 30.0, bar.center().y), egui::vec2(24.0, 22.0));
     let arrow = Rect::from_center_size(egui::pos2(bar.right() - 11.0, bar.center().y), egui::vec2(14.0, 22.0));
     let r = ui.interact(button, egui::Id::new(("zoom", view_id.0)), Sense::click());
@@ -330,13 +338,12 @@ pub fn view_toolbar(
     if r.on_hover_text(tip).clicked() {
         chosen = Some(default);
     }
-    let history = state.view2d.get(&view_id).map(|v| (v.can_go_back(), v.can_go_forward()));
-    let (back, forward) = history.unwrap_or_default();
     egui::Popup::menu(&a).align(egui::RectAlign::TOP_END).show(|ui| {
         for cmd in ZoomCommand::ALL {
             let enabled = match cmd {
-                ZoomCommand::Previous => back,
-                ZoomCommand::Next => forward,
+                ZoomCommand::Previous => nav.back,
+                ZoomCommand::Next => nav.forward,
+                ZoomCommand::SheetSize => nav.sheet_size,
                 _ => true,
             };
             let button = egui::Button::new(crate::i18n::tr(cmd.key())).selected(cmd == default);
@@ -364,7 +371,7 @@ mod tests {
     fn previous_and_next_walk_the_zoom_history() {
         let (mut st, rect) = fitted();
         let start = (st.center, st.ppm);
-        assert!(!st.can_go_back());
+        assert!(!st.nav().back);
         st.apply(ZoomCommand::OutTwo, 10.0);
         assert!((st.ppm - start.1 / 2.0).abs() < 1e-9);
         st.apply(ZoomCommand::Fit, 10.0);
@@ -373,12 +380,12 @@ mod tests {
         assert!((st.ppm - start.1 / 2.0).abs() < 1e-9);
         st.apply(ZoomCommand::Previous, 10.0);
         assert_eq!((st.center, st.ppm), start);
-        assert!(!st.can_go_back() && st.can_go_forward());
+        assert!(!st.nav().back && st.nav().forward);
         st.apply(ZoomCommand::Next, 10.0);
         assert!((st.ppm - start.1 / 2.0).abs() < 1e-9);
         // A new zoom drops the steps ahead.
         st.apply(ZoomCommand::SheetSize, 10.0);
-        assert!(!st.can_go_forward());
+        assert!(!st.nav().forward);
     }
 
     #[test]

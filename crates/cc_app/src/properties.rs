@@ -872,7 +872,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             if let ViewKind::ThreeD { .. } = view.kind {
                 let clicked = row(ui, "", |ui| ui.button(t!("action-zoom-fit")).clicked());
                 if clicked && let Some(v3) = state.view3d.get_mut(&id) {
-                    v3.fit_requested = true;
+                    v3.request_fit();
                 }
             }
         });

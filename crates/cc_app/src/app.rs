@@ -94,7 +94,7 @@ pub fn zoom_fit(state: &mut AppState) {
         v.request_fit();
     }
     if let Some(v) = state.view3d.get_mut(&view) {
-        v.fit_requested = true;
+        v.request_fit();
     }
 }
 

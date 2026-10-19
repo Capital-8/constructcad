@@ -42,7 +42,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
         }
     }
 
-    if let Some(cmd) = crate::canvas::view_toolbar(ui, state, rect, sheet_id, None) {
+    let nav = state.view2d.get(&sheet_id).map(crate::canvas::View2DState::nav).unwrap_or_default();
+    if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, sheet_id, None, nav) {
         crate::canvas::zoom(state, sheet_id, cmd, 1.0);
     }
     if zooming {
