@@ -28,7 +28,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
             ui.label(RichText::new(&view.name).family(theme::semibold()).size(17.0).color(PALETTE.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(t!("schedule-export-csv")).clicked() {
-                    export_csv(state, &view.name, &table);
+                    export_csv(state, view_id, &view.name);
                 }
                 if ui.button(t!("schedule-fields")).clicked() {
                     state.dialogs.schedule_def = Some(view_id);
@@ -67,18 +67,17 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     });
 }
 
-fn export_csv(state: &mut AppState, name: &str, table: &cc_views::Table) {
+fn export_csv(state: &mut AppState, view: ViewId, name: &str) {
     let dialog =
         rfd::FileDialog::new().add_filter(t!("file-filter-csv"), &["csv"]).set_file_name(format!("{name}.csv"));
     let Some(mut path) = dialog.save_file() else { return };
     if path.extension().is_none() {
         path.set_extension("csv");
     }
-    // A BOM so spreadsheets read UTF-8 (accents) correctly.
-    let csv = format!("\u{feff}{}", cc_views::to_csv(table, tr, cell_text));
-    match std::fs::write(&path, csv) {
-        Ok(()) => state.message = t!("msg-exported", "path" => path.display()),
-        Err(err) => state.dialogs.error = Some(t!("msg-export-failed", "error" => t!("err-io", "detail" => err))),
+    let command = cc_engine::commands::io::ScheduleExportCsv { view: cc_engine::Ref::Id(view.0), path: path.clone() };
+    match state.session.run(command) {
+        Ok(_) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(e) => state.dialogs.error = Some(t!("msg-export-failed", "error" => e.message)),
     }
 }
 

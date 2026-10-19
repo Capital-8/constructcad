@@ -58,6 +58,54 @@ impl fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
+impl From<cc_core::PersistError> for EngineError {
+    fn from(err: cc_core::PersistError) -> Self {
+        use crate::t;
+        use cc_core::PersistError as E;
+        Self::io(match err {
+            E::Io(e) => t!("err-io", "detail" => e),
+            E::Parse(e) => t!("err-parse", "detail" => e),
+            E::Serialize(e) => t!("err-serialize", "detail" => e),
+            E::Version(v) => t!("err-version", "version" => v, "max" => cc_core::FORMAT_VERSION),
+        })
+    }
+}
+
+impl From<cc_core::component_file::ComponentFileError> for EngineError {
+    fn from(err: cc_core::component_file::ComponentFileError) -> Self {
+        use crate::t;
+        use cc_core::component_file::ComponentFileError as E;
+        let not_found = matches!(err, E::NotFound(_));
+        let message = match err {
+            E::Io(e) => t!("err-io", "detail" => e),
+            E::Parse(e) => t!("err-component-parse", "detail" => e),
+            E::Serialize(e) => t!("err-serialize", "detail" => e),
+            E::Version(v) => {
+                t!("err-version", "version" => v, "max" => cc_core::component_file::COMPONENT_FORMAT_VERSION)
+            }
+            E::Invalid(detail) | E::NotFound(detail) => t!("err-component-invalid", "detail" => detail),
+        };
+        if not_found { Self::not_found(message) } else { Self::io(message) }
+    }
+}
+
+impl From<cc_ifc::ImportError> for EngineError {
+    fn from(err: cc_ifc::ImportError) -> Self {
+        use crate::t;
+        Self::io(match err {
+            cc_ifc::ImportError::Io(e) => t!("err-io", "detail" => e),
+            cc_ifc::ImportError::Parse(e) => t!("err-ifc-parse", "detail" => e),
+            cc_ifc::ImportError::NotIfc => t!("err-not-ifc"),
+        })
+    }
+}
+
+impl From<std::io::Error> for EngineError {
+    fn from(e: std::io::Error) -> Self {
+        Self::io(crate::t!("err-io", "detail" => e))
+    }
+}
+
 impl From<cc_core::wall_ops::EditError> for EngineError {
     fn from(e: cc_core::wall_ops::EditError) -> Self {
         use cc_core::wall_ops::EditError as E;

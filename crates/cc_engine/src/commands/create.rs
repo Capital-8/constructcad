@@ -14,7 +14,7 @@ use cc_core::{
 use cc_geom::polygon;
 use glam::DVec2;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A top constraint: attached to a level (with an offset) or a fixed height.
@@ -43,7 +43,7 @@ fn create(
 
 /// Create a straight wall from `start` to `end` on a level. Its top is
 /// `height` above its base, or attached to `top_level` (plus `top_offset`).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WallCreate {
     pub start: Point,
@@ -100,7 +100,7 @@ impl Command for WallCreate {
 }
 
 /// Parameters shared by doors and windows.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct HostedArgs {
     /// Id of the host wall.
     pub wall: u64,
@@ -169,7 +169,7 @@ fn place_hosted(s: &mut Session, a: HostedArgs, category: Category) -> Result<Va
 }
 
 /// Place a door in a wall (centered on the wall unless `offset` or `point` is given).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct DoorCreate {
     #[serde(flatten)]
     pub args: HostedArgs,
@@ -184,7 +184,7 @@ impl Command for DoorCreate {
 }
 
 /// Place a window in a wall (centered on the wall unless `offset` or `point` is given).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct WindowCreate {
     #[serde(flatten)]
     pub args: HostedArgs,
@@ -199,7 +199,7 @@ impl Command for WindowCreate {
 }
 
 /// Parameters shared by floors, ceilings and roofs.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SketchArgs {
     /// Closed outline (at least 3 points); omit with `from_walls`.
     #[serde(default)]
@@ -235,7 +235,7 @@ fn sketch(s: &Session, a: &SketchArgs, category: Category) -> Result<(LevelId, V
 }
 
 /// Create a floor slab from an outline (or the loop of walls).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct FloorCreate {
     #[serde(flatten)]
     pub sketch: SketchArgs,
@@ -259,7 +259,7 @@ impl Command for FloorCreate {
 }
 
 /// Create a ceiling from an outline (or the inside of the loop of walls).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct CeilingCreate {
     #[serde(flatten)]
     pub sketch: SketchArgs,
@@ -278,7 +278,7 @@ impl Command for CeilingCreate {
 
 /// Create a roof over an outline (or the loop of walls): flat by default; change its
 /// shape (shed, gable, hip) with `element_set`.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct RoofCreate {
     #[serde(flatten)]
     pub sketch: SketchArgs,
@@ -303,7 +303,7 @@ impl Command for RoofCreate {
 }
 
 /// Create a room at a point enclosed by room-bounding walls (its boundary follows the walls).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RoomCreate {
     pub point: Point,
@@ -344,7 +344,7 @@ impl Command for RoomCreate {
 }
 
 /// Create a grid line (named with the next free number unless `name` is given).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GridCreate {
     pub start: Point,
@@ -376,7 +376,7 @@ impl Command for GridCreate {
 }
 
 /// Place a column; its top goes to the level above (or `height` when there is none).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ColumnCreate {
     pub position: Point,
@@ -415,7 +415,7 @@ impl Command for ColumnCreate {
 
 /// Create a beam from `start` to `end`; its top is `top_offset` above the level
 /// (default: the level's height).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BeamCreate {
     pub start: Point,
@@ -446,7 +446,7 @@ impl Command for BeamCreate {
 
 /// Create a straight stair starting at `start` and rising along `direction`
 /// (degrees) up to the level above (or `height`). Risers follow the type.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StairCreate {
     pub start: Point,
@@ -487,7 +487,7 @@ impl Command for StairCreate {
 }
 
 /// Create a railing along a path (at least 2 points).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RailingCreate {
     pub path: Vec<Point>,
@@ -516,7 +516,7 @@ impl Command for RailingCreate {
 }
 
 /// Place a component (furniture, fixture…) of a component type.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentPlace {
     pub position: Point,

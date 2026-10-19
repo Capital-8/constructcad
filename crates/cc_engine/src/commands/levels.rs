@@ -8,7 +8,7 @@ use crate::session::Session;
 use crate::t;
 use cc_core::{ElementKind, Level, LevelId, View, ViewId, ViewKind, WallTop};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 fn level_out(s: &Session, id: LevelId) -> Value {
@@ -20,7 +20,7 @@ fn level_out(s: &Session, id: LevelId) -> Value {
 
 /// Add a level (default: 3 m above the highest, named "Level n") with its
 /// floor and ceiling plans.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LevelCreate {
     #[serde(default)]
@@ -66,7 +66,7 @@ impl Command for LevelCreate {
 }
 
 /// Rename a level or change its elevation (what is attached to it moves along).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LevelSet {
     pub level: Ref,
@@ -106,7 +106,7 @@ impl Command for LevelSet {
 
 /// Delete a level no element is on, with its plan views; walls rising to it
 /// keep their current height, unconnected. The last level is kept.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LevelDelete {
     pub level: Ref,
@@ -119,7 +119,7 @@ impl Command for LevelDelete {
         let p = s.project();
         let level = refs::level(p, &self.level)?;
         if p.elements.values().any(|e| e.level == level) {
-            return Err(EngineError::rejected("elements are on this level"));
+            return Err(EngineError::rejected(t!("msg-level-in-use")));
         }
         if p.levels.len() <= 1 {
             return Err(EngineError::rejected("the last level cannot be deleted"));

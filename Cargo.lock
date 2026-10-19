@@ -650,6 +650,8 @@ dependencies = [
  "png 0.18.1",
  "resvg",
  "rfd",
+ "serde",
+ "serde_json",
  "sys-locale",
  "wgpu",
  "winresource",

@@ -7,12 +7,12 @@ use crate::session::{Session, guard, new_project};
 use crate::t;
 use cc_core::Document;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
 /// Start a new project from the template (unsaved changes are discarded).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectNew {}
 
@@ -27,7 +27,7 @@ impl Command for ProjectNew {
 
 /// Open a ConstructCAD project (.ccad), replacing the session's project.
 /// Damaged files are repaired and the number of repairs reported.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectOpen {
     /// Path of the .ccad file.
@@ -47,7 +47,7 @@ impl Command for ProjectOpen {
 }
 
 /// Save the project to its file, or to `path` (which becomes its file).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectSave {
     /// Where to save; required when the project has no file yet.
@@ -63,8 +63,7 @@ impl Command for ProjectSave {
             .path
             .or_else(|| s.doc.path.clone())
             .ok_or_else(|| EngineError::invalid("the project has no file yet: give a path"))?;
-        guard(|| cc_core::save(s.project(), &path))?
-            .map_err(|e| EngineError::io(format!("{}: {e}", path.display())))?;
+        guard(|| cc_core::save(s.project(), &path))??;
         s.doc.path = Some(path.clone());
         s.doc.mark_saved();
         Ok(json!({ "path": path }))
@@ -72,7 +71,7 @@ impl Command for ProjectSave {
 }
 
 /// Project information, file, unsaved state and counts.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectInfoGet {}
 
@@ -106,7 +105,7 @@ fn summary(s: &Session) -> Value {
 }
 
 /// Change the project information (title block fields).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectInfoSet {
     #[serde(default)]
@@ -145,7 +144,7 @@ impl Command for ProjectInfoSet {
 }
 
 /// Undo the last edit.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Undo {}
 
@@ -162,7 +161,7 @@ impl Command for Undo {
 }
 
 /// Redo the last undone edit.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Redo {}
 
@@ -179,7 +178,7 @@ impl Command for Redo {
 }
 
 /// The project units (length, area, volume, angle, slope, currency, number format).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UnitsGet {}
 
@@ -193,7 +192,7 @@ impl Command for UnitsGet {
 
 /// Change the project units: `values` is merged into the object `units_get`
 /// returns (only the fields given change).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UnitsSet {
     /// Fields to change, shaped like the result of `units_get`.
@@ -217,7 +216,7 @@ impl Command for UnitsSet {
 }
 
 /// Language of default names, messages and sheet labels (`en` or `pt-BR`).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LanguageSet {
     pub language: String,

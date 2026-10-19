@@ -3,56 +3,60 @@
 use crate::state::{AppState, PendingAction};
 use crate::t;
 use crate::tools::Tool;
-use cc_core::{
-    CameraState, Category, Document, Level, LevelId, Project, SheetSize, View, ViewCategory, ViewId, ViewKind, Viewport,
-};
-use glam::DVec2;
+use cc_core::{Category, Document, LevelId, Project, ViewCategory, ViewId, ViewKind};
+use cc_engine::Ref;
+use cc_engine::commands::{io, levels, project, views};
 
-fn add_view(state: &mut AppState, tx: String, name: String, scale: u32, kind: ViewKind) -> ViewId {
-    let id = state.session.doc.edit(tx, |e| {
-        let id = ViewId(e.alloc_id());
-        e.add_view(View { id, name, scale, kind })
-    });
-    state.open_view(id);
-    id
+/// Run an engine command; failures go to the status bar.
+fn run<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, command: C) -> Option<serde_json::Value> {
+    match state.session.run(command) {
+        Ok(out) => Some(out),
+        Err(e) => {
+            state.message = e.message;
+            None
+        }
+    }
 }
 
-pub fn new_plan(state: &mut AppState, level: LevelId, ceiling: bool) -> ViewId {
-    let name = state.project().level_name(level).to_string();
-    let kind = if ceiling {
-        ViewKind::CeilingPlan { level, cut_height: 1.2 }
-    } else {
-        ViewKind::FloorPlan { level, cut_height: 1.2 }
+fn view_id(out: &serde_json::Value) -> Option<ViewId> {
+    out["id"].as_u64().map(ViewId)
+}
+
+fn new_view(state: &mut AppState, kind: &str, level: Option<LevelId>, category: Option<Category>) -> Option<ViewId> {
+    let command = views::ViewCreate {
+        kind: kind.to_string(),
+        name: None,
+        level: level.map(|l| Ref::Id(l.0)),
+        category: category.map(cc_engine::category_name),
+        start: None,
+        end: None,
+        depth: None,
+        direction: None,
+        scale: None,
     };
-    add_view(state, t!("tx-new-view"), name, 50, kind)
+    let id = run(state, command).as_ref().and_then(view_id)?;
+    state.open_view(id);
+    Some(id)
 }
 
-pub fn new_3d(state: &mut AppState) -> ViewId {
-    let n = state.project().views_of(ViewCategory::ThreeD).count() + 1;
-    add_view(
-        state,
-        t!("tx-new-view"),
-        t!("default-3d-name", "n" => n),
-        100,
-        ViewKind::ThreeD { camera: CameraState::default() },
-    )
+pub fn new_plan(state: &mut AppState, level: LevelId, ceiling: bool) -> Option<ViewId> {
+    new_view(state, if ceiling { "ceiling_plan" } else { "floor_plan" }, Some(level), None)
 }
 
-pub fn new_legend(state: &mut AppState) -> ViewId {
-    let types = state.project().types.keys().copied().collect();
-    let n = state.project().views_of(ViewCategory::Legend).count() + 1;
-    add_view(state, t!("tx-new-view"), t!("default-legend-name", "n" => n), 50, ViewKind::Legend { types })
+pub fn new_3d(state: &mut AppState) -> Option<ViewId> {
+    new_view(state, "three_d", None, None)
 }
 
-pub fn new_schedule(state: &mut AppState, category: Category) -> ViewId {
-    let name = t!("default-schedule-name", "category" => t_category(category));
-    add_view(state, t!("tx-new-view"), name, 1, ViewKind::Schedule { category, def: Default::default() })
+pub fn new_legend(state: &mut AppState) -> Option<ViewId> {
+    new_view(state, "legend", None, None)
 }
 
-pub fn new_sheet(state: &mut AppState) -> ViewId {
-    let n = state.project().views_of(ViewCategory::Sheet).count() + 101;
-    let kind = ViewKind::Sheet { number: format!("A{n}"), size: SheetSize::A3, viewports: Vec::new() };
-    add_view(state, t!("tx-new-sheet"), t!("default-sheet-name"), 1, kind)
+pub fn new_schedule(state: &mut AppState, category: Category) -> Option<ViewId> {
+    new_view(state, "schedule", None, Some(category))
+}
+
+pub fn new_sheet(state: &mut AppState) -> Option<ViewId> {
+    new_view(state, "sheet", None, None)
 }
 
 pub fn t_category(category: Category) -> String {
@@ -60,133 +64,61 @@ pub fn t_category(category: Category) -> String {
 }
 
 pub fn duplicate_view(state: &mut AppState, id: ViewId) {
-    let Some(mut v) = state.project().view(id).cloned() else { return };
-    v.name = t!("copy-of", "name" => v.name);
-    if let ViewKind::Sheet { viewports, number, .. } = &mut v.kind {
-        // A view can be placed on only one sheet.
-        viewports.clear();
-        number.push('a');
+    if let Some(new) = run(state, views::ViewDuplicate { view: Ref::Id(id.0) }).as_ref().and_then(view_id) {
+        state.open_view(new);
     }
-    let id = state.session.doc.edit(t!("tx-duplicate-view"), |e| {
-        v.id = ViewId(e.alloc_id());
-        e.add_view(v)
-    });
-    state.open_view(id);
 }
 
 pub fn delete_view(state: &mut AppState, id: ViewId) {
-    state.session.doc.edit(t!("tx-delete-view"), |e| e.remove_view(id));
+    run(state, views::ViewDelete { view: Ref::Id(id.0) });
     if state.active_view == Some(id) {
         state.active_view = None;
     }
 }
 
 pub fn rename_view(state: &mut AppState, id: ViewId, name: String) {
-    let name = name.trim().to_string();
-    if name.is_empty() {
+    if name.trim().is_empty() {
         return;
     }
-    state.session.doc.edit(t!("tx-rename-view"), |e| {
-        if let Some(v) = e.view_mut(id) {
-            v.name = name;
-        }
-    });
+    run(state, views::ViewSet { view: Ref::Id(id.0), name: Some(name), scale: None, params: None });
 }
 
 /// Sheet that already shows `view`, if any.
 pub fn sheet_of(project: &Project, view: ViewId) -> Option<ViewId> {
-    project.views.values().find_map(|v| match &v.kind {
-        ViewKind::Sheet { viewports, .. } if viewports.iter().any(|vp| vp.view == view) => Some(v.id),
-        _ => None,
-    })
+    views::sheet_of(project, view)
 }
 
 pub fn place_on_sheet(state: &mut AppState, sheet: ViewId, view: ViewId) {
-    if sheet_of(state.project(), view).is_some() {
-        state.message = t!("msg-view-already-placed");
-        return;
-    }
-    state.session.doc.edit(t!("tx-place-view"), |e| {
-        if let Some(ViewKind::Sheet { viewports, size, .. }) = e.view_mut(sheet).map(|v| &mut v.kind) {
-            let center = size.size_mm() * DVec2::new(0.4, 0.55);
-            viewports.push(Viewport { view, center });
-        }
-    });
+    run(state, views::SheetPlaceView { sheet: Ref::Id(sheet.0), view: Ref::Id(view.0), center: None });
 }
 
 pub fn remove_viewport(state: &mut AppState, sheet: ViewId, index: usize) {
-    state.session.doc.edit(t!("tx-remove-viewport"), |e| {
-        if let Some(ViewKind::Sheet { viewports, .. }) = e.view_mut(sheet).map(|v| &mut v.kind)
-            && index < viewports.len()
-        {
-            viewports.remove(index);
-        }
-    });
+    let view = match state.project().view(sheet).map(|v| &v.kind) {
+        Some(ViewKind::Sheet { viewports, .. }) => viewports.get(index).map(|vp| vp.view),
+        _ => None,
+    };
+    if let Some(view) = view {
+        run(state, views::SheetRemoveViewport { sheet: Ref::Id(sheet.0), view: Ref::Id(view.0) });
+    }
     state.sheet_selection = None;
 }
 
 /// Add a level above the highest one, with its floor and ceiling plans.
 pub fn add_level(state: &mut AppState) {
-    let top = state
-        .project()
-        .levels
-        .iter()
-        .map(|l| l.elevation)
-        .fold(None, |m: Option<f64>, e| Some(m.map_or(e, |m| m.max(e))));
-    let elevation = top.map_or(0.0, |t| t + 3.0);
-    let n = state.project().levels.len();
-    state.session.doc.edit(t!("tx-add-level"), |e| {
-        let id = LevelId(e.alloc_id());
-        let name = t!("default-level-name", "n" => n);
-        e.levels_mut().push(Level { id, name: name.clone(), elevation });
-        for kind in
-            [ViewKind::FloorPlan { level: id, cut_height: 1.2 }, ViewKind::CeilingPlan { level: id, cut_height: 1.2 }]
-        {
-            let vid = ViewId(e.alloc_id());
-            e.add_view(View { id: vid, name: name.clone(), scale: 50, kind });
-        }
-    });
+    run(state, levels::LevelCreate { name: None, elevation: None, plans: None });
 }
 
 /// Delete a level and its plan views; refused while elements use it.
 pub fn delete_level(state: &mut AppState, level: LevelId) {
-    if state.project().elements.values().any(|e| e.level == level) {
-        state.message = t!("msg-level-in-use");
-        return;
-    }
-    if state.project().levels.len() <= 1 {
-        return;
-    }
-    let views: Vec<_> = state.project().views.values().filter(|v| v.level() == Some(level)).map(|v| v.id).collect();
-    // Walls rising to this level keep their current height, unconnected.
-    let attached: Vec<_> = state
-        .project()
-        .walls()
-        .filter(|(_, w)| matches!(w.top, cc_core::WallTop::Level { level: l, .. } if l == level))
-        .map(|(e, w)| (e.id, state.project().wall_height(e, w)))
-        .collect();
-    state.session.doc.edit(t!("tx-delete-level"), |e| {
-        for v in views {
-            e.remove_view(v);
-        }
-        for (id, height) in attached {
-            if let Some(cc_core::ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
-                w.top = cc_core::WallTop::Unconnected;
-                w.height = height;
-            }
-        }
-        e.levels_mut().retain(|l| l.id != level);
-    });
+    run(state, levels::LevelDelete { level: Ref::Id(level.0) });
 }
 
 /// Open the project's first 3D view, creating one when there is none.
 pub fn open_default_3d(state: &mut AppState) {
     let existing = state.project().views_of(ViewCategory::ThreeD).next().map(|v| v.id);
-    let id = match existing {
-        Some(id) => id,
-        None => new_3d(state),
-    };
-    state.open_view(id);
+    if let Some(id) = existing.or_else(|| new_3d(state)) {
+        state.open_view(id);
+    }
 }
 
 pub fn activate_category_tool(state: &mut AppState, category: Category) {
@@ -202,7 +134,7 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
 
 /// A new project from the template, named in the active UI language.
 pub fn new_project() -> Project {
-    Project::from_template_localized(&crate::i18n::try_tr)
+    cc_engine::new_project()
 }
 
 /// Switch the UI language and refresh text baked into cached drawings.
@@ -213,16 +145,6 @@ pub fn set_language(state: &mut AppState, lang: crate::i18n::Language) {
     crate::i18n::set_language(lang);
     state.invalidate_drawings();
     state.message = t!("msg-language-changed");
-}
-
-fn persist_error(err: &cc_core::PersistError) -> String {
-    use cc_core::PersistError as E;
-    match err {
-        E::Io(e) => t!("err-io", "detail" => e),
-        E::Parse(e) => t!("err-parse", "detail" => e),
-        E::Serialize(e) => t!("err-serialize", "detail" => e),
-        E::Version(v) => t!("err-version", "version" => v, "max" => cc_core::FORMAT_VERSION),
-    }
 }
 
 // --- Files ---
@@ -274,32 +196,12 @@ pub fn open(state: &mut AppState) {
     open_path(state, path);
 }
 
-/// Last-resort guard for file operations: a panic becomes an error message and
-/// the open document is kept. A safety net, not a licence to panic.
-fn guard<T>(f: impl FnOnce() -> T) -> Result<T, String> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|payload| {
-        let detail = payload
-            .downcast_ref::<&str>()
-            .map(|s| s.to_string())
-            .or_else(|| payload.downcast_ref::<String>().cloned())
-            .unwrap_or_default();
-        t!("err-internal", "detail" => detail)
-    })
-}
-
 pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
-    let loaded = match guard(|| cc_core::load_with_repairs(&path)) {
-        Ok(result) => result,
-        Err(message) => {
-            state.dialogs.error = Some(t!("msg-open-failed", "error" => message));
-            return;
-        }
-    };
-    match loaded {
-        Ok((project, repairs)) => {
-            let mut doc = Document::new(project);
-            doc.path = Some(path.clone());
-            state.replace_document(doc);
+    let mut session = cc_engine::Session::default();
+    match session.run(project::ProjectOpen { path: path.clone() }) {
+        Ok(out) => {
+            let repairs = out["repairs"].as_u64().unwrap_or(0);
+            state.replace_document(session.doc);
             state.message = if repairs > 0 {
                 t!("msg-opened-repaired", "path" => path.display(), "count" => repairs)
             } else {
@@ -310,31 +212,12 @@ pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
                 state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path));
             }
         }
-        Err(err) => state.dialogs.error = Some(t!("msg-open-failed", "error" => persist_error(&err))),
-    }
-}
-
-fn component_file_error(err: cc_core::component_file::ComponentFileError) -> String {
-    use cc_core::component_file::ComponentFileError as E;
-    match err {
-        E::Io(e) => t!("err-io", "detail" => e),
-        E::Parse(e) => t!("err-component-parse", "detail" => e),
-        E::Serialize(e) => t!("err-serialize", "detail" => e),
-        E::Version(v) => t!("err-version", "version" => v, "max" => cc_core::component_file::COMPONENT_FORMAT_VERSION),
-        E::Invalid(detail) => t!("err-component-invalid", "detail" => detail),
-        E::NotFound(name) => t!("err-component-invalid", "detail" => name),
+        Err(err) => state.dialogs.error = Some(t!("msg-open-failed", "error" => err.message)),
     }
 }
 
 /// Save the component `name` (all its types) to a `.ccomp` file.
 pub fn save_component(state: &mut AppState, name: &str) {
-    let file = match cc_core::component_file::extract(state.project(), name) {
-        Ok(file) => file,
-        Err(err) => {
-            state.dialogs.error = Some(t!("msg-component-save-failed", "error" => component_file_error(err)));
-            return;
-        }
-    };
     let dialog = rfd::FileDialog::new()
         .add_filter(t!("file-filter-component"), &["ccomp"])
         .set_file_name(format!("{name}.ccomp"));
@@ -342,12 +225,9 @@ pub fn save_component(state: &mut AppState, name: &str) {
     if path.extension().is_none() {
         path.set_extension("ccomp");
     }
-    match guard(|| cc_core::component_file::save(&file, &path)) {
-        Ok(Ok(())) => state.message = t!("msg-exported", "path" => path.display()),
-        Ok(Err(err)) => {
-            state.dialogs.error = Some(t!("msg-component-save-failed", "error" => component_file_error(err)));
-        }
-        Err(message) => state.dialogs.error = Some(t!("msg-component-save-failed", "error" => message)),
+    match state.session.run(io::ComponentSave { component: name.to_string(), path: path.clone() }) {
+        Ok(_) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(e) => state.dialogs.error = Some(t!("msg-component-save-failed", "error" => e.message)),
     }
 }
 
@@ -356,39 +236,21 @@ pub fn save_component(state: &mut AppState, name: &str) {
 pub fn load_component(state: &mut AppState) {
     let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-component"), &["ccomp"]);
     let Some(path) = dialog.pick_file() else { return };
-    let file = match guard(|| cc_core::component_file::load(&path)) {
-        Ok(Ok(file)) => file,
-        Ok(Err(err)) => {
-            state.dialogs.error = Some(t!("msg-component-load-failed", "error" => component_file_error(err)));
-            return;
-        }
-        Err(message) => {
-            state.dialogs.error = Some(t!("msg-component-load-failed", "error" => message));
-            return;
-        }
-    };
-    add_component_types(state, &file);
+    load_component_path(state, path);
 }
 
-/// Add the types of a component file to the project; returns the first new type.
-pub fn add_component_types(
-    state: &mut AppState,
-    file: &cc_core::component_file::ComponentFile,
-) -> Option<cc_core::ElementTypeId> {
-    let first = state.session.doc.edit(t!("tx-load-component"), |e| {
-        let mut ids: Vec<u64> = (0..file.types.len()).map(|_| e.alloc_id()).collect();
-        ids.reverse();
-        let (types, materials) = cc_core::component_file::types_for(e.project(), file, || ids.pop().unwrap_or(0));
-        e.materials_mut().extend(materials);
-        let first = types.first().map(|t| t.id);
-        for t in types {
-            e.add_type(t);
+/// Load the component file at `path` (see [`load_component`]).
+pub fn load_component_path(state: &mut AppState, path: std::path::PathBuf) {
+    match state.session.run(io::ComponentLoad { path }) {
+        Ok(out) => {
+            if let Some(first) = out["types"].get(0).and_then(serde_json::Value::as_u64) {
+                state.set_tool(crate::tools::Tool::Component { type_id: cc_core::ElementTypeId(first) });
+            }
+            let name = out["component"].as_str().unwrap_or_default().to_string();
+            state.message = t!("msg-component-loaded", "name" => name);
         }
-        first
-    })?;
-    state.set_tool(crate::tools::Tool::Component { type_id: first });
-    state.message = t!("msg-component-loaded", "name" => file.component);
-    Some(first)
+        Err(e) => state.dialogs.error = Some(t!("msg-component-load-failed", "error" => e.message)),
+    }
 }
 
 /// Replace the document with a project imported from an IFC file. The
@@ -396,29 +258,24 @@ pub fn add_component_types(
 fn import_ifc(state: &mut AppState) {
     let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-ifc"), &["ifc"]);
     let Some(path) = dialog.pick_file() else { return };
-    match guard(|| cc_ifc::import_file(&path, new_project())) {
-        Ok(Ok((project, report))) => {
-            state.replace_document(Document::new(project));
-            let skipped = report.skipped_total();
+    let mut session = cc_engine::Session::default();
+    match session.run(io::IfcImport { path: path.clone() }) {
+        Ok(report) => {
+            state.replace_document(session.doc);
+            let count =
+                |v: &serde_json::Value| v.as_object().map_or(0, |o| o.values().filter_map(|n| n.as_u64()).sum());
+            let (imported, skipped, generic) =
+                (count(&report["imported"]), count(&report["skipped"]), count(&report["generic"]));
             state.message = if skipped == 0 {
-                t!("msg-imported", "path" => path.display(), "count" => report.imported_total())
+                t!("msg-imported", "path" => path.display(), "count" => imported)
             } else {
-                t!("msg-imported-skipped", "path" => path.display(), "count" => report.imported_total(), "skipped" => skipped)
+                t!("msg-imported-skipped", "path" => path.display(), "count" => imported, "skipped" => skipped)
             };
-            let generic: usize = report.generic.values().sum();
             if generic > 0 {
                 state.message = format!("{} {}", state.message, t!("msg-imported-generic", "count" => generic));
             }
         }
-        Ok(Err(err)) => {
-            let error = match err {
-                cc_ifc::ImportError::Io(e) => t!("err-io", "detail" => e),
-                cc_ifc::ImportError::Parse(e) => t!("err-ifc-parse", "detail" => e),
-                cc_ifc::ImportError::NotIfc => t!("err-not-ifc"),
-            };
-            state.dialogs.error = Some(t!("msg-import-failed", "error" => error));
-        }
-        Err(message) => state.dialogs.error = Some(t!("msg-import-failed", "error" => message)),
+        Err(e) => state.dialogs.error = Some(t!("msg-import-failed", "error" => e.message)),
     }
 }
 
@@ -429,13 +286,9 @@ pub fn export_ifc(state: &mut AppState) {
     if path.extension().is_none() {
         path.set_extension("ifc");
     }
-    match guard(|| cc_ifc::export_to_file(state.project(), &path)) {
-        Ok(Ok(())) => state.message = t!("msg-exported", "path" => path.display()),
-        Ok(Err(err)) => {
-            let error = t!("err-io", "detail" => err);
-            state.dialogs.error = Some(t!("msg-export-failed", "error" => error));
-        }
-        Err(message) => state.dialogs.error = Some(t!("msg-export-failed", "error" => message)),
+    match state.session.run(io::IfcExport { path: path.clone() }) {
+        Ok(_) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(e) => state.dialogs.error = Some(t!("msg-export-failed", "error" => e.message)),
     }
 }
 
@@ -469,18 +322,14 @@ pub fn export_sheet(state: &mut AppState, format: SheetFormat) {
     if path.extension().is_none() {
         path.set_extension(ext);
     }
-    let Some(sheet) = state.sheet(id) else { return };
-    let bytes = guard(|| match format {
-        SheetFormat::Pdf => cc_views::export::to_pdf(&sheet.drawing, sheet.paper),
-        SheetFormat::Svg => cc_views::export::to_svg(&sheet.drawing, sheet.paper).into_bytes(),
-    });
-    match bytes.map(|b| std::fs::write(&path, b)) {
-        Ok(Ok(())) => state.message = t!("msg-exported", "path" => path.display()),
-        Ok(Err(err)) => {
-            let error = t!("err-io", "detail" => err);
-            state.dialogs.error = Some(t!("msg-export-failed", "error" => error));
-        }
-        Err(message) => state.dialogs.error = Some(t!("msg-export-failed", "error" => message)),
+    let format = match format {
+        SheetFormat::Pdf => "pdf",
+        SheetFormat::Svg => "svg",
+    };
+    let command = io::SheetExport { sheet: Ref::Id(id.0), path: path.clone(), format: Some(format.to_string()) };
+    match state.session.run(command) {
+        Ok(_) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(e) => state.dialogs.error = Some(t!("msg-export-failed", "error" => e.message)),
     }
 }
 
@@ -496,24 +345,15 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
             p
         }
     };
-    let saved = match guard(|| cc_core::save(state.project(), &path)) {
-        Ok(result) => result,
-        Err(message) => {
-            state.dialogs.error = Some(t!("msg-save-failed", "error" => message));
-            return false;
-        }
-    };
-    match saved {
-        Ok(()) => {
-            state.session.doc.path = Some(path.clone());
-            state.session.doc.mark_saved();
+    match state.session.run(project::ProjectSave { path: Some(path.clone()) }) {
+        Ok(_) => {
             state.message = t!("msg-saved", "path" => path.display());
             crate::home::push_recent(&mut state.recent, &path);
             state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path.clone()));
             true
         }
-        Err(err) => {
-            state.dialogs.error = Some(t!("msg-save-failed", "error" => persist_error(&err)));
+        Err(e) => {
+            state.dialogs.error = Some(t!("msg-save-failed", "error" => e.message));
             false
         }
     }

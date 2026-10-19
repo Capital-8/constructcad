@@ -41,8 +41,7 @@ impl Session {
 
     /// Open a `.ccad` file; returns the session and the number of repairs made.
     pub fn open(path: &std::path::Path) -> Result<(Self, usize)> {
-        let (project, repairs) = guard(|| cc_core::load_with_repairs(path))?
-            .map_err(|e| EngineError::io(format!("{}: {e}", path.display())))?;
+        let (project, repairs) = guard(|| cc_core::load_with_repairs(path))??;
         let mut doc = Document::new(project);
         doc.path = Some(path.to_path_buf());
         Ok((Self::new(doc), repairs))

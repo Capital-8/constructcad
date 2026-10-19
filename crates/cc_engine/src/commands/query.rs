@@ -8,7 +8,7 @@ use crate::session::Session;
 use cc_core::{Category, ElementId, ElementKind, ViewCategory, ViewId};
 use cc_geom::polygon;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// `FloorPlan` → `floor_plan`.
@@ -35,7 +35,7 @@ fn to_json<T: serde::Serialize>(v: &T) -> Value {
 }
 
 /// Element categories with their display names and how many elements and types each has.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CategoriesList {}
 
@@ -59,7 +59,7 @@ impl Command for CategoriesList {
 }
 
 /// Levels from the lowest, with their elevations (meters).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LevelsList {}
 
@@ -72,7 +72,7 @@ impl Command for LevelsList {
 }
 
 /// Types, optionally of one category.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TypesList {
     /// Category name (`wall`, `door`, `component`…).
@@ -115,7 +115,7 @@ pub(crate) fn type_json(s: &Session, id: cc_core::ElementTypeId) -> Option<Value
 }
 
 /// A type with all its parameters (`params`, editable with `type_set`) and identity data (`info`).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TypeGet {
     /// Type id or name.
@@ -133,7 +133,7 @@ impl Command for TypeGet {
 }
 
 /// Elements, optionally of one category and/or level, with a short summary each.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsList {
     #[serde(default)]
@@ -213,7 +213,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
 
 /// An element with all its parameters (`params`, editable with `element_set`) and derived values
 /// (length, height, thickness, volume, room area and perimeter).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementGet {
     pub id: u64,
@@ -242,7 +242,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
 
 /// Views (plans, ceiling plans, elevations, sections, 3D, legends, schedules, sheets),
 /// optionally of one category.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewsList {
     /// `floor_plan`, `ceiling_plan`, `three_d`, `elevation`, `section`, `legend`, `schedule` or `sheet`.
@@ -265,7 +265,7 @@ impl Command for ViewsList {
 }
 
 /// A view with all its parameters (`params`, editable with `view_set`).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewGet {
     /// View id or name.
@@ -282,7 +282,7 @@ impl Command for ViewGet {
 }
 
 /// Materials with their colors and how many types use each.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialsList {}
 
@@ -307,7 +307,7 @@ impl Command for MaterialsList {
 }
 
 /// A material with all its fields (editable with `material_set`).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialGet {
     /// Material name (or index in `materials_list`).
@@ -325,7 +325,7 @@ impl Command for MaterialGet {
 
 /// The table of a schedule view: headers, one row per element (with its id) and totals,
 /// formatted with the project units.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ScheduleTable {
     /// Schedule view id or name.

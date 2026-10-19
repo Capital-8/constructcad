@@ -628,10 +628,12 @@ mod file_tests {
         let mut state = AppState::new(Document::new(crate::actions::new_project()));
         let file = cc_core::component_file::extract(state.project(), "Mesa").unwrap();
         let text = cc_core::component_file::to_ron(&file).unwrap();
-        let file = cc_core::component_file::from_ron(&text).unwrap();
+        let path = std::env::temp_dir().join(format!("ccad-mesa-{}.ccomp", std::process::id()));
+        std::fs::write(&path, text).unwrap();
         let before = state.project().types_of(Category::Component).count();
         let depth = state.session.doc.undo_depth();
-        let first = crate::actions::add_component_types(&mut state, &file).unwrap();
+        crate::actions::load_component_path(&mut state, path);
+        let crate::tools::Tool::Component { type_id: first } = state.tool.clone() else { panic!("tool") };
         assert_eq!(state.session.doc.undo_depth(), depth + 1);
         assert_eq!(state.project().types_of(Category::Component).count(), before + 1);
         assert_eq!(state.project().type_name(first), "Mesa 120 x 80 (2)");

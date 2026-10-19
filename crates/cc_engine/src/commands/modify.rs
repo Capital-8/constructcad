@@ -10,7 +10,7 @@ use crate::t;
 use cc_core::{ElementId, ElementKind, PlanTransform, Project};
 use glam::DVec2;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Split `ids` into free and pinned elements (pinned ones are not changed).
@@ -32,7 +32,7 @@ fn copy(s: &mut Session, ids: &[u64], transforms: &[PlanTransform], tx: String) 
 }
 
 /// Delete elements (doors and windows of deleted walls go too; pinned elements stay).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsDelete {
     pub ids: Vec<u64>,
@@ -56,7 +56,7 @@ impl Command for ElementsDelete {
 
 /// Move elements by `delta` (walls take their doors and windows; doors and
 /// windows alone slide along their wall).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsMove {
     pub ids: Vec<u64>,
@@ -74,7 +74,7 @@ impl Command for ElementsMove {
 
 /// Copy elements by `delta`; with `count` > 1, a linear array of that many
 /// copies spaced by `delta`.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsCopy {
     pub ids: Vec<u64>,
@@ -124,7 +124,7 @@ fn center_of(s: &mut Session, ids: &[ElementId]) -> Option<DVec2> {
 
 /// Rotate elements by `angle` degrees (counter-clockwise) about `center`
 /// (default: the center of their extents); with `copy`, rotated copies.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsRotate {
     pub ids: Vec<u64>,
@@ -151,7 +151,7 @@ impl Command for ElementsRotate {
 
 /// Mirror elements across an axis: two points, or the line of a wall, grid,
 /// beam or railing (`axis_element`). Copies by default (`copy: false` moves them).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsMirror {
     pub ids: Vec<u64>,
@@ -197,7 +197,7 @@ impl Command for ElementsMirror {
 }
 
 /// Pin elements (they cannot be moved or deleted) or unpin them.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsPin {
     pub ids: Vec<u64>,
@@ -217,7 +217,7 @@ impl Command for ElementsPin {
 }
 
 /// Flip a door or window to the other side of its wall (`facing`) and/or to the other jamb (`hand`).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementFlip {
     pub id: u64,
@@ -246,7 +246,7 @@ impl Command for ElementFlip {
 }
 
 /// Allow or disallow joining at one end of a wall.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WallJoin {
     pub id: u64,
@@ -282,7 +282,7 @@ impl Command for WallJoin {
 
 /// Trim or extend two linear elements (walls, beams, grids) to meet at a
 /// corner; each pick point marks the part of its element to keep.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimCorner {
     pub a: u64,
@@ -304,7 +304,7 @@ impl Command for TrimCorner {
 
 /// Trim or extend a linear element to the line of a reference element; the
 /// pick point marks the part to keep.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimExtend {
     pub id: u64,
@@ -332,7 +332,7 @@ impl Command for TrimExtend {
 }
 
 /// Split a linear element (wall, beam, grid) at a point; returns the new element.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementSplit {
     pub id: u64,
@@ -351,7 +351,7 @@ impl Command for ElementSplit {
 }
 
 /// Copy a linear element parallel at `distance` (positive: to the left of its direction).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementOffset {
     pub id: u64,
@@ -370,7 +370,7 @@ impl Command for ElementOffset {
 }
 
 /// Move a linear element parallel onto the line of a reference element.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementAlign {
     pub id: u64,
@@ -389,7 +389,7 @@ impl Command for ElementAlign {
 }
 
 /// Move one end of a wall, beam or grid (joined wall ends follow).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementMoveEnd {
     pub id: u64,

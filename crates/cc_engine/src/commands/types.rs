@@ -8,7 +8,7 @@ use crate::session::Session;
 use crate::t;
 use cc_core::{ComponentDef, ElementType, ElementTypeId, TypeData, expr};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Parameter names valid and unique, at least one piece, every piece resolves.
@@ -41,7 +41,7 @@ fn type_out(s: &Session, id: ElementTypeId) -> Value {
 /// identity data (`info`: type mark, description, manufacturer, cost…).
 /// Changing a component's definition updates every type of that component,
 /// each keeping its own parameter values.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TypeSet {
     #[serde(rename = "type")]
@@ -126,7 +126,7 @@ impl Command for TypeSet {
 }
 
 /// Copy a type under a new name (default "<name> (copy)"); the given elements of the type switch to the copy.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TypeDuplicate {
     #[serde(rename = "type")]
@@ -162,7 +162,7 @@ impl Command for TypeDuplicate {
 }
 
 /// Delete a type that no element uses (the last type of a category is kept).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TypeDelete {
     #[serde(rename = "type")]
@@ -203,7 +203,7 @@ impl Command for TypeDelete {
 /// Create a component type: `def` holds its parameters and pieces (boxes,
 /// cylinders, extrusions whose fields are expressions over the parameters),
 /// shaped like a component type's `params.def` in `type_get`.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentCreate {
     /// Name of the component and of its first type.

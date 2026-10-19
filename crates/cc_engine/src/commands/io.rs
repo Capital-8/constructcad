@@ -8,17 +8,17 @@ use crate::session::{Session, guard, new_project};
 use crate::t;
 use cc_core::{Document, ViewKind};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 fn write(path: &Path, bytes: &[u8]) -> Result<()> {
-    std::fs::write(path, bytes).map_err(|e| EngineError::io(format!("{}: {e}", path.display())))
+    Ok(std::fs::write(path, bytes)?)
 }
 
 /// Import an IFC file (IFC2X3 or IFC4), replacing the session's project. The
 /// result has no file yet; save it with `project_save` and a path.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct IfcImport {
     pub path: PathBuf,
@@ -28,8 +28,7 @@ impl Command for IfcImport {
     const NAME: &'static str = "ifc_import";
     const KIND: CommandKind = CommandKind::File;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let (project, report) = guard(|| cc_ifc::import_file(&self.path, new_project()))?
-            .map_err(|e| EngineError::io(format!("{}: {e}", self.path.display())))?;
+        let (project, report) = guard(|| cc_ifc::import_file(&self.path, new_project()))??;
         s.replace(Document::new(project));
         let imported: serde_json::Map<String, Value> =
             report.imported.iter().map(|(c, n)| (refs::category_name(*c), json!(n))).collect();
@@ -44,7 +43,7 @@ impl Command for IfcImport {
 }
 
 /// Export the project as IFC4.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct IfcExport {
     pub path: PathBuf,
@@ -54,14 +53,13 @@ impl Command for IfcExport {
     const NAME: &'static str = "ifc_export";
     const KIND: CommandKind = CommandKind::File;
     fn run(self, s: &mut Session) -> Result<Value> {
-        guard(|| cc_ifc::export_to_file(s.project(), &self.path))?
-            .map_err(|e| EngineError::io(format!("{}: {e}", self.path.display())))?;
+        guard(|| cc_ifc::export_to_file(s.project(), &self.path))??;
         Ok(json!({ "path": self.path }))
     }
 }
 
 /// Export a sheet as vector PDF or SVG (by `format`, else by the file extension).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SheetExport {
     /// Sheet id or name.
@@ -94,7 +92,7 @@ impl Command for SheetExport {
 }
 
 /// Export a schedule view as CSV (UTF-8; semicolons when the decimal comma is used).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ScheduleExportCsv {
     /// Schedule view id or name.
@@ -120,7 +118,7 @@ impl Command for ScheduleExportCsv {
 }
 
 /// Load a component file (.ccomp): its types and missing materials join the project.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentLoad {
     pub path: PathBuf,
@@ -130,8 +128,7 @@ impl Command for ComponentLoad {
     const NAME: &'static str = "component_load";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let file = guard(|| cc_core::component_file::load(&self.path))?
-            .map_err(|e| EngineError::io(format!("{}: {e}", self.path.display())))?;
+        let file = guard(|| cc_core::component_file::load(&self.path))??;
         let ids = edit(s, t!("tx-load-component"), |e| {
             let mut ids: Vec<u64> = (0..file.types.len()).map(|_| e.alloc_id()).collect();
             ids.reverse();
@@ -144,7 +141,7 @@ impl Command for ComponentLoad {
 }
 
 /// Save a component (all its types and the materials they use) to a .ccomp file.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentSave {
     /// Component name (as in a component type's `params.component`).
@@ -156,10 +153,8 @@ impl Command for ComponentSave {
     const NAME: &'static str = "component_save";
     const KIND: CommandKind = CommandKind::File;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let file = cc_core::component_file::extract(s.project(), &self.component)
-            .map_err(|e| EngineError::not_found(e.to_string()))?;
-        guard(|| cc_core::component_file::save(&file, &self.path))?
-            .map_err(|e| EngineError::io(format!("{}: {e}", self.path.display())))?;
+        let file = cc_core::component_file::extract(s.project(), &self.component)?;
+        guard(|| cc_core::component_file::save(&file, &self.path))??;
         Ok(json!({ "path": self.path, "types": file.types.len() }))
     }
 }

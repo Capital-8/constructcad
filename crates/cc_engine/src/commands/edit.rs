@@ -7,7 +7,7 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Change an element: its level (doors and windows of a wall follow it),
@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 /// `{"height": 2.8}` for a wall or `{"shape": {"Gable": {"slope": 0.5,
 /// "ridge_deg": 0}}}` for a roof). The edit is refused if it would leave the
 /// model invalid.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementSet {
     pub id: u64,
@@ -75,7 +75,7 @@ impl Command for ElementSet {
 }
 
 /// Give elements a type (all must be of the type's category), like Match Type.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsSetType {
     pub ids: Vec<u64>,

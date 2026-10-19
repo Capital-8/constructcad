@@ -8,7 +8,7 @@ use crate::session::Session;
 use crate::t;
 use cc_core::{Material, Project};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// `base`, or `base 2`, `base 3`… when taken.
@@ -28,7 +28,7 @@ fn material_out(s: &Session, name: &str) -> Value {
 }
 
 /// Create a material (default name "Material"; a number is added when taken).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialCreate {
     #[serde(default)]
@@ -53,7 +53,7 @@ impl Command for MaterialCreate {
 }
 
 /// Copy a material under a new name (default "<name> (copy)").
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialDuplicate {
     pub material: Ref,
@@ -81,7 +81,7 @@ impl Command for MaterialDuplicate {
 }
 
 /// Rename a material; every type using it follows.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialRename {
     pub material: Ref,
@@ -113,7 +113,7 @@ impl Command for MaterialRename {
 /// Change a material's fields (merged into what `material_get` shows:
 /// description, class, colors, patterns, transparency, finish, physical
 /// values…). Use `material_rename` to rename it.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialSet {
     pub material: Ref,
@@ -145,7 +145,7 @@ impl Command for MaterialSet {
 }
 
 /// Delete a material no type uses.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialDelete {
     pub material: Ref,

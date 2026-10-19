@@ -9,7 +9,7 @@ use crate::session::Session;
 use crate::t;
 use cc_core::{CameraState, Direction, Project, SheetSize, View, ViewCategory, ViewId, ViewKind, Viewport};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 fn view_out(s: &Session, id: ViewId) -> Value {
@@ -20,7 +20,7 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 /// `section` (with `start`, `end` and optional `depth`), `elevation` (with
 /// `direction`: north, south, east or west), `three_d`, `legend` (all types),
 /// `schedule` (with `category`) or `sheet` (A3, numbered after the others).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
     pub kind: String,
@@ -136,7 +136,7 @@ fn capitalized(s: &str) -> String {
 /// Change a view: name, scale and its `params` as `view_get` shows them
 /// (merged: cut height, section depth, legend types, schedule fields, sort,
 /// filter and totals, sheet number and size, viewport positions…).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
     pub view: Ref,
@@ -182,7 +182,7 @@ impl Command for ViewSet {
 }
 
 /// Copy a view (a copied sheet starts without viewports).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewDuplicate {
     pub view: Ref,
@@ -210,7 +210,7 @@ impl Command for ViewDuplicate {
 }
 
 /// Delete a view (and its viewports on sheets; dimensions drawn in it go too).
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewDelete {
     pub view: Ref,
@@ -247,7 +247,7 @@ fn sheet(p: &Project, r: &Ref) -> Result<ViewId> {
 
 /// Place a view on a sheet at `center` (paper millimeters; default left of
 /// center). A view can be on only one sheet; sheets cannot be placed.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SheetPlaceView {
     pub sheet: Ref,
@@ -267,7 +267,7 @@ impl Command for SheetPlaceView {
             return Err(EngineError::invalid("this view cannot be placed on a sheet"));
         }
         if sheet_of(p, view).is_some() {
-            return Err(EngineError::rejected("the view is already on a sheet"));
+            return Err(EngineError::rejected(t!("msg-view-already-placed")));
         }
         let center = self.center.map(point).transpose()?;
         edit(s, t!("tx-place-view"), |e| {
@@ -282,7 +282,7 @@ impl Command for SheetPlaceView {
 }
 
 /// Remove a view from a sheet.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SheetRemoveViewport {
     pub sheet: Ref,

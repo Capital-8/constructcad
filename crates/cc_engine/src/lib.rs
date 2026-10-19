@@ -25,6 +25,6 @@ pub mod commands;
 
 pub use defaults::{default_roof_base, default_top, next_number, walls_loop};
 pub use error::{EngineError, ErrorCode, Result};
-pub use refs::Ref;
+pub use refs::{Ref, category_name};
 pub use registry::{Command, CommandInfo, CommandKind, catalog, describe};
-pub use session::Session;
+pub use session::{Session, new_project};
