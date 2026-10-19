@@ -8,6 +8,7 @@
 //! third-party IFC libraries. [`import`] reads IFC2X3/IFC4 files back into a
 //! project (see the `import` module).
 
+mod csg;
 mod export;
 mod geometry;
 pub mod guid;

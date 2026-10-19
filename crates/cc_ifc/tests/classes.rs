@@ -55,7 +55,12 @@ fn check_volumes(p: &Project) {
         .find(|e| p.element_type(e.type_id).is_some_and(|t| t.name == "Curved"))
         .map(|e| g.volume(e.id))
         .unwrap();
-    near(wall, PI / 4.0 * (25.0 - 23.04) * 3.0, 0.02, "curved wall");
+    // Minus an opening 2 m tall across x 0.5–1.5 m (Simpson's rule on the annulus strip).
+    let strip = |x: f64| (25.0 - x * x).sqrt() - (23.04 - x * x).sqrt();
+    let hole = 2.0 * (strip(0.5) + 4.0 * strip(1.0) + strip(1.5)) / 6.0;
+    near(wall, PI / 4.0 * (25.0 - 23.04) * 3.0 - hole, 0.02, "curved wall with an opening");
+    // A beam that would be native, but with a web opening it keeps its exact cut shape.
+    near(volume_of(p, &g, "IFCBEAM"), 0.2 * 0.4 * 4.0 - 0.5 * 0.2 * 0.2, 1e-9, "beam with a web opening");
 }
 
 #[test]
@@ -66,6 +71,7 @@ fn every_class_is_imported() {
     assert_eq!(
         generic,
         vec![
+            ("IfcBeam", 1),
             ("IfcBuildingElementProxy", 2),
             ("IfcCovering", 1),
             ("IfcDoor", 1),

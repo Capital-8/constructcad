@@ -23,6 +23,8 @@ use cc_geom::polygon;
 use glam::{DAffine3, DVec2, DVec3};
 use std::collections::{BTreeMap, HashMap};
 
+/// Most openings cut from one product.
+const MAX_OPENINGS: usize = 1000;
 const MAX_PARENT_DEPTH: usize = 16;
 /// Length tolerance when matching types (meters).
 const TYPE_TOL: f64 = 0.001;
@@ -171,6 +173,8 @@ struct Importer<'a> {
     psets_of: HashMap<u32, Vec<u32>>,
     /// Opening → host element; filler → opening.
     host_of_opening: HashMap<u32, u32>,
+    /// Host → the openings voiding it.
+    openings_of: HashMap<u32, Vec<u32>>,
     opening_of_filler: HashMap<u32, u32>,
     /// Surface style colors by style name and by styled item.
     style_colors: HashMap<String, [u8; 3]>,
@@ -211,6 +215,7 @@ impl<'a> Importer<'a> {
             material_of: HashMap::new(),
             psets_of: HashMap::new(),
             host_of_opening: HashMap::new(),
+            openings_of: HashMap::new(),
             opening_of_filler: HashMap::new(),
             style_colors: HashMap::new(),
             item_colors: HashMap::new(),
@@ -400,6 +405,7 @@ impl<'a> Importer<'a> {
                 "IFCRELVOIDSELEMENT" => {
                     if let (Some(host), Some(opening)) = (e.arg(4).as_ref(), e.arg(5).as_ref()) {
                         self.host_of_opening.insert(opening, host);
+                        self.openings_of.entry(host).or_default().push(opening);
                     }
                 }
                 "IFCRELFILLSELEMENT" => {
@@ -970,7 +976,16 @@ impl<'a> Importer<'a> {
         (footprint.len() >= 3 && polygon::area(&footprint) > 1e-4).then_some((footprint, z0, z1, thickness))
     }
 
+    /// Openings voiding a product that a native element (other than a wall,
+    /// whose doors and windows cut it) could not show.
+    fn has_openings(&self, id: u32) -> bool {
+        self.openings_of.get(&id).is_some_and(|o| !o.is_empty())
+    }
+
     fn import_slab(&mut self, id: u32, e: &Entity) -> bool {
+        if self.has_openings(id) {
+            return false;
+        }
         let kind = e.arg(8).as_enum().unwrap_or("NOTDEFINED");
         let (_, body) = self.product(e);
         let Some((boundary, z0, z1, thickness)) = Self::sketch(&body, false) else { return false };
@@ -995,6 +1010,9 @@ impl<'a> Importer<'a> {
     }
 
     fn import_covering(&mut self, id: u32, e: &Entity) -> bool {
+        if self.has_openings(id) {
+            return false;
+        }
         if e.arg(8).as_enum() != Some("CEILING") {
             return false;
         }
@@ -1018,6 +1036,9 @@ impl<'a> Importer<'a> {
     }
 
     fn import_roof(&mut self, id: u32, e: &Entity) -> bool {
+        if self.has_openings(id) {
+            return false;
+        }
         let (_, body) = self.product(e);
         if body.solids.is_empty() {
             // Roofs made of aggregated slabs are imported through the slabs.
@@ -1170,6 +1191,9 @@ impl<'a> Importer<'a> {
     }
 
     fn import_column(&mut self, id: u32, e: &Entity) -> bool {
+        if self.has_openings(id) {
+            return false;
+        }
         let (_, body) = self.product(e);
         let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical() && e.profile.is_simple()).cloned() else {
             return false;
@@ -1262,10 +1286,11 @@ impl<'a> Importer<'a> {
     /// same name and size is reused, so parametric components survive a
     /// round trip.
     fn import_component(&mut self, id: u32, e: &Entity, kind: ComponentKind) -> bool {
-        let (world, body) = self.product(e);
+        let (world, mut body) = self.product(e);
         if body.solids.is_empty() {
             return false;
         }
+        self.cut_openings(id, &mut body);
         let x = world.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X);
         let rotation = x.y.atan2(x.x);
         let origin = world.translation;
@@ -1364,6 +1389,24 @@ impl<'a> Importer<'a> {
         true
     }
 
+    /// Subtract the bodies of the openings voiding `id` from its solids
+    /// (openings too complex to cut are left uncut).
+    fn cut_openings(&self, id: u32, body: &mut Body) {
+        let f = self.f;
+        let openings = self.openings_of.get(&id).into_iter().flatten().filter_map(|o| f.get(*o));
+        for opening in openings.take(MAX_OPENINGS) {
+            let (_, cutter) = self.product(opening);
+            for c in &cutter.solids {
+                for s in &mut body.solids {
+                    if let Some(mesh) = crate::geometry::subtract(&s.mesh, &c.mesh) {
+                        s.replace_mesh(mesh);
+                    }
+                }
+            }
+        }
+        body.solids.retain(|s| !s.mesh.is_empty());
+    }
+
     /// Grid axes of an `IfcGrid` as grid lines.
     fn import_grid(&mut self, id: u32, e: &Entity) {
         let f = self.f;
@@ -1403,6 +1446,9 @@ impl<'a> Importer<'a> {
     }
 
     fn import_beam(&mut self, id: u32, e: &Entity) -> bool {
+        if self.has_openings(id) {
+            return false;
+        }
         let (_, body) = self.product(e);
         let Some((_, z1)) = body.z_range() else { return false };
         let Some(ex) = body.sole_extrusion().filter(|e| e.profile.is_simple()).cloned() else { return false };

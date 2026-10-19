@@ -146,7 +146,7 @@ pub struct Solid {
     pub points: Vec<DVec3>,
     /// Representation item (for styles).
     pub item: u32,
-    /// A half space cut the item (its extrusion is the uncut one).
+    /// A half space or boolean cut the item (its extrusion is the uncut one).
     pub clipped: bool,
 }
 
@@ -155,6 +155,24 @@ impl Solid {
         let points = mesh.iter().flatten().copied().collect();
         Self { extrusion, mesh, points, item, clipped: false }
     }
+
+    /// Replace the faces by a cut version of them; a changed solid is
+    /// marked clipped (its extrusion stays the uncut one).
+    pub fn replace_mesh(&mut self, mesh: Vec<Polygon>) {
+        if mesh != self.mesh {
+            self.points = mesh.iter().flatten().copied().collect();
+            self.mesh = mesh;
+            self.clipped = true;
+        }
+    }
+}
+
+/// `a` minus `b` when their bounds overlap (`None`: nothing to cut or too large to cut).
+pub fn subtract(a: &[Polygon], b: &[Polygon]) -> Option<Vec<Polygon>> {
+    if !crate::csg::bounds_overlap(a, b) {
+        return None;
+    }
+    crate::csg::subtract(a, b)
 }
 
 pub fn bounds2(pts: &[DVec2]) -> (DVec2, DVec2) {
@@ -1060,17 +1078,36 @@ impl<'a> Geometry<'a> {
                         self.items_at(e.arg(2), xf, depth + 1, out);
                     }
                     "DIFFERENCE" => {
-                        // Half spaces clip exactly; other operands are not subtracted.
                         if let Some((point, keep)) = self.half_space(e.arg(2), xf, &first) {
+                            // Half spaces clip by their plane.
                             for s in &mut first {
                                 let mesh = clip_mesh(&s.mesh, point, keep);
-                                if mesh != s.mesh {
-                                    let extrusion = s.extrusion.take();
-                                    *s = Solid { clipped: true, extrusion, ..Solid::new(s.item, mesh, None) };
+                                s.replace_mesh(mesh);
+                            }
+                        } else {
+                            let mut second = Vec::new();
+                            self.items_at(e.arg(2), xf, depth + 1, &mut second);
+                            for s in &mut first {
+                                for cutter in &second {
+                                    if let Some(mesh) = subtract(&s.mesh, &cutter.mesh) {
+                                        s.replace_mesh(mesh);
+                                    }
                                 }
                             }
-                            first.retain(|s| !s.mesh.is_empty());
                         }
+                        first.retain(|s| !s.mesh.is_empty());
+                        out.extend(first);
+                    }
+                    "INTERSECTION" => {
+                        let mut second = Vec::new();
+                        self.items_at(e.arg(2), xf, depth + 1, &mut second);
+                        let other: Vec<Polygon> = second.into_iter().flat_map(|s| s.mesh).collect();
+                        for s in &mut first {
+                            if let Some(mesh) = crate::csg::intersect(&s.mesh, &other) {
+                                s.replace_mesh(mesh);
+                            }
+                        }
+                        first.retain(|s| !s.mesh.is_empty());
                         out.extend(first);
                     }
                     _ => out.extend(first),

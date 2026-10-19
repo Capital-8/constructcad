@@ -59,7 +59,7 @@ pub fn plan_edges(faces: &[Vec<DVec3>]) -> Vec<(DVec3, DVec3)> {
             edges.entry(k).or_insert_with(|| (a, b, Vec::new())).2.push(fi);
         }
     }
-    let mut out: Vec<(DVec3, DVec3)> = edges
+    let kept: Vec<(DVec3, DVec3, Vec<usize>)> = edges
         .into_values()
         .filter(|(a, b, adjacent)| {
             if (a.truncate() - b.truncate()).length_squared() < 1e-12 {
@@ -73,9 +73,72 @@ pub fn plan_edges(faces: &[Vec<DVec3>]) -> Vec<(DVec3, DVec3)> {
                 _ => up.iter().zip(up.iter().skip(1)).any(|(m, n)| m.dot(*n) < CREASE_COS),
             }
         })
-        .map(|(a, b, _)| (a, b))
         .collect();
+    let mut out = hide_t_junctions(kept, &normals);
     out.sort_by(|x, y| key(x.0).cmp(&key(y.0)).then(key(x.1).cmp(&key(y.1))));
+    out
+}
+
+/// Line of an edge: canonical direction and the point closest to the origin, quantized.
+fn line_key(a: DVec3, b: DVec3) -> Option<([i64; 3], [i64; 3], DVec3)> {
+    let mut d = (b - a).try_normalize()?;
+    let first = [d.x, d.y, d.z].into_iter().find(|c| c.abs() > 1e-9).unwrap_or(1.0);
+    if first < 0.0 {
+        d = -d;
+    }
+    let q = |v: DVec3, s: f64| [(v.x * s).round() as i64, (v.y * s).round() as i64, (v.z * s).round() as i64];
+    Some((q(d, 1e4), q(a - d * a.dot(d), 1e4), d))
+}
+
+/// Faces cut into fragments (booleans) meet in T-junctions, whose edges are
+/// not shared end to end: the parts of a boundary edge that run along an
+/// edge of a coplanar neighbor are interior and left out.
+fn hide_t_junctions(edges: Vec<(DVec3, DVec3, Vec<usize>)>, normals: &[DVec3]) -> Vec<(DVec3, DVec3)> {
+    let mut lines: HashMap<([i64; 3], [i64; 3]), Vec<usize>> = HashMap::new();
+    for (i, (a, b, adjacent)) in edges.iter().enumerate() {
+        if adjacent.len() == 1
+            && let Some((dk, pk, _)) = line_key(*a, *b)
+        {
+            lines.entry((dk, pk)).or_default().push(i);
+        }
+    }
+    let mut out = Vec::with_capacity(edges.len());
+    for (i, (a, b, adjacent)) in edges.iter().enumerate() {
+        let (Some(&face), Some((dk, pk, d))) = (adjacent.first(), line_key(*a, *b)) else {
+            out.push((*a, *b));
+            continue;
+        };
+        let others = lines.get(&(dk, pk)).map(Vec::as_slice).unwrap_or_default();
+        let (ta, tb) = (a.dot(d), b.dot(d));
+        let (lo, hi) = (ta.min(tb), ta.max(tb));
+        let mut covered: Vec<(f64, f64)> = others
+            .iter()
+            .filter(|j| **j != i && adjacent.len() == 1)
+            .filter_map(|j| {
+                let (c, e, adj) = &edges[*j];
+                let other = *adj.first()?;
+                (other != face && normals[other].dot(normals[face]) > 0.9999)
+                    .then(|| (c.dot(d).min(e.dot(d)).max(lo), c.dot(d).max(e.dot(d)).min(hi)))
+            })
+            .filter(|(x, y)| y - x > 1e-9)
+            .collect();
+        if covered.is_empty() {
+            out.push((*a, *b));
+            continue;
+        }
+        covered.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let at = |t: f64| *a + d * (t - ta);
+        let mut t = lo;
+        for (x, y) in covered {
+            if x > t + 1e-9 {
+                out.push((at(t), at(x)));
+            }
+            t = t.max(y);
+        }
+        if t < hi - 1e-9 {
+            out.push((at(t), at(hi)));
+        }
+    }
     out
 }
 
@@ -133,5 +196,19 @@ mod tests {
         let p = |x: f64, y: f64| DVec3::new(x, y, 0.0);
         let faces = vec![vec![p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0)], vec![p(0.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)]];
         assert_eq!(plan_edges(&faces).len(), 4);
+    }
+
+    #[test]
+    fn t_junctions_of_fragments_are_hidden() {
+        // A unit square top split into a left half and two right quarters:
+        // the middle line meets the quarters' edges in a T.
+        let p = |x: f64, y: f64| DVec3::new(x, y, 0.0);
+        let faces = vec![
+            vec![p(0.0, 0.0), p(0.5, 0.0), p(0.5, 1.0), p(0.0, 1.0)],
+            vec![p(0.5, 0.0), p(1.0, 0.0), p(1.0, 0.5), p(0.5, 0.5)],
+            vec![p(0.5, 0.5), p(1.0, 0.5), p(1.0, 1.0), p(0.5, 1.0)],
+        ];
+        let total: f64 = plan_edges(&faces).iter().map(|(a, b)| a.distance(*b)).sum();
+        assert!((total - 4.0).abs() < 1e-9, "{total}");
     }
 }
