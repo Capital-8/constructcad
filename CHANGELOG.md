@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- IFC import without dropping classes: every physical object of an IFC2X3/IFC4 file comes in. Products become native elements whenever a native element holds their geometry exactly; everything else (stairs, railings, members, plates, curtain walls, MEP segments and fittings, terrain, curved walls, classes from other schemas) becomes a generic component that keeps its IFC class, predefined type, object type and exact geometry, and is exported back as the same class (with its IFC4 type object, or as a named `IfcBuildingElementProxy` for classes IFC4 lacks). `IfcGrid` axes become grid lines.
+- In-house IFC geometry engine: placements (local and grid), polylines, indexed curves with arcs, circles, ellipses, trimmed and composite curves, B-splines (rational too); every parametric profile, arbitrary profiles with voids, center-line, composite, derived and mirrored profiles; extrusions, revolutions, swept disks and directrix sweeps; CSG primitives; boolean union, difference and intersection; half-space clipping; faceted and advanced B-reps; face sets and mapped items. Plane angle, area and volume units are read.
+- Openings (`IfcRelVoidsElement`) are cut from imported generic objects with in-house mesh booleans; slabs, coverings, roofs, columns and beams with openings come in as generic objects so their holes are kept.
+- Property and quantity sets of imported generic objects (their own and their type's) are kept with their IFC value types, converted to SI units, listed in Properties and written back on IFC export.
+- Components can hold fixed mesh pieces; plans draw them cut at the cut plane with the edges seen from above.
+- Properties show the IFC class, predefined type and object type of imported objects, and the import message counts the objects brought in as generic objects.
+- `export_ifc` example accepts an `.ifc` file (import and export again); CI validates a hand-written IFC4 fixture covering many classes with IfcOpenShell.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added
