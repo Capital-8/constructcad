@@ -19,6 +19,7 @@ mod error;
 pub mod i18n;
 mod refs;
 mod registry;
+pub mod script;
 mod session;
 
 pub mod commands;

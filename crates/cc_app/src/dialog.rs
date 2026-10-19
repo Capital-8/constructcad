@@ -248,7 +248,7 @@ pub mod session {
     /// Undo every edit made since [`begin`].
     pub fn cancel(state: &mut AppState) {
         if let Some(start) = state.dialogs.edit_start.take() {
-            while state.session.doc.undo_depth() > start && state.session.doc.undo() {}
+            state.session.undo_to(start);
         }
     }
 }

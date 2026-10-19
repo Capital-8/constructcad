@@ -340,6 +340,66 @@ pub fn export_sheet(state: &mut AppState, format: SheetFormat) {
     }
 }
 
+// --- Macros ---
+
+fn macro_dialog() -> rfd::FileDialog {
+    rfd::FileDialog::new().add_filter(t!("file-filter-macro"), &["ccmacro", "jsonl", "json"])
+}
+
+/// Start recording a macro, or stop and save it as a script of commands
+/// (the format `ccad script` runs).
+pub fn toggle_macro_recording(state: &mut AppState) {
+    if !state.session.is_recording() {
+        state.session.start_recording();
+        state.message = t!("msg-macro-recording");
+        return;
+    }
+    let steps = state.session.stop_recording();
+    if steps.is_empty() {
+        state.message = t!("msg-macro-empty");
+        return;
+    }
+    let Some(mut path) = macro_dialog().set_file_name("macro.ccmacro").save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension("ccmacro");
+    }
+    match std::fs::write(&path, cc_engine::script::to_text(&steps)) {
+        Ok(()) => state.message = t!("msg-macro-saved", "path" => path.display(), "count" => steps.len()),
+        Err(e) => state.dialogs.error = Some(t!("msg-export-failed", "error" => t!("err-io", "detail" => e))),
+    }
+}
+
+/// Run a macro (a script of commands) on the open project; each step is one undo step.
+pub fn run_macro(state: &mut AppState) {
+    let Some(path) = macro_dialog().pick_file() else { return };
+    run_macro_file(state, &path);
+}
+
+/// Run the macro at `path` (see [`run_macro`]).
+pub fn run_macro_file(state: &mut AppState, path: &std::path::Path) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => {
+            state.dialogs.error = Some(t!("msg-macro-failed", "step" => 0, "error" => t!("err-io", "detail" => e)));
+            return;
+        }
+    };
+    let steps = match cc_engine::script::parse(&text) {
+        Ok(steps) => steps,
+        Err(e) => {
+            state.dialogs.error = Some(t!("msg-macro-failed", "step" => 0, "error" => e.message));
+            return;
+        }
+    };
+    match cc_engine::script::run(&mut state.session, &steps) {
+        Ok(done) => state.message = t!("msg-macro-done", "count" => done.len()),
+        Err((_, failed)) => {
+            let step = format!("{} ({})", failed.index + 1, failed.command);
+            state.dialogs.error = Some(t!("msg-macro-failed", "step" => step, "error" => failed.error.message));
+        }
+    }
+}
+
 pub fn save(state: &mut AppState, save_as: bool) -> bool {
     let path = match (&state.session.doc.path, save_as) {
         (Some(p), false) => p.clone(),
@@ -369,6 +429,39 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recorded_macro_replays_on_another_project() {
+        let mut state = AppState::new(Document::new(new_project()));
+        let levels = state.project().levels.len();
+        state.session.start_recording();
+        add_level(&mut state);
+        let wall = run_command(
+            &mut state,
+            cc_engine::commands::create::WallCreate { start: [0.0, 0.0], end: [5.0, 0.0], ..Default::default() },
+        )
+        .and_then(|o| o["id"].as_u64())
+        .map(cc_core::ElementId)
+        .unwrap();
+        // Dragging the height in the properties: one recorded step.
+        for h in [3.2, 3.4] {
+            crate::engine_edit::element(&mut state, wall, Some(1), |e| {
+                if let cc_core::ElementKind::Wall(w) = &mut e.kind {
+                    w.height = h;
+                }
+            });
+        }
+        let steps = state.session.stop_recording();
+        assert_eq!(steps.len(), 3);
+        let path = std::env::temp_dir().join(format!("ccad-macro-{}.ccmacro", std::process::id()));
+        std::fs::write(&path, cc_engine::script::to_text(&steps)).unwrap();
+        let mut other = AppState::new(Document::new(new_project()));
+        run_macro_file(&mut other, &path);
+        assert!(other.dialogs.error.is_none(), "{:?}", other.dialogs.error);
+        assert_eq!(other.project().levels.len(), levels + 1);
+        let (_, w) = other.project().walls().next().unwrap();
+        assert!((w.height - 3.4).abs() < 1e-12);
+    }
 
     #[test]
     fn closing_returns_home_and_opening_leaves_it() {

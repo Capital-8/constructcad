@@ -13,10 +13,21 @@ pub struct Session {
     pub doc: Document,
     /// Merge key for the next edit (see [`Session::run_merged`]).
     merge_key: Option<u64>,
+    /// Commands recorded as a macro, while recording.
+    recording: Option<Vec<Recorded>>,
     geom: ModelGeometry,
     geom_revision: Option<u64>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
     sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
+}
+
+/// A command recorded in a macro.
+#[derive(Debug, Clone)]
+struct Recorded {
+    step: crate::script::Step,
+    merge_key: Option<u64>,
+    /// Undo depth before the command ran.
+    depth: usize,
 }
 
 /// A new project from the template, named in the active language.
@@ -35,6 +46,7 @@ impl Session {
         Self {
             doc,
             merge_key: None,
+            recording: None,
             geom: ModelGeometry::default(),
             geom_revision: None,
             drawings: HashMap::new(),
@@ -168,11 +180,57 @@ impl Session {
         self.merge_key.take()
     }
 
+    /// Start recording the commands that change the model (a macro).
+    pub fn start_recording(&mut self) {
+        self.recording = Some(Vec::new());
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.recording.is_some()
+    }
+
+    /// Stop recording; returns the recorded steps (a dragged value counts once,
+    /// with its final value).
+    pub fn stop_recording(&mut self) -> Vec<crate::script::Step> {
+        self.recording.take().unwrap_or_default().into_iter().map(|r| r.step).collect()
+    }
+
+    /// Undo back to undo depth `depth` (cancelling a dialog), dropping what
+    /// was recorded since.
+    pub fn undo_to(&mut self, depth: usize) {
+        while self.doc.undo_depth() > depth && self.doc.undo() {}
+        if let Some(rec) = &mut self.recording {
+            rec.retain(|r| r.depth < depth);
+        }
+    }
+
+    fn record(&mut self, name: &str, args: &Value, merge_key: Option<u64>, depth: usize) {
+        let kind = crate::describe(name).map(|c| c.kind);
+        let Some(rec) = &mut self.recording else { return };
+        // Edits only: replaying a macro should not open, save or export files.
+        if kind != Some(crate::CommandKind::Edit) {
+            return;
+        }
+        let step = crate::script::Step { command: name.to_string(), args: args.clone() };
+        match rec.last_mut() {
+            // A value being dragged: keep its last state only.
+            Some(last) if merge_key.is_some() && last.merge_key == merge_key && last.step.command == name => {
+                last.step = step;
+            }
+            _ => rec.push(Recorded { step, merge_key, depth }),
+        }
+    }
+
     /// Run the command `name` with JSON `args`. A panic inside the command
     /// becomes an internal error and the document is kept.
     pub fn execute(&mut self, name: &str, args: Value) -> Result<Value> {
         let depth = self.doc.undo_depth();
+        let merge_key = self.merge_key;
+        let recorded_args = self.recording.is_some().then(|| args.clone());
         let result = guard(|| crate::registry::dispatch(self, name, args)).and_then(|r| r);
+        if let (Ok(_), Some(args)) = (&result, recorded_args) {
+            self.record(name, &args, merge_key, depth);
+        }
         if let Err(EngineError { code: ErrorCode::Internal, .. }) = &result {
             // Undo whatever the failed command left behind.
             while self.doc.undo_depth() > depth && self.doc.undo() {}

@@ -12,6 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ccad` command line (`cc_cli`, no GUI dependencies): list commands and schemas, run one command (JSON or `key=value` arguments) or a script, open or import a project and save it afterwards. Included in release packages.
 - MCP server (`ccad mcp`): an in-house Model Context Protocol server over stdio exposing every engine command as a tool, so AI agents can build and edit models.
 - Deleting a type that no element uses (`type_delete`); creating elevations and levels at a given elevation and name from commands.
+- Dimensions as engine commands: `dimension_create` (associated with the elements or level lines its ends lie on) and `dimension_set_value` (drives what it measures); `elements_turn` (the Space key), `elements_export` and `elements_paste` (element sets between sessions).
+- Macros (*Manage → Macros*): record the changes you make as a script of engine commands (`.ccmacro`, dragged values recorded once, cancelled dialogs left out) and play macros back; `ccad script` runs the same files.
+
+### Changed
+
+- The desktop app runs on the engine: its drawing tools, modify tools, properties, dialogs, clipboard, dimensions, document actions and undo/redo change the model through the same commands as the command line and MCP. Edits that would leave the model invalid are refused with a message; dragged values remain one undo step.
+- Deleting a level also unconnects columns and stairs whose top was attached to it.
 
 - IFC import without dropping classes: every physical object of an IFC2X3/IFC4 file comes in. Products become native elements whenever a native element holds their geometry exactly; everything else (stairs, railings, members, plates, curtain walls, MEP segments and fittings, terrain, curved walls, classes from other schemas) becomes a generic component that keeps its IFC class, predefined type, object type and exact geometry, and is exported back as the same class (with its IFC4 type object, or as a named `IfcBuildingElementProxy` for classes IFC4 lacks). `IfcGrid` axes become grid lines.
 - In-house IFC geometry engine: placements (local and grid), polylines, indexed curves with arcs, circles, ellipses, trimmed and composite curves, B-splines (rational too); every parametric profile, arbitrary profiles with voids, center-line, composite, derived and mirrored profiles; extrusions, revolutions, swept disks and directrix sweeps; CSG primitives; boolean union, difference and intersection; half-space clipping; faceted and advanced B-reps; face sets and mapped items. Plane angle, area and volume units are read.

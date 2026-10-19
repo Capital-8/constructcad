@@ -128,7 +128,7 @@ Para usar num cliente MCP (Claude Desktop, Claude Code, IDEs), registre `ccad mc
 
 ou, no Claude Code, `claude mcp add constructcad -- ccad mcp`. Cada sessão do servidor tem um projeto aberto (`project_open`, `project_new`, `ifc_import`, `project_save`).
 
-As ferramentas de desenho, os painéis de propriedades e os diálogos do aplicativo estão sendo levados para os mesmos comandos; as cotas (criar e editar o valor) ainda não estão disponíveis como comandos.
+O aplicativo roda sobre os mesmos comandos: ferramentas de desenho, painel de propriedades e diálogos alteram o modelo pelo motor. *Gerenciar → Macros* grava o que você faz como uma macro (um script de comandos, salvo como `.ccmacro`) e executa macros; `ccad script` roda os mesmos arquivos.
 
 ## Arquitetura
 
@@ -167,7 +167,7 @@ python scripts/validate_ifc.py casa_simples.ifc
 
 - Componentes em série, aninhados e hospedados (em paredes e forros).
 - Importação nativa (editável) de escadas e guarda-corpos.
-- Ferramentas e diálogos do aplicativo sobre os comandos do motor; cotas como comandos; macros gravadas a partir da GUI.
+- Executar uma macro como um único passo de desfazer; parâmetros em macros.
 - Texturas de materiais.
 
 ## Independência

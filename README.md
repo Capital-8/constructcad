@@ -132,7 +132,7 @@ To use it from an MCP client (Claude Desktop, Claude Code, IDEs), register `ccad
 
 or, in Claude Code, `claude mcp add constructcad -- ccad mcp`. One project is open per server session (`project_open`, `project_new`, `ifc_import`, `project_save`).
 
-The drawing tools, property panels and dialogs of the desktop app are being moved onto the same commands; dimensions (placing and editing their values) are not available as commands yet.
+The desktop app runs on the same commands: its drawing tools, property panel and dialogs change the model through the engine. *Manage → Macros* records what you do as a macro (a script of commands, saved as `.ccmacro`) and plays macros back; `ccad script` runs the same files.
 
 ## Architecture
 
@@ -173,7 +173,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 
 - Component arrays, nested components and hosted components (on walls and ceilings).
 - Native (editable) import of stairs and railings.
-- The desktop app's tools and dialogs running on the engine commands; dimensions as commands; macros recorded from the GUI.
+- Run a macro as a single undo step; parameters in macros.
 - Material textures.
 
 ## Independence

@@ -685,6 +685,18 @@ fn manage_tab(ui: &mut Ui, state: &mut AppState) {
             state.dialogs.materials = true;
         }
     });
+    group(ui, t!("group-macros"), |ui| {
+        let recording = state.session.is_recording();
+        let label = if recording { t!("action-macro-stop") } else { t!("action-macro-record") };
+        let record = big_button(ui, Icon::MacroRecord, &label, recording, true, false);
+        if record.on_hover_text(t!("hint-macro-record")).clicked() {
+            actions::toggle_macro_recording(state);
+        }
+        let run = big_button(ui, Icon::MacroRun, &t!("action-macro-run"), false, !recording, false);
+        if run.on_hover_text(t!("hint-macro-run")).clicked() {
+            actions::run_macro(state);
+        }
+    });
 }
 
 /// Context options for the active tool (options bar).

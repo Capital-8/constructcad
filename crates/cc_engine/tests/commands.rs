@@ -361,3 +361,40 @@ fn merged_edits_are_one_undo_step() {
     run(&mut s, "undo", json!({}));
     assert_eq!(run(&mut s, "element_get", json!({"id": id}))["params"]["height"], 3.0);
 }
+
+#[test]
+fn recording_a_macro() {
+    use cc_engine::commands::edit::ElementSet;
+    let mut s = Session::default();
+    s.start_recording();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [5, 0]}));
+    run(&mut s, "elements_list", json!({}));
+    assert!(s.execute("element_get", json!({"id": 424242})).is_err());
+    let id = wall["id"].as_u64().unwrap();
+    for h in [3.1, 3.2, 3.3] {
+        let set = ElementSet {
+            id,
+            level: None,
+            type_ref: None,
+            mark: None,
+            comments: None,
+            params: Some(json!({"height": h})),
+        };
+        s.run_merged(9, set).unwrap();
+    }
+    // A cancelled dialog's edits are dropped from the recording.
+    let depth = s.doc.undo_depth();
+    run(&mut s, "level_create", json!({}));
+    s.undo_to(depth);
+    let steps = s.stop_recording();
+    let names: Vec<&str> = steps.iter().map(|st| st.command.as_str()).collect();
+    assert_eq!(names, ["wall_create", "element_set"], "queries, failures and cancelled edits are left out");
+    assert_eq!(steps[1].args["params"]["height"], 3.3, "a dragged value is recorded once, at its end");
+    // The macro replays on a new project.
+    let text = cc_engine::script::to_text(&steps);
+    let mut other = Session::default();
+    cc_engine::script::run(&mut other, &cc_engine::script::parse(&text).unwrap()).unwrap();
+    let walls = run(&mut other, "elements_list", json!({"category": "wall"}));
+    let replayed = run(&mut other, "element_get", json!({"id": walls[0]["id"]}));
+    assert_eq!(replayed["params"]["height"], 3.3);
+}

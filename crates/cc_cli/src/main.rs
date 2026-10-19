@@ -109,25 +109,6 @@ fn parse_args(args: &[String]) -> Result<Value, String> {
     }
 }
 
-/// Script steps: a JSON array, or one JSON object per line.
-fn parse_script(text: &str) -> Result<Vec<(String, Value)>, String> {
-    let items: Vec<Value> = if text.trim_start().starts_with('[') {
-        serde_json::from_str(text).map_err(|e| e.to_string())?
-    } else {
-        text.lines()
-            .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with("//"))
-            .map(|l| serde_json::from_str(l).map_err(|e| e.to_string()))
-            .collect::<Result<_, _>>()?
-    };
-    items
-        .into_iter()
-        .map(|item| {
-            let command = item.get("command").and_then(Value::as_str).ok_or("each step needs a \"command\"")?;
-            Ok((command.to_string(), item.get("args").cloned().unwrap_or(json!({}))))
-        })
-        .collect()
-}
-
 fn print(v: &Value) {
     println!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
 }
@@ -206,7 +187,7 @@ fn main() -> ExitCode {
         }
         "script" => {
             let Some(file) = rest.first() else { return usage_error("script needs a file (or -)") };
-            let steps = match read_input(file).and_then(|t| parse_script(&t)) {
+            let steps = match read_input(file).and_then(|t| cc_engine::script::parse(&t).map_err(|e| e.message)) {
                 Ok(s) => s,
                 Err(e) => return usage_error(&format!("invalid script: {e}")),
             };
@@ -214,17 +195,21 @@ fn main() -> ExitCode {
                 Ok(s) => s,
                 Err(e) => return fail(&e),
             };
-            let mut results = Vec::new();
-            for (i, (name, args)) in steps.into_iter().enumerate() {
-                match s.execute(&name, args) {
-                    Ok(out) => results.push(json!({ "command": name, "result": out })),
-                    Err(e) => {
-                        print(&json!(results));
-                        eprintln!("step {} ({name}) failed:", i + 1);
-                        return fail(&e);
-                    }
+            let results = match cc_engine::script::run(&mut s, &steps) {
+                Ok(results) => results,
+                Err((done, failed)) => {
+                    print(&json!(
+                        done.iter()
+                            .zip(&steps)
+                            .map(|(r, st)| json!({"command": st.command, "result": r}))
+                            .collect::<Vec<_>>()
+                    ));
+                    eprintln!("step {} ({}) failed:", failed.index + 1, failed.command);
+                    return fail(&failed.error);
                 }
-            }
+            };
+            let results: Vec<Value> =
+                results.into_iter().zip(&steps).map(|(r, st)| json!({"command": st.command, "result": r})).collect();
             if let Err(e) = save(&mut s, &o) {
                 print(&json!(results));
                 return fail(&e);
