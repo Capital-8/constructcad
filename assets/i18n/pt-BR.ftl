@@ -174,7 +174,14 @@ action-cancel = Cancelar
 action-discard = Descartar
 action-dont-save = Não salvar
 action-ok = OK
-action-zoom-fit = Ajustar zoom
+action-zoom-fit = Zoom para ajustar
+zoom-region = Zoom na região
+zoom-out-2x = Afastar zoom (2x)
+zoom-fit-all = Zoom em todos para ajustar
+zoom-sheet-size = Zoom no tamanho da folha
+zoom-previous = Pan/Zoom anterior
+zoom-next = Pan/Zoom próximo
+hint-zoom-region = Arraste uma janela para aproximar (clique ou Esc cancela)
 
 # Vista
 view-new-floor-plan = Planta de piso

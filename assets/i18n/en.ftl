@@ -175,6 +175,13 @@ action-discard = Discard
 action-dont-save = Don't Save
 action-ok = OK
 action-zoom-fit = Zoom to Fit
+zoom-region = Zoom in Region
+zoom-out-2x = Zoom Out (2x)
+zoom-fit-all = Zoom All to Fit
+zoom-sheet-size = Zoom Sheet Size
+zoom-previous = Previous Pan/Zoom
+zoom-next = Next Pan/Zoom
+hint-zoom-region = Drag a window to zoom into (click or Esc cancels)
 
 # View
 view-new-floor-plan = Floor Plan

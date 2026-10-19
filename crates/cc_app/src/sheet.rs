@@ -20,6 +20,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
         st.fit((DVec2::ZERO, paper), rect);
     }
     st.navigate(ui, &resp, rect);
+    let zooming = st.region(ui, &resp, &painter, rect);
     let xf = st.xf(rect);
     let to = |p: DVec2| xf.to_screen(p);
 
@@ -41,6 +42,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
         }
     }
 
+    if let Some(cmd) = crate::canvas::view_toolbar(ui, state, rect, sheet_id, None) {
+        crate::canvas::zoom(state, sheet_id, cmd, 1.0);
+    }
+    if zooming {
+        return;
+    }
     // Select and drag viewports.
     let hit = |pos: egui::Pos2| {
         let w = xf.to_world(pos);

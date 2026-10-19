@@ -112,6 +112,8 @@ pub struct AppState {
     pub requested_samples: std::collections::BTreeSet<&'static str>,
     /// Cut or copied elements of this document.
     pub clipboard: crate::clipboard::Clipboard,
+    /// Command of the views' zoom button (the last one chosen from its menu).
+    pub zoom_default: crate::canvas::ZoomCommand,
 }
 
 impl AppState {
@@ -152,6 +154,7 @@ impl AppState {
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),
             clipboard: Default::default(),
+            zoom_default: Default::default(),
         }
     }
 

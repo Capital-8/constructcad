@@ -8,8 +8,60 @@ use cc_core::ViewId;
 use egui::{Rect, Response, Sense, Ui};
 use glam::DVec2;
 
+/// Screen points per paper millimeter at "sheet size" (96 points per inch).
+const POINTS_PER_MM: f64 = 96.0 / 25.4;
+/// Pan/zoom states kept for "previous" and "next".
+const HISTORY: usize = 50;
+
+/// Zoom commands of the view toolbar menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ZoomCommand {
+    /// Drag a window to zoom into.
+    Region,
+    /// Zoom out by half around the view center.
+    OutTwo,
+    #[default]
+    Fit,
+    /// Zoom every open view to fit.
+    FitAll,
+    /// One paper millimeter shows as one screen millimeter.
+    SheetSize,
+    Previous,
+    Next,
+}
+
+impl ZoomCommand {
+    pub const ALL: [ZoomCommand; 7] = [
+        ZoomCommand::Region,
+        ZoomCommand::OutTwo,
+        ZoomCommand::Fit,
+        ZoomCommand::FitAll,
+        ZoomCommand::SheetSize,
+        ZoomCommand::Previous,
+        ZoomCommand::Next,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            ZoomCommand::Region => "zoom-region",
+            ZoomCommand::OutTwo => "zoom-out-2x",
+            ZoomCommand::Fit => "action-zoom-fit",
+            ZoomCommand::FitAll => "zoom-fit-all",
+            ZoomCommand::SheetSize => "zoom-sheet-size",
+            ZoomCommand::Previous => "zoom-previous",
+            ZoomCommand::Next => "zoom-next",
+        }
+    }
+
+    /// Whether choosing it from the menu makes it the button's command
+    /// (previous/next step through the history instead).
+    fn becomes_default(self) -> bool {
+        !matches!(self, ZoomCommand::Previous | ZoomCommand::Next)
+    }
+}
+
 /// Pan/zoom state of a 2D view.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct View2DState {
     /// Drawing coordinates shown at the canvas center.
     pub center: DVec2,
@@ -17,17 +69,94 @@ pub struct View2DState {
     pub ppm: f64,
     /// Whether the view has been zoomed to fit at least once (or after "zoom extents").
     pub fitted: bool,
+    /// Earlier and undone (center, ppm) states for "previous" / "next".
+    back: Vec<(DVec2, f64)>,
+    forward: Vec<(DVec2, f64)>,
+    /// Time of the last wheel zoom: a pause starts a new history step.
+    last_wheel: f64,
+    /// "Zoom in region" waits for a window; the drag's start once it began.
+    pub zoom_region: bool,
+    region_start: Option<egui::Pos2>,
 }
 
 impl Default for View2DState {
     fn default() -> Self {
-        Self { center: DVec2::ZERO, ppm: 40.0, fitted: false }
+        Self {
+            center: DVec2::ZERO,
+            ppm: 40.0,
+            fitted: false,
+            back: Vec::new(),
+            forward: Vec::new(),
+            last_wheel: f64::NEG_INFINITY,
+            zoom_region: false,
+            region_start: None,
+        }
     }
 }
 
 impl View2DState {
     pub fn xf(&self, rect: Rect) -> Xf {
         Xf { screen: rect.center(), origin: self.center, scale: self.ppm }
+    }
+
+    /// Remember the current pan/zoom before changing it.
+    fn remember(&mut self) {
+        if self.back.last() != Some(&(self.center, self.ppm)) {
+            self.back.push((self.center, self.ppm));
+            if self.back.len() > HISTORY {
+                self.back.remove(0);
+            }
+        }
+        self.forward.clear();
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        !self.back.is_empty()
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        !self.forward.is_empty()
+    }
+
+    /// Step back (or forward) through the pan/zoom history.
+    fn step(&mut self, back: bool) {
+        let (from, to) = if back { (&mut self.back, &mut self.forward) } else { (&mut self.forward, &mut self.back) };
+        if let Some((center, ppm)) = from.pop() {
+            to.push((self.center, self.ppm));
+            self.center = center;
+            self.ppm = ppm;
+        }
+    }
+
+    /// Run a zoom command; `mm_scale` is the drawing's paper millimeters
+    /// per drawing unit (sheets: 1; plans at 1:100: 10).
+    pub fn apply(&mut self, cmd: ZoomCommand, mm_scale: f64) {
+        match cmd {
+            ZoomCommand::Region => {
+                self.zoom_region = true;
+                self.region_start = None;
+            }
+            ZoomCommand::OutTwo => {
+                self.remember();
+                self.ppm = (self.ppm / 2.0).clamp(1e-3, 1e6);
+            }
+            ZoomCommand::Fit | ZoomCommand::FitAll => self.request_fit(),
+            ZoomCommand::SheetSize => {
+                self.remember();
+                self.ppm = (POINTS_PER_MM * mm_scale).clamp(1e-3, 1e6);
+            }
+            ZoomCommand::Previous => self.step(true),
+            ZoomCommand::Next => self.step(false),
+        }
+    }
+
+    /// Zoom to fit on the next frame (fitting needs the drawing's bounds),
+    /// remembering the current pan/zoom.
+    pub fn request_fit(&mut self) {
+        if self.fitted {
+            self.remember();
+        }
+        self.fitted = false;
     }
 
     pub fn fit(&mut self, (lo, hi): (DVec2, DVec2), rect: Rect) {
@@ -47,15 +176,80 @@ impl View2DState {
             if (factor - 1.0).abs() > 1e-6
                 && let Some(cursor) = resp.hover_pos()
             {
+                let now = ui.input(|i| i.time);
+                if now - self.last_wheel > 0.6 {
+                    self.remember();
+                }
+                self.last_wheel = now;
                 let before = self.xf(rect).to_world(cursor);
                 self.ppm = (self.ppm * factor).clamp(1e-3, 1e6);
                 let after = self.xf(rect).to_world(cursor);
                 self.center += before - after;
             }
         }
+        if resp.drag_started_by(egui::PointerButton::Middle) {
+            self.remember();
+        }
         if resp.dragged_by(egui::PointerButton::Middle) {
             let d = resp.drag_delta();
             self.center += DVec2::new(-d.x as f64, d.y as f64) / self.ppm;
+        }
+    }
+
+    /// "Zoom in region": drag a window and zoom to it; a click or Esc cancels.
+    /// Returns true while it takes the pointer (tools wait meanwhile).
+    pub fn region(&mut self, ui: &Ui, resp: &Response, painter: &egui::Painter, rect: Rect) -> bool {
+        if !self.zoom_region {
+            return false;
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked() {
+            self.zoom_region = false;
+            self.region_start = None;
+            return true;
+        }
+        if resp.drag_started_by(egui::PointerButton::Primary) {
+            self.region_start = ui.input(|i| i.pointer.press_origin());
+        }
+        let (Some(a), Some(b)) = (self.region_start, resp.interact_pointer_pos().or(resp.hover_pos())) else {
+            return true;
+        };
+        let window = Rect::from_two_pos(a, b);
+        painter.rect_filled(window, 0.0, PALETTE.accent.gamma_multiply(0.08));
+        painter.rect_stroke(window, 0.0, egui::Stroke::new(1.0, PALETTE.accent), egui::StrokeKind::Middle);
+        if resp.drag_stopped() {
+            self.zoom_region = false;
+            self.region_start = None;
+            if window.width() > 4.0 && window.height() > 4.0 {
+                let xf = self.xf(rect);
+                let (p, q) = (xf.to_world(window.min), xf.to_world(window.max));
+                self.remember();
+                self.fit((p.min(q), p.max(q)), rect);
+                // The window fills the view (no fit margin).
+                self.ppm /= 0.85;
+            }
+        }
+        true
+    }
+}
+
+/// Run a toolbar zoom command on `view` (or, for "fit all", on every view).
+pub fn zoom(state: &mut AppState, view: ViewId, cmd: ZoomCommand, mm_scale: f64) {
+    if cmd.becomes_default() {
+        state.zoom_default = cmd;
+    }
+    if cmd == ZoomCommand::FitAll {
+        for v in state.view2d.values_mut() {
+            v.request_fit();
+        }
+        for v in state.view3d.values_mut() {
+            v.fit_requested = true;
+        }
+        return;
+    }
+    if let Some(st) = state.view2d.get_mut(&view) {
+        st.apply(cmd, mm_scale);
+        if cmd == ZoomCommand::Region {
+            state.message = crate::t!("hint-zoom-region");
         }
     }
 }
@@ -79,6 +273,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
         }
     }
     st.navigate(ui, &resp, rect);
+    let zooming = st.region(ui, &resp, &painter, rect);
     let xf = st.xf(rect);
     let px_per_mm = st.ppm * view.scale as f64 / 1000.0;
 
@@ -88,31 +283,109 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     if let Some(p) = resp.hover_pos() {
         state.cursor = Some(xf.to_world(p));
     }
-    crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
-    if view_toolbar(ui, rect, view_id, view.scale)
-        && let Some(st) = state.view2d.get_mut(&view_id)
-    {
-        st.fitted = false;
+    if !zooming {
+        crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
+    }
+    if let Some(cmd) = view_toolbar(ui, state, rect, view_id, Some(view.scale)) {
+        zoom(state, view_id, cmd, 1000.0 / view.scale.max(1) as f64);
     }
 }
 
-/// Floating chip in the view corner with the scale and a zoom-to-fit button.
-/// Returns true when zoom to fit was clicked.
-pub fn view_toolbar(ui: &mut Ui, rect: Rect, view_id: ViewId, scale: u32) -> bool {
+/// Floating chip in the view corner with the scale (when given) and the
+/// zoom button: a click runs the default zoom command, the arrow opens the
+/// menu of all of them. Returns the command to run.
+pub fn view_toolbar(
+    ui: &mut Ui,
+    state: &AppState,
+    rect: Rect,
+    view_id: ViewId,
+    scale: Option<u32>,
+) -> Option<ZoomCommand> {
     let painter = ui.painter_at(rect);
-    let size = egui::vec2(96.0, 28.0);
+    let size = egui::vec2(if scale.is_some() { 110.0 } else { 52.0 }, 28.0);
     let bar = Rect::from_min_size(rect.right_bottom() - size - egui::vec2(12.0, 12.0), size);
     painter.rect_filled(bar.translate(egui::vec2(0.0, 1.0)), 7.0, egui::Color32::from_black_alpha(18));
     painter.rect_filled(bar, 7.0, PALETTE.panel);
     painter.rect_stroke(bar, 7.0, egui::Stroke::new(1.0, PALETTE.border), egui::StrokeKind::Inside);
-    let label = egui::pos2(bar.left() + 12.0, bar.center().y);
-    let font = egui::FontId::new(12.0, theme::semibold());
-    painter.text(label, egui::Align2::LEFT_CENTER, format!("1:{scale}"), font, PALETTE.text_muted);
-    let button = Rect::from_center_size(egui::pos2(bar.right() - 16.0, bar.center().y), egui::vec2(24.0, 22.0));
-    let r = ui.interact(button, egui::Id::new(("zoom-fit", view_id.0)), Sense::click());
-    if r.hovered() {
-        painter.rect_filled(button, theme::RADIUS as f32, PALETTE.hover);
+    if let Some(scale) = scale {
+        let label = egui::pos2(bar.left() + 12.0, bar.center().y);
+        let font = egui::FontId::new(12.0, theme::semibold());
+        painter.text(label, egui::Align2::LEFT_CENTER, format!("1:{scale}"), font, PALETTE.text_muted);
     }
-    icons::paint(&painter, button.shrink(5.0), Icon::ZoomFit, PALETTE.text_muted);
-    r.on_hover_text(format!("{} (ZE)", crate::t!("action-zoom-fit"))).clicked()
+    let default = state.zoom_default;
+    let button = Rect::from_center_size(egui::pos2(bar.right() - 30.0, bar.center().y), egui::vec2(24.0, 22.0));
+    let arrow = Rect::from_center_size(egui::pos2(bar.right() - 11.0, bar.center().y), egui::vec2(14.0, 22.0));
+    let r = ui.interact(button, egui::Id::new(("zoom", view_id.0)), Sense::click());
+    let a = ui.interact(arrow, egui::Id::new(("zoom-menu", view_id.0)), Sense::click());
+    for (area, resp) in [(button, &r), (arrow, &a)] {
+        if resp.hovered() {
+            painter.rect_filled(area, theme::RADIUS as f32, PALETTE.hover);
+        }
+    }
+    icons::paint(&painter, button.shrink(4.0), Icon::ZoomFit, PALETTE.text_muted);
+    icons::paint(&painter, arrow.shrink2(egui::vec2(1.0, 5.0)), Icon::ChevronDown, PALETTE.text_muted);
+    let mut chosen = None;
+    let tip = crate::i18n::tr(default.key());
+    let tip = if default == ZoomCommand::Fit { format!("{tip} (ZE)") } else { tip };
+    if r.on_hover_text(tip).clicked() {
+        chosen = Some(default);
+    }
+    let history = state.view2d.get(&view_id).map(|v| (v.can_go_back(), v.can_go_forward()));
+    let (back, forward) = history.unwrap_or_default();
+    egui::Popup::menu(&a).align(egui::RectAlign::TOP_END).show(|ui| {
+        for cmd in ZoomCommand::ALL {
+            let enabled = match cmd {
+                ZoomCommand::Previous => back,
+                ZoomCommand::Next => forward,
+                _ => true,
+            };
+            let button = egui::Button::new(crate::i18n::tr(cmd.key())).selected(cmd == default);
+            if ui.add_enabled(enabled, button).clicked() {
+                chosen = Some(cmd);
+            }
+        }
+    });
+    chosen
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fitted() -> (View2DState, Rect) {
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0));
+        let mut st = View2DState::default();
+        st.fit((DVec2::ZERO, DVec2::new(20.0, 10.0)), rect);
+        st.fitted = true;
+        (st, rect)
+    }
+
+    #[test]
+    fn previous_and_next_walk_the_zoom_history() {
+        let (mut st, rect) = fitted();
+        let start = (st.center, st.ppm);
+        assert!(!st.can_go_back());
+        st.apply(ZoomCommand::OutTwo, 10.0);
+        assert!((st.ppm - start.1 / 2.0).abs() < 1e-9);
+        st.apply(ZoomCommand::Fit, 10.0);
+        st.fit((DVec2::ZERO, DVec2::new(20.0, 10.0)), rect);
+        st.apply(ZoomCommand::Previous, 10.0);
+        assert!((st.ppm - start.1 / 2.0).abs() < 1e-9);
+        st.apply(ZoomCommand::Previous, 10.0);
+        assert_eq!((st.center, st.ppm), start);
+        assert!(!st.can_go_back() && st.can_go_forward());
+        st.apply(ZoomCommand::Next, 10.0);
+        assert!((st.ppm - start.1 / 2.0).abs() < 1e-9);
+        // A new zoom drops the steps ahead.
+        st.apply(ZoomCommand::SheetSize, 10.0);
+        assert!(!st.can_go_forward());
+    }
+
+    #[test]
+    fn sheet_size_shows_paper_millimeters_at_screen_size() {
+        let (mut st, _) = fitted();
+        // A plan at 1:50 has 20 paper mm per meter.
+        st.apply(ZoomCommand::SheetSize, 20.0);
+        assert!((st.ppm - 20.0 * 96.0 / 25.4).abs() < 1e-9);
+    }
 }

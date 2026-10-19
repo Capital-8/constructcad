@@ -91,7 +91,7 @@ fn active_tab(dock: &mut DockState<ViewId>) -> Option<ViewId> {
 pub fn zoom_fit(state: &mut AppState) {
     let Some(view) = state.active_view else { return };
     if let Some(v) = state.view2d.get_mut(&view) {
-        v.fitted = false;
+        v.request_fit();
     }
     if let Some(v) = state.view3d.get_mut(&view) {
         v.fit_requested = true;
