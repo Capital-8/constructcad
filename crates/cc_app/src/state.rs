@@ -114,6 +114,8 @@ pub struct AppState {
     pub clipboard: crate::clipboard::Clipboard,
     /// Command of the views' zoom button (the last one chosen from its menu).
     pub zoom_default: crate::canvas::ZoomCommand,
+    /// Selection seen last frame (see [`AppState::follow_selection`]).
+    seen_selection: BTreeSet<ElementId>,
 }
 
 impl AppState {
@@ -155,6 +157,7 @@ impl AppState {
             requested_samples: Default::default(),
             clipboard: Default::default(),
             zoom_default: Default::default(),
+            seen_selection: Default::default(),
         }
     }
 
@@ -249,6 +252,17 @@ impl AppState {
         self.open_requests.push(view);
     }
 
+    /// Picking objects with the Select tool opens the Modify tab (drawing
+    /// tools, which select what they create, keep their tab).
+    pub fn follow_selection(&mut self) {
+        if self.selection != self.seen_selection {
+            if !self.selection.is_empty() && self.tool == Tool::Select {
+                self.ribbon_tab = RibbonTab::Modify;
+            }
+            self.seen_selection = self.selection.clone();
+        }
+    }
+
     pub fn set_tool(&mut self, tool: Tool) {
         self.tool = tool;
         self.interaction = Interaction::default();
@@ -322,5 +336,34 @@ impl AppState {
             cc_core::ViewKind::Section { .. } => crate::t!("tab-section", "name" => v.name),
             _ => v.name.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selecting_objects_opens_the_modify_tab() {
+        let doc = Document::new(crate::home::sample_project("casa_simples").unwrap());
+        let mut state = AppState::new(doc);
+        let wall = state.project().walls().next().map(|(e, _)| e.id).unwrap();
+        state.follow_selection();
+        assert_eq!(state.ribbon_tab, RibbonTab::Architecture);
+        state.selection.insert(wall);
+        state.follow_selection();
+        assert_eq!(state.ribbon_tab, RibbonTab::Modify);
+        // Once the user picks another tab, the same selection leaves it alone.
+        state.ribbon_tab = RibbonTab::View;
+        state.follow_selection();
+        assert_eq!(state.ribbon_tab, RibbonTab::View);
+        // Drawing tools select what they create without switching tabs.
+        state.ribbon_tab = RibbonTab::Architecture;
+        state.tool = Tool::Wall { type_id: state.project().default_type(cc_core::Category::Wall).unwrap() };
+        state.selection.clear();
+        state.follow_selection();
+        state.selection.insert(wall);
+        state.follow_selection();
+        assert_eq!(state.ribbon_tab, RibbonTab::Architecture);
     }
 }

@@ -360,6 +360,7 @@ impl eframe::App for ConstructApp {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.state.sync();
+        self.state.follow_selection();
         if !self.state.textures_to_free.is_empty()
             && let Some(rs) = frame.wgpu_render_state()
         {
