@@ -41,7 +41,7 @@ fn key(parts: impl std::hash::Hash) -> u64 {
 
 /// Change material `name`, merging consecutive edits of one field.
 fn update(state: &mut AppState, name: &str, field: &str, f: impl FnOnce(&mut Material)) {
-    state.doc.edit_merged(t!("tx-modify-material"), key((name, field)), |e| {
+    state.session.doc.edit_merged(t!("tx-modify-material"), key((name, field)), |e| {
         if let Some(m) = e.materials_mut().iter_mut().find(|m| m.name == name) {
             f(m);
         }
@@ -50,7 +50,7 @@ fn update(state: &mut AppState, name: &str, field: &str, f: impl FnOnce(&mut Mat
 
 fn done(state: &mut AppState, r: &egui::Response) {
     if r.drag_stopped() || r.lost_focus() {
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
 }
 
@@ -218,7 +218,7 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
     ui.horizontal_wrapped(|ui| {
         if ui.button(t!("mat-new")).clicked() {
             let name = unique_name(state, &t!("mat-new-name"));
-            state.doc.edit(t!("tx-modify-material"), |e| {
+            state.session.doc.edit(t!("tx-modify-material"), |e| {
                 e.materials_mut().push(Material::new(name.clone(), [190, 190, 190]))
             });
             state.dialogs.material_browser.selected = Some(name);
@@ -228,7 +228,7 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
         {
             let name = unique_name(state, &t!("copy-of", "name" => src.name));
             let copy = Material { name: name.clone(), ..src };
-            state.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().push(copy));
+            state.session.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().push(copy));
             state.dialogs.material_browser.selected = Some(name);
         }
         let delete = ui.add_enabled(selected.is_some() && users == 0, egui::Button::new(t!("mat-delete")));
@@ -236,7 +236,7 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
         if delete.clicked()
             && let Some(name) = selected
         {
-            state.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().retain(|m| m.name != name));
+            state.session.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().retain(|m| m.name != name));
             state.dialogs.material_browser.selected = None;
         }
     });
@@ -322,7 +322,7 @@ fn identity(ui: &mut Ui, state: &mut AppState, m: &Material) {
             let new = new.trim().to_string();
             if new != m.name {
                 let old = m.name.clone();
-                let renamed = state.doc.edit(t!("tx-rename-material"), |e| e.rename_material(&old, &new));
+                let renamed = state.session.doc.edit(t!("tx-rename-material"), |e| e.rename_material(&old, &new));
                 let b = &mut state.dialogs.material_browser;
                 if renamed {
                     b.selected = Some(new);

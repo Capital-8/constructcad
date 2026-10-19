@@ -20,13 +20,13 @@ fn key(parts: impl Hash) -> u64 {
 
 fn finish(state: &mut AppState, r: &egui::Response) {
     if r.drag_stopped() || r.lost_focus() {
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
 }
 
 /// Apply `f` to type `tid`, merging consecutive edits of the same field.
 fn update(state: &mut AppState, tid: ElementTypeId, field: &str, f: impl FnOnce(&mut ElementType)) {
-    state.doc.edit_merged(t!("tx-modify-type"), key((tid, field)), |e| {
+    state.session.doc.edit_merged(t!("tx-modify-type"), key((tid, field)), |e| {
         if let Some(t) = e.type_mut(tid) {
             f(t);
         }
@@ -91,7 +91,7 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 if (r.lost_focus() || enter) && !escape {
                     let name = name.trim().to_string();
                     if !name.is_empty() && name != ty.name {
-                        state.doc.edit(t!("tx-modify-type"), |e| {
+                        state.session.doc.edit(t!("tx-modify-type"), |e| {
                             if let Some(t) = e.type_mut(tid) {
                                 t.name = name;
                             }
@@ -133,7 +133,7 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
 fn duplicate(state: &mut AppState, ty: &ElementType) {
     let tid = ty.id;
     let selection: Vec<_> = state.selection.iter().copied().collect();
-    let new_id = state.doc.edit(t!("tx-duplicate-type"), |e| {
+    let new_id = state.session.doc.edit(t!("tx-duplicate-type"), |e| {
         let id = ElementTypeId(e.alloc_id());
         e.add_type(ElementType {
             id,
@@ -387,14 +387,14 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     let mut l = layers.clone();
                     l[i].function = f;
                     set_layers(state, "lfn", l);
-                    state.doc.break_merge();
+                    state.session.doc.break_merge();
                 }
                 let mut m = layer.material.clone();
                 if crate::dialogs::material_combo(ui, state, ("lmat", tid.0, i), &mut m) {
                     let mut l = layers.clone();
                     l[i].material = m;
                     set_layers(state, "lmat", l);
-                    state.doc.break_merge();
+                    state.session.doc.break_merge();
                 }
                 let mut thk = layer.thickness;
                 let r = ui.add(crate::properties::length_drag(&mut thk).speed(0.002).range(0.001..=2.0));
@@ -413,7 +413,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                             let mut l = layers.clone();
                             l.swap(i, target);
                             set_layers(state, "lmove", l);
-                            state.doc.break_merge();
+                            state.session.doc.break_merge();
                         }
                     }
                     let remove =
@@ -422,7 +422,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         let mut l = layers.clone();
                         l.remove(i);
                         set_layers(state, "lremove", l);
-                        state.doc.break_merge();
+                        state.session.doc.break_merge();
                     }
                 });
                 ui.end_row();
@@ -434,7 +434,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 let material = state.project().materials.first().map(|m| m.name.clone()).unwrap_or_default();
                 l.push(Layer { material, thickness: 0.02, function: LayerFunction::Finish });
                 set_layers(state, "ladd", l);
-                state.doc.break_merge();
+                state.session.doc.break_merge();
             }
             let total = format!("{}: {}", t!("type-total-thickness"), format::length(ty.thickness()));
             ui.label(theme::muted(total));

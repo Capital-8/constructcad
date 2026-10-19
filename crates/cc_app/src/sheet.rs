@@ -67,7 +67,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
             let d = resp.drag_delta();
             let delta = DVec2::new(d.x as f64, -d.y as f64) / xf.scale;
             let key = sheet_id.0 ^ ((index as u64) << 48);
-            state.doc.edit_merged(t!("tx-move-viewport"), key, |e| {
+            state.session.doc.edit_merged(t!("tx-move-viewport"), key, |e| {
                 if let Some(ViewKind::Sheet { viewports, .. }) = e.view_mut(sheet_id).map(|v| &mut v.kind)
                     && let Some(vp) = viewports.get_mut(index)
                 {
@@ -76,7 +76,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
             });
         }
         if resp.drag_stopped() {
-            state.doc.break_merge();
+            state.session.doc.break_merge();
         }
     }
     if let Some(p) = resp.hover_pos() {

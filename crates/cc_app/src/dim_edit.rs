@@ -332,7 +332,7 @@ fn set_level_by_dimension(state: &mut AppState, dim: &Dimension, value: f64) -> 
     let measured = (dim.b - dim.a).dot(dir);
     let target = value * if measured < 0.0 { -1.0 } else { 1.0 };
     let dz = dir.y * (target - measured) * if at_b { 1.0 } else { -1.0 };
-    state.doc.edit(t!("tx-dim-value"), |e| {
+    state.session.doc.edit(t!("tx-dim-value"), |e| {
         if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level) {
             l.elevation += dz;
         }
@@ -401,7 +401,7 @@ pub fn set_dimension_value(state: &mut AppState, id: ElementId, value: f64) -> R
             let measured = (dim.b - dim.a).dot(dir);
             let target = value * if measured < 0.0 { -1.0 } else { 1.0 };
             let shift = dir * (target - measured) * if at_b { 1.0 } else { -1.0 };
-            let result = state.doc.edit(t!("tx-dim-value"), |e| {
+            let result = state.session.doc.edit(t!("tx-dim-value"), |e| {
                 let mut translate = Vec::new();
                 let mut result = Ok(());
                 for el in &free {
@@ -440,7 +440,7 @@ pub fn set_dimension_value(state: &mut AppState, id: ElementId, value: f64) -> R
             let target = value * if sweep < 0.0 { -1.0 } else { 1.0 };
             let turn = (target - sweep) * if at_b { 1.0 } else { -1.0 };
             let t = PlanTransform::rotate_about(vertex, turn);
-            state.doc.edit(t!("tx-dim-value"), |e| {
+            state.session.doc.edit(t!("tx-dim-value"), |e| {
                 e.transform_elements(&free, &t);
                 if let Some(ElementKind::Dimension(d)) = e.element_mut(id).map(|x| &mut x.kind) {
                     if at_b {
@@ -541,7 +541,7 @@ mod tests {
         assert!((moved - DVec2::new(52.0, 50.0)).length() < 1e-9, "{moved}");
         assert!((dimension(&state, id).unwrap().value() - 6.0).abs() < 1e-9);
         // One undo step.
-        state.doc.undo();
+        state.session.doc.undo();
         assert!(
             matches!(&state.project().element(cid).unwrap().kind, ElementKind::Column(c) if c.position == DVec2::new(50.0, 50.0))
         );

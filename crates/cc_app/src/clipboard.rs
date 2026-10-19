@@ -95,7 +95,7 @@ pub fn paste_aligned(state: &mut AppState, current_level: bool) {
 
 fn paste_with(state: &mut AppState, t: &PlanTransform, level: Option<LevelId>) {
     let elements = std::mem::take(&mut state.clipboard.elements);
-    let new = state.doc.edit(t!("tx-paste"), |e| e.paste_elements(&elements, &[*t], level));
+    let new = state.session.doc.edit(t!("tx-paste"), |e| e.paste_elements(&elements, &[*t], level));
     state.clipboard.elements = elements;
     state.message = if new.is_empty() { t!("msg-paste-nothing") } else { t!("msg-pasted", "count" => new.len()) };
     state.selection = new.into_iter().collect();
@@ -227,7 +227,7 @@ pub fn match_type_tool(resp: &Response, painter: &Painter, state: &mut AppState,
     }
     let type_id = from.type_id;
     if to.type_id != type_id {
-        state.doc.edit(t!("tx-change-type"), |e| {
+        state.session.doc.edit(t!("tx-change-type"), |e| {
             if let Some(x) = e.element_mut(target) {
                 x.type_id = type_id;
             }

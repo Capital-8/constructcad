@@ -21,12 +21,12 @@ fn set(state: &mut AppState, field: &str, f: impl FnOnce(&mut Units)) {
         ("units", field).hash(&mut h);
         h.finish()
     };
-    state.doc.edit_merged(t!("tx-units"), key, |e| f(e.units_mut()));
+    state.session.doc.edit_merged(t!("tx-units"), key, |e| f(e.units_mut()));
 }
 
 fn done(state: &mut AppState, r: &egui::Response) {
     if r.drag_stopped() || r.lost_focus() {
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
 }
 
@@ -124,7 +124,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
         },
     );
     if response.clicked == Some(reset) {
-        state.doc.edit(t!("tx-units"), |e| *e.units_mut() = Units::default());
+        state.session.doc.edit(t!("tx-units"), |e| *e.units_mut() = Units::default());
         return;
     }
     if crate::dialogs::ok_cancel(state, &response, ok) {

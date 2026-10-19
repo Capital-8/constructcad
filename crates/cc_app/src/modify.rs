@@ -413,9 +413,13 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                 (Some(a), Some(pick_a)) if a != id => {
                     let reference = state.project().element(a).and_then(cc_core::wall_ops::line_of);
                     let result = match (tool, reference) {
-                        (Tool::TrimCorner, _) => state.doc.edit(t!("tx-trim"), |e| e.trim_corner(a, pick_a, id, raw)),
-                        (Tool::Align, Some((r0, r1))) => state.doc.edit(t!("tx-align"), |e| e.align_to(id, r0, r1)),
-                        (_, Some((r0, r1))) => state.doc.edit(t!("tx-trim"), |e| e.trim_to(id, raw, r0, r1)),
+                        (Tool::TrimCorner, _) => {
+                            state.session.doc.edit(t!("tx-trim"), |e| e.trim_corner(a, pick_a, id, raw))
+                        }
+                        (Tool::Align, Some((r0, r1))) => {
+                            state.session.doc.edit(t!("tx-align"), |e| e.align_to(id, r0, r1))
+                        }
+                        (_, Some((r0, r1))) => state.session.doc.edit(t!("tx-trim"), |e| e.trim_to(id, raw, r0, r1)),
                         _ => Err(cc_core::wall_ops::EditError::NotLinear),
                     };
                     report(state, result);
@@ -437,7 +441,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
             painter.line_segment([xf.to_screen(p - n), xf.to_screen(p + n)], Stroke::new(2.0, PREVIEW));
             label(painter, xf.to_screen(p), format::length(a.distance(p)));
             if clicked {
-                let result = state.doc.edit(t!("tx-split"), |e| e.split(id, p).map(|_| ()));
+                let result = state.session.doc.edit(t!("tx-split"), |e| e.split(id, p).map(|_| ()));
                 report(state, result);
             }
         }
@@ -447,7 +451,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
             let end = if at_start { a } else { b };
             painter.circle_stroke(xf.to_screen(end), 7.0, Stroke::new(2.0, PREVIEW));
             if clicked && state.project().element(id).is_some_and(|e| e.as_wall().is_some()) {
-                state.doc.edit(t!("tx-wall-join"), |e| {
+                state.session.doc.edit(t!("tx-wall-join"), |e| {
                     if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
                         if at_start {
                             w.join_start = !w.join_start;
@@ -471,7 +475,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                 4.0,
             ));
             if clicked {
-                let result = state.doc.edit(t!("tx-offset"), |e| e.offset_copy(id, d).map(|_| ()));
+                let result = state.session.doc.edit(t!("tx-offset"), |e| e.offset_copy(id, d).map(|_| ()));
                 report(state, result);
             }
         }
@@ -487,7 +491,7 @@ pub fn set_pinned(state: &mut AppState, pinned: bool) {
         return;
     }
     let name = if pinned { t!("tx-pin") } else { t!("tx-unpin") };
-    let n = state.doc.edit(name, |e| e.set_pinned(&ids, pinned));
+    let n = state.session.doc.edit(name, |e| e.set_pinned(&ids, pinned));
     state.message = if pinned { t!("msg-pinned", "count" => n) } else { t!("msg-unpinned", "count" => n) };
 }
 
@@ -518,9 +522,9 @@ mod tests {
         let (id, start_pt) = state.project().walls().next().map(|(e, w)| (e.id, w.start)).unwrap();
         let targets: BTreeSet<ElementId> = [id].into_iter().collect();
         let center = DVec2::ZERO;
-        let depth = state.doc.undo_depth();
+        let depth = state.session.doc.undo_depth();
         apply_rotation(&mut state, &targets, center, std::f64::consts::FRAC_PI_2);
-        assert_eq!(state.doc.undo_depth(), depth + 1);
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
         let moved = state.project().element(id).and_then(|e| e.as_wall()).map(|w| w.start).unwrap();
         assert!(moved.distance(DVec2::new(-start_pt.y, start_pt.x)) < 1e-9);
         assert_eq!(state.tool, Tool::Select);
@@ -549,8 +553,8 @@ mod tests {
         set_pinned(&mut state, false);
         crate::tools::move_elements(&mut state, &[wall], DVec2::new(1.0, 0.0));
         assert_ne!(state.project().element(wall).cloned(), before);
-        state.doc.undo();
-        state.doc.undo();
+        state.session.doc.undo();
+        state.session.doc.undo();
         assert!(state.project().is_pinned(wall));
     }
 }

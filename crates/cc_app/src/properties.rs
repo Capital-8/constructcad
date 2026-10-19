@@ -26,12 +26,12 @@ fn key(parts: impl Hash) -> u64 {
 /// End coalescing when a drag or text edit finishes.
 fn finish(state: &mut AppState, r: &Response) {
     if r.drag_stopped() || r.lost_focus() {
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
 }
 
 fn modify(state: &mut AppState, id: ElementId, field: &str, f: impl FnOnce(&mut Element)) {
-    state.doc.edit_merged(t!("tx-modify"), key((id, field)), |e| {
+    state.session.doc.edit_merged(t!("tx-modify"), key((id, field)), |e| {
         if let Some(el) = e.element_mut(id) {
             f(el);
         }
@@ -68,7 +68,7 @@ fn level_row(ui: &mut Ui, state: &mut AppState, el: &Element) {
     });
     if level != el.level {
         let hosted: Vec<_> = state.project().hosted_by(el.id).map(|h| h.id).collect();
-        state.doc.edit(t!("tx-modify"), |e| {
+        state.session.doc.edit(t!("tx-modify"), |e| {
             for id in hosted.into_iter().chain([el.id]) {
                 if let Some(x) = e.element_mut(id) {
                     x.level = level;
@@ -189,7 +189,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         });
     });
     if type_id != el.type_id {
-        state.doc.edit(t!("tx-change-type"), |e| {
+        state.session.doc.edit(t!("tx-change-type"), |e| {
             if let Some(x) = e.element_mut(id) {
                 x.type_id = type_id;
             }
@@ -235,7 +235,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 readonly_row(ui, &t!("prop-height"), format::length(height));
                 let thickness = state.project().thickness_of(&el);
                 readonly_row(ui, &t!("prop-thickness"), format::length(thickness));
-                readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
         }
         ElementKind::Door(h) | ElementKind::Window(h) => {
@@ -262,7 +262,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 {
                     let mut v = value;
                     if row(ui, &label, |ui| ui.checkbox(&mut v, "")).changed() {
-                        state.doc.edit(t!("tx-modify"), |e| {
+                        state.session.doc.edit(t!("tx-modify"), |e| {
                             if let Some(h) = e.element_mut(id).and_then(|x| x.as_hosted_mut()) {
                                 if field == "ff" {
                                     h.flip_facing = v;
@@ -305,7 +305,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let (base, top) = state.project().column_span(&el, c);
                 readonly_row(ui, &t!("prop-height"), format::length(top - base));
-                readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
         }
         ElementKind::Beam(b) => {
@@ -319,7 +319,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 readonly_row(ui, &t!("prop-length"), format::length(b.length()));
-                readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
         }
         ElementKind::Stair(st) => {
@@ -447,7 +447,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         let mut pinned = state.project().is_pinned(id);
         if row(ui, &t!("prop-pinned"), |ui| ui.checkbox(&mut pinned, "")).changed() {
             let name = if pinned { t!("tx-pin") } else { t!("tx-unpin") };
-            state.doc.edit(name, |e| e.set_pinned(&[id], pinned));
+            state.session.doc.edit(name, |e| e.set_pinned(&[id], pinned));
         }
     });
     section(ui, "ifc", t!("section-ifc"), |ui| {
@@ -503,7 +503,7 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
     if choice != before {
         let new_top = choice.map_or(WallTop::Unconnected, |level| WallTop::Level { level, offset: 0.0 });
         set_top(state, "top", new_top, None);
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
     match top {
         WallTop::Level { level, offset } => {
@@ -621,7 +621,7 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
                 }
                 if reset {
                     let name = p.name.clone();
-                    state.doc.edit(t!("tx-modify"), |e| {
+                    state.session.doc.edit(t!("tx-modify"), |e| {
                         if let Some(ElementKind::Component(c)) = e.element_mut(id).map(|x| &mut x.kind) {
                             c.overrides.remove(&name);
                         }
@@ -632,7 +632,7 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
         });
     }
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
-        readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
+        readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
     });
 }
 
@@ -716,7 +716,7 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
             }
         });
     });
-    section(ui, "dimensions", t!("section-dimensions"), |ui| match state.geom.rooms.get(&id).cloned() {
+    section(ui, "dimensions", t!("section-dimensions"), |ui| match state.session.geom().rooms.get(&id).cloned() {
         Some(boundary) => {
             let area = cc_geom::polygon::area(&boundary);
             readonly_row(ui, &t!("col-area"), format::area(area));
@@ -749,14 +749,14 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
     });
     if location != w.location_line {
         set(state, "loc", &|w| w.location_line = location);
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
     for (label, at_start, value) in
         [(t!("prop-join-start"), true, w.join_start), (t!("prop-join-end"), false, w.join_end)]
     {
         let mut on = value;
         if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
-            state.doc.edit(t!("tx-wall-join"), |e| {
+            state.session.doc.edit(t!("tx-wall-join"), |e| {
                 if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
                     if at_start {
                         w.join_start = on;
@@ -809,7 +809,7 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
                 w.height = height;
             }
         });
-        state.doc.break_merge();
+        state.session.doc.break_merge();
     }
     match w.top {
         WallTop::Level { level, offset } => {
@@ -872,7 +872,7 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
             .map(|(a, b)| *b - *a)
             .max_by(|a, b| a.length().total_cmp(&b.length()))
             .map_or(0.0, |d| d.y.atan2(d.x).to_degrees());
-        state.doc.edit(t!("tx-modify"), |e| {
+        state.session.doc.edit(t!("tx-modify"), |e| {
             if let Some(ElementKind::Roof(r)) = e.element_mut(id).map(|x| &mut x.kind) {
                 r.shape = match shape {
                     1 => RoofShape::Shed { slope, direction_deg: 90.0 },
@@ -934,7 +934,7 @@ fn view_text_row(
 ) {
     let (r, text) = text_row(ui, label, value);
     if r.changed() {
-        state.doc.edit_merged(t!("tx-modify-view"), key((view, field)), |e| {
+        state.session.doc.edit_merged(t!("tx-modify-view"), key((view, field)), |e| {
             if let Some(v) = e.view_mut(view) {
                 set(v, text);
             }
@@ -962,7 +962,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 });
             });
             if scale != view.scale {
-                state.doc.edit(t!("tx-modify-view"), |e| {
+                state.session.doc.edit(t!("tx-modify-view"), |e| {
                     if let Some(v) = e.view_mut(id) {
                         v.scale = scale;
                     }
@@ -986,7 +986,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     ui.add(crate::properties::length_drag(&mut h).speed(0.01).range(0.0..=20.0))
                 });
                 if r.changed() {
-                    state.doc.edit_merged(t!("tx-modify-view"), key((id, "cut")), |e| {
+                    state.session.doc.edit_merged(t!("tx-modify-view"), key((id, "cut")), |e| {
                         if let Some(ViewKind::FloorPlan { cut_height, .. } | ViewKind::CeilingPlan { cut_height, .. }) =
                             e.view_mut(id).map(|v| &mut v.kind)
                         {
@@ -1004,7 +1004,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     ui.add(crate::properties::length_drag(&mut d).speed(0.05).range(0.1..=500.0))
                 });
                 if r.changed() {
-                    state.doc.edit_merged(t!("tx-modify-view"), key((id, "depth")), |e| {
+                    state.session.doc.edit_merged(t!("tx-modify-view"), key((id, "depth")), |e| {
                         if let Some(ViewKind::Section { depth, .. }) = e.view_mut(id).map(|v| &mut v.kind) {
                             *depth = d;
                         }
@@ -1012,7 +1012,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 }
                 finish(state, &r);
                 if row(ui, "", |ui| ui.button(t!("prop-flip-section")).clicked()) {
-                    state.doc.edit(t!("tx-modify-view"), |e| {
+                    state.session.doc.edit(t!("tx-modify-view"), |e| {
                         if let Some(ViewKind::Section { start, end, .. }) = e.view_mut(id).map(|v| &mut v.kind) {
                             std::mem::swap(start, end);
                         }
@@ -1041,7 +1041,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     });
                 });
                 if sz != *size {
-                    state.doc.edit(t!("tx-modify-view"), |e| {
+                    state.session.doc.edit(t!("tx-modify-view"), |e| {
                         if let Some(ViewKind::Sheet { size, .. }) = e.view_mut(id).map(|v| &mut v.kind) {
                             *size = sz;
                         }
@@ -1075,7 +1075,7 @@ fn legend_types(ui: &mut Ui, state: &mut AppState, id: ViewId, current: &[cc_cor
     for (tid, name) in all {
         let mut on = current.contains(&tid);
         if row(ui, &name, |ui| ui.checkbox(&mut on, "")).changed() {
-            state.doc.edit(t!("tx-modify-view"), |e| {
+            state.session.doc.edit(t!("tx-modify-view"), |e| {
                 if let Some(ViewKind::Legend { types }) = e.view_mut(id).map(|v| &mut v.kind) {
                     if on {
                         types.push(tid);
@@ -1129,7 +1129,7 @@ fn viewport_props(ui: &mut Ui, state: &mut AppState, sheet: ViewId, index: usize
             let mut v = vp.center[axis];
             let r = row(ui, &label, |ui| ui.add(DragValue::new(&mut v).speed(1.0).fixed_decimals(1).suffix(" mm")));
             if r.changed() {
-                state.doc.edit_merged(t!("tx-move-viewport"), key((sheet, index, axis)), |e| {
+                state.session.doc.edit_merged(t!("tx-move-viewport"), key((sheet, index, axis)), |e| {
                     if let Some(ViewKind::Sheet { viewports, .. }) = e.view_mut(sheet).map(|v| &mut v.kind)
                         && let Some(vp) = viewports.get_mut(index)
                     {

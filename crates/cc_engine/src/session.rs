@@ -62,13 +62,26 @@ impl Session {
         cc_views::format::set_units(&self.doc.project.units);
     }
 
+    /// Rebuild derived geometry if the document changed; returns whether it did.
+    pub fn sync(&mut self) -> bool {
+        let rev = self.doc.revision();
+        if self.geom_revision == Some(rev) {
+            return false;
+        }
+        self.geom = ModelGeometry::build(&self.doc.project);
+        self.geom_revision = Some(rev);
+        true
+    }
+
+    /// Derived geometry as of the last [`Session::sync`] (callers that keep
+    /// it current, like the GUI once a frame, read it without `&mut`).
+    pub fn geom(&self) -> &ModelGeometry {
+        &self.geom
+    }
+
     /// Derived geometry of the current revision.
     pub fn geometry(&mut self) -> &ModelGeometry {
-        let rev = self.doc.revision();
-        if self.geom_revision != Some(rev) {
-            self.geom = ModelGeometry::build(&self.doc.project);
-            self.geom_revision = Some(rev);
-        }
+        self.sync();
         &self.geom
     }
 

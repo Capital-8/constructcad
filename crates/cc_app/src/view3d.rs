@@ -223,7 +223,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         return;
     };
 
-    let geom = &state.geom;
+    let geom = state.session.geom();
     let v3 = state.view3d.entry(view_id).or_insert_with(|| {
         let mut v = View3DState::new(camera);
         if geom.bounds().is_some() && camera == CameraState::default() {
@@ -307,10 +307,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
 
     // Upload geometry when the model or selection changed.
-    let key = (state.doc.revision(), selection_hash(&state.selection));
+    let key = (state.session.doc.revision(), selection_hash(&state.selection));
     let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
     if v3.mesh_key != Some(key) {
-        renderer.upload(&rs.device, &SceneMesh::build(&state.geom, &state.selection, &[]));
+        renderer.upload(&rs.device, &SceneMesh::build(state.session.geom(), &state.selection, &[]));
         v3.mesh_key = Some(key);
     }
     let ppp = ui.ctx().pixels_per_point();
@@ -347,7 +347,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
     if cube.home {
         let home = CameraState::default();
-        fit_camera(&mut v3.camera, &state.geom, aspect);
+        fit_camera(&mut v3.camera, state.session.geom(), aspect);
         v3.turn_to(home.yaw_deg, home.pitch_deg, now);
         ui.ctx().request_repaint();
     }
@@ -378,7 +378,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if v3.camera_dirty && !interacting {
         v3.camera_dirty = false;
         let camera = v3.camera;
-        state.doc.set_untracked(|p| {
+        state.session.doc.set_untracked(|p| {
             if let Some(ViewKind::ThreeD { camera: c }) = p.views.get_mut(&view_id).map(|v| &mut v.kind) {
                 *c = camera;
             }

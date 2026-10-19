@@ -21,7 +21,7 @@ fn cell_text(cell: &Cell) -> String {
 pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     let Some(view) = state.project().view(view_id).cloned() else { return };
     let ViewKind::Schedule { category, def } = view.kind.clone() else { return };
-    let table = cc_views::schedule(state.project(), &state.geom, category, &def);
+    let table = cc_views::schedule(state.project(), state.session.geom(), category, &def);
 
     egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -84,7 +84,7 @@ fn export_csv(state: &mut AppState, name: &str, table: &cc_views::Table) {
 
 /// Edit the schedule definition of `view` through `f` (one undo step per change).
 fn update(state: &mut AppState, view: ViewId, f: impl FnOnce(&mut ScheduleDef)) {
-    state.doc.edit(t!("tx-modify-view"), |e| {
+    state.session.doc.edit(t!("tx-modify-view"), |e| {
         if let Some(ViewKind::Schedule { def, .. }) = e.view_mut(view).map(|v| &mut v.kind) {
             f(def);
         }
@@ -208,14 +208,14 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
             let r = ui.add_enabled(field.is_some(), egui::TextEdit::singleline(&mut text).desired_width(160.0));
             let new = field.map(|f| (f, text));
             if new != def.filter {
-                state.doc.edit_merged(t!("tx-modify-view"), view.0 ^ 0x5c4e, |e| {
+                state.session.doc.edit_merged(t!("tx-modify-view"), view.0 ^ 0x5c4e, |e| {
                     if let Some(ViewKind::Schedule { def, .. }) = e.view_mut(view).map(|v| &mut v.kind) {
                         def.filter = new;
                     }
                 });
             }
             if r.lost_focus() {
-                state.doc.break_merge();
+                state.session.doc.break_merge();
             }
         });
         ui.end_row();

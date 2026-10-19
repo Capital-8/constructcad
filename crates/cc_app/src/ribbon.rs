@@ -292,14 +292,14 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         }
         let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
         ui.painter().vline(div.center().x, div.y_range(), Stroke::new(1.0, PALETTE.border));
-        let undo_name = state.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
-        let undo = icon_button(ui, Icon::Undo, state.doc.can_undo());
+        let undo_name = state.session.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
+        let undo = icon_button(ui, Icon::Undo, state.session.doc.can_undo());
         if undo.on_hover_text(format!("{}{undo_name} (Ctrl+Z)", t!("action-undo"))).clicked() {
-            state.doc.undo();
+            state.session.doc.undo();
         }
-        let redo = icon_button(ui, Icon::Redo, state.doc.can_redo());
+        let redo = icon_button(ui, Icon::Redo, state.session.doc.can_redo());
         if redo.on_hover_text(format!("{} (Ctrl+Y)", t!("action-redo"))).clicked() {
-            state.doc.redo();
+            state.session.doc.redo();
         }
         // Frequent commands that already live in the ribbon.
         let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
@@ -905,13 +905,14 @@ pub fn status_bar(ui: &mut Ui, state: &AppState) {
         ui.label(theme::muted(&state.message));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let file = state
+                .session
                 .doc
                 .path
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .map(|f| f.to_string_lossy().to_string())
                 .unwrap_or_else(|| t!("status-unsaved-file"));
-            let dirty = if state.doc.is_dirty() { " *" } else { "" };
+            let dirty = if state.session.doc.is_dirty() { " *" } else { "" };
             ui.label(RichText::new(format!("{file}{dirty}")).color(PALETTE.text_faint));
         });
     });

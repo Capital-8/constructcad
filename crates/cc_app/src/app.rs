@@ -160,10 +160,10 @@ impl ConstructApp {
             actions::guarded(state, PendingAction::Close);
         }
         if undo && state.interaction.is_idle() {
-            state.doc.undo();
+            state.session.doc.undo();
         }
         if redo {
-            state.doc.redo();
+            state.session.doc.redo();
         }
         if save_as {
             actions::save(state, true);
@@ -310,7 +310,7 @@ impl ConstructApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
-        if ctx.input(|i| i.viewport().close_requested()) && state.doc.is_dirty() {
+        if ctx.input(|i| i.viewport().close_requested()) && state.session.doc.is_dirty() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             state.dialogs.confirm = Some(PendingAction::Quit);
         }
@@ -319,7 +319,7 @@ impl ConstructApp {
     fn sync_dock(&mut self) {
         let state = &mut self.state;
         // Drop tabs whose view no longer exists (deleted or undone).
-        let project = &state.doc.project;
+        let project = &state.session.doc.project;
         let mut removed = Vec::new();
         self.dock.retain_tabs(|tab| {
             let keep = project.views.contains_key(tab);
@@ -395,7 +395,7 @@ impl eframe::App for ConstructApp {
         self.sync_dock();
 
         let title = if self.state.project_open {
-            let dirty = if self.state.doc.is_dirty() { " *" } else { "" };
+            let dirty = if self.state.session.doc.is_dirty() { " *" } else { "" };
             format!("ConstructCAD — {}{dirty}", self.state.project().info.name)
         } else {
             "ConstructCAD".to_string()

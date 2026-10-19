@@ -312,7 +312,7 @@ pub(crate) fn snap_at(
     scale: f64,
     ortho: bool,
 ) -> Snap {
-    let s = snap(&state.doc.project, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho);
+    let s = snap(&state.session.doc.project, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho);
     if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint) {
         let tracked = &mut state.interaction.tracked;
         tracked.retain(|p| p.distance(s.point) > 1e-9);
@@ -970,7 +970,7 @@ fn room_tool(
     xf: &Xf,
 ) {
     let Some(p) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
-    let boundary = state.geom.room_at(state.project(), level, p);
+    let boundary = state.session.geom().room_at(state.project(), level, p);
     if let Some(b) = &boundary {
         let pts: Vec<Pos2> = b.iter().map(|q| xf.to_screen(*q)).collect();
         crate::paint::fill_polygon(painter, pts.clone(), PREVIEW.gamma_multiply(0.18));
@@ -1429,18 +1429,18 @@ fn hosted_tool(
         state.interaction.flip_hand = !state.interaction.flip_hand;
     }
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
-    let project = &state.doc.project;
+    let project = &state.session.doc.project;
     let Some(ty) = project.element_type(type_id) else { return };
     let Some((width, _)) = ty.opening_size() else { return };
     let sill = match ty.data {
         cc_core::TypeData::Window { default_sill, .. } => default_sill,
         _ => 0.0,
     };
-    let Some((host, u, v)) = wall_under(project, &state.geom, level, raw, 12.0 / xf.scale) else {
+    let Some((host, u, v)) = wall_under(project, state.session.geom(), level, raw, 12.0 / xf.scale) else {
         painter.circle_stroke(xf.to_screen(raw), 4.0, Stroke::new(1.0, Color32::GRAY));
         return;
     };
-    let g = &state.geom.walls[&host];
+    let g = &state.session.geom().walls[&host];
     let margin = 0.01;
     if g.length < width + 2.0 * margin {
         label(painter, xf.to_screen(raw), t!("msg-wall-too-short"));
@@ -1573,7 +1573,7 @@ fn section_tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppStat
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.1 => {
                 let end = s.point;
-                let id = state.doc.edit(t!("tx-create-section"), |e| {
+                let id = state.session.doc.edit(t!("tx-create-section"), |e| {
                     let n = e.project().views_of(cc_core::ViewCategory::Section).count() + 1;
                     let id = ViewId(e.alloc_id());
                     e.add_view(View {
@@ -1692,7 +1692,7 @@ fn select(
         temp_dimension(painter, xf, fixed, s.point, None, None, 0.0);
         if resp.drag_stopped() {
             state.interaction.drag = None;
-            let result = state.doc.edit(t!("tx-modify"), |e| e.move_endpoint(id, at_start, s.point));
+            let result = state.session.doc.edit(t!("tx-modify"), |e| e.move_endpoint(id, at_start, s.point));
             if result.is_err() {
                 state.message = t!("msg-degenerate");
             }
@@ -1788,7 +1788,7 @@ pub fn transform_selection(state: &mut AppState, ids: &[ElementId], t: &cc_core:
         state.message = t!("msg-pinned-skipped", "count" => pinned);
     }
     let ids = free.as_slice();
-    state.doc.edit(name, |e| e.transform_elements(ids, t));
+    state.session.doc.edit(name, |e| e.transform_elements(ids, t));
 }
 
 /// Copy elements by `delta`; hosted elements follow copied hosts.
@@ -1798,7 +1798,7 @@ pub fn duplicate(state: &mut AppState, ids: &[ElementId], delta: DVec2) {
 
 /// Copy `ids` once per transform and select the copies.
 pub fn copy_transformed(state: &mut AppState, ids: &[ElementId], transforms: &[cc_core::PlanTransform], name: String) {
-    let new_ids = state.doc.edit(name, |e| e.copy_elements(ids, transforms));
+    let new_ids = state.session.doc.edit(name, |e| e.copy_elements(ids, transforms));
     state.selection = new_ids.into_iter().collect();
 }
 
@@ -1816,7 +1816,7 @@ pub fn rotate_selection(state: &mut AppState) -> bool {
     if !turnable {
         return false;
     }
-    state.doc.edit(t!("tx-rotate"), |e| {
+    state.session.doc.edit(t!("tx-rotate"), |e| {
         for id in ids {
             let Some(el) = e.element_mut(id) else { continue };
             match &mut el.kind {
@@ -1931,9 +1931,9 @@ mod tests {
         let wall = pick(&state, |k| matches!(k, ElementKind::Wall(_)));
         let before = state.project().element(comp).cloned().unwrap();
         state.selection = [comp, door, wall].into_iter().collect();
-        let depth = state.doc.undo_depth();
+        let depth = state.session.doc.undo_depth();
         assert!(rotate_selection(&mut state));
-        assert_eq!(state.doc.undo_depth(), depth + 1);
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
         let (ElementKind::Component(a), Some(ElementKind::Component(b))) =
             (&before.kind, state.project().element(comp).map(|e| &e.kind))
         else {

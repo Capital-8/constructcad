@@ -9,7 +9,7 @@ use cc_core::{
 use glam::DVec2;
 
 fn add_view(state: &mut AppState, tx: String, name: String, scale: u32, kind: ViewKind) -> ViewId {
-    let id = state.doc.edit(tx, |e| {
+    let id = state.session.doc.edit(tx, |e| {
         let id = ViewId(e.alloc_id());
         e.add_view(View { id, name, scale, kind })
     });
@@ -67,7 +67,7 @@ pub fn duplicate_view(state: &mut AppState, id: ViewId) {
         viewports.clear();
         number.push('a');
     }
-    let id = state.doc.edit(t!("tx-duplicate-view"), |e| {
+    let id = state.session.doc.edit(t!("tx-duplicate-view"), |e| {
         v.id = ViewId(e.alloc_id());
         e.add_view(v)
     });
@@ -75,7 +75,7 @@ pub fn duplicate_view(state: &mut AppState, id: ViewId) {
 }
 
 pub fn delete_view(state: &mut AppState, id: ViewId) {
-    state.doc.edit(t!("tx-delete-view"), |e| e.remove_view(id));
+    state.session.doc.edit(t!("tx-delete-view"), |e| e.remove_view(id));
     if state.active_view == Some(id) {
         state.active_view = None;
     }
@@ -86,7 +86,7 @@ pub fn rename_view(state: &mut AppState, id: ViewId, name: String) {
     if name.is_empty() {
         return;
     }
-    state.doc.edit(t!("tx-rename-view"), |e| {
+    state.session.doc.edit(t!("tx-rename-view"), |e| {
         if let Some(v) = e.view_mut(id) {
             v.name = name;
         }
@@ -106,7 +106,7 @@ pub fn place_on_sheet(state: &mut AppState, sheet: ViewId, view: ViewId) {
         state.message = t!("msg-view-already-placed");
         return;
     }
-    state.doc.edit(t!("tx-place-view"), |e| {
+    state.session.doc.edit(t!("tx-place-view"), |e| {
         if let Some(ViewKind::Sheet { viewports, size, .. }) = e.view_mut(sheet).map(|v| &mut v.kind) {
             let center = size.size_mm() * DVec2::new(0.4, 0.55);
             viewports.push(Viewport { view, center });
@@ -115,7 +115,7 @@ pub fn place_on_sheet(state: &mut AppState, sheet: ViewId, view: ViewId) {
 }
 
 pub fn remove_viewport(state: &mut AppState, sheet: ViewId, index: usize) {
-    state.doc.edit(t!("tx-remove-viewport"), |e| {
+    state.session.doc.edit(t!("tx-remove-viewport"), |e| {
         if let Some(ViewKind::Sheet { viewports, .. }) = e.view_mut(sheet).map(|v| &mut v.kind)
             && index < viewports.len()
         {
@@ -135,7 +135,7 @@ pub fn add_level(state: &mut AppState) {
         .fold(None, |m: Option<f64>, e| Some(m.map_or(e, |m| m.max(e))));
     let elevation = top.map_or(0.0, |t| t + 3.0);
     let n = state.project().levels.len();
-    state.doc.edit(t!("tx-add-level"), |e| {
+    state.session.doc.edit(t!("tx-add-level"), |e| {
         let id = LevelId(e.alloc_id());
         let name = t!("default-level-name", "n" => n);
         e.levels_mut().push(Level { id, name: name.clone(), elevation });
@@ -165,7 +165,7 @@ pub fn delete_level(state: &mut AppState, level: LevelId) {
         .filter(|(_, w)| matches!(w.top, cc_core::WallTop::Level { level: l, .. } if l == level))
         .map(|(e, w)| (e.id, state.project().wall_height(e, w)))
         .collect();
-    state.doc.edit(t!("tx-delete-level"), |e| {
+    state.session.doc.edit(t!("tx-delete-level"), |e| {
         for v in views {
             e.remove_view(v);
         }
@@ -233,7 +233,7 @@ fn file_dialog() -> rfd::FileDialog {
 
 /// Run `action` now, or ask for confirmation first if there are unsaved changes.
 pub fn guarded(state: &mut AppState, action: PendingAction) {
-    if state.doc.is_dirty() {
+    if state.session.doc.is_dirty() {
         state.dialogs.confirm = Some(action);
     } else {
         run_pending(state, action);
@@ -375,7 +375,7 @@ pub fn add_component_types(
     state: &mut AppState,
     file: &cc_core::component_file::ComponentFile,
 ) -> Option<cc_core::ElementTypeId> {
-    let first = state.doc.edit(t!("tx-load-component"), |e| {
+    let first = state.session.doc.edit(t!("tx-load-component"), |e| {
         let mut ids: Vec<u64> = (0..file.types.len()).map(|_| e.alloc_id()).collect();
         ids.reverse();
         let (types, materials) = cc_core::component_file::types_for(e.project(), file, || ids.pop().unwrap_or(0));
@@ -485,7 +485,7 @@ pub fn export_sheet(state: &mut AppState, format: SheetFormat) {
 }
 
 pub fn save(state: &mut AppState, save_as: bool) -> bool {
-    let path = match (&state.doc.path, save_as) {
+    let path = match (&state.session.doc.path, save_as) {
         (Some(p), false) => p.clone(),
         _ => {
             let name = format!("{}.ccad", state.project().info.name);
@@ -505,8 +505,8 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
     };
     match saved {
         Ok(()) => {
-            state.doc.path = Some(path.clone());
-            state.doc.mark_saved();
+            state.session.doc.path = Some(path.clone());
+            state.session.doc.mark_saved();
             state.message = t!("msg-saved", "path" => path.display());
             crate::home::push_recent(&mut state.recent, &path);
             state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path.clone()));

@@ -151,7 +151,7 @@ fn part_error(e: &PartError) -> String {
 fn apply(state: &mut AppState, ed: Editor) {
     let name = ed.name.trim().to_string();
     let Some(tid) = ed.type_id else {
-        let id = state.doc.edit(t!("tx-new-component"), |e| {
+        let id = state.session.doc.edit(t!("tx-new-component"), |e| {
             let id = ElementTypeId(e.alloc_id());
             let data = TypeData::Component { component: name.clone(), def: ed.def.clone() };
             e.add_type(ElementType { id, name: name.clone(), data, info: Default::default(), uid: Default::default() });
@@ -172,7 +172,7 @@ fn apply(state: &mut AppState, ed: Editor) {
         .filter(|t| matches!(&t.data, TypeData::Component { component, .. } if *component == old_name))
         .map(|t| t.id)
         .collect();
-    state.doc.edit(t!("tx-edit-component"), |e| {
+    state.session.doc.edit(t!("tx-edit-component"), |e| {
         for id in siblings {
             let Some(ty) = e.type_mut(id) else { continue };
             let TypeData::Component { component, def } = &mut ty.data else { continue };
@@ -549,7 +549,7 @@ mod tests {
         let mut state = AppState::new(Document::new(crate::actions::new_project()));
         let table = table_type(&state);
         // A second type of the same component, 2 m wide.
-        let wide = state.doc.edit("dup", |e| {
+        let wide = state.session.doc.edit("dup", |e| {
             let mut ty = e.project().element_type(table).unwrap().clone();
             ty.id = ElementTypeId(e.alloc_id());
             ty.name = "Wide".into();
@@ -570,9 +570,9 @@ mod tests {
         ed.def.params[0].value = 1.5;
         ed.def.params[0].instance = true;
         assert_eq!(validate(&ed), Ok(()));
-        let depth = state.doc.undo_depth();
+        let depth = state.session.doc.undo_depth();
         apply(&mut state, ed);
-        assert_eq!(state.doc.undo_depth(), depth + 1);
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
 
         let (name, def) = def_of(&state, table);
         assert_eq!(name, "Mesa nova");
@@ -583,7 +583,7 @@ mod tests {
         assert_eq!(name, "Mesa nova");
         assert_eq!((def.params[0].name.as_str(), def.params[0].value), ("W", 2.0));
         // One undo restores both types.
-        state.doc.undo();
+        state.session.doc.undo();
         assert_eq!(def_of(&state, wide).1.params[0].name, width);
     }
 
@@ -630,13 +630,13 @@ mod file_tests {
         let text = cc_core::component_file::to_ron(&file).unwrap();
         let file = cc_core::component_file::from_ron(&text).unwrap();
         let before = state.project().types_of(Category::Component).count();
-        let depth = state.doc.undo_depth();
+        let depth = state.session.doc.undo_depth();
         let first = crate::actions::add_component_types(&mut state, &file).unwrap();
-        assert_eq!(state.doc.undo_depth(), depth + 1);
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
         assert_eq!(state.project().types_of(Category::Component).count(), before + 1);
         assert_eq!(state.project().type_name(first), "Mesa 120 x 80 (2)");
         assert!(matches!(state.tool, crate::tools::Tool::Component { type_id } if type_id == first));
-        state.doc.undo();
+        state.session.doc.undo();
         assert_eq!(state.project().types_of(Category::Component).count(), before);
     }
 }

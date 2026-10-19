@@ -3,8 +3,8 @@
 use crate::canvas::View2DState;
 use crate::tools::{Interaction, Tool};
 use crate::view3d::View3DState;
-use cc_core::{Category, Document, Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, ViewId, ViewKind};
-use cc_geom::ModelGeometry;
+use cc_core::{Category, Document, Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, ViewId};
+use cc_engine::Session;
 use cc_views::Drawing2D;
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
@@ -59,9 +59,8 @@ pub struct Dialogs {
 }
 
 pub struct AppState {
-    pub doc: Document,
-    pub geom: ModelGeometry,
-    geom_revision: u64,
+    /// The engine session: document, derived geometry, drawings and sheets.
+    pub session: Session,
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
@@ -70,8 +69,6 @@ pub struct AppState {
     pub active_view: Option<ViewId>,
     pub view2d: HashMap<ViewId, View2DState>,
     pub view3d: HashMap<ViewId, View3DState>,
-    drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
-    sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
     /// Views the dock should open (or focus) this frame.
     pub open_requests: Vec<ViewId>,
     pub dialogs: Dialogs,
@@ -122,12 +119,10 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(doc: Document) -> Self {
-        let geom = ModelGeometry::build(&doc.project);
-        let geom_revision = doc.revision();
+        let mut session = Session::new(doc);
+        session.sync();
         Self {
-            doc,
-            geom,
-            geom_revision,
+            session,
             selection: BTreeSet::new(),
             tool: Tool::Select,
             interaction: Interaction::default(),
@@ -135,8 +130,6 @@ impl AppState {
             active_view: None,
             view2d: HashMap::new(),
             view3d: HashMap::new(),
-            drawings: HashMap::new(),
-            sheets: HashMap::new(),
             open_requests: Vec::new(),
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
@@ -187,11 +180,9 @@ impl AppState {
     /// Rebuild derived geometry after model changes and drop stale selection.
     pub fn sync(&mut self) {
         // Drawings, schedules and fields format quantities with the project units.
-        cc_views::format::set_units(&self.doc.project.units);
-        if self.geom_revision != self.doc.revision() {
-            self.geom = ModelGeometry::build(&self.doc.project);
-            self.geom_revision = self.doc.revision();
-            let project = &self.doc.project;
+        cc_views::format::set_units(&self.session.doc.project.units);
+        if self.session.sync() {
+            let project = &self.session.doc.project;
             self.selection.retain(|id| project.elements.contains_key(id));
             if let Some((sheet, _)) = self.sheet_selection
                 && project.view(sheet).is_none()
@@ -202,53 +193,22 @@ impl AppState {
     }
 
     pub fn project(&self) -> &Project {
-        &self.doc.project
+        &self.session.doc.project
     }
 
     /// Cached drawing for a graphical view.
     pub fn drawing(&mut self, view: ViewId) -> Option<Rc<Drawing2D>> {
-        let rev = self.doc.revision();
-        if let Some((r, d)) = self.drawings.get(&view)
-            && *r == rev
-        {
-            return Some(d.clone());
-        }
-        let v = self.doc.project.view(view)?;
-        let d = Rc::new(cc_views::generate(&self.doc.project, &self.geom, v)?);
-        self.drawings.insert(view, (rev, d.clone()));
-        Some(d)
+        self.session.drawing(view)
     }
 
     /// Drop cached drawings (e.g. after a language change alters their text).
     pub fn invalidate_drawings(&mut self) {
-        self.drawings.clear();
-        self.sheets.clear();
+        self.session.invalidate_drawings();
     }
 
     /// Cached composition of a sheet view (paper millimeters).
     pub fn sheet(&mut self, view: ViewId) -> Option<Rc<cc_views::Sheet>> {
-        let rev = self.doc.revision();
-        if let Some((r, s)) = self.sheets.get(&view)
-            && *r == rev
-        {
-            return Some(s.clone());
-        }
-        let sheet_view = self.doc.project.view(view)?.clone();
-        let labels = cc_views::TitleLabels {
-            project: crate::t!("title-project"),
-            sheet: crate::t!("title-sheet"),
-            client: crate::t!("title-client"),
-            number: crate::t!("title-number"),
-            project_number: crate::t!("title-project-number"),
-            author: crate::t!("title-author"),
-        };
-        let ViewKind::Sheet { viewports, .. } = &sheet_view.kind else { return None };
-        let drawings: HashMap<ViewId, Rc<Drawing2D>> =
-            viewports.iter().filter_map(|vp| Some((vp.view, self.drawing(vp.view)?))).collect();
-        let s =
-            Rc::new(cc_views::compose_sheet(&self.doc.project, &sheet_view, &labels, |v| drawings.get(&v).cloned())?);
-        self.sheets.insert(view, (rev, s.clone()));
-        Some(s)
+        self.session.sheet(view)
     }
 
     pub fn open_view(&mut self, view: ViewId) {
@@ -280,7 +240,7 @@ impl AppState {
 
     /// Level of the active plan view, if the active view is a plan.
     pub fn active_level(&self) -> Option<LevelId> {
-        self.active_view.and_then(|v| self.doc.project.view(v)).and_then(|v| v.level())
+        self.active_view.and_then(|v| self.session.doc.project.view(v)).and_then(|v| v.level())
     }
 
     pub fn delete_selection(&mut self) {
@@ -288,13 +248,13 @@ impl AppState {
             return;
         }
         let (ids, pinned): (Vec<_>, Vec<_>) =
-            self.selection.iter().copied().partition(|id| !self.doc.project.is_pinned(*id));
+            self.selection.iter().copied().partition(|id| !self.session.doc.project.is_pinned(*id));
         if ids.is_empty() {
             self.message = crate::t!("msg-pinned-skipped", "count" => pinned.len());
             return;
         }
         let n = ids.len();
-        self.doc.edit(crate::t!("tx-delete"), |e| {
+        self.session.doc.edit(crate::t!("tx-delete"), |e| {
             for id in ids {
                 e.remove_element(id);
             }
@@ -321,7 +281,7 @@ impl AppState {
             kind: kind.clone(),
         }
         .category();
-        let id = self.doc.edit(name, |e| {
+        let id = self.session.doc.edit(name, |e| {
             let mark = if matches!(category, Category::Door | Category::Window) {
                 e.project().next_mark(category)
             } else {
@@ -336,7 +296,7 @@ impl AppState {
 
     /// Title shown in tabs and window title for a view.
     pub fn view_title(&self, view: ViewId) -> String {
-        let Some(v) = self.doc.project.view(view) else { return "?".into() };
+        let Some(v) = self.session.doc.project.view(view) else { return "?".into() };
         match &v.kind {
             cc_core::ViewKind::Sheet { number, .. } => format!("{number} - {}", v.name),
             cc_core::ViewKind::FloorPlan { .. } => crate::t!("tab-floor-plan", "name" => v.name),

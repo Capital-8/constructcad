@@ -234,21 +234,21 @@ pub mod session {
     /// Mark the start of the dialog's edits (no-op if already marked).
     pub fn begin(state: &mut AppState) {
         if state.dialogs.edit_start.is_none() {
-            state.doc.break_merge();
-            state.dialogs.edit_start = Some(state.doc.undo_depth());
+            state.session.doc.break_merge();
+            state.dialogs.edit_start = Some(state.session.doc.undo_depth());
         }
     }
 
     /// Keep the edits.
     pub fn commit(state: &mut AppState) {
-        state.doc.break_merge();
+        state.session.doc.break_merge();
         state.dialogs.edit_start = None;
     }
 
     /// Undo every edit made since [`begin`].
     pub fn cancel(state: &mut AppState) {
         if let Some(start) = state.dialogs.edit_start.take() {
-            while state.doc.undo_depth() > start && state.doc.undo() {}
+            while state.session.doc.undo_depth() > start && state.session.doc.undo() {}
         }
     }
 }
@@ -262,17 +262,17 @@ mod tests {
     #[test]
     fn cancel_undoes_the_dialog_edits_and_ok_keeps_them() {
         let mut state = AppState::new(Document::new(Project::from_template()));
-        state.doc.edit("before", |e| e.info_mut().name = "A".into());
+        state.session.doc.edit("before", |e| e.info_mut().name = "A".into());
 
         session::begin(&mut state);
-        state.doc.edit("in dialog", |e| e.info_mut().name = "B".into());
-        state.doc.edit("in dialog", |e| e.info_mut().number = "42".into());
+        state.session.doc.edit("in dialog", |e| e.info_mut().name = "B".into());
+        state.session.doc.edit("in dialog", |e| e.info_mut().number = "42".into());
         session::cancel(&mut state);
         assert_eq!(state.project().info.name, "A");
         assert_ne!(state.project().info.number, "42");
 
         session::begin(&mut state);
-        state.doc.edit("in dialog", |e| e.info_mut().name = "C".into());
+        state.session.doc.edit("in dialog", |e| e.info_mut().name = "C".into());
         session::commit(&mut state);
         assert_eq!(state.project().info.name, "C");
         assert!(state.dialogs.edit_start.is_none());
