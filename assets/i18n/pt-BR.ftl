@@ -257,6 +257,7 @@ section-ifc = IFC
 prop-ifc-class = Classe IFC
 prop-ifc-predefined = Tipo predefinido
 prop-ifc-object-type = Tipo de objeto
+section-type-set = { $name } (tipo)
 msg-import-failed = Não foi possível importar o arquivo: { $error }
 msg-no-gpu = A vista 3D requer o renderizador wgpu.
 msg-no-views-open = Abra uma vista no Navegador de projeto.

@@ -13,6 +13,7 @@ use crate::guid;
 use crate::parse::{Entity, Param, ParseError, StepFile, parse};
 use cc_core::component::IfcClass;
 use cc_core::component::convex_hull;
+use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
@@ -23,6 +24,8 @@ use cc_geom::polygon;
 use glam::{DAffine3, DVec2, DVec3};
 use std::collections::{BTreeMap, HashMap};
 
+/// Deepest nesting of complex properties.
+const MAX_PROPERTY_DEPTH: usize = 8;
 /// Most openings cut from one product.
 const MAX_OPENINGS: usize = 1000;
 const MAX_PARENT_DEPTH: usize = 16;
@@ -165,6 +168,9 @@ struct Importer<'a> {
     project_id: u32,
     /// Meters per file length unit.
     scale: f64,
+    /// SI values of the file's area and volume units.
+    area: f64,
+    volume: f64,
     storeys: HashMap<u32, LevelId>,
     /// Product → its containing structure or aggregating whole.
     parent: HashMap<u32, u32>,
@@ -209,6 +215,8 @@ impl<'a> Importer<'a> {
             report: ImportReport { schema: f.schema.clone(), ..Default::default() },
             project_id,
             scale: 1.0,
+            area: 1.0,
+            volume: 1.0,
             storeys: HashMap::new(),
             parent: HashMap::new(),
             type_of: HashMap::new(),
@@ -224,6 +232,8 @@ impl<'a> Importer<'a> {
             has_parts: HashMap::new(),
         };
         im.scale = im.unit("LENGTHUNIT");
+        im.area = im.unit_opt("AREAUNIT").unwrap_or(im.scale * im.scale);
+        im.volume = im.unit_opt("VOLUMEUNIT").unwrap_or(im.scale.powi(3));
         im.g = Geometry::new(f, im.scale, im.unit("PLANEANGLEUNIT"));
         im.index_relationships();
         im.index_styles();
@@ -331,39 +341,57 @@ impl<'a> Importer<'a> {
         }
     }
 
-    /// SI value of one file unit of `kind` (`LENGTHUNIT`: meters; `PLANEANGLEUNIT`: radians).
+    /// SI value of one file unit of `kind` (`LENGTHUNIT`: meters; `PLANEANGLEUNIT`: radians), 1 if unset.
     fn unit(&self, kind: &str) -> f64 {
+        self.unit_opt(kind).unwrap_or(1.0)
+    }
+
+    /// SI value of one file unit of `kind`, if the file assigns one.
+    fn unit_opt(&self, kind: &str) -> Option<f64> {
         let f = self.f;
         let assignment = f
             .get(self.project_id)
             .and_then(|p| f.deref(p.arg(8)))
-            .or_else(|| f.of_type("IFCUNITASSIGNMENT").next().map(|(_, e)| e));
-        let Some(units) = assignment else { return 1.0 };
-        for unit in units.arg(0).as_list().iter().filter_map(|u| f.deref(u)) {
-            if unit.arg(1).as_enum() != Some(kind) {
-                continue;
-            }
-            match unit.name.as_str() {
-                "IFCSIUNIT" => return si_prefix(unit.arg(2).as_enum()),
-                "IFCCONVERSIONBASEDUNIT" | "IFCCONVERSIONBASEDUNITWITHOFFSET" => {
-                    let Some(measure) = f.deref(unit.arg(3)) else { continue };
-                    let value = measure.arg(0).as_f64().unwrap_or(1.0);
-                    let base = f.deref(measure.arg(1)).map_or(1.0, |u| si_prefix(u.arg(2).as_enum()));
-                    let factor = value * base;
-                    if factor.is_finite() && factor > 0.0 {
-                        return factor;
-                    }
+            .or_else(|| f.of_type("IFCUNITASSIGNMENT").next().map(|(_, e)| e))?;
+        assignment
+            .arg(0)
+            .as_list()
+            .iter()
+            .filter_map(|u| f.deref(u))
+            .filter(|u| u.arg(1).as_enum() == Some(kind))
+            .find_map(|u| self.unit_factor(u))
+    }
+
+    /// SI value of one `unit` (an `IfcSIUnit` or conversion-based unit).
+    fn unit_factor(&self, unit: &Entity) -> Option<f64> {
+        let power = |kind: Option<&str>| match kind {
+            Some("AREAUNIT") => 2,
+            Some("VOLUMEUNIT") => 3,
+            _ => 1,
+        };
+        // A prefix applies to the metre before squaring or cubing (mm², mm³).
+        let si = |u: &Entity| si_prefix(u.arg(2).as_enum()).powi(power(u.arg(1).as_enum()));
+        let factor = match unit.name.as_str() {
+            "IFCSIUNIT" => si(unit),
+            "IFCCONVERSIONBASEDUNIT" | "IFCCONVERSIONBASEDUNITWITHOFFSET" => {
+                let measure = self.f.deref(unit.arg(3));
+                let base =
+                    measure.and_then(|m| self.f.deref(m.arg(1))).filter(|b| b.name == "IFCSIUNIT").map_or(1.0, si);
+                let value = measure.and_then(|m| m.arg(0).as_f64()).map(|v| v * base);
+                match value {
+                    Some(v) if v.is_finite() && v > 0.0 => v,
                     // Degrees without a usable conversion factor.
-                    if kind == "PLANEANGLEUNIT"
-                        && unit.arg(2).as_str().is_some_and(|n| n.eq_ignore_ascii_case("degree"))
+                    _ if unit.arg(1).as_enum() == Some("PLANEANGLEUNIT")
+                        && unit.arg(2).as_str().is_some_and(|n| n.eq_ignore_ascii_case("degree")) =>
                     {
-                        return std::f64::consts::PI / 180.0;
+                        std::f64::consts::PI / 180.0
                     }
+                    _ => return None,
                 }
-                _ => {}
             }
-        }
-        1.0
+            _ => return None,
+        };
+        (factor.is_finite() && factor > 0.0).then_some(factor)
     }
 
     fn index_relationships(&mut self) {
@@ -420,7 +448,9 @@ impl<'a> Importer<'a> {
         for (id, e) in f.entities.iter() {
             if e.name.ends_with("TYPE") || e.name.ends_with("STYLE") {
                 let sets = refs(e.arg(5));
-                if !sets.is_empty() && sets.iter().all(|s| f.get(*s).is_some_and(|x| x.name == "IFCPROPERTYSET")) {
+                let is_set =
+                    |s: &u32| f.get(*s).is_some_and(|x| x.name == "IFCPROPERTYSET" || x.name == "IFCELEMENTQUANTITY");
+                if !sets.is_empty() && sets.iter().all(is_set) {
                     self.psets_of.entry(*id).or_default().extend(sets);
                 }
             }
@@ -1257,14 +1287,16 @@ impl<'a> Importer<'a> {
         ok
     }
 
-    /// IFC class, predefined type and object type of a product.
-    fn ifc_class(&self, e: &Entity) -> IfcClass {
+    /// IFC class, predefined type, object type and type property sets of a product.
+    fn ifc_class(&self, id: u32, e: &Entity) -> IfcClass {
+        let properties = self.type_of.get(&id).map(|t| self.property_sets(*t)).unwrap_or_default();
         // Site geometry (terrain) is written back as a geographic element.
         if e.name == "IFCSITE" {
             return IfcClass {
                 entity: "IFCGEOGRAPHICELEMENT".into(),
                 predefined: "TERRAIN".into(),
                 object_type: String::new(),
+                properties,
             };
         }
         // Predefined types are read from IFC4 files only (IFC2X3 enumerations differ).
@@ -1277,7 +1309,103 @@ impl<'a> Importer<'a> {
             entity: e.name.clone(),
             predefined: predefined.to_string(),
             object_type: e.arg(4).as_str().unwrap_or_default().to_string(),
+            properties,
         }
+    }
+
+    /// Property and quantity sets attached to `owner` (an object or a type).
+    /// The program's own component parameters are left out (they are read
+    /// back as overrides).
+    fn property_sets(&self, owner: u32) -> Vec<PropertySet> {
+        let f = self.f;
+        let mut out = Vec::new();
+        for set in self.psets_of.get(&owner).into_iter().flatten().filter_map(|s| f.get(*s)) {
+            let name = set.arg(2).as_str().unwrap_or_default().to_string();
+            if name == crate::export::COMPONENT_PSET {
+                continue;
+            }
+            let (quantities, properties) = match set.name.as_str() {
+                "IFCPROPERTYSET" => {
+                    (false, set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, 0)).collect::<Vec<_>>())
+                }
+                "IFCELEMENTQUANTITY" => (true, set.arg(5).as_list().iter().filter_map(|q| self.quantity(q)).collect()),
+                // Predefined property sets (door linings…) and others.
+                _ => continue,
+            };
+            if !properties.is_empty() {
+                out.push(PropertySet { name, quantities, properties });
+            }
+        }
+        out
+    }
+
+    fn read_property(&self, param: &Param, depth: usize) -> Option<Property> {
+        let p = self.f.deref(param)?;
+        let name = p.arg(0).as_str()?.to_string();
+        let values = |i: usize, unit: &Param| -> Vec<IfcValue> {
+            p.arg(i).as_list().iter().filter_map(|v| self.ifc_value(v, unit)).collect()
+        };
+        let value = match p.name.as_str() {
+            "IFCPROPERTYSINGLEVALUE" => PropertyValue::Single(self.ifc_value(p.arg(2), p.arg(3))),
+            "IFCPROPERTYENUMERATEDVALUE" => PropertyValue::Enumerated(values(2, &Param::Null)),
+            "IFCPROPERTYLISTVALUE" => PropertyValue::List(values(2, p.arg(3))),
+            "IFCPROPERTYBOUNDEDVALUE" => PropertyValue::Bounded {
+                upper: self.ifc_value(p.arg(2), p.arg(4)),
+                lower: self.ifc_value(p.arg(3), p.arg(4)),
+                set_point: self.ifc_value(p.arg(5), p.arg(4)),
+            },
+            "IFCPROPERTYTABLEVALUE" => {
+                PropertyValue::Table { defining: values(2, p.arg(5)), defined: values(3, p.arg(6)) }
+            }
+            "IFCCOMPLEXPROPERTY" if depth < MAX_PROPERTY_DEPTH => PropertyValue::Complex {
+                usage: p.arg(2).as_str().unwrap_or_default().to_string(),
+                properties: p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, depth + 1)).collect(),
+            },
+            _ => return None,
+        };
+        Some(Property { name, value })
+    }
+
+    fn quantity(&self, param: &Param) -> Option<Property> {
+        let q = self.f.deref(param)?;
+        let name = q.arg(0).as_str()?.to_string();
+        let explicit = self.f.deref(q.arg(2)).and_then(|u| self.unit_factor(u));
+        let factor = match q.name.as_str() {
+            "IFCQUANTITYLENGTH" => explicit.unwrap_or(self.scale),
+            "IFCQUANTITYAREA" => explicit.unwrap_or(self.area),
+            "IFCQUANTITYVOLUME" => explicit.unwrap_or(self.volume),
+            "IFCQUANTITYCOUNT" | "IFCQUANTITYWEIGHT" | "IFCQUANTITYTIME" => explicit.unwrap_or(1.0),
+            _ => return None,
+        };
+        let value = q.arg(3).as_f64().map(|v| v * factor).filter(|v| v.is_finite())?;
+        Some(Property { name, value: PropertyValue::Quantity { kind: q.name.clone(), value } })
+    }
+
+    /// A typed value converted to SI (lengths, areas, volumes, angles), by
+    /// its explicit `unit` or the file's units.
+    fn ifc_value(&self, param: &Param, unit: &Param) -> Option<IfcValue> {
+        let Param::Typed(measure, inner) = param else { return None };
+        let explicit = self.f.deref(unit).and_then(|u| self.unit_factor(u));
+        let factor = match measure.as_str() {
+            "IFCLENGTHMEASURE" | "IFCPOSITIVELENGTHMEASURE" | "IFCNONNEGATIVELENGTHMEASURE" => {
+                explicit.unwrap_or(self.scale)
+            }
+            "IFCAREAMEASURE" => explicit.unwrap_or(self.area),
+            "IFCVOLUMEMEASURE" => explicit.unwrap_or(self.volume),
+            "IFCPLANEANGLEMEASURE" | "IFCPOSITIVEPLANEANGLEMEASURE" => explicit.unwrap_or(self.g.angle),
+            _ => 1.0,
+        };
+        let value = match inner.as_ref() {
+            Param::Real(x) => Atom::Real(x * factor),
+            Param::Int(i) if factor == 1.0 => Atom::Integer(*i),
+            Param::Int(i) => Atom::Real(*i as f64 * factor),
+            Param::Str(s) => Atom::Text(s.clone()),
+            Param::Enum(e) if e == "T" => Atom::Bool(true),
+            Param::Enum(e) if e == "F" => Atom::Bool(false),
+            Param::Enum(e) => Atom::Enum(e.clone()),
+            _ => return None,
+        };
+        value.is_finite().then(|| IfcValue { measure: measure.clone(), value })
     }
 
     /// Furniture, fixtures and any other object: pieces in the product's own
@@ -1338,7 +1466,8 @@ impl<'a> Importer<'a> {
             };
             items.push(ComponentItem { name, shape, material, in_plan: true });
         }
-        let ifc = Some(self.ifc_class(e));
+        let ifc = Some(self.ifc_class(id, e));
+        let properties = self.property_sets(id);
         let def = ComponentDef { kind, params: Vec::new(), items, ifc };
         let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
         // Instance parameter values written by ConstructCAD.
@@ -1384,6 +1513,7 @@ impl<'a> Importer<'a> {
             rotation_deg: rotation.to_degrees(),
             base_offset: origin.z - elevation,
             overrides,
+            properties,
         };
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Component(c));
         true

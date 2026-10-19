@@ -112,8 +112,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or(format!("template lacks the component {name}"))
         };
         let place = |e: &mut cc_core::EditCtx, type_id, x: f64, y: f64, rotation_deg: f64| {
-            let c =
-                Component { position: DVec2::new(x, y), rotation_deg, base_offset: 0.0, overrides: Default::default() };
+            let c = Component {
+                position: DVec2::new(x, y),
+                rotation_deg,
+                base_offset: 0.0,
+                overrides: Default::default(),
+                properties: Vec::new(),
+            };
             add(e, type_id, "", ElementKind::Component(c));
         };
         place(e, component("Sofá")?, 3.4, 5.45, 0.0);

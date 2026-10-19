@@ -518,6 +518,86 @@ impl<'a> Exporter<'a> {
         self.w.add("IFCFACETEDBREP", args![shell])
     }
 
+    /// An imported property or quantity set (`None` when nothing in it can be written).
+    fn imported_set(&mut self, tag: &str, set: &cc_core::properties::PropertySet) -> Option<Id> {
+        let mut seen = std::collections::HashSet::new();
+        let mut items = Vec::new();
+        for p in set.properties.iter().filter(|p| seen.insert(p.name.as_str())) {
+            let item = if set.quantities { self.imported_quantity(p) } else { self.imported_property(p, 0) };
+            items.extend(item);
+        }
+        if items.is_empty() {
+            return None;
+        }
+        let gid = self.guid(&format!("pset-{tag}"));
+        let n = Value::Null;
+        let name = set.name.as_str();
+        Some(if set.quantities {
+            self.w.add("IFCELEMENTQUANTITY", args![gid, n.clone(), name, n.clone(), n, items])
+        } else {
+            self.w.add("IFCPROPERTYSET", args![gid, n.clone(), name, n, items])
+        })
+    }
+
+    fn imported_quantity(&mut self, p: &cc_core::properties::Property) -> Option<Id> {
+        let cc_core::properties::PropertyValue::Quantity { kind, value } = &p.value else { return None };
+        let entity = [
+            "IFCQUANTITYLENGTH",
+            "IFCQUANTITYAREA",
+            "IFCQUANTITYVOLUME",
+            "IFCQUANTITYCOUNT",
+            "IFCQUANTITYWEIGHT",
+            "IFCQUANTITYTIME",
+        ]
+        .into_iter()
+        .find(|k| k == kind)?;
+        // Quantities are never negative.
+        if !(value.is_finite() && *value >= 0.0) {
+            return None;
+        }
+        let n = Value::Null;
+        Some(self.w.add(entity, args![p.name.as_str(), n.clone(), n.clone(), *value, n]))
+    }
+
+    fn imported_property(&mut self, p: &cc_core::properties::Property, depth: usize) -> Option<Id> {
+        use cc_core::properties::PropertyValue as V;
+        let n = Value::Null;
+        let name = p.name.as_str();
+        let list = |values: &[cc_core::properties::IfcValue]| -> Value {
+            let values: Vec<Value> = values.iter().map(typed_value).filter(|v| *v != Value::Null).collect();
+            if values.is_empty() { Value::Null } else { Value::List(values) }
+        };
+        let opt = |v: &Option<cc_core::properties::IfcValue>| v.as_ref().map_or(Value::Null, typed_value);
+        Some(match &p.value {
+            V::Single(v) => self.w.add("IFCPROPERTYSINGLEVALUE", args![name, n.clone(), opt(v), n]),
+            V::Enumerated(values) => self.w.add("IFCPROPERTYENUMERATEDVALUE", args![name, n.clone(), list(values), n]),
+            V::List(values) => self.w.add("IFCPROPERTYLISTVALUE", args![name, n.clone(), list(values), n]),
+            V::Bounded { lower, upper, set_point } => {
+                self.w.add("IFCPROPERTYBOUNDEDVALUE", args![name, n.clone(), opt(upper), opt(lower), n, opt(set_point)])
+            }
+            V::Table { defining, defined } => {
+                // Rows come in pairs.
+                let rows = defining.len().min(defined.len());
+                let (a, b) = (list(&defining[..rows]), list(&defined[..rows]));
+                let args = args![name, n.clone(), a, b, n.clone(), n.clone(), n.clone(), n];
+                self.w.add("IFCPROPERTYTABLEVALUE", args)
+            }
+            V::Complex { usage, properties } if depth < 8 => {
+                let mut seen = std::collections::HashSet::new();
+                let parts: Vec<Id> = properties
+                    .iter()
+                    .filter(|q| seen.insert(q.name.as_str()))
+                    .filter_map(|q| self.imported_property(q, depth + 1))
+                    .collect();
+                if parts.is_empty() {
+                    return None;
+                }
+                self.w.add("IFCCOMPLEXPROPERTY", args![name, n, usage.as_str(), parts])
+            }
+            V::Complex { .. } | V::Quantity { .. } => return None,
+        })
+    }
+
     /// Polygons as an `IfcPolygonalFaceSet` (shared corners share a point).
     fn face_set(&mut self, faces: &[Vec<DVec3>]) -> Option<Id> {
         let mut coords: Vec<Value> = Vec::new();
@@ -739,6 +819,14 @@ impl<'a> Exporter<'a> {
                 })
                 .collect();
             self.property_set(&format!("comp-{}", e.id), COMPONENT_PSET, vec![product], props);
+            // Sets carried over from an imported file.
+            for (i, set) in c.properties.iter().enumerate() {
+                if let Some(set) = self.imported_set(&format!("imported-{}-{i}", e.id), set) {
+                    let gid = self.guid(&format!("imported-rel-{}-{i}", e.id));
+                    let n = Value::Null;
+                    self.w.add("IFCRELDEFINESBYPROPERTIES", args![gid, n.clone(), n.clone(), n, vec![product], set]);
+                }
+            }
         }
     }
 
@@ -810,6 +898,15 @@ impl<'a> Exporter<'a> {
                 let class = component_class(def);
                 // Classes whose schema type object is abstract go untyped.
                 let (entity, layout) = class.type_entity?;
+                let sets: Vec<Id> = def
+                    .ifc
+                    .iter()
+                    .flat_map(|ifc| ifc.properties.iter().enumerate())
+                    .filter_map(|(i, set)| self.imported_set(&format!("imported-type-{type_id}-{i}"), set))
+                    .collect();
+                if !sets.is_empty() {
+                    base[5] = Value::List(sets.into_iter().map(Value::Ref).collect());
+                }
                 let predefined = class.predefined_value();
                 if matches!(&predefined, Value::EnumName(p) if p == "USERDEFINED") {
                     base[8] = Value::Str(class.object_type.clone());
@@ -1314,6 +1411,31 @@ fn component_class(def: &cc_core::ComponentDef) -> WrittenClass {
                 },
             }
         }
+    }
+}
+
+/// An imported value with its IFC type (a value whose type name is unusable
+/// becomes a label holding its text).
+fn typed_value(v: &cc_core::properties::IfcValue) -> Value {
+    use cc_core::properties::Atom;
+    let inner = match &v.value {
+        Atom::Text(s) => Value::Str(s.clone()),
+        Atom::Real(x) if x.is_finite() => Value::Real(*x),
+        Atom::Real(_) => return Value::Null,
+        Atom::Integer(i) => Value::Int(*i),
+        Atom::Bool(b) => Value::Bool(*b),
+        Atom::Enum(e) => Value::EnumName(e.clone()),
+    };
+    if crate::step::is_type_name(&v.measure) {
+        Value::TypedName(v.measure.clone(), Box::new(inner))
+    } else {
+        let text = match &v.value {
+            Atom::Text(s) | Atom::Enum(s) => s.clone(),
+            Atom::Real(x) => x.to_string(),
+            Atom::Integer(i) => i.to_string(),
+            Atom::Bool(b) => b.to_string(),
+        };
+        Value::Typed("IFCLABEL", Box::new(Value::Str(text)))
     }
 }
 

@@ -63,6 +63,62 @@ fn check_volumes(p: &Project) {
     near(volume_of(p, &g, "IFCBEAM"), 0.2 * 0.4 * 4.0 - 0.5 * 0.2 * 0.2, 1e-9, "beam with a web opening");
 }
 
+/// The pipe's and the box type's property sets, values in SI units.
+fn check_properties(p: &Project) {
+    use cc_core::properties::{Atom, PropertySet, PropertyValue as V};
+    let pipe = p
+        .elements
+        .values()
+        .find_map(|e| match (&e.kind, p.element_type(e.type_id).map(|t| &t.data)) {
+            (ElementKind::Component(c), Some(TypeData::Component { def, .. }))
+                if def.ifc.as_ref().is_some_and(|i| i.entity == "IFCPIPESEGMENT") =>
+            {
+                Some(c)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let set = |name: &str| -> &PropertySet { pipe.properties.iter().find(|s| s.name == name).unwrap() };
+    let get = |set: &PropertySet, name: &str| set.properties.iter().find(|p| p.name == name).unwrap().value.clone();
+    let real = |v: V| match v {
+        V::Single(Some(v)) => match v.value {
+            Atom::Real(x) => x,
+            other => panic!("{other:?}"),
+        },
+        V::Quantity { value, .. } => value,
+        other => panic!("{other:?}"),
+    };
+    let custom = set("Pset_Custom");
+    assert!(!custom.quantities);
+    near(real(get(custom, "NominalDiameter")), 0.1, 1e-9, "length in mm");
+    near(real(get(custom, "Slope")), std::f64::consts::FRAC_PI_2, 1e-9, "angle in degrees");
+    assert!(matches!(get(custom, "IsExternal"), V::Single(Some(v)) if v.value == Atom::Bool(true)));
+    assert!(
+        matches!(get(custom, "Status"), V::Single(Some(v)) if v.measure == "IFCLABEL" && v.value == Atom::Text("New".into()))
+    );
+    assert!(matches!(get(custom, "Material"), V::Enumerated(v) if v.len() == 1));
+    let V::Bounded { lower: Some(lower), upper: Some(upper), set_point: None } = get(custom, "Pressure") else {
+        panic!("bounded")
+    };
+    assert_eq!((lower.value, upper.value), (Atom::Real(2.0), Atom::Real(10.0)));
+    // A nested property with its own unit (centimeters).
+    let V::Complex { usage, properties } = get(custom, "Fitting") else { panic!("complex") };
+    assert_eq!(usage, "Usage");
+    near(real(properties[0].value.clone()), 2.5, 1e-9, "explicit unit");
+    let qto = set("Qto_PipeSegmentBaseQuantities");
+    assert!(qto.quantities);
+    near(real(get(qto, "Length")), 7.0, 1e-9, "quantity length");
+    near(real(get(qto, "OuterSurfaceArea")), 2.2, 1e-9, "area unit m²");
+    near(real(get(qto, "GrossVolume")), 0.055, 1e-9, "volume from mm");
+    // The box type's own set travels with the type.
+    let boxed = p.types_of(Category::Component).find(|t| t.name == "Box").unwrap();
+    let TypeData::Component { def, .. } = &boxed.data else { panic!("not a component") };
+    let sets = &def.ifc.as_ref().unwrap().properties;
+    assert_eq!(sets.len(), 1);
+    assert_eq!(sets[0].name, "Pset_Box");
+    assert!(matches!(&sets[0].properties[0].value, V::Single(Some(v)) if v.value == Atom::Text("ACME".into())));
+}
+
 #[test]
 fn every_class_is_imported() {
     let (p, report) = import(FIXTURE, Project::from_template()).unwrap();
@@ -111,6 +167,7 @@ fn every_class_is_imported() {
         .unwrap();
     assert_eq!(pipe.predefined, "RIGIDSEGMENT");
     check_volumes(&p);
+    check_properties(&p);
 }
 
 #[test]
@@ -137,4 +194,5 @@ fn classes_survive_export_and_import() {
     assert_eq!(report.generic.get("IfcPipeSegment"), Some(&1));
     assert_eq!(report.generic.get("IfcBuildingElementProxy"), Some(&3));
     check_volumes(&again);
+    check_properties(&again);
 }

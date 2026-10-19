@@ -801,6 +801,7 @@ fn component_tool(
             rotation_deg: rotation,
             base_offset: 0.0,
             overrides: Default::default(),
+            properties: Vec::new(),
         };
         state.create_element(t!("tx-create-component"), level, type_id, ElementKind::Component(component));
     }

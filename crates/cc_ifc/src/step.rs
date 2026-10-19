@@ -26,6 +26,9 @@ pub enum Value {
     List(Vec<Value>),
     /// Typed value for SELECT attributes, such as `IFCLABEL('x')`.
     Typed(&'static str, Box<Value>),
+    /// Typed value whose type name comes from data; an invalid name (not
+    /// `IFC` followed by `A-Z`, `0-9`, `_`) is written as `$`.
+    TypedName(String, Box<Value>),
 }
 
 impl From<f64> for Value {
@@ -176,6 +179,13 @@ fn write_list(out: &mut String, items: &[Value]) {
     }
 }
 
+/// An IFC type name: `IFC` followed by upper-case letters, digits and `_`.
+pub fn is_type_name(name: &str) -> bool {
+    name.strip_prefix("IFC").is_some_and(|rest| {
+        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    })
+}
+
 fn write_value(out: &mut String, v: &Value) {
     match v {
         Value::Null => out.push('$'),
@@ -206,6 +216,16 @@ fn write_value(out: &mut String, v: &Value) {
             out.push('(');
             write_value(out, inner);
             out.push(')');
+        }
+        Value::TypedName(name, inner) => {
+            if is_type_name(name) {
+                out.push_str(name);
+                out.push('(');
+                write_value(out, inner);
+                out.push(')');
+            } else {
+                out.push('$');
+            }
         }
     }
 }

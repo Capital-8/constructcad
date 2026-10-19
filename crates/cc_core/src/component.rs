@@ -165,7 +165,7 @@ pub struct ComponentDef {
 }
 
 /// An IFC entity class with its predefined and object types.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct IfcClass {
     /// Entity name as written in IFC files, e.g. `IFCPIPESEGMENT`.
     pub entity: String,
@@ -175,6 +175,9 @@ pub struct IfcClass {
     /// `ObjectType` (the user-defined type when `predefined` is `USERDEFINED`).
     #[serde(default)]
     pub object_type: String,
+    /// Property and quantity sets of the IFC type object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<crate::properties::PropertySet>,
 }
 
 /// A resolved piece: a prism of `footprint` between `z0` and `z1`, in the

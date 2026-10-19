@@ -119,6 +119,9 @@ impl Project {
                     repairs += usize::from(fix_positive(height, 1.1)) + usize::from(fix_positive(post_spacing, 1.2));
                 }
                 TypeData::Component { def, .. } => {
+                    if let Some(ifc) = &mut def.ifc {
+                        repairs += crate::properties::repair_sets(&mut ifc.properties);
+                    }
                     for p in &mut def.params {
                         if !p.value.is_finite() {
                             p.value = 0.0;
@@ -177,12 +180,13 @@ impl Project {
         let elements = &self.elements;
         self.pinned.retain(|id| elements.contains_key(id));
         repairs += before - self.pinned.len();
-        // Component overrides must be finite.
+        // Component overrides and imported properties must be finite.
         for e in self.elements.values_mut() {
             if let ElementKind::Component(c) = &mut e.kind {
                 let before = c.overrides.len();
                 c.overrides.retain(|_, v| v.is_finite());
                 repairs += before - c.overrides.len();
+                repairs += crate::properties::repair_sets(&mut c.properties);
             }
         }
         // Walls attached to a missing level keep their height, unconnected.
@@ -297,6 +301,7 @@ mod tests {
                 rotation_deg: rotation,
                 base_offset: 0.0,
                 overrides,
+                properties: Vec::new(),
             });
             p.elements.insert(
                 id,

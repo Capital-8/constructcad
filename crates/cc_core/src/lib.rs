@@ -14,6 +14,7 @@ mod ids;
 pub mod material;
 mod persist;
 mod project;
+pub mod properties;
 mod repair;
 mod schedule;
 pub mod transform;

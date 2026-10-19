@@ -469,4 +469,7 @@ pub struct Component {
     /// Values of instance parameters that differ from the type.
     #[serde(default)]
     pub overrides: std::collections::BTreeMap<String, f64>,
+    /// Property and quantity sets of the object (from IFC import).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<crate::properties::PropertySet>,
 }

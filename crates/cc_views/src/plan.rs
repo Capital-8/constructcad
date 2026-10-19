@@ -466,6 +466,7 @@ mod tests {
                 rotation_deg: 90.0,
                 base_offset: 0.0,
                 overrides: Default::default(),
+                properties: Vec::new(),
             });
             e.add_element(Element {
                 id,

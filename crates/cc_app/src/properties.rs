@@ -584,6 +584,17 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
             }
         });
     }
+    // Property and quantity sets from the imported file: the object's, then its type's.
+    let type_sets = def.ifc.as_ref().map(|i| i.properties.as_slice()).unwrap_or_default();
+    let sets = c.properties.iter().map(|s| (s, false)).chain(type_sets.iter().map(|s| (s, true)));
+    for (i, (set, of_type)) in sets.enumerate() {
+        let title = if of_type { t!("section-type-set", "name" => set.name.as_str()) } else { set.name.clone() };
+        section(ui, &format!("comp-set-{i}"), title, |ui| {
+            for p in &set.properties {
+                property_rows(ui, &p.name, &p.value);
+            }
+        });
+    }
     let instance: Vec<_> = def.params.iter().filter(|p| p.instance).cloned().collect();
     if !instance.is_empty() {
         section(ui, "comp-params", t!("section-instance-params"), |ui| {
@@ -623,6 +634,57 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
         readonly_row(ui, &t!("prop-volume"), format::volume(state.geom.volume(id)));
     });
+}
+
+/// Read-only rows of an imported property (nested ones as `parent.child`).
+fn property_rows(ui: &mut Ui, label: &str, value: &cc_core::properties::PropertyValue) {
+    use cc_core::properties::PropertyValue as V;
+    let text = match value {
+        V::Single(v) => v.as_ref().map(ifc_value_text).unwrap_or_default(),
+        V::Enumerated(values) | V::List(values) => values.iter().map(ifc_value_text).collect::<Vec<_>>().join(", "),
+        V::Bounded { lower, upper, set_point } => {
+            let t = |v: &Option<cc_core::properties::IfcValue>| v.as_ref().map(ifc_value_text).unwrap_or_default();
+            let range = format!("{} – {}", t(lower), t(upper));
+            if set_point.is_some() { format!("{range} ({})", t(set_point)) } else { range }
+        }
+        V::Table { defining, defined } => defining
+            .iter()
+            .zip(defined)
+            .map(|(a, b)| format!("{} → {}", ifc_value_text(a), ifc_value_text(b)))
+            .collect::<Vec<_>>()
+            .join("; "),
+        V::Complex { properties, .. } => {
+            for p in properties {
+                property_rows(ui, &format!("{label}.{}", p.name), &p.value);
+            }
+            return;
+        }
+        V::Quantity { kind, value } => match kind.as_str() {
+            "IFCQUANTITYLENGTH" => format::meters(*value),
+            "IFCQUANTITYAREA" => format::area(*value),
+            "IFCQUANTITYVOLUME" => format::volume(*value),
+            _ => format::number(*value, 3),
+        },
+    };
+    readonly_row(ui, label, text);
+}
+
+/// An imported value as text, in the project's units for measures.
+fn ifc_value_text(v: &cc_core::properties::IfcValue) -> String {
+    use cc_core::properties::Atom;
+    match &v.value {
+        Atom::Real(x) => match v.measure.as_str() {
+            "IFCLENGTHMEASURE" | "IFCPOSITIVELENGTHMEASURE" | "IFCNONNEGATIVELENGTHMEASURE" => format::meters(*x),
+            "IFCAREAMEASURE" => format::area(*x),
+            "IFCVOLUMEMEASURE" => format::volume(*x),
+            "IFCPLANEANGLEMEASURE" | "IFCPOSITIVEPLANEANGLEMEASURE" => format::angle(x.to_degrees()),
+            _ => format::number(*x, 3),
+        },
+        Atom::Integer(i) => i.to_string(),
+        Atom::Bool(true) => t!("value-yes"),
+        Atom::Bool(false) => t!("value-no"),
+        Atom::Text(s) | Atom::Enum(s) => s.clone(),
+    }
 }
 
 fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room) {
