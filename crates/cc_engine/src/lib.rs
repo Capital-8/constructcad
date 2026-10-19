@@ -23,6 +23,11 @@ mod session;
 
 pub mod commands;
 
+/// The fields of an enum value's variant as `*_get` shows them in `params`.
+pub fn params_of<T: serde::Serialize>(value: &T) -> serde_json::Value {
+    commands::variant(serde_json::to_value(value).unwrap_or_default()).1
+}
+
 pub use defaults::{default_roof_base, default_top, next_number, walls_loop};
 pub use error::{EngineError, ErrorCode, Result};
 pub use refs::{Ref, category_name};

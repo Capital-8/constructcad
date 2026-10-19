@@ -81,15 +81,12 @@ fn project_info(ctx: &Context, state: &mut AppState) {
                     let mut text = value;
                     let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(300.0));
                     if r.changed() {
-                        state.session.doc.edit_merged(t!("tx-project-info"), key(("info", field)), |e| {
-                            let info = e.info_mut();
-                            match field {
-                                "name" => info.name = text,
-                                "number" => info.number = text,
-                                "client" => info.client = text,
-                                "address" => info.address = text,
-                                _ => info.author = text,
-                            }
+                        crate::engine_edit::info(state, Some(key(("info", field))), |info| match field {
+                            "name" => info.name = text,
+                            "number" => info.number = text,
+                            "client" => info.client = text,
+                            "address" => info.address = text,
+                            _ => info.author = text,
                         });
                     }
                     done(state, &r);
@@ -126,21 +123,14 @@ fn levels(ctx: &Context, state: &mut AppState) {
                     let mut name = level.name.clone();
                     let r = ui.add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut name));
                     if r.changed() {
-                        state.session.doc.edit_merged(t!("tx-modify-level"), key((level.id, "name")), |e| {
-                            if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {
-                                l.name = name;
-                            }
-                        });
+                        crate::engine_edit::level(state, level.id, Some(key((level.id, "name"))), |l| l.name = name);
                     }
                     done(state, &r);
                     let mut elev = level.elevation;
                     let r = ui.add(crate::properties::length_drag(&mut elev).speed(0.01));
                     if r.changed() {
-                        state.session.doc.edit_merged(t!("tx-modify-level"), key((level.id, "elev")), |e| {
-                            if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == level.id) {
-                                l.elevation = elev;
-                            }
-                            e.levels_mut().sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+                        crate::engine_edit::level(state, level.id, Some(key((level.id, "elev"))), |l| {
+                            l.elevation = elev;
                         });
                     }
                     done(state, &r);

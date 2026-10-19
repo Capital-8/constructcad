@@ -433,6 +433,18 @@ impl Document {
         f: impl FnOnce(&mut EditCtx) -> Result<R, E>,
         check: impl FnOnce(&Project) -> Result<(), E>,
     ) -> Result<R, E> {
+        self.try_edit_merged(name, None, f, check)
+    }
+
+    /// [`Document::try_edit`] that merges into the previous step when
+    /// `merge_key` matches its key (like [`Document::edit_merged`]).
+    pub fn try_edit_merged<R, E>(
+        &mut self,
+        name: impl Into<String>,
+        merge_key: Option<u64>,
+        f: impl FnOnce(&mut EditCtx) -> Result<R, E>,
+        check: impl FnOnce(&Project) -> Result<(), E>,
+    ) -> Result<R, E> {
         let mut ctx =
             EditCtx { project: &mut self.project, tx: Transaction { name: name.into(), ..Default::default() } };
         let result = f(&mut ctx);
@@ -443,8 +455,13 @@ impl Document {
             return outcome;
         }
         if !tx.is_empty() {
-            self.undo.push(tx);
-            self.last_merge_key = None;
+            match self.undo.last_mut() {
+                Some(last) if merge_key.is_some() && merge_key == self.last_merge_key && self.redo.is_empty() => {
+                    last.merge(tx);
+                }
+                _ => self.undo.push(tx),
+            }
+            self.last_merge_key = merge_key;
             self.redo.clear();
             self.revision += 1;
         }

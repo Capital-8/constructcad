@@ -83,8 +83,8 @@ fn export_csv(state: &mut AppState, view: ViewId, name: &str) {
 
 /// Edit the schedule definition of `view` through `f` (one undo step per change).
 fn update(state: &mut AppState, view: ViewId, f: impl FnOnce(&mut ScheduleDef)) {
-    state.session.doc.edit(t!("tx-modify-view"), |e| {
-        if let Some(ViewKind::Schedule { def, .. }) = e.view_mut(view).map(|v| &mut v.kind) {
+    crate::engine_edit::view(state, view, None, |x| {
+        if let ViewKind::Schedule { def, .. } = &mut x.kind {
             f(def);
         }
     });
@@ -207,8 +207,8 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
             let r = ui.add_enabled(field.is_some(), egui::TextEdit::singleline(&mut text).desired_width(160.0));
             let new = field.map(|f| (f, text));
             if new != def.filter {
-                state.session.doc.edit_merged(t!("tx-modify-view"), view.0 ^ 0x5c4e, |e| {
-                    if let Some(ViewKind::Schedule { def, .. }) = e.view_mut(view).map(|v| &mut v.kind) {
+                crate::engine_edit::view(state, view, Some(view.0 ^ 0x5c4e), |x| {
+                    if let ViewKind::Schedule { def, .. } = &mut x.kind {
                         def.filter = new;
                     }
                 });

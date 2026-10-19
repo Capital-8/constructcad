@@ -9,6 +9,8 @@ use crate::t;
 use crate::theme::{self, PALETTE};
 use cc_core::Material;
 use cc_core::material::{Behavior, Finish, MaterialClass, Pattern, PatternFill};
+use cc_engine::Ref;
+use cc_engine::commands::materials;
 use egui::{Color32, Context, DragValue, Pos2, Rect, RichText, Sense, Stroke, Ui, vec2};
 use glam::DVec2;
 
@@ -41,11 +43,7 @@ fn key(parts: impl std::hash::Hash) -> u64 {
 
 /// Change material `name`, merging consecutive edits of one field.
 fn update(state: &mut AppState, name: &str, field: &str, f: impl FnOnce(&mut Material)) {
-    state.session.doc.edit_merged(t!("tx-modify-material"), key((name, field)), |e| {
-        if let Some(m) = e.materials_mut().iter_mut().find(|m| m.name == name) {
-            f(m);
-        }
-    });
+    crate::engine_edit::material(state, name, Some(key((name, field))), f);
 }
 
 fn done(state: &mut AppState, r: &egui::Response) {
@@ -217,39 +215,32 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
     let users = selected.as_deref().map_or(0, |n| state.project().material_users(n).len());
     ui.horizontal_wrapped(|ui| {
         if ui.button(t!("mat-new")).clicked() {
-            let name = unique_name(state, &t!("mat-new-name"));
-            state.session.doc.edit(t!("tx-modify-material"), |e| {
-                e.materials_mut().push(Material::new(name.clone(), [190, 190, 190]))
-            });
-            state.dialogs.material_browser.selected = Some(name);
+            let command = materials::MaterialCreate { name: Some(t!("mat-new-name")), color: None };
+            if let Some(name) =
+                crate::actions::run_command(state, command).and_then(|o| o["name"].as_str().map(String::from))
+            {
+                state.dialogs.material_browser.selected = Some(name);
+            }
         }
         if ui.add_enabled(selected.is_some(), egui::Button::new(t!("mat-duplicate"))).clicked()
-            && let Some(src) = selected.as_deref().and_then(|n| state.project().material(n).cloned())
+            && let Some(src) = selected.clone()
         {
-            let name = unique_name(state, &t!("copy-of", "name" => src.name));
-            let copy = Material { name: name.clone(), ..src };
-            state.session.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().push(copy));
-            state.dialogs.material_browser.selected = Some(name);
+            let command = materials::MaterialDuplicate { material: Ref::Name(src), name: None };
+            if let Some(name) =
+                crate::actions::run_command(state, command).and_then(|o| o["name"].as_str().map(String::from))
+            {
+                state.dialogs.material_browser.selected = Some(name);
+            }
         }
         let delete = ui.add_enabled(selected.is_some() && users == 0, egui::Button::new(t!("mat-delete")));
         let delete = if users > 0 { delete.on_disabled_hover_text(t!("mat-in-use", "count" => users)) } else { delete };
         if delete.clicked()
             && let Some(name) = selected
         {
-            state.session.doc.edit(t!("tx-modify-material"), |e| e.materials_mut().retain(|m| m.name != name));
+            crate::actions::run_command(state, materials::MaterialDelete { material: Ref::Name(name) });
             state.dialogs.material_browser.selected = None;
         }
     });
-}
-
-fn unique_name(state: &AppState, base: &str) -> String {
-    let mut name = base.to_string();
-    let mut n = 2;
-    while state.project().material(&name).is_some() {
-        name = format!("{base} {n}");
-        n += 1;
-    }
-    name
 }
 
 fn details(ui: &mut Ui, state: &mut AppState, m: &Material, height: f32) {
@@ -322,7 +313,8 @@ fn identity(ui: &mut Ui, state: &mut AppState, m: &Material) {
             let new = new.trim().to_string();
             if new != m.name {
                 let old = m.name.clone();
-                let renamed = state.session.doc.edit(t!("tx-rename-material"), |e| e.rename_material(&old, &new));
+                let command = materials::MaterialRename { material: Ref::Name(old), name: new.clone() };
+                let renamed = state.session.run(command).is_ok();
                 let b = &mut state.dialogs.material_browser;
                 if renamed {
                     b.selected = Some(new);

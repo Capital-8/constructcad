@@ -295,11 +295,11 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         let undo_name = state.session.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
         let undo = icon_button(ui, Icon::Undo, state.session.doc.can_undo());
         if undo.on_hover_text(format!("{}{undo_name} (Ctrl+Z)", t!("action-undo"))).clicked() {
-            state.session.doc.undo();
+            let _ = state.session.run(cc_engine::commands::project::Undo {});
         }
         let redo = icon_button(ui, Icon::Redo, state.session.doc.can_redo());
         if redo.on_hover_text(format!("{} (Ctrl+Y)", t!("action-redo"))).clicked() {
-            state.session.doc.redo();
+            let _ = state.session.run(cc_engine::commands::project::Redo {});
         }
         // Frequent commands that already live in the ribbon.
         let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());

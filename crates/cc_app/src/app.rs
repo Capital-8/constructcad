@@ -160,10 +160,10 @@ impl ConstructApp {
             actions::guarded(state, PendingAction::Close);
         }
         if undo && state.interaction.is_idle() {
-            state.session.doc.undo();
+            let _ = state.session.run(cc_engine::commands::project::Undo {});
         }
         if redo {
-            state.session.doc.redo();
+            let _ = state.session.run(cc_engine::commands::project::Redo {});
         }
         if save_as {
             actions::save(state, true);

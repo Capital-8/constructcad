@@ -12,6 +12,7 @@ mod component_editor;
 mod dialog;
 mod dialogs;
 mod dim_edit;
+mod engine_edit;
 mod home;
 mod i18n;
 mod icons;

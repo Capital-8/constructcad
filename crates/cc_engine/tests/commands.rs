@@ -323,3 +323,41 @@ fn turning_and_pinned_elements() {
     let moved = run(&mut s, "elements_move", json!({"ids": [wall["id"], column["id"]], "delta": [1, 0]}));
     assert_eq!(moved["pinned_skipped"], json!([wall["id"]]));
 }
+
+#[test]
+fn export_and_paste_elements() {
+    let mut s = Session::default();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [5, 0]}));
+    run(&mut s, "door_create", json!({"wall": wall["id"]}));
+    let set = run(&mut s, "elements_export", json!({"ids": [wall["id"]]}));
+    assert_eq!(set["elements"].as_array().unwrap().len(), 2, "the door comes along");
+    let pasted = run(&mut s, "elements_paste", json!({"elements": set["elements"], "delta": [0, 4]}));
+    let created = pasted["created"].as_array().unwrap();
+    assert_eq!(created.len(), 2);
+    let y = |s: &mut Session, id: &Value| run(s, "element_get", json!({"id": id}))["params"]["start"][1].as_f64();
+    assert!(created.iter().any(|id| y(&mut s, id) == Some(4.0)));
+    assert_eq!(fails(&mut s, "elements_paste", json!({"elements": [{"bogus": true}]})), ErrorCode::InvalidArguments);
+}
+
+#[test]
+fn merged_edits_are_one_undo_step() {
+    use cc_engine::commands::edit::ElementSet;
+    let mut s = Session::default();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [5, 0], "height": 3.0}));
+    let id = wall["id"].as_u64().unwrap();
+    let depth = s.doc.undo_depth();
+    for h in [3.1, 3.2, 3.3] {
+        let set = ElementSet {
+            id,
+            level: None,
+            type_ref: None,
+            mark: None,
+            comments: None,
+            params: Some(json!({"height": h})),
+        };
+        s.run_merged(7, set).unwrap();
+    }
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "element_get", json!({"id": id}))["params"]["height"], 3.0);
+}

@@ -26,11 +26,7 @@ fn finish(state: &mut AppState, r: &egui::Response) {
 
 /// Apply `f` to type `tid`, merging consecutive edits of the same field.
 fn update(state: &mut AppState, tid: ElementTypeId, field: &str, f: impl FnOnce(&mut ElementType)) {
-    state.session.doc.edit_merged(t!("tx-modify-type"), key((tid, field)), |e| {
-        if let Some(t) = e.type_mut(tid) {
-            f(t);
-        }
-    });
+    crate::engine_edit::element_type(state, tid, Some(key((tid, field))), f);
 }
 
 pub fn show(ctx: &Context, state: &mut AppState) {
@@ -91,11 +87,7 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 if (r.lost_focus() || enter) && !escape {
                     let name = name.trim().to_string();
                     if !name.is_empty() && name != ty.name {
-                        state.session.doc.edit(t!("tx-modify-type"), |e| {
-                            if let Some(t) = e.type_mut(tid) {
-                                t.name = name;
-                            }
-                        });
+                        crate::engine_edit::element_type(state, tid, None, |t| t.name = name);
                     }
                 } else if !escape {
                     state.dialogs.type_rename = Some(name);
@@ -131,26 +123,16 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
 
 /// Copy the type under a new name; selected instances of it switch to the copy.
 fn duplicate(state: &mut AppState, ty: &ElementType) {
-    let tid = ty.id;
-    let selection: Vec<_> = state.selection.iter().copied().collect();
-    let new_id = state.session.doc.edit(t!("tx-duplicate-type"), |e| {
-        let id = ElementTypeId(e.alloc_id());
-        e.add_type(ElementType {
-            id,
-            name: t!("copy-of", "name" => ty.name),
-            data: ty.data.clone(),
-            info: ty.info.clone(),
-            uid: Default::default(),
-        });
-        for el in selection {
-            if let Some(x) = e.element_mut(el).filter(|x| x.type_id == tid) {
-                x.type_id = id;
-            }
-        }
-        id
-    });
-    state.dialogs.type_editor = Some(new_id);
-    state.dialogs.type_rename = Some(t!("copy-of", "name" => ty.name));
+    let selection: Vec<u64> = state.selection.iter().map(|e| e.0).collect();
+    let name = t!("copy-of", "name" => ty.name);
+    let command = cc_engine::commands::types::TypeDuplicate {
+        type_ref: cc_engine::Ref::Id(ty.id.0),
+        name: Some(name.clone()),
+        elements: selection,
+    };
+    let Some(new_id) = crate::actions::run_command(state, command).and_then(|o| o["id"].as_u64()) else { return };
+    state.dialogs.type_editor = Some(ElementTypeId(new_id));
+    state.dialogs.type_rename = Some(name);
 }
 
 fn length_row(

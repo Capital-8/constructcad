@@ -143,6 +143,8 @@ registry![
     modify::ElementsPin,
     modify::ElementFlip,
     modify::ElementsTurn,
+    modify::ElementsExport,
+    modify::ElementsPaste,
     modify::WallJoin,
     modify::TrimCorner,
     modify::TrimExtend,

@@ -11,8 +11,8 @@ use crate::t;
 use crate::theme::{self, PALETTE};
 use cc_core::component::PartError;
 use cc_core::{
-    ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ElementType, ElementTypeId, ParamKind,
-    TypeData, expr,
+    ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ElementTypeId, ParamKind, TypeData,
+    expr,
 };
 use egui::{Color32, Context, Pos2, RichText, Sense, Stroke, Ui, vec2};
 use glam::DVec2;
@@ -147,54 +147,26 @@ fn part_error(e: &PartError) -> String {
     }
 }
 
-/// Write the definition to every type of the component (or create a type).
+/// Write the definition to every type of the component (or create a type),
+/// through the engine.
 fn apply(state: &mut AppState, ed: Editor) {
     let name = ed.name.trim().to_string();
+    let def = serde_json::to_value(&ed.def).unwrap_or_default();
     let Some(tid) = ed.type_id else {
-        let id = state.session.doc.edit(t!("tx-new-component"), |e| {
-            let id = ElementTypeId(e.alloc_id());
-            let data = TypeData::Component { component: name.clone(), def: ed.def.clone() };
-            e.add_type(ElementType { id, name: name.clone(), data, info: Default::default(), uid: Default::default() });
-            id
-        });
-        state.set_tool(crate::tools::Tool::Component { type_id: id });
+        let command = cc_engine::commands::types::ComponentCreate { name: name.clone(), def };
+        let Some(id) = crate::actions::run_command(state, command).and_then(|o| o["id"].as_u64()) else { return };
+        state.set_tool(crate::tools::Tool::Component { type_id: ElementTypeId(id) });
         state.message = t!("msg-component-created", "name" => name);
         return;
     };
-    let old_name = match state.project().element_type(tid).map(|t| &t.data) {
-        Some(TypeData::Component { component, .. }) => component.clone(),
-        _ => return,
+    let command = cc_engine::commands::types::TypeSet {
+        type_ref: cc_engine::Ref::Id(tid.0),
+        name: None,
+        params: Some(serde_json::json!({ "component": name, "def": def })),
+        info: None,
+        renames: ed.renames.into_iter().map(|(a, b)| [a, b]).collect(),
     };
-    let siblings: Vec<ElementTypeId> = state
-        .project()
-        .types
-        .values()
-        .filter(|t| matches!(&t.data, TypeData::Component { component, .. } if *component == old_name))
-        .map(|t| t.id)
-        .collect();
-    state.session.doc.edit(t!("tx-edit-component"), |e| {
-        for id in siblings {
-            let Some(ty) = e.type_mut(id) else { continue };
-            let TypeData::Component { component, def } = &mut ty.data else { continue };
-            let mut new_def = ed.def.clone();
-            if id != tid {
-                // Other types keep their values of the parameters they had (following renames).
-                for p in &mut new_def.params {
-                    let old = ed.renames.iter().rev().fold(
-                        p.name.clone(),
-                        |n, (from, to)| {
-                            if n == *to { from.clone() } else { n }
-                        },
-                    );
-                    if let Some(v) = def.param(&old).map(|q| q.value) {
-                        p.value = v;
-                    }
-                }
-            }
-            *def = new_def;
-            *component = name.clone();
-        }
-    });
+    crate::actions::run_command(state, command);
 }
 
 fn body(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {

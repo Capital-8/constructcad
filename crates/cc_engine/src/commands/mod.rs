@@ -21,7 +21,8 @@ use serde_json::{Value, json};
 /// Run an edit as one undo step, kept only if it succeeds and leaves a
 /// project that needs no repair (no dangling references, no invalid numbers).
 pub(crate) fn edit<R>(s: &mut Session, tx: String, f: impl FnOnce(&mut EditCtx) -> Result<R>) -> Result<R> {
-    s.doc.try_edit(tx, f, check)
+    let key = s.take_merge_key();
+    s.doc.try_edit_merged(tx, key, f, check)
 }
 
 /// The project is consistent: repairing a copy would change nothing.
@@ -56,17 +57,14 @@ pub(crate) fn variant(v: Value) -> (String, Value) {
     }
 }
 
-/// JSON merge patch (RFC 7396): objects merge key by key, `null` removes,
-/// anything else replaces.
+/// Merge patch: objects merge key by key, anything else (arrays, numbers,
+/// `null` for an optional value) replaces. Unlike RFC 7396, `null` sets a
+/// field to null rather than removing it (model fields are never absent).
 pub(crate) fn merge(target: &mut Value, patch: &Value) {
     match (target, patch) {
         (Value::Object(t), Value::Object(p)) => {
             for (k, v) in p {
-                if v.is_null() {
-                    t.remove(k);
-                } else {
-                    merge(t.entry(k.clone()).or_insert(Value::Null), v);
-                }
+                merge(t.entry(k.clone()).or_insert(Value::Null), v);
             }
         }
         (t, p) => *t = p.clone(),

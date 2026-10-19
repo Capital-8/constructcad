@@ -52,6 +52,10 @@ pub struct TypeSet {
     pub params: Option<Value>,
     #[serde(default)]
     pub info: Option<Value>,
+    /// Component parameters renamed by a new `def`, as `[old, new]` pairs in
+    /// order, so the component's other types keep their values.
+    #[serde(default)]
+    pub renames: Vec<[String; 2]>,
 }
 
 impl Command for TypeSet {
@@ -73,11 +77,18 @@ impl Command for TypeSet {
         let info = self.info.as_ref().map(|patch| patch_value(&ty.info, patch)).transpose()?;
         // A new component definition goes to every type of the component.
         let mut siblings = Vec::new();
-        if let (Some(TypeData::Component { def: new_def, .. }), TypeData::Component { component, def: old_def }) =
-            (&data, &ty.data)
-            && new_def != old_def
+        if let (
+            Some(TypeData::Component { def: new_def, component: new_name }),
+            TypeData::Component { component, def: old_def },
+        ) = (&data, &ty.data)
+            && (new_def != old_def || new_name != component)
         {
-            validate(new_def)?;
+            if new_name.trim().is_empty() {
+                return Err(EngineError::invalid("the component needs a name"));
+            }
+            if new_def != old_def {
+                validate(new_def)?;
+            }
             siblings = p
                 .types
                 .values()
@@ -100,7 +111,13 @@ impl Command for TypeSet {
                 };
                 let Some(mut d) = new_def.clone() else { continue };
                 for param in &mut d.params {
-                    if let Some(v) = def.param(&param.name).map(|q| q.value) {
+                    // The name this parameter had before the renames.
+                    let old = self
+                        .renames
+                        .iter()
+                        .rev()
+                        .fold(param.name.clone(), |n, [from, to]| if n == *to { from.clone() } else { n });
+                    if let Some(v) = def.param(&old).map(|q| q.value) {
                         param.value = v;
                     }
                 }

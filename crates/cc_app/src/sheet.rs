@@ -2,7 +2,7 @@
 
 use crate::paint::{HIGHLIGHT, PaintOptions, paint_drawing};
 use crate::state::AppState;
-use crate::t;
+
 use cc_core::{ViewId, ViewKind};
 use egui::{Color32, Rect, Sense, Stroke, Ui};
 use glam::DVec2;
@@ -67,8 +67,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
             let d = resp.drag_delta();
             let delta = DVec2::new(d.x as f64, -d.y as f64) / xf.scale;
             let key = sheet_id.0 ^ ((index as u64) << 48);
-            state.session.doc.edit_merged(t!("tx-move-viewport"), key, |e| {
-                if let Some(ViewKind::Sheet { viewports, .. }) = e.view_mut(sheet_id).map(|v| &mut v.kind)
+            crate::engine_edit::view(state, sheet_id, Some(key), |x| {
+                if let ViewKind::Sheet { viewports, .. } = &mut x.kind
                     && let Some(vp) = viewports.get_mut(index)
                 {
                     vp.center += delta;

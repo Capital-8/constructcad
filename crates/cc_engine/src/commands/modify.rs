@@ -466,3 +466,49 @@ impl Command for ElementsTurn {
         Ok(json!({ "changed": ids_json(&turnable), "pinned_skipped": ids_json(&pinned) }))
     }
 }
+
+/// The elements as a portable set for `elements_paste`: doors and windows of
+/// the given walls come along. The set keeps type, level and view ids, so it
+/// pastes into this project or one sharing them.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ElementsExport {
+    pub ids: Vec<u64>,
+}
+
+impl Command for ElementsExport {
+    const NAME: &'static str = "elements_export";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let ids = refs::elements(s.project(), &self.ids)?;
+        let set = s.project().copy_set(&ids);
+        Ok(json!({ "elements": serde_json::to_value(set).map_err(|e| EngineError::invalid(e.to_string()))? }))
+    }
+}
+
+/// Paste a set from `elements_export` moved by `delta`, on `level` when
+/// given (else on their own levels). Elements whose type, level, view or
+/// wall does not exist here are skipped. Returns the new ids.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ElementsPaste {
+    /// The `elements` of an `elements_export` result.
+    pub elements: Value,
+    #[serde(default)]
+    pub delta: Option<Point>,
+    #[serde(default)]
+    pub level: Option<crate::refs::Ref>,
+}
+
+impl Command for ElementsPaste {
+    const NAME: &'static str = "elements_paste";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let set: Vec<cc_core::Element> = serde_json::from_value(self.elements)
+            .map_err(|e| EngineError::invalid(format!("invalid elements: {e}")))?;
+        let t = PlanTransform::translate(self.delta.map(point).transpose()?.unwrap_or(DVec2::ZERO));
+        let level = self.level.as_ref().map(|l| refs::level(s.project(), l)).transpose()?;
+        let created = edit(s, t!("tx-paste"), |e| Ok(e.paste_elements(&set, &[t], level)))?;
+        Ok(json!({ "created": ids_json(&created) }))
+    }
+}

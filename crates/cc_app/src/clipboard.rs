@@ -90,13 +90,20 @@ pub fn paste_aligned(state: &mut AppState, current_level: bool) {
     } else {
         None
     };
-    paste_with(state, &PlanTransform::IDENTITY, level);
+    paste_with(state, DVec2::ZERO, level);
 }
 
-fn paste_with(state: &mut AppState, t: &PlanTransform, level: Option<LevelId>) {
-    let elements = std::mem::take(&mut state.clipboard.elements);
-    let new = state.session.doc.edit(t!("tx-paste"), |e| e.paste_elements(&elements, &[*t], level));
-    state.clipboard.elements = elements;
+fn paste_with(state: &mut AppState, delta: DVec2, level: Option<LevelId>) {
+    let command = cc_engine::commands::modify::ElementsPaste {
+        elements: serde_json::to_value(&state.clipboard.elements).unwrap_or_default(),
+        delta: Some(delta.to_array()),
+        level: level.map(|l| cc_engine::Ref::Id(l.0)),
+    };
+    let Some(out) = crate::actions::run_command(state, command) else { return };
+    let new: Vec<ElementId> = out["created"]
+        .as_array()
+        .map(|a| a.iter().filter_map(serde_json::Value::as_u64).map(ElementId).collect())
+        .unwrap_or_default();
     state.message = if new.is_empty() { t!("msg-paste-nothing") } else { t!("msg-pasted", "count" => new.len()) };
     state.selection = new.into_iter().collect();
 }
@@ -176,7 +183,7 @@ pub fn paste_tool(
     paint_ghost(painter, xf, &drawing, &ids, &t);
     if resp.clicked() {
         state.set_tool(Tool::Select);
-        paste_with(state, &t, Some(level));
+        paste_with(state, s.point - anchor, Some(level));
     }
 }
 

@@ -11,6 +11,8 @@ use std::rc::Rc;
 /// when the document changes.
 pub struct Session {
     pub doc: Document,
+    /// Merge key for the next edit (see [`Session::run_merged`]).
+    merge_key: Option<u64>,
     geom: ModelGeometry,
     geom_revision: Option<u64>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
@@ -32,6 +34,7 @@ impl Session {
     pub fn new(doc: Document) -> Self {
         Self {
             doc,
+            merge_key: None,
             geom: ModelGeometry::default(),
             geom_revision: None,
             drawings: HashMap::new(),
@@ -148,6 +151,21 @@ impl Session {
     pub fn run<C: crate::Command + serde::Serialize>(&mut self, command: C) -> Result<Value> {
         let args = serde_json::to_value(&command).map_err(|e| EngineError::invalid(e.to_string()))?;
         self.execute(C::NAME, args)
+    }
+
+    /// Run a typed command whose edit merges with the previous one of the
+    /// same `key` into one undo step (a value being dragged); a different
+    /// key, an unmerged edit or [`Document::break_merge`] starts a new step.
+    pub fn run_merged<C: crate::Command + serde::Serialize>(&mut self, key: u64, command: C) -> Result<Value> {
+        self.merge_key = Some(key);
+        let result = self.run(command);
+        self.merge_key = None;
+        result
+    }
+
+    /// The merge key for the edit being run.
+    pub(crate) fn take_merge_key(&mut self) -> Option<u64> {
+        self.merge_key.take()
     }
 
     /// Run the command `name` with JSON `args`. A panic inside the command

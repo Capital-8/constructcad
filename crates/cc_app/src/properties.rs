@@ -31,11 +31,7 @@ fn finish(state: &mut AppState, r: &Response) {
 }
 
 fn modify(state: &mut AppState, id: ElementId, field: &str, f: impl FnOnce(&mut Element)) {
-    state.session.doc.edit_merged(t!("tx-modify"), key((id, field)), |e| {
-        if let Some(el) = e.element_mut(id) {
-            f(el);
-        }
-    });
+    crate::engine_edit::element(state, id, Some(key((id, field))), f);
 }
 
 fn length_row(
@@ -66,15 +62,9 @@ fn level_row(ui: &mut Ui, state: &mut AppState, el: &Element) {
             }
         });
     });
+    // The engine moves the doors and windows of a wall along with it.
     if level != el.level {
-        let hosted: Vec<_> = state.project().hosted_by(el.id).map(|h| h.id).collect();
-        state.session.doc.edit(t!("tx-modify"), |e| {
-            for id in hosted.into_iter().chain([el.id]) {
-                if let Some(x) = e.element_mut(id) {
-                    x.level = level;
-                }
-            }
-        });
+        crate::engine_edit::element(state, el.id, None, |x| x.level = level);
     }
 }
 
@@ -189,11 +179,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         });
     });
     if type_id != el.type_id {
-        state.session.doc.edit(t!("tx-change-type"), |e| {
-            if let Some(x) = e.element_mut(id) {
-                x.type_id = type_id;
-            }
-        });
+        crate::engine_edit::element(state, id, None, |x| x.type_id = type_id);
     }
 
     match &el.kind {
@@ -262,8 +248,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 {
                     let mut v = value;
                     if row(ui, &label, |ui| ui.checkbox(&mut v, "")).changed() {
-                        state.session.doc.edit(t!("tx-modify"), |e| {
-                            if let Some(h) = e.element_mut(id).and_then(|x| x.as_hosted_mut()) {
+                        crate::engine_edit::element(state, id, None, |x| {
+                            if let Some(h) = x.as_hosted_mut() {
                                 if field == "ff" {
                                     h.flip_facing = v;
                                 } else {
@@ -446,8 +432,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         }
         let mut pinned = state.project().is_pinned(id);
         if row(ui, &t!("prop-pinned"), |ui| ui.checkbox(&mut pinned, "")).changed() {
-            let name = if pinned { t!("tx-pin") } else { t!("tx-unpin") };
-            state.session.doc.edit(name, |e| e.set_pinned(&[id], pinned));
+            crate::actions::run_command(state, cc_engine::commands::modify::ElementsPin { ids: vec![id.0], pinned });
         }
     });
     section(ui, "ifc", t!("section-ifc"), |ui| {
@@ -621,8 +606,8 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
                 }
                 if reset {
                     let name = p.name.clone();
-                    state.session.doc.edit(t!("tx-modify"), |e| {
-                        if let Some(ElementKind::Component(c)) = e.element_mut(id).map(|x| &mut x.kind) {
+                    crate::engine_edit::element(state, id, None, |x| {
+                        if let ElementKind::Component(c) = &mut x.kind {
                             c.overrides.remove(&name);
                         }
                     });
@@ -756,8 +741,8 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
     {
         let mut on = value;
         if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
-            state.session.doc.edit(t!("tx-wall-join"), |e| {
-                if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
+            crate::engine_edit::element(state, id, None, |x| {
+                if let ElementKind::Wall(w) = &mut x.kind {
                     if at_start {
                         w.join_start = on;
                     } else {
@@ -872,8 +857,8 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
             .map(|(a, b)| *b - *a)
             .max_by(|a, b| a.length().total_cmp(&b.length()))
             .map_or(0.0, |d| d.y.atan2(d.x).to_degrees());
-        state.session.doc.edit(t!("tx-modify"), |e| {
-            if let Some(ElementKind::Roof(r)) = e.element_mut(id).map(|x| &mut x.kind) {
+        crate::engine_edit::element(state, id, None, |x| {
+            if let ElementKind::Roof(r) = &mut x.kind {
                 r.shape = match shape {
                     1 => RoofShape::Shed { slope, direction_deg: 90.0 },
                     2 => RoofShape::Gable { slope, ridge_deg: longest },
@@ -934,11 +919,7 @@ fn view_text_row(
 ) {
     let (r, text) = text_row(ui, label, value);
     if r.changed() {
-        state.session.doc.edit_merged(t!("tx-modify-view"), key((view, field)), |e| {
-            if let Some(v) = e.view_mut(view) {
-                set(v, text);
-            }
-        });
+        crate::engine_edit::view(state, view, Some(key((view, field))), |v| set(v, text));
     }
     finish(state, &r);
 }
@@ -962,11 +943,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 });
             });
             if scale != view.scale {
-                state.session.doc.edit(t!("tx-modify-view"), |e| {
-                    if let Some(v) = e.view_mut(id) {
-                        v.scale = scale;
-                    }
-                });
+                crate::engine_edit::view(state, id, None, |v| v.scale = scale);
             }
             if let ViewKind::ThreeD { .. } = view.kind {
                 let clicked = row(ui, "", |ui| ui.button(t!("action-zoom-fit")).clicked());
@@ -986,9 +963,9 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     ui.add(crate::properties::length_drag(&mut h).speed(0.01).range(0.0..=20.0))
                 });
                 if r.changed() {
-                    state.session.doc.edit_merged(t!("tx-modify-view"), key((id, "cut")), |e| {
+                    crate::engine_edit::view(state, id, Some(key((id, "cut"))), |x| {
                         if let Some(ViewKind::FloorPlan { cut_height, .. } | ViewKind::CeilingPlan { cut_height, .. }) =
-                            e.view_mut(id).map(|v| &mut v.kind)
+                            Some(&mut x.kind)
                         {
                             *cut_height = h;
                         }
@@ -1004,16 +981,16 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     ui.add(crate::properties::length_drag(&mut d).speed(0.05).range(0.1..=500.0))
                 });
                 if r.changed() {
-                    state.session.doc.edit_merged(t!("tx-modify-view"), key((id, "depth")), |e| {
-                        if let Some(ViewKind::Section { depth, .. }) = e.view_mut(id).map(|v| &mut v.kind) {
+                    crate::engine_edit::view(state, id, Some(key((id, "depth"))), |x| {
+                        if let ViewKind::Section { depth, .. } = &mut x.kind {
                             *depth = d;
                         }
                     });
                 }
                 finish(state, &r);
                 if row(ui, "", |ui| ui.button(t!("prop-flip-section")).clicked()) {
-                    state.session.doc.edit(t!("tx-modify-view"), |e| {
-                        if let Some(ViewKind::Section { start, end, .. }) = e.view_mut(id).map(|v| &mut v.kind) {
+                    crate::engine_edit::view(state, id, None, |x| {
+                        if let ViewKind::Section { start, end, .. } = &mut x.kind {
                             std::mem::swap(start, end);
                         }
                     });
@@ -1041,8 +1018,8 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     });
                 });
                 if sz != *size {
-                    state.session.doc.edit(t!("tx-modify-view"), |e| {
-                        if let Some(ViewKind::Sheet { size, .. }) = e.view_mut(id).map(|v| &mut v.kind) {
+                    crate::engine_edit::view(state, id, None, |x| {
+                        if let ViewKind::Sheet { size, .. } = &mut x.kind {
                             *size = sz;
                         }
                     });
@@ -1075,8 +1052,8 @@ fn legend_types(ui: &mut Ui, state: &mut AppState, id: ViewId, current: &[cc_cor
     for (tid, name) in all {
         let mut on = current.contains(&tid);
         if row(ui, &name, |ui| ui.checkbox(&mut on, "")).changed() {
-            state.session.doc.edit(t!("tx-modify-view"), |e| {
-                if let Some(ViewKind::Legend { types }) = e.view_mut(id).map(|v| &mut v.kind) {
+            crate::engine_edit::view(state, id, None, |x| {
+                if let ViewKind::Legend { types } = &mut x.kind {
                     if on {
                         types.push(tid);
                     } else {
@@ -1129,8 +1106,8 @@ fn viewport_props(ui: &mut Ui, state: &mut AppState, sheet: ViewId, index: usize
             let mut v = vp.center[axis];
             let r = row(ui, &label, |ui| ui.add(DragValue::new(&mut v).speed(1.0).fixed_decimals(1).suffix(" mm")));
             if r.changed() {
-                state.session.doc.edit_merged(t!("tx-move-viewport"), key((sheet, index, axis)), |e| {
-                    if let Some(ViewKind::Sheet { viewports, .. }) = e.view_mut(sheet).map(|v| &mut v.kind)
+                crate::engine_edit::view(state, sheet, Some(key((sheet, index, axis))), |x| {
+                    if let ViewKind::Sheet { viewports, .. } = &mut x.kind
                         && let Some(vp) = viewports.get_mut(index)
                     {
                         vp.center[axis] = v;
