@@ -528,6 +528,29 @@ fn dim_text(painter: &Painter, pos: Pos2, text: String, angle: f32, strong: bool
     painter.add(egui::epaint::TextShape::new(top_left, galley, TEMP_DIM).with_angle(angle));
 }
 
+/// Temporary dimension measuring from `a` to `b` (both drawn as small
+/// ticks on the measuring line). Returns the screen center, size and
+/// rotation of its value, for clicking.
+pub(crate) fn temp_measure(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2) -> (Pos2, egui::Vec2, f32) {
+    let (sa, sb) = (xf.to_screen(a), xf.to_screen(b));
+    painter.line_segment([sa, sb], Stroke::new(1.0, TEMP_DIM));
+    let d = (sb - sa).normalized();
+    let n = egui::vec2(-d.y, d.x);
+    for q in [sa, sb] {
+        painter.line_segment([q - (d + n) * 4.0, q + (d + n) * 4.0], Stroke::new(1.5, TEMP_DIM));
+    }
+    let mut angle = d.y.atan2(d.x);
+    if angle.abs() > std::f32::consts::FRAC_PI_2 {
+        angle -= angle.signum() * std::f32::consts::PI;
+    }
+    let text = format::length(a.distance(b));
+    let size = painter.layout_no_wrap(text.clone(), egui::FontId::proportional(12.0), TEMP_DIM).size();
+    let up = egui::emath::Rot2::from_angle(angle) * egui::vec2(0.0, -(size.y / 2.0 + 3.0));
+    let center = sa + (sb - sa) / 2.0 + up;
+    dim_text(painter, center, text, angle, false);
+    (center, size, angle)
+}
+
 /// Temporary dimension of a segment being drawn from `a` to `p`: a
 /// dimension line beside it with its length (or the typed value) and an
 /// arc with the angle to `reference` (the previous segment, or the X axis).

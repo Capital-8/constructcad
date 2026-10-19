@@ -23,6 +23,9 @@ use std::collections::BTreeSet;
 pub enum Target {
     /// The value of a dimension element.
     Dimension(ElementId),
+    /// A temporary dimension of the selection: `ids` move along `dir` so
+    /// that the measured `current` distance becomes the typed one.
+    Offset { ids: Vec<ElementId>, dir: DVec2, current: f64 },
 }
 
 /// The open value field.
@@ -44,6 +47,7 @@ pub fn open(state: &mut AppState, view: ViewId, target: Target, at: Pos2) {
             Some(d) => format::meters(d.value()),
             None => return,
         },
+        Target::Offset { current, .. } => format::meters(*current),
     };
     state.value_edit = Some(ValueEdit { target, view, at, text, focus: true });
 }
@@ -70,6 +74,9 @@ pub fn canvas(
 ) -> bool {
     if state.tool != crate::tools::Tool::Select {
         return false;
+    }
+    if selection_temps(ui, resp, painter, state, view, xf, drawing) {
+        return true;
     }
     let Some(pos) = resp.hover_pos() else { return false };
     // Double-click on any dimension.
@@ -189,6 +196,13 @@ pub fn apply_text(state: &mut AppState, target: &Target, text: &str) -> Result<(
             let value =
                 if angular { format::parse_number(text).map(f64::to_radians) } else { format::parse_length(text) };
             set_dimension_value(state, *id, value.ok_or_else(|| t!("msg-invalid-value"))?)
+        }
+        Target::Offset { ids, dir, current } => {
+            let value = format::parse_length(text).filter(|v| v.is_finite() && *v >= 0.0);
+            let value = value.ok_or_else(|| t!("msg-invalid-value"))?;
+            let t = PlanTransform::translate(*dir * (value - current));
+            crate::tools::transform_selection(state, ids, &t, t!("tx-dim-value"));
+            Ok(())
         }
     }
 }
@@ -380,4 +394,200 @@ mod tests {
             matches!(&state.project().element(cid).unwrap().kind, ElementKind::Column(c) if c.position == DVec2::new(50.0, 50.0))
         );
     }
+
+    #[test]
+    fn a_selected_column_shows_editable_distances() {
+        let mut state = sample();
+        let view = plan(&state);
+        let level = state.project().levels[0].id;
+        let col_ty = state.project().default_type(Category::Column).unwrap();
+        // Inside the house, away from its walls.
+        let walls: Vec<_> = state.project().walls().map(|(_, w)| (w.start, w.end)).collect();
+        let lo = walls.iter().fold(DVec2::splat(f64::MAX), |m, (a, b)| m.min(*a).min(*b));
+        let at = lo + DVec2::new(1.3, 1.7);
+        let col = cc_core::Column {
+            position: at,
+            rotation_deg: 0.0,
+            base_offset: 0.0,
+            height: 3.0,
+            top: cc_core::WallTop::Unconnected,
+        };
+        let cid = state.create_element("col".into(), level, col_ty, ElementKind::Column(col));
+        state.sync();
+        state.selection = BTreeSet::from([cid]);
+        let drawing = state.drawing(view).unwrap();
+        let temps = temps(&state, &drawing);
+        assert_eq!(temps.len(), 2, "{temps:?}");
+        let along_x = temps.iter().find(|t| t.away.x.abs() > 0.5).cloned().unwrap();
+        let current = along_x.from.distance(along_x.to);
+        let target = Target::Offset { ids: vec![cid], dir: along_x.away, current };
+        apply_text(&mut state, &target, "2").unwrap();
+        state.sync();
+        let moved = match &state.project().element(cid).unwrap().kind {
+            ElementKind::Column(c) => c.position,
+            other => panic!("{other:?}"),
+        };
+        assert!(((moved - along_x.to).dot(along_x.away) - 2.0).abs() < 1e-9, "{moved}");
+    }
+}
+
+/// A temporary dimension of the selected element: from a point of it to
+/// the nearest reference linework, editable to move the element.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Temp {
+    pub from: DVec2,
+    pub to: DVec2,
+    /// Unit direction the element moves for a larger value (away from `to`).
+    pub away: DVec2,
+}
+
+/// Nearest reference linework (walls, grids and columns other than
+/// `skip`) from `p` along `dir`, crossing the ray at a right angle.
+fn nearest_along(
+    state: &AppState,
+    drawing: &Drawing2D,
+    skip: &BTreeSet<ElementId>,
+    p: DVec2,
+    dir: DVec2,
+) -> Option<DVec2> {
+    let reference = |e: &ElementId| {
+        let category = state.project().element(*e).map(|x| x.category());
+        matches!(category, Some(Category::Wall | Category::Grid | Category::Column))
+    };
+    let mut best: Option<f64> = None;
+    for prim in &drawing.prims {
+        let Prim::Line { a, b, style, element: Some(e) } = prim else { continue };
+        let style_ok =
+            matches!(style, cc_views::LineStyle::Cut | cc_views::LineStyle::Projection | cc_views::LineStyle::Center);
+        if skip.contains(e) || !style_ok || !reference(e) {
+            continue;
+        }
+        let Some(u) = (*b - *a).try_normalize() else { continue };
+        // Lines across the ray only (parallel to the element's side).
+        if u.dot(dir).abs() > 0.02 {
+            continue;
+        }
+        let t = (*a - p).dot(dir);
+        if t <= 1e-6 || t > 50.0 {
+            continue;
+        }
+        // The ray must hit the segment.
+        let hit = p + dir * t;
+        if !crate::tools::point_on_segment(*a, *b, hit, 1e-6) {
+            continue;
+        }
+        if best.is_none_or(|d| t < d) {
+            best = Some(t);
+        }
+    }
+    best.map(|t| p + dir * t)
+}
+
+/// Temporary dimensions of the single selected element in a plan: walls,
+/// beams and grids to the nearest parallel linework on each side; columns
+/// and components along X and Y; doors and windows along their wall.
+pub fn temps(state: &AppState, drawing: &Drawing2D) -> Vec<Temp> {
+    let [id] = state.selection.iter().copied().collect::<Vec<_>>()[..] else { return Vec::new() };
+    let project = state.project();
+    let Some(el) = project.element(id) else { return Vec::new() };
+    if project.is_pinned(id) {
+        return Vec::new();
+    }
+    // The element's own linework (and its openings') is not a reference.
+    let mut skip: BTreeSet<ElementId> = project.hosted_by(id).map(|h| h.id).collect();
+    skip.insert(id);
+    let mut out = Vec::new();
+    let mut probe = |p: DVec2, dir: DVec2, skip: &BTreeSet<ElementId>| {
+        if let Some(q) = nearest_along(state, drawing, skip, p, dir) {
+            out.push(Temp { from: p, to: q, away: -dir });
+        }
+    };
+    match &el.kind {
+        ElementKind::Wall(_) | ElementKind::Beam(_) | ElementKind::Grid(_) => {
+            let Some((a, b)) = cc_core::wall_ops::line_of(el) else { return out };
+            let Some(u) = (b - a).try_normalize() else { return out };
+            let mid = (a + b) / 2.0;
+            for n in [u.perp(), -u.perp()] {
+                probe(mid, n, &skip);
+            }
+        }
+        ElementKind::Column(c) => {
+            for d in [DVec2::X, DVec2::NEG_X, DVec2::Y, DVec2::NEG_Y] {
+                probe(c.position, d, &skip);
+            }
+        }
+        ElementKind::Component(c) => {
+            for d in [DVec2::X, DVec2::NEG_X, DVec2::Y, DVec2::NEG_Y] {
+                probe(c.position, d, &skip);
+            }
+        }
+        ElementKind::Door(h) | ElementKind::Window(h) => {
+            let Some(w) = project.element(h.host).and_then(|e| e.as_wall()) else { return out };
+            let Some(u) = (w.end - w.start).try_normalize() else { return out };
+            let center = w.start + u * h.offset;
+            // The host's own faces run along the move; other walls cross it.
+            skip.insert(h.host);
+            for d in [u, -u] {
+                probe(center, d, &skip);
+            }
+        }
+        _ => {}
+    }
+    // Points: keep the nearest on each axis (left or right, below or above).
+    if matches!(el.kind, ElementKind::Column(_) | ElementKind::Component(_)) {
+        let mut kept: Vec<Temp> = Vec::new();
+        for axis in [DVec2::X, DVec2::Y] {
+            let nearest = out
+                .iter()
+                .filter(|t| t.away.dot(axis).abs() > 0.5)
+                .min_by(|x, y| x.from.distance(x.to).total_cmp(&y.from.distance(y.to)));
+            kept.extend(nearest.cloned());
+        }
+        return kept;
+    }
+    out
+}
+
+/// Draw the selection's temporary dimensions and open one for editing
+/// when its value is clicked. Returns true when the click was used.
+fn selection_temps(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    view: ViewId,
+    xf: &Xf,
+    drawing: &Drawing2D,
+) -> bool {
+    let plan = state
+        .project()
+        .view(view)
+        .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }));
+    if !plan || state.interaction.drag.is_some() || resp.dragged() {
+        return false;
+    }
+    let ids: Vec<ElementId> = state.selection.iter().copied().collect();
+    let pointer = resp.hover_pos();
+    let mut clicked = None;
+    for t in temps(state, drawing) {
+        let (center, size, angle) = crate::tools::temp_measure(painter, xf, t.from, t.to);
+        let local = pointer.map(|p| egui::emath::Rot2::from_angle(angle).inverse() * (p - center));
+        let over = local.is_some_and(|l| l.x.abs() <= size.x / 2.0 + 4.0 && l.y.abs() <= size.y / 2.0 + 4.0);
+        if over {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+            painter.rect_stroke(
+                egui::Rect::from_center_size(center, size + egui::vec2(8.0, 6.0)),
+                3.0,
+                egui::Stroke::new(1.0, crate::theme::PALETTE.accent),
+                egui::StrokeKind::Middle,
+            );
+            if resp.clicked() {
+                clicked = Some((t, center));
+            }
+        }
+    }
+    let Some((t, center)) = clicked else { return false };
+    let current = t.from.distance(t.to);
+    open(state, view, Target::Offset { ids, dir: t.away, current }, center);
+    true
 }
