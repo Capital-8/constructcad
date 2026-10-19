@@ -87,7 +87,7 @@ pub struct AppState {
     /// Typed shortcut letters (e.g. "WA").
     pub key_buffer: String,
     /// Typed length for the wall tool.
-    pub length_input: String,
+    pub typed: crate::tools::TypedInput,
     /// Default height for new walls.
     pub wall_height: f64,
     /// Location line for new walls.
@@ -145,7 +145,7 @@ impl AppState {
             message: String::new(),
             cursor: None,
             key_buffer: String::new(),
-            length_input: String::new(),
+            typed: Default::default(),
             wall_height: 3.0,
             wall_location_line: Default::default(),
             wall_top_level: None,
@@ -266,10 +266,16 @@ impl AppState {
         }
     }
 
+    /// A segment is being drawn with typed input (wall, move, copy, array).
+    pub fn typing_segment(&self) -> bool {
+        matches!(self.tool, Tool::Wall { .. } | Tool::Move | Tool::Copy | Tool::Array)
+            && self.interaction.anchor.is_some()
+    }
+
     pub fn set_tool(&mut self, tool: Tool) {
         self.tool = tool;
         self.interaction = Interaction::default();
-        self.length_input.clear();
+        self.typed.clear();
     }
 
     /// Level of the active plan view, if the active view is a plan.

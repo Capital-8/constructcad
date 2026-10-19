@@ -222,6 +222,7 @@ sketch-from-walls = Das paredes
 
 # Barra de status
 status-length = Comprimento: { $value }
+status-angle = Ângulo: { $value }°
 status-selected = { $count } selecionado(s)
 status-unsaved-file = (não salvo)
 

@@ -222,6 +222,7 @@ sketch-from-walls = From Walls
 
 # Status bar
 status-length = Length: { $value }
+status-angle = Angle: { $value }°
 status-selected = { $count } selected
 status-unsaved-file = (unsaved)
 

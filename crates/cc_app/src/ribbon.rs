@@ -889,8 +889,12 @@ pub fn status_bar(ui: &mut Ui, state: &AppState) {
             ui.label(RichText::new(coords).monospace().color(PALETTE.text_muted));
             ui.separator();
         }
-        if !state.length_input.is_empty() {
-            ui.label(RichText::new(t!("status-length", "value" => state.length_input)).strong());
+        if !state.typed.length.is_empty() {
+            ui.label(RichText::new(t!("status-length", "value" => state.typed.length)).strong());
+            ui.separator();
+        }
+        if !state.typed.angle.is_empty() || state.typed.angle_active {
+            ui.label(RichText::new(t!("status-angle", "value" => state.typed.angle)).strong());
             ui.separator();
         }
         let n = state.selection.len();

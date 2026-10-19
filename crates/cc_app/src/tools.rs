@@ -560,9 +560,11 @@ pub(crate) fn temp_dimension(
     a: DVec2,
     p: DVec2,
     reference: Option<DVec2>,
-    typed: &str,
+    typed: Option<&TypedInput>,
     side: f64,
 ) {
+    let none = TypedInput::default();
+    let typed = typed.unwrap_or(&none);
     let len = a.distance(p);
     let Some(dir) = (p - a).try_normalize() else { return };
     let thin = Stroke::new(1.0, TEMP_DIM);
@@ -582,17 +584,17 @@ pub(crate) fn temp_dimension(
         painter.line_segment([xf.to_screen(q - tick), xf.to_screen(q + tick)], Stroke::new(1.5, TEMP_DIM));
     }
     let unit = format::current().0.length.unit.symbol();
-    let text = if typed.is_empty() { format::length(len) } else { format!("{typed} {unit} ⏎") };
+    let text = if typed.length.is_empty() { format::length(len) } else { format!("{} {unit} \u{23ce}", typed.length) };
     let screen_dir = xf.to_screen(dp) - xf.to_screen(da);
     let mid = xf.to_screen((da + dp) * 0.5) + (xf.to_screen(da + n) - xf.to_screen(da)).normalized() * 9.0;
-    dim_text(painter, mid, text, screen_dir.y.atan2(screen_dir.x), true);
+    dim_text(painter, mid, text, screen_dir.y.atan2(screen_dir.x), !typed.angle_active);
 
     // Angle to the reference direction.
     let reference = reference.and_then(|r| r.try_normalize()).unwrap_or(DVec2::X);
     let angle = reference.angle_to(dir);
     let degrees = angle.to_degrees();
     let radius_px = (len * xf.scale * 0.45).clamp(18.0, 70.0);
-    if len * xf.scale < 30.0 || degrees.abs() < 0.5 {
+    if (len * xf.scale < 30.0 || degrees.abs() < 0.5) && !typed.angle_active {
         return;
     }
     let radius = radius_px / xf.scale;
@@ -608,12 +610,59 @@ pub(crate) fn temp_dimension(
         .collect();
     painter.add(egui::Shape::line(arc, thin));
     let label_at = xf.to_screen(a + DVec2::from_angle(angle / 2.0).rotate(reference) * (radius + 14.0 / xf.scale));
-    dim_text(painter, label_at, format::angle(degrees.abs()), 0.0, false);
+    let text =
+        if typed.angle.is_empty() { format::angle(degrees.abs()) } else { format!("{}\u{b0} \u{23ce}", typed.angle) };
+    dim_text(painter, label_at, text, 0.0, typed.angle_active);
 }
 
-/// Parse the typed length ("3,5" or "3.5").
-pub(crate) fn typed_length(input: &str) -> Option<f64> {
-    input.trim().replace(',', ".").parse::<f64>().ok().filter(|v| *v > 0.0)
+/// Values typed while drawing a segment: digits go to the active field
+/// (length, or angle after Tab), in the project's length unit and degrees.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TypedInput {
+    pub length: String,
+    pub angle: String,
+    /// Typing goes to the angle.
+    pub angle_active: bool,
+}
+
+impl TypedInput {
+    pub fn is_empty(&self) -> bool {
+        self.length.is_empty() && self.angle.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn push(&mut self, ch: char) {
+        if self.angle_active { &mut self.angle } else { &mut self.length }.push(ch);
+    }
+
+    pub fn pop(&mut self) {
+        if self.angle_active { &mut self.angle } else { &mut self.length }.pop();
+    }
+
+    pub fn length_value(&self) -> Option<f64> {
+        format::parse_length(&self.length).filter(|v| v.is_finite() && *v > 0.0)
+    }
+
+    pub fn angle_value(&self) -> Option<f64> {
+        format::parse_number(&self.angle).filter(|v| v.is_finite())
+    }
+
+    /// The end of a segment from `a` toward the cursor `p`, with the typed
+    /// length and the typed angle from `reference` (the X axis by default;
+    /// the angle turns to the cursor's side of it).
+    pub fn apply(&self, a: DVec2, p: DVec2, reference: Option<DVec2>) -> DVec2 {
+        let reference = reference.and_then(|r| r.try_normalize()).unwrap_or(DVec2::X);
+        let mut dir = (p - a).normalize_or(reference);
+        if let Some(deg) = self.angle_value() {
+            let side = if reference.perp_dot(dir) >= 0.0 { 1.0 } else { -1.0 };
+            dir = DVec2::from_angle(side * deg.to_radians()).rotate(reference);
+        }
+        let len = self.length_value().unwrap_or_else(|| (p - a).dot(dir).max(0.0));
+        a + dir * len
+    }
 }
 
 pub fn handle(
@@ -804,7 +853,7 @@ fn beam_tool(
         let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
         let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
         painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
-        temp_dimension(painter, xf, a, s.point, None, "", width / 2.0);
+        temp_dimension(painter, xf, a, s.point, None, None, width / 2.0);
     }
     if resp.clicked() {
         match state.interaction.anchor {
@@ -978,7 +1027,7 @@ fn grid_tool(
             10.0,
             4.0,
         ));
-        temp_dimension(painter, xf, a, s.point, None, "", 0.0);
+        temp_dimension(painter, xf, a, s.point, None, None, 0.0);
     }
     if resp.clicked() {
         match state.interaction.anchor {
@@ -1306,8 +1355,8 @@ fn wall_tool(
     draw_snap(painter, xf, s);
 
     if let Some(a) = anchor {
-        if let Some(len) = typed_length(&state.length_input) {
-            p = a + (p - a).normalize_or(DVec2::X) * len;
+        if !state.typed.is_empty() {
+            p = state.typed.apply(a, p, state.interaction.prev_dir);
         }
         let half = state.project().element_type(type_id).map_or(0.075, |t| t.thickness() * 0.5);
         let n = (p - a).normalize_or_zero().perp() * half;
@@ -1315,10 +1364,10 @@ fn wall_tool(
         painter.line_segment([xf.to_screen(a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
         painter.line_segment([xf.to_screen(a + n), xf.to_screen(p + n)], stroke);
         painter.line_segment([xf.to_screen(a - n), xf.to_screen(p - n)], stroke);
-        temp_dimension(painter, xf, a, p, state.interaction.prev_dir, &state.length_input, half);
+        temp_dimension(painter, xf, a, p, state.interaction.prev_dir, Some(&state.typed), half);
     }
 
-    let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.length_input.is_empty();
+    let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.typed.is_empty();
     if resp.clicked() || enter {
         match anchor {
             None => state.interaction.anchor = Some(p),
@@ -1340,7 +1389,7 @@ fn wall_tool(
                 state.interaction.anchor = Some(p);
                 // The next wall's angle is measured from this one (as an interior angle).
                 state.interaction.prev_dir = Some(a - p);
-                state.length_input.clear();
+                state.typed.clear();
             }
             _ => {}
         }
@@ -1439,7 +1488,7 @@ fn sketch_tool(
     type_id: ElementTypeId,
     xf: &Xf,
 ) {
-    if ui.input(|i| i.key_pressed(Key::Backspace)) && state.length_input.is_empty() {
+    if ui.input(|i| i.key_pressed(Key::Backspace)) && state.typed.is_empty() {
         state.interaction.points.pop();
     }
     let finish_key = ui.input(|i| i.key_pressed(Key::Enter));
@@ -1456,7 +1505,7 @@ fn sketch_tool(
         if let Some(last) = pts.last() {
             painter.line_segment([xf.to_screen(*last), xf.to_screen(s.point)], Stroke::new(1.0, PREVIEW));
             let previous = pts.len().checked_sub(2).and_then(|i| pts.get(i)).map(|q| *q - *last);
-            temp_dimension(painter, xf, *last, s.point, previous, "", 0.0);
+            temp_dimension(painter, xf, *last, s.point, previous, None, 0.0);
         }
         if pts.len() >= 2 {
             painter.extend(egui::Shape::dashed_line(
@@ -1683,7 +1732,7 @@ fn select(
         let s = snap_at(state, level, raw, Some(fixed), &[], xf.scale, shift);
         draw_snap(painter, xf, s);
         painter.line_segment([xf.to_screen(fixed), xf.to_screen(s.point)], Stroke::new(2.0, PREVIEW));
-        temp_dimension(painter, xf, fixed, s.point, None, "", 0.0);
+        temp_dimension(painter, xf, fixed, s.point, None, None, 0.0);
         if resp.drag_stopped() {
             state.interaction.drag = None;
             let result = state.doc.edit(t!("tx-modify"), |e| e.move_endpoint(id, at_start, s.point));
@@ -1830,6 +1879,30 @@ mod tests {
 
     /// 100 px per meter: the snap radius is 0.1 m.
     const SCALE: f64 = 100.0;
+
+    #[test]
+    fn typed_length_and_angle_place_the_segment_end() {
+        let a = DVec2::new(1.0, 1.0);
+        let mut typed = TypedInput::default();
+        // Nothing typed: the cursor point.
+        assert_eq!(typed.apply(a, DVec2::new(4.0, 1.0), None), DVec2::new(4.0, 1.0));
+        "2,5".chars().for_each(|c| typed.push(c));
+        assert!(typed.apply(a, DVec2::new(4.0, 1.0), None).distance(DVec2::new(3.5, 1.0)) < 1e-9);
+        // Tab: digits go to the angle, turned to the cursor's side of the X axis.
+        typed.angle_active = true;
+        "90".chars().for_each(|c| typed.push(c));
+        let below = typed.apply(a, DVec2::new(4.0, -0.5), None);
+        assert!(
+            below.distance(DVec2::new(1.0, -1.5)) < 1e-9,
+            "{below} {:?} {:?}",
+            typed.angle_value(),
+            typed.length_value()
+        );
+        assert!(typed.apply(a, DVec2::new(4.0, 1.5), None).distance(DVec2::new(1.0, 3.5)) < 1e-9);
+        typed.pop();
+        typed.pop();
+        assert!(typed.angle.is_empty() && typed.length == "2,5");
+    }
 
     #[test]
     fn linear_dimensions_follow_the_cursor_side() {

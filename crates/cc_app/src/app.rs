@@ -184,8 +184,8 @@ impl ConstructApp {
             state.message = t!("msg-rotated");
         }
         if escape {
-            if !state.length_input.is_empty() {
-                state.length_input.clear();
+            if !state.typed.is_empty() || state.typed.angle_active {
+                state.typed.clear();
             } else if !state.interaction.is_idle() {
                 state.interaction = Default::default();
             } else if state.tool != Tool::Select {
@@ -204,10 +204,9 @@ impl ConstructApp {
                 _ => state.delete_selection(),
             }
         }
-        let typing_length = matches!(state.tool, Tool::Wall { .. } | Tool::Move | Tool::Copy | Tool::Array)
-            && state.interaction.anchor.is_some();
+        let typing_length = state.typing_segment();
         if backspace && typing_length {
-            state.length_input.pop();
+            state.typed.pop();
         }
         for event in &events {
             match event {
@@ -223,7 +222,7 @@ impl ConstructApp {
             let Event::Text(text) = event else { continue };
             for ch in text.chars() {
                 if typing_length && (ch.is_ascii_digit() || ch == ',' || ch == '.') {
-                    state.length_input.push(ch);
+                    state.typed.push(ch);
                     continue;
                 }
                 if !ch.is_ascii_alphabetic() {
@@ -351,6 +350,21 @@ impl ConstructApp {
 }
 
 impl eframe::App for ConstructApp {
+    /// While a segment is drawn, Tab switches the typed field (length or
+    /// angle) instead of moving keyboard focus between widgets.
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if !self.state.typing_segment() || ctx.memory(|m| m.focused().is_some()) {
+            return;
+        }
+        let is_tab = |e: &Event| matches!(e, Event::Key { key: Key::Tab, .. });
+        let presses =
+            raw_input.events.iter().filter(|e| matches!(e, Event::Key { key: Key::Tab, pressed: true, .. })).count();
+        raw_input.events.retain(|e| !is_tab(e));
+        if presses % 2 == 1 {
+            self.state.typed.angle_active = !self.state.typed.angle_active;
+        }
+    }
+
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string(LANGUAGE_KEY, crate::i18n::language().code().to_string());
         let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();

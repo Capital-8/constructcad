@@ -6,7 +6,7 @@
 use crate::paint::{PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
-use crate::tools::{Tool, draw_snap, label, snap_at, temp_dimension, typed_length};
+use crate::tools::{Tool, draw_snap, label, snap_at, temp_dimension};
 use cc_core::{ElementId, ElementKind, LevelId, PlanTransform};
 use cc_views::{Drawing2D, Prim, format};
 use egui::{Key, Painter, Response, Stroke, Ui};
@@ -171,8 +171,8 @@ fn base_target(
         return;
     };
     let mut p = s.point;
-    if let Some(len) = typed_length(&state.length_input) {
-        p = a + (p - a).normalize_or(DVec2::X) * len;
+    if !state.typed.is_empty() {
+        p = state.typed.apply(a, p, None);
     }
     let step = PlanTransform::translate(p - a);
     let count = state.modify.count.max(2);
@@ -183,13 +183,13 @@ fn base_target(
     for t in &steps {
         paint_ghost(painter, xf, drawing, targets, t);
     }
-    temp_dimension(painter, xf, a, p, None, &state.length_input, 0.0);
-    let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.length_input.is_empty();
+    temp_dimension(painter, xf, a, p, None, Some(&state.typed), 0.0);
+    let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.typed.is_empty();
     if !(resp.clicked() || enter) || a.distance(p) < 1e-6 {
         return;
     }
     let ids: Vec<ElementId> = targets.iter().copied().collect();
-    state.length_input.clear();
+    state.typed.clear();
     match tool {
         Tool::Move => {
             crate::tools::transform_selection(state, &ids, &step, t!("tx-move"));
