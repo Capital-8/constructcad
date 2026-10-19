@@ -161,6 +161,13 @@ impl<'a> EditCtx<'a> {
         id
     }
 
+    /// Whether `id` is (or was, before this edit) a dimension.
+    fn is_dimension(&self, id: ElementId) -> bool {
+        let now = self.project.elements.get(&id);
+        let before = self.tx.elements.get(&id).and_then(|c| c.0.as_ref());
+        now.or(before).is_some_and(|e| matches!(e.kind, crate::ElementKind::Dimension(_)))
+    }
+
     pub fn element_mut(&mut self, id: ElementId) -> Option<&mut Element> {
         if !self.project.elements.contains_key(&id) {
             return None;
@@ -307,6 +314,10 @@ impl<'a> EditCtx<'a> {
 
     /// Fill in "after" states and drop no-op entries.
     fn finish(mut self) -> Transaction {
+        // Associative dimensions follow what this edit changed.
+        if self.tx.elements.keys().any(|id| !self.is_dimension(*id)) {
+            self.sync_dimensions();
+        }
         let p = &*self.project;
         self.tx.elements.retain(|id, c| {
             c.1 = p.elements.get(id).cloned();

@@ -132,9 +132,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let room = Room { position: DVec2::new(x, 3.0), number: number.into(), name: name.into(), height: 3.0 };
             add(e, room_t, "", ElementKind::Room(room));
         }
+        let mut grids_x = Vec::new();
         for (x, name) in [(0.0, "1"), (5.0, "2"), (9.0, "3")] {
             let grid = Grid { start: DVec2::new(x, -1.5), end: DVec2::new(x, 7.5), name: name.into() };
-            add(e, grid_t, "", ElementKind::Grid(grid));
+            grids_x.push((x, add(e, grid_t, "", ElementKind::Grid(grid))));
         }
         for (y, name) in [(0.0, "A"), (6.0, "B")] {
             let grid = Grid { start: DVec2::new(-1.5, y), end: DVec2::new(10.5, y), name: name.into() };
@@ -148,13 +149,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for (a, b, offset) in
             [((0.0, 0.0), (5.0, 0.0), -1.2), ((5.0, 0.0), (9.0, 0.0), -1.2), ((0.0, 0.0), (9.0, 0.0), -1.9)]
         {
-            let dim = Dimension {
-                view: ground_plan,
-                a: DVec2::new(a.0, a.1),
-                b: DVec2::new(b.0, b.1),
-                offset,
-                kind: Default::default(),
+            let (a, b) = (DVec2::new(a.0, a.1), DVec2::new(b.0, b.1));
+            // The ends follow the grids they measure.
+            let on_grid = |e: &cc_core::EditCtx, p: DVec2| {
+                let grid = grids_x.iter().find(|(x, _)| (x - p.x).abs() < 1e-9)?.1;
+                e.project().dim_ref_at(grid, p)
             };
+            let refs = [on_grid(e, a), on_grid(e, b)];
+            let dim = Dimension { view: ground_plan, a, b, offset, kind: Default::default(), refs };
             add(e, dim_t, "", ElementKind::Dimension(dim));
         }
 

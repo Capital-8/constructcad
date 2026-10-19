@@ -258,7 +258,14 @@ mod tests {
     use cc_core::{Dimension, ViewId};
 
     fn dim(a: (f64, f64), b: (f64, f64), offset: f64, kind: DimensionKind) -> Dimension {
-        Dimension { view: ViewId(1), a: DVec2::new(a.0, a.1), b: DVec2::new(b.0, b.1), offset, kind }
+        Dimension {
+            view: ViewId(1),
+            a: DVec2::new(a.0, a.1),
+            b: DVec2::new(b.0, b.1),
+            offset,
+            kind,
+            refs: Default::default(),
+        }
     }
 
     #[test]

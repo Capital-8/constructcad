@@ -333,6 +333,9 @@ pub struct Dimension {
     pub offset: f64,
     #[serde(default)]
     pub kind: DimensionKind,
+    /// Elements the ends `a` and `b` follow (associative dimension).
+    #[serde(default)]
+    pub refs: [Option<crate::DimRef>; 2],
 }
 
 /// How a dimension measures.

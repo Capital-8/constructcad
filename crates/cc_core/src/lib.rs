@@ -6,6 +6,7 @@
 
 pub mod component;
 pub mod component_file;
+pub mod dim_refs;
 mod document;
 mod element;
 pub mod expr;
@@ -22,6 +23,7 @@ mod view;
 pub mod wall_ops;
 
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
+pub use dim_refs::{DimRef, RefAnchor};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
     Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted,

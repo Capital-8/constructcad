@@ -1064,14 +1064,22 @@ fn dimension_tool(
     let tol = 6.0 / xf.scale;
     let points = state.interaction.points.clone();
     let place = |state: &mut AppState, dim: cc_core::Dimension| {
+        // In plans the ends follow the elements they were placed on.
+        let dim = cc_core::Dimension { refs: crate::dim_edit::associate(state, drawing, &dim), ..dim };
         let level = level.or_else(|| state.project().levels.first().map(|l| l.id));
         if let Some(level) = level {
             state.create_element(t!("tx-create-dimension"), level, type_id, ElementKind::Dimension(dim));
         }
         state.interaction.points.clear();
     };
-    let dim =
-        |a: DVec2, b: DVec2, offset: f64, kind: DimensionKind| cc_core::Dimension { view: view.id, a, b, offset, kind };
+    let dim = |a: DVec2, b: DVec2, offset: f64, kind: DimensionKind| cc_core::Dimension {
+        view: view.id,
+        a,
+        b,
+        offset,
+        kind,
+        refs: Default::default(),
+    };
     match mode {
         DimensionMode::Aligned | DimensionMode::Linear => {
             let shift = ui.input(|i| i.modifiers.shift);

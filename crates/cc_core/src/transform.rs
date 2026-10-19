@@ -175,6 +175,14 @@ impl crate::EditCtx<'_> {
                 continue;
             }
             el.transform(t);
+            // A dimension moved without what it measures lets go of it.
+            if let ElementKind::Dimension(d) = &mut el.kind {
+                for r in &mut d.refs {
+                    if r.is_some_and(|r| !set.contains(&r.element)) {
+                        *r = None;
+                    }
+                }
+            }
             changed.push(*id);
         }
         for (id, with_wall) in hosted {
@@ -269,6 +277,13 @@ impl crate::EditCtx<'_> {
                 self.detach_missing_top(&mut c);
                 remap.insert(el.id, c.id);
                 created.push(self.add_element(c));
+            }
+            // Copied dimensions follow the copies of what they measure, or nothing.
+            for id in &created {
+                let Some(ElementKind::Dimension(d)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                for r in d.refs.iter_mut() {
+                    *r = r.and_then(|r| remap.get(&r.element).map(|e| crate::DimRef { element: *e, ..r }));
+                }
             }
             for el in accepted.iter().filter(|el| el.as_hosted().is_some()) {
                 let Some(h) = el.as_hosted() else { continue };

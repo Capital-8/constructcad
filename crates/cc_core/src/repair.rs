@@ -156,6 +156,17 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
+        // Dimension ends referencing missing elements or bad numbers become free.
+        let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
+        for e in self.elements.values_mut() {
+            let ElementKind::Dimension(d) = &mut e.kind else { continue };
+            for r in d.refs.iter_mut() {
+                if r.is_some_and(|r| !ids.contains(&r.element) || !r.anchor_is_finite()) {
+                    *r = None;
+                    repairs += 1;
+                }
+            }
+        }
         // Pins of missing elements go.
         let before = self.pinned.len();
         let elements = &self.elements;
