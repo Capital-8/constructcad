@@ -238,6 +238,14 @@ impl<'a> EditCtx<'a> {
         self.project.types.get_mut(&id)
     }
 
+    /// Remove a type (callers make sure no element uses it).
+    pub fn remove_type(&mut self, id: ElementTypeId) {
+        if self.project.types.contains_key(&id) {
+            self.touch_type(id);
+            self.project.types.remove(&id);
+        }
+    }
+
     fn touch_settings(&mut self) {
         if self.tx.settings.is_none() {
             self.tx.settings = Some((Some(Settings::of(self.project)), None));
@@ -416,6 +424,33 @@ impl Document {
         result
     }
 
+    /// Like [`Document::edit`], but the change is kept only if `f` succeeds
+    /// and `check` accepts the resulting project; otherwise the project is
+    /// restored and nothing is recorded (no undo step, redo kept).
+    pub fn try_edit<R, E>(
+        &mut self,
+        name: impl Into<String>,
+        f: impl FnOnce(&mut EditCtx) -> Result<R, E>,
+        check: impl FnOnce(&Project) -> Result<(), E>,
+    ) -> Result<R, E> {
+        let mut ctx =
+            EditCtx { project: &mut self.project, tx: Transaction { name: name.into(), ..Default::default() } };
+        let result = f(&mut ctx);
+        let tx = ctx.finish();
+        let outcome = result.and_then(|r| check(&self.project).map(|()| r));
+        if outcome.is_err() {
+            tx.apply(&mut self.project, false);
+            return outcome;
+        }
+        if !tx.is_empty() {
+            self.undo.push(tx);
+            self.last_merge_key = None;
+            self.redo.clear();
+            self.revision += 1;
+        }
+        outcome
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
@@ -456,6 +491,42 @@ mod tests {
     use super::*;
     use crate::{Category, ElementKind, Hosted, Wall};
     use glam::DVec2;
+
+    #[test]
+    fn rejected_edits_leave_no_trace() {
+        let mut doc = Document::new(Project::from_template());
+        let before = doc.project.clone();
+        let (depth, rev) = (doc.undo_depth(), doc.revision());
+        let failed: Result<(), &str> = doc.try_edit(
+            "t",
+            |e| {
+                e.info_mut().name = "changed".into();
+                Err("no")
+            },
+            |_| Ok(()),
+        );
+        assert!(failed.is_err());
+        let refused: Result<(), &str> = doc.try_edit(
+            "t",
+            |e| {
+                e.info_mut().name = "changed".into();
+                Ok(())
+            },
+            |p| if p.info.name == "changed" { Err("refused") } else { Ok(()) },
+        );
+        assert!(refused.is_err());
+        assert_eq!(doc.project, before);
+        assert_eq!((doc.undo_depth(), doc.revision()), (depth, rev));
+        let ok: Result<(), &str> = doc.try_edit(
+            "t",
+            |e| {
+                e.info_mut().name = "kept".into();
+                Ok(())
+            },
+            |_| Ok(()),
+        );
+        assert!(ok.is_ok() && doc.can_undo() && doc.project.info.name == "kept");
+    }
 
     fn add_wall(doc: &mut Document) -> ElementId {
         doc.edit("wall", |e| {

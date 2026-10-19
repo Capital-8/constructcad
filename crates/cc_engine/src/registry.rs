@@ -1,0 +1,172 @@
+use crate::commands::*;
+use crate::error::{EngineError, ErrorCode, Result};
+use crate::session::Session;
+use schemars::JsonSchema;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+
+/// What a command does to the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandKind {
+    /// Reads the model; changes nothing.
+    Query,
+    /// Changes the model (one undo step).
+    Edit,
+    /// Works with files or replaces the document.
+    File,
+}
+
+/// A command: typed parameters and what running it does. The type's doc
+/// comment is its description; its fields' doc comments describe the
+/// parameters in the generated schema.
+pub trait Command: DeserializeOwned + JsonSchema {
+    const NAME: &'static str;
+    const KIND: CommandKind;
+    fn run(self, session: &mut Session) -> Result<Value>;
+}
+
+/// A command as listed by the catalog.
+#[derive(Debug, Clone, Serialize)]
+pub struct CommandInfo {
+    pub name: &'static str,
+    pub kind: CommandKind,
+    pub description: String,
+    /// JSON Schema (draft 7, no references) of the parameters object.
+    pub input_schema: Value,
+}
+
+fn info<C: Command>() -> CommandInfo {
+    let generator = schemars::generate::SchemaSettings::draft07()
+        .with(|s| {
+            s.inline_subschemas = true;
+            s.meta_schema = None;
+        })
+        .into_generator();
+    let schema = generator.into_root_schema_for::<C>();
+    let mut input_schema = serde_json::to_value(schema).unwrap_or_else(|_| serde_json::json!({"type": "object"}));
+    let description = input_schema
+        .get("description")
+        .and_then(Value::as_str)
+        .map(|d| d.split_whitespace().collect::<Vec<_>>().join(" "))
+        .unwrap_or_default();
+    if let Some(o) = input_schema.as_object_mut() {
+        o.remove("title");
+        o.remove("description");
+        o.entry("properties").or_insert_with(|| serde_json::json!({}));
+    }
+    CommandInfo { name: C::NAME, kind: C::KIND, description, input_schema }
+}
+
+fn run<C: Command>(session: &mut Session, args: Value) -> Result<Value> {
+    let args = if args.is_null() { serde_json::json!({}) } else { args };
+    let command: C = serde_json::from_value(args).map_err(|e| EngineError::invalid(format!("{}: {e}", C::NAME)))?;
+    command.run(session)
+}
+
+macro_rules! registry {
+    ($($c:ty),* $(,)?) => {
+        /// Every command, in catalog order.
+        pub fn catalog() -> Vec<CommandInfo> {
+            vec![$(info::<$c>()),*]
+        }
+
+        pub(crate) fn dispatch(session: &mut Session, name: &str, args: Value) -> Result<Value> {
+            $(
+                if name == <$c as Command>::NAME {
+                    return run::<$c>(session, args);
+                }
+            )*
+            Err(EngineError::new(ErrorCode::UnknownCommand, format!("unknown command: {name}")))
+        }
+    };
+}
+
+/// The catalog entry of one command.
+pub fn describe(name: &str) -> Option<CommandInfo> {
+    catalog().into_iter().find(|c| c.name == name)
+}
+
+registry![
+    // Project and files
+    project::ProjectNew,
+    project::ProjectOpen,
+    project::ProjectSave,
+    project::ProjectInfoGet,
+    project::ProjectInfoSet,
+    project::Undo,
+    project::Redo,
+    project::UnitsGet,
+    project::UnitsSet,
+    project::LanguageSet,
+    io::IfcImport,
+    io::IfcExport,
+    io::SheetExport,
+    io::ScheduleExportCsv,
+    io::ComponentLoad,
+    io::ComponentSave,
+    // Queries
+    query::CategoriesList,
+    query::LevelsList,
+    query::TypesList,
+    query::TypeGet,
+    query::ElementsList,
+    query::ElementGet,
+    query::ViewsList,
+    query::ViewGet,
+    query::MaterialsList,
+    query::MaterialGet,
+    query::ScheduleTable,
+    // Creating elements
+    create::WallCreate,
+    create::DoorCreate,
+    create::WindowCreate,
+    create::FloorCreate,
+    create::CeilingCreate,
+    create::RoofCreate,
+    create::RoomCreate,
+    create::GridCreate,
+    create::ColumnCreate,
+    create::BeamCreate,
+    create::StairCreate,
+    create::RailingCreate,
+    create::ComponentPlace,
+    // Modifying elements
+    modify::ElementsDelete,
+    modify::ElementsMove,
+    modify::ElementsCopy,
+    modify::ElementsRotate,
+    modify::ElementsMirror,
+    modify::ElementsPin,
+    modify::ElementFlip,
+    modify::WallJoin,
+    modify::TrimCorner,
+    modify::TrimExtend,
+    modify::ElementSplit,
+    modify::ElementOffset,
+    modify::ElementAlign,
+    modify::ElementMoveEnd,
+    edit::ElementSet,
+    edit::ElementsSetType,
+    // Types, components, materials
+    types::TypeSet,
+    types::TypeDuplicate,
+    types::TypeDelete,
+    types::ComponentCreate,
+    materials::MaterialCreate,
+    materials::MaterialDuplicate,
+    materials::MaterialRename,
+    materials::MaterialSet,
+    materials::MaterialDelete,
+    // Levels and views
+    levels::LevelCreate,
+    levels::LevelSet,
+    levels::LevelDelete,
+    views::ViewCreate,
+    views::ViewSet,
+    views::ViewDuplicate,
+    views::ViewDelete,
+    views::SheetPlaceView,
+    views::SheetRemoveViewport,
+];

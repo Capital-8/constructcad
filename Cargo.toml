@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/cc_core", "crates/cc_geom", "crates/cc_views", "crates/cc_render", "crates/cc_ifc", "crates/cc_app"]
+members = ["crates/cc_core", "crates/cc_geom", "crates/cc_views", "crates/cc_render", "crates/cc_ifc", "crates/cc_engine", "crates/cc_cli", "crates/cc_app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,6 +15,7 @@ cc_geom = { path = "crates/cc_geom" }
 cc_views = { path = "crates/cc_views" }
 cc_render = { path = "crates/cc_render" }
 cc_ifc = { path = "crates/cc_ifc" }
+cc_engine = { path = "crates/cc_engine" }
 
 eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "default_fonts", "persistence", "accesskit", "x11", "wayland"] }
 egui = "0.36.2"
@@ -29,6 +30,8 @@ rfd = "0.17.2"
 png = "0.18.1"
 bytemuck = { version = "1.25.2", features = ["derive"] }
 thiserror = "2"
+serde_json = "1"
+schemars = "1"
 log = "0.4"
 sys-locale = "0.3.2"
 env_logger = "0.11"

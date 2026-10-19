@@ -473,6 +473,7 @@ msg-rotated = Selection rotated (Space: components and columns turn 90°, doors 
 tx-change-type = Change Type
 tx-modify-type = Modify Type
 tx-duplicate-type = Duplicate Type
+tx-delete-type = Delete Type
 tx-modify-view = Modify View
 tx-new-view = New View
 tx-new-sheet = New Sheet

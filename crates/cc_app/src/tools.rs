@@ -5,9 +5,11 @@ use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
 use cc_core::{
-    Category, Ceiling, DimensionKind, Element, ElementId, ElementKind, ElementTypeId, Floor, Hosted, LevelId, Project,
-    Roof, RoofShape, View, ViewId, ViewKind, Wall,
+    Category, Ceiling, DimensionKind, ElementId, ElementKind, ElementTypeId, Floor, Hosted, LevelId, Project, Roof,
+    RoofShape, View, ViewId, ViewKind, Wall,
 };
+pub use cc_engine::walls_loop;
+use cc_engine::{default_roof_base, default_top, next_number};
 use cc_geom::{ModelGeometry, polygon};
 use cc_views::{Drawing2D, format};
 use egui::{Color32, Key, Painter, Pos2, Response, Stroke, Ui};
@@ -724,14 +726,6 @@ pub fn handle(
     }
 }
 
-/// Top constraint for new columns and stairs: the level above, if any.
-fn default_top(project: &Project, level: LevelId) -> cc_core::WallTop {
-    match project.level_above(level) {
-        Some(above) => cc_core::WallTop::Level { level: above.id, offset: 0.0 },
-        None => cc_core::WallTop::Unconnected,
-    }
-}
-
 /// Click to place a column (snaps to wall ends and grid crossings through the usual snaps).
 fn column_tool(
     ui: &Ui,
@@ -964,11 +958,6 @@ pub fn finish_railing(state: &mut AppState, level: LevelId, type_id: ElementType
         let railing = cc_core::Railing { path, base_offset: 0.0 };
         state.create_element(t!("tx-create-railing"), level, type_id, ElementKind::Railing(railing));
     }
-}
-
-/// Next free number among `existing` names (1 when none is numeric).
-fn next_number<'a>(existing: impl Iterator<Item = &'a str>) -> String {
-    (existing.filter_map(|s| s.trim().parse::<u32>().ok()).max().unwrap_or(0) + 1).to_string()
 }
 
 /// Click inside walls to create a room; the enclosed region under the cursor is previewed.
@@ -1541,16 +1530,6 @@ fn sketch_tool(
     }
 }
 
-/// Default roof base: the top of the tallest wall on the level.
-fn default_roof_base(project: &Project, level: LevelId) -> f64 {
-    project
-        .walls()
-        .filter(|(e, _)| e.level == level)
-        .map(|(e, w)| project.wall_top_z(e, w) - project.level_elevation(level))
-        .fold(None, |m: Option<f64>, h| Some(m.map_or(h, |m| m.max(h))))
-        .unwrap_or(3.0)
-}
-
 pub fn finish_sketch(
     state: &mut AppState,
     level: LevelId,
@@ -1575,37 +1554,6 @@ pub fn finish_sketch(
     };
     state.create_element(name, level, type_id, kind);
     state.interaction.points.clear();
-}
-
-/// Closed loop following the walls of `level`, offset to the exterior faces
-/// (`outward > 0`) or interior faces (`outward < 0`).
-pub fn walls_loop(project: &Project, level: LevelId, outward: f64) -> Option<Vec<DVec2>> {
-    let walls: Vec<(&Element, &Wall)> = project.walls().filter(|(e, _)| e.level == level).collect();
-    const TOL: f64 = 0.01;
-    for start in 0..walls.len() {
-        let mut used = vec![false; walls.len()];
-        used[start] = true;
-        let (first, w0) = (walls[start].1.start, walls[start].1.end);
-        let mut pts = vec![first, w0];
-        let mut cur = w0;
-        let mut half = project.thickness_of(walls[start].0) * 0.5;
-        loop {
-            if cur.distance(first) < TOL && pts.len() > 3 {
-                pts.pop();
-                let pts = polygon::ccw(&pts);
-                return Some(polygon::offset(&pts, half * outward));
-            }
-            let next = (0..walls.len())
-                .find(|&i| !used[i] && (walls[i].1.start.distance(cur) < TOL || walls[i].1.end.distance(cur) < TOL));
-            let Some(i) = next else { break };
-            used[i] = true;
-            let w = walls[i].1;
-            cur = if w.start.distance(cur) < TOL { w.end } else { w.start };
-            half = half.max(project.thickness_of(walls[i].0) * 0.5);
-            pts.push(cur);
-        }
-    }
-    None
 }
 
 fn section_tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, level: Option<LevelId>, xf: &Xf) {

@@ -105,6 +105,31 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 
+## Automação (linha de comando e MCP)
+
+Tudo o que o ConstructCAD faz deve poder ser acionado sem a interface. O motor (`cc_engine`) expõe as operações como comandos nomeados com parâmetros JSON e um esquema JSON cada; a ferramenta `ccad` os executa pela linha de comando, por scripts ou, para agentes de IA, como servidor [MCP](https://modelcontextprotocol.io/). O mesmo catálogo atende os três.
+
+```sh
+ccad commands                                   # lista os comandos
+ccad schema wall_create                         # parâmetros de um comando
+ccad -p casa.ccad --save run wall_create start=[0,0] end=[5,0] height=2.8
+ccad -p casa.ccad run elements_list category=door
+ccad -p modelo.ifc --save-as modelo.ccad run project_info   # importa um IFC
+ccad -p casa.ccad script obra.jsonl             # um {"command": ..., "args": {...}} por linha
+```
+
+Comprimentos em metros, ângulos em graus, pontos `[x, y]`; níveis, tipos, vistas e materiais podem ser indicados por id ou por nome. `element_get`, `type_get` e `view_get` mostram os `params` que `element_set`, `type_set` e `view_set` alteram. Cada edição é um passo de desfazer, e uma edição que deixaria o modelo inválido é recusada.
+
+Para usar num cliente MCP (Claude Desktop, Claude Code, IDEs), registre `ccad mcp`:
+
+```json
+{ "mcpServers": { "constructcad": { "command": "ccad", "args": ["mcp"] } } }
+```
+
+ou, no Claude Code, `claude mcp add constructcad -- ccad mcp`. Cada sessão do servidor tem um projeto aberto (`project_open`, `project_new`, `ifc_import`, `project_save`).
+
+As ferramentas de desenho, os painéis de propriedades e os diálogos do aplicativo estão sendo levados para os mesmos comandos; as cotas (criar e editar o valor) ainda não estão disponíveis como comandos.
+
 ## Arquitetura
 
 ```
@@ -114,6 +139,8 @@ crates/
   cc_views   geração de desenhos 2D (planta, forro, elevação, corte, axonometria, legenda), tabelas, montagem das folhas e exportação PDF/SVG
   cc_render  renderizador 3D offscreen em wgpu
   cc_ifc     exportação IFC4 e importação IFC2X3/IFC4: escritor e leitor STEP, mapeamento do modelo
+  cc_engine  cada operação como comando nomeado com esquema JSON, numa sessão sem GUI
+  cc_cli     `ccad`: linha de comando, scripts e servidor MCP sobre o motor
   cc_app     aplicativo eframe/egui: ribbon, navegador, propriedades, ferramentas, folhas
 assets/i18n  traduções (pt-BR, en); textos de interface nunca ficam fixos no código
 ```
@@ -140,7 +167,7 @@ python scripts/validate_ifc.py casa_simples.ifc
 
 - Componentes em série, aninhados e hospedados (em paredes e forros).
 - Importação nativa (editável) de escadas e guarda-corpos.
-- Arquitetura em que tudo é um comando (scripts e macros).
+- Ferramentas e diálogos do aplicativo sobre os comandos do motor; cotas como comandos; macros gravadas a partir da GUI.
 - Texturas de materiais.
 
 ## Independência

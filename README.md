@@ -109,6 +109,31 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 
+## Automation (command line and MCP)
+
+Everything ConstructCAD does is meant to be reachable without the interface. The engine (`cc_engine`) exposes the operations as named commands with JSON parameters and a JSON Schema each; the `ccad` tool runs them from the command line, from scripts, or for AI agents as an [MCP](https://modelcontextprotocol.io/) server. The same catalog serves all three.
+
+```sh
+ccad commands                                   # list the commands
+ccad schema wall_create                         # parameters of one command
+ccad -p house.ccad --save run wall_create start=[0,0] end=[5,0] height=2.8
+ccad -p house.ccad run elements_list category=door
+ccad -p model.ifc --save-as model.ccad run project_info     # import an IFC file
+ccad -p house.ccad script build.jsonl           # one {"command": ..., "args": {...}} per line
+```
+
+Lengths are in meters, angles in degrees, points `[x, y]`; levels, types, views and materials can be named by id or by name. `element_get`, `type_get` and `view_get` show the `params` that `element_set`, `type_set` and `view_set` change. Each edit is one undo step, and an edit that would leave the model invalid is refused.
+
+To use it from an MCP client (Claude Desktop, Claude Code, IDEs), register `ccad mcp`:
+
+```json
+{ "mcpServers": { "constructcad": { "command": "ccad", "args": ["mcp"] } } }
+```
+
+or, in Claude Code, `claude mcp add constructcad -- ccad mcp`. One project is open per server session (`project_open`, `project_new`, `ifc_import`, `project_save`).
+
+The drawing tools, property panels and dialogs of the desktop app are being moved onto the same commands; dimensions (placing and editing their values) are not available as commands yet.
+
 ## Architecture
 
 ```
@@ -118,6 +143,8 @@ crates/
   cc_views   2D drawing generation (plan, ceiling, elevation, section, axonometric, legend), schedules, sheet composition and PDF/SVG export
   cc_render  offscreen wgpu 3D renderer
   cc_ifc     IFC4 export and IFC2X3/IFC4 import: STEP writer and parser, model mapping
+  cc_engine  every operation as a named command with a JSON Schema, on a session without GUI
+  cc_cli     `ccad`: command line, scripts and MCP server over the engine
   cc_app     eframe/egui application: ribbon, browser, properties, tools, sheets
 assets/i18n  translations (pt-BR, en); interface text is never hard-coded
 ```
@@ -146,7 +173,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and project rules.
 
 - Component arrays, nested components and hosted components (on walls and ceilings).
 - Native (editable) import of stairs and railings.
-- Everything-is-a-command architecture (scripting and macros).
+- The desktop app's tools and dialogs running on the engine commands; dimensions as commands; macros recorded from the GUI.
 - Material textures.
 
 ## Independence

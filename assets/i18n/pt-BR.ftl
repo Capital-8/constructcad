@@ -473,6 +473,7 @@ msg-rotated = Seleção girada (Espaço: componentes e pilares giram 90°, porta
 tx-change-type = Alterar tipo
 tx-modify-type = Modificar tipo
 tx-duplicate-type = Duplicar tipo
+tx-delete-type = Excluir tipo
 tx-modify-view = Modificar vista
 tx-new-view = Nova vista
 tx-new-sheet = Nova folha

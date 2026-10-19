@@ -38,7 +38,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - run: cargo build --release --locked -p cc_app --target ${{ matrix.target }}
+      - run: cargo build --release --locked -p cc_app -p cc_cli --target ${{ matrix.target }}
       - name: Package
         shell: bash
         run: |
@@ -47,10 +47,10 @@ jobs:
           cp README.md README.pt-BR.md LICENSE CHANGELOG.md "dist/$name/"
           cp examples/casa_simples.ccad "dist/$name/"
           if [ "${{ matrix.archive }}" = zip ]; then
-            cp "target/${{ matrix.target }}/release/constructcad.exe" "dist/$name/"
+            cp "target/${{ matrix.target }}/release/constructcad.exe" "target/${{ matrix.target }}/release/ccad.exe" "dist/$name/"
             (cd dist && 7z a "$name.zip" "$name" > /dev/null)
           else
-            cp "target/${{ matrix.target }}/release/constructcad" "dist/$name/"
+            cp "target/${{ matrix.target }}/release/constructcad" "target/${{ matrix.target }}/release/ccad" "dist/$name/"
             tar -C dist -czf "dist/$name.tar.gz" "$name"
           fi
       - uses: actions/upload-artifact@v7

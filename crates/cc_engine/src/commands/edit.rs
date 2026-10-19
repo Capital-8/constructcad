@@ -1,0 +1,108 @@
+//! Changing element parameters (the Properties panel).
+
+use super::{created, edit, ids_json, patch_variant};
+use crate::error::{EngineError, Result};
+use crate::refs::{self, Ref};
+use crate::registry::{Command, CommandKind};
+use crate::session::Session;
+use crate::t;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+/// Change an element: its level (doors and windows of a wall follow it),
+/// type (of the same category), mark, comments, and any of its `params`
+/// as `element_get` shows them (merged: only the fields given change, e.g.
+/// `{"height": 2.8}` for a wall or `{"shape": {"Gable": {"slope": 0.5,
+/// "ridge_deg": 0}}}` for a roof). The edit is refused if it would leave the
+/// model invalid.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ElementSet {
+    pub id: u64,
+    #[serde(default)]
+    pub level: Option<Ref>,
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    #[serde(default)]
+    pub mark: Option<String>,
+    #[serde(default)]
+    pub comments: Option<String>,
+    /// Fields of the element's parameters to change.
+    #[serde(default)]
+    pub params: Option<Value>,
+}
+
+impl Command for ElementSet {
+    const NAME: &'static str = "element_set";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let id = refs::element(p, self.id)?;
+        let element = p.element(id).ok_or_else(|| EngineError::not_found("element"))?.clone();
+        let level = self.level.as_ref().map(|l| refs::level(p, l)).transpose()?;
+        let type_id = self.type_ref.as_ref().map(|t| refs::type_of(p, element.category(), Some(t))).transpose()?;
+        let kind = self.params.as_ref().map(|patch| patch_variant(&element.kind, patch)).transpose()?;
+        if kind.as_ref().is_some_and(|k| std::mem::discriminant(k) != std::mem::discriminant(&element.kind)) {
+            return Err(EngineError::invalid("params cannot change the element's category"));
+        }
+        let hosted: Vec<_> = p.hosted_by(id).map(|h| h.id).collect();
+        edit(s, t!("tx-modify"), |e| {
+            if let Some(level) = level {
+                for h in hosted.iter().copied().chain([id]) {
+                    if let Some(x) = e.element_mut(h) {
+                        x.level = level;
+                    }
+                }
+            }
+            let x = e.element_mut(id).ok_or_else(|| EngineError::not_found("element"))?;
+            if let Some(t) = type_id {
+                x.type_id = t;
+            }
+            if let Some(m) = self.mark {
+                x.mark = m;
+            }
+            if let Some(c) = self.comments {
+                x.comments = c;
+            }
+            if let Some(k) = kind {
+                x.kind = k;
+            }
+            Ok(())
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// Give elements a type (all must be of the type's category), like Match Type.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ElementsSetType {
+    pub ids: Vec<u64>,
+    /// Type id or name.
+    #[serde(rename = "type")]
+    pub type_ref: Ref,
+}
+
+impl Command for ElementsSetType {
+    const NAME: &'static str = "elements_set_type";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let ids = refs::elements(p, &self.ids)?;
+        let type_id = refs::element_type(p, &self.type_ref)?;
+        let category = p.element_type(type_id).map(|t| t.category());
+        if ids.iter().any(|id| p.element(*id).map(|e| e.category()) != category) {
+            return Err(EngineError::invalid("every element must be of the type's category"));
+        }
+        edit(s, t!("tx-change-type"), |e| {
+            for id in &ids {
+                if let Some(x) = e.element_mut(*id) {
+                    x.type_id = type_id;
+                }
+            }
+            Ok(())
+        })?;
+        Ok(json!({ "changed": ids_json(&ids) }))
+    }
+}

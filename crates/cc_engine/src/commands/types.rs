@@ -1,0 +1,233 @@
+//! Types and components: change, duplicate, delete, create components.
+
+use super::{edit, patch_value, patch_variant};
+use crate::error::{EngineError, Result};
+use crate::refs::{self, Ref};
+use crate::registry::{Command, CommandKind};
+use crate::session::Session;
+use crate::t;
+use cc_core::{ComponentDef, ElementType, ElementTypeId, TypeData, expr};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+/// Parameter names valid and unique, at least one piece, every piece resolves.
+fn validate(def: &ComponentDef) -> Result<()> {
+    for (i, p) in def.params.iter().enumerate() {
+        if !expr::is_valid_name(&p.name) {
+            return Err(EngineError::invalid(format!("invalid parameter name '{}'", p.name)));
+        }
+        if def.params[..i].iter().any(|q| q.name == p.name) {
+            return Err(EngineError::invalid(format!("parameter '{}' is repeated", p.name)));
+        }
+    }
+    if def.items.is_empty() {
+        return Err(EngineError::invalid("the component has no pieces"));
+    }
+    let (_, errors) = def.resolve(&Default::default());
+    if let Some((i, e)) = errors.first() {
+        let piece = def.items.get(*i).map_or(String::new(), |it| it.name.clone());
+        return Err(EngineError::invalid(format!("piece '{piece}': {e}")));
+    }
+    Ok(())
+}
+
+fn type_out(s: &Session, id: ElementTypeId) -> Value {
+    super::query::type_json(s, id).unwrap_or_else(|| json!({ "id": id.0 }))
+}
+
+/// Change a type: its name, its parameters (`params`, merged into what
+/// `type_get` shows: layers, sizes, materials, a component's `def`…) and its
+/// identity data (`info`: type mark, description, manufacturer, cost…).
+/// Changing a component's definition updates every type of that component,
+/// each keeping its own parameter values.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TypeSet {
+    #[serde(rename = "type")]
+    pub type_ref: Ref,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub params: Option<Value>,
+    #[serde(default)]
+    pub info: Option<Value>,
+}
+
+impl Command for TypeSet {
+    const NAME: &'static str = "type_set";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let id = refs::element_type(p, &self.type_ref)?;
+        let ty = p.element_type(id).ok_or_else(|| EngineError::not_found("type"))?.clone();
+        if let Some(name) = &self.name
+            && (name.trim().is_empty() || p.types_of(ty.category()).any(|t| t.id != id && t.name.trim() == name.trim()))
+        {
+            return Err(EngineError::invalid(format!("the name '{name}' is empty or already used")));
+        }
+        let data = self.params.as_ref().map(|patch| patch_variant(&ty.data, patch)).transpose()?;
+        if data.as_ref().is_some_and(|d| std::mem::discriminant(d) != std::mem::discriminant(&ty.data)) {
+            return Err(EngineError::invalid("params cannot change the type's category"));
+        }
+        let info = self.info.as_ref().map(|patch| patch_value(&ty.info, patch)).transpose()?;
+        // A new component definition goes to every type of the component.
+        let mut siblings = Vec::new();
+        if let (Some(TypeData::Component { def: new_def, .. }), TypeData::Component { component, def: old_def }) =
+            (&data, &ty.data)
+            && new_def != old_def
+        {
+            validate(new_def)?;
+            siblings = p
+                .types
+                .values()
+                .filter(|t| t.id != id && matches!(&t.data, TypeData::Component { component: c, .. } if c == component))
+                .map(|t| t.id)
+                .collect();
+        }
+        edit(s, t!("tx-modify-type"), |e| {
+            let new_def = match &data {
+                Some(TypeData::Component { def, .. }) => Some(def.clone()),
+                _ => None,
+            };
+            let new_component = match &data {
+                Some(TypeData::Component { component, .. }) => Some(component.clone()),
+                _ => None,
+            };
+            for sid in &siblings {
+                let Some(TypeData::Component { component, def }) = e.type_mut(*sid).map(|t| &mut t.data) else {
+                    continue;
+                };
+                let Some(mut d) = new_def.clone() else { continue };
+                for param in &mut d.params {
+                    if let Some(v) = def.param(&param.name).map(|q| q.value) {
+                        param.value = v;
+                    }
+                }
+                *def = d;
+                if let Some(c) = &new_component {
+                    *component = c.clone();
+                }
+            }
+            let t = e.type_mut(id).ok_or_else(|| EngineError::not_found("type"))?;
+            if let Some(n) = self.name {
+                t.name = n.trim().to_string();
+            }
+            if let Some(d) = data {
+                t.data = d;
+            }
+            if let Some(i) = info {
+                t.info = i;
+            }
+            Ok(())
+        })?;
+        Ok(type_out(s, id))
+    }
+}
+
+/// Copy a type under a new name (default "<name> (copy)"); the given elements of the type switch to the copy.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TypeDuplicate {
+    #[serde(rename = "type")]
+    pub type_ref: Ref,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Elements of the type to switch to the copy.
+    #[serde(default)]
+    pub elements: Vec<u64>,
+}
+
+impl Command for TypeDuplicate {
+    const NAME: &'static str = "type_duplicate";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let tid = refs::element_type(p, &self.type_ref)?;
+        let ty = p.element_type(tid).ok_or_else(|| EngineError::not_found("type"))?.clone();
+        let elements = self.elements.iter().map(|e| refs::element(p, *e)).collect::<Result<Vec<_>>>()?;
+        let name = self.name.unwrap_or_else(|| t!("copy-of", "name" => ty.name));
+        let new_id = edit(s, t!("tx-duplicate-type"), |e| {
+            let id = ElementTypeId(e.alloc_id());
+            e.add_type(ElementType { id, name, data: ty.data.clone(), info: ty.info.clone(), uid: Default::default() });
+            for el in elements {
+                if let Some(x) = e.element_mut(el).filter(|x| x.type_id == tid) {
+                    x.type_id = id;
+                }
+            }
+            Ok(id)
+        })?;
+        Ok(type_out(s, new_id))
+    }
+}
+
+/// Delete a type that no element uses (the last type of a category is kept).
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TypeDelete {
+    #[serde(rename = "type")]
+    pub type_ref: Ref,
+}
+
+impl Command for TypeDelete {
+    const NAME: &'static str = "type_delete";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let id = refs::element_type(p, &self.type_ref)?;
+        let category = p.element_type(id).map(|t| t.category()).ok_or_else(|| EngineError::not_found("type"))?;
+        if p.elements.values().any(|e| e.type_id == id) {
+            return Err(EngineError::rejected("elements use this type"));
+        }
+        if p.types_of(category).count() <= 1 {
+            return Err(EngineError::rejected("the last type of a category cannot be deleted"));
+        }
+        let legends_use =
+            p.views.values().any(|v| matches!(&v.kind, cc_core::ViewKind::Legend { types } if types.contains(&id)));
+        edit(s, t!("tx-delete-type"), |e| {
+            if legends_use {
+                let views: Vec<_> = e.project().views.keys().copied().collect();
+                for v in views {
+                    if let Some(cc_core::ViewKind::Legend { types }) = e.view_mut(v).map(|v| &mut v.kind) {
+                        types.retain(|t| *t != id);
+                    }
+                }
+            }
+            e.remove_type(id);
+            Ok(())
+        })?;
+        Ok(json!({ "deleted": id.0 }))
+    }
+}
+
+/// Create a component type: `def` holds its parameters and pieces (boxes,
+/// cylinders, extrusions whose fields are expressions over the parameters),
+/// shaped like a component type's `params.def` in `type_get`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentCreate {
+    /// Name of the component and of its first type.
+    pub name: String,
+    pub def: Value,
+}
+
+impl Command for ComponentCreate {
+    const NAME: &'static str = "component_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let name = self.name.trim().to_string();
+        if name.is_empty() {
+            return Err(EngineError::invalid("the component needs a name"));
+        }
+        let def: ComponentDef =
+            serde_json::from_value(self.def).map_err(|e| EngineError::invalid(format!("invalid def: {e}")))?;
+        validate(&def)?;
+        let id = edit(s, t!("tx-new-component"), |e| {
+            let id = ElementTypeId(e.alloc_id());
+            let data = TypeData::Component { component: name.clone(), def };
+            e.add_type(ElementType { id, name: name.clone(), data, info: Default::default(), uid: Default::default() });
+            Ok(id)
+        })?;
+        Ok(type_out(s, id))
+    }
+}
