@@ -1168,6 +1168,11 @@ pub(crate) fn line_at(drawing: &Drawing2D, p: DVec2, tol: f64) -> Option<(DVec2,
         .map(|(_, l)| l)
 }
 
+/// Whether `p` lies on the segment `a`-`b` within `tol`.
+pub(crate) fn point_on_segment(a: DVec2, b: DVec2, p: DVec2, tol: f64) -> bool {
+    closest_on_segment(a, b, p).distance(p) <= tol
+}
+
 fn closest_on_segment(a: DVec2, b: DVec2, p: DVec2) -> DVec2 {
     let ab = b - a;
     let t = if ab.length_squared() > 1e-18 { ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };

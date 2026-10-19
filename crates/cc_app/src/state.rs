@@ -114,6 +114,8 @@ pub struct AppState {
     pub clipboard: crate::clipboard::Clipboard,
     /// Command of the views' zoom button (the last one chosen from its menu).
     pub zoom_default: crate::canvas::ZoomCommand,
+    /// Value field open over a view (dimension values).
+    pub value_edit: Option<crate::dim_edit::ValueEdit>,
     /// Selection seen last frame (see [`AppState::follow_selection`]).
     seen_selection: BTreeSet<ElementId>,
 }
@@ -158,6 +160,7 @@ impl AppState {
             clipboard: Default::default(),
             zoom_default: Default::default(),
             seen_selection: Default::default(),
+            value_edit: None,
         }
     }
 

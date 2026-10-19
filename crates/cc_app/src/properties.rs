@@ -78,6 +78,32 @@ fn level_row(ui: &mut Ui, state: &mut AppState, el: &Element) {
     }
 }
 
+/// The value of a dimension: typing a new one (Enter) moves what it measures.
+fn dimension_value_row(ui: &mut Ui, state: &mut AppState, id: ElementId, d: &cc_core::Dimension) {
+    let current = match d.kind {
+        cc_core::DimensionKind::Angular { .. } => format::angle(d.value().to_degrees()),
+        cc_core::DimensionKind::Radial | cc_core::DimensionKind::Diameter => {
+            readonly_row(ui, &t!("prop-value"), format::length(d.value()));
+            return;
+        }
+        _ => format::length(d.value()),
+    };
+    let key = ui.make_persistent_id(("dim-value", id.0));
+    let mut text = ui.data(|m| m.get_temp::<String>(key)).unwrap_or(current);
+    let r = row(ui, &t!("prop-value"), |ui| ui.add(egui::TextEdit::singleline(&mut text)));
+    if r.has_focus() {
+        ui.data_mut(|m| m.insert_temp(key, text.clone()));
+    } else {
+        ui.data_mut(|m| m.remove::<String>(key));
+    }
+    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        let digits = text.trim_end_matches(|c: char| !c.is_ascii_digit()).to_string();
+        if let Err(message) = crate::dim_edit::apply_text(state, &crate::dim_edit::Target::Dimension(id), &digits) {
+            state.message = message;
+        }
+    }
+}
+
 fn text_row(ui: &mut Ui, label: &str, value: String) -> (Response, String) {
     let mut text = value;
     let r = row(ui, label, |ui| ui.text_edit_singleline(&mut text));
@@ -346,7 +372,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         }
         ElementKind::Dimension(d) => {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-value"), format::length(d.length()));
+                dimension_value_row(ui, state, id, d);
                 let view = state.project().view(d.view).map(|v| v.name.clone()).unwrap_or_default();
                 readonly_row(ui, &t!("prop-view"), view);
                 length_row(ui, state, &t!("prop-dimension-offset"), id, "dim-offset", d.offset, |e, v| {
