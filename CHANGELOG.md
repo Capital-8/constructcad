@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - Text notes (*Annotate → Text*, TT) in any 2D view: single-line text, or multiline text word-wrapped to a width in paper millimeters; rotation; text types with their size and default leader symbol. Leaders are drawn from the text with one segment or two (an elbow), ending in an arrow, open arrow, triangle, dot, circle, square, filled square, tick or nothing; *Add Leader* adds more to a selected text. Double-click a text to edit it; the properties edit its text, width, rotation and each leader's symbol. Engine commands `text_create`, `text_add_leader` and `text_remove_leader`; texts move, copy and rotate with the other elements and stay readable when mirrored.
@@ -103,5 +105,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/francisreboucas/constructcad/releases/tag/v0.1.0
