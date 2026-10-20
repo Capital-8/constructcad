@@ -76,6 +76,8 @@ pub struct AppState {
     /// The ribbon shows only its tabs; clicking one shows its panel over the views (`ribbon_peek`).
     pub ribbon_collapsed: bool,
     pub ribbon_peek: bool,
+    /// The open command palette.
+    pub palette: Option<crate::palette::Palette>,
     /// Browser inline rename in progress.
     pub rename: Option<(ViewId, String)>,
     /// Selected viewport on a sheet: (sheet, viewport index).
@@ -142,6 +144,7 @@ impl AppState {
             ribbon_tab: RibbonTab::default(),
             ribbon_collapsed: false,
             ribbon_peek: false,
+            palette: None,
             rename: None,
             sheet_selection: None,
             message: String::new(),

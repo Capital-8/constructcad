@@ -20,6 +20,7 @@ mod icons;
 mod material_browser;
 mod modify;
 mod paint;
+mod palette;
 mod properties;
 mod ribbon;
 mod schedule_ui;

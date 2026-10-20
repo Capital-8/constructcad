@@ -119,6 +119,12 @@ Scripts não têm variáveis: um passo não usa o id criado por um passo anterio
 - Um valor arrastado nas propriedades é gravado uma vez, com o valor final; alterações feitas num diálogo cancelado não são gravadas.
 - Os passos gravados se referem a elementos pelo id. No projeto em que foi gravada (ou numa cópia dele como estava no início da gravação), a macro reproduz as mesmas alterações; em outro projeto, passos que indicam elementos pelo id podem falhar ou atingir outros elementos.
 
+## Paleta de comandos no aplicativo
+
+**Ctrl+Shift+P** (ou a lupa no fim das abas do ribbon) abre a paleta de comandos. Ela encontra comandos da interface, vistas para abrir ou criar e os comandos do motor pelo nome, pela descrição ou pelo atalho, sem diferenciar acentos nem maiúsculas. Comandos do motor abrem um formulário com os argumentos em JSON, já com os campos obrigatórios; **Executar** (Ctrl+Enter) os roda no projeto aberto, como um passo de desfazer, e mostra o resultado. Os comandos de arquivo (`project_open`, `ifc_export`…) ficam na aba *Arquivo*.
+
+A dica de cada botão do ribbon mostra o comando do motor que ele executa, para que o que você faz à mão possa virar um script.
+
 ## Servidor MCP
 
 `ccad mcp` é um servidor [Model Context Protocol](https://modelcontextprotocol.io/) na entrada/saída padrão. Cada comando é uma ferramenta com o mesmo nome, descrição e esquema de entrada; as consultas são marcadas como somente leitura. O servidor mantém uma sessão, então um agente abre ou cria um projeto, trabalha nele ao longo de várias chamadas e o salva.

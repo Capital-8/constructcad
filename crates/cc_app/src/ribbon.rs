@@ -398,6 +398,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             }
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            command_icon(ui, state, UiCommand::CommandPalette);
             let command = UiCommand::ToggleRibbon;
             let icon = if collapsed { Icon::ChevronDown } else { Icon::ChevronUp };
             let r = icon_button(ui, (icon, None), true);

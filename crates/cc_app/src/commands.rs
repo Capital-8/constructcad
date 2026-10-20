@@ -70,6 +70,7 @@ pub enum UiCommand {
     MacroRecord,
     MacroRun,
     ToggleRibbon,
+    CommandPalette,
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
@@ -150,6 +151,7 @@ impl UiCommand {
             MacroRecord,
             MacroRun,
             ToggleRibbon,
+            CommandPalette,
         ]);
         all
     }
@@ -212,6 +214,7 @@ impl UiCommand {
             MacroRecord => Icon::MacroRecord,
             MacroRun => Icon::MacroRun,
             ToggleRibbon => Icon::ChevronUp,
+            CommandPalette => Icon::Search,
         }
     }
 
@@ -289,6 +292,7 @@ impl UiCommand {
             MacroRun => t!("action-macro-run"),
             ToggleRibbon if state.ribbon_collapsed => t!("action-ribbon-expand"),
             ToggleRibbon => t!("action-ribbon-collapse"),
+            CommandPalette => t!("action-command-palette"),
         }
     }
 
@@ -370,6 +374,7 @@ impl UiCommand {
             MacroRecord => t!("hint-macro-record"),
             MacroRun => t!("hint-macro-run"),
             ToggleRibbon => t!("cmd-desc-toggle-ribbon"),
+            CommandPalette => t!("cmd-desc-command-palette"),
         }
     }
 
@@ -421,6 +426,7 @@ impl UiCommand {
             Section => "CT",
             ZoomFit => "ZE",
             ToggleRibbon => "Ctrl+F1",
+            CommandPalette => "Ctrl+Shift+P",
             _ => return None,
         })
     }
@@ -484,7 +490,7 @@ impl UiCommand {
         use UiCommand::*;
         let project_open = state.project_open && !state.show_home;
         match self {
-            Home | New | Open | ImportIfc | About | ToggleRibbon => return None,
+            Home | New | Open | ImportIfc | About | ToggleRibbon | CommandPalette => return None,
             _ if !project_open => return Some(t!("why-no-project")),
             _ => {}
         }
@@ -703,6 +709,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         MacroRecord => actions::toggle_macro_recording(state),
         MacroRun => actions::run_macro(state),
         ToggleRibbon => state.ribbon_collapsed = !state.ribbon_collapsed,
+        CommandPalette => crate::palette::toggle(state),
     }
 }
 

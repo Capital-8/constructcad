@@ -119,6 +119,12 @@ Scripts have no variables: a step cannot use an id created by an earlier one. Co
 - A value dragged in the properties is recorded once, with its final value; changes made in a dialog that you cancel are not recorded.
 - Recorded steps refer to elements by id. Played on the project it was recorded on (or on a copy of it as it was when recording started) a macro reproduces the same changes; on another project, steps that name elements by id may fail or reach other elements.
 
+## Command palette in the app
+
+**Ctrl+Shift+P** (or the magnifier at the end of the ribbon tabs) opens the command palette. It finds interface commands, views to open or create and the engine's commands by name, description or shortcut, without regard to accents or case. Engine commands open a form with their JSON arguments, prefilled with the required fields; **Run** (Ctrl+Enter) executes them in the open project, as one undo step, and shows the result. File commands (`project_open`, `ifc_export`…) are left to the *File* tab.
+
+Every ribbon button's tooltip names the engine command it runs, so what you do by hand can be written as a script.
+
 ## MCP server
 
 `ccad mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) server on standard input/output. Every command is a tool with the same name, description and input schema; queries are marked read-only. The server keeps one session, so an agent opens or creates a project, works on it over many calls and saves it.

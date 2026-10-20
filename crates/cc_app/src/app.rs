@@ -152,6 +152,9 @@ impl ConstructApp {
         if open {
             actions::guarded(state, PendingAction::Open);
         }
+        if ctx.input_mut(|i| cmd_shift(i, Key::P)) {
+            crate::palette::toggle(state);
+        }
         if ctx.input_mut(|i| cmd(i, Key::F1)) {
             crate::commands::run(state, ctx, crate::commands::UiCommand::ToggleRibbon);
         }
@@ -349,6 +352,7 @@ impl eframe::App for ConstructApp {
         if self.state.show_home {
             crate::home::show(ui, &mut self.state);
             dialogs::show(&ctx, &mut self.state);
+            crate::palette::show(&ctx, &mut self.state);
             return;
         }
         let state = &mut self.state;
@@ -390,6 +394,7 @@ impl eframe::App for ConstructApp {
                 .show_inside(ui, &mut Tabs { state: &mut self.state, render_state });
         });
         dialogs::show(&ctx, &mut self.state);
+        crate::palette::show(&ctx, &mut self.state);
     }
 }
 
