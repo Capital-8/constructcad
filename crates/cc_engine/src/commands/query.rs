@@ -393,3 +393,49 @@ impl Command for GroupsList {
             .collect())
     }
 }
+
+/// Measure between two points of a view (meters on its plane: plan
+/// coordinates in plans): the distance, its horizontal and vertical parts
+/// and its angle. When both points lie on lines (`line_a`, `line_b`, each two
+/// points) that are parallel, the distance between the lines is given too.
+/// Nothing is created.
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Measure {
+    /// First point `[x, y]`.
+    pub a: [f64; 2],
+    /// Second point `[x, y]`.
+    pub b: [f64; 2],
+    /// The line the first point was taken on, as two points.
+    #[serde(default)]
+    pub line_a: Option<[[f64; 2]; 2]>,
+    /// The line the second point was taken on, as two points.
+    #[serde(default)]
+    pub line_b: Option<[[f64; 2]; 2]>,
+}
+
+impl Command for Measure {
+    const NAME: &'static str = "measure";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, _: &mut Session) -> Result<Value> {
+        let a = refs::point(self.a)?;
+        let b = refs::point(self.b)?;
+        let d = b - a;
+        let mut out = json!({
+            "distance": d.length(),
+            "dx": d.x,
+            "dy": d.y,
+            "angle": d.y.atan2(d.x).to_degrees().rem_euclid(360.0),
+        });
+        let line = |l: Option<[[f64; 2]; 2]>| -> Result<Option<(glam::DVec2, glam::DVec2)>> {
+            l.map(|[p, q]| Ok((refs::point(p)?, refs::point(q)?))).transpose()
+        };
+        if let (Some((p, q)), Some((r, t))) = (line(self.line_a)?, line(self.line_b)?) {
+            let (u, v) = ((q - p).normalize_or_zero(), (t - r).normalize_or_zero());
+            if u != glam::DVec2::ZERO && u.perp_dot(v).abs() < 1e-6 {
+                out["between_lines"] = json!((r - p).perp_dot(u).abs());
+            }
+        }
+        Ok(out)
+    }
+}

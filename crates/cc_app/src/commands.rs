@@ -48,6 +48,7 @@ pub enum UiCommand {
     TrimExtend,
     Split,
     ToggleJoin,
+    Measure,
     JoinGeometry,
     UnjoinGeometry,
     Group,
@@ -133,6 +134,7 @@ impl UiCommand {
             TrimExtend,
             Split,
             ToggleJoin,
+            Measure,
             JoinGeometry,
             UnjoinGeometry,
             Group,
@@ -204,6 +206,7 @@ impl UiCommand {
             TrimExtend => Icon::TrimExtend,
             Split => Icon::Split,
             ToggleJoin => Icon::Join,
+            Measure => Icon::Measure,
             JoinGeometry => Icon::JoinGeometry,
             Group => Icon::Group,
             Ungroup => Icon::Ungroup,
@@ -282,6 +285,7 @@ impl UiCommand {
             TrimExtend => t!("tool-trim-extend"),
             Split => t!("tool-split"),
             ToggleJoin => t!("tool-toggle-join"),
+            Measure => t!("tool-measure"),
             JoinGeometry => t!("tool-join-geometry"),
             Group => t!("action-group"),
             Ungroup => t!("action-ungroup"),
@@ -371,6 +375,7 @@ impl UiCommand {
             TrimExtend => t!("cmd-desc-trim-extend"),
             Split => t!("cmd-desc-split"),
             ToggleJoin => t!("cmd-desc-toggle-join"),
+            Measure => t!("cmd-desc-measure"),
             JoinGeometry => t!("cmd-desc-join-geometry"),
             Group => t!("cmd-desc-group"),
             Ungroup => t!("cmd-desc-ungroup"),
@@ -429,6 +434,7 @@ impl UiCommand {
             Select => "MD",
             SelectInstances => "SA",
             Group => "GP",
+            Measure => "ME",
             Ungroup => "UG",
             Dimension(DimensionMode::Aligned) => "DI",
             Text => "TT",
@@ -500,6 +506,7 @@ impl UiCommand {
             Split => "element_split",
             ToggleJoin => "wall_join",
             JoinGeometry => "geometry_join",
+            Measure => "measure",
             Group => "group_create",
             Ungroup => "group_ungroup",
             UnjoinGeometry => "geometry_unjoin",
@@ -548,7 +555,7 @@ impl UiCommand {
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             Elevations if project.views_of(ViewCategory::Elevation).next().is_none() => Some(t!("why-no-elevations")),
-            ZoomFit if state.active_view.is_none() => Some(t!("why-no-view")),
+            ZoomFit | Measure if state.active_view.is_none() => Some(t!("why-no-view")),
             MacroRun if state.session.is_recording() => Some(t!("why-recording")),
             _ => None,
         }
@@ -576,6 +583,7 @@ impl UiCommand {
             TrimExtend => *tool == Tool::TrimExtend,
             Split => *tool == Tool::Split,
             ToggleJoin => *tool == Tool::ToggleJoin,
+            Measure => *tool == Tool::Measure,
             JoinGeometry => *tool == Tool::JoinGeometry { unjoin: false },
             UnjoinGeometry => *tool == Tool::JoinGeometry { unjoin: true },
             Paste => *tool == Tool::Paste,
@@ -704,6 +712,10 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         TrimExtend => crate::modify::start_pick(state, Tool::TrimExtend),
         Split => crate::modify::start_pick(state, Tool::Split),
         ToggleJoin => crate::modify::start_pick(state, Tool::ToggleJoin),
+        Measure => {
+            state.set_tool(Tool::Measure);
+            state.message = t!("hint-measure");
+        }
         JoinGeometry | UnjoinGeometry => {
             state.set_tool(Tool::JoinGeometry { unjoin: command == UnjoinGeometry });
             state.message = t!("hint-join-pick");

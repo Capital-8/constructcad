@@ -117,6 +117,7 @@ registry![
         query::ElementsList,
         query::ElementGet,
         query::GroupsList,
+        query::Measure,
         query::ViewsList,
         query::ViewGet,
         query::MaterialsList,

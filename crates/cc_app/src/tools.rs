@@ -72,6 +72,8 @@ pub enum Tool {
     Align,
     /// Click near a wall end to allow or disallow its join.
     ToggleJoin,
+    /// Measure between two points; the result stays until the next pick.
+    Measure,
     /// Pick an element, then others to join (or unjoin) their geometry with it.
     JoinGeometry {
         unjoin: bool,
@@ -122,6 +124,7 @@ impl Tool {
             Tool::Offset => "tool-offset",
             Tool::Align => "tool-align",
             Tool::ToggleJoin => "tool-toggle-join",
+            Tool::Measure => "tool-measure",
             Tool::JoinGeometry { unjoin: false } => "tool-join-geometry",
             Tool::JoinGeometry { unjoin: true } => "tool-unjoin-geometry",
             Tool::Paste => "action-paste",
@@ -266,6 +269,8 @@ pub enum Drag {
 /// Transient state of the active tool.
 #[derive(Debug, Clone, Default)]
 pub struct Interaction {
+    /// Lines under the measuring tool's first pick.
+    pub targets_lines: Vec<(glam::DVec2, glam::DVec2)>,
     /// Wall chain anchor or section start.
     pub anchor: Option<DVec2>,
     /// Sketch points.
@@ -707,6 +712,8 @@ pub fn handle(
         (Tool::Dimension { type_id, mode }, _) => {
             dimension_tool(ui, resp, painter, state, view, (*type_id, *mode), xf, drawing)
         }
+        // Measuring too.
+        (Tool::Measure, _) => measure_tool(ui, resp, painter, state, xf, drawing),
         // Joining geometry too (sections show it best).
         (Tool::JoinGeometry { unjoin }, _) => crate::modify::join_tool(resp, painter, state, xf, drawing, *unjoin),
         // Text notes too.
@@ -1073,6 +1080,77 @@ fn grid_tool(
                 state.interaction.anchor = None;
             }
             _ => {}
+        }
+    }
+}
+
+/// Measure between two references: two clicks snapped to the view's
+/// linework; the result (the engine's `measure`) stays until the next click.
+fn measure_tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, drawing: &Drawing2D) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let ends: Vec<DVec2> = drawing
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            cc_views::Prim::Line { a, b, .. } => Some([*a, *b]),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let points = state.interaction.points.clone();
+    let anchor = match points.as_slice() {
+        [a] => Some(*a),
+        _ => None,
+    };
+    let s = snap_at(state, None, raw, anchor, &ends, xf.scale, shift);
+    draw_snap(painter, xf, s);
+    let tol = 6.0 / xf.scale;
+    let stroke = Stroke::new(1.5, PREVIEW);
+    match points.as_slice() {
+        [a] => {
+            painter.line_segment([xf.to_screen(*a), xf.to_screen(s.point)], stroke);
+            label(painter, xf.to_screen(s.point), format::length(a.distance(s.point)));
+            if resp.clicked() {
+                let line_a = state.interaction.targets_lines.first().copied();
+                let line_b = line_at(drawing, s.point, tol);
+                let command = cc_engine::commands::query::Measure {
+                    a: a.to_array(),
+                    b: s.point.to_array(),
+                    line_a: line_a.map(|(p, q)| [p.to_array(), q.to_array()]),
+                    line_b: line_b.map(|(p, q)| [p.to_array(), q.to_array()]),
+                };
+                if let Some(out) = crate::actions::run_command(state, command) {
+                    let num = |k: &str| out[k].as_f64().unwrap_or(0.0);
+                    let mut text = t!(
+                        "msg-measure",
+                        "distance" => format::length(num("distance")),
+                        "dx" => format::length(num("dx").abs()),
+                        "dy" => format::length(num("dy").abs()),
+                        "angle" => format!("{:.2}°", num("angle"))
+                    );
+                    if let Some(between) = out["between_lines"].as_f64() {
+                        text.push_str(&t!("msg-measure-lines", "distance" => format::length(between)));
+                    }
+                    state.message = text;
+                }
+                state.interaction.points.push(s.point);
+            }
+        }
+        [a, b, ..] => {
+            // The last measurement stays on screen until the next pick.
+            painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], stroke);
+            label(painter, xf.to_screen((*a + *b) / 2.0), format::length(a.distance(*b)));
+            if resp.clicked() {
+                state.interaction.points = vec![s.point];
+                state.interaction.targets_lines = line_at(drawing, s.point, tol).into_iter().collect();
+            }
+        }
+        [] => {
+            if resp.clicked() {
+                state.interaction.points.push(s.point);
+                state.interaction.targets_lines = line_at(drawing, s.point, tol).into_iter().collect();
+            }
         }
     }
 }

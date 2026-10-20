@@ -109,7 +109,8 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | PN / UP | Pin / Unpin | MA | Match type properties |
 | Ctrl+X / Ctrl+C | Cut / Copy | Ctrl+V | Paste |
 | TT | Text | Ctrl+Shift+P | Command palette |
-| Ctrl+F1 | Collapse / expand the ribbon | | |
+| Ctrl+F1 | Collapse / expand the ribbon | SA | Select all instances in the view |
+| GP / UG | Group / Ungroup | ME | Measure between two references |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 

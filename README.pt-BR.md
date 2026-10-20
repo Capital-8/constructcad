@@ -105,7 +105,8 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 | PN / UP | Fixar / Liberar | MA | Corresponder propriedades de tipo |
 | Ctrl+X / Ctrl+C | Recortar / Copiar | Ctrl+V | Colar |
 | TT | Texto | Ctrl+Shift+P | Paleta de comandos |
-| Ctrl+F1 | Recolher / expandir o ribbon | | |
+| Ctrl+F1 | Recolher / expandir o ribbon | SA | Selecionar todas as instâncias na vista |
+| GP / UG | Agrupar / Desagrupar | ME | Medir entre duas referências |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 

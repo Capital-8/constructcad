@@ -54,6 +54,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Offset => Icon::Offset,
         Tool::Align => Icon::Align,
         Tool::ToggleJoin => Icon::Join,
+        Tool::Measure => Icon::Measure,
         Tool::JoinGeometry { unjoin: false } => Icon::JoinGeometry,
         Tool::JoinGeometry { unjoin: true } => Icon::UnjoinGeometry,
         Tool::Paste => Icon::Paste,
@@ -633,6 +634,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
         let picks: &[UiCommand] = &[Align, Offset, TrimCorner, TrimExtend, Split, ToggleJoin];
         stacks(ui, state, &[transforms, picks, &[Pin, Unpin, Delete]]);
     });
+    group(ui, t!("group-measure"), |ui| command_button(ui, state, Measure));
     group(ui, t!("group-geometry"), |ui| command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry]));
     group(ui, t!("group-group"), |ui| command_buttons(ui, state, &[Group, Ungroup]));
 }
@@ -871,6 +873,9 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     _ => "hint-align",
                 };
                 ui.label(theme::muted(crate::i18n::tr(key)));
+            }
+            Tool::Measure => {
+                ui.label(theme::muted(t!("hint-measure")));
             }
             Tool::JoinGeometry { unjoin } => {
                 let key = match (state.interaction.targets.is_empty(), unjoin) {

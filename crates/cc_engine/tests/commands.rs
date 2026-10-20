@@ -579,3 +579,22 @@ fn groups_keep_elements_together() {
     assert_eq!(fails(&mut s, "group_create", json!({"ids": [c]})), ErrorCode::InvalidArguments);
     assert_eq!(fails(&mut s, "group_ungroup", json!({"group": 999})), ErrorCode::NotFound);
 }
+
+#[test]
+fn measuring_creates_nothing() {
+    let mut s = Session::default();
+    let before = run(&mut s, "project_info", json!({}));
+    let m = run(&mut s, "measure", json!({"a": [1, 1], "b": [4, 5]}));
+    assert!((m["distance"].as_f64().unwrap() - 5.0).abs() < 1e-12);
+    assert_eq!((m["dx"].clone(), m["dy"].clone()), (json!(3.0), json!(4.0)));
+    assert!((m["angle"].as_f64().unwrap() - 53.130102354).abs() < 1e-6);
+    assert!(m["between_lines"].is_null());
+    // Two parallel wall faces 0.2 apart, measured on a slant.
+    let m = run(
+        &mut s,
+        "measure",
+        json!({"a": [0, 0], "b": [3, 0.2], "line_a": [[-1, 0], [5, 0]], "line_b": [[0, 0.2], [9, 0.2]]}),
+    );
+    assert!((m["between_lines"].as_f64().unwrap() - 0.2).abs() < 1e-12);
+    assert_eq!(run(&mut s, "project_info", json!({})), before);
+}
