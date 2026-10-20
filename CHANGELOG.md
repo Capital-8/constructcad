@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-20
+
+### Fixed
+
+- The command palette button after the ribbon tabs did nothing: the click that opened the palette closed it again in the same frame. Ctrl+Shift+P was not affected.
+
+### Changed
+
+- Contributing: the DCO check lists the commits without a sign-off and explains how to add it; commits made in the GitHub web editor are signed off automatically.
+
 ## [0.2.0] - 2026-10-20
 
 ### Added
@@ -105,6 +115,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/francisreboucas/constructcad/releases/tag/v0.1.0
