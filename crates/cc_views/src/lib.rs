@@ -6,6 +6,7 @@
 
 mod annotate;
 mod cut;
+mod diagram;
 mod drawing;
 pub mod export;
 pub mod format;
@@ -30,8 +31,20 @@ pub use sheet::{MARGIN, PlacedViewport, Sheet, TITLE_H, TITLE_W, TitleLabels, co
 use cc_core::{Project, View, ViewKind};
 use cc_geom::ModelGeometry;
 
-/// Drawing for any graphical view (`None` for schedules and sheets).
+/// Drawing for any graphical view (`None` for schedules and sheets), with
+/// the headings of diagrams left as their translation keys.
 pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<Drawing2D> {
+    generate_labeled(project, geom, view, &|key| key.to_string())
+}
+
+/// Drawing for any graphical view; `label` translates the headings drawn
+/// by the view itself (diagrams).
+pub fn generate_labeled(
+    project: &Project,
+    geom: &ModelGeometry,
+    view: &View,
+    label: &dyn Fn(&str) -> String,
+) -> Option<Drawing2D> {
     let mut d = match &view.kind {
         ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
@@ -44,6 +57,8 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
             let mut d = plan_of(project, geom, *level, *cut_height, ceiling, structural, view.scale);
             joins::merge(project, &mut d);
             if let Some(discipline) = services {
+                // The architecture stays in the background of a services plan.
+                fade(&mut d);
                 mep::services(&mut d, project, geom, *level, *cut_height, discipline, view.scale);
             }
             annotate::plan_annotations(&mut d, project, geom, *level, ceiling, structural, view.scale);
@@ -62,11 +77,30 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
         ViewKind::ThreeD { camera, rebar: true, .. } => projected::rebar(geom, camera),
         ViewKind::ThreeD { camera, .. } => axonometric(project, geom, camera),
         ViewKind::Legend { types } => legend(project, types, view.scale),
+        ViewKind::Diagram { panel } => diagram::panel_diagram(project, geom, *panel, view.scale, label),
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
     };
     annotate::dimensions(&mut d, project, view.id, view.scale);
     notes::notes(&mut d, project, view.id, view.scale);
     Some(d)
+}
+
+/// Draw everything so far faint: lines in the faint pen (dashes kept),
+/// fills mixed two thirds with white.
+fn fade(d: &mut Drawing2D) {
+    for prim in &mut d.prims {
+        match prim {
+            Prim::Line { style, .. } if matches!(style, LineStyle::Cut | LineStyle::Projection | LineStyle::Thin) => {
+                *style = LineStyle::Faint;
+            }
+            Prim::Fill { color, .. } => {
+                for c in color.iter_mut().take(3) {
+                    *c = (f64::from(*c) + (255.0 - f64::from(*c)) * 0.66).round() as u8;
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]

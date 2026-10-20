@@ -37,6 +37,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     - Water pipes carry a flow of 0.3 √ΣP l/s from the weights of the fixtures they feed, coming from the highest node, and get the smallest PVC pipe kept at most 3 m/s.
     - Circuits get their design current, the next standard breaker and a copper conductor that carries it (at least 1.5 mm² for lighting, 2.5 mm² for power). The conductor grows until the voltage drop to the farthest device, measured along the conduits (else in a straight line), is at most 4 %.
     - *Apply Diameters* (`mep_size_apply`) gives undersized pipes the smallest pipe type that is wide enough.
+  - Panel diagrams, a new view category (*MEP → Documentation → Panel Diagram*, `view_create` kind `panel_diagram`): the single-line diagram of a distribution board and its load schedule, with the circuits' points, load, current, breaker, conductor and voltage drop, the totals and the main breaker. Diagrams go on sheets like any drawing and are deleted with their board. Views draw their own headings in the interface language.
+  - In plumbing and electrical plans, the architecture is drawn faint (a new faint pen, with fills lightened) so the services stand out.
   - Engine commands `pipe_create`, `conduit_create`, `systems_list`, `system_create`, `system_set`, `system_delete`, `system_assign` and `circuit_loads` (installed load and current per circuit and board). `component_place` takes a `system`. Systems resolve by id, name, code or kind.
 
 ### Changed

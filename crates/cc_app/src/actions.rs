@@ -40,6 +40,7 @@ fn new_view(state: &mut AppState, kind: &str, level: Option<LevelId>, category: 
         depth: None,
         direction: None,
         scale: None,
+        panel: None,
     };
     let id = run(state, command).as_ref().and_then(view_id)?;
     state.open_view(id);
@@ -702,6 +703,29 @@ pub fn mep_connect(state: &mut AppState) {
         let count = out["created"].as_array().map_or(0, Vec::len);
         let skipped = out["skipped"].as_u64().unwrap_or(0);
         state.message = t!("msg-mep-connected", "count" => count, "skipped" => skipped);
+    }
+}
+
+/// Open the diagram of the selected distribution board (or the first), creating it the first time.
+pub fn open_panel_diagram(state: &mut AppState) {
+    let project = state.project();
+    let is_board = |id: &cc_core::ElementId| {
+        project.element(*id).and_then(|e| project.mep_data(e)).and_then(|m| m.device())
+            == Some(cc_core::DeviceKind::Panel)
+    };
+    let boards: Vec<cc_core::ElementId> = project.elements.keys().copied().filter(is_board).collect();
+    let Some(board) = state.selection.iter().copied().find(is_board).or(boards.first().copied()) else { return };
+    let existing =
+        project.views.values().find(|v| matches!(v.kind, ViewKind::Diagram { panel } if panel == board)).map(|v| v.id);
+    match existing {
+        Some(id) => state.open_view(id),
+        None => {
+            let command =
+                views::ViewCreate { kind: "panel_diagram".into(), panel: Some(board.0), ..Default::default() };
+            if let Some(id) = run(state, command).as_ref().and_then(view_id) {
+                state.open_view(id);
+            }
+        }
     }
 }
 

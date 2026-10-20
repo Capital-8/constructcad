@@ -328,9 +328,17 @@ impl Project {
             }
         }
 
-        // Views on missing levels go; sheets and legends drop missing references.
-        let dangling: Vec<_> =
-            self.views.values().filter(|v| v.level().is_some_and(|l| !levels.contains(&l))).map(|v| v.id).collect();
+        // Views on missing levels (or boards) go; sheets and legends drop missing references.
+        let elements = &self.elements;
+        let dangling: Vec<_> = self
+            .views
+            .values()
+            .filter(|v| {
+                v.level().is_some_and(|l| !levels.contains(&l))
+                    || matches!(v.kind, ViewKind::Diagram { panel } if !elements.contains_key(&panel))
+            })
+            .map(|v| v.id)
+            .collect();
         repairs += dangling.len();
         for id in dangling {
             self.views.remove(&id);

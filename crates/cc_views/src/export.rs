@@ -15,6 +15,7 @@ fn pen(style: LineStyle) -> (f64, [u8; 3]) {
         LineStyle::Hidden => (0.18, [120, 120, 120]),
         LineStyle::Annotation => (0.18, [30, 90, 170]),
         LineStyle::Center => (0.18, [30, 90, 170]),
+        LineStyle::Faint => (0.13, [175, 175, 175]),
     }
 }
 

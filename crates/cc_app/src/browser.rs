@@ -22,6 +22,7 @@ pub fn category_icon(category: ViewCategory) -> Icon {
         ViewCategory::Section => Icon::Section,
         ViewCategory::Legend => Icon::Legend,
         ViewCategory::Schedule => Icon::Schedule,
+        ViewCategory::Diagram => Icon::Systems,
         ViewCategory::Sheet => Icon::Sheet,
     }
 }

@@ -116,7 +116,7 @@ impl Session {
         self.sync_units();
         self.geometry();
         let v = self.doc.project.view(view)?;
-        let d = Rc::new(cc_views::generate(&self.doc.project, &self.geom, v)?);
+        let d = Rc::new(cc_views::generate_labeled(&self.doc.project, &self.geom, v, &crate::i18n::tr)?);
         self.drawings.insert(view, (rev, d.clone()));
         Some(d)
     }

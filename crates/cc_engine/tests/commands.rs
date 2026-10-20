@@ -1187,3 +1187,22 @@ fn sizing_drains_water_pipes_and_circuits() {
     assert!((c["length_m"].as_f64().unwrap() - 51.0).abs() < 1e-9);
     assert!(c["voltage_drop_pct"].as_f64().unwrap() < 4.0 && c["ok"] == json!(true));
 }
+
+#[test]
+fn panel_diagrams_follow_their_board() {
+    let mut s = Session::default();
+    assert_eq!(fails(&mut s, "view_create", json!({"kind": "panel_diagram"})), ErrorCode::InvalidArguments);
+    let panel_t = mep_type(&mut s, "Panel");
+    let panel = id(&run(&mut s, "component_place", json!({"position": [0, 0], "type": panel_t})));
+    run(&mut s, "system_create", json!({"kind": "lighting"}));
+    let diagram = run(&mut s, "view_create", json!({"kind": "panel_diagram"}));
+    assert_eq!(diagram["params"]["panel"], json!(panel), "{diagram}");
+    // It goes on a sheet like any drawing.
+    let sheet = id(&run(&mut s, "view_create", json!({"kind": "sheet"})));
+    run(&mut s, "sheet_place_view", json!({"sheet": sheet, "view": id(&diagram)}));
+    // Deleting the board deletes its diagram (and the viewport).
+    run(&mut s, "elements_delete", json!({"ids": [panel]}));
+    assert_eq!(fails(&mut s, "view_get", json!({"view": id(&diagram)})), ErrorCode::NotFound);
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "view_get", json!({"view": id(&diagram)}))["params"]["panel"], json!(panel));
+}

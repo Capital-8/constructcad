@@ -59,6 +59,7 @@ pub enum UiCommand {
     MepSchedules,
     MepConnect,
     MepSizing,
+    PanelDiagram,
     Dimension(DimensionMode),
     Text,
     AddLeader,
@@ -152,7 +153,7 @@ impl UiCommand {
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
         all.extend([PlaceFixture, PlaceDevice, MepConnect, Systems, MepSizing, PlumbingPlan, ElectricalPlan]);
-        all.push(MepSchedules);
+        all.extend([MepSchedules, PanelDiagram]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -251,6 +252,7 @@ impl UiCommand {
             MepSchedules => Icon::Schedule,
             MepConnect => Icon::Connect,
             MepSizing => Icon::Sizing,
+            PanelDiagram => Icon::Systems,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             AddLeader => Icon::Leader,
@@ -300,7 +302,9 @@ impl UiCommand {
         use UiCommand::*;
         match self {
             NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | StructuralSchedules | Sheet
-            | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules => Some(Badge::New),
+            | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules | PanelDiagram => {
+                Some(Badge::New)
+            }
             ImportIfc | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | AnalyticalExport => Some(Badge::Export),
             Delete => Some(Badge::Remove),
@@ -357,6 +361,7 @@ impl UiCommand {
             MepSchedules => t!("action-mep-schedules"),
             MepConnect => t!("action-mep-connect"),
             MepSizing => t!("dlg-mep-sizing"),
+            PanelDiagram => t!("action-panel-diagram"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             AddLeader => t!("tool-add-leader"),
@@ -469,6 +474,7 @@ impl UiCommand {
             MepSchedules => t!("cmd-desc-mep-schedules"),
             MepConnect => t!("cmd-desc-mep-connect"),
             MepSizing => t!("cmd-desc-mep-sizing"),
+            PanelDiagram => t!("cmd-desc-panel-diagram"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
@@ -615,6 +621,7 @@ impl UiCommand {
             Systems => "system_set",
             MepConnect => "mep_connect",
             MepSizing => "mep_sizing",
+            PanelDiagram => "view_create",
             PlumbingPlan | ElectricalPlan | MepSchedules => "view_create",
             FootingsUnderColumns => "footings_under_columns",
             StripFootingsUnderWalls => "strip_footings_under_walls",
@@ -709,6 +716,7 @@ impl UiCommand {
             TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
             StructuralPlan | PlumbingPlan | ElectricalPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             PlaceFixture if crate::tools::mep_component_type(project, false).is_none() => Some(t!("msg-no-type")),
+            PanelDiagram if crate::systems_dialog::panels(state).is_empty() => Some(t!("why-no-panel")),
             PlaceDevice if crate::tools::mep_component_type(project, true).is_none() => Some(t!("msg-no-type")),
             MepConnect
                 if !state
@@ -912,6 +920,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Systems => state.dialogs.systems = true,
         MepConnect => crate::actions::mep_connect(state),
         MepSizing => state.dialogs.sizing = true,
+        PanelDiagram => crate::actions::open_panel_diagram(state),
         PlumbingPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Plumbing),
         ElectricalPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Electrical),
         MepSchedules => {

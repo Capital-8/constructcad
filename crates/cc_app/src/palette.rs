@@ -167,6 +167,7 @@ fn entries(state: &AppState, palette: &Palette) -> Vec<Entry> {
                 ViewCategory::ThreeD => Icon::View3D,
                 ViewCategory::Legend => Icon::Legend,
                 ViewCategory::Schedule => Icon::Schedule,
+                ViewCategory::Diagram => Icon::Systems,
                 ViewCategory::Sheet => Icon::Sheet,
             };
             list.push(Entry {

@@ -618,7 +618,9 @@ fn mep_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-electrical"), |ui| command_buttons(ui, state, &[place(Category::Conduit), PlaceDevice]));
     group(ui, t!("group-systems"), |ui| command_buttons(ui, state, &[MepConnect, Systems]));
     group(ui, t!("group-analysis"), |ui| command_button(ui, state, MepSizing));
-    group(ui, t!("group-documentation"), |ui| stacks(ui, state, &[&[PlumbingPlan, ElectricalPlan, MepSchedules]]));
+    group(ui, t!("group-documentation"), |ui| {
+        stacks(ui, state, &[&[PlumbingPlan, ElectricalPlan, MepSchedules], &[PanelDiagram]]);
+    });
     group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
 }
 

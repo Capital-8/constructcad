@@ -23,12 +23,14 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 /// `electrical_plan` (with `level`: the pipes, or the conduits and devices,
 /// over the architecture, tagged), `three_d`, `analytical` (a 3D
 /// view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types),
-/// `schedule` (with `category`) or `sheet` (A3, numbered after the others).
+/// `schedule` (with `category`), `panel_diagram` (with `panel`: the
+/// single-line diagram and load schedule of a distribution board; default
+/// the only board) or `sheet` (A3, numbered after the others).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
     /// `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`,
-    /// `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule` or `sheet`.
+    /// `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule`, `panel_diagram` or `sheet`.
     pub kind: String,
     /// View name (default: by kind).
     #[serde(default)]
@@ -54,6 +56,9 @@ pub struct ViewCreate {
     /// Scale denominator (e.g. 50 for 1:50).
     #[serde(default)]
     pub scale: Option<u32>,
+    /// Distribution board element id, for a panel diagram.
+    #[serde(default)]
+    pub panel: Option<u64>,
 }
 
 fn count(p: &Project, c: ViewCategory) -> usize {
@@ -163,6 +168,28 @@ impl Command for ViewCreate {
                 }
                 let name = t!("default-schedule-name", "category" => crate::i18n::tr(category.key()));
                 (name, 1, ViewKind::Schedule { category, def: Default::default() }, t!("tx-new-view"))
+            }
+            "panel_diagram" => {
+                let boards: Vec<&cc_core::Element> = p
+                    .elements
+                    .values()
+                    .filter(|e| p.mep_data(e).and_then(|m| m.device()) == Some(cc_core::DeviceKind::Panel))
+                    .collect();
+                let board = match self.panel {
+                    Some(id) => boards
+                        .iter()
+                        .find(|e| e.id.0 == id)
+                        .copied()
+                        .ok_or_else(|| EngineError::invalid(t!("msg-not-a-panel", "id" => id)))?,
+                    None => match boards[..] {
+                        [only] => only,
+                        _ => return Err(EngineError::invalid(t!("msg-choose-panel"))),
+                    },
+                };
+                let label =
+                    if board.mark.is_empty() { p.type_name(board.type_id).to_string() } else { board.mark.clone() };
+                let name = t!("default-diagram-name", "panel" => label);
+                (name, 50, ViewKind::Diagram { panel: board.id }, t!("tx-new-view"))
             }
             "sheet" => {
                 let n = count(p, ViewCategory::Sheet) + 101;

@@ -38,6 +38,7 @@ pub fn stroke_for(style: LineStyle, highlighted: bool) -> Stroke {
         LineStyle::Hidden => (0.8, Color32::from_gray(120)),
         LineStyle::Annotation => (0.9, Color32::from_rgb(30, 90, 170)),
         LineStyle::Center => (0.8, Color32::from_rgb(30, 90, 170)),
+        LineStyle::Faint => (0.6, Color32::from_gray(175)),
     };
     if highlighted { Stroke::new(width + 0.6, HIGHLIGHT) } else { Stroke::new(width, color) }
 }

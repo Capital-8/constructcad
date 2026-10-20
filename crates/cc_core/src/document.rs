@@ -195,6 +195,17 @@ impl<'a> EditCtx<'a> {
                 self.touch_settings();
                 self.project.joins.retain(|&(a, b)| a != id && b != id);
             }
+            // A board's diagrams go with it.
+            let diagrams: Vec<ViewId> = self
+                .project
+                .views
+                .values()
+                .filter(|v| matches!(v.kind, ViewKind::Diagram { panel } if panel == id))
+                .map(|v| v.id)
+                .collect();
+            for view in diagrams {
+                self.remove_view(view);
+            }
             if self.project.systems.values().any(|s| s.panel == Some(id)) {
                 // Circuits fed by a removed board stay, unfed.
                 for system in self.systems_mut().values_mut().filter(|s| s.panel == Some(id)) {

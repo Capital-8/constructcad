@@ -16,6 +16,8 @@ pub enum LineStyle {
     Annotation,
     /// Dash-dot: grid lines and center lines.
     Center,
+    /// Background linework (the architecture under building services).
+    Faint,
 }
 
 /// Which point of a text box sits at its position.

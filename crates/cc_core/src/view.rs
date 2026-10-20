@@ -12,11 +12,13 @@ pub enum ViewCategory {
     Section,
     Legend,
     Schedule,
+    /// Single-line diagrams of distribution boards.
+    Diagram,
     Sheet,
 }
 
 impl ViewCategory {
-    pub const ALL: [ViewCategory; 8] = [
+    pub const ALL: [ViewCategory; 9] = [
         ViewCategory::FloorPlan,
         ViewCategory::CeilingPlan,
         ViewCategory::ThreeD,
@@ -24,6 +26,7 @@ impl ViewCategory {
         ViewCategory::Section,
         ViewCategory::Legend,
         ViewCategory::Schedule,
+        ViewCategory::Diagram,
         ViewCategory::Sheet,
     ];
 
@@ -37,6 +40,7 @@ impl ViewCategory {
             ViewCategory::Section => "browser-sections",
             ViewCategory::Legend => "browser-legends",
             ViewCategory::Schedule => "browser-schedules",
+            ViewCategory::Diagram => "browser-diagrams",
             ViewCategory::Sheet => "browser-sheets",
         }
     }
@@ -184,6 +188,10 @@ pub enum ViewKind {
         size: SheetSize,
         viewports: Vec<Viewport>,
     },
+    /// The single-line diagram and load schedule of a distribution board.
+    Diagram {
+        panel: crate::ElementId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -231,6 +239,7 @@ impl View {
             ViewKind::Legend { .. } => ViewCategory::Legend,
             ViewKind::Schedule { .. } => ViewCategory::Schedule,
             ViewKind::Sheet { .. } => ViewCategory::Sheet,
+            ViewKind::Diagram { .. } => ViewCategory::Diagram,
         }
     }
 

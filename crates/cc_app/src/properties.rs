@@ -1403,7 +1403,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 }
             });
         }
-        ViewKind::ThreeD { .. } | ViewKind::Legend { .. } | ViewKind::Elevation { .. } => {}
+        ViewKind::ThreeD { .. } | ViewKind::Legend { .. } | ViewKind::Elevation { .. } | ViewKind::Diagram { .. } => {}
     }
 
     section(ui, "identity", t!("section-identity"), |ui| {
