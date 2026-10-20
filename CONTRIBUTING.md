@@ -43,7 +43,7 @@ git rebase --signoff FETCH_HEAD   # adds the line to every commit since main
 git push --force-with-lease
 ```
 
-For only the last commit, `git commit --amend --no-edit -s` followed by `git push --force-with-lease` is enough. Commits made in the GitHub web editor can be signed off by adding the `Signed-off-by:` line to the commit message.
+For only the last commit, `git commit --amend --no-edit -s` followed by `git push --force-with-lease` is enough. Commits made in the GitHub web editor are signed off automatically.
 
 If you cannot rewrite your branch, say in the pull request that you agree to the DCO for its commits and a maintainer can sign them off on your behalf when merging.
 
