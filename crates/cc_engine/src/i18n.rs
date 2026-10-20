@@ -8,18 +8,20 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
+    Uk,
     PtBr,
     En,
 }
 
 impl Language {
-    pub const ALL: [Language; 2] = [Language::PtBr, Language::En];
+    pub const ALL: [Language; 3] = [Language::PtBr, Language::En, Language::Uk];
 
     /// BCP 47 code, used for persistence.
     pub fn code(self) -> &'static str {
         match self {
             Language::PtBr => "pt-BR",
             Language::En => "en",
+            Language::Uk => "uk-UA",
         }
     }
 
@@ -28,6 +30,7 @@ impl Language {
         match self {
             Language::PtBr => "Português (Brasil)",
             Language::En => "English",
+            Language::Uk => "Українська",
         }
     }
 
@@ -35,6 +38,8 @@ impl Language {
         let code = code.to_ascii_lowercase();
         if code.starts_with("pt") {
             Some(Language::PtBr)
+        } else if code.starts_with("uk") {
+            Some(Language::Uk)
         } else if code.starts_with("en") {
             Some(Language::En)
         } else {
@@ -52,6 +57,7 @@ impl Language {
         match self {
             Language::PtBr => include_str!("../../../assets/i18n/pt-BR.ftl"),
             Language::En => include_str!("../../../assets/i18n/en.ftl"),
+            Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
         }
     }
 
@@ -140,6 +146,7 @@ mod tests {
         assert_eq!(Language::from_code("pt_BR"), Some(Language::PtBr));
         assert_eq!(Language::from_code("en-US"), Some(Language::En));
         assert_eq!(Language::from_code("fr-FR"), None);
+        assert_eq!(Language::from_code("uk-UA"), Some(Language::Uk));
         for l in Language::ALL {
             assert_eq!(Language::from_code(l.code()), Some(l));
         }
