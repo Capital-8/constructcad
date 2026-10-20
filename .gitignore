@@ -4,3 +4,8 @@ __pycache__/
 
 # Third-party sample IFC files kept locally only (not redistributable).
 examples/sample-models/
+
+# Screenshot test outputs written next to the references on a mismatch.
+crates/cc_app/tests/snapshots/*.new.png
+crates/cc_app/tests/snapshots/*.diff.png
+crates/cc_app/tests/snapshots/*.old.png

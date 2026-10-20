@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Two-tone interface icons: strokes in the ink tone and soft fills in the theme's tint, with badges for commands that create (new views, components), import, export or remove. Theme colors are tokens with a dark set alongside the light one, ready for a dark theme.
 - The ribbon collapses to its tabs (Ctrl+F1, a double click on a tab or the arrow at the end of the tabs) and the choice is remembered; while collapsed, a click on a tab shows its panel over the views until a command runs. When the window is narrower than a tab's groups, they scroll sideways with arrows at the ends.
 - Command palette (Ctrl+Shift+P, or the magnifier after the ribbon tabs): finds interface commands, views to open, plans and schedules to create, and engine commands by name, description or shortcut (accents and case aside); engine commands open a form with their JSON arguments and run in the open project.
+- Accessibility: the custom ribbon, palette, browser, home screen, dialog and property widgets report their role, name and state to screen readers. Interface tests drive the ribbon and the palette headlessly (egui_kittest), and screenshot tests of every ribbon tab, the narrow and collapsed ribbon, a rich tooltip, the palette and an icon gallery in both themes run on request.
 
 ### Changed
 

@@ -340,6 +340,8 @@ pub fn view_toolbar(
     let mut chosen = None;
     let tip = crate::i18n::tr(default.key());
     let tip = if default == ZoomCommand::Fit { format!("{tip} (ZE)") } else { tip };
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &tip));
+    a.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::t!("canvas-zoom-menu")));
     if r.on_hover_text(tip).clicked() {
         chosen = Some(default);
     }

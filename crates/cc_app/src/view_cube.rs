@@ -207,6 +207,7 @@ pub fn show(ui: &mut Ui, view: Rect, cam: &CameraState) -> CubeAction {
         ui.painter().rect_filled(home_rect, 4.0, PALETTE.hover);
     }
     icons::paint(ui.painter(), home_rect.shrink(3.0), Icon::Home, PALETTE.text_muted);
+    home.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, t!("cube-home")));
     if home.on_hover_text(t!("cube-home")).clicked() {
         action.home = true;
     }

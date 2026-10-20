@@ -35,7 +35,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
 fn sidebar(ui: &mut Ui, state: &mut AppState) {
     // Back to the open project; without one there is nothing to return to.
     if state.project_open {
-        let back = round_button(ui, Icon::ArrowLeft).on_hover_text(t!("home-back"));
+        let back = round_button(ui, Icon::ArrowLeft, &t!("home-back")).on_hover_text(t!("home-back"));
         if back.clicked() {
             state.show_home = false;
         }
@@ -55,8 +55,9 @@ fn sidebar(ui: &mut Ui, state: &mut AppState) {
     nav_item(ui, Icon::Open, &t!("home-recent"), true);
 }
 
-fn round_button(ui: &mut Ui, icon: Icon) -> Response {
+fn round_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     let color = if response.hovered() { PALETTE.accent_text } else { PALETTE.text_muted };
     ui.painter().circle_stroke(rect.center(), 16.0, Stroke::new(1.5, color));
     icons::paint(ui.painter(), rect.shrink(11.0), icon, color);
@@ -65,6 +66,7 @@ fn round_button(ui: &mut Ui, icon: Icon) -> Response {
 
 fn side_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     let painter = ui.painter();
     let fill = if response.hovered() { PALETTE.hover } else { Color32::WHITE };
     painter.rect_filled(rect, theme::RADIUS as f32, fill);
@@ -157,6 +159,7 @@ fn section_bar(ui: &mut Ui, title: &str) {
 fn card(ui: &mut Ui, name: &str, thumbnail: Option<&Path>, enabled: bool) -> Response {
     let label_h = 26.0;
     let (rect, response) = ui.allocate_exact_size(vec2(CARD.x, CARD.y + label_h), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, name));
     let image_rect = Rect::from_min_size(rect.min, CARD);
     let painter = ui.painter();
     painter.rect_filled(image_rect, 2.0, Color32::WHITE);

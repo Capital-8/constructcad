@@ -177,6 +177,9 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
                 for m in &mats {
                     let is_sel = selected.as_deref() == Some(m.name.as_str());
                     let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+                    r.widget_info(|| {
+                        egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, is_sel, &m.name)
+                    });
                     if is_sel {
                         ui.painter().rect_filled(rect, 0.0, PALETTE.accent_soft);
                     } else if r.hovered() {

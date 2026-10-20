@@ -74,6 +74,7 @@ fn tree_row(
     selected: bool,
 ) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, label));
     if !ui.is_rect_visible(rect) {
         return response;
     }
@@ -200,7 +201,9 @@ fn add_button(ui: &mut Ui, state: &mut AppState, category: ViewCategory, row: &R
         return false;
     }
     let rect = Rect::from_center_size(egui::pos2(row.rect.right() - 18.0, row.rect.center().y), vec2(20.0, 20.0));
-    let r = ui.interact(rect, row.id.with("add"), Sense::click()).on_hover_text(t!("browser-new"));
+    let r = ui.interact(rect, row.id.with("add"), Sense::click());
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, t!("browser-new")));
+    let r = r.on_hover_text(t!("browser-new"));
     if r.hovered() {
         ui.painter().rect_filled(rect, theme::RADIUS as f32, PALETTE.pressed);
     }

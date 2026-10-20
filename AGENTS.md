@@ -18,6 +18,8 @@ cargo test --workspace                                # all tests
 cargo test -p cc_geom rooms                           # tests of one crate matching a name
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check                            # max_width = 120 (rustfmt.toml)
+CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots      # compare UI screenshots (tests/snapshots)
+UPDATE_SNAPSHOTS=1 cargo test -p cc_app snapshots     # rewrite them after an intended UI change
 
 # IFC validation (CI only; IfcOpenShell is never a build/runtime dependency)
 pip install -r scripts/requirements-ifc.txt
@@ -48,7 +50,7 @@ Rust workspace (edition 2024). Dependency direction: `cc_core` ← `cc_geom` ←
 
 - **Familiar by design**: menus, shortcuts, panels and tools go where desktop CAD/BIM users expect them (quick access toolbar top-left, ribbon tabs, properties/browser docked left, standard Ctrl shortcuts and two-letter tool keys). Use general conventions only — never a specific product's icons, colors or wording; prefer neutral terms (Category, Type, Component — not "Family").
 - Colors and fonts come from `theme.rs` (`PALETTE`, with the same tokens for a dark theme in `DARK`; `theme::palette(ctx)` picks by the egui theme; Inter). Icons are our own SVG line drawings in `assets/icons/ui` (24 grid, white strokes, `stroke-width` 1.75, round caps/joins, soft fills at 20% opacity), rasterized by resvg per pixel size in two layers and tinted in `icons.rs`: strokes in the ink tone, soft fills in the tint tone (`icons::Tones`), plus an optional badge (new, import, export, remove).
-- Ribbon, quick access and shortcut entries are `commands::UiCommand`s: label, shortcut, description, engine command and availability (with the reason) are defined there once; buttons and tooltips read them.
+- Ribbon, quick access and shortcut entries are `commands::UiCommand`s: label, shortcut, description, engine command and availability (with the reason) are defined there once; buttons and tooltips read them. Custom widgets report their role, label and state with `Response::widget_info`, so `ui_tests.rs` (egui_kittest) can find them by label; screenshot references live in `crates/cc_app/tests/snapshots` and run on request, since GPUs render slightly differently.
 - Every modal uses `dialog::Dialog` (header with close button, footer buttons right-aligned: main action first, Cancel last; auxiliary buttons left; `danger` for destructive). Dialogs that edit data offer OK/Cancel and wrap edits in `dialog::session` so Cancel undoes them.
 - Property grids use the shared `table.rs` primitives (collapsible `section`, two-column `row`).
 - No hard-coded interface text: keys live in `assets/i18n/{en,pt-BR}.ftl`, read with `t!` / `tr`. A test scans the sources and fails if any key used in code is missing from a language, so add every new key to both files.

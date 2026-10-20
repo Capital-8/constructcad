@@ -972,3 +972,4 @@ palette-run = Run
 palette-back = Back
 palette-result = Result
 palette-bad-json = The arguments are not valid JSON: { $error }
+canvas-zoom-menu = Zoom options

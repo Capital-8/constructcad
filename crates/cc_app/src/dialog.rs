@@ -151,6 +151,9 @@ impl Dialog {
                             }
                             let color = if r.hovered() { PALETTE.text } else { PALETTE.text_muted };
                             icons::paint(ui.painter(), rect.shrink(8.0), Icon::Close, color);
+                            r.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::t!("action-close"))
+                            });
                             close_clicked = r.on_hover_text(crate::t!("action-close")).clicked();
                         });
                     });

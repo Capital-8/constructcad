@@ -18,6 +18,7 @@ pub fn section(ui: &mut Ui, id: &str, title: String, add: impl FnOnce(&mut Ui)) 
     let state_id = ui.make_persistent_id(("prop-section", id));
     let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(state_id, true));
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::CollapsingHeader, true, open, &title));
     let painter = ui.painter();
     let fill = if response.hovered() { PALETTE.hover } else { PALETTE.surface };
     painter.rect_filled(rect, 0.0, fill);
