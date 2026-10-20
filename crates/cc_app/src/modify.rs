@@ -465,6 +465,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
             painter.circle_stroke(xf.to_screen(end), 7.0, Stroke::new(2.0, PREVIEW));
             let joined = match state.project().element(id).map(|e| &e.kind) {
                 Some(ElementKind::Wall(w)) => Some(if at_start { w.join_start } else { w.join_end }),
+                Some(ElementKind::Beam(b)) => Some(if at_start { b.join_start } else { b.join_end }),
                 _ => None,
             };
             if clicked && let Some(joined) = joined {

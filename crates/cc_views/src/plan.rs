@@ -68,7 +68,7 @@ pub fn plan(
         }
     }
     if !ceiling {
-        draw_structure(&mut d, project, level, cut_z, spacing);
+        draw_structure(&mut d, project, geom, level, cut_z, spacing);
     }
     draw_components(&mut d, project, level, cut_z, ceiling);
 
@@ -167,36 +167,61 @@ fn draw_mesh(d: &mut Drawing2D, faces: &[Vec<glam::DVec3>], cut_z: f64, ceiling:
     plan.above.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Hidden, id));
 }
 
-fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, spacing: f64) {
+fn draw_structure(
+    d: &mut Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    cut_z: f64,
+    spacing: f64,
+) {
     for e in project.elements.values().filter(|e| e.level == level) {
         let id = Some(e.id);
         let data = project.element_type(e.type_id).map(|t| &t.data);
         match (&e.kind, data) {
             (ElementKind::Column(c), Some(TypeData::Column { section, .. })) => {
-                let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
+                let loops = cc_geom::section::column_loops(*section, c.position, c.rotation_deg);
                 let (base, top) = project.column_span(e, c);
-                if base <= cut_z && cut_z <= top {
+                let style = if base <= cut_z && cut_z <= top {
                     let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
-                    crate::cut::cut_fill(d, project, material, outline.clone(), spacing, id);
-                    d.polyline(&outline, true, LineStyle::Cut, id);
+                    for part in cc_geom::section::column_parts(*section, c.position, c.rotation_deg) {
+                        crate::cut::cut_fill(d, project, material, part, spacing, id);
+                    }
+                    LineStyle::Cut
+                } else if base > cut_z {
+                    LineStyle::Hidden
                 } else {
-                    let style = if base > cut_z { LineStyle::Hidden } else { LineStyle::Projection };
-                    d.polyline(&outline, true, style, id);
+                    LineStyle::Projection
+                };
+                for outline in &loops {
+                    d.polyline(outline, true, style, id);
                 }
             }
-            (ElementKind::Beam(b), Some(TypeData::Beam { width, height, .. })) => {
-                let Some(u) = (b.end - b.start).try_normalize() else { continue };
-                let n = u.perp() * (width / 2.0);
-                let top = project.level_elevation(e.level) + b.top_offset;
+            (ElementKind::Foundation(_), Some(TypeData::Foundation { .. })) => {
+                // Foundations lie under the floor: dashed, unless the cut plane passes through them.
+                let Some(g) = geom.foundations.get(&e.id) else { continue };
+                let (bottom, top) = g.z_range;
+                if bottom <= cut_z && cut_z <= top {
+                    let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
+                    crate::cut::cut_fill(d, project, material, g.footprint.clone(), spacing, id);
+                    d.polyline(&g.footprint, true, LineStyle::Cut, id);
+                } else {
+                    d.polyline(&g.footprint, true, LineStyle::Hidden, id);
+                }
+            }
+            (ElementKind::Beam(_), Some(TypeData::Beam { .. })) => {
+                // The body as framed into columns and other beams.
+                let Some(g) = geom.beams.get(&e.id) else { continue };
+                let (bottom, top) = g.z_bounds();
                 // Beams above the cut plane are dashed; cut beams are drawn heavy.
-                let style = if top - height > cut_z {
+                let style = if bottom > cut_z {
                     LineStyle::Hidden
                 } else if top >= cut_z {
                     LineStyle::Cut
                 } else {
                     LineStyle::Projection
                 };
-                d.polyline(&[b.start - n, b.end - n, b.end + n, b.start + n], true, style, id);
+                d.polyline(&g.footprint(), true, style, id);
             }
             (ElementKind::Stair(st), Some(TypeData::Stair { .. })) => {
                 if let Some(g) = cc_geom::stair_geom(project, e, st) {

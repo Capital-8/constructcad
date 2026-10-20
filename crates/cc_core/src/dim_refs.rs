@@ -233,7 +233,7 @@ impl Project {
             ElementKind::Wall(w) => self.wall_base_z(e, w),
             ElementKind::Column(c) => level + c.base_offset,
             ElementKind::Component(c) => level + c.base_offset,
-            ElementKind::Beam(b) => level + b.top_offset,
+            ElementKind::Beam(b) => self.beam_z(e, b).1,
             ElementKind::Door(h) | ElementKind::Window(h) => {
                 let host = self.element(h.host);
                 let wall_base = host.and_then(|x| x.as_wall().map(|w| self.wall_base_z(x, w))).unwrap_or(level);

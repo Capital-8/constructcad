@@ -36,6 +36,7 @@ pub enum ElementKind {
     Stair(Stair),
     Railing(Railing),
     Component(Component),
+    Foundation(Foundation),
 }
 
 impl Element {
@@ -56,6 +57,7 @@ impl Element {
             ElementKind::Stair(_) => Category::Stair,
             ElementKind::Railing(_) => Category::Railing,
             ElementKind::Component(_) => Category::Component,
+            ElementKind::Foundation(_) => Category::Foundation,
         }
     }
 
@@ -129,6 +131,7 @@ impl Element {
             ElementKind::Stair(s) => s.start += delta,
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Component(c) => c.position += delta,
+            ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
             ElementKind::Door(_) | ElementKind::Window(_) => {}
         }
     }
@@ -513,19 +516,148 @@ pub struct Column {
     pub structural: bool,
 }
 
-/// A horizontal beam between two points; its top is at the level elevation
-/// plus `top_offset`.
+/// Which line across a beam's section its `start`-`end` location line follows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum BeamLateral {
+    /// The middle of the section.
+    #[default]
+    Center,
+    /// The left face (looking from the start to the end).
+    Left,
+    /// The right face.
+    Right,
+}
+
+impl BeamLateral {
+    pub const ALL: [BeamLateral; 3] = [BeamLateral::Center, BeamLateral::Left, BeamLateral::Right];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            BeamLateral::Center => "just-center",
+            BeamLateral::Left => "just-left",
+            BeamLateral::Right => "just-right",
+        }
+    }
+
+    /// The other side, as seen in a mirror.
+    pub fn mirrored(self) -> Self {
+        match self {
+            BeamLateral::Center => BeamLateral::Center,
+            BeamLateral::Left => BeamLateral::Right,
+            BeamLateral::Right => BeamLateral::Left,
+        }
+    }
+}
+
+/// Which height of a beam's section sits at its location elevation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum BeamVertical {
+    #[default]
+    Top,
+    Center,
+    Bottom,
+}
+
+impl BeamVertical {
+    pub const ALL: [BeamVertical; 3] = [BeamVertical::Top, BeamVertical::Center, BeamVertical::Bottom];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            BeamVertical::Top => "just-top",
+            BeamVertical::Center => "just-center",
+            BeamVertical::Bottom => "just-bottom",
+        }
+    }
+}
+
+/// A horizontal beam between two points. Its location line is at the level
+/// elevation plus `top_offset`; `vertical` picks which height of the section
+/// sits there (the top by default) and `lateral` which line across it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Beam {
     pub start: DVec2,
     pub end: DVec2,
     pub top_offset: f64,
+    /// Location elevation of the end above the level when it differs from
+    /// the start's (a sloped beam).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_offset: Option<f64>,
+    #[serde(default)]
+    pub lateral: BeamLateral,
+    #[serde(default)]
+    pub vertical: BeamVertical,
+    /// The start (end) may join structural columns and other beams; when off it stays square.
+    #[serde(default = "yes")]
+    pub join_start: bool,
+    #[serde(default = "yes")]
+    pub join_end: bool,
 }
 
 impl Beam {
+    /// Rise of the location line from the start to the end.
+    pub fn rise(&self) -> f64 {
+        self.end_offset.map_or(0.0, |end| end - self.top_offset)
+    }
+
+    /// Length along the slope.
+    pub fn true_length(&self) -> f64 {
+        self.length().hypot(self.rise())
+    }
+
+    /// A beam whose ends may join.
+    pub fn new(start: DVec2, end: DVec2, top_offset: f64) -> Self {
+        Self {
+            start,
+            end,
+            top_offset,
+            end_offset: None,
+            lateral: BeamLateral::Center,
+            vertical: BeamVertical::Top,
+            join_start: true,
+            join_end: true,
+        }
+    }
+
     pub fn length(&self) -> f64 {
         self.start.distance(self.end)
     }
+}
+
+/// Where a foundation is in plan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FoundationShape {
+    /// A pad centered at `position`, its width along the rotated X axis.
+    Pad { position: DVec2, rotation_deg: f64 },
+    /// A strip centered on the line `start`-`end`.
+    Strip { start: DVec2, end: DVec2 },
+    /// A slab with this boundary.
+    Slab { boundary: Vec<DVec2> },
+}
+
+impl FoundationShape {
+    pub fn points_mut(&mut self) -> Vec<&mut DVec2> {
+        match self {
+            FoundationShape::Pad { position, .. } => vec![position],
+            FoundationShape::Strip { start, end } => vec![start, end],
+            FoundationShape::Slab { boundary } => boundary.iter_mut().collect(),
+        }
+    }
+
+    pub fn points(&self) -> Vec<DVec2> {
+        match self {
+            FoundationShape::Pad { position, .. } => vec![*position],
+            FoundationShape::Strip { start, end } => vec![*start, *end],
+            FoundationShape::Slab { boundary } => boundary.clone(),
+        }
+    }
+}
+
+/// A foundation: its top is `top_offset` above the level; the type gives its
+/// size and depth.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Foundation {
+    pub shape: FoundationShape,
+    pub top_offset: f64,
 }
 
 /// A straight stair run starting at `start` (bottom of the first riser,

@@ -142,8 +142,19 @@ impl EditCtx<'_> {
             g.name = format!("{}'", g.name);
         }
         set_line(&mut second, p, b);
+        // A sloped beam keeps its slope: the split point's elevation joins the parts.
+        let split_z = match &original.kind {
+            ElementKind::Beam(x) if x.end_offset.is_some() => Some(x.top_offset + x.rise() * t / len),
+            _ => None,
+        };
+        if let (Some(z), ElementKind::Beam(x)) = (split_z, &mut second.kind) {
+            x.top_offset = z;
+        }
         if let Some(el) = self.element_mut(id) {
             set_line(el, a, p);
+            if let (Some(z), ElementKind::Beam(x)) = (split_z, &mut el.kind) {
+                x.end_offset = Some(z);
+            }
         }
         let new = self.add_element(second);
         let hosted: Vec<(ElementId, f64)> =

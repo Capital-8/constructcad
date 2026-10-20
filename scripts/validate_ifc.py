@@ -24,7 +24,7 @@ import ifcopenshell.validate
 ELEMENTS = (
     "IfcWall", "IfcDoor", "IfcWindow", "IfcSlab", "IfcCovering", "IfcRoof",
     "IfcColumn", "IfcBeam", "IfcStair", "IfcRailing",
-    "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
+    "IfcFooting", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
     "IfcPipeSegment", "IfcStairFlight", "IfcMember",
 )
 REL_TOL = 1e-3
@@ -55,6 +55,9 @@ def main(path):
         errors.append(f"validation: {statement.get('message')} ({statement.get('instance')})")
 
     settings = ifcopenshell.geom.settings()
+    # Tessellate curved profiles finely enough for the volume comparison.
+    settings.set("mesher-angular-deflection", 0.02)
+    settings.set("mesher-linear-deflection", 0.0001)
     for entity in ELEMENTS:
         elements = model.by_type(entity)
         print(f"  {entity}: {len(elements)}")

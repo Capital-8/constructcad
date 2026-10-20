@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Structural framing joins: a beam end that lies in a structural column stops at the column's face (along the face when the column is rotated), and beam ends at a common depth meet like walls — mitered at corners, butted against the side of a beam they end on, with a collinear pair running through junctions of three or more. Beams resting on a column, or at another depth, are left whole. Plans, sections, 3D, volumes and IFC export use the framed body; IFC beams carry their location line as an axis, so they come back with their own length and frame again on import.
+- *Modify → Allow/Disallow Join* works on beam ends too. Beams gain *Join at Start*/*Join at End* properties and a read-only *Cut Length*; `wall_join` accepts beams, and `element_get` reports a beam's `cut_length` and what each end is framed into (`start_join`, `end_join`).
+- Structural layout from grids (*Structure → Framing*): *Columns at Grids* places a column at every intersection of the selected grids (or all grids) on the active level, *Beams on Grids* places a beam between neighboring columns along each grid, and *Beams Between Columns* chains beams through the selected columns. Places and spans already modeled are skipped, and each run is one undo step. Engine commands `columns_at_grids`, `beams_on_grids` and `beams_between_columns`.
+- Beam justification: the location line can follow the center or either face of the section (*Lateral Justification*) and sit at its top, center or bottom (*Vertical Justification*); joins work on the body, mirrors keep the body on its side, and `beam_create` takes `lateral` and `vertical`. The beam offset is now labeled *Elevation Offset*.
+- Structural quantities: column and beam schedules gain *Section*, *Cut Length* (with a total) and *Material* fields (columns also *Structural*), shown by default in new schedules; *Structure → Structural Schedules* creates both.
+- Foundations, a new category (*Structure → Foundation*): pad footings (FT, click their centers; *Footings Under Columns* centers and turns one under each column at its base), strip footings / ground beams (*Ground Beams Under Walls*, along each wall's centerline at its base, meeting at corners like beams) and foundation slabs (rafts, sketched or under the loop of walls). Types set the kind, size and depth; plans draw foundations dashed under the floor and cut where the plane passes through them; schedules list section, length, area, thickness, volume and material. IFC export writes `IfcFooting` (pad or strip) and `IfcSlab` `BASESLAB` with their type objects and base quantities. Engine commands `footing_create`, `strip_footing_create`, `foundation_slab_create`, `footings_under_columns` and `strip_footings_under_walls`.
+- Sloped beams: a beam's end can sit at another elevation (*End Elevation Offset*, `beam_create` `end_offset`); the section stays square to the axis, the true length and volume follow the slope, splitting keeps the slope, and IFC export writes the body as a B-rep.
+- Steel and hollow sections: column types can be I/H, channel (U), angle (L), rectangular tube or round tube, and beam types I/H, U, L or tube, edited in the type dialog (section kind, size, web, flange or wall thickness, kept within the section). 3D, plans, legends and schedules draw and measure the real profile; IFC export uses the parametric IFC profiles (`IfcIShapeProfileDef`, `IfcUShapeProfileDef`, `IfcLShapeProfileDef`, `IfcRectangleHollowProfileDef`, `IfcCircleHollowProfileDef`). The template gains steel column and beam types and a steel material.
+- *Join Slabs to Supports* (*Structure → Analysis*, `slab_join_supports`): joins floors with the beams, structural columns and structural walls whose bodies overlap them, so the shared volume counts once and sections show one piece.
+- Analytical model: structural columns and beams as center lines between shared nodes — beams framed into columns end on the column axis, beams ending on beams end on their line, members split where others connect, column bases are supports. *Analytical Model* opens a 3D view of it over the model drawn faint (any 3D view can switch with its *Analytical Model* property; `view_create` kind `analytical`); `analytical_model` returns it as JSON and *Export Analytical Model* (`analytical_export`) saves it for structural analysis programs.
+
+### Changed
+
+- `.ccad` format version 7 (foundations, steel sections, sloped beams); older files still open.
+- Elements cut by joined geometry (other than walls) are exported to IFC with their cut body as a B-rep, matching their exported volume.
+- `*_set` commands replace an enum value given as another variant (a column section switching from rectangular to a profile) instead of merging the two.
+- IFC validation tessellates curved profiles finely enough to compare their volumes, and CI validates a structural fixture.
+
 ## [0.2.1] - 2026-10-20
 
 ### Fixed

@@ -18,12 +18,13 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 
 /// Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`),
 /// `section` (with `start`, `end` and optional `depth`), `elevation` (with
-/// `direction`: north, south, east or west), `three_d`, `legend` (all types),
+/// `direction`: north, south, east or west), `three_d`, `analytical` (a 3D
+/// view of the analytical model), `legend` (all types),
 /// `schedule` (with `category`) or `sheet` (A3, numbered after the others).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
-    /// `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`, `legend`, `schedule` or `sheet`.
+    /// `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`, `analytical`, `legend`, `schedule` or `sheet`.
     pub kind: String,
     /// View name (default: by kind).
     #[serde(default)]
@@ -100,7 +101,16 @@ impl Command for ViewCreate {
                 (
                     t!("default-3d-name", "n" => n),
                     100,
-                    ViewKind::ThreeD { camera: CameraState::default() },
+                    ViewKind::ThreeD { camera: CameraState::default(), analytical: false },
+                    t!("tx-new-view"),
+                )
+            }
+            "analytical" => {
+                let n = count(p, ViewCategory::ThreeD) + 1;
+                (
+                    t!("default-analytical-name", "n" => n),
+                    100,
+                    ViewKind::ThreeD { camera: CameraState::default(), analytical: true },
                     t!("tx-new-view"),
                 )
             }

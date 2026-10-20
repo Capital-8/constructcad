@@ -48,6 +48,10 @@ pub enum Tool {
     Beam {
         type_id: ElementTypeId,
     },
+    /// Click to place a pad footing; Space turns it by 90°.
+    Footing {
+        type_id: ElementTypeId,
+    },
     Stair {
         type_id: ElementTypeId,
     },
@@ -102,6 +106,7 @@ impl Tool {
             Tool::Hosted { .. } => "tool-window",
             Tool::Sketch { category: Category::Ceiling, .. } => "tool-ceiling",
             Tool::Sketch { category: Category::Roof, .. } => "tool-roof",
+            Tool::Sketch { category: Category::Foundation, .. } => "tool-foundation-slab",
             Tool::Sketch { .. } => "tool-floor",
             Tool::Section => "tool-section",
             Tool::Room { .. } => "tool-room",
@@ -109,6 +114,7 @@ impl Tool {
             Tool::Dimension { mode, .. } => mode.key(),
             Tool::Column { .. } => "tool-column",
             Tool::Beam { .. } => "tool-beam",
+            Tool::Footing { .. } => "tool-footing",
             Tool::Stair { .. } => "tool-stair",
             Tool::Railing { .. } => "tool-railing",
             Tool::Component { .. } => "tool-component",
@@ -144,6 +150,7 @@ impl Tool {
             | Tool::Dimension { type_id, .. }
             | Tool::Column { type_id }
             | Tool::Beam { type_id }
+            | Tool::Footing { type_id }
             | Tool::Stair { type_id }
             | Tool::Railing { type_id }
             | Tool::Component { type_id }
@@ -161,6 +168,7 @@ impl Tool {
             Tool::Dimension { .. } => Some(Category::Dimension),
             Tool::Column { .. } => Some(Category::Column),
             Tool::Beam { .. } => Some(Category::Beam),
+            Tool::Footing { .. } => Some(Category::Foundation),
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Railing { .. } => Some(Category::Railing),
             Tool::Component { .. } => Some(Category::Component),
@@ -179,6 +187,7 @@ impl Tool {
             Tool::Dimension { mode, .. } => Tool::Dimension { type_id: id, mode },
             Tool::Column { .. } => Tool::Column { type_id: id },
             Tool::Beam { .. } => Tool::Beam { type_id: id },
+            Tool::Footing { .. } => Tool::Footing { type_id: id },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
             Tool::Component { .. } => Tool::Component { type_id: id },
@@ -187,8 +196,12 @@ impl Tool {
         }
     }
 
-    /// Tool for creating elements of `category` with its default type.
+    /// Tool for creating elements of `category` with its default type
+    /// (foundations: a pad footing with the first pad type).
     pub fn for_category(project: &Project, category: Category) -> Option<Tool> {
+        if category == Category::Foundation {
+            return foundation_type(project, cc_core::FoundationKind::Pad).map(|type_id| Tool::Footing { type_id });
+        }
         let type_id = project.default_type(category)?;
         Some(match category {
             Category::Wall => Tool::Wall { type_id },
@@ -199,6 +212,7 @@ impl Tool {
             Category::Dimension => Tool::Dimension { type_id, mode: DimensionMode::Aligned },
             Category::Column => Tool::Column { type_id },
             Category::Beam => Tool::Beam { type_id },
+            Category::Foundation => Tool::Footing { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
             Category::Component => Tool::Component { type_id },
@@ -743,6 +757,7 @@ pub fn handle(
         (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Column { type_id }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
         (
@@ -798,6 +813,53 @@ fn column_tool(
     }
     if resp.clicked() {
         let command = create::ColumnCreate {
+            position: s.point.to_array(),
+            rotation: Some(state.interaction.rotation),
+            level: Some(Ref::Id(level.0)),
+            type_ref: Some(Ref::Id(type_id.0)),
+            ..Default::default()
+        };
+        run_create(state, command);
+    }
+}
+
+/// The first foundation type of `kind`.
+pub fn foundation_type(project: &Project, kind: cc_core::FoundationKind) -> Option<ElementTypeId> {
+    project
+        .types_of(Category::Foundation)
+        .find(|t| matches!(t.data, cc_core::TypeData::Foundation { kind: k, .. } if k == kind))
+        .map(|t| t.id)
+}
+
+/// Click to place a pad footing; Space turns it by 90°.
+fn footing_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    if resp.hovered() && ui.input(|i| i.key_pressed(Key::Space)) {
+        state.interaction.rotation = (state.interaction.rotation + 90.0).rem_euclid(360.0);
+    }
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap_at(state, Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
+    draw_snap(painter, xf, s);
+    if let Some(cc_core::TypeData::Foundation { width, length, .. }) =
+        state.project().element_type(type_id).map(|t| &t.data)
+    {
+        let section = cc_core::ColumnSection::Rectangular { width: *width, depth: *length };
+        let outline: Vec<Pos2> = cc_geom::column_outline(section, s.point, state.interaction.rotation)
+            .iter()
+            .map(|p| xf.to_screen(*p))
+            .collect();
+        painter.add(egui::Shape::closed_line(outline, Stroke::new(1.5, PREVIEW)));
+    }
+    if resp.clicked() {
+        let command = cc_engine::commands::foundation::FootingCreate {
             position: s.point.to_array(),
             rotation: Some(state.interaction.rotation),
             level: Some(Ref::Id(level.0)),
@@ -1695,6 +1757,7 @@ pub fn finish_sketch(
     match category {
         Category::Floor => run_create(state, create::FloorCreate { sketch }),
         Category::Ceiling => run_create(state, create::CeilingCreate { sketch }),
+        Category::Foundation => run_create(state, cc_engine::commands::foundation::FoundationSlabCreate { sketch }),
         _ => run_create(state, create::RoofCreate { sketch, overhang: None }),
     };
     state.interaction.points.clear();

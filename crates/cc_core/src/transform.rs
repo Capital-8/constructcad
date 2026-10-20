@@ -104,6 +104,12 @@ impl Element {
                 }
             }
             ElementKind::Room(r) => p(&mut r.position),
+            ElementKind::Foundation(f) => {
+                if let crate::FoundationShape::Pad { rotation_deg, .. } = &mut f.shape {
+                    *rotation_deg = t.apply_angle_deg(*rotation_deg);
+                }
+                f.shape.points_mut().into_iter().for_each(p);
+            }
             ElementKind::Grid(g) => {
                 p(&mut g.start);
                 p(&mut g.end);
@@ -143,6 +149,10 @@ impl Element {
             ElementKind::Beam(b) => {
                 p(&mut b.start);
                 p(&mut b.end);
+                // The line keeps its direction, so a face justification changes sides.
+                if t.mirror {
+                    b.lateral = b.lateral.mirrored();
+                }
             }
             ElementKind::Stair(s) => {
                 p(&mut s.start);

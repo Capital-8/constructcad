@@ -54,13 +54,33 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Column(c) => {
             finite(&[c.rotation_deg, c.base_offset, c.height]) && c.position.is_finite() && top_ok(c.top)
         }
-        ElementKind::Beam(b) => b.top_offset.is_finite() && finite_points(&[b.start, b.end]),
+        ElementKind::Beam(b) => {
+            b.top_offset.is_finite() && b.end_offset.is_none_or(f64::is_finite) && finite_points(&[b.start, b.end])
+        }
+        ElementKind::Foundation(f) => {
+            let shape = match &f.shape {
+                crate::FoundationShape::Pad { position, rotation_deg } => {
+                    position.is_finite() && rotation_deg.is_finite()
+                }
+                crate::FoundationShape::Strip { start, end } => finite_points(&[*start, *end]),
+                crate::FoundationShape::Slab { boundary } => boundary.len() >= 3 && finite_points(boundary),
+            };
+            shape && f.top_offset.is_finite()
+        }
         ElementKind::Stair(s) => {
             finite(&[s.direction_deg, s.base_offset, s.height]) && s.start.is_finite() && top_ok(s.top)
         }
         ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
         ElementKind::Component(c) => finite(&[c.rotation_deg, c.base_offset]) && c.position.is_finite(),
     }
+}
+
+/// Fit a profile's thicknesses into its box; returns how many changed (0 or 1).
+fn fit_shape(shape: &mut crate::SectionShape, width: f64, depth: f64) -> usize {
+    let fitted = shape.fitted(width, depth);
+    let changed = fitted != *shape;
+    *shape = fitted;
+    usize::from(changed)
 }
 
 /// Replace a non-finite or non-positive value by `fallback`; returns whether it changed.
@@ -112,9 +132,28 @@ impl Project {
                         repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
                     }
                     crate::ColumnSection::Round { diameter } => repairs += usize::from(fix_positive(diameter, 0.3)),
+                    crate::ColumnSection::Profile { width, depth, shape } => {
+                        repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
+                        repairs += fit_shape(shape, *width, *depth);
+                    }
+                    crate::ColumnSection::Pipe { diameter, wall } => {
+                        repairs += usize::from(fix_positive(diameter, 0.2));
+                        let fitted =
+                            if wall.is_finite() { wall.clamp(0.001, *diameter * 0.5) } else { *diameter * 0.5 };
+                        if fitted != *wall {
+                            *wall = fitted;
+                            repairs += 1;
+                        }
+                    }
                 },
-                TypeData::Beam { width, height, .. } => {
+                TypeData::Beam { width, height, shape, .. } => {
                     repairs += usize::from(fix_positive(width, 0.15)) + usize::from(fix_positive(height, 0.4));
+                    repairs += fit_shape(shape, *width, *height);
+                }
+                TypeData::Foundation { width, length, thickness, .. } => {
+                    repairs += usize::from(fix_positive(width, 1.0))
+                        + usize::from(fix_positive(length, 1.0))
+                        + usize::from(fix_positive(thickness, 0.4));
                 }
                 TypeData::Stair { width, max_riser, tread, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))

@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             add(e, column_t, "", ElementKind::Column(column));
         }
-        let beam = Beam { start: DVec2::new(2.0, -2.5), end: DVec2::new(7.0, -2.5), top_offset: 3.0 };
+        let beam = Beam::new(DVec2::new(2.0, -2.5), DVec2::new(7.0, -2.5), 3.0);
         add(e, beam_t, "", ElementKind::Beam(beam));
         let railing = Railing { path: vec![DVec2::new(2.1, -2.5), DVec2::new(5.5, -2.5)], base_offset: 0.0 };
         add(e, railing_t, "", ElementKind::Railing(railing));

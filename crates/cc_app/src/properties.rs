@@ -307,14 +307,56 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         ElementKind::Beam(b) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
-                length_row(ui, state, &t!("prop-top-offset"), id, "beam-top", b.top_offset, |e, v| {
+                length_row(ui, state, &t!("prop-elevation-offset"), id, "beam-top", b.top_offset, |e, v| {
                     if let ElementKind::Beam(b) = &mut e.kind {
                         b.top_offset = v;
                     }
                 });
+                let end = b.end_offset.unwrap_or(b.top_offset);
+                length_row(ui, state, &t!("prop-end-elevation-offset"), id, "beam-end", end, |e, v| {
+                    if let ElementKind::Beam(b) = &mut e.kind {
+                        // Level again when the end returns to the start's elevation.
+                        b.end_offset = ((v - b.top_offset).abs() > 1e-9).then_some(v);
+                    }
+                });
+                beam_justification(ui, state, id, b);
+                for (label, at_start, value) in
+                    [(t!("prop-join-start"), true, b.join_start), (t!("prop-join-end"), false, b.join_end)]
+                {
+                    let mut on = value;
+                    if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+                        crate::engine_edit::element(state, id, None, |x| {
+                            if let ElementKind::Beam(b) = &mut x.kind {
+                                *(if at_start { &mut b.join_start } else { &mut b.join_end }) = on;
+                            }
+                        });
+                    }
+                }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 readonly_row(ui, &t!("prop-length"), format::length(b.length()));
+                if b.end_offset.is_some() {
+                    readonly_row(ui, &t!("prop-true-length"), format::length(b.true_length()));
+                }
+                if let Some(g) = state.session.geom().beams.get(&id) {
+                    readonly_row(ui, &t!("prop-cut-length"), format::length(g.cut_length()));
+                }
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
+            });
+        }
+        ElementKind::Foundation(f) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-top-offset"), id, "foundation-top", f.top_offset, |e, v| {
+                    if let ElementKind::Foundation(f) = &mut e.kind {
+                        f.top_offset = v;
+                    }
+                });
+            });
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                if let Some(g) = state.session.geom().foundations.get(&id).cloned() {
+                    readonly_row(ui, &t!("col-area"), format::area(cc_geom::polygon::area(&g.footprint)));
+                }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
         }
@@ -797,6 +839,34 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
     });
 }
 
+/// Lateral and vertical justification of a beam: which line of its section
+/// the location line follows.
+fn beam_justification(ui: &mut Ui, state: &mut AppState, id: cc_core::ElementId, b: &cc_core::Beam) {
+    use cc_core::{BeamLateral, BeamVertical};
+    let (mut lateral, mut vertical) = (b.lateral, b.vertical);
+    row(ui, &t!("prop-lateral-justification"), |ui| {
+        egui::ComboBox::from_id_salt(("beam-lateral", id.0)).selected_text(tr(lateral.key())).show_ui(ui, |ui| {
+            for j in BeamLateral::ALL {
+                ui.selectable_value(&mut lateral, j, tr(j.key()));
+            }
+        });
+    });
+    row(ui, &t!("prop-vertical-justification"), |ui| {
+        egui::ComboBox::from_id_salt(("beam-vertical", id.0)).selected_text(tr(vertical.key())).show_ui(ui, |ui| {
+            for j in BeamVertical::ALL {
+                ui.selectable_value(&mut vertical, j, tr(j.key()));
+            }
+        });
+    });
+    if (lateral, vertical) != (b.lateral, b.vertical) {
+        crate::engine_edit::element(state, id, None, |x| {
+            if let ElementKind::Beam(b) = &mut x.kind {
+                (b.lateral, b.vertical) = (lateral, vertical);
+            }
+        });
+    }
+}
+
 /// Base and top constraints, location line and room bounding of a wall.
 fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core::Wall) {
     use cc_core::{LocationLine, WallTop};
@@ -1030,7 +1100,15 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             if scale != view.scale {
                 crate::engine_edit::view(state, id, None, |v| v.scale = scale);
             }
-            if let ViewKind::ThreeD { .. } = view.kind {
+            if let ViewKind::ThreeD { analytical, .. } = view.kind {
+                let mut on = analytical;
+                if row(ui, &t!("prop-analytical"), |ui| ui.checkbox(&mut on, "")).changed() {
+                    crate::engine_edit::view(state, id, None, |v| {
+                        if let ViewKind::ThreeD { analytical, .. } = &mut v.kind {
+                            *analytical = on;
+                        }
+                    });
+                }
                 let clicked = row(ui, "", |ui| ui.button(t!("action-zoom-fit")).clicked());
                 if clicked && let Some(v3) = state.view3d.get_mut(&id) {
                     v3.request_fit();

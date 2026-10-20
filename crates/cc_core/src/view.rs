@@ -145,6 +145,9 @@ pub enum ViewKind {
     },
     ThreeD {
         camera: CameraState,
+        /// Show the analytical model (member lines and nodes) over a faint model.
+        #[serde(default)]
+        analytical: bool,
     },
     Elevation {
         direction: Direction,

@@ -598,3 +598,238 @@ fn measuring_creates_nothing() {
     assert!((m["between_lines"].as_f64().unwrap() - 0.2).abs() < 1e-12);
     assert_eq!(run(&mut s, "project_info", json!({})), before);
 }
+
+#[test]
+fn beams_frame_into_columns_and_each_other() {
+    let mut s = Session::default();
+    // Two 0.2 m columns 5 m apart with a 0.15 m beam between their centers,
+    // a beam going north from the second and one along the north side.
+    let c1 = id(&run(&mut s, "column_create", json!({"position": [0, 0]})));
+    let c2 = id(&run(&mut s, "column_create", json!({"position": [5, 0]})));
+    let span = id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [5, 0]})));
+    let side = id(&run(&mut s, "beam_create", json!({"start": [5, 0], "end": [5, 4]})));
+    let north = id(&run(&mut s, "beam_create", json!({"start": [0, 4], "end": [5, 4]})));
+    let derived = |s: &mut Session, beam: u64| run(s, "element_get", json!({"id": beam}))["derived"].clone();
+
+    let d = derived(&mut s, span);
+    assert_eq!((d["start_join"].clone(), d["end_join"].clone()), (json!({"column": c1}), json!({"column": c2})));
+    assert!((d["length"].as_f64().unwrap() - 5.0).abs() < 1e-9);
+    assert!((d["cut_length"].as_f64().unwrap() - 4.8).abs() < 1e-9, "{d}");
+    assert!((d["volume"].as_f64().unwrap() - 0.15 * 0.4 * 4.8).abs() < 1e-9, "{d}");
+    // A mitered corner between the side and north beams.
+    let d = derived(&mut s, side);
+    assert_eq!((d["start_join"].clone(), d["end_join"].clone()), (json!({"column": c2}), json!("beam")));
+    assert_eq!(derived(&mut s, north)["end_join"], json!("beam"));
+
+    // A disallowed end stays square at its location point, and undoes.
+    run(&mut s, "wall_join", json!({"id": span, "end": "start", "joined": false}));
+    let d = derived(&mut s, span);
+    assert_eq!(d["start_join"], json!("free"));
+    assert!((d["cut_length"].as_f64().unwrap() - 4.9).abs() < 1e-9, "{d}");
+    assert_eq!(run(&mut s, "element_get", json!({"id": span}))["params"]["join_start"], json!(false));
+    run(&mut s, "undo", json!({}));
+    assert_eq!(derived(&mut s, span)["start_join"], json!({"column": c1}));
+    assert_eq!(
+        fails(&mut s, "wall_join", json!({"id": c1, "end": "start", "joined": false})),
+        ErrorCode::InvalidArguments
+    );
+}
+
+#[test]
+fn columns_and_beams_from_grids() {
+    let mut s = Session::default();
+    // Two grids each way: a 6 x 4 m bay, plus a short grid crossing nothing.
+    let a = id(&run(&mut s, "grid_create", json!({"start": [-1, 0], "end": [7, 0]})));
+    let b = id(&run(&mut s, "grid_create", json!({"start": [-1, 4], "end": [7, 4]})));
+    let one = id(&run(&mut s, "grid_create", json!({"start": [0, -1], "end": [0, 5]})));
+    let two = id(&run(&mut s, "grid_create", json!({"start": [6, -1], "end": [6, 5]})));
+    run(&mut s, "grid_create", json!({"start": [20, 20], "end": [21, 20]}));
+    let columns = |s: &mut Session| run(s, "elements_list", json!({"category": "column"})).as_array().unwrap().len();
+
+    let out = run(&mut s, "columns_at_grids", json!({}));
+    assert_eq!(out["created"].as_array().unwrap().len(), 4, "{out}");
+    assert_eq!(columns(&mut s), 4);
+    // Once is enough: the intersections are taken now.
+    let again = run(&mut s, "columns_at_grids", json!({"grids": [a, b, one, two]}));
+    assert_eq!((again["created"].as_array().unwrap().len(), again["skipped"].as_u64()), (0, Some(4)));
+    // All four columns came in one undo step.
+    run(&mut s, "undo", json!({}));
+    assert_eq!(columns(&mut s), 0);
+    run(&mut s, "redo", json!({}));
+    assert_eq!(fails(&mut s, "columns_at_grids", json!({"grids": [a]})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "columns_at_grids", json!({"grids": [a, 999_999]})), ErrorCode::NotFound);
+
+    // A beam between the neighboring columns on each grid, framed into them.
+    let out = run(&mut s, "beams_on_grids", json!({}));
+    let beams: Vec<u64> = out["created"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+    assert_eq!(beams.len(), 4, "{out}");
+    let d = run(&mut s, "element_get", json!({"id": beams[0]}))["derived"].clone();
+    assert!(d["start_join"]["column"].is_u64() && d["end_join"]["column"].is_u64(), "{d}");
+    let again = run(&mut s, "beams_on_grids", json!({"grids": [a]}));
+    assert_eq!((again["created"].as_array().unwrap().len(), again["skipped"].as_u64()), (0, Some(1)));
+
+    // Beams in a chain through chosen columns: the diagonal is new, the side exists.
+    let ids: Vec<u64> = run(&mut s, "elements_list", json!({"category": "column"}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].as_u64().unwrap())
+        .collect();
+    let at = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["params"]["position"].clone();
+    let origin = *ids.iter().find(|&&c| at(&mut s, c) == json!([0.0, 0.0])).unwrap();
+    let far = *ids.iter().find(|&&c| at(&mut s, c) == json!([6.0, 4.0])).unwrap();
+    let side = *ids.iter().find(|&&c| at(&mut s, c) == json!([6.0, 0.0])).unwrap();
+    let out = run(&mut s, "beams_between_columns", json!({"columns": [far, origin, side], "top_offset": 2.5}));
+    assert_eq!((out["created"].as_array().unwrap().len(), out["skipped"].as_u64()), (1, Some(1)), "{out}");
+    let diagonal = run(&mut s, "element_get", json!({"id": out["created"][0]}));
+    assert_eq!(diagonal["params"]["top_offset"], json!(2.5));
+    assert_eq!(fails(&mut s, "beams_between_columns", json!({"columns": [far]})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "beams_between_columns", json!({"columns": [far, a]})), ErrorCode::InvalidArguments);
+}
+
+#[test]
+fn beam_justification_moves_the_body() {
+    let mut s = Session::default();
+    let beam =
+        id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [4, 0], "top_offset": 3.0, "lateral": "left"})));
+    let justified = |s: &mut Session| {
+        let b = run(s, "element_get", json!({"id": beam}))["params"].clone();
+        (b["lateral"].clone(), b["vertical"].clone())
+    };
+    assert_eq!(justified(&mut s), (json!("Left"), json!("Top")));
+    run(&mut s, "element_set", json!({"id": beam, "params": {"vertical": "Bottom"}}));
+    assert_eq!(justified(&mut s), (json!("Left"), json!("Bottom")));
+    let d = run(&mut s, "element_get", json!({"id": beam}))["derived"].clone();
+    assert!((d["volume"].as_f64().unwrap() - 0.15 * 0.4 * 4.0).abs() < 1e-9, "{d}");
+    assert_eq!(
+        fails(&mut s, "beam_create", json!({"start": [0, 0], "end": [1, 0], "lateral": "middle"})),
+        ErrorCode::InvalidArguments
+    );
+}
+
+#[test]
+fn foundations_under_columns_and_walls() {
+    let mut s = Session::default();
+    let volume =
+        |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["derived"]["volume"].as_f64().unwrap();
+    // Two columns: a 1.00 x 1.00 x 0.40 pad under each, once.
+    for x in [0, 5] {
+        run(&mut s, "column_create", json!({"position": [x, 0]}));
+    }
+    let out = run(&mut s, "footings_under_columns", json!({}));
+    let pads: Vec<u64> = out["created"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+    assert_eq!(pads.len(), 2, "{out}");
+    assert!((volume(&mut s, pads[0]) - 0.4).abs() < 1e-9);
+    let pad = run(&mut s, "element_get", json!({"id": pads[0]}));
+    assert_eq!(pad["category"], json!("foundation"));
+    let again = run(&mut s, "footings_under_columns", json!({}));
+    assert_eq!((again["created"].as_array().unwrap().len(), again["skipped"].as_u64()), (0, Some(2)));
+
+    // A 6 x 4 m loop of walls: 0.20 m strips meeting at the corners tile 20 m of centerline.
+    let corners = [[10, 0], [16, 0], [16, 4], [10, 4]];
+    for i in 0..4 {
+        run(&mut s, "wall_create", json!({"start": corners[i], "end": corners[(i + 1) % 4]}));
+    }
+    let out = run(&mut s, "strip_footings_under_walls", json!({}));
+    let strips: Vec<u64> = out["created"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+    assert_eq!(strips.len(), 4, "{out}");
+    let total: f64 = strips.iter().map(|id| volume(&mut s, *id)).sum();
+    assert!((total - 20.0 * 0.2 * 0.4).abs() < 1e-9, "{total}");
+
+    // A raft under the loop of walls, 0.30 m thick.
+    let raft = run(&mut s, "foundation_slab_create", json!({"boundary": [[10, 0], [16, 0], [16, 4], [10, 4]]}));
+    assert!((volume(&mut s, id(&raft)) - 24.0 * 0.3).abs() < 1e-9);
+    // A pad needs a pad type.
+    assert_eq!(
+        fails(&mut s, "footing_create", json!({"position": [0, 9], "type": "Radier 30 cm"})),
+        ErrorCode::InvalidArguments
+    );
+    let pad = run(&mut s, "footing_create", json!({"position": [0, 9], "rotation": 45, "top_offset": -0.5}));
+    assert_eq!(pad["params"]["top_offset"], json!(-0.5));
+}
+
+#[test]
+fn sloped_beams_and_steel_sections() {
+    let mut s = Session::default();
+    let derived = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["derived"].clone();
+    // A beam rising 1 m over 4 m: its 0.15 x 0.40 section runs the true length.
+    let beam =
+        id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [4, 0], "top_offset": 3.0, "end_offset": 4.0})));
+    let d = derived(&mut s, beam);
+    let true_length = 17f64.sqrt();
+    assert!((d["true_length"].as_f64().unwrap() - true_length).abs() < 1e-9, "{d}");
+    assert!((d["volume"].as_f64().unwrap() - 0.15 * 0.4 * true_length).abs() < 1e-9, "{d}");
+    // Splitting keeps the slope: the parts meet at the elevation in between.
+    let second = run(&mut s, "element_split", json!({"id": beam, "point": [2, 0]}));
+    let first = run(&mut s, "element_get", json!({"id": beam}));
+    assert_eq!(first["params"]["end_offset"], json!(3.5));
+    assert_eq!(run(&mut s, "element_get", json!({"id": second["created"]}))["params"]["top_offset"], json!(3.5));
+
+    // An I profile: two 0.02 flanges and a 0.01 web in a 0.15 x 0.40 box.
+    let ty = run(&mut s, "type_duplicate", json!({"type": "Viga 15 x 40 cm", "name": "Perfil I", "elements": [beam]}));
+    run(&mut s, "type_set", json!({"type": ty["id"], "params": {"shape": {"I": {"web": 0.01, "flange": 0.02}}}}));
+    let area = 2.0 * 0.15 * 0.02 + 0.01 * (0.4 - 0.04);
+    let d = derived(&mut s, beam);
+    assert!((d["volume"].as_f64().unwrap() - area * true_length / 2.0).abs() < 1e-9, "{d}");
+    // Back to a solid section: the variant is replaced, not merged.
+    run(&mut s, "type_set", json!({"type": ty["id"], "params": {"shape": "Solid"}}));
+
+    // A column switching to a tube profile and to a pipe.
+    let column = id(&run(&mut s, "column_create", json!({"position": [9, 9], "height": 3.0})));
+    let ty = run(&mut s, "type_duplicate", json!({"type": "Pilar 20 x 20 cm", "name": "Tubo", "elements": [column]}));
+    let tube = json!({"Profile": {"width": 0.2, "depth": 0.2, "shape": {"Tube": {"wall": 0.01}}}});
+    run(&mut s, "type_set", json!({"type": ty["id"], "params": {"section": tube}}));
+    let volume = derived(&mut s, column)["volume"].as_f64().unwrap();
+    assert!((volume - (0.04 - 0.18 * 0.18) * 3.0).abs() < 1e-9, "{volume}");
+    run(
+        &mut s,
+        "type_set",
+        json!({"type": ty["id"], "params": {"section": {"Pipe": {"diameter": 0.2, "wall": 0.01}}}}),
+    );
+    assert!(derived(&mut s, column)["volume"].as_f64().unwrap() < volume);
+}
+
+#[test]
+fn slabs_join_their_supports_and_the_analytical_model() {
+    let mut s = Session::default();
+    // A slab over two columns and a beam hanging from it, and a beam well below it.
+    for x in [0, 6] {
+        run(&mut s, "column_create", json!({"position": [x, 0], "height": 3.0}));
+    }
+    let beam = id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [6, 0], "top_offset": 3.0})));
+    let low = id(&run(&mut s, "beam_create", json!({"start": [0, 2], "end": [6, 2], "top_offset": 1.5})));
+    let slab = id(&run(
+        &mut s,
+        "floor_create",
+        json!({"boundary": [[-1, -1], [7, -1], [7, 3], [-1, 3]], "level": "Pavimento 1", "offset": 0.0}),
+    ));
+    let before = run(&mut s, "element_get", json!({"id": slab}))["derived"]["volume"].as_f64().unwrap();
+    let out = run(&mut s, "slab_join_supports", json!({}));
+    let joined = out["joined"].as_array().unwrap();
+    assert!(joined.iter().any(|j| j["cutting"] == json!(beam) && j["cut"] == json!(slab)), "{out}");
+    assert!(!joined.iter().any(|j| j["cutting"] == json!(low)), "the low beam does not touch the slab");
+    let after = run(&mut s, "element_get", json!({"id": slab}))["derived"]["volume"].as_f64().unwrap();
+    assert!(after < before - 1e-6, "the beam took its share: {before} -> {after}");
+    // Running it again joins nothing new.
+    assert_eq!(run(&mut s, "slab_join_supports", json!({}))["joined"], json!([]));
+
+    // The analytical model: the beam between the column axes, splitting both columns.
+    let m = run(&mut s, "analytical_model", json!({}));
+    let members = m["members"].as_array().unwrap();
+    let of = |id: u64| members.iter().filter(|x| x["element"] == json!(id)).count();
+    assert_eq!(of(beam), 1);
+    assert_eq!(members.iter().filter(|x| x["kind"] == json!("column")).count(), 4, "{m}");
+    let node = |i: &Value| m["nodes"][i.as_u64().unwrap() as usize].clone();
+    let main = members.iter().find(|x| x["element"] == json!(beam)).unwrap();
+    assert_eq!((node(&main["start"])["x"].clone(), node(&main["end"])["x"].clone()), (json!(0.0), json!(6.0)));
+    assert!((main["length"].as_f64().unwrap() - 6.0).abs() < 1e-9);
+    assert_eq!(m["nodes"].as_array().unwrap().iter().filter(|n| n["support"] == json!(true)).count(), 2);
+    let path = scratch("model.analytical.json");
+    let out = run(&mut s, "analytical_export", json!({"path": path}));
+    assert_eq!(out["members"].as_u64(), Some(members.len() as u64));
+    let written: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(written["format"], json!("constructcad-analytical"));
+    // An analytical 3D view.
+    let view = run(&mut s, "view_create", json!({"kind": "analytical"}));
+    assert_eq!(view["params"]["analytical"], json!(true), "{view}");
+}

@@ -272,6 +272,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     | TypeData::Ceiling { material, .. }
     | TypeData::Column { material, .. }
     | TypeData::Beam { material, .. }
+    | TypeData::Foundation { material, .. }
     | TypeData::Stair { material, .. }
     | TypeData::Railing { material, .. } = &ty.data
     {
@@ -286,6 +287,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     | TypeData::Ceiling { material, .. }
                     | TypeData::Column { material, .. }
                     | TypeData::Beam { material, .. }
+                    | TypeData::Foundation { material, .. }
                     | TypeData::Stair { material, .. }
                     | TypeData::Railing { material, .. } => *material = m,
                     _ => {}
@@ -429,18 +431,49 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let tid = ty.id;
     match ty.data {
         TypeData::Column { section, .. } => {
-            section_rows(ui, state, tid, section);
+            section_rows(ui, state, tid, section, false);
         }
-        TypeData::Beam { width, height, .. } => {
+        TypeData::Beam { width, height, shape, .. } => {
+            section_rows(ui, state, tid, cc_core::ColumnSection::Profile { width, depth: height, shape }, true);
+        }
+        TypeData::Foundation { kind, width, length, thickness, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
-                length_row(ui, state, &t!("col-width"), tid, "bw", width, |d, v| {
-                    if let TypeData::Beam { width, .. } = d {
-                        *width = v.max(0.01);
-                    }
+                let mut k = kind;
+                row(ui, &t!("prop-foundation-kind"), |ui| {
+                    egui::ComboBox::from_id_salt(("foundation-kind", tid.0)).selected_text(tr(k.key())).show_ui(
+                        ui,
+                        |ui| {
+                            for option in cc_core::FoundationKind::ALL {
+                                ui.selectable_value(&mut k, option, tr(option.key()));
+                            }
+                        },
+                    );
                 });
-                length_row(ui, state, &t!("col-height"), tid, "bh", height, |d, v| {
-                    if let TypeData::Beam { height, .. } = d {
-                        *height = v.max(0.01);
+                if k != kind {
+                    update(state, tid, "fk", |t| {
+                        if let TypeData::Foundation { kind, .. } = &mut t.data {
+                            *kind = k;
+                        }
+                    });
+                    state.session.doc.break_merge();
+                }
+                if kind != cc_core::FoundationKind::Slab {
+                    length_row(ui, state, &t!("col-width"), tid, "fw", width, |d, v| {
+                        if let TypeData::Foundation { width, .. } = d {
+                            *width = v.max(0.05);
+                        }
+                    });
+                }
+                if kind == cc_core::FoundationKind::Pad {
+                    length_row(ui, state, &t!("prop-length"), tid, "fl", length, |d, v| {
+                        if let TypeData::Foundation { length, .. } = d {
+                            *length = v.max(0.05);
+                        }
+                    });
+                }
+                length_row(ui, state, &t!("col-thickness"), tid, "ft", thickness, |d, v| {
+                    if let TypeData::Foundation { thickness, .. } = d {
+                        *thickness = v.max(0.05);
                     }
                 });
             });
@@ -482,25 +515,179 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     }
 }
 
-fn section_rows(ui: &mut Ui, state: &mut AppState, tid: ElementTypeId, section: cc_core::ColumnSection) {
-    use cc_core::ColumnSection;
-    crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| match section {
-        ColumnSection::Rectangular { width, depth } => {
-            length_row(ui, state, &t!("col-width"), tid, "cw", width, |d, v| {
-                if let TypeData::Column { section: ColumnSection::Rectangular { width, .. }, .. } = d {
-                    *width = v.max(0.01);
-                }
-            });
-            length_row(ui, state, &t!("prop-depth-section"), tid, "cd", depth, |d, v| {
-                if let TypeData::Column { section: ColumnSection::Rectangular { depth, .. }, .. } = d {
-                    *depth = v.max(0.01);
-                }
-            });
+/// The kinds of section a type can choose; beams take all but the round ones.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SectionKind {
+    Rectangular,
+    Round,
+    I,
+    Channel,
+    Angle,
+    Tube,
+    Pipe,
+}
+
+impl SectionKind {
+    const ALL: [SectionKind; 7] = [
+        SectionKind::Rectangular,
+        SectionKind::Round,
+        SectionKind::I,
+        SectionKind::Channel,
+        SectionKind::Angle,
+        SectionKind::Tube,
+        SectionKind::Pipe,
+    ];
+
+    fn key(self) -> &'static str {
+        match self {
+            SectionKind::Rectangular => "section-solid",
+            SectionKind::Round => "section-round",
+            SectionKind::I => "section-i",
+            SectionKind::Channel => "section-channel",
+            SectionKind::Angle => "section-angle",
+            SectionKind::Tube => "section-tube",
+            SectionKind::Pipe => "section-pipe",
         }
-        ColumnSection::Round { diameter } => {
-            length_row(ui, state, &t!("prop-diameter"), tid, "cdia", diameter, |d, v| {
-                if let TypeData::Column { section: ColumnSection::Round { diameter }, .. } = d {
-                    *diameter = v.max(0.01);
+    }
+
+    fn of(section: cc_core::ColumnSection) -> Self {
+        use cc_core::{ColumnSection as C, SectionShape as S};
+        match section {
+            C::Rectangular { .. } | C::Profile { shape: S::Solid, .. } => SectionKind::Rectangular,
+            C::Round { .. } => SectionKind::Round,
+            C::Pipe { .. } => SectionKind::Pipe,
+            C::Profile { shape: S::I { .. }, .. } => SectionKind::I,
+            C::Profile { shape: S::Channel { .. }, .. } => SectionKind::Channel,
+            C::Profile { shape: S::Angle { .. }, .. } => SectionKind::Angle,
+            C::Profile { shape: S::Tube { .. }, .. } => SectionKind::Tube,
+        }
+    }
+
+    /// `section` turned into this kind, keeping its size; thicknesses start
+    /// at typical proportions.
+    fn convert(self, section: cc_core::ColumnSection) -> cc_core::ColumnSection {
+        use cc_core::{ColumnSection as C, SectionShape as S};
+        let (w, d) = section.size();
+        let profile = |shape| C::Profile { width: w, depth: d, shape };
+        match self {
+            SectionKind::Rectangular => C::Rectangular { width: w, depth: d },
+            SectionKind::Round => C::Round { diameter: w.max(d) },
+            SectionKind::Pipe => C::Pipe { diameter: w.max(d), wall: w.max(d) * 0.05 },
+            SectionKind::I => profile(S::I { web: w * 0.05, flange: d * 0.075 }),
+            SectionKind::Channel => profile(S::Channel { web: w * 0.1, flange: d * 0.075 }),
+            SectionKind::Angle => profile(S::Angle { thickness: w.min(d) * 0.1 }),
+            SectionKind::Tube => profile(S::Tube { wall: w.min(d) * 0.05 }),
+        }
+    }
+}
+
+/// The section of a column type, or a beam type's as a profile.
+fn type_section(d: &TypeData) -> Option<cc_core::ColumnSection> {
+    match *d {
+        TypeData::Column { section, .. } => Some(section),
+        TypeData::Beam { width, height, shape, .. } => {
+            Some(cc_core::ColumnSection::Profile { width, depth: height, shape })
+        }
+        _ => None,
+    }
+}
+
+fn set_type_section(d: &mut TypeData, s: cc_core::ColumnSection) {
+    use cc_core::ColumnSection as C;
+    match d {
+        TypeData::Column { section, .. } => *section = s,
+        TypeData::Beam { width, height, shape, .. } => match s {
+            C::Profile { width: w, depth: h, shape: p } => (*width, *height, *shape) = (w, h, p),
+            C::Rectangular { width: w, depth: h } => (*width, *height, *shape) = (w, h, cc_core::SectionShape::Solid),
+            C::Round { .. } | C::Pipe { .. } => {}
+        },
+        _ => {}
+    }
+}
+
+/// Kind and dimensions of a column's section, or a beam's (`beam`: the
+/// depth is its height and round sections are not offered).
+fn section_rows(ui: &mut Ui, state: &mut AppState, tid: ElementTypeId, section: cc_core::ColumnSection, beam: bool) {
+    use cc_core::{ColumnSection as C, SectionShape as S};
+    crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+        let current = SectionKind::of(section);
+        let mut kind = current;
+        row(ui, &t!("prop-section-kind"), |ui| {
+            egui::ComboBox::from_id_salt(("section-kind", tid.0)).selected_text(tr(kind.key())).show_ui(ui, |ui| {
+                for option in SectionKind::ALL {
+                    if beam && matches!(option, SectionKind::Round | SectionKind::Pipe) {
+                        continue;
+                    }
+                    ui.selectable_value(&mut kind, option, tr(option.key()));
+                }
+            });
+        });
+        if kind != current {
+            update(state, tid, "skind", |t| set_type_section(&mut t.data, kind.convert(section)));
+            state.session.doc.break_merge();
+        }
+        // Each dimension: label, field key, value and how to set it.
+        type Setter = fn(&mut C, f64);
+        let depth_label = if beam { t!("col-height") } else { t!("prop-depth-section") };
+        let mut rows: Vec<(String, &str, f64, Setter)> = Vec::new();
+        match section {
+            C::Rectangular { width, depth } | C::Profile { width, depth, .. } => {
+                rows.push((t!("col-width"), "sw", width, |s, v| match s {
+                    C::Rectangular { width, .. } | C::Profile { width, .. } => *width = v.max(0.01),
+                    _ => {}
+                }));
+                rows.push((depth_label, "sd", depth, |s, v| match s {
+                    C::Rectangular { depth, .. } | C::Profile { depth, .. } => *depth = v.max(0.01),
+                    _ => {}
+                }));
+            }
+            C::Round { diameter } | C::Pipe { diameter, .. } => {
+                rows.push((t!("prop-diameter"), "sdia", diameter, |s, v| match s {
+                    C::Round { diameter } | C::Pipe { diameter, .. } => *diameter = v.max(0.01),
+                    _ => {}
+                }));
+            }
+        }
+        match section {
+            C::Profile { shape: S::I { web, flange } | S::Channel { web, flange }, .. } => {
+                rows.push((t!("prop-web"), "sweb", web, |s, v| {
+                    if let C::Profile { shape: S::I { web, .. } | S::Channel { web, .. }, .. } = s {
+                        *web = v.max(0.001);
+                    }
+                }));
+                rows.push((t!("prop-flange"), "sfl", flange, |s, v| {
+                    if let C::Profile { shape: S::I { flange, .. } | S::Channel { flange, .. }, .. } = s {
+                        *flange = v.max(0.001);
+                    }
+                }));
+            }
+            C::Profile { shape: S::Angle { thickness }, .. } => {
+                rows.push((t!("col-thickness"), "sth", thickness, |s, v| {
+                    if let C::Profile { shape: S::Angle { thickness }, .. } = s {
+                        *thickness = v.max(0.001);
+                    }
+                }));
+            }
+            C::Profile { shape: S::Tube { wall }, .. } | C::Pipe { wall, .. } => {
+                rows.push((t!("prop-wall-thickness"), "swall", wall, |s, v| match s {
+                    C::Profile { shape: S::Tube { wall }, .. } | C::Pipe { wall, .. } => *wall = v.max(0.001),
+                    _ => {}
+                }));
+            }
+            _ => {}
+        }
+        for (label, field, value, set) in rows {
+            length_row(ui, state, &label, tid, field, value, |d, v| {
+                if let Some(mut s) = type_section(d) {
+                    set(&mut s, v);
+                    // Thicknesses stay within the section's box.
+                    if let C::Profile { width, depth, shape } = &mut s {
+                        *shape = shape.fitted(*width, *depth);
+                    }
+                    if let C::Pipe { diameter, wall } = &mut s {
+                        *wall = wall.min(*diameter * 0.5);
+                    }
+                    set_type_section(d, s);
                 }
             });
         }

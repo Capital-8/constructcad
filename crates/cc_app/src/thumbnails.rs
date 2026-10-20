@@ -44,7 +44,7 @@ fn render(project: &Project, rs: &egui_wgpu::RenderState) -> Option<Vec<u8>> {
         .views
         .values()
         .find_map(|v| match v.kind {
-            ViewKind::ThreeD { camera } => Some(camera),
+            ViewKind::ThreeD { camera, .. } => Some(camera),
             _ => None,
         })
         .unwrap_or_default();

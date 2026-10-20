@@ -468,6 +468,178 @@ pub fn ungroup_selection(state: &mut AppState) {
     state.message = t!("msg-ungrouped");
 }
 
+/// Ids of the selected grids, or of every grid when none is selected.
+pub fn grids_for(state: &AppState) -> Vec<u64> {
+    let project = state.project();
+    let is_grid = |id: &cc_core::ElementId| project.element(*id).is_some_and(|e| e.category() == Category::Grid);
+    let selected: Vec<u64> = state.selection.iter().filter(|id| is_grid(id)).map(|id| id.0).collect();
+    if !selected.is_empty() {
+        return selected;
+    }
+    project.elements_of(Category::Grid).map(|e| e.id.0).collect()
+}
+
+/// The selected columns as a chain: from the lowest-left one, each followed by the nearest left.
+pub fn selected_columns(state: &AppState) -> Vec<u64> {
+    let project = state.project();
+    let mut left: Vec<(u64, glam::DVec2)> = state
+        .selection
+        .iter()
+        .filter_map(|id| match &project.element(*id)?.kind {
+            cc_core::ElementKind::Column(c) => Some((id.0, c.position)),
+            _ => None,
+        })
+        .collect();
+    left.sort_by(|a, b| a.1.x.total_cmp(&b.1.x).then(a.1.y.total_cmp(&b.1.y)));
+    let mut chain = Vec::with_capacity(left.len());
+    let mut at = left.first().map(|c| c.1);
+    while let Some(here) = at {
+        let Some(i) = (0..left.len()).min_by(|&i, &j| left[i].1.distance(here).total_cmp(&left[j].1.distance(here)))
+        else {
+            break;
+        };
+        let (id, p) = left.remove(i);
+        chain.push(id);
+        at = (!left.is_empty()).then_some(p);
+    }
+    chain
+}
+
+/// The level new structure goes on: the active plan's, else the lowest.
+fn structure_level(state: &AppState) -> Option<Ref> {
+    let level = state.active_level().or_else(|| state.project().levels.first().map(|l| l.id))?;
+    Some(Ref::Id(level.0))
+}
+
+/// Select what a placement created and say how much, or why nothing.
+/// What a placement command placed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Placed {
+    Columns,
+    Beams,
+    Footings,
+}
+
+fn placed(state: &mut AppState, out: Option<serde_json::Value>, what: Placed) {
+    let Some(out) = out else { return };
+    let created: std::collections::BTreeSet<cc_core::ElementId> =
+        out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64()).map(cc_core::ElementId).collect();
+    let skipped = out["skipped"].as_u64().unwrap_or(0);
+    state.message = if created.is_empty() {
+        t!("msg-nothing-placed", "skipped" => skipped)
+    } else {
+        let count = created.len();
+        match what {
+            Placed::Beams => t!("msg-beams-placed", "count" => count, "skipped" => skipped),
+            Placed::Columns => t!("msg-columns-placed", "count" => count, "skipped" => skipped),
+            Placed::Footings => t!("msg-footings-placed", "count" => count, "skipped" => skipped),
+        }
+    };
+    if !created.is_empty() {
+        state.selection = created;
+    }
+}
+
+/// Columns at the intersections of the selected grids (the engine's `columns_at_grids`).
+pub fn columns_at_grids(state: &mut AppState) {
+    let command = cc_engine::commands::structure::ColumnsAtGrids {
+        grids: grids_for(state),
+        level: structure_level(state),
+        ..Default::default()
+    };
+    let out = run(state, command);
+    placed(state, out, Placed::Columns);
+}
+
+/// Beams between the columns along the selected grids (the engine's `beams_on_grids`).
+pub fn beams_on_grids(state: &mut AppState) {
+    let command = cc_engine::commands::structure::BeamsOnGrids {
+        grids: grids_for(state),
+        level: structure_level(state),
+        ..Default::default()
+    };
+    let out = run(state, command);
+    placed(state, out, Placed::Beams);
+}
+
+/// Ids of the selected elements of `category`.
+fn selected_of(state: &AppState, category: Category) -> Vec<u64> {
+    let project = state.project();
+    state
+        .selection
+        .iter()
+        .filter(|id| project.element(**id).is_some_and(|e| e.category() == category))
+        .map(|id| id.0)
+        .collect()
+}
+
+/// Pad footings under the selected columns, or every column of the active level.
+pub fn footings_under_columns(state: &mut AppState) {
+    let columns = selected_of(state, Category::Column);
+    let level = if columns.is_empty() { structure_level(state) } else { None };
+    let command = cc_engine::commands::foundation::FootingsUnderColumns { columns, level, type_ref: None };
+    let out = run(state, command);
+    placed(state, out, Placed::Footings);
+}
+
+/// Strip footings under the selected walls, or every wall of the active level.
+pub fn strip_footings_under_walls(state: &mut AppState) {
+    let walls = selected_of(state, Category::Wall);
+    let level = if walls.is_empty() { structure_level(state) } else { None };
+    let command = cc_engine::commands::foundation::StripFootingsUnderWalls { walls, level, type_ref: None };
+    let out = run(state, command);
+    placed(state, out, Placed::Footings);
+}
+
+/// Join the selected floors (or those of the active level) with the beams, columns and walls carrying them.
+pub fn slab_join_supports(state: &mut AppState) {
+    let floors = selected_of(state, Category::Floor);
+    let level = if floors.is_empty() { state.active_level().map(|l| Ref::Id(l.0)) } else { None };
+    let command = cc_engine::commands::structure::SlabJoinSupports { floors, level };
+    if let Some(out) = run(state, command) {
+        let count = out["joined"].as_array().map_or(0, Vec::len);
+        state.message = t!("msg-supports-joined", "count" => count);
+    }
+}
+
+/// Open the analytical model view, creating it the first time.
+pub fn open_analytical_view(state: &mut AppState) {
+    let existing = state
+        .project()
+        .views
+        .values()
+        .find(|v| matches!(v.kind, ViewKind::ThreeD { analytical: true, .. }))
+        .map(|v| v.id);
+    match existing {
+        Some(id) => state.open_view(id),
+        None => {
+            new_view(state, "analytical", None, None);
+        }
+    }
+}
+
+/// Export the analytical model as JSON.
+pub fn export_analytical(state: &mut AppState) {
+    let name = format!("{}.analytical.json", state.project().info.name);
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-json"), &["json"]).set_file_name(name);
+    let Some(mut path) = dialog.save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension("json");
+    }
+    match state.session.run(cc_engine::commands::analytical::AnalyticalExport { path: path.clone() }) {
+        Ok(_) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(e) => state.dialogs.error = Some(t!("msg-export-failed", "error" => e.message)),
+    }
+}
+
+/// Beams through the selected columns (the engine's `beams_between_columns`).
+pub fn beams_between_columns(state: &mut AppState) {
+    let command =
+        cc_engine::commands::structure::BeamsBetweenColumns { columns: selected_columns(state), ..Default::default() };
+    let out = run(state, command);
+    placed(state, out, Placed::Beams);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

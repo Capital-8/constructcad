@@ -208,7 +208,9 @@ pub fn fit_camera(camera: &mut CameraState, geom: &cc_geom::ModelGeometry, aspec
 }
 
 pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Option<&egui_wgpu::RenderState>) {
-    let Some(ViewKind::ThreeD { camera }) = state.project().view(view_id).map(|v| v.kind.clone()) else { return };
+    let Some(ViewKind::ThreeD { camera, analytical }) = state.project().view(view_id).map(|v| v.kind.clone()) else {
+        return;
+    };
     let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
     let rect = resp.rect;
     let aspect = rect.width() / rect.height().max(1.0);
@@ -310,7 +312,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     let key = (state.session.doc.revision(), selection_hash(&state.selection));
     let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
     if v3.mesh_key != Some(key) {
-        renderer.upload(&rs.device, &SceneMesh::build(state.session.geom(), &state.selection, &[]));
+        let geom = state.session.geom();
+        let mesh = if analytical {
+            let model = cc_geom::analytical::analytical_model(&state.session.doc.project, geom);
+            SceneMesh::build_analytical(geom, &model, &state.selection)
+        } else {
+            SceneMesh::build(geom, &state.selection, &[])
+        };
+        renderer.upload(&rs.device, &mesh);
         v3.mesh_key = Some(key);
     }
     let ppp = ui.ctx().pixels_per_point();
@@ -379,7 +388,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         v3.camera_dirty = false;
         let camera = v3.camera;
         state.session.doc.set_untracked(|p| {
-            if let Some(ViewKind::ThreeD { camera: c }) = p.views.get_mut(&view_id).map(|v| &mut v.kind) {
+            if let Some(ViewKind::ThreeD { camera: c, .. }) = p.views.get_mut(&view_id).map(|v| &mut v.kind) {
                 *c = camera;
             }
         });
