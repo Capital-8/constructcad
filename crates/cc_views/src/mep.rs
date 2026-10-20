@@ -46,6 +46,37 @@ pub(crate) fn services(
             _ => {}
         }
     }
+    let category = match discipline {
+        MepDiscipline::Plumbing => cc_core::Category::Pipe,
+        MepDiscipline::Electrical => cc_core::Category::Conduit,
+    };
+    for f in geom.mep.fittings.iter().filter(|f| f.level == level && f.category == category) {
+        fitting(d, project, f, mm);
+    }
+}
+
+/// A fitting in plan: a dot in the system's color on pipes; on conduits, a
+/// box where three or more runs meet (elbows and couplings show as the runs).
+fn fitting(d: &mut Drawing2D, project: &Project, f: &cc_geom::mep_net::Fitting, mm: f64) {
+    use cc_geom::mep_net::FittingKind as K;
+    let id = f.runs.first().copied();
+    let c = DVec2::new(f.point.x, f.point.y);
+    match (f.category, f.kind) {
+        (cc_core::Category::Conduit, K::Tee | K::Cross) => {
+            let h = 1.5 * mm;
+            let square =
+                vec![c + DVec2::new(-h, -h), c + DVec2::new(h, -h), c + DVec2::new(h, h), c + DVec2::new(-h, h)];
+            d.fill(square.clone(), [255, 255, 255, 255], id);
+            d.polyline(&square, true, LineStyle::Projection, id);
+        }
+        (cc_core::Category::Conduit, _) => {}
+        _ => {
+            let color = f.system.and_then(|s| project.system(s)).map_or([128, 128, 128], |s| s.color());
+            let pts = circle(c, f.diameter().max(0.8 * mm) * 0.75);
+            d.fill(pts.clone(), [color[0], color[1], color[2], 255], id);
+            d.polyline(&pts, true, LineStyle::Thin, id);
+        }
+    }
 }
 
 /// A band of `width` from `a` to `b` in `color`, with a fine outline (dashed when hidden).
@@ -254,7 +285,8 @@ mod tests {
             (add(e, ElementKind::Pipe(run)), add(e, ElementKind::Pipe(up)))
         });
         let geom = ModelGeometry::build(&doc.project);
-        assert_eq!(geom.solids_of(pipe).count(), 1);
+        // The run and the elbow where the riser leaves it.
+        assert_eq!(geom.solids_of(pipe).count(), 2);
         let plan = |mep| cc_core::View {
             id: cc_core::ViewId(999),
             name: String::new(),

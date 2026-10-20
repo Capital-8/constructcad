@@ -424,6 +424,18 @@ fn snap(
             ends.extend([w.start, w.end]);
             mids.push((w.start + w.end) * 0.5);
             lines.push((w.start, w.end));
+        } else if let Some(s) = e.as_segment() {
+            // Pipe and conduit ends, and runs to branch from.
+            ends.extend([s.start, s.end]);
+            if !s.is_vertical() {
+                mids.push((s.start + s.end) * 0.5);
+                lines.push((s.start, s.end));
+            }
+        } else if let cc_core::ElementKind::Component(c) = &e.kind
+            && project.mep_data(e).is_some()
+        {
+            // Fixtures and devices, where their branches start.
+            ends.push(c.position);
         } else if let Some(s) = e.sketch() {
             ends.extend_from_slice(s);
         }

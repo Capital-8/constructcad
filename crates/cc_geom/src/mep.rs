@@ -67,6 +67,16 @@ impl crate::ModelGeometry {
             self.solids.push(solid);
             self.segments.insert(e.id, g);
         }
+        self.mep = crate::mep_net::MepNetwork::build(project, &self.segments);
+        // Fittings: a socket a little wider than the pipe on each branch, part of the first run.
+        for f in &self.mep.fittings {
+            let Some(e) = f.runs.first().and_then(|id| project.element(*id)) else { continue };
+            let mut solid = Solid::new(e.id, e.category(), project.system_color(e));
+            for &(dir, d) in &f.branches {
+                solid.add_polygons(cylinder(f.point, f.point + dir * (d * 0.8), d * 0.6));
+            }
+            self.solids.push(solid);
+        }
     }
 }
 

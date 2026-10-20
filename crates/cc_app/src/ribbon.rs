@@ -616,7 +616,7 @@ fn mep_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
     group(ui, t!("group-plumbing"), |ui| command_buttons(ui, state, &[place(Category::Pipe), PlaceFixture]));
     group(ui, t!("group-electrical"), |ui| command_buttons(ui, state, &[place(Category::Conduit), PlaceDevice]));
-    group(ui, t!("group-systems"), |ui| command_button(ui, state, Systems));
+    group(ui, t!("group-systems"), |ui| command_buttons(ui, state, &[MepConnect, Systems]));
     group(ui, t!("group-documentation"), |ui| stacks(ui, state, &[&[PlumbingPlan, ElectricalPlan, MepSchedules]]));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
 }

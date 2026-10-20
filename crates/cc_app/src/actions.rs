@@ -689,6 +689,22 @@ pub fn open_structural_plan(state: &mut AppState) {
     }
 }
 
+/// Connect the selected fixtures and devices to the nearest pipes and conduits (`mep_connect`).
+pub fn mep_connect(state: &mut AppState) {
+    let project = state.project();
+    let elements: Vec<u64> = state
+        .selection
+        .iter()
+        .filter(|id| project.element(**id).is_some_and(|e| project.mep_data(e).is_some()))
+        .map(|id| id.0)
+        .collect();
+    if let Some(out) = run(state, cc_engine::commands::mep::MepConnect { elements, system: None }) {
+        let count = out["created"].as_array().map_or(0, Vec::len);
+        let skipped = out["skipped"].as_u64().unwrap_or(0);
+        state.message = t!("msg-mep-connected", "count" => count, "skipped" => skipped);
+    }
+}
+
 /// Open the plumbing or electrical plan of the active level (or the lowest), creating it the first time.
 pub fn open_mep_plan(state: &mut AppState, discipline: cc_core::MepDiscipline) {
     let Some(level) = state.active_level().or_else(|| state.project().levels.first().map(|l| l.id)) else { return };

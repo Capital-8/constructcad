@@ -178,7 +178,8 @@ impl<'a> Exporter<'a> {
         self.write_rebar();
         self.write_components();
         self.write_segments();
-        self.write_systems();
+        let fittings = self.write_fittings();
+        self.write_systems(&fittings);
         self.write_spaces();
         self.write_relationships();
     }
@@ -1060,13 +1061,100 @@ impl<'a> Exporter<'a> {
         }
     }
 
+    /// Fittings where pipes and conduits meet: a socket (a short circular
+    /// extrusion) along each branch, placed at the node; one type object per
+    /// kind of fitting. Returns the written fittings with their system.
+    fn write_fittings(&mut self) -> Vec<(Option<cc_core::SystemId>, Id)> {
+        use cc_geom::mep_net::FittingKind as K;
+        let geom = self.geom;
+        let n = Value::Null;
+        let mut written = Vec::new();
+        let mut typed: BTreeMap<(&'static str, &'static str), Vec<Id>> = BTreeMap::new();
+        for (i, f) in geom.mep.fittings.iter().enumerate() {
+            let Some(storey) = self.storey_placement(f.level) else { continue };
+            let level_z = self.project.level_elevation(f.level);
+            let pipe = f.category == cc_core::Category::Pipe;
+            let (entity, kind, name) = match (pipe, f.kind) {
+                (true, K::Elbow { .. }) => ("IFCPIPEFITTING", "BEND", "Elbow"),
+                (true, K::Tee | K::Cross) => ("IFCPIPEFITTING", "JUNCTION", "Junction"),
+                (true, K::Coupling) => ("IFCPIPEFITTING", "CONNECTOR", "Coupling"),
+                (true, K::Reducer) => ("IFCPIPEFITTING", "TRANSITION", "Reducer"),
+                (false, K::Elbow { .. }) => ("IFCCABLECARRIERFITTING", "BEND", "Bend"),
+                (false, K::Tee) => ("IFCCABLECARRIERFITTING", "TEE", "Tee"),
+                (false, K::Cross) => ("IFCCABLECARRIERFITTING", "CROSS", "Cross"),
+                (false, K::Reducer) => ("IFCCABLECARRIERFITTING", "REDUCER", "Reducer"),
+                (false, K::Coupling) => ("IFCCABLECARRIERFITTING", "NOTDEFINED", "Coupling"),
+            };
+            let items: Vec<Id> = f
+                .branches
+                .iter()
+                .filter_map(|&(dir, d)| {
+                    let x = dir.any_orthonormal_vector();
+                    let position = self.placement3(Frame { origin: DVec3::ZERO, x, z: dir });
+                    let radius = d * 0.6;
+                    (radius > 0.0).then(|| {
+                        let profile = self
+                            .w
+                            .add("IFCCIRCLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, Value::Null, radius]);
+                        self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, d * 0.8])
+                    })
+                })
+                .collect();
+            if items.is_empty() {
+                continue;
+            }
+            let color = f.system.and_then(|s| self.project.system(s)).map_or([128, 128, 128], |s| s.color());
+            let style_name = f.system.and_then(|s| self.project.system(s)).map_or("Generic", |s| s.name.as_str());
+            let style = self.style(&format!("system {style_name}"), color, 0.0);
+            for &item in &items {
+                self.styled(item, style);
+            }
+            let shape = self.shape(items, None);
+            let origin = DVec3::new(f.point.x, f.point.y, f.point.z - level_z);
+            let placement = self.local_placement(Some(storey), Frame::at(origin));
+            let gid = self.guid(&format!("fitting-{i}-{}", f.node));
+            let product = self.w.add(
+                entity,
+                args![gid, n.clone(), name, n.clone(), n.clone(), placement, shape, n.clone(), Value::Enum(kind)],
+            );
+            typed.entry((entity, kind)).or_default().push(product);
+            self.contained.entry(f.level).or_default().push(product);
+            written.push((f.system, product));
+        }
+        for ((entity, kind), objects) in typed {
+            let type_entity =
+                if entity == "IFCPIPEFITTING" { "IFCPIPEFITTINGTYPE" } else { "IFCCABLECARRIERFITTINGTYPE" };
+            let gid = self.guid(&format!("fitting-type-{entity}-{kind}"));
+            let name = format!("{} {}", crate::schema::display_name(entity), kind.to_lowercase());
+            let ty = self.w.add(
+                type_entity,
+                args![
+                    gid,
+                    n.clone(),
+                    name.as_str(),
+                    n.clone(),
+                    n.clone(),
+                    n.clone(),
+                    n.clone(),
+                    n.clone(),
+                    n.clone(),
+                    Value::Enum(kind)
+                ],
+            );
+            let gid = self.guid(&format!("fitting-deftype-{entity}-{kind}"));
+            self.w.add("IFCRELDEFINESBYTYPE", args![gid, n.clone(), n.clone(), n.clone(), objects, ty]);
+        }
+        written
+    }
+
     /// Plumbing systems and electrical circuits grouping their written members.
-    fn write_systems(&mut self) {
+    fn write_systems(&mut self, fittings: &[(Option<cc_core::SystemId>, Id)]) {
         let project = self.project;
         let n = Value::Null;
         for (id, system) in &project.systems {
             let mut members: Vec<Id> =
                 project.system_members(*id).filter_map(|e| self.products.get(&e.id).copied()).collect();
+            members.extend(fittings.iter().filter(|(s, _)| *s == Some(*id)).map(|(_, p)| *p));
             if let Some(panel) = system.panel.and_then(|p| self.products.get(&p).copied()) {
                 members.insert(0, panel);
             }

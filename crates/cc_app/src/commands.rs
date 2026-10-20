@@ -57,6 +57,7 @@ pub enum UiCommand {
     PlumbingPlan,
     ElectricalPlan,
     MepSchedules,
+    MepConnect,
     Dimension(DimensionMode),
     Text,
     AddLeader,
@@ -149,7 +150,7 @@ impl UiCommand {
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
-        all.extend([PlaceFixture, PlaceDevice, Systems, PlumbingPlan, ElectricalPlan, MepSchedules]);
+        all.extend([PlaceFixture, PlaceDevice, MepConnect, Systems, PlumbingPlan, ElectricalPlan, MepSchedules]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -246,6 +247,7 @@ impl UiCommand {
             PlumbingPlan => Icon::PlumbingPlan,
             ElectricalPlan => Icon::ElectricalPlan,
             MepSchedules => Icon::Schedule,
+            MepConnect => Icon::Connect,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             AddLeader => Icon::Leader,
@@ -350,6 +352,7 @@ impl UiCommand {
             PlumbingPlan => t!("action-plumbing-plan"),
             ElectricalPlan => t!("action-electrical-plan"),
             MepSchedules => t!("action-mep-schedules"),
+            MepConnect => t!("action-mep-connect"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             AddLeader => t!("tool-add-leader"),
@@ -460,6 +463,7 @@ impl UiCommand {
             PlumbingPlan => t!("cmd-desc-plumbing-plan"),
             ElectricalPlan => t!("cmd-desc-electrical-plan"),
             MepSchedules => t!("cmd-desc-mep-schedules"),
+            MepConnect => t!("cmd-desc-mep-connect"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
@@ -604,6 +608,7 @@ impl UiCommand {
             Place(Category::Conduit) => "conduit_create",
             PlaceFixture | PlaceDevice => "component_place",
             Systems => "system_set",
+            MepConnect => "mep_connect",
             PlumbingPlan | ElectricalPlan | MepSchedules => "view_create",
             FootingsUnderColumns => "footings_under_columns",
             StripFootingsUnderWalls => "strip_footings_under_walls",
@@ -699,6 +704,14 @@ impl UiCommand {
             StructuralPlan | PlumbingPlan | ElectricalPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             PlaceFixture if crate::tools::mep_component_type(project, false).is_none() => Some(t!("msg-no-type")),
             PlaceDevice if crate::tools::mep_component_type(project, true).is_none() => Some(t!("msg-no-type")),
+            MepConnect
+                if !state
+                    .selection
+                    .iter()
+                    .any(|id| project.element(*id).is_some_and(|e| project.mep_data(e).is_some())) =>
+            {
+                Some(t!("why-select-fixtures"))
+            }
             StructureTags if crate::actions::active_floor_plan(state).is_none() => Some(t!("msg-plan-only")),
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
@@ -891,6 +904,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             }
         }
         Systems => state.dialogs.systems = true,
+        MepConnect => crate::actions::mep_connect(state),
         PlumbingPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Plumbing),
         ElectricalPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Electrical),
         MepSchedules => {

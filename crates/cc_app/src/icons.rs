@@ -110,11 +110,12 @@ pub enum Icon {
     PlumbingPlan,
     ElectricalPlan,
     Systems,
+    Connect,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 99] = [
+    pub const ALL: [Icon; 100] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -214,6 +215,7 @@ impl Icon {
         Icon::PlumbingPlan,
         Icon::ElectricalPlan,
         Icon::Systems,
+        Icon::Connect,
     ];
 
     /// The icon's SVG source.
@@ -318,6 +320,7 @@ impl Icon {
             Icon::PlumbingPlan => include_str!("../../../assets/icons/ui/plumbing-plan.svg"),
             Icon::ElectricalPlan => include_str!("../../../assets/icons/ui/electrical-plan.svg"),
             Icon::Systems => include_str!("../../../assets/icons/ui/systems.svg"),
+            Icon::Connect => include_str!("../../../assets/icons/ui/mep-connect.svg"),
         }
     }
 }

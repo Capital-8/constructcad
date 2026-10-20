@@ -540,6 +540,229 @@ impl Command for CircuitLoads {
     }
 }
 
+/// The fittings where pipes and conduits meet, counted by category, kind,
+/// angle (elbows), diameters and system: the fittings takeoff.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MepFittings {
+    /// Level id or name (default: every level).
+    #[serde(default)]
+    pub level: Option<Ref>,
+}
+
+impl Command for MepFittings {
+    const NAME: &'static str = "mep_fittings";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let level = self.level.as_ref().map(|r| refs::level(s.project(), r)).transpose()?;
+        let fittings = s.geometry().mep.fittings.clone();
+        let p = s.project();
+        let mut counts: std::collections::BTreeMap<String, (Value, usize)> = Default::default();
+        for f in fittings.iter().filter(|f| level.is_none_or(|l| f.level == l)) {
+            let mm: Vec<u64> = f.diameters().iter().map(|d| (d * 1000.0).round() as u64).collect();
+            let system = f.system.and_then(|id| p.system(id)).map(|s| s.label().to_string());
+            let kind = f.kind.key().trim_start_matches("fitting-").to_string();
+            let item = json!({
+                "category": refs::category_name(f.category),
+                "kind": kind,
+                "angle": f.kind.nominal_angle(),
+                "diameters_mm": mm,
+                "system": system,
+            });
+            let entry = counts.entry(item.to_string()).or_insert((item, 0));
+            entry.1 += 1;
+        }
+        let total: usize = counts.values().map(|c| c.1).sum();
+        let items: Vec<Value> = counts
+            .into_values()
+            .map(|(mut item, n)| {
+                if let Some(o) = item.as_object_mut() {
+                    o.insert("count".into(), json!(n));
+                }
+                item
+            })
+            .collect();
+        Ok(json!({"fittings": items, "total": total}))
+    }
+}
+
+/// Connect plumbing fixtures and electrical devices to the nearest pipe or
+/// conduit of their level. A fixture gets a branch to the nearest sanitary
+/// drain (falling towards it, with a drop from the floor), and to the
+/// nearest cold (and, when it takes it, hot) water pipe; a device gets a
+/// conduit to the nearest conduit, with a drop from its mounting height,
+/// carrying its circuit. Branches end on the runs, which forms tees.
+/// `system` connects only to that system or circuit.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MepConnect {
+    /// Fixture and device ids.
+    pub elements: Vec<u64>,
+    /// Only to this system or circuit (id, name or code).
+    #[serde(default)]
+    pub system: Option<Ref>,
+}
+
+/// A branch to create: a run on `level` of `type_id`.
+struct Branch {
+    level: cc_core::LevelId,
+    type_id: cc_core::ElementTypeId,
+    conduit: bool,
+    run: MepSegment,
+}
+
+/// The nearest point in plan of run `s` to `p`, and the run's elevation there
+/// (on a riser, the height nearest `wanted_z`).
+fn nearest_on(s: &MepSegment, p: glam::DVec2, wanted_z: f64) -> (glam::DVec2, f64) {
+    if s.is_vertical() {
+        let (lo, hi) = (s.start_offset.min(s.end_offset), s.start_offset.max(s.end_offset));
+        return (s.start, wanted_z.clamp(lo, hi));
+    }
+    let d = s.end - s.start;
+    let t = ((p - s.start).dot(d) / d.length_squared()).clamp(0.0, 1.0);
+    (s.start + d * t, s.start_offset + (s.end_offset - s.start_offset) * t)
+}
+
+/// The smallest pipe type at least `diameter` across (else the largest).
+fn pipe_type_for(p: &Project, diameter: f64) -> Option<cc_core::ElementTypeId> {
+    let mut types: Vec<(f64, cc_core::ElementTypeId)> =
+        p.types_of(Category::Pipe).filter_map(|t| Some((t.diameter()?, t.id))).collect();
+    types.sort_by(|a, b| a.0.total_cmp(&b.0));
+    types.iter().find(|(d, _)| *d >= diameter - 1e-6).or(types.last()).map(|x| x.1)
+}
+
+/// The runs of `level` as (element, run), pipes or conduits.
+fn runs_on(p: &Project, level: cc_core::LevelId, conduit: bool) -> Vec<(&Element, &MepSegment)> {
+    p.elements
+        .values()
+        .filter(|r| r.level == level)
+        .filter_map(|r| match (&r.kind, conduit) {
+            (ElementKind::Pipe(seg), false) | (ElementKind::Conduit(seg), true) => Some((r, seg)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The run nearest `p` in plan among `runs`, with the point and elevation there.
+fn nearest_run<'a>(
+    runs: impl Iterator<Item = (&'a Element, &'a MepSegment)>,
+    p: glam::DVec2,
+    z: f64,
+) -> Option<(&'a Element, &'a MepSegment, glam::DVec2, f64)> {
+    runs.map(|(r, seg)| {
+        let (q, zq) = nearest_on(seg, p, z);
+        (r, seg, q, zq)
+    })
+    .min_by(|a, b| a.2.distance(p).total_cmp(&b.2.distance(p)))
+}
+
+impl Command for MepConnect {
+    const NAME: &'static str = "mep_connect";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let only = self.system.as_ref().map(|r| refs::system(p, r)).transpose()?;
+        let mut branches: Vec<Branch> = Vec::new();
+        let mut skipped = 0;
+        for id in refs::elements(p, &self.elements)? {
+            let Some(e) = p.element(id) else { continue };
+            let (ElementKind::Component(c), Some(mep)) = (&e.kind, p.mep_data(e)) else {
+                return Err(EngineError::invalid(t!("msg-not-fixture", "id" => id.0)));
+            };
+            let base = c.base_offset;
+            let mut connected = false;
+            match mep {
+                MepData::Fixture { drain_units, supply_weight, hot_water } => {
+                    let mut kinds = vec![SystemKind::Sanitary];
+                    if supply_weight > 0.0 {
+                        kinds.push(SystemKind::ColdWater);
+                    }
+                    if hot_water {
+                        kinds.push(SystemKind::HotWater);
+                    }
+                    let pipes = runs_on(p, e.level, false);
+                    for kind in kinds {
+                        let fits = |seg: &MepSegment| match only {
+                            Some(o) => seg.system() == Some(o),
+                            None => seg.system().and_then(|x| p.system(x)).is_some_and(|x| x.kind == kind),
+                        };
+                        let candidates = pipes.iter().copied().filter(|(_, seg)| fits(seg));
+                        let Some((run_el, seg, q, zq)) = nearest_run(candidates, c.position, base) else { continue };
+                        let drain = kind.is_drainage();
+                        // Fixture branches as in common drainage practice: 100 mm for toilets.
+                        let need = match (drain, drain_units) {
+                            (false, _) => 0.02,
+                            (true, u) if u >= 6.0 => 0.1,
+                            (true, u) if u >= 3.0 => 0.05,
+                            (true, _) => 0.04,
+                        };
+                        let type_id = pipe_type_for(p, need).unwrap_or(run_el.type_id);
+                        let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(need);
+                        let dist = q.distance(c.position);
+                        let zp = if drain { zq + crate::defaults::drain_slope(diameter) * dist } else { zq };
+                        let systems = seg.systems.clone();
+                        if drain && base - zp > 0.01 {
+                            let mut drop = MepSegment::new(c.position, c.position, base);
+                            drop.end_offset = zp;
+                            drop.systems = systems.clone();
+                            branches.push(Branch { level: e.level, type_id, conduit: false, run: drop });
+                        }
+                        if dist > 0.01 {
+                            let mut run = MepSegment::new(c.position, q, zp);
+                            run.end_offset = zq;
+                            run.systems = systems;
+                            branches.push(Branch { level: e.level, type_id, conduit: false, run });
+                        }
+                        connected = true;
+                        if only.is_some() {
+                            break;
+                        }
+                    }
+                }
+                MepData::Device { .. } => {
+                    let conduits = runs_on(p, e.level, true);
+                    let candidates =
+                        conduits.iter().copied().filter(|(_, seg)| only.is_none_or(|o| seg.systems.contains(&o)));
+                    if let Some((run_el, seg, q, zq)) = nearest_run(candidates, c.position, base) {
+                        let systems = match c.system.or(only) {
+                            Some(circuit) => vec![circuit],
+                            None => seg.systems.clone(),
+                        };
+                        if (base - zq).abs() > 0.01 {
+                            let mut drop = MepSegment::new(c.position, c.position, base);
+                            drop.end_offset = zq;
+                            drop.systems = systems.clone();
+                            branches.push(Branch { level: e.level, type_id: run_el.type_id, conduit: true, run: drop });
+                        }
+                        if q.distance(c.position) > 0.01 {
+                            let mut run = MepSegment::new(c.position, q, zq);
+                            run.systems = systems;
+                            branches.push(Branch { level: e.level, type_id: run_el.type_id, conduit: true, run });
+                        }
+                        connected = true;
+                    }
+                }
+            }
+            if !connected {
+                skipped += 1;
+            }
+        }
+        if branches.is_empty() {
+            return Ok(json!({"created": [], "skipped": skipped}));
+        }
+        let created = edit(s, t!("tx-mep-connect"), |e| {
+            Ok(branches
+                .into_iter()
+                .map(|b| {
+                    let kind = if b.conduit { ElementKind::Conduit(b.run) } else { ElementKind::Pipe(b.run) };
+                    add_element(e, b.level, b.type_id, kind)
+                })
+                .collect::<Vec<_>>())
+        })?;
+        Ok(json!({"created": super::ids_json(&created), "skipped": skipped}))
+    }
+}
+
 /// Numbers numerically, then text.
 fn natural(a: &str, b: &str) -> std::cmp::Ordering {
     match (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {

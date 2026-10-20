@@ -1077,3 +1077,53 @@ fn building_services_through_commands() {
         assert!(ifc.contains(entity), "{entity} missing");
     }
 }
+
+#[test]
+fn fixtures_and_devices_connect_to_the_networks() {
+    let mut s = Session::default();
+    // A drain main under the floor and a cold water pipe in the wall, along y = 0.
+    let drain_100 = run(&mut s, "types_list", json!({"category": "pipe"}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(id)
+        .find(|t| {
+            (run(&mut s, "type_get", json!({"type": t}))["params"]["diameter"].as_f64().unwrap() - 0.1).abs() < 1e-9
+        })
+        .unwrap();
+    run(&mut s, "pipe_create", json!({"start": [0, 0], "end": [6, 0], "system": "sanitary", "type": drain_100}));
+    run(&mut s, "pipe_create", json!({"start": [0, 0.1], "end": [6, 0.1], "system": "cold_water"}));
+    let toilet = mep_type(&mut s, "Fixture");
+    let wc = id(&run(&mut s, "component_place", json!({"position": [3, 1.5], "type": toilet})));
+    let out = run(&mut s, "mep_connect", json!({"elements": [wc]}));
+    // Drain: a drop from the floor and a branch falling to the main; supply: one branch.
+    assert_eq!(out["created"].as_array().unwrap().len(), 3, "{out}");
+    let fittings = run(&mut s, "mep_fittings", json!({}));
+    let kinds: Vec<&str> =
+        fittings["fittings"].as_array().unwrap().iter().map(|f| f["kind"].as_str().unwrap()).collect();
+    // Tees on both mains and the elbow at the bottom of the drop.
+    assert_eq!(kinds.iter().filter(|k| **k == "tee").count(), 2, "{fittings}");
+    assert!(kinds.contains(&"elbow"), "{fittings}");
+    // The toilet's branch is 100 mm: no reducer at the drain tee.
+    assert!(!kinds.contains(&"reducer"), "{fittings}");
+
+    // A device drops from its height to the conduit in the slab, on its circuit.
+    let panel_t = mep_type(&mut s, "Panel");
+    run(&mut s, "component_place", json!({"position": [0, 3], "type": panel_t}));
+    let circuit = id(&run(&mut s, "system_create", json!({"kind": "power"})));
+    run(&mut s, "conduit_create", json!({"start": [0, 3], "end": [6, 3], "circuits": [circuit]}));
+    let outlet_t = mep_type(&mut s, "Outlet");
+    let outlet = id(&run(&mut s, "component_place", json!({"position": [4, 4], "type": outlet_t, "system": circuit})));
+    let out = run(&mut s, "mep_connect", json!({"elements": [outlet]}));
+    let created = out["created"].as_array().unwrap();
+    assert_eq!(created.len(), 2, "{out}");
+    let drop = run(&mut s, "element_get", json!({"id": created[0]}));
+    assert_eq!(
+        (drop["params"]["start_offset"].clone(), drop["params"]["end_offset"].clone()),
+        (json!(0.3), json!(3.0))
+    );
+    assert_eq!(drop["params"]["systems"], json!([circuit]));
+    // Walls are not fixtures.
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0, 8], "end": [4, 8]})));
+    assert_eq!(fails(&mut s, "mep_connect", json!({"elements": [wall]})), ErrorCode::InvalidArguments);
+}

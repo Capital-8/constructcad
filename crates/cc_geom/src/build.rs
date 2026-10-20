@@ -64,6 +64,8 @@ pub struct ModelGeometry {
     pub rebar: BTreeMap<ElementId, crate::rebar::RebarGeom>,
     /// Pipes and conduits: their center lines and diameters.
     pub segments: BTreeMap<ElementId, crate::mep::SegmentGeom>,
+    /// Where pipes and conduits meet: nodes, fittings and attached fixtures and devices.
+    pub mep: crate::mep_net::MepNetwork,
     /// Foundations: plan outline and elevations (strips meet at corners like beams).
     pub foundations: BTreeMap<ElementId, FoundationGeom>,
     /// Boundary of each enclosed room (missing when the room is not enclosed).

@@ -27,7 +27,7 @@ ELEMENTS = (
     "IfcColumn", "IfcBeam", "IfcStair", "IfcRailing",
     "IfcFooting", "IfcReinforcingBar", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
     "IfcPipeSegment", "IfcStairFlight", "IfcMember",
-    "IfcCableCarrierSegment", "IfcOutlet", "IfcSwitchingDevice", "IfcElectricDistributionBoard",
+    "IfcCableCarrierSegment", "IfcPipeFitting", "IfcCableCarrierFitting", "IfcOutlet", "IfcSwitchingDevice", "IfcElectricDistributionBoard",
 )
 REL_TOL = 1e-3
 

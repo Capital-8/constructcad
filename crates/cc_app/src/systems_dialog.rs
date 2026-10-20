@@ -116,6 +116,37 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         ui.add_space(8.0);
     }
     loads(ui, state);
+    fittings(ui, state);
+}
+
+/// The fittings takeoff: how many of each kind, angle and diameter.
+fn fittings(ui: &mut Ui, state: &mut AppState) {
+    let Ok(out) = state.session.run(mep::MepFittings { level: None }) else { return };
+    let rows = out["fittings"].as_array().cloned().unwrap_or_default();
+    if rows.is_empty() {
+        return;
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new(t!("systems-fittings")).strong());
+    egui::Grid::new("fittings").num_columns(4).striped(true).spacing([14.0, 4.0]).show(ui, |ui| {
+        for h in [t!("col-system"), t!("col-fitting"), t!("col-diameter"), t!("col-quantity")] {
+            ui.label(RichText::new(h).color(PALETTE.text_muted));
+        }
+        ui.end_row();
+        for r in &rows {
+            let kind = crate::i18n::tr(&format!("fitting-{}", r["kind"].as_str().unwrap_or("")));
+            let angle = r["angle"].as_f64().map_or(String::new(), |a| format!(" {a:.0}°"));
+            let category = if r["category"] == "conduit" { t!("category-conduit") } else { String::new() };
+            let system = r["system"].as_str().map_or(category, str::to_string);
+            let sizes: Vec<String> =
+                r["diameters_mm"].as_array().into_iter().flatten().map(|d| format!("Ø{d}")).collect();
+            ui.label(system);
+            ui.label(format!("{kind}{angle}"));
+            ui.label(sizes.join(" × "));
+            ui.label(r["count"].to_string());
+            ui.end_row();
+        }
+    });
 }
 
 fn row(ui: &mut Ui, state: &mut AppState, id: SystemId, s: &cc_core::MepSystem, panels: &[(ElementId, String)]) {

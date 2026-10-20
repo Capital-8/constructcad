@@ -10,6 +10,7 @@ mod build;
 pub mod csg;
 mod cut;
 pub mod mep;
+pub mod mep_net;
 mod mesh;
 pub mod polygon;
 pub mod rebar;
