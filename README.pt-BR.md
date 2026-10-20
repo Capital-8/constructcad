@@ -19,6 +19,8 @@ Os menus, atalhos, painéis e ferramentas que suas mãos já conhecem. Produtivo
 
 O ConstructCAD segue as convenções comuns às ferramentas CAD e BIM de desktop: barra de acesso rápido no canto superior esquerdo, ribbon com abas, paleta de propriedades e navegador de projeto encaixados na lateral, e atalhos de teclado padrão e de duas letras. São convenções gerais; o ConstructCAD não copia ícones, arte ou textos de nenhum produto (veja [Independência](#independência)).
 
+A dica de cada botão mostra o atalho, o que ele faz, por que está indisponível quando aparece acinzentado e o comando do motor por trás dele. **Ctrl+Shift+P** abre uma paleta que encontra qualquer comando, vista ou comando do motor pelo nome; **Ctrl+F1** recolhe o ribbon até as abas. Veja o [guia da interface](docs/interface.pt-BR.md).
+
 ## Capturas de tela
 
 ![Planta e vista 3D do projeto de exemplo](docs/screenshots/plan-3d.png)
@@ -102,7 +104,8 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 | OF | Deslocamento paralelo | AL | Alinhar |
 | PN / UP | Fixar / Liberar | MA | Corresponder propriedades de tipo |
 | Ctrl+X / Ctrl+C | Recortar / Copiar | Ctrl+V | Colar |
-| TT | Texto | | |
+| TT | Texto | Ctrl+Shift+P | Paleta de comandos |
+| Ctrl+F1 | Recolher / expandir o ribbon | | |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 
@@ -154,6 +157,7 @@ Toda alteração passa por `Document::edit`, que registra uma `Transaction` reve
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
+CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots    # capturas da interface (veja docs/interface.pt-BR.md)
 ```
 
 Os arquivos IFC exportados são validados na CI com o [IfcOpenShell](https://ifcopenshell.org/), uma referência independente e de código aberto usada apenas nos testes:

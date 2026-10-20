@@ -19,6 +19,8 @@ The menus, shortcuts, panels and tools your hands already know. Productive on da
 
 ConstructCAD follows the conventions shared by desktop CAD and BIM tools: the quick access toolbar at the top left, a ribbon of tabs, the properties palette and project browser docked at the side, and standard and two-letter keyboard shortcuts. These are general conventions; ConstructCAD does not copy any product's icons, artwork or wording (see [Independence](#independence)).
 
+Every button's tooltip shows its shortcut, what it does, why it is unavailable when it is greyed out, and the engine command behind it. **Ctrl+Shift+P** opens a command palette that finds any command, view or engine command by name; **Ctrl+F1** collapses the ribbon to its tabs. See the [interface guide](docs/interface.md).
+
 ## Screenshots
 
 ![Floor plan and 3D view of the example project](docs/screenshots/plan-3d.png)
@@ -106,7 +108,8 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | OF | Offset | AL | Align |
 | PN / UP | Pin / Unpin | MA | Match type properties |
 | Ctrl+X / Ctrl+C | Cut / Copy | Ctrl+V | Paste |
-| TT | Text | | |
+| TT | Text | Ctrl+Shift+P | Command palette |
+| Ctrl+F1 | Collapse / expand the ribbon | | |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 
@@ -158,6 +161,7 @@ Every change goes through `Document::edit`, which records a reversible `Transact
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
+CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots    # interface screenshots (see docs/interface.md)
 ```
 
 IFC exports are validated in CI with [IfcOpenShell](https://ifcopenshell.org/), an independent open-source reference used only for testing:
