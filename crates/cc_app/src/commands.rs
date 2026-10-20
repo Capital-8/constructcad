@@ -32,6 +32,7 @@ pub enum UiCommand {
     NewComponent,
     LoadComponent,
     Select,
+    SelectInstances,
     Dimension(DimensionMode),
     Text,
     AddLeader,
@@ -113,7 +114,7 @@ impl UiCommand {
             Default3D,
         ];
         all.extend(PLACED.map(Place));
-        all.extend([NewComponent, LoadComponent, Select]);
+        all.extend([NewComponent, LoadComponent, Select, SelectInstances]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -183,6 +184,7 @@ impl UiCommand {
             Place(category) => category_icon(category),
             NewComponent | LoadComponent => Icon::Component,
             Select => Icon::Select,
+            SelectInstances => Icon::SelectInstances,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             AddLeader => Icon::Leader,
@@ -258,6 +260,7 @@ impl UiCommand {
             NewComponent => t!("action-new-component"),
             LoadComponent => t!("action-load-component"),
             Select => t!("tool-select"),
+            SelectInstances => t!("action-select-instances"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             AddLeader => t!("tool-add-leader"),
@@ -340,6 +343,7 @@ impl UiCommand {
             NewComponent => t!("cmd-desc-new-component"),
             LoadComponent => t!("cmd-desc-load-component"),
             Select => t!("cmd-desc-select"),
+            SelectInstances => t!("cmd-desc-select-instances"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
@@ -413,6 +417,7 @@ impl UiCommand {
             Place(Category::Column) => "CL",
             Place(Category::Beam) => "BM",
             Select => "MD",
+            SelectInstances => "SA",
             Dimension(DimensionMode::Aligned) => "DI",
             Text => "TT",
             Move => "MV",
@@ -452,6 +457,7 @@ impl UiCommand {
             ExportIfc => "ifc_export",
             ExportPdf | ExportSvg => "sheet_export",
             Undo => "undo",
+            SelectInstances => "elements_list",
             Redo => "redo",
             Place(Category::Wall) => "wall_create",
             Place(Category::Door) => "door_create",
@@ -521,7 +527,8 @@ impl UiCommand {
             Move | CopyElements | Rotate | MirrorPick | MirrorDraw | Array if !has_sel && !self.selected(state) => {
                 Some(t!("msg-select-first"))
             }
-            Pin | Unpin | Delete | Cut | ClipboardCopy if !has_sel => Some(t!("msg-select-first")),
+            Pin | Unpin | Delete | Cut | ClipboardCopy | SelectInstances if !has_sel => Some(t!("msg-select-first")),
+            SelectInstances if state.active_view.is_none() => Some(t!("why-no-view")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             Elevations if project.views_of(ViewCategory::Elevation).next().is_none() => Some(t!("why-no-elevations")),
@@ -648,6 +655,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         }
         LoadComponent => actions::load_component(state),
         Select => state.set_tool(Tool::Select),
+        SelectInstances => crate::actions::select_instances(state),
         Dimension(mode) => {
             if let Some(Tool::Dimension { type_id, .. }) = Tool::for_category(state.project(), Category::Dimension) {
                 state.set_tool(Tool::Dimension { type_id, mode });
@@ -775,5 +783,25 @@ mod tests {
         state.show_home = true;
         assert_eq!(UiCommand::Save.unavailable(&state), Some(t!("why-no-project")));
         assert_eq!(UiCommand::Open.unavailable(&state), None);
+    }
+
+    #[test]
+    fn select_all_instances_in_the_view() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let level = state.project().levels[0].id;
+        let plan = state.project().views_of(ViewCategory::FloorPlan).find(|v| v.level() == Some(level)).unwrap().id;
+        state.active_view = Some(plan);
+        assert_eq!(UiCommand::SelectInstances.unavailable(&state), Some(t!("msg-select-first")));
+        let (wall, ty) =
+            state.project().walls().find(|(e, _)| e.level == level).map(|(e, _)| (e.id, e.type_id)).unwrap();
+        state.selection = [wall].into_iter().collect();
+        let ctx = egui::Context::default();
+        invoke(&mut state, &ctx, UiCommand::SelectInstances);
+        let expected: std::collections::BTreeSet<_> =
+            state.project().elements.values().filter(|e| e.type_id == ty && e.level == level).map(|e| e.id).collect();
+        assert!(expected.len() > 1);
+        assert_eq!(state.selection, expected);
     }
 }

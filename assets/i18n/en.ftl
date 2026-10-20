@@ -989,3 +989,7 @@ hint-unjoin-second = Click the elements to unjoin from it · Esc ends
 msg-joined = Geometry joined.
 msg-unjoined = Geometry unjoined.
 group-geometry = Geometry
+msg-view-not-graphical = That view shows no elements (schedules and sheets list or place views).
+action-select-instances = Select All Instances
+cmd-desc-select-instances = Select every element of the selected elements' types shown in the active view.
+msg-instances-selected = { $count } instances selected in the view.

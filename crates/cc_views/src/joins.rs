@@ -90,13 +90,6 @@ fn trim_lines(
     }
 }
 
-fn owner(prim: &Prim) -> Option<ElementId> {
-    match prim {
-        Prim::Line { element, .. } | Prim::Fill { element, .. } => *element,
-        Prim::Text { .. } => None,
-    }
-}
-
 /// Merge the cut regions of joined elements drawn in `d`.
 pub(crate) fn merge(project: &Project, d: &mut Drawing2D) {
     if project.joins.is_empty() {
@@ -129,13 +122,13 @@ pub(crate) fn merge(project: &Project, d: &mut Drawing2D) {
             trim_lines(d, cutting, own, &[LineStyle::Cut], |_, place| place != Place::Boundary);
         }
         // The cutting element is painted over the one it cuts.
-        let Some(last) = d.prims.iter().rposition(|p| owner(p) == Some(cut)) else { continue };
+        let Some(last) = d.prims.iter().rposition(|p| p.element() == Some(cut)) else { continue };
         let mut moved = Vec::new();
         let mut kept = Vec::new();
         for (i, prim) in std::mem::take(&mut d.prims).into_iter().enumerate() {
-            if i < last && owner(&prim) == Some(cutting) { moved.push(prim) } else { kept.push(prim) }
+            if i < last && prim.element() == Some(cutting) { moved.push(prim) } else { kept.push(prim) }
         }
-        let at = kept.iter().rposition(|p| owner(p) == Some(cut)).map_or(kept.len(), |i| i + 1);
+        let at = kept.iter().rposition(|p| p.element() == Some(cut)).map_or(kept.len(), |i| i + 1);
         kept.splice(at..at, moved);
         d.prims = kept;
     }

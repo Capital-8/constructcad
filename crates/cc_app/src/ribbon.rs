@@ -625,7 +625,7 @@ fn stacks(ui: &mut Ui, state: &mut AppState, families: &[&[UiCommand]]) {
 
 fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
-    group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
+    group(ui, t!("group-selection"), |ui| command_buttons(ui, state, &[Select, SelectInstances]));
     group(ui, t!("group-clipboard"), |ui| clipboard_group(ui, state));
     group(ui, t!("group-modify"), |ui| {
         let transforms: &[UiCommand] = &[Move, CopyElements, Rotate, MirrorPick, MirrorDraw, Array];

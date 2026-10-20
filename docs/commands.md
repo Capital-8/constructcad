@@ -174,12 +174,14 @@ No parameters.
 
 ### `elements_list`
 
-*query* — Elements, optionally of one category and/or level, with a short summary each.
+*query* — Elements, optionally of one category, level and/or type, or only those shown in a view (all the instances of a type visible in it, for example), with a short summary each.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `category` | string | optional | Category name (`wall`, `door`, `component`…); see `categories_list`. |
 | `level` | id or name | optional | Level id or name. |
+| `type` | id or name | optional | Type id or name: only its instances. |
+| `view` | id or name | optional | View id or name: only the elements the view shows. |
 
 ### `element_get`
 

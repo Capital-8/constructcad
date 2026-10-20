@@ -534,3 +534,23 @@ fn joined_geometry_follows_the_cutting_order() {
     let grid = id(&run(&mut s, "grid_create", json!({"start": [0, -1], "end": [6, -1]})));
     assert_eq!(fails(&mut s, "geometry_join", json!({"first": wall, "second": grid})), ErrorCode::InvalidArguments);
 }
+
+#[test]
+fn instances_of_a_type_shown_in_a_view() {
+    let mut s = Session::default();
+    let levels = run(&mut s, "levels_list", json!({}));
+    let upper = levels[1]["id"].clone();
+    let a = id(&run(&mut s, "wall_create", json!({"start": [0, 0], "end": [4, 0]})));
+    let b = id(&run(&mut s, "wall_create", json!({"start": [4, 0], "end": [4, 4]})));
+    let up = id(&run(&mut s, "wall_create", json!({"start": [0, 0], "end": [4, 0], "level": upper})));
+    let ty = run(&mut s, "element_get", json!({"id": a}))["type"]["id"].clone();
+    let plan = run(&mut s, "views_list", json!({"category": "floor_plan"}))[0]["id"].clone();
+    let ids = |v: Value| -> Vec<u64> { v.as_array().unwrap().iter().map(|e| e["id"].as_u64().unwrap()).collect() };
+    let all = ids(run(&mut s, "elements_list", json!({"type": ty})));
+    assert!(all.contains(&a) && all.contains(&b) && all.contains(&up));
+    let shown = ids(run(&mut s, "elements_list", json!({"type": ty, "view": plan})));
+    assert_eq!(shown, vec![a, b], "the upper wall is not in the ground plan");
+    let schedule = run(&mut s, "view_create", json!({"kind": "schedule"}));
+    let refused = fails(&mut s, "elements_list", json!({"type": ty, "view": schedule["id"]}));
+    assert_eq!(refused, ErrorCode::InvalidArguments);
+}

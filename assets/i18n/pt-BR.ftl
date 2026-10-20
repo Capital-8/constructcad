@@ -989,3 +989,7 @@ hint-unjoin-second = Clique nos elementos a desunir dele · Esc encerra
 msg-joined = Geometria unida.
 msg-unjoined = Geometria desunida.
 group-geometry = Geometria
+msg-view-not-graphical = Essa vista não mostra elementos (tabelas e folhas listam ou posicionam vistas).
+action-select-instances = Selecionar todas as instâncias
+cmd-desc-select-instances = Seleciona todos os elementos dos tipos selecionados que aparecem na vista ativa.
+msg-instances-selected = { $count } instâncias selecionadas na vista.

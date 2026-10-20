@@ -24,6 +24,7 @@ pub enum Icon {
     Ceiling,
     Roof,
     Select,
+    SelectInstances,
     Copy,
     Delete,
     Undo,
@@ -87,7 +88,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 72] = [
+    pub const ALL: [Icon; 73] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -101,6 +102,7 @@ impl Icon {
         Icon::Ceiling,
         Icon::Roof,
         Icon::Select,
+        Icon::SelectInstances,
         Icon::Copy,
         Icon::Delete,
         Icon::Undo,
@@ -178,6 +180,7 @@ impl Icon {
             Icon::Ceiling => include_str!("../../../assets/icons/ui/ceiling.svg"),
             Icon::Roof => include_str!("../../../assets/icons/ui/roof.svg"),
             Icon::Select => include_str!("../../../assets/icons/ui/select.svg"),
+            Icon::SelectInstances => include_str!("../../../assets/icons/ui/select-instances.svg"),
             Icon::Copy => include_str!("../../../assets/icons/ui/copy.svg"),
             Icon::Delete => include_str!("../../../assets/icons/ui/delete.svg"),
             Icon::Undo => include_str!("../../../assets/icons/ui/undo.svg"),

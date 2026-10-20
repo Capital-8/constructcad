@@ -53,6 +53,16 @@ pub enum Prim {
     },
 }
 
+impl Prim {
+    /// The element a primitive belongs to, if any.
+    pub fn element(&self) -> Option<ElementId> {
+        match self {
+            Prim::Line { element, .. } | Prim::Fill { element, .. } => *element,
+            Prim::Text { .. } => None,
+        }
+    }
+}
+
 /// Ordered list of primitives, painted first to last.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Drawing2D {

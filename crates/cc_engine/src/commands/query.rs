@@ -5,6 +5,7 @@ use crate::error::{EngineError, Result};
 use crate::refs::{self, Ref};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
+use crate::t;
 use cc_core::{Category, ElementId, ElementKind, ViewCategory, ViewId};
 use cc_geom::polygon;
 use schemars::JsonSchema;
@@ -132,7 +133,9 @@ impl Command for TypeGet {
     }
 }
 
-/// Elements, optionally of one category and/or level, with a short summary each.
+/// Elements, optionally of one category, level and/or type, or only those
+/// shown in a view (all the instances of a type visible in it, for example),
+/// with a short summary each.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsList {
@@ -142,6 +145,12 @@ pub struct ElementsList {
     /// Level id or name.
     #[serde(default)]
     pub level: Option<Ref>,
+    /// Type id or name: only its instances.
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// View id or name: only the elements the view shows.
+    #[serde(default)]
+    pub view: Option<Ref>,
 }
 
 impl Command for ElementsList {
@@ -151,9 +160,21 @@ impl Command for ElementsList {
         let p = s.project();
         let category = self.category.as_deref().map(refs::category).transpose()?;
         let level = self.level.as_ref().map(|l| refs::level(p, l)).transpose()?;
+        let type_id = self.type_ref.as_ref().map(|t| refs::element_type(p, t)).transpose()?;
+        let shown: Option<std::collections::BTreeSet<ElementId>> = match &self.view {
+            Some(v) => {
+                let view = refs::view(p, v)?;
+                let drawing = s.drawing(view).ok_or_else(|| EngineError::invalid(t!("msg-view-not-graphical")))?;
+                Some(drawing.prims.iter().filter_map(cc_views::Prim::element).collect())
+            }
+            None => None,
+        };
+        let p = s.project();
         Ok(p.elements
             .values()
             .filter(|e| category.is_none_or(|c| e.category() == c) && level.is_none_or(|l| e.level == l))
+            .filter(|e| type_id.is_none_or(|t| e.type_id == t))
+            .filter(|e| shown.as_ref().is_none_or(|ids| ids.contains(&e.id)))
             .map(|e| {
                 json!({
                     "id": e.id.0,

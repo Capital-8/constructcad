@@ -426,6 +426,30 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
     }
 }
 
+/// Select every instance of the selected elements' types shown in the
+/// active view (the engine's `elements_list` by type and view).
+pub fn select_instances(state: &mut AppState) {
+    let Some(view) = state.active_view else { return };
+    let types: std::collections::BTreeSet<cc_core::ElementTypeId> =
+        state.selection.iter().filter_map(|id| state.project().element(*id)).map(|e| e.type_id).collect();
+    let mut found = std::collections::BTreeSet::new();
+    for type_id in types {
+        let command = cc_engine::commands::query::ElementsList {
+            category: None,
+            level: None,
+            type_ref: Some(Ref::Id(type_id.0)),
+            view: Some(Ref::Id(view.0)),
+        };
+        let Some(out) = run(state, command) else { return };
+        let ids = out.as_array().into_iter().flatten().filter_map(|e| e["id"].as_u64());
+        found.extend(ids.map(cc_core::ElementId));
+    }
+    if !found.is_empty() {
+        state.message = t!("msg-instances-selected", "count" => found.len());
+        state.selection = found;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
