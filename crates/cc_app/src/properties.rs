@@ -288,6 +288,16 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
                 finish(state, &r);
             });
+            section(ui, "structural", t!("section-structural"), |ui| {
+                let mut on = c.structural;
+                if row(ui, &t!("prop-structural"), |ui| ui.checkbox(&mut on, "")).changed() {
+                    modify(state, id, "structural", |e| {
+                        if let ElementKind::Column(c) = &mut e.kind {
+                            c.structural = on;
+                        }
+                    });
+                }
+            });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let (base, top) = state.project().column_span(&el, c);
                 readonly_row(ui, &t!("prop-height"), format::length(top - base));

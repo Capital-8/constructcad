@@ -1272,6 +1272,7 @@ impl<'a> Importer<'a> {
             base_offset: z0 - elevation,
             height: z1 - z0,
             top: WallTop::Unconnected,
+            structural: true,
         };
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Column(column));
         true

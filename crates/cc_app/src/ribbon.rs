@@ -54,6 +54,8 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Offset => Icon::Offset,
         Tool::Align => Icon::Align,
         Tool::ToggleJoin => Icon::Join,
+        Tool::JoinGeometry { unjoin: false } => Icon::JoinGeometry,
+        Tool::JoinGeometry { unjoin: true } => Icon::UnjoinGeometry,
         Tool::Paste => Icon::Paste,
         Tool::Dimension { mode, .. } => dimension_icon(*mode),
         Tool::MatchType => Icon::MatchType,
@@ -631,6 +633,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
         let picks: &[UiCommand] = &[Align, Offset, TrimCorner, TrimExtend, Split, ToggleJoin];
         stacks(ui, state, &[transforms, picks, &[Pin, Unpin, Delete]]);
     });
+    group(ui, t!("group-geometry"), |ui| command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry]));
 }
 
 /// Paste (a menu of where to paste), then cut, copy and match type.
@@ -865,6 +868,14 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     Tool::Split => "hint-split",
                     Tool::ToggleJoin => "hint-toggle-join",
                     _ => "hint-align",
+                };
+                ui.label(theme::muted(crate::i18n::tr(key)));
+            }
+            Tool::JoinGeometry { unjoin } => {
+                let key = match (state.interaction.targets.is_empty(), unjoin) {
+                    (true, _) => "hint-join-pick",
+                    (false, false) => "hint-join-second",
+                    (false, true) => "hint-unjoin-second",
                 };
                 ui.label(theme::muted(crate::i18n::tr(key)));
             }

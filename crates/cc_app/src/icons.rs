@@ -74,6 +74,8 @@ pub enum Icon {
     Pin,
     Unpin,
     Join,
+    JoinGeometry,
+    UnjoinGeometry,
     Cut,
     Paste,
     MatchType,
@@ -85,7 +87,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 70] = [
+    pub const ALL: [Icon; 72] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -149,6 +151,8 @@ impl Icon {
         Icon::Pin,
         Icon::Unpin,
         Icon::Join,
+        Icon::JoinGeometry,
+        Icon::UnjoinGeometry,
         Icon::Cut,
         Icon::Paste,
         Icon::MatchType,
@@ -224,6 +228,8 @@ impl Icon {
             Icon::Pin => include_str!("../../../assets/icons/ui/pin.svg"),
             Icon::Unpin => include_str!("../../../assets/icons/ui/unpin.svg"),
             Icon::Join => include_str!("../../../assets/icons/ui/join.svg"),
+            Icon::JoinGeometry => include_str!("../../../assets/icons/ui/join-geometry.svg"),
+            Icon::UnjoinGeometry => include_str!("../../../assets/icons/ui/unjoin-geometry.svg"),
             Icon::Cut => include_str!("../../../assets/icons/ui/cut.svg"),
             Icon::Paste => include_str!("../../../assets/icons/ui/paste.svg"),
             Icon::MatchType => include_str!("../../../assets/icons/ui/match-type.svg"),

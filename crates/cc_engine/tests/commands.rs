@@ -491,3 +491,46 @@ fn text_notes_with_leaders() {
         ErrorCode::InvalidArguments
     );
 }
+
+#[test]
+fn joined_geometry_follows_the_cutting_order() {
+    let mut s = Session::default();
+    // A wall with a structural column in it, and an architectural one.
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0], "height": 3.0})));
+    let column = id(&run(&mut s, "column_create", json!({"position": [3, 0], "height": 3.0})));
+    let deco = id(&run(&mut s, "column_create", json!({"position": [5, 0], "height": 3.0, "structural": false})));
+    let far = id(&run(&mut s, "column_create", json!({"position": [3, 9], "height": 3.0})));
+    let volume =
+        |s: &mut Session, e: u64| run(s, "element_get", json!({"id": e}))["derived"]["volume"].as_f64().unwrap();
+    let wall_v = volume(&mut s, wall);
+    let deco_v = volume(&mut s, deco);
+
+    // Structural elements cut hosts, whichever is picked first.
+    let joined = run(&mut s, "geometry_join", json!({"first": wall, "second": column}));
+    assert_eq!(joined, json!({"cutting": column, "cut": wall}));
+    assert!(volume(&mut s, wall) < wall_v - 1e-6, "the wall gives up the column's volume");
+    assert_eq!(run(&mut s, "element_get", json!({"id": wall}))["joined_with"], json!([column]));
+    // Walls cut architectural columns.
+    let joined = run(&mut s, "geometry_join", json!({"first": deco, "second": wall}));
+    assert_eq!(joined, json!({"cutting": wall, "cut": deco}));
+    assert!(volume(&mut s, deco) < deco_v - 1e-6);
+
+    // Unjoin gives the volume back; undo joins again.
+    run(&mut s, "geometry_unjoin", json!({"first": column, "second": wall}));
+    run(&mut s, "geometry_unjoin", json!({"first": wall, "second": deco}));
+    assert!((volume(&mut s, wall) - wall_v).abs() < 1e-9);
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "element_get", json!({"id": deco}))["joined_with"], json!([wall]));
+
+    // Deleting an element drops its joins.
+    run(&mut s, "geometry_join", json!({"first": wall, "second": column}));
+    run(&mut s, "elements_delete", json!({"ids": [column]}));
+    assert_eq!(run(&mut s, "element_get", json!({"id": wall}))["joined_with"], json!([deco]));
+
+    // Refusals: apart, itself, not joined, no body.
+    assert_eq!(fails(&mut s, "geometry_join", json!({"first": wall, "second": far})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "geometry_join", json!({"first": wall, "second": wall})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "geometry_unjoin", json!({"first": wall, "second": far})), ErrorCode::NotFound);
+    let grid = id(&run(&mut s, "grid_create", json!({"start": [0, -1], "end": [6, -1]})));
+    assert_eq!(fails(&mut s, "geometry_join", json!({"first": wall, "second": grid})), ErrorCode::InvalidArguments);
+}

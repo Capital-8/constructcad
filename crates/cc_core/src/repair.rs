@@ -187,6 +187,12 @@ impl Project {
         let elements = &self.elements;
         self.pinned.retain(|id| elements.contains_key(id));
         repairs += before - self.pinned.len();
+        // Joins need two distinct elements with a body, joined once.
+        let before = self.joins.len();
+        let mut seen = std::collections::BTreeSet::new();
+        let joinable = |id: crate::ElementId| elements.get(&id).is_some_and(|e| crate::can_join_geometry(e.category()));
+        self.joins.retain(|&(a, b)| a != b && joinable(a) && joinable(b) && seen.insert((a.min(b), a.max(b))));
+        repairs += before - self.joins.len();
         // Component overrides and imported properties must be finite.
         for e in self.elements.values_mut() {
             if let ElementKind::Component(c) = &mut e.kind {

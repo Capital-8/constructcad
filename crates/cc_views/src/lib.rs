@@ -10,6 +10,7 @@ mod drawing;
 pub mod export;
 pub mod format;
 pub mod hatch;
+mod joins;
 mod legend;
 pub mod notes;
 mod plan;
@@ -34,11 +35,16 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
         ViewKind::FloorPlan { level, cut_height } | ViewKind::CeilingPlan { level, cut_height } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
             let mut d = plan(project, geom, *level, *cut_height, ceiling, view.scale);
+            joins::merge(project, &mut d);
             annotate::plan_annotations(&mut d, project, geom, *level, ceiling, view.scale);
             d
         }
         ViewKind::Elevation { direction } => elevation(project, geom, *direction),
-        ViewKind::Section { start, end, depth } => section(project, geom, *start, *end, *depth, view.scale),
+        ViewKind::Section { start, end, depth } => {
+            let mut d = section(project, geom, *start, *end, *depth, view.scale);
+            joins::merge(project, &mut d);
+            d
+        }
         ViewKind::ThreeD { camera } => axonometric(project, geom, camera),
         ViewKind::Legend { types } => legend(project, types, view.scale),
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,

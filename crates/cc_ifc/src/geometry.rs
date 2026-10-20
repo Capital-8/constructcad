@@ -169,10 +169,10 @@ impl Solid {
 
 /// `a` minus `b` when their bounds overlap (`None`: nothing to cut or too large to cut).
 pub fn subtract(a: &[Polygon], b: &[Polygon]) -> Option<Vec<Polygon>> {
-    if !crate::csg::bounds_overlap(a, b) {
+    if !cc_geom::csg::bounds_overlap(a, b) {
         return None;
     }
-    crate::csg::subtract(a, b)
+    cc_geom::csg::subtract(a, b)
 }
 
 pub fn bounds2(pts: &[DVec2]) -> (DVec2, DVec2) {
@@ -1103,7 +1103,7 @@ impl<'a> Geometry<'a> {
                         self.items_at(e.arg(2), xf, depth + 1, &mut second);
                         let other: Vec<Polygon> = second.into_iter().flat_map(|s| s.mesh).collect();
                         for s in &mut first {
-                            if let Some(mesh) = crate::csg::intersect(&s.mesh, &other) {
+                            if let Some(mesh) = cc_geom::csg::intersect(&s.mesh, &other) {
                                 s.replace_mesh(mesh);
                             }
                         }

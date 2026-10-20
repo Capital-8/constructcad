@@ -5,6 +5,7 @@
 //! elevations and sections, plus [`WallGeom`] data used by plan views.
 
 mod build;
+pub mod csg;
 mod cut;
 mod mesh;
 pub mod polygon;

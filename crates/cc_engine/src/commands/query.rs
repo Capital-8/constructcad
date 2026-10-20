@@ -188,6 +188,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         _ => {}
     }
     let pinned = p.is_pinned(id);
+    let joined_with: Vec<u64> = p.joined_with(id).map(|j| j.0).collect();
     let level = json!({"id": e.level.0, "name": p.level_name(e.level)});
     let type_ = json!({"id": e.type_id.0, "name": p.type_name(e.type_id)});
     let geom = s.geometry();
@@ -207,6 +208,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         "mark": e.mark,
         "comments": e.comments,
         "pinned": pinned,
+        "joined_with": joined_with,
         "params": params,
         "derived": derived,
     }))

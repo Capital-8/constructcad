@@ -149,6 +149,8 @@ registry![
         modify::ElementsExport,
         modify::ElementsPaste,
         modify::WallJoin,
+        modify::GeometryJoin,
+        modify::GeometryUnjoin,
         modify::TrimCorner,
         modify::TrimExtend,
         modify::ElementSplit,

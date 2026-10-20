@@ -263,7 +263,7 @@ fn polys(mesh: &[Vec<DVec3>]) -> Vec<Poly> {
         let u = p.plane.normal.cross(helper).normalize();
         let v = p.plane.normal.cross(u);
         let flat: Vec<glam::DVec2> = face.iter().map(|q| glam::DVec2::new(q.dot(u), q.dot(v))).collect();
-        for [a, b, c] in cc_geom::polygon::triangulate(&flat) {
+        for [a, b, c] in crate::polygon::triangulate(&flat) {
             let (Some(a), Some(b), Some(c)) = (face.get(a), face.get(b), face.get(c)) else { continue };
             // Ear clipping keeps the winding of the outline.
             if let Some(t) = Poly::new(vec![*a, *b, *c]) {

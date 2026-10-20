@@ -301,6 +301,90 @@ impl Command for WallJoin {
     }
 }
 
+/// Join the geometry of two elements that touch or overlap (walls, floors,
+/// ceilings, roofs, columns, beams, stairs, railings, components). Where they
+/// overlap, one cuts the other: structural columns and beams cut walls,
+/// floors, ceilings and roofs; floors, ceilings and roofs cut walls; walls
+/// cut architectural columns; between equals the first cuts the second. The
+/// shared volume is counted once, and plans and sections draw two elements
+/// cut in the same material as one piece.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GeometryJoin {
+    /// The first element.
+    pub first: u64,
+    /// The second element.
+    pub second: u64,
+}
+
+/// The two elements of a join, checked: distinct, with a body.
+fn join_pair(p: &Project, first: u64, second: u64) -> Result<(ElementId, ElementId)> {
+    let (a, b) = (refs::element(p, first)?, refs::element(p, second)?);
+    if a == b {
+        return Err(EngineError::invalid(t!("msg-join-same")));
+    }
+    for id in [a, b] {
+        if !p.element(id).is_some_and(|e| cc_core::can_join_geometry(e.category())) {
+            return Err(EngineError::invalid(t!("msg-join-category")));
+        }
+    }
+    Ok((a, b))
+}
+
+/// Whether two elements' bodies touch or overlap.
+fn bodies_meet(geom: &cc_geom::ModelGeometry, a: ElementId, b: ElementId) -> bool {
+    let bounds =
+        |id| geom.solids_of(id).filter_map(cc_geom::Solid::bounds).reduce(|(lo, hi), (l, h)| (lo.min(l), hi.max(h)));
+    let (Some((alo, ahi)), Some((blo, bhi))) = (bounds(a), bounds(b)) else { return false };
+    let eps = glam::DVec3::splat(1e-6);
+    alo.cmple(bhi + eps).all() && blo.cmple(ahi + eps).all()
+}
+
+impl Command for GeometryJoin {
+    const NAME: &'static str = "geometry_join";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let (a, b) = join_pair(s.project(), self.first, self.second)?;
+        if !bodies_meet(s.geometry(), a, b) {
+            return Err(EngineError::invalid(t!("msg-join-apart")));
+        }
+        let p = s.project();
+        let priority = |id| p.element(id).map_or(0, cc_core::join_priority);
+        let (cutting, cut) = if priority(b) > priority(a) { (b, a) } else { (a, b) };
+        edit(s, t!("tx-join-geometry"), |e| {
+            e.set_joined(cutting, cut, true);
+            Ok(())
+        })?;
+        Ok(json!({"cutting": cutting.0, "cut": cut.0}))
+    }
+}
+
+/// Unjoin the geometry of two joined elements: each keeps its whole body again.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GeometryUnjoin {
+    /// The first element.
+    pub first: u64,
+    /// The second element.
+    pub second: u64,
+}
+
+impl Command for GeometryUnjoin {
+    const NAME: &'static str = "geometry_unjoin";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let (a, b) = join_pair(s.project(), self.first, self.second)?;
+        let Some((cutting, cut)) = s.project().join_of(a, b) else {
+            return Err(EngineError::not_found(t!("msg-join-none")));
+        };
+        edit(s, t!("tx-unjoin-geometry"), |e| {
+            e.set_joined(cutting, cut, false);
+            Ok(())
+        })?;
+        Ok(json!({"unjoined": [a.0, b.0]}))
+    }
+}
+
 /// Trim or extend two linear elements (walls, beams, grids) to meet at a
 /// corner; each pick point marks the part of its element to keep.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]

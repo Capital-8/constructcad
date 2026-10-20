@@ -428,6 +428,9 @@ pub struct ColumnCreate {
     /// Offset of the top from `top_level`, meters.
     #[serde(default)]
     pub top_offset: Option<f64>,
+    /// Load-bearing (default true); an architectural column is cut by the walls it is joined with.
+    #[serde(default)]
+    pub structural: Option<bool>,
 }
 
 impl Command for ColumnCreate {
@@ -442,6 +445,7 @@ impl Command for ColumnCreate {
             base_offset: 0.0,
             height: positive(self.height.unwrap_or_else(|| p.level_height(level, 3.0)), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_top(p, level)),
+            structural: self.structural.unwrap_or(true),
         };
         create(s, t!("tx-create-column"), level, Category::Column, self.type_ref.as_ref(), ElementKind::Column(column))
     }

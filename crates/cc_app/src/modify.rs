@@ -352,6 +352,43 @@ fn report<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, comman
     crate::actions::run_command(state, command);
 }
 
+/// Join or unjoin geometry: the first pick stays, and each further pick is
+/// joined with it (or unjoined from it) until Esc.
+pub fn join_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, drawing: &Drawing2D, unjoin: bool) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let joinable =
+        |id: ElementId| state.project().element(id).is_some_and(|e| cc_core::can_join_geometry(e.category()));
+    let hovered = drawing.hit_test(raw, 6.0 / xf.scale).filter(|id| joinable(*id));
+    let first = state.interaction.targets.first().copied();
+    let mut lit: BTreeSet<ElementId> = first.into_iter().collect();
+    lit.extend(hovered);
+    paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
+    if !resp.clicked() {
+        return;
+    }
+    let Some(id) = hovered else {
+        state.message = t!("hint-join-pick");
+        return;
+    };
+    match first {
+        None => {
+            state.interaction.targets = vec![id];
+            state.message = if unjoin { t!("hint-unjoin-second") } else { t!("hint-join-second") };
+        }
+        Some(first) if first != id => {
+            let done = if unjoin {
+                crate::actions::run_command(state, cmd::GeometryUnjoin { first: first.0, second: id.0 })
+            } else {
+                crate::actions::run_command(state, cmd::GeometryJoin { first: first.0, second: id.0 })
+            };
+            if done.is_some() {
+                state.message = if unjoin { t!("msg-unjoined") } else { t!("msg-joined") };
+            }
+        }
+        Some(_) => {}
+    }
+}
+
 /// Trim/extend to corner or to a reference, split, offset and align.
 fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, drawing: &Drawing2D, tool: &Tool) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };

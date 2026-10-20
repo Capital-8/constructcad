@@ -61,6 +61,9 @@ pub struct ModelGeometry {
     pub rooms: BTreeMap<ElementId, Vec<DVec2>>,
     /// Ridge and hip lines of pitched roofs, in plan.
     pub roof_ridges: BTreeMap<ElementId, Vec<(DVec2, DVec2)>>,
+    /// Volume a joined wall shares with the elements that cut it, taken
+    /// off its quantity (a wall's body stays whole; see [`Self::volume`]).
+    pub join_deductions: BTreeMap<ElementId, f64>,
 }
 
 /// An axis-aligned box in a horizontal frame: `origin`, plan axes `u`/`v`
@@ -242,8 +245,61 @@ impl ModelGeometry {
         geom.build_slabs(project);
         geom.build_structure(project);
         geom.build_components(project);
+        geom.apply_joins(project);
         geom.build_rooms(project);
         geom
+    }
+
+    /// The closed meshes of an element's body, one per solid. A wall's solid
+    /// leaves its joints open, so it is rebuilt with both ends capped.
+    fn closed_meshes(&self, id: ElementId) -> Vec<Vec<Vec<DVec3>>> {
+        let mesh = |s: &Solid| s.faces.iter().map(|f| f.verts.clone()).collect::<Vec<_>>();
+        if let Some(wall) = self.walls.get(&id) {
+            let mut closed = wall.clone();
+            closed.start_joined = false;
+            closed.end_joined = false;
+            closed.face_gaps.clear();
+            return vec![mesh(&closed.to_solid([0, 0, 0]))];
+        }
+        self.solids_of(id).map(mesh).collect()
+    }
+
+    /// Joined geometry: the cut element loses the volume it shares with
+    /// the element that cuts it. Bodies are subtracted, except walls, whose
+    /// plan and joints are analytic: their shared volume is deducted from
+    /// their quantity instead, and views merge the outlines.
+    fn apply_joins(&mut self, project: &Project) {
+        for &(cutting, cut) in &project.joins {
+            let cutters = self.closed_meshes(cutting);
+            if self.walls.contains_key(&cut) {
+                let Some(body) = self.closed_meshes(cut).into_iter().next() else { continue };
+                let shared: f64 = cutters
+                    .iter()
+                    .filter(|c| crate::csg::bounds_overlap(&body, c))
+                    .filter_map(|c| crate::csg::intersect(&body, c))
+                    .map(|common| {
+                        let mut s = Solid::new(cut, Category::Wall, [0, 0, 0]);
+                        s.add_polygons(common);
+                        s.volume().max(0.0)
+                    })
+                    .sum();
+                *self.join_deductions.entry(cut).or_default() += shared;
+                continue;
+            }
+            for solid in self.solids.iter_mut().filter(|s| s.element == cut) {
+                for cutter in &cutters {
+                    let body: Vec<Vec<DVec3>> = solid.faces.iter().map(|f| f.verts.clone()).collect();
+                    if !crate::csg::bounds_overlap(&body, cutter) {
+                        continue;
+                    }
+                    // Past the operation budget the body stays whole.
+                    if let Some(rest) = crate::csg::subtract(&body, cutter) {
+                        solid.faces.clear();
+                        solid.add_polygons(rest);
+                    }
+                }
+            }
+        }
     }
 
     /// One solid per resolved piece of each component, colored by its material.
@@ -501,7 +557,8 @@ impl ModelGeometry {
     /// Volume of an element's main body (frames/glass excluded for openings).
     pub fn volume(&self, id: ElementId) -> f64 {
         if let Some(wall) = self.walls.get(&id) {
-            return wall.volume();
+            let shared = self.join_deductions.get(&id).copied().unwrap_or(0.0);
+            return (wall.volume() - shared).max(0.0);
         }
         self.solids_of(id).map(Solid::volume).sum()
     }
@@ -577,6 +634,84 @@ mod tests {
             });
         });
         doc
+    }
+
+    /// A beam at the top of the walls of the sample house, from the middle
+    /// of the west wall to the middle of the east wall.
+    fn house_with_beam(top_offset: f64) -> (Document, ElementId) {
+        let mut doc = sample_house();
+        let mut beam = ElementId(0);
+        doc.edit("beam", |e| {
+            let level = e.project().levels[0].id;
+            let beam_t = e.project().default_type(Category::Beam).unwrap();
+            beam = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id: beam,
+                level,
+                type_id: beam_t,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind: ElementKind::Beam(cc_core::Beam {
+                    start: DVec2::new(0.0, 3.0),
+                    end: DVec2::new(8.0, 3.0),
+                    top_offset,
+                }),
+            });
+        });
+        (doc, beam)
+    }
+
+    fn beam_size(project: &Project, beam: ElementId) -> (f64, f64) {
+        let ty = project.element(beam).and_then(|e| project.element_type(e.type_id)).unwrap();
+        let TypeData::Beam { width, height, .. } = ty.data else { panic!("beam type") };
+        (width, height)
+    }
+
+    #[test]
+    fn joined_geometry_counts_shared_volume_once() {
+        // A beam hanging from the floor slab: the beam cuts the slab.
+        let (mut doc, beam) = house_with_beam(0.0);
+        let floor = doc.project.elements.values().find(|e| e.category() == Category::Floor).unwrap().id;
+        let before = ModelGeometry::build(&doc.project);
+        let (floor_v, beam_v) = (before.volume(floor), before.volume(beam));
+        let (width, height) = beam_size(&doc.project, beam);
+        let slab = floor_v / 48.0;
+        assert!(slab < height, "the slab is thinner than the beam");
+        doc.edit("join", |e| e.set_joined(beam, floor, true));
+        let after = ModelGeometry::build(&doc.project);
+        let shared = width * slab * 8.0;
+        assert!(
+            (after.volume(floor) - (floor_v - shared)).abs() < 1e-6,
+            "{} vs {}",
+            after.volume(floor),
+            floor_v - shared
+        );
+        assert!((after.volume(beam) - beam_v).abs() < 1e-9, "the cutting element keeps its volume");
+
+        // A beam inside the walls' height: it cuts the two walls it enters
+        // (half their thickness each), whose bodies stay whole.
+        let (mut doc, beam) = house_with_beam(3.0);
+        let walls: Vec<ElementId> = doc.project.walls().map(|(e, _)| e.id).collect();
+        let before = ModelGeometry::build(&doc.project);
+        let total: f64 = walls.iter().map(|w| before.volume(*w)).sum();
+        doc.edit("join", |e| {
+            for w in &walls {
+                e.set_joined(beam, *w, true);
+            }
+        });
+        let after = ModelGeometry::build(&doc.project);
+        let joined: f64 = walls.iter().map(|w| after.volume(*w)).sum();
+        let shared = 2.0 * width * height * 0.075;
+        assert!((total - joined - shared).abs() < 1e-6, "{} vs {}", total - joined, shared);
+        // Unjoined, the volumes come back.
+        doc.edit("unjoin", |e| {
+            for w in &walls {
+                e.set_joined(beam, *w, false);
+            }
+        });
+        let again: f64 = walls.iter().map(|w| ModelGeometry::build(&doc.project).volume(*w)).sum();
+        assert!((again - total).abs() < 1e-9);
     }
 
     #[test]
@@ -674,6 +809,7 @@ mod tests {
                     base_offset: 0.0,
                     height: 3.0,
                     top,
+                    structural: true,
                 }),
             );
             let beam = add(

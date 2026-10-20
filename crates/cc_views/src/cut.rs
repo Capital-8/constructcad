@@ -41,7 +41,8 @@ pub(crate) fn cut_fill(
             continue;
         }
         for (a, b) in crate::hatch::hatch(pattern, &poly, spacing) {
-            d.line(a, b, LineStyle::Thin, None);
+            // Tagged with the element, so joined geometry can trim them.
+            d.line(a, b, LineStyle::Thin, id);
         }
     }
 }

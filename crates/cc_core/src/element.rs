@@ -508,6 +508,9 @@ pub struct Column {
     /// Height when `top` is unconnected.
     pub height: f64,
     pub top: WallTop,
+    /// A load-bearing column; an architectural one (off) is cut by the walls it is joined with.
+    #[serde(default = "yes")]
+    pub structural: bool,
 }
 
 /// A horizontal beam between two points; its top is at the level elevation

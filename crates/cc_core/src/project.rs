@@ -42,6 +42,10 @@ pub struct Project {
     /// Elements protected from moving and deleting.
     #[serde(default)]
     pub pinned: std::collections::BTreeSet<ElementId>,
+    /// Joined geometry as `(cutting, cut)` pairs: where the two overlap,
+    /// the first keeps the volume and their cut outlines merge.
+    #[serde(default)]
+    pub joins: std::collections::BTreeSet<(ElementId, ElementId)>,
     next_id: u64,
 }
 
@@ -57,6 +61,7 @@ impl Project {
             views: BTreeMap::new(),
             units: crate::Units::default(),
             pinned: Default::default(),
+            joins: Default::default(),
             next_id: 1,
         }
     }
@@ -414,6 +419,16 @@ impl Project {
         self.pinned.contains(&id)
     }
 
+    /// The join between two elements as `(cutting, cut)`, if they are joined.
+    pub fn join_of(&self, a: ElementId, b: ElementId) -> Option<(ElementId, ElementId)> {
+        [(a, b), (b, a)].into_iter().find(|pair| self.joins.contains(pair))
+    }
+
+    /// Elements whose geometry is joined with `id`.
+    pub fn joined_with(&self, id: ElementId) -> impl Iterator<Item = ElementId> + '_ {
+        self.joins.iter().filter_map(move |&(a, b)| (a == id).then_some(b).or((b == id).then_some(a)))
+    }
+
     pub fn element(&self, id: ElementId) -> Option<&Element> {
         self.elements.get(&id)
     }
@@ -576,5 +591,29 @@ fn template_default(key: &str) -> &'static str {
         "tpl-type-washbasin" => "Lavatório de coluna",
         "tpl-type-wardrobe" => "Armário 160 cm",
         _ => "?",
+    }
+}
+
+/// Whether elements of `category` have a body whose geometry can be joined.
+pub fn can_join_geometry(category: crate::Category) -> bool {
+    use crate::Category::*;
+    matches!(category, Wall | Floor | Ceiling | Roof | Column | Beam | Stair | Railing | Component)
+}
+
+/// How strongly an element cuts the elements it is joined with: of two
+/// joined elements, the higher cuts the lower. Structural columns and beams
+/// cut hosts (walls, roofs, ceilings, floors); floors, ceilings and roofs cut
+/// walls; walls cut architectural columns.
+pub fn join_priority(element: &crate::Element) -> u8 {
+    use crate::ElementKind::*;
+    match &element.kind {
+        Column(c) if c.structural => 7,
+        Beam(_) => 6,
+        Floor(_) => 5,
+        Roof(_) => 4,
+        Ceiling(_) => 3,
+        Wall(_) => 2,
+        Column(_) => 1,
+        _ => 0,
     }
 }

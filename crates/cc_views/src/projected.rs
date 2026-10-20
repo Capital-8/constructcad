@@ -433,8 +433,11 @@ mod tests {
         // The cut is filled with the core material's pattern (the template's masonry hatch).
         let fills = d.prims.iter().filter(|p| matches!(p, Prim::Fill { element: Some(e), .. } if *e == id)).count();
         assert!(fills >= 1);
-        let hatch =
-            d.prims.iter().filter(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: None, .. })).count();
+        let hatch = d
+            .prims
+            .iter()
+            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: Some(e), .. } if *e == id))
+            .count();
         assert!(hatch > 0);
         assert!(d.elements_in(DVec2::splat(-100.0), DVec2::splat(100.0), false).contains(&id));
     }

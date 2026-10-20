@@ -95,8 +95,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let beam_t = p.default_type(Category::Beam).ok_or("template lacks a beam type")?;
         let railing_t = p.default_type(Category::Railing).ok_or("template lacks a railing type")?;
         for x in [2.0, 7.0] {
-            let column =
-                Column { position: DVec2::new(x, -2.5), rotation_deg: 0.0, base_offset: 0.0, height: 3.0, top: up };
+            let column = Column {
+                position: DVec2::new(x, -2.5),
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: up,
+                structural: true,
+            };
             add(e, column_t, "", ElementKind::Column(column));
         }
         let beam = Beam { start: DVec2::new(2.0, -2.5), end: DVec2::new(7.0, -2.5), top_offset: 3.0 };

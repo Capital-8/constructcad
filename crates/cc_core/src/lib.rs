@@ -35,7 +35,7 @@ pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
-pub use project::{Level, Project, ProjectInfo};
+pub use project::{Level, Project, ProjectInfo, can_join_geometry, join_priority};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use transform::PlanTransform;
 pub use types::{

@@ -72,6 +72,10 @@ pub enum Tool {
     Align,
     /// Click near a wall end to allow or disallow its join.
     ToggleJoin,
+    /// Pick an element, then others to join (or unjoin) their geometry with it.
+    JoinGeometry {
+        unjoin: bool,
+    },
     /// Place the clipboard with a click.
     Paste,
     /// Pick an element, then click others to give them its type.
@@ -118,6 +122,8 @@ impl Tool {
             Tool::Offset => "tool-offset",
             Tool::Align => "tool-align",
             Tool::ToggleJoin => "tool-toggle-join",
+            Tool::JoinGeometry { unjoin: false } => "tool-join-geometry",
+            Tool::JoinGeometry { unjoin: true } => "tool-unjoin-geometry",
             Tool::Paste => "action-paste",
             Tool::MatchType => "tool-match-type",
             Tool::Text { .. } => "tool-text",
@@ -701,6 +707,8 @@ pub fn handle(
         (Tool::Dimension { type_id, mode }, _) => {
             dimension_tool(ui, resp, painter, state, view, (*type_id, *mode), xf, drawing)
         }
+        // Joining geometry too (sections show it best).
+        (Tool::JoinGeometry { unjoin }, _) => crate::modify::join_tool(resp, painter, state, xf, drawing, *unjoin),
         // Text notes too.
         (Tool::Text { type_id }, _) => {
             let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;

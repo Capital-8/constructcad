@@ -424,8 +424,10 @@ mod tests {
         // One fill per layer on each side of the door.
         let layers = geom.walls[&wall_id].layers.len();
         assert_eq!(fills, 2 * layers, "wall cut split by the door");
-        // The template's masonry core is hatched.
-        assert!(d.prims.iter().any(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: None, .. })));
+        // The template's masonry core is hatched (the hatch belongs to the wall).
+        let hatched =
+            |p: &Prim| matches!(p, Prim::Line { style: LineStyle::Thin, element: Some(e), .. } if *e == wall_id);
+        assert!(d.prims.iter().any(hatched));
         assert_eq!(d.hit_test(DVec2::new(1.0, 0.0), 0.01), Some(wall_id));
         // On the open leaf, drawn from the hinge at u = 2.1 on the left face.
         assert_eq!(d.hit_test(DVec2::new(2.12, 0.5), 0.05), Some(door_id));

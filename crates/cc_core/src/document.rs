@@ -15,6 +15,7 @@ struct Settings {
     materials: Vec<Material>,
     units: crate::Units,
     pinned: std::collections::BTreeSet<ElementId>,
+    joins: std::collections::BTreeSet<(ElementId, ElementId)>,
 }
 
 impl Settings {
@@ -25,6 +26,7 @@ impl Settings {
             materials: p.materials.clone(),
             units: p.units.clone(),
             pinned: p.pinned.clone(),
+            joins: p.joins.clone(),
         }
     }
 
@@ -34,6 +36,7 @@ impl Settings {
         p.materials = self.materials;
         p.units = self.units;
         p.pinned = self.pinned;
+        p.joins = self.joins;
     }
 }
 
@@ -181,6 +184,10 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.hosted_by(id).map(|e| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);
+            if self.project.joined_with(id).next().is_some() {
+                self.touch_settings();
+                self.project.joins.retain(|&(a, b)| a != id && b != id);
+            }
         }
     }
 
@@ -306,6 +313,25 @@ impl<'a> EditCtx<'a> {
             }
         }
         existing.len()
+    }
+
+    /// Join the geometry of two elements, `cutting` keeping their common
+    /// volume (an existing join between them is replaced), or unjoin them.
+    /// Returns whether anything changed.
+    pub fn set_joined(&mut self, cutting: ElementId, cut: ElementId, joined: bool) -> bool {
+        let current = self.project.join_of(cutting, cut);
+        let wanted = joined.then_some((cutting, cut));
+        if current == wanted {
+            return false;
+        }
+        self.touch_settings();
+        if let Some(pair) = current {
+            self.project.joins.remove(&pair);
+        }
+        if let Some(pair) = wanted {
+            self.project.joins.insert(pair);
+        }
+        true
     }
 
     pub fn units_mut(&mut self) -> &mut crate::Units {
