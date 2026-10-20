@@ -224,6 +224,23 @@ fn palette_runs_commands() {
     assert_eq!(harness.state().message, t!("msg-select-first"));
 }
 
+/// The palette button opens the palette (its own click used to close it in
+/// the same frame); a click outside closes it.
+#[test]
+fn palette_button_opens_the_palette() {
+    let mut harness = themed_harness(sample_state(), egui::vec2(1400.0, 480.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::ribbon(ui, state);
+        crate::palette::show(ui.ctx(), state);
+    });
+    harness.get_by_role_and_label(Role::Button, &t!("action-command-palette")).click();
+    harness.run();
+    assert!(harness.state().palette.is_some(), "the button opens the palette");
+    assert!(harness.query_by_role(Role::TextInput).is_some());
+    harness.get_by_role_and_label(Role::Button, &t!("action-command-palette")).click();
+    harness.run();
+    assert!(harness.state().palette.is_none(), "a click outside closes it");
+}
+
 /// Engine commands open a form with their arguments and run in the session.
 #[test]
 fn palette_runs_engine_commands() {
