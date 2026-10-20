@@ -554,3 +554,28 @@ fn instances_of_a_type_shown_in_a_view() {
     let refused = fails(&mut s, "elements_list", json!({"type": ty, "view": schedule["id"]}));
     assert_eq!(refused, ErrorCode::InvalidArguments);
 }
+
+#[test]
+fn groups_keep_elements_together() {
+    let mut s = Session::default();
+    let a = id(&run(&mut s, "wall_create", json!({"start": [0, 0], "end": [4, 0]})));
+    let b = id(&run(&mut s, "wall_create", json!({"start": [4, 0], "end": [4, 4]})));
+    let c = id(&run(&mut s, "column_create", json!({"position": [8, 8]})));
+    let group = run(&mut s, "group_create", json!({"ids": [a, b]}));
+    let g = id(&group);
+    assert_eq!(group["members"], json!([a, b]));
+    assert_eq!(run(&mut s, "element_get", json!({"id": a}))["group"], g);
+    assert_eq!(run(&mut s, "groups_list", json!({}))[0]["name"], group["name"]);
+    // An element joins one group at most: regrouping takes it out of the first.
+    let other = run(&mut s, "group_create", json!({"ids": [b, c], "name": "Core"}));
+    assert_eq!(run(&mut s, "element_get", json!({"id": b}))["group"], other["id"]);
+    // The first group is left with one member; deleting it empties and removes the group.
+    run(&mut s, "elements_delete", json!({"ids": [a]}));
+    assert_eq!(run(&mut s, "groups_list", json!({})).as_array().unwrap().len(), 1);
+    run(&mut s, "group_ungroup", json!({"group": id(&other)}));
+    assert!(run(&mut s, "element_get", json!({"id": b}))["group"].is_null());
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "element_get", json!({"id": c}))["group"], other["id"]);
+    assert_eq!(fails(&mut s, "group_create", json!({"ids": [c]})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "group_ungroup", json!({"group": 999})), ErrorCode::NotFound);
+}

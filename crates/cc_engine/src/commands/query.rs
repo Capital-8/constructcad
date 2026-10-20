@@ -210,6 +210,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     }
     let pinned = p.is_pinned(id);
     let joined_with: Vec<u64> = p.joined_with(id).map(|j| j.0).collect();
+    let group = p.group_of(id).map(|g| g.0);
     let level = json!({"id": e.level.0, "name": p.level_name(e.level)});
     let type_ = json!({"id": e.type_id.0, "name": p.type_name(e.type_id)});
     let geom = s.geometry();
@@ -230,6 +231,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         "comments": e.comments,
         "pinned": pinned,
         "joined_with": joined_with,
+        "group": group,
         "params": params,
         "derived": derived,
     }))
@@ -372,5 +374,22 @@ impl Command for ScheduleTable {
             "rows": table.rows.iter().map(|r| json!({"element": r.element.0, "cells": r.cells.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
             "totals": table.totals,
         }))
+    }
+}
+
+/// The project's groups with their members.
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GroupsList {}
+
+impl Command for GroupsList {
+    const NAME: &'static str = "groups_list";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        Ok(s.project()
+            .groups
+            .iter()
+            .map(|(id, g)| json!({"id": id.0, "name": g.name, "members": g.members.iter().map(|m| m.0).collect::<Vec<_>>()}))
+            .collect())
     }
 }

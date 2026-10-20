@@ -450,6 +450,24 @@ pub fn select_instances(state: &mut AppState) {
     }
 }
 
+/// Group the selection (the engine's `group_create`).
+pub fn group_selection(state: &mut AppState) {
+    let ids = state.selection.iter().map(|id| id.0).collect();
+    if let Some(out) = run(state, cc_engine::commands::modify::GroupCreate { ids, name: None }) {
+        state.message = t!("msg-grouped", "name" => out["name"].as_str().unwrap_or_default());
+    }
+}
+
+/// Ungroup every group the selection touches (the engine's `group_ungroup`).
+pub fn ungroup_selection(state: &mut AppState) {
+    let groups: std::collections::BTreeSet<cc_core::GroupId> =
+        state.selection.iter().filter_map(|id| state.project().group_of(*id)).collect();
+    for group in groups {
+        run(state, cc_engine::commands::modify::GroupUngroup { group: group.0 });
+    }
+    state.message = t!("msg-ungrouped");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

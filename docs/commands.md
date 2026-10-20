@@ -7,9 +7,9 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 ## Contents
 
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_save`](#component_save)
-- **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
+- **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
-- **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
+- **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport)
@@ -190,6 +190,12 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `id` | integer | required | Element id. |
+
+### `groups_list`
+
+*query* — The project's groups with their members.
+
+No parameters.
 
 ### `views_list`
 
@@ -521,6 +527,23 @@ No parameters.
 |---|---|---|---|
 | `first` | integer | required | The first element. |
 | `second` | integer | required | The second element. |
+
+### `group_create`
+
+*edit* — Group elements: selecting one of them selects them all, so they move, copy and rotate together. Elements already in a group leave it.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `ids` | [id, …] | required | The elements (at least two). |
+| `name` | string | optional | Group name (default: "Group N"). |
+
+### `group_ungroup`
+
+*edit* — Ungroup: the group goes, its elements stay.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `group` | integer | required | Group id (see `groups_list`, or `group` in `element_get`). |
 
 ### `trim_corner`
 

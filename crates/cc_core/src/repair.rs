@@ -193,6 +193,16 @@ impl Project {
         let joinable = |id: crate::ElementId| elements.get(&id).is_some_and(|e| crate::can_join_geometry(e.category()));
         self.joins.retain(|&(a, b)| a != b && joinable(a) && joinable(b) && seen.insert((a.min(b), a.max(b))));
         repairs += before - self.joins.len();
+        // Groups keep existing elements, each in one group, and are not empty.
+        let mut grouped = std::collections::BTreeSet::new();
+        for group in self.groups.values_mut() {
+            let before = group.members.len();
+            group.members.retain(|m| elements.contains_key(m) && grouped.insert(*m));
+            repairs += before - group.members.len();
+        }
+        let before = self.groups.len();
+        self.groups.retain(|_, g| !g.members.is_empty());
+        repairs += before - self.groups.len();
         // Component overrides and imported properties must be finite.
         for e in self.elements.values_mut() {
             if let ElementKind::Component(c) = &mut e.kind {

@@ -46,7 +46,18 @@ pub struct Project {
     /// the first keeps the volume and their cut outlines merge.
     #[serde(default)]
     pub joins: std::collections::BTreeSet<(ElementId, ElementId)>,
+    /// Named sets of elements selected, moved and copied together.
+    #[serde(default)]
+    pub groups: BTreeMap<crate::GroupId, Group>,
     next_id: u64,
+}
+
+/// Elements kept together: selecting one selects them all. An element
+/// belongs to one group at most.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Group {
+    pub name: String,
+    pub members: std::collections::BTreeSet<ElementId>,
 }
 
 impl Project {
@@ -62,6 +73,7 @@ impl Project {
             units: crate::Units::default(),
             pinned: Default::default(),
             joins: Default::default(),
+            groups: BTreeMap::new(),
             next_id: 1,
         }
     }
@@ -422,6 +434,25 @@ impl Project {
     /// The join between two elements as `(cutting, cut)`, if they are joined.
     pub fn join_of(&self, a: ElementId, b: ElementId) -> Option<(ElementId, ElementId)> {
         [(a, b), (b, a)].into_iter().find(|pair| self.joins.contains(pair))
+    }
+
+    /// The group an element belongs to.
+    pub fn group_of(&self, id: ElementId) -> Option<crate::GroupId> {
+        self.groups.iter().find(|(_, g)| g.members.contains(&id)).map(|(gid, _)| *gid)
+    }
+
+    /// `ids` plus every member of the groups they belong to.
+    pub fn with_groups(&self, ids: impl IntoIterator<Item = ElementId>) -> std::collections::BTreeSet<ElementId> {
+        let mut out = std::collections::BTreeSet::new();
+        for id in ids {
+            match self.group_of(id).and_then(|g| self.groups.get(&g)) {
+                Some(group) => out.extend(group.members.iter().copied()),
+                None => {
+                    out.insert(id);
+                }
+            }
+        }
+        out
     }
 
     /// Elements whose geometry is joined with `id`.

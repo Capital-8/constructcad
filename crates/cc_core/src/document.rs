@@ -16,6 +16,7 @@ struct Settings {
     units: crate::Units,
     pinned: std::collections::BTreeSet<ElementId>,
     joins: std::collections::BTreeSet<(ElementId, ElementId)>,
+    groups: BTreeMap<crate::GroupId, crate::Group>,
 }
 
 impl Settings {
@@ -27,6 +28,7 @@ impl Settings {
             units: p.units.clone(),
             pinned: p.pinned.clone(),
             joins: p.joins.clone(),
+            groups: p.groups.clone(),
         }
     }
 
@@ -37,6 +39,7 @@ impl Settings {
         p.units = self.units;
         p.pinned = self.pinned;
         p.joins = self.joins;
+        p.groups = self.groups;
     }
 }
 
@@ -188,6 +191,13 @@ impl<'a> EditCtx<'a> {
                 self.touch_settings();
                 self.project.joins.retain(|&(a, b)| a != id && b != id);
             }
+            if self.project.group_of(id).is_some() {
+                self.touch_settings();
+                for group in self.project.groups.values_mut() {
+                    group.members.remove(&id);
+                }
+                self.project.groups.retain(|_, g| !g.members.is_empty());
+            }
         }
     }
 
@@ -331,6 +341,29 @@ impl<'a> EditCtx<'a> {
         if let Some(pair) = wanted {
             self.project.joins.insert(pair);
         }
+        true
+    }
+
+    /// Group `members` (taking them out of any group they were in) under
+    /// `name`; returns the new group's id.
+    pub fn add_group(&mut self, name: String, members: std::collections::BTreeSet<ElementId>) -> crate::GroupId {
+        self.touch_settings();
+        let id = crate::GroupId(self.alloc_id());
+        for group in self.project.groups.values_mut() {
+            group.members.retain(|m| !members.contains(m));
+        }
+        self.project.groups.retain(|_, g| !g.members.is_empty());
+        self.project.groups.insert(id, crate::Group { name, members });
+        id
+    }
+
+    /// Dissolve a group (its elements stay); returns whether it existed.
+    pub fn remove_group(&mut self, id: crate::GroupId) -> bool {
+        if !self.project.groups.contains_key(&id) {
+            return false;
+        }
+        self.touch_settings();
+        self.project.groups.remove(&id);
         true
     }
 

@@ -385,6 +385,68 @@ impl Command for GeometryUnjoin {
     }
 }
 
+/// Group elements: selecting one of them selects them all, so they move,
+/// copy and rotate together. Elements already in a group leave it.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GroupCreate {
+    /// The elements (at least two).
+    pub ids: Vec<u64>,
+    /// Group name (default: "Group N").
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+impl Command for GroupCreate {
+    const NAME: &'static str = "group_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let members: std::collections::BTreeSet<ElementId> = refs::elements(p, &self.ids)?.into_iter().collect();
+        if members.len() < 2 {
+            return Err(EngineError::invalid(t!("msg-group-two")));
+        }
+        let name = match self.name.map(|n| n.trim().to_string()) {
+            Some(n) if !n.is_empty() => n,
+            Some(_) => return Err(EngineError::invalid(t!("msg-group-name"))),
+            None => (1..)
+                .map(|n| t!("group-default-name", "n" => n))
+                .find(|n| !p.groups.values().any(|g| &g.name == n))
+                .unwrap_or_default(),
+        };
+        let mut id = cc_core::GroupId(0);
+        edit(s, t!("tx-group"), |e| {
+            id = e.add_group(name.clone(), members.clone());
+            Ok(())
+        })?;
+        Ok(json!({"id": id.0, "name": name, "members": members.iter().map(|m| m.0).collect::<Vec<_>>()}))
+    }
+}
+
+/// Ungroup: the group goes, its elements stay.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GroupUngroup {
+    /// Group id (see `groups_list`, or `group` in `element_get`).
+    pub group: u64,
+}
+
+impl Command for GroupUngroup {
+    const NAME: &'static str = "group_ungroup";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = cc_core::GroupId(self.group);
+        let Some(group) = s.project().groups.get(&id).cloned() else {
+            return Err(EngineError::not_found(t!("msg-group-missing")));
+        };
+        edit(s, t!("tx-ungroup"), |e| {
+            e.remove_group(id);
+            Ok(())
+        })?;
+        Ok(json!({"ungrouped": group.members.iter().map(|m| m.0).collect::<Vec<_>>()}))
+    }
+}
+
 /// Trim or extend two linear elements (walls, beams, grids) to meet at a
 /// corner; each pick point marks the part of its element to keep.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]

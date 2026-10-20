@@ -634,6 +634,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
         stacks(ui, state, &[transforms, picks, &[Pin, Unpin, Delete]]);
     });
     group(ui, t!("group-geometry"), |ui| command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry]));
+    group(ui, t!("group-group"), |ui| command_buttons(ui, state, &[Group, Ungroup]));
 }
 
 /// Paste (a menu of where to paste), then cut, copy and match type.

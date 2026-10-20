@@ -30,12 +30,12 @@ pub use element::{
     Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted, Leader,
     LeaderSymbol, LocationLine, Railing, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
-pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
+pub use ids::{ElementId, ElementTypeId, GroupId, LevelId, Uid, ViewId};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
-pub use project::{Level, Project, ProjectInfo, can_join_geometry, join_priority};
+pub use project::{Group, Level, Project, ProjectInfo, can_join_geometry, join_priority};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use transform::PlanTransform;
 pub use types::{

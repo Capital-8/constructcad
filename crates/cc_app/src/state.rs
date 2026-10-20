@@ -233,6 +233,13 @@ impl AppState {
     /// tools, which select what they create, keep their tab).
     pub fn follow_selection(&mut self) {
         if self.selection != self.seen_selection {
+            // Picking one member of a group picks the whole group.
+            if self.tool == Tool::Select {
+                let whole = self.project().with_groups(self.selection.iter().copied());
+                if whole != self.selection {
+                    self.selection = whole;
+                }
+            }
             if !self.selection.is_empty() && self.tool == Tool::Select {
                 self.ribbon_tab = RibbonTab::Modify;
             }

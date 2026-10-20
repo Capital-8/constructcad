@@ -20,6 +20,7 @@ id_type!(ElementId, "E");
 id_type!(ElementTypeId, "T");
 id_type!(LevelId, "L");
 id_type!(ViewId, "V");
+id_type!(GroupId, "G");
 
 /// Globally unique, persistent identifier of a model object (128 bits),
 /// kept across saves so exports such as IFC keep stable ids. Zero means

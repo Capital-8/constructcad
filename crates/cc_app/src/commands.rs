@@ -50,6 +50,8 @@ pub enum UiCommand {
     ToggleJoin,
     JoinGeometry,
     UnjoinGeometry,
+    Group,
+    Ungroup,
     Pin,
     Unpin,
     Delete,
@@ -133,6 +135,8 @@ impl UiCommand {
             ToggleJoin,
             JoinGeometry,
             UnjoinGeometry,
+            Group,
+            Ungroup,
             Pin,
             Unpin,
             Delete,
@@ -201,6 +205,8 @@ impl UiCommand {
             Split => Icon::Split,
             ToggleJoin => Icon::Join,
             JoinGeometry => Icon::JoinGeometry,
+            Group => Icon::Group,
+            Ungroup => Icon::Ungroup,
             UnjoinGeometry => Icon::UnjoinGeometry,
             Pin => Icon::Pin,
             Unpin => Icon::Unpin,
@@ -277,6 +283,8 @@ impl UiCommand {
             Split => t!("tool-split"),
             ToggleJoin => t!("tool-toggle-join"),
             JoinGeometry => t!("tool-join-geometry"),
+            Group => t!("action-group"),
+            Ungroup => t!("action-ungroup"),
             UnjoinGeometry => t!("tool-unjoin-geometry"),
             Pin => t!("action-pin"),
             Unpin => t!("action-unpin"),
@@ -364,6 +372,8 @@ impl UiCommand {
             Split => t!("cmd-desc-split"),
             ToggleJoin => t!("cmd-desc-toggle-join"),
             JoinGeometry => t!("cmd-desc-join-geometry"),
+            Group => t!("cmd-desc-group"),
+            Ungroup => t!("cmd-desc-ungroup"),
             UnjoinGeometry => t!("cmd-desc-unjoin-geometry"),
             Pin => t!("cmd-desc-pin"),
             Unpin => t!("cmd-desc-unpin"),
@@ -418,6 +428,8 @@ impl UiCommand {
             Place(Category::Beam) => "BM",
             Select => "MD",
             SelectInstances => "SA",
+            Group => "GP",
+            Ungroup => "UG",
             Dimension(DimensionMode::Aligned) => "DI",
             Text => "TT",
             Move => "MV",
@@ -488,6 +500,8 @@ impl UiCommand {
             Split => "element_split",
             ToggleJoin => "wall_join",
             JoinGeometry => "geometry_join",
+            Group => "group_create",
+            Ungroup => "group_ungroup",
             UnjoinGeometry => "geometry_unjoin",
             Pin | Unpin => "elements_pin",
             Delete | Cut => "elements_delete",
@@ -529,6 +543,8 @@ impl UiCommand {
             }
             Pin | Unpin | Delete | Cut | ClipboardCopy | SelectInstances if !has_sel => Some(t!("msg-select-first")),
             SelectInstances if state.active_view.is_none() => Some(t!("why-no-view")),
+            Group if state.selection.len() < 2 => Some(t!("msg-group-two")),
+            Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             Elevations if project.views_of(ViewCategory::Elevation).next().is_none() => Some(t!("why-no-elevations")),
@@ -656,6 +672,8 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         LoadComponent => actions::load_component(state),
         Select => state.set_tool(Tool::Select),
         SelectInstances => crate::actions::select_instances(state),
+        Group => crate::actions::group_selection(state),
+        Ungroup => crate::actions::ungroup_selection(state),
         Dimension(mode) => {
             if let Some(Tool::Dimension { type_id, .. }) = Tool::for_category(state.project(), Category::Dimension) {
                 state.set_tool(Tool::Dimension { type_id, mode });
@@ -803,5 +821,27 @@ mod tests {
             state.project().elements.values().filter(|e| e.type_id == ty && e.level == level).map(|e| e.id).collect();
         assert!(expected.len() > 1);
         assert_eq!(state.selection, expected);
+    }
+
+    #[test]
+    fn group_selects_together_and_ungroup_releases() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let walls: Vec<_> = state.project().walls().map(|(e, _)| e.id).take(2).collect();
+        let ctx = egui::Context::default();
+        state.selection = [walls[0]].into_iter().collect();
+        assert_eq!(UiCommand::Group.unavailable(&state), Some(t!("msg-group-two")));
+        state.selection = walls.iter().copied().collect();
+        invoke(&mut state, &ctx, UiCommand::Group);
+        // Picking one member picks the group.
+        state.selection = [walls[1]].into_iter().collect();
+        state.follow_selection();
+        assert_eq!(state.selection, walls.iter().copied().collect());
+        invoke(&mut state, &ctx, UiCommand::Ungroup);
+        assert!(state.project().groups.is_empty());
+        state.selection = [walls[1]].into_iter().collect();
+        state.follow_selection();
+        assert_eq!(state.selection.len(), 1);
     }
 }
