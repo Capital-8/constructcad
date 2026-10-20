@@ -21,6 +21,7 @@ eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "de
 egui = "0.36.2"
 egui-wgpu = "0.36.2"
 egui_dock = "0.21.1"
+egui_kittest = { version = "0.36.2", features = ["wgpu", "snapshot"] }
 wgpu = "30.0.1"
 glam = { version = "0.34.1", features = ["serde", "bytemuck"] }
 serde = { version = "1", features = ["derive"] }

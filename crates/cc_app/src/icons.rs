@@ -1,7 +1,9 @@
 //! Interface icons: SVG drawings in `assets/icons/ui` (24 x 24 grid, white
 //! strokes and fills), rasterized with resvg at the exact pixel size they
-//! are shown at and tinted with the theme color. Textures are cached per
-//! icon and size, so each one is rasterized once.
+//! are shown at and tinted with theme colors: strokes in one tone, soft
+//! fills in a second (see [`Tones`]), and an optional [`Badge`] marks what
+//! kind of action a command is. Textures are cached per icon, layer and
+//! size, so each one is rasterized once.
 
 use egui::{Color32, ColorImage, Context, Painter, Rect, TextureHandle, TextureOptions};
 use std::collections::HashMap;
@@ -232,10 +234,132 @@ impl Icon {
 #[derive(Clone, Default)]
 struct Cache(Arc<std::sync::Mutex<Textures>>);
 
-type Textures = HashMap<(Icon, u32), Option<TextureHandle>>;
+type Textures = HashMap<(Icon, Layer, u32), Option<TextureHandle>>;
 
-/// Paint `icon` centered in `rect` (the largest square that fits), tinted with `color`.
+/// The two tones of an icon: its strokes and solid marks (ink) and its soft
+/// fills (tint). Single-color icons paint the tint as the ink at 20%.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Layer {
+    Ink,
+    Tint,
+}
+
+/// The SVG of one layer: the drawings are white with soft fills at 20%
+/// (`fill="#fff" fill-opacity=".2"`), so the layers split by attribute.
+fn layer_source(source: &str, layer: Layer) -> String {
+    const SOFT: &str = r##"fill="#fff" fill-opacity=".2""##;
+    match layer {
+        Layer::Ink => source.replace(SOFT, r#"fill="none""#),
+        Layer::Tint => source
+            .replace(SOFT, "\u{1}")
+            .replace(r##"fill="#fff""##, r#"fill="none""#)
+            .replace(r##"stroke="#fff""##, r#"stroke="none""#)
+            .replace('\u{1}', r##"fill="#fff" stroke="none""##),
+    }
+}
+
+/// A small mark in the bottom-right corner of an icon telling what kind
+/// of action it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Badge {
+    /// Creates something new.
+    New,
+    /// Brings data in from a file.
+    Import,
+    /// Writes data out to a file.
+    Export,
+    /// Removes something.
+    Remove,
+}
+
+/// Colors of a two-tone icon and its badge.
+#[derive(Debug, Clone, Copy)]
+pub struct Tones {
+    pub ink: Color32,
+    pub tint: Color32,
+    /// Badge background; the badge glyph uses `badge_glyph`.
+    pub badge: Color32,
+    pub badge_glyph: Color32,
+}
+
+impl Tones {
+    /// Theme tones of an icon in a given state; badges take their semantic color.
+    pub fn of(palette: &crate::theme::Palette, badge: Option<Badge>, enabled: bool, selected: bool) -> Tones {
+        let badge_color = match badge {
+            Some(Badge::New) => palette.success,
+            Some(Badge::Remove) => palette.danger,
+            _ => palette.accent,
+        };
+        let glyph = if palette.dark { palette.app_bg } else { Color32::WHITE };
+        match (enabled, selected) {
+            (false, _) => {
+                let faint = palette.text_faint;
+                Tones { ink: faint, tint: faint.gamma_multiply(0.35), badge: faint, badge_glyph: glyph }
+            }
+            (true, true) => Tones {
+                ink: palette.accent_text,
+                tint: palette.accent.gamma_multiply(0.45),
+                badge: badge_color,
+                badge_glyph: glyph,
+            },
+            (true, false) => Tones {
+                ink: palette.icon_ink,
+                tint: palette.icon_tint.gamma_multiply(0.4),
+                badge: badge_color,
+                badge_glyph: glyph,
+            },
+        }
+    }
+}
+
+/// Paint `icon` centered in `rect` (the largest square that fits), in one color.
 pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
+    paint_layer(painter, rect, icon, Layer::Tint, color.gamma_multiply(0.2));
+    paint_layer(painter, rect, icon, Layer::Ink, color);
+}
+
+/// Paint `icon` in two tones, with an optional badge.
+pub fn paint_toned(painter: &Painter, rect: Rect, icon: Icon, tones: Tones, badge: Option<Badge>) {
+    paint_layer(painter, rect, icon, Layer::Tint, tones.tint);
+    paint_layer(painter, rect, icon, Layer::Ink, tones.ink);
+    if let Some(badge) = badge {
+        paint_badge(painter, rect, badge, tones);
+    }
+}
+
+/// A disc in the bottom-right quarter of the icon square, with a glyph.
+fn paint_badge(painter: &Painter, rect: Rect, badge: Badge, tones: Tones) {
+    let side = rect.width().min(rect.height());
+    let r = (side * 0.21).max(3.5);
+    let center = egui::pos2(rect.center().x + side / 2.0 - r * 0.8, rect.center().y + side / 2.0 - r * 0.8);
+    // A ring of the background separates the badge from the strokes beneath.
+    let ring = crate::theme::palette(painter.ctx()).panel;
+    painter.circle_filled(center, r + 1.2, ring);
+    painter.circle_filled(center, r, tones.badge);
+    let g = r * 0.5;
+    let stroke = egui::Stroke::new((r * 0.32).max(1.2), tones.badge_glyph);
+    let c = center;
+    let v = egui::vec2;
+    match badge {
+        Badge::New => {
+            painter.line_segment([c - v(g, 0.0), c + v(g, 0.0)], stroke);
+            painter.line_segment([c - v(0.0, g), c + v(0.0, g)], stroke);
+        }
+        Badge::Remove => {
+            painter.line_segment([c - v(g, 0.0), c + v(g, 0.0)], stroke);
+        }
+        // Arrows: down into the icon (import) or up out of it (export).
+        Badge::Import | Badge::Export => {
+            let dir = if badge == Badge::Import { 1.0 } else { -1.0 };
+            let tip = c + v(0.0, g * dir);
+            painter.line_segment([c - v(0.0, g * dir), tip], stroke);
+            painter.line_segment([tip, tip + v(-g * 0.75, -g * 0.75 * dir)], stroke);
+            painter.line_segment([tip, tip + v(g * 0.75, -g * 0.75 * dir)], stroke);
+        }
+    }
+}
+
+fn paint_layer(painter: &Painter, rect: Rect, icon: Icon, layer: Layer, color: Color32) {
     let ppp = painter.pixels_per_point();
     let side = rect.width().min(rect.height());
     // Whole physical pixels, placed on the pixel grid, keep the strokes crisp.
@@ -243,28 +367,32 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
     let size = px / ppp;
     let min = ((rect.center() - egui::vec2(size, size) / 2.0) * ppp).round() / ppp;
     let target = Rect::from_min_size(min, egui::vec2(size, size));
-    let Some(texture) = texture(painter.ctx(), icon, px as u32) else { return };
+    let Some(Some(texture)) = texture(painter.ctx(), icon, layer, px as u32) else { return };
     let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     painter.image(texture.id(), target, uv, color);
 }
 
-fn texture(ctx: &Context, icon: Icon, px: u32) -> Option<TextureHandle> {
+/// The cached texture of a layer: `Some(None)` when the layer is empty
+/// (icons without soft fills) or failed to rasterize.
+fn texture(ctx: &Context, icon: Icon, layer: Layer, px: u32) -> Option<Option<TextureHandle>> {
     let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Cache>(egui::Id::new("icon-cache")).clone());
     let mut map = cache.0.lock().ok()?;
-    map.entry((icon, px))
-        .or_insert_with(|| {
-            let image = rasterize(icon, px);
-            if image.is_none() {
-                log::warn!("icon {icon:?} failed to rasterize");
-            }
-            image.map(|image| ctx.load_texture(format!("icon-{icon:?}-{px}"), image, TextureOptions::LINEAR))
-        })
-        .clone()
+    let texture = map.entry((icon, layer, px)).or_insert_with(|| {
+        let image = rasterize(icon, layer, px);
+        if image.is_none() {
+            log::warn!("icon {icon:?} failed to rasterize");
+        }
+        image
+            .filter(|image| image.pixels.iter().any(|p| p.a() > 0))
+            .map(|image| ctx.load_texture(format!("icon-{icon:?}-{layer:?}-{px}"), image, TextureOptions::LINEAR))
+    });
+    Some(texture.clone())
 }
 
-/// Render an icon's SVG into a `px` x `px` image (premultiplied alpha).
-fn rasterize(icon: Icon, px: u32) -> Option<ColorImage> {
-    let tree = resvg::usvg::Tree::from_str(icon.source(), &resvg::usvg::Options::default()).ok()?;
+/// Render a layer of an icon's SVG into a `px` x `px` image (premultiplied alpha).
+fn rasterize(icon: Icon, layer: Layer, px: u32) -> Option<ColorImage> {
+    let source = layer_source(icon.source(), layer);
+    let tree = resvg::usvg::Tree::from_str(&source, &resvg::usvg::Options::default()).ok()?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(px, px)?;
     let scale = px as f32 / tree.size().width().max(tree.size().height());
     resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
@@ -279,7 +407,7 @@ mod tests {
     #[test]
     fn every_icon_rasterizes() {
         for icon in Icon::ALL {
-            let image = rasterize(icon, 20).unwrap_or_else(|| panic!("{icon:?} does not rasterize"));
+            let image = rasterize(icon, Layer::Ink, 20).unwrap_or_else(|| panic!("{icon:?} does not rasterize"));
             let inked = image.pixels.iter().filter(|p| p.a() > 0).count();
             assert!(inked > 20, "{icon:?} is (nearly) empty");
             // Strokes stay inside the icon, with a margin.
@@ -303,7 +431,7 @@ mod tests {
         let mut rgba = vec![248u8; w * h * 4];
         for (row, &px) in sizes.iter().enumerate() {
             for (col, icon) in Icon::ALL.iter().enumerate() {
-                let image = rasterize(*icon, px).unwrap();
+                let image = rasterize(*icon, Layer::Ink, px).unwrap();
                 for (i, p) in image.pixels.iter().enumerate() {
                     let (x, y) = (col * cell + 4 + i % px as usize, row * cell + 4 + i / px as usize);
                     let a = p.a() as f32 / 255.0;

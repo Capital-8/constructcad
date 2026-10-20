@@ -2,12 +2,15 @@
 //!
 //! Colors are defined once in [`Palette`] and every panel reads them from
 //! [`PALETTE`] instead of hard-coding values, so the look stays consistent.
+//! [`DARK`] holds the same tokens for a dark theme; code that paints with
+//! [`palette`] already follows the egui theme, so switching is a matter of
+//! moving the remaining `PALETTE` reads onto it.
 
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, RichText, Shadow, Stroke};
 use egui::{TextStyle, Visuals};
 use std::sync::Arc;
 
-/// Color tokens of the light neutral theme.
+/// Color tokens of a theme.
 #[derive(Debug, Clone, Copy)]
 pub struct Palette {
     /// Application background behind panels (ribbon strip, dock gaps).
@@ -32,6 +35,14 @@ pub struct Palette {
     pub pressed: Color32,
     pub danger: Color32,
     pub warning: Color32,
+    /// Positive actions: badges of commands that create something.
+    pub success: Color32,
+    /// Plain interface icons (strokes).
+    pub icon_ink: Color32,
+    /// Second tone of two-tone icons (their soft fills).
+    pub icon_tint: Color32,
+    /// Whether this is a dark theme (egui base visuals).
+    pub dark: bool,
 }
 
 pub const PALETTE: Palette = Palette {
@@ -52,7 +63,41 @@ pub const PALETTE: Palette = Palette {
     pressed: Color32::from_rgb(0xD6, 0xDB, 0xE1),
     danger: Color32::from_rgb(0xC9, 0x2A, 0x2A),
     warning: Color32::from_rgb(0xB2, 0x6B, 0x00),
+    success: Color32::from_rgb(0x1E, 0x8A, 0x4C),
+    icon_ink: Color32::from_rgb(0x1F, 0x23, 0x28),
+    icon_tint: Color32::from_rgb(0x1F, 0x6F, 0xEB),
+    dark: false,
 };
+
+/// Color tokens of the dark theme.
+pub const DARK: Palette = Palette {
+    app_bg: Color32::from_rgb(0x17, 0x19, 0x1D),
+    panel: Color32::from_rgb(0x21, 0x24, 0x29),
+    surface: Color32::from_rgb(0x2A, 0x2E, 0x34),
+    canvas: Color32::from_rgb(0x1C, 0x1F, 0x23),
+    sheet_bg: Color32::from_rgb(0x36, 0x3B, 0x42),
+    border: Color32::from_rgb(0x38, 0x3D, 0x44),
+    border_strong: Color32::from_rgb(0x4C, 0x53, 0x5C),
+    text: Color32::from_rgb(0xE6, 0xE8, 0xEB),
+    text_muted: Color32::from_rgb(0xAE, 0xB4, 0xBC),
+    text_faint: Color32::from_rgb(0x80, 0x87, 0x90),
+    accent: Color32::from_rgb(0x4C, 0x8D, 0xF6),
+    accent_soft: Color32::from_rgb(0x1F, 0x35, 0x57),
+    accent_text: Color32::from_rgb(0x8C, 0xB8, 0xFF),
+    hover: Color32::from_rgb(0x2F, 0x33, 0x39),
+    pressed: Color32::from_rgb(0x3A, 0x3F, 0x46),
+    danger: Color32::from_rgb(0xF0, 0x6A, 0x6A),
+    warning: Color32::from_rgb(0xE0, 0xA4, 0x3A),
+    success: Color32::from_rgb(0x4C, 0xC3, 0x8A),
+    icon_ink: Color32::from_rgb(0xE6, 0xE8, 0xEB),
+    icon_tint: Color32::from_rgb(0x6A, 0xA2, 0xFA),
+    dark: true,
+};
+
+/// The palette of the theme `ctx` shows.
+pub fn palette(ctx: &egui::Context) -> &'static Palette {
+    if ctx.theme() == egui::Theme::Dark { &DARK } else { &PALETTE }
+}
 
 /// The application icon (256 px PNG).
 pub const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/icons/app-icon-256.png");
@@ -114,25 +159,29 @@ pub fn apply(ctx: &egui::Context) {
     ctx.set_fonts(fonts());
     load_logo(ctx);
     ctx.set_theme(egui::ThemePreference::Light);
-    ctx.style_mut_of(egui::Theme::Light, |style| {
-        style.visuals = visuals();
-        style.text_styles = [
-            (TextStyle::Small, FontId::proportional(11.5)),
-            (TextStyle::Body, FontId::proportional(13.5)),
-            (TextStyle::Button, FontId::proportional(13.5)),
-            (TextStyle::Heading, FontId::new(17.0, semibold())),
-            (TextStyle::Monospace, FontId::monospace(12.5)),
-        ]
-        .into();
-        let s = &mut style.spacing;
-        s.item_spacing = egui::vec2(8.0, 6.0);
-        s.button_padding = egui::vec2(8.0, 4.0);
-        s.interact_size = egui::vec2(36.0, 24.0);
-        s.menu_margin = Margin::same(6);
-        s.window_margin = Margin::same(12);
-        s.indent = 16.0;
-        s.combo_height = 320.0;
-    });
+    for (theme, palette) in [(egui::Theme::Light, &PALETTE), (egui::Theme::Dark, &DARK)] {
+        ctx.style_mut_of(theme, |style| style_of(style, palette));
+    }
+}
+
+fn style_of(style: &mut egui::Style, palette: &Palette) {
+    style.visuals = visuals(palette);
+    style.text_styles = [
+        (TextStyle::Small, FontId::proportional(11.5)),
+        (TextStyle::Body, FontId::proportional(13.5)),
+        (TextStyle::Button, FontId::proportional(13.5)),
+        (TextStyle::Heading, FontId::new(17.0, semibold())),
+        (TextStyle::Monospace, FontId::monospace(12.5)),
+    ]
+    .into();
+    let s = &mut style.spacing;
+    s.item_spacing = egui::vec2(8.0, 6.0);
+    s.button_padding = egui::vec2(8.0, 4.0);
+    s.interact_size = egui::vec2(36.0, 24.0);
+    s.menu_margin = Margin::same(6);
+    s.window_margin = Margin::same(12);
+    s.indent = 16.0;
+    s.combo_height = 320.0;
 }
 
 fn fonts() -> FontDefinitions {
@@ -155,10 +204,10 @@ fn fonts() -> FontDefinitions {
     fonts
 }
 
-fn visuals() -> Visuals {
-    let p = PALETTE;
+fn visuals(p: &Palette) -> Visuals {
     let r = CornerRadius::same(RADIUS);
-    let mut v = Visuals::light();
+    let field = if p.dark { p.app_bg } else { Color32::WHITE };
+    let mut v = if p.dark { Visuals::dark() } else { Visuals::light() };
     v.override_text_color = None;
     v.panel_fill = p.panel;
     v.window_fill = p.panel;
@@ -168,7 +217,7 @@ fn visuals() -> Visuals {
     v.window_shadow = Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(36) };
     v.popup_shadow = Shadow { offset: [0, 3], blur: 10, spread: 0, color: Color32::from_black_alpha(30) };
     v.faint_bg_color = p.surface;
-    v.extreme_bg_color = Color32::WHITE;
+    v.extreme_bg_color = field;
     v.code_bg_color = p.surface;
     v.hyperlink_color = p.accent_text;
     v.warn_fg_color = p.warning;
@@ -186,7 +235,7 @@ fn visuals() -> Visuals {
     w.noninteractive.fg_stroke = Stroke::new(1.0, p.text);
     w.noninteractive.corner_radius = r;
 
-    w.inactive.bg_fill = Color32::WHITE;
+    w.inactive.bg_fill = field;
     w.inactive.weak_bg_fill = Color32::TRANSPARENT;
     w.inactive.bg_stroke = Stroke::new(1.0, p.border);
     w.inactive.fg_stroke = Stroke::new(1.0, p.text);
@@ -253,4 +302,39 @@ pub fn dock_style(style: &egui::Style) -> egui_dock::Style {
     s.buttons.close_tab_bg_fill = p.pressed;
     s.overlay.selection_color = p.accent.gamma_multiply(0.35);
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// WCAG relative luminance.
+    fn luminance(c: Color32) -> f32 {
+        let channel = |v: u8| {
+            let v = v as f32 / 255.0;
+            if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+    }
+
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    /// Text and icons stay readable on panels in both themes.
+    #[test]
+    fn palettes_have_readable_contrast() {
+        for p in [&PALETTE, &DARK] {
+            for bg in [p.panel, p.surface, p.hover] {
+                assert!(contrast(p.text, bg) >= 7.0, "text on {bg:?}");
+                assert!(contrast(p.icon_ink, bg) >= 7.0, "icons on {bg:?}");
+                assert!(contrast(p.text_muted, bg) >= 4.5, "muted text on {bg:?}");
+            }
+            assert!(contrast(p.accent_text, p.accent_soft) >= 4.5, "selected text");
+            for c in [p.danger, p.warning, p.success, p.icon_tint] {
+                assert!(contrast(c, p.panel) >= 3.0, "{c:?} on the panel");
+            }
+        }
+    }
 }

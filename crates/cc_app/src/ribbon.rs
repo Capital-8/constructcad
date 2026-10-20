@@ -2,7 +2,7 @@
 
 use crate::actions;
 use crate::commands::{self, UiCommand};
-use crate::icons::{self, Icon};
+use crate::icons::{self, Badge, Icon, Tones};
 use crate::state::{AppState, RibbonTab};
 use crate::t;
 use crate::theme::{self, PALETTE};
@@ -84,7 +84,14 @@ fn label_lines(ui: &Ui, label: &str, font: &egui::FontId) -> Vec<String> {
 }
 
 /// A large ribbon button: icon above a label of up to two lines. `dropdown` adds a chevron.
-fn big_button(ui: &mut Ui, icon: Icon, label: &str, selected: bool, enabled: bool, dropdown: bool) -> Response {
+fn big_button(
+    ui: &mut Ui,
+    (icon, badge): (Icon, Option<Badge>),
+    label: &str,
+    selected: bool,
+    enabled: bool,
+    dropdown: bool,
+) -> Response {
     let text_color = if enabled { PALETTE.text } else { PALETTE.text_faint };
     let font = egui::FontId::proportional(12.0);
     let galleys: Vec<_> = label_lines(ui, label, &font)
@@ -113,7 +120,9 @@ fn big_button(ui: &mut Ui, icon: Icon, label: &str, selected: bool, enabled: boo
             (true, false) => PALETTE.text,
         };
         let icon_center = egui::pos2(rect.center().x, rect.top() + 6.0 + ICON_SIZE / 2.0);
-        icons::paint(painter, egui::Rect::from_center_size(icon_center, vec2(ICON_SIZE, ICON_SIZE)), icon, icon_color);
+        let tones = Tones::of(theme::palette(ui.ctx()), badge, enabled, selected);
+        let icon_rect = egui::Rect::from_center_size(icon_center, vec2(ICON_SIZE, ICON_SIZE));
+        icons::paint_toned(painter, icon_rect, icon, tones, badge);
         // Lines start right under the icon, each centered; the chevron follows the last one.
         let text_color = if selected { PALETTE.accent_text } else { text_color };
         let mut y = rect.top() + 6.0 + ICON_SIZE + 3.0;
@@ -178,7 +187,9 @@ fn stacked(ui: &mut Ui, state: &AppState, family: &[UiCommand]) -> Option<UiComm
                     (true, false) => PALETTE.text,
                 };
                 let icon_rect = egui::Rect::from_center_size(rect.center(), vec2(STACK_ICON_SIZE, STACK_ICON_SIZE));
-                icons::paint(painter, icon_rect, command.icon(), color);
+                let tones =
+                    Tones { ink: color, ..Tones::of(theme::palette(ui.ctx()), command.badge(), enabled, selected) };
+                icons::paint_toned(painter, icon_rect, command.icon(), tones, command.badge());
                 let r = if enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
                 if command_tooltip(r, state, *command, why).clicked() && enabled {
                     clicked = Some(*command);
@@ -190,14 +201,15 @@ fn stacked(ui: &mut Ui, state: &AppState, family: &[UiCommand]) -> Option<UiComm
 }
 
 /// Small square icon button (quick access toolbar).
-fn icon_button(ui: &mut Ui, icon: Icon, enabled: bool) -> Response {
+fn icon_button(ui: &mut Ui, (icon, badge): (Icon, Option<Badge>), enabled: bool) -> Response {
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, response) = ui.allocate_exact_size(vec2(26.0, 26.0), sense);
     if enabled && response.hovered() {
         ui.painter().rect_filled(rect, theme::RADIUS as f32, PALETTE.hover);
     }
     let color = if enabled { PALETTE.text_muted } else { PALETTE.text_faint.gamma_multiply(0.6) };
-    icons::paint(ui.painter(), rect.shrink(5.0), icon, color);
+    let tones = Tones { ink: color, ..Tones::of(theme::palette(ui.ctx()), badge, enabled, false) };
+    icons::paint_toned(ui.painter(), rect.shrink(5.0), icon, tones, badge);
     response
 }
 
@@ -262,7 +274,7 @@ fn command_menu(ui: &mut Ui, state: &AppState, command: UiCommand) -> Response {
 fn command_big(ui: &mut Ui, state: &AppState, command: UiCommand, dropdown: bool) -> Response {
     let why = command.unavailable(state);
     let label = command.label(state);
-    let r = big_button(ui, command.icon(), &label, command.selected(state), why.is_none(), dropdown);
+    let r = big_button(ui, (command.icon(), command.badge()), &label, command.selected(state), why.is_none(), dropdown);
     command_tooltip(r, state, command, why)
 }
 
@@ -304,7 +316,7 @@ fn key_cap(ui: &mut Ui, keys: &str) {
 /// A small quick access button for `command`.
 fn command_icon(ui: &mut Ui, state: &mut AppState, command: UiCommand) {
     let why = command.unavailable(state);
-    let r = icon_button(ui, command.icon(), why.is_none());
+    let r = icon_button(ui, (command.icon(), command.badge()), why.is_none());
     if command_tooltip(r, state, command, why).clicked() {
         commands::run(state, &ui.ctx().clone(), command);
     }

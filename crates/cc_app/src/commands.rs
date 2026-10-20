@@ -4,7 +4,7 @@
 //! read by every place that shows it.
 
 use crate::actions;
-use crate::icons::Icon;
+use crate::icons::{Badge, Icon};
 use crate::ribbon::{category_icon, dimension_icon};
 use crate::state::{AppState, PendingAction};
 use crate::t;
@@ -162,7 +162,7 @@ impl UiCommand {
         match self {
             Home => Icon::Home,
             New => Icon::New,
-            Open | ImportIfc | LoadComponent => Icon::Open,
+            Open | ImportIfc => Icon::Open,
             Save => Icon::Save,
             SaveAs => Icon::SaveAs,
             CloseProject => Icon::CloseProject,
@@ -173,7 +173,7 @@ impl UiCommand {
             Redo => Icon::Redo,
             Default3D | New3D => Icon::View3D,
             Place(category) => category_icon(category),
-            NewComponent => Icon::Plus,
+            NewComponent | LoadComponent => Icon::Component,
             Select => Icon::Select,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
@@ -209,6 +209,18 @@ impl UiCommand {
             Materials => Icon::Materials,
             MacroRecord => Icon::MacroRecord,
             MacroRun => Icon::MacroRun,
+        }
+    }
+
+    /// The mark of the kind of action: creating, importing, exporting.
+    pub fn badge(self) -> Option<Badge> {
+        use UiCommand::*;
+        match self {
+            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | Sheet => Some(Badge::New),
+            ImportIfc | LoadComponent => Some(Badge::Import),
+            ExportPdf | ExportSvg => Some(Badge::Export),
+            Delete => Some(Badge::Remove),
+            _ => None,
         }
     }
 
