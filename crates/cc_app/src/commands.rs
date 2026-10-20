@@ -51,6 +51,12 @@ pub enum UiCommand {
     StructuralPlan,
     NumberStructure,
     StructureTags,
+    PlaceFixture,
+    PlaceDevice,
+    Systems,
+    PlumbingPlan,
+    ElectricalPlan,
+    MepSchedules,
     Dimension(DimensionMode),
     Text,
     AddLeader,
@@ -98,7 +104,7 @@ pub enum UiCommand {
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
-const PLACED: [Category; 14] = [
+const PLACED: [Category; 16] = [
     Category::Wall,
     Category::Door,
     Category::Window,
@@ -113,6 +119,8 @@ const PLACED: [Category; 14] = [
     Category::Column,
     Category::Beam,
     Category::Foundation,
+    Category::Pipe,
+    Category::Conduit,
 ];
 
 impl UiCommand {
@@ -141,6 +149,7 @@ impl UiCommand {
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
+        all.extend([PlaceFixture, PlaceDevice, Systems, PlumbingPlan, ElectricalPlan, MepSchedules]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -231,6 +240,12 @@ impl UiCommand {
             StructuralPlan => Icon::StructuralPlan,
             NumberStructure => Icon::NumberMarks,
             StructureTags => Icon::StructureTags,
+            PlaceFixture => Icon::PlumbingFixture,
+            PlaceDevice => Icon::Outlet,
+            Systems => Icon::Systems,
+            PlumbingPlan => Icon::PlumbingPlan,
+            ElectricalPlan => Icon::ElectricalPlan,
+            MepSchedules => Icon::Schedule,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             AddLeader => Icon::Leader,
@@ -280,7 +295,7 @@ impl UiCommand {
         use UiCommand::*;
         match self {
             NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | StructuralSchedules | Sheet
-            | SteelSchedule | StructuralPlan => Some(Badge::New),
+            | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules => Some(Badge::New),
             ImportIfc | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | AnalyticalExport => Some(Badge::Export),
             Delete => Some(Badge::Remove),
@@ -329,6 +344,12 @@ impl UiCommand {
             StructuralPlan => t!("action-structural-plan"),
             NumberStructure => t!("action-number-structure"),
             StructureTags => t!("action-structure-tags"),
+            PlaceFixture => t!("tool-fixture"),
+            PlaceDevice => t!("tool-device"),
+            Systems => t!("dlg-systems"),
+            PlumbingPlan => t!("action-plumbing-plan"),
+            ElectricalPlan => t!("action-electrical-plan"),
+            MepSchedules => t!("action-mep-schedules"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             AddLeader => t!("tool-add-leader"),
@@ -433,6 +454,12 @@ impl UiCommand {
             StructuralPlan => t!("cmd-desc-structural-plan"),
             NumberStructure => t!("cmd-desc-number-structure"),
             StructureTags => t!("cmd-desc-structure-tags"),
+            PlaceFixture => t!("cmd-desc-fixture"),
+            PlaceDevice => t!("cmd-desc-device"),
+            Systems => t!("cmd-desc-systems"),
+            PlumbingPlan => t!("cmd-desc-plumbing-plan"),
+            ElectricalPlan => t!("cmd-desc-electrical-plan"),
+            MepSchedules => t!("cmd-desc-mep-schedules"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
@@ -509,6 +536,8 @@ impl UiCommand {
             Place(Category::Column) => "CL",
             Place(Category::Beam) => "BM",
             Place(Category::Foundation) => "FT",
+            Place(Category::Pipe) => "PI",
+            Place(Category::Conduit) => "CN",
             Select => "MD",
             SelectInstances => "SA",
             Group => "GP",
@@ -571,6 +600,11 @@ impl UiCommand {
             Place(Category::Column) => "column_create",
             Place(Category::Beam) => "beam_create",
             Place(Category::Foundation) => "footing_create",
+            Place(Category::Pipe) => "pipe_create",
+            Place(Category::Conduit) => "conduit_create",
+            PlaceFixture | PlaceDevice => "component_place",
+            Systems => "system_set",
+            PlumbingPlan | ElectricalPlan | MepSchedules => "view_create",
             FootingsUnderColumns => "footings_under_columns",
             StripFootingsUnderWalls => "strip_footings_under_walls",
             FoundationSlab => "foundation_slab_create",
@@ -662,7 +696,9 @@ impl UiCommand {
             Truss if project.default_type(Category::Beam).is_none() => Some(t!("msg-no-type")),
             BracesX if crate::actions::selected_columns(state).len() != 2 => Some(t!("msg-columns-two-exactly")),
             TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
-            StructuralPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
+            StructuralPlan | PlumbingPlan | ElectricalPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
+            PlaceFixture if crate::tools::mep_component_type(project, false).is_none() => Some(t!("msg-no-type")),
+            PlaceDevice if crate::tools::mep_component_type(project, true).is_none() => Some(t!("msg-no-type")),
             StructureTags if crate::actions::active_floor_plan(state).is_none() => Some(t!("msg-plan-only")),
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
@@ -679,7 +715,12 @@ impl UiCommand {
         use UiCommand::*;
         let tool = &state.tool;
         match self {
+            Place(Category::Component) => {
+                matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id).is_none())
+            }
             Place(category) => tool.category() == Some(category) && !matches!(tool, Tool::Section | Tool::Truss { .. }),
+            PlaceFixture => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(false)),
+            PlaceDevice => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(true)),
             Truss => matches!(tool, Tool::Truss { .. }),
             StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select => *tool == Tool::Select,
@@ -712,6 +753,14 @@ impl UiCommand {
     }
 }
 
+/// Whether a component type is an electrical device (`Some(true)`), a plumbing fixture or neither.
+fn mep_kind(state: &AppState, type_id: cc_core::ElementTypeId) -> Option<bool> {
+    match state.project().element_type(type_id).map(|t| &t.data) {
+        Some(cc_core::TypeData::Component { def, .. }) => def.mep.map(|m| matches!(m, cc_core::MepData::Device { .. })),
+        _ => None,
+    }
+}
+
 fn place_label(category: Category) -> String {
     match category {
         Category::Wall => t!("tool-wall"),
@@ -728,6 +777,8 @@ fn place_label(category: Category) -> String {
         Category::Beam => t!("tool-beam"),
         Category::Foundation => t!("tool-footing"),
         Category::Rebar => t!("category-rebar"),
+        Category::Pipe => t!("tool-pipe"),
+        Category::Conduit => t!("tool-conduit"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::Component => t!("tool-component"),
@@ -750,6 +801,8 @@ fn place_description(category: Category) -> String {
         Category::Beam => t!("cmd-desc-beam"),
         Category::Foundation => t!("cmd-desc-footing"),
         Category::Rebar => t!("cmd-desc-rebar-typical"),
+        Category::Pipe => t!("cmd-desc-pipe"),
+        Category::Conduit => t!("cmd-desc-conduit"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::Component => t!("cmd-desc-component"),
@@ -830,6 +883,20 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         StructuralPlan => crate::actions::open_structural_plan(state),
         NumberStructure => crate::actions::number_structure(state),
         StructureTags => crate::actions::toggle_structure_tags(state),
+        PlaceFixture | PlaceDevice => {
+            let device = command == PlaceDevice;
+            if let Some(type_id) = crate::tools::mep_component_type(state.project(), device) {
+                state.set_tool(Tool::Component { type_id });
+                state.message = if device { t!("hint-device") } else { t!("hint-component") };
+            }
+        }
+        Systems => state.dialogs.systems = true,
+        PlumbingPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Plumbing),
+        ElectricalPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Electrical),
+        MepSchedules => {
+            actions::new_schedule(state, Category::Pipe);
+            actions::new_schedule(state, Category::Conduit);
+        }
         StructuralSchedules => {
             actions::new_schedule(state, Category::Column);
             actions::new_schedule(state, Category::Beam);

@@ -30,6 +30,8 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Grid => Icon::Grid,
         Category::Foundation => Icon::Footing,
         Category::Rebar => Icon::Rebar,
+        Category::Pipe => Icon::Pipe,
+        Category::Conduit => Icon::Conduit,
         Category::Dimension => Icon::Dimension,
         Category::Column => Icon::Column,
         Category::Beam => Icon::Beam,
@@ -372,6 +374,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         (RibbonTab::File, t!("ribbon-file")),
         (RibbonTab::Architecture, t!("ribbon-architecture")),
         (RibbonTab::Structure, t!("ribbon-structure")),
+        (RibbonTab::Mep, t!("ribbon-mep")),
         (RibbonTab::Modify, t!("ribbon-modify")),
         (RibbonTab::Annotate, t!("ribbon-annotate")),
         (RibbonTab::View, t!("ribbon-view")),
@@ -498,6 +501,7 @@ fn tab_row(ui: &mut Ui, state: &mut AppState, available: f32) {
                     RibbonTab::File => file_tab(ui, state),
                     RibbonTab::Architecture => architecture_tab(ui, state),
                     RibbonTab::Structure => structure_tab(ui, state),
+                    RibbonTab::Mep => mep_tab(ui, state),
                     RibbonTab::Modify => modify_tab(ui, state),
                     RibbonTab::Annotate => annotate_tab(ui, state),
                     RibbonTab::View => view_tab(ui, state),
@@ -605,6 +609,15 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
         stacks(ui, state, &[&[StructuralPlan, NumberStructure, StructuralSchedules]]);
     });
     group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Category::Grid)));
+    group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
+}
+
+fn mep_tab(ui: &mut Ui, state: &mut AppState) {
+    use UiCommand::*;
+    group(ui, t!("group-plumbing"), |ui| command_buttons(ui, state, &[place(Category::Pipe), PlaceFixture]));
+    group(ui, t!("group-electrical"), |ui| command_buttons(ui, state, &[place(Category::Conduit), PlaceDevice]));
+    group(ui, t!("group-systems"), |ui| command_button(ui, state, Systems));
+    group(ui, t!("group-documentation"), |ui| stacks(ui, state, &[&[PlumbingPlan, ElectricalPlan, MepSchedules]]));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
 }
 
@@ -722,6 +735,48 @@ fn manage_tab(ui: &mut Ui, state: &mut AppState) {
 }
 
 /// Context options for the active tool (options bar).
+/// Options of the pipe and conduit tools: the system (or circuit), the
+/// elevation of the run's start and, for pipes, the fall along it. Changing
+/// the system brings back its defaults.
+fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementTypeId, pipe: bool) {
+    let mut system = if pipe { state.mep.system } else { state.mep.circuit };
+    ui.label(if pipe { t!("col-system") } else { t!("prop-circuit") });
+    if crate::systems_dialog::system_combo(ui, state, ("segment-system", pipe), Some(!pipe), &mut system) {
+        if pipe {
+            state.mep.system = system;
+        } else {
+            state.mep.circuit = system;
+        }
+        state.mep.offset = None;
+        state.mep.slope = None;
+    }
+    let project = state.project();
+    let kind = system.and_then(|id| project.system(id)).map(|s| s.kind);
+    let default_offset = match (pipe, state.active_level()) {
+        (true, _) => cc_engine::pipe_offset(kind),
+        (false, Some(level)) => cc_engine::conduit_offset(project, level),
+        (false, None) => 2.8,
+    };
+    let diameter = project.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
+    let default_slope =
+        if kind.is_some_and(cc_core::SystemKind::is_drainage) { cc_engine::drain_slope(diameter) * 100.0 } else { 0.0 };
+    ui.label(t!("prop-elevation-offset"));
+    let mut offset = state.mep.offset.unwrap_or(default_offset);
+    if ui.add(crate::properties::length_drag(&mut offset).speed(0.01)).changed() {
+        state.mep.offset = Some(offset);
+        state.mep.chain = None;
+    }
+    if pipe {
+        ui.label(t!("col-slope"));
+        let mut slope = state.mep.slope.unwrap_or(default_slope);
+        if ui.add(DragValue::new(&mut slope).speed(0.1).range(-20.0..=20.0).suffix(" %")).changed() {
+            state.mep.slope = Some(slope);
+        }
+    }
+    ui.separator();
+    ui.label(theme::muted(if pipe { t!("hint-pipe") } else { t!("hint-conduit") }));
+}
+
 pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         egui::Frame::new()
@@ -865,6 +920,27 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Stair { .. } => {
                 ui.label(theme::muted(t!("hint-stair")));
+            }
+            Tool::Pipe { type_id } => segment_options(ui, state, type_id, true),
+            Tool::Conduit { type_id } => segment_options(ui, state, type_id, false),
+            Tool::Component { type_id } if crate::tools::device_type(state.project(), type_id).is_some() => {
+                ui.label(t!("prop-rotation"));
+                let rotation = &mut state.interaction.rotation;
+                if ui.add(DragValue::new(rotation).speed(1.0).suffix("°")).changed() {
+                    *rotation = rotation.rem_euclid(360.0);
+                }
+                ui.label(t!("prop-circuit"));
+                let mut circuit = state.mep.circuit;
+                if crate::systems_dialog::system_combo(
+                    ui,
+                    state,
+                    ("device-circuit", type_id.0),
+                    Some(true),
+                    &mut circuit,
+                ) {
+                    state.mep.circuit = circuit;
+                }
+                ui.label(theme::muted(t!("hint-device")));
             }
             Tool::Component { .. } => {
                 ui.label(t!("prop-rotation"));

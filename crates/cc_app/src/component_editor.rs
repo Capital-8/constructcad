@@ -62,6 +62,7 @@ impl Editor {
         let def = ComponentDef {
             kind: ComponentKind::Generic,
             ifc: None,
+            mep: None,
             params: vec![param(&w, 1.0), param(&d, 0.6), param(&h, 0.9)],
             items: vec![ComponentItem {
                 name: t!("tpl-part-body"),

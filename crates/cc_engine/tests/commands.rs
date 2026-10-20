@@ -930,3 +930,150 @@ fn trusses_braces_numbering_and_structural_plans() {
     let plan = run(&mut s, "view_create", json!({"kind": "structural_plan"}));
     assert_eq!(plan["params"]["structural"], json!(true), "{plan}");
 }
+
+/// The component type of the template whose MEP data names `device` (or a fixture, for `"Fixture"`).
+fn mep_type(s: &mut Session, device: &str) -> u64 {
+    let types = run(s, "types_list", json!({"category": "component"}));
+    types
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(id)
+        .find(|t| {
+            let ty = run(s, "type_get", json!({"type": t}));
+            let mep = &ty["params"]["def"]["mep"];
+            mep["Device"]["device"] == json!(device) || (device == "Fixture" && mep["Fixture"].is_object())
+        })
+        .unwrap_or_else(|| panic!("no {device} type"))
+}
+
+#[test]
+fn building_services_through_commands() {
+    let mut s = Session::default();
+    // The template's plumbing systems.
+    let systems = run(&mut s, "systems_list", json!({}));
+    assert_eq!(systems.as_array().unwrap().len(), 5, "{systems}");
+    let sewer_code = systems.as_array().unwrap().iter().find(|x| x["kind"] == json!("sanitary")).unwrap()["code"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let pipes = run(&mut s, "types_list", json!({"category": "pipe"}));
+    let drain_100 = pipes.as_array().unwrap().iter().map(id).find(|t| {
+        (run(&mut s, "type_get", json!({"type": t}))["params"]["diameter"].as_f64().unwrap() - 0.1).abs() < 1e-9
+    });
+
+    // A 100 mm drain falls 1 % from under the floor; a riser goes up from its end.
+    let drain = run(
+        &mut s,
+        "pipe_create",
+        json!({"start": [0, 0], "end": [5, 0], "system": sewer_code, "type": drain_100.unwrap()}),
+    );
+    assert_eq!(drain["params"]["start_offset"], json!(-0.3), "{drain}");
+    assert!((drain["params"]["end_offset"].as_f64().unwrap() + 0.35).abs() < 1e-9, "{drain}");
+    assert!((drain["derived"]["slope"].as_f64().unwrap() - 0.01).abs() < 1e-9);
+    let riser = run(
+        &mut s,
+        "pipe_create",
+        json!({"start": [5, 0], "system": sewer_code, "offset": -0.35, "end_offset": 2.8, "type": drain_100.unwrap()}),
+    );
+    assert!((riser["derived"]["length"].as_f64().unwrap() - 3.15).abs() < 1e-9, "{riser}");
+    // A supply pipe is level, in the wall.
+    let supply = run(&mut s, "pipe_create", json!({"start": [0, 1], "end": [3, 1], "system": "cold_water"}));
+    assert_eq!(
+        (supply["params"]["start_offset"].clone(), supply["params"]["end_offset"].clone()),
+        (json!(0.6), json!(0.6))
+    );
+    assert_eq!(fails(&mut s, "pipe_create", json!({"start": [0, 0]})), ErrorCode::InvalidArguments);
+
+    // A board, a lighting circuit on it, a light and two outlets.
+    let panel_t = mep_type(&mut s, "Panel");
+    let panel = id(&run(&mut s, "component_place", json!({"position": [0, 3], "type": panel_t})));
+    let circuit =
+        run(&mut s, "system_create", json!({"kind": "lighting", "panel": panel, "voltage": 127.0, "name": "Luz"}));
+    assert_eq!(circuit["code"], json!("1"));
+    let power = run(&mut s, "system_create", json!({"kind": "power", "panel": panel}));
+    assert_eq!(power["code"], json!("2"));
+    let light_t = mep_type(&mut s, "CeilingLight");
+    let light = run(&mut s, "component_place", json!({"position": [2, 2], "type": light_t, "system": id(&circuit)}));
+    // Lights go on the ceiling: the template's levels are 3 m apart.
+    assert_eq!(light["params"]["base_offset"], json!(3.0), "{light}");
+    let outlet_t = mep_type(&mut s, "Outlet");
+    for x in [1.0, 3.0] {
+        let o = run(&mut s, "component_place", json!({"position": [x, 0], "type": outlet_t, "system": id(&power)}));
+        assert_eq!(o["params"]["base_offset"], json!(0.3));
+    }
+    // Circuits take devices and conduits, not pipes.
+    assert_eq!(
+        fails(&mut s, "system_assign", json!({"elements": [id(&drain)], "system": id(&power)})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(&mut s, "component_place", json!({"position": [1, 1], "type": outlet_t, "system": sewer_code})),
+        ErrorCode::InvalidArguments
+    );
+    let conduit = run(&mut s, "conduit_create", json!({"start": [0, 3], "end": [2, 2], "circuits": ["1", "2"]}));
+    assert_eq!(conduit["params"]["systems"].as_array().unwrap().len(), 2);
+    assert_eq!(conduit["params"]["start_offset"], json!(3.0));
+    assert_eq!(
+        fails(&mut s, "conduit_create", json!({"start": [0, 3], "end": [2, 2], "circuits": [sewer_code]})),
+        ErrorCode::InvalidArguments
+    );
+
+    // The load schedule: 100 VA of lighting, 2 x 100 VA of outlets at 127 V.
+    let loads = run(&mut s, "circuit_loads", json!({"panel": panel}));
+    let rows = loads["circuits"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!((rows[0]["power_va"].clone(), rows[1]["power_va"].clone()), (json!(100.0), json!(200.0)));
+    assert!((rows[1]["current_a"].as_f64().unwrap() - 200.0 / 127.0).abs() < 1e-9);
+    assert_eq!(loads["panels"][0]["power_va"], json!(300.0));
+
+    // Fixture units add up in their system.
+    let fixture_t = mep_type(&mut s, "Fixture");
+    let wc = id(&run(&mut s, "component_place", json!({"position": [4, 4], "type": fixture_t})));
+    run(&mut s, "system_assign", json!({"elements": [wc], "system": sewer_code}));
+    let systems = run(&mut s, "systems_list", json!({}));
+    let sewer = systems.as_array().unwrap().iter().find(|x| x["code"] == json!(sewer_code)).unwrap().clone();
+    assert_eq!(sewer["elements"], json!(3), "{sewer}");
+    assert!(sewer["drain_units"].as_f64().unwrap() > 0.0);
+    assert!((sewer["length"].as_f64().unwrap() - (5.0f64.hypot(0.05) + 3.15)).abs() < 1e-9);
+
+    // Changing and deleting systems; members stay, outside it.
+    let set = run(&mut s, "system_set", json!({"system": "2", "params": {"name": "Tomadas", "voltage": 220.0}}));
+    assert_eq!((set["name"].clone(), set["voltage"].clone()), (json!("Tomadas"), json!(220.0)));
+    assert_eq!(
+        fails(&mut s, "system_set", json!({"system": "2", "params": {"kind": "cold_water"}})),
+        ErrorCode::Rejected
+    );
+    run(&mut s, "system_delete", json!({"system": "Tomadas"}));
+    let after = run(&mut s, "element_get", json!({"id": id(&conduit)}));
+    assert_eq!(after["params"]["systems"].as_array().unwrap().len(), 1, "{after}");
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "systems_list", json!({})).as_array().unwrap().len(), 7);
+
+    // Deleting the board leaves its circuits unfed.
+    run(&mut s, "elements_delete", json!({"ids": [panel]}));
+    let loads = run(&mut s, "circuit_loads", json!({}));
+    assert!(loads["circuits"].as_array().unwrap().iter().all(|c| c["panel"].is_null()), "{loads}");
+
+    // Services plans and schedules; IFC export with the systems.
+    let plan = run(&mut s, "view_create", json!({"kind": "plumbing_plan"}));
+    assert_eq!(plan["params"]["mep"], json!("Plumbing"), "{plan}");
+    run(&mut s, "view_create", json!({"kind": "electrical_plan"}));
+    let table = run(&mut s, "view_create", json!({"kind": "schedule", "category": "pipe"}));
+    let rows = run(&mut s, "schedule_table", json!({"view": id(&table)}));
+    assert_eq!(rows["rows"].as_array().unwrap().len(), 3, "{rows}");
+    let path = scratch("mep.ifc");
+    run(&mut s, "ifc_export", json!({"path": path.to_string_lossy()}));
+    let ifc = std::fs::read_to_string(&path).unwrap();
+    for entity in [
+        "IFCPIPESEGMENT(",
+        "IFCCABLECARRIERSEGMENT(",
+        "IFCDISTRIBUTIONSYSTEM(",
+        "IFCDISTRIBUTIONCIRCUIT(",
+        "IFCOUTLET(",
+        "IFCLIGHTFIXTURE(",
+        "IFCRELASSIGNSTOGROUP(",
+    ] {
+        assert!(ifc.contains(entity), "{entity} missing");
+    }
+}

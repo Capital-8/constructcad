@@ -9,6 +9,7 @@ mod beam;
 mod build;
 pub mod csg;
 mod cut;
+pub mod mep;
 mod mesh;
 pub mod polygon;
 pub mod rebar;
@@ -24,6 +25,7 @@ pub use build::{
     hosted_parts, railing_parts, stair_geom,
 };
 pub use cut::{clip_polygon, face_plane_segments};
+pub use mep::{SegmentGeom, segment_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};
 pub use rooms::room_boundary;
 pub use solid::{Face, Ray, Solid};

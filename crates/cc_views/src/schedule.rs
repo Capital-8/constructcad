@@ -51,6 +51,10 @@ enum Value {
     Money(f64),
     /// Kilograms.
     Weight(f64),
+    /// Volt-amperes.
+    Power(f64),
+    /// A plain quantity (fixture units).
+    Number(f64),
     Missing,
 }
 
@@ -65,6 +69,8 @@ impl Value {
             Value::Money(v) => Cell::Text(format::money(*v)),
             Value::Volume(v) => Cell::Text(format::volume(*v)),
             Value::Weight(v) => Cell::Text(format!("{} kg", format::number(*v, 2))),
+            Value::Power(v) => Cell::Text(format!("{} VA", format::number(*v, 0))),
+            Value::Number(v) => Cell::Text(format::number(*v, 1)),
             Value::Missing => Cell::Text(String::new()),
         }
     }
@@ -72,7 +78,13 @@ impl Value {
     fn number(&self) -> Option<f64> {
         match self {
             Value::Count(n) => Some(*n as f64),
-            Value::Length(v) | Value::Area(v) | Value::Volume(v) | Value::Money(v) | Value::Weight(v) => Some(*v),
+            Value::Length(v)
+            | Value::Area(v)
+            | Value::Volume(v)
+            | Value::Money(v)
+            | Value::Weight(v)
+            | Value::Power(v)
+            | Value::Number(v) => Some(*v),
             _ => None,
         }
     }
@@ -107,6 +119,8 @@ fn summable(field: ScheduleField) -> bool {
             | ScheduleField::CutLength
             | ScheduleField::BarCount
             | ScheduleField::Weight
+            | ScheduleField::Power
+            | ScheduleField::DrainUnits
             | ScheduleField::Area
             | ScheduleField::Volume
             | ScheduleField::Cost
@@ -191,6 +205,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 _ => Value::Missing,
             },
             ElementKind::Railing(r) => Value::Length(r.length()),
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) => Value::Length(s.length()),
             _ => Value::Missing,
         },
         F::Height => match (&e.kind, ty.map(|t| &t.data)) {
@@ -280,6 +295,26 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             Some(TypeData::Rebar { diameter, .. }) => {
                 Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
             }
+            Some(TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. }) => {
+                Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 0)))
+            }
+            _ => Value::Missing,
+        },
+        F::System => {
+            let labels: Vec<&str> =
+                e.systems().iter().filter_map(|id| project.system(*id)).map(|s| s.label()).collect();
+            if labels.is_empty() { Value::Missing } else { Value::Text(labels.join(", ")) }
+        }
+        F::Slope => match &e.kind {
+            ElementKind::Pipe(s) if !s.is_vertical() => Value::Text(format::slope(s.slope())),
+            _ => Value::Missing,
+        },
+        F::Power => match project.mep_data(e) {
+            Some(m @ cc_core::MepData::Device { .. }) => Value::Power(m.power()),
+            _ => Value::Missing,
+        },
+        F::DrainUnits => match project.mep_data(e) {
+            Some(cc_core::MepData::Fixture { drain_units, .. }) => Value::Number(drain_units),
             _ => Value::Missing,
         },
         F::BarCount => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Count(r.count())),

@@ -1471,7 +1471,7 @@ impl<'a> Importer<'a> {
         }
         let ifc = Some(self.ifc_class(id, e));
         let properties = self.property_sets(id);
-        let def = ComponentDef { kind, params: Vec::new(), items, ifc };
+        let def = ComponentDef { kind, params: Vec::new(), items, ifc, mep: None };
         let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
         // Instance parameter values written by ConstructCAD.
         let overrides: std::collections::BTreeMap<String, f64> = self
@@ -1512,6 +1512,7 @@ impl<'a> Importer<'a> {
             _ => Default::default(),
         };
         let c = Component {
+            system: None,
             position: origin.truncate(),
             rotation_deg: rotation.to_degrees(),
             base_offset: origin.z - elevation,

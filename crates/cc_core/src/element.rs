@@ -38,6 +38,8 @@ pub enum ElementKind {
     Component(Component),
     Foundation(Foundation),
     Rebar(Rebar),
+    Pipe(crate::MepSegment),
+    Conduit(crate::MepSegment),
 }
 
 impl Element {
@@ -60,6 +62,32 @@ impl Element {
             ElementKind::Component(_) => Category::Component,
             ElementKind::Foundation(_) => Category::Foundation,
             ElementKind::Rebar(_) => Category::Rebar,
+            ElementKind::Pipe(_) => Category::Pipe,
+            ElementKind::Conduit(_) => Category::Conduit,
+        }
+    }
+
+    /// The pipe or conduit run of MEP segments.
+    pub fn as_segment(&self) -> Option<&crate::MepSegment> {
+        match &self.kind {
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_segment_mut(&mut self) -> Option<&mut crate::MepSegment> {
+        match &mut self.kind {
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Systems (or circuits) the element belongs to.
+    pub fn systems(&self) -> Vec<crate::SystemId> {
+        match &self.kind {
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) => s.systems.clone(),
+            ElementKind::Component(c) => c.system.into_iter().collect(),
+            _ => Vec::new(),
         }
     }
 
@@ -133,6 +161,10 @@ impl Element {
             ElementKind::Stair(s) => s.start += delta,
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Component(c) => c.position += delta,
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+                s.start += delta;
+                s.end += delta;
+            }
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
             // Placed by their hosts.
             ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}
@@ -743,4 +775,7 @@ pub struct Component {
     /// Property and quantity sets of the object (from IFC import).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<crate::properties::PropertySet>,
+    /// The system or circuit it is connected to (an electrical device's circuit).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system: Option<crate::SystemId>,
 }

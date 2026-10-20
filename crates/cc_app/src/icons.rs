@@ -103,11 +103,18 @@ pub enum Icon {
     DimAngular,
     DimRadial,
     DimDiameter,
+    Pipe,
+    Conduit,
+    PlumbingFixture,
+    Outlet,
+    PlumbingPlan,
+    ElectricalPlan,
+    Systems,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 92] = [
+    pub const ALL: [Icon; 99] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -200,6 +207,13 @@ impl Icon {
         Icon::DimAngular,
         Icon::DimRadial,
         Icon::DimDiameter,
+        Icon::Pipe,
+        Icon::Conduit,
+        Icon::PlumbingFixture,
+        Icon::Outlet,
+        Icon::PlumbingPlan,
+        Icon::ElectricalPlan,
+        Icon::Systems,
     ];
 
     /// The icon's SVG source.
@@ -297,6 +311,13 @@ impl Icon {
             Icon::DimAngular => include_str!("../../../assets/icons/ui/dim-angular.svg"),
             Icon::DimRadial => include_str!("../../../assets/icons/ui/dim-radial.svg"),
             Icon::DimDiameter => include_str!("../../../assets/icons/ui/dim-diameter.svg"),
+            Icon::Pipe => include_str!("../../../assets/icons/ui/pipe.svg"),
+            Icon::Conduit => include_str!("../../../assets/icons/ui/conduit.svg"),
+            Icon::PlumbingFixture => include_str!("../../../assets/icons/ui/plumbing-fixture.svg"),
+            Icon::Outlet => include_str!("../../../assets/icons/ui/outlet.svg"),
+            Icon::PlumbingPlan => include_str!("../../../assets/icons/ui/plumbing-plan.svg"),
+            Icon::ElectricalPlan => include_str!("../../../assets/icons/ui/electrical-plan.svg"),
+            Icon::Systems => include_str!("../../../assets/icons/ui/systems.svg"),
         }
     }
 }

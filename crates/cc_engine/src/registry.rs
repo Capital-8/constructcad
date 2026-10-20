@@ -156,6 +156,16 @@ registry![
         create::RailingCreate,
         create::ComponentPlace,
     ],
+    "Building services" => [
+        mep::PipeCreate,
+        mep::ConduitCreate,
+        mep::SystemsList,
+        mep::SystemCreate,
+        mep::SystemSet,
+        mep::SystemDelete,
+        mep::SystemAssign,
+        mep::CircuitLoads,
+    ],
     "Modifying elements" => [
         modify::ElementsDelete,
         modify::ElementsMove,

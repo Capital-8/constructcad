@@ -13,7 +13,13 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
     let mut y = 0.0;
     for t in types.iter().filter_map(|id| project.element_type(*id)).filter(|t| t.category().is_model()) {
         // Component outlines in plan, centered on the row.
+        let device = match &t.data {
+            TypeData::Component { def, .. } => def.mep.and_then(|m| m.device().map(|d| (d, m.power()))),
+            _ => None,
+        };
         let plan: Vec<Vec<DVec2>> = match &t.data {
+            // Devices are shown by their plan symbol.
+            TypeData::Component { .. } if device.is_some() => Vec::new(),
             TypeData::Component { def, .. } => {
                 def.resolve(&Default::default()).0.into_iter().filter(|p| p.in_plan).map(|p| p.footprint).collect()
             }
@@ -116,6 +122,18 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 // A bar, drawn as a heavy line.
                 d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Cut, None);
             }
+            TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
+                // A run of the pipe in plan, at least half a millimeter wide on paper.
+                let h = diameter.max(0.5 * mm) * 0.5;
+                let r = [
+                    o + DVec2::new(0.0, -h),
+                    o + DVec2::new(sample, -h),
+                    o + DVec2::new(sample, h),
+                    o + DVec2::new(0.0, h),
+                ];
+                d.fill(r.to_vec(), POCHE, None);
+                d.polyline(&r, true, LineStyle::Projection, None);
+            }
             TypeData::Foundation { kind, width, thickness, .. } => {
                 // Section: a pad or strip its width wide, a slab as a band.
                 let w = if *kind == cc_core::FoundationKind::Slab { sample } else { *width };
@@ -139,6 +157,13 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 for k in 0..=3 {
                     let x = sample * k as f64 / 3.0;
                     d.line(o + DVec2::new(x, 0.0), o + DVec2::new(x, *height), LineStyle::Thin, None);
+                }
+            }
+            TypeData::Component { .. } if device.is_some() => {
+                if let Some((kind, power)) = device {
+                    // Wall devices with the wall along the top of the symbol; outlets low.
+                    let f = crate::mep::Frame { origin: o + DVec2::new(4.0 * mm, 2.0 * mm), angle: 0.0, mm };
+                    crate::mep::symbol(&mut d, &f, kind, 0.3, power, None, None);
                 }
             }
             TypeData::Component { .. } => {

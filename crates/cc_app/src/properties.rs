@@ -306,6 +306,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             reinforcement(ui, state, id);
         }
         ElementKind::Rebar(r) => rebar_props(ui, state, &el, r),
+        ElementKind::Pipe(s) | ElementKind::Conduit(s) => segment_props(ui, state, &el, s),
         ElementKind::Beam(b) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
@@ -589,6 +590,102 @@ pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
     }
 }
 
+/// A pipe or conduit: elevations of its ends, its system or circuits, length and slope.
+fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::MepSegment) {
+    let id = el.id;
+    let pipe = matches!(el.kind, ElementKind::Pipe(_));
+    section(ui, "constraints", t!("section-constraints"), |ui| {
+        level_row(ui, state, el);
+        length_row(ui, state, &t!("prop-start-elevation"), id, "seg-start", s.start_offset, |e, v| {
+            if let Some(s) = e.as_segment_mut() {
+                s.start_offset = v;
+            }
+        });
+        length_row(ui, state, &t!("prop-end-elevation"), id, "seg-end", s.end_offset, |e, v| {
+            if let Some(s) = e.as_segment_mut() {
+                s.end_offset = v;
+            }
+        });
+    });
+    section(ui, "mep-system", t!("section-mep"), |ui| {
+        if pipe {
+            let mut system = s.system();
+            let changed = row(ui, &t!("col-system"), |ui| {
+                crate::systems_dialog::system_combo(ui, state, ("pipe-system", id.0), Some(false), &mut system)
+            });
+            if changed {
+                crate::engine_edit::element(state, id, None, |e| {
+                    if let Some(s) = e.as_segment_mut() {
+                        s.systems = system.into_iter().collect();
+                    }
+                });
+            }
+        } else {
+            // A conduit carries any number of circuits.
+            let circuits: Vec<(cc_core::SystemId, String)> = state
+                .project()
+                .systems
+                .iter()
+                .filter(|(_, c)| c.kind.is_electrical())
+                .map(|(cid, c)| (*cid, format!("{} – {}", c.label(), c.name)))
+                .collect();
+            for (cid, label) in circuits {
+                let mut on = s.systems.contains(&cid);
+                if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+                    crate::engine_edit::element(state, id, None, |e| {
+                        if let Some(s) = e.as_segment_mut() {
+                            s.systems.retain(|x| *x != cid);
+                            if on {
+                                s.systems.push(cid);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+    section(ui, "dimensions", t!("section-dimensions"), |ui| {
+        if let Some(d) = state.project().element_type(el.type_id).and_then(|t| t.diameter()) {
+            readonly_row(ui, &t!("col-diameter"), format::length(d));
+        }
+        readonly_row(ui, &t!("prop-length"), format::length(s.length()));
+        if pipe && !s.is_vertical() {
+            readonly_row(ui, &t!("col-slope"), format::slope(s.slope()));
+        }
+    });
+}
+
+/// The system or circuit of a plumbing fixture or electrical device, and its data.
+fn component_services(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core::Component) {
+    let Some(mep) = state.project().mep_data(el) else { return };
+    let id = el.id;
+    let device = matches!(mep, cc_core::MepData::Device { .. });
+    section(ui, "mep-system", t!("section-mep"), |ui| {
+        let mut system = c.system;
+        let label = if device { t!("prop-circuit") } else { t!("col-system") };
+        let changed = row(ui, &label, |ui| {
+            crate::systems_dialog::system_combo(ui, state, ("comp-system", id.0), Some(device), &mut system)
+        });
+        if changed {
+            crate::engine_edit::element(state, id, None, |e| {
+                if let ElementKind::Component(c) = &mut e.kind {
+                    c.system = system;
+                }
+            });
+        }
+        match mep {
+            cc_core::MepData::Device { device, power } => {
+                readonly_row(ui, &t!("prop-device"), tr(device.key()));
+                readonly_row(ui, &t!("col-power"), format!("{} VA", format::number(power, 0)));
+            }
+            cc_core::MepData::Fixture { drain_units, supply_weight, .. } => {
+                readonly_row(ui, &t!("col-drain-units"), format::number(drain_units, 1));
+                readonly_row(ui, &t!("prop-supply-weight"), format::number(supply_weight, 2));
+            }
+        }
+    });
+}
+
 fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core::Component) {
     let id = el.id;
     section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -609,6 +706,7 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
         }
         finish(state, &r);
     });
+    component_services(ui, state, el, c);
     let Some(cc_core::TypeData::Component { def, .. }) =
         state.project().element_type(el.type_id).map(|t| t.data.clone())
     else {

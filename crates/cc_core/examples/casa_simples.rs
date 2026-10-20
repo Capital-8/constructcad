@@ -124,6 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 base_offset: 0.0,
                 overrides: Default::default(),
                 properties: Vec::new(),
+                system: None,
             };
             add(e, type_id, "", ElementKind::Component(c));
         };

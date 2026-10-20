@@ -1,5 +1,5 @@
-//! Naming model objects in commands: levels, types, views and materials by
-//! numeric id or by name; elements by id.
+//! Naming model objects in commands: levels, types, views, materials and
+//! systems by numeric id or by name; elements by id.
 
 use crate::error::{EngineError, Result};
 use cc_core::{Category, ElementId, ElementTypeId, LevelId, Project, ViewId};
@@ -138,6 +138,32 @@ pub fn material(p: &Project, r: &Ref) -> Result<String> {
             .or_else(|| p.materials.iter().find(|m| matches(&m.name, n)))
             .map(|m| m.name.clone())
             .ok_or_else(|| EngineError::not_found(format!("no material named '{n}'"))),
+    }
+}
+
+/// A plumbing system or electrical circuit by id, name, code or, when it is
+/// the only one of its kind, kind (`cold_water`, `sanitary`…).
+pub fn system(p: &Project, r: &Ref) -> Result<cc_core::SystemId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::SystemId(*id);
+            p.system(id).map(|_| id).ok_or_else(|| EngineError::not_found(format!("no system with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            let named: Vec<_> = p.systems.iter().filter(|(_, s)| matches(&s.name, n)).map(|(id, _)| *id).collect();
+            if !named.is_empty() {
+                return unique("system", n, named);
+            }
+            let coded: Vec<_> = p.systems.iter().filter(|(_, s)| matches(&s.code, n)).map(|(id, _)| *id).collect();
+            if !coded.is_empty() {
+                return unique("system", n, coded);
+            }
+            unique(
+                "system",
+                n,
+                p.systems.iter().filter(|(_, s)| matches(s.kind.name(), n)).map(|(id, _)| *id).collect(),
+            )
+        }
     }
 }
 

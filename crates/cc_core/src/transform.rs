@@ -106,6 +106,10 @@ impl Element {
             ElementKind::Room(r) => p(&mut r.position),
             // Bars follow their host.
             ElementKind::Rebar(_) => {}
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+                p(&mut s.start);
+                p(&mut s.end);
+            }
             ElementKind::Foundation(f) => {
                 if let crate::FoundationShape::Pad { rotation_deg, .. } = &mut f.shape {
                     *rotation_deg = t.apply_angle_deg(*rotation_deg);

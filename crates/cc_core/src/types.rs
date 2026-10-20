@@ -21,10 +21,14 @@ pub enum Category {
     Component,
     Foundation,
     Rebar,
+    /// Plumbing pipes (water supply, drainage, vent, rainwater).
+    Pipe,
+    /// Electrical conduits.
+    Conduit,
 }
 
 impl Category {
-    pub const ALL: [Category; 17] = [
+    pub const ALL: [Category; 19] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -35,6 +39,8 @@ impl Category {
         Category::Beam,
         Category::Foundation,
         Category::Rebar,
+        Category::Pipe,
+        Category::Conduit,
         Category::Stair,
         Category::Railing,
         Category::Component,
@@ -45,7 +51,7 @@ impl Category {
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 13] = [
+    pub const MODEL: [Category; 15] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -56,13 +62,15 @@ impl Category {
         Category::Beam,
         Category::Foundation,
         Category::Rebar,
+        Category::Pipe,
+        Category::Conduit,
         Category::Stair,
         Category::Railing,
         Category::Component,
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 14] = [
+    pub const SCHEDULABLE: [Category; 16] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -73,6 +81,8 @@ impl Category {
         Category::Beam,
         Category::Foundation,
         Category::Rebar,
+        Category::Pipe,
+        Category::Conduit,
         Category::Stair,
         Category::Railing,
         Category::Component,
@@ -103,7 +113,14 @@ impl Category {
             Category::Component => "category-component",
             Category::Foundation => "category-foundation",
             Category::Rebar => "category-rebar",
+            Category::Pipe => "category-pipe",
+            Category::Conduit => "category-conduit",
         }
+    }
+
+    /// Whether the category belongs to the building services (MEP).
+    pub fn is_mep(self) -> bool {
+        matches!(self, Category::Pipe | Category::Conduit)
     }
 }
 
@@ -259,6 +276,16 @@ pub enum TypeData {
         diameter: f64,
         material: String,
     },
+    /// Pipes of outside `diameter`.
+    Pipe {
+        diameter: f64,
+        material: String,
+    },
+    /// Conduits of outside `diameter`.
+    Conduit {
+        diameter: f64,
+        material: String,
+    },
     /// Foundation: a pad `width` x `length`, a strip `width` wide or a slab,
     /// each `thickness` deep.
     Foundation {
@@ -303,6 +330,8 @@ impl TypeData {
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pipe { material, .. }
+            | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
@@ -347,6 +376,8 @@ impl TypeData {
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pipe { material, .. }
+            | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
@@ -484,6 +515,8 @@ impl ElementType {
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Foundation { .. } => Category::Foundation,
             TypeData::Rebar { .. } => Category::Rebar,
+            TypeData::Pipe { .. } => Category::Pipe,
+            TypeData::Conduit { .. } => Category::Conduit,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { .. } => Category::Component,
@@ -502,6 +535,16 @@ impl ElementType {
         match &self.data {
             TypeData::Ceiling { thickness, .. } | TypeData::Foundation { thickness, .. } => *thickness,
             _ => self.layers().iter().map(|l| l.thickness).sum(),
+        }
+    }
+
+    /// Outside diameter of pipe, conduit and rebar types.
+    pub fn diameter(&self) -> Option<f64> {
+        match self.data {
+            TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } | TypeData::Rebar { diameter, .. } => {
+                Some(diameter)
+            }
+            _ => None,
         }
     }
 
@@ -553,6 +596,8 @@ impl ElementType {
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pipe { material, .. }
+            | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => material,
             TypeData::Component { def, .. } => def.main_material(),

@@ -10,6 +10,7 @@ pub mod framing;
 pub mod io;
 pub mod levels;
 pub mod materials;
+pub mod mep;
 pub mod modify;
 pub mod project;
 pub mod query;

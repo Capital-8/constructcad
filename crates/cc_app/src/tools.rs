@@ -65,6 +65,14 @@ pub enum Tool {
     Component {
         type_id: ElementTypeId,
     },
+    /// Click the ends of pipe runs, one after the other (options in `AppState::mep`).
+    Pipe {
+        type_id: ElementTypeId,
+    },
+    /// Click the ends of conduit runs, one after the other.
+    Conduit {
+        type_id: ElementTypeId,
+    },
     Move,
     Copy,
     Rotate,
@@ -123,6 +131,8 @@ impl Tool {
             Tool::Stair { .. } => "tool-stair",
             Tool::Railing { .. } => "tool-railing",
             Tool::Component { .. } => "tool-component",
+            Tool::Pipe { .. } => "tool-pipe",
+            Tool::Conduit { .. } => "tool-conduit",
             Tool::Move => "tool-move",
             Tool::Copy => "tool-copy",
             Tool::Rotate => "tool-rotate",
@@ -160,6 +170,8 @@ impl Tool {
             | Tool::Stair { type_id }
             | Tool::Railing { type_id }
             | Tool::Component { type_id }
+            | Tool::Pipe { type_id }
+            | Tool::Conduit { type_id }
             | Tool::Text { type_id } => Some(*type_id),
             _ => None,
         }
@@ -179,6 +191,8 @@ impl Tool {
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Railing { .. } => Some(Category::Railing),
             Tool::Component { .. } => Some(Category::Component),
+            Tool::Pipe { .. } => Some(Category::Pipe),
+            Tool::Conduit { .. } => Some(Category::Conduit),
             Tool::Text { .. } => Some(Category::Text),
             _ => None,
         }
@@ -199,6 +213,8 @@ impl Tool {
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
             Tool::Component { .. } => Tool::Component { type_id: id },
+            Tool::Pipe { .. } => Tool::Pipe { type_id: id },
+            Tool::Conduit { .. } => Tool::Conduit { type_id: id },
             Tool::Text { .. } => Tool::Text { type_id: id },
             t => t,
         }
@@ -228,6 +244,8 @@ impl Tool {
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
             Category::Component => Tool::Component { type_id },
+            Category::Pipe => Tool::Pipe { type_id },
+            Category::Conduit => Tool::Conduit { type_id },
             Category::Text => Tool::Text { type_id },
         })
     }
@@ -789,6 +807,8 @@ pub fn handle(
         ) => crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool),
         (Tool::Paste, Some(level)) => crate::clipboard::paste_tool(ui, resp, painter, state, view.id, level, xf),
         (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Pipe { type_id }, Some(level)) => segment_tool(ui, resp, painter, state, level, *type_id, true, xf),
+        (Tool::Conduit { type_id }, Some(level)) => segment_tool(ui, resp, painter, state, level, *type_id, false, xf),
         _ => {}
     }
 }
@@ -833,6 +853,122 @@ fn column_tool(
             ..Default::default()
         };
         run_create(state, command);
+    }
+}
+
+/// Options of the pipe and conduit tools and of placing devices, kept between uses.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MepOptions {
+    /// System of new pipes.
+    pub system: Option<cc_core::SystemId>,
+    /// Circuit of new conduits and devices.
+    pub circuit: Option<cc_core::SystemId>,
+    /// Elevation of new pipes and conduits above the level (`None`: the engine's default).
+    pub offset: Option<f64>,
+    /// Fall of new pipes, percent (`None`: the default for the system and diameter).
+    pub slope: Option<f64>,
+    /// Elevation where the next run of a chain starts (the end of the last one).
+    pub chain: Option<f64>,
+}
+
+/// The device kind of a component type, if it is an electrical device.
+pub fn device_type(project: &Project, type_id: ElementTypeId) -> Option<cc_core::DeviceKind> {
+    match project.element_type(type_id).map(|t| &t.data) {
+        Some(cc_core::TypeData::Component { def, .. }) => def.mep.and_then(|m| m.device()),
+        _ => None,
+    }
+}
+
+/// The first component type that is an electrical device (`device`) or a plumbing fixture.
+pub fn mep_component_type(project: &Project, device: bool) -> Option<ElementTypeId> {
+    project
+        .types_of(Category::Component)
+        .find(|t| match &t.data {
+            cc_core::TypeData::Component { def, .. } => match def.mep {
+                Some(cc_core::MepData::Device { .. }) => device,
+                Some(cc_core::MepData::Fixture { .. }) => !device,
+                None => false,
+            },
+            _ => false,
+        })
+        .map(|t| t.id)
+}
+
+/// Clicks chain pipe or conduit runs: each ends where the next one starts,
+/// at the elevation the last one reached (a sloped drain keeps falling).
+#[allow(clippy::too_many_arguments)]
+fn segment_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    pipe: bool,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let anchor = state.interaction.anchor;
+    let s = snap_at(state, Some(level), raw, anchor, &[], xf.scale, shift);
+    draw_snap(painter, xf, s);
+    let project = state.project();
+    let diameter = project.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.025);
+    let system = if pipe { state.mep.system } else { state.mep.circuit };
+    let color = system.and_then(|id| project.system(id)).map_or(PREVIEW, |sys| {
+        let [r, g, b] = sys.color();
+        Color32::from_rgb(r, g, b)
+    });
+    if let Some(a) = anchor {
+        let half = (diameter / 2.0).max(1.0 / xf.scale);
+        let n = (s.point - a).normalize_or_zero().perp() * half;
+        let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
+        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, color)));
+        temp_dimension(painter, xf, a, s.point, None, None, half);
+    }
+    if !resp.clicked() {
+        return;
+    }
+    let Some(a) = anchor else {
+        state.interaction.anchor = Some(s.point);
+        state.mep.chain = None;
+        return;
+    };
+    if a.distance(s.point) <= 0.01 {
+        return;
+    }
+    let offset = state.mep.chain.or(state.mep.offset);
+    let level_ref = Some(Ref::Id(level.0));
+    let out = if pipe {
+        let command = cc_engine::commands::mep::PipeCreate {
+            start: a.to_array(),
+            end: Some(s.point.to_array()),
+            level: level_ref,
+            type_ref: Some(Ref::Id(type_id.0)),
+            system: state.mep.system.map(|id| Ref::Id(id.0)),
+            offset,
+            end_offset: None,
+            slope: state.mep.slope,
+        };
+        crate::actions::run_command(state, command)
+    } else {
+        let command = cc_engine::commands::mep::ConduitCreate {
+            start: a.to_array(),
+            end: Some(s.point.to_array()),
+            level: level_ref,
+            type_ref: Some(Ref::Id(type_id.0)),
+            circuits: state.mep.circuit.map(|id| Ref::Id(id.0)).into_iter().collect(),
+            offset,
+            end_offset: None,
+        };
+        crate::actions::run_command(state, command)
+    };
+    if let Some(out) = out {
+        if let Some(id) = out["id"].as_u64() {
+            state.selection = BTreeSet::from([ElementId(id)]);
+        }
+        state.mep.chain = out["params"]["end_offset"].as_f64();
+        state.interaction.anchor = Some(s.point);
     }
 }
 
@@ -983,6 +1119,7 @@ fn component_tool(
             rotation: Some(rotation),
             level: Some(Ref::Id(level.0)),
             base_offset: None,
+            system: device_type(state.project(), type_id).and(state.mep.circuit).map(|s| Ref::Id(s.0)),
         };
         run_create(state, command);
     }

@@ -15,6 +15,8 @@ pub enum RibbonTab {
     #[default]
     Architecture,
     Structure,
+    /// Building services: plumbing and electrical.
+    Mep,
     Modify,
     Annotate,
     View,
@@ -56,6 +58,8 @@ pub struct Dialogs {
     pub confirm: Option<PendingAction>,
     pub error: Option<String>,
     pub about: bool,
+    /// Plumbing systems and electrical circuits.
+    pub systems: bool,
 }
 
 pub struct AppState {
@@ -68,6 +72,8 @@ pub struct AppState {
     pub modify: crate::modify::ModifyOptions,
     /// Options of the truss tool.
     pub truss: crate::tools::TrussOptions,
+    /// Options of the pipe, conduit and device tools.
+    pub mep: crate::tools::MepOptions,
     pub active_view: Option<ViewId>,
     pub view2d: HashMap<ViewId, View2DState>,
     pub view3d: HashMap<ViewId, View3DState>,
@@ -139,6 +145,7 @@ impl AppState {
             interaction: Interaction::default(),
             modify: Default::default(),
             truss: Default::default(),
+            mep: Default::default(),
             active_view: None,
             view2d: HashMap::new(),
             view3d: HashMap::new(),

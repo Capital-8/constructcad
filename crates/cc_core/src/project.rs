@@ -50,6 +50,9 @@ pub struct Project {
     /// Named sets of elements selected, moved and copied together.
     #[serde(default)]
     pub groups: BTreeMap<crate::GroupId, Group>,
+    /// Plumbing systems and electrical circuits.
+    #[serde(default)]
+    pub systems: BTreeMap<crate::SystemId, crate::MepSystem>,
     next_id: u64,
 }
 
@@ -75,6 +78,7 @@ impl Project {
             pinned: Default::default(),
             joins: Default::default(),
             groups: BTreeMap::new(),
+            systems: BTreeMap::new(),
             next_id: 1,
         }
     }
@@ -116,6 +120,7 @@ impl Project {
             (&n("tpl-mat-fabric"), [120, 132, 150], C::Fabric),
             (&n("tpl-mat-porcelain"), [240, 240, 236], C::Ceramic),
             (&n("tpl-mat-steel"), [140, 146, 152], C::Metal),
+            (&n("tpl-mat-pvc"), [236, 236, 230], C::Plastic),
         ]
         .into_iter()
         .map(|(name, color, class)| {
@@ -262,6 +267,16 @@ impl Project {
                 TypeData::Stair { width: 1.0, max_riser: 0.18, tread: 0.28, material: n("tpl-mat-concrete") },
             ),
             (&n("tpl-type-railing"), TypeData::Railing { height: 1.1, post_spacing: 1.2, material: n("tpl-mat-wood") }),
+            (&n("tpl-type-pipe-20"), TypeData::Pipe { diameter: 0.020, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-pipe-25"), TypeData::Pipe { diameter: 0.025, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-pipe-32"), TypeData::Pipe { diameter: 0.032, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-pipe-sewer-40"), TypeData::Pipe { diameter: 0.040, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-pipe-sewer-50"), TypeData::Pipe { diameter: 0.050, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-pipe-sewer-75"), TypeData::Pipe { diameter: 0.075, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-pipe-sewer-100"), TypeData::Pipe { diameter: 0.100, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-conduit-20"), TypeData::Conduit { diameter: 0.020, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-conduit-25"), TypeData::Conduit { diameter: 0.025, material: n("tpl-mat-pvc") }),
+            (&n("tpl-type-conduit-32"), TypeData::Conduit { diameter: 0.032, material: n("tpl-mat-pvc") }),
             (&n("tpl-type-room"), TypeData::Room {}),
             (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
             (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
@@ -284,6 +299,8 @@ impl Project {
             let data = TypeData::Component { component, def };
             p.types.insert(id, ElementType { id, name, data, info: Default::default(), uid: Default::default() });
         }
+
+        p.add_default_systems(&n);
 
         let add_view = |p: &mut Project, name: &str, scale: u32, kind: ViewKind| {
             let id = ViewId(p.alloc_id());
@@ -441,6 +458,54 @@ impl Project {
                     .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
             }
         }
+        // Projects created before building services get pipes, conduits, the
+        // fixtures and devices of the library and the usual plumbing systems.
+        if self.default_type(Category::Pipe).is_none() {
+            let n = |key: &str| template_default(key).to_string();
+            let pvc = n("tpl-mat-pvc");
+            if !self.materials.iter().any(|m| m.name == pvc) {
+                let mut m = Material::new(pvc.as_str(), [236, 236, 230]);
+                crate::material::template_properties(&mut m, crate::material::MaterialClass::Plastic);
+                self.materials.push(m);
+            }
+            let types = [
+                ("tpl-type-pipe-20", TypeData::Pipe { diameter: 0.020, material: pvc.clone() }),
+                ("tpl-type-pipe-25", TypeData::Pipe { diameter: 0.025, material: pvc.clone() }),
+                ("tpl-type-pipe-sewer-50", TypeData::Pipe { diameter: 0.050, material: pvc.clone() }),
+                ("tpl-type-pipe-sewer-100", TypeData::Pipe { diameter: 0.100, material: pvc.clone() }),
+            ];
+            for (key, data) in types {
+                let id = ElementTypeId(self.alloc_id());
+                self.types.insert(
+                    id,
+                    ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
+                );
+            }
+            // Projects without the library get all of it below.
+            if self.default_type(Category::Component).is_some() {
+                for (component, name, def) in crate::component::mep_library(&n) {
+                    let id = ElementTypeId(self.alloc_id());
+                    let data = TypeData::Component { component, def };
+                    self.types.insert(
+                        id,
+                        ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() },
+                    );
+                }
+            }
+            if self.systems.is_empty() {
+                self.add_default_systems(&n);
+            }
+        }
+        if self.default_type(Category::Conduit).is_none() {
+            let pvc = template_default("tpl-mat-pvc").to_string();
+            for (key, diameter) in [("tpl-type-conduit-20", 0.020), ("tpl-type-conduit-25", 0.025)] {
+                let id = ElementTypeId(self.alloc_id());
+                let data = TypeData::Conduit { diameter, material: pvc.clone() };
+                let name = template_default(key).to_string();
+                self.types
+                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+            }
+        }
         // Projects created before components get the default library.
         if self.default_type(Category::Component).is_none() {
             let n = |key: &str| template_default(key).to_string();
@@ -462,6 +527,44 @@ impl Project {
                     .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
             }
         }
+    }
+
+    /// Add the usual plumbing systems (names and codes from `n`, keys `tpl-sys-*`).
+    fn add_default_systems(&mut self, n: &dyn Fn(&str) -> String) {
+        use crate::SystemKind as K;
+        for (name, code, kind) in [
+            ("tpl-sys-cold-water", "tpl-sys-cold-water-code", K::ColdWater),
+            ("tpl-sys-hot-water", "tpl-sys-hot-water-code", K::HotWater),
+            ("tpl-sys-sanitary", "tpl-sys-sanitary-code", K::Sanitary),
+            ("tpl-sys-vent", "tpl-sys-vent-code", K::Vent),
+            ("tpl-sys-rainwater", "tpl-sys-rainwater-code", K::Rainwater),
+        ] {
+            let id = crate::SystemId(self.alloc_id());
+            self.systems.insert(id, crate::MepSystem::new(n(name), n(code), kind));
+        }
+    }
+
+    pub fn system(&self, id: crate::SystemId) -> Option<&crate::MepSystem> {
+        self.systems.get(&id)
+    }
+
+    /// Display color of a pipe, conduit or device: its (first) system's, or gray.
+    pub fn system_color(&self, element: &Element) -> [u8; 3] {
+        element.systems().first().and_then(|s| self.system(*s)).map_or([128, 128, 128], crate::MepSystem::color)
+    }
+
+    /// The MEP data of a component element's type.
+    pub fn mep_data(&self, element: &Element) -> Option<crate::MepData> {
+        match (&element.kind, self.element_type(element.type_id).map(|t| &t.data)) {
+            (ElementKind::Component(_), Some(TypeData::Component { def, .. })) => def.mep,
+            _ => None,
+        }
+    }
+
+    /// Elements in system `id`: its pipes, the conduits carrying the circuit
+    /// and the components connected to it.
+    pub fn system_members(&self, id: crate::SystemId) -> impl Iterator<Item = &Element> {
+        self.elements.values().filter(move |e| e.systems().contains(&id))
     }
 
     /// The level above `id`, or `id` itself plus `fallback` meters: the default upper limit of rooms.
@@ -800,6 +903,47 @@ fn template_default(key: &str) -> &'static str {
         "tpl-type-toilet" => "Bacia com caixa acoplada",
         "tpl-type-washbasin" => "Lavatório de coluna",
         "tpl-type-wardrobe" => "Armário 160 cm",
+        "tpl-mat-pvc" => "PVC",
+        "tpl-type-pipe-20" => "Tubo PVC soldável 20 mm",
+        "tpl-type-pipe-25" => "Tubo PVC soldável 25 mm",
+        "tpl-type-pipe-32" => "Tubo PVC soldável 32 mm",
+        "tpl-type-pipe-sewer-40" => "Tubo PVC esgoto 40 mm",
+        "tpl-type-pipe-sewer-50" => "Tubo PVC esgoto 50 mm",
+        "tpl-type-pipe-sewer-75" => "Tubo PVC esgoto 75 mm",
+        "tpl-type-pipe-sewer-100" => "Tubo PVC esgoto 100 mm",
+        "tpl-type-conduit-20" => "Eletroduto flexível 20 mm",
+        "tpl-type-conduit-25" => "Eletroduto flexível 25 mm",
+        "tpl-type-conduit-32" => "Eletroduto flexível 32 mm",
+        "tpl-sys-cold-water" => "Água fria",
+        "tpl-sys-cold-water-code" => "AF",
+        "tpl-sys-hot-water" => "Água quente",
+        "tpl-sys-hot-water-code" => "AQ",
+        "tpl-sys-sanitary" => "Esgoto sanitário",
+        "tpl-sys-sanitary-code" => "ES",
+        "tpl-sys-vent" => "Ventilação",
+        "tpl-sys-vent-code" => "V",
+        "tpl-sys-rainwater" => "Águas pluviais",
+        "tpl-sys-rainwater-code" => "AP",
+        "tpl-part-head" => "Crivo",
+        "tpl-part-grate" => "Grelha",
+        "tpl-comp-shower" => "Chuveiro",
+        "tpl-comp-kitchen-sink" => "Pia de cozinha",
+        "tpl-comp-floor-drain" => "Ralo sifonado",
+        "tpl-comp-outlet" => "Tomada de uso geral",
+        "tpl-comp-dedicated-outlet" => "Tomada de uso específico",
+        "tpl-comp-switch" => "Interruptor",
+        "tpl-comp-wall-light" => "Arandela",
+        "tpl-comp-panel" => "Quadro de distribuição",
+        "tpl-comp-ceiling-light" => "Ponto de luz no teto",
+        "tpl-type-shower" => "Chuveiro de parede",
+        "tpl-type-kitchen-sink" => "Pia inox 120 cm",
+        "tpl-type-floor-drain" => "Ralo sifonado 150 mm",
+        "tpl-type-outlet" => "Tomada 2P+T 10 A",
+        "tpl-type-dedicated-outlet" => "Tomada 2P+T 20 A",
+        "tpl-type-switch" => "Interruptor simples",
+        "tpl-type-wall-light" => "Arandela 60 VA",
+        "tpl-type-panel" => "Quadro de distribuição de embutir",
+        "tpl-type-ceiling-light" => "Luminária de teto 100 VA",
         _ => "?",
     }
 }

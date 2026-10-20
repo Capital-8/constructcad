@@ -209,6 +209,24 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         ElementKind::Railing(r) => {
             derived.insert("length".into(), json!(r.length()));
         }
+        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) => {
+            derived.insert("length".into(), json!(seg.length()));
+            derived.insert("slope".into(), json!(seg.slope()));
+            let systems: Vec<Value> = seg
+                .systems
+                .iter()
+                .filter_map(|id| p.system(*id).map(|sys| json!({"id": id.0, "name": sys.name, "code": sys.code})))
+                .collect();
+            derived.insert("systems".into(), json!(systems));
+        }
+        ElementKind::Component(c) => {
+            if let Some(mep) = p.mep_data(&e) {
+                derived.insert("mep".into(), to_json(&mep));
+            }
+            if let Some(sys) = c.system.and_then(|id| p.system(id)) {
+                derived.insert("system_name".into(), json!(sys.name));
+            }
+        }
         _ => {}
     }
     let pinned = p.is_pinned(id);

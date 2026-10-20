@@ -30,7 +30,9 @@ pub fn params_of<T: serde::Serialize>(value: &T) -> serde_json::Value {
     commands::variant(serde_json::to_value(value).unwrap_or_default()).1
 }
 
-pub use defaults::{default_roof_base, default_top, next_number, walls_loop};
+pub use defaults::{
+    conduit_offset, default_roof_base, default_top, device_height, drain_slope, next_number, pipe_offset, walls_loop,
+};
 pub use error::{EngineError, ErrorCode, Result};
 pub use refs::{Ref, category_name};
 pub use registry::{Command, CommandInfo, CommandKind, catalog, describe};

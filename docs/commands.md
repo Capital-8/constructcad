@@ -9,6 +9,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_save`](#component_save)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
+- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
@@ -592,15 +593,101 @@ No parameters.
 
 ### `component_place`
 
-*edit* — Place a component (furniture, fixture…) of a component type.
+*edit* — Place a component (furniture, plumbing fixture, electrical device…) of a component type. Electrical devices default to their usual mounting height (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m, ceiling lights at the level height) and may be put on a circuit.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `position` | [x, y] | required | Insertion point in plan. |
 | `type` | id or name | required | Component type id or name. |
-| `base_offset` | number | optional | Base above the level, meters. |
+| `base_offset` | number | optional | Base above the level, meters (default 0; for devices, their mounting height). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `rotation` | number | optional | Rotation in plan, degrees. |
+| `system` | id or name | optional | Circuit or system id, name or code to connect it to. |
+
+## Building services
+
+### `pipe_create`
+
+*edit* — Create a pipe from `start` to `end` (or a vertical riser at `start` up or down to `end_offset`), in a plumbing system. Its center line starts `offset` above the level (default: 0.60 m for supply and vent pipes, -0.30 m for drains). Drains fall along the flow by `slope` (percent; default 2 % up to 75 mm, 1 % above); other pipes are level unless `end_offset` or `slope` says otherwise.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `start` | [x, y] | required | Start of the center line in plan. |
+| `end` | [x, y] | optional | End in plan (default: the start, for a riser). |
+| `end_offset` | number | optional | Elevation of the end above the level, meters (overrides `slope`). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `offset` | number | optional | Elevation of the start above the level, meters. |
+| `slope` | number | optional | Fall from the start to the end, percent of the plan length. |
+| `system` | id or name | optional | Plumbing system id, name or code (e.g. "AF"). |
+| `type` | id or name | optional | Pipe type id or name (default: the first pipe type). |
+
+### `conduit_create`
+
+*edit* — Create a conduit from `start` to `end` (or a vertical drop at `start` to `end_offset`) carrying `circuits`. It runs `offset` above the level (default: in the slab above, at the level height).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `start` | [x, y] | required | Start of the center line in plan. |
+| `circuits` | [id or name, …] | optional | Circuits it carries: ids, names or codes. |
+| `end` | [x, y] | optional | End in plan (default: the start, for a vertical drop). |
+| `end_offset` | number | optional | Elevation of the end above the level, meters (default: as the start). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `offset` | number | optional | Elevation of the start above the level, meters. |
+| `type` | id or name | optional | Conduit type id or name (default: the first conduit type). |
+
+### `systems_list`
+
+*query* — List the plumbing systems and electrical circuits with what is in them: element count, pipe or conduit length, fixture units and supply weights of plumbing fixtures, and the devices and load of circuits.
+
+No parameters.
+
+### `system_create`
+
+*edit* — Create a plumbing system or an electrical circuit. `kind` is `cold_water`, `hot_water`, `sanitary`, `vent`, `rainwater`, `power` or `lighting`; circuits may name the board (`panel`, a component element; default: the project's only board, if it has one) feeding them and their voltage (default 127 V). A circuit's code defaults to the next free number on its board.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `kind` | string | required | What it carries. |
+| `code` | string | optional | Short code shown in tags (e.g. "AF", a circuit number). |
+| `color` | [id, …] | optional | Display color `[r, g, b]` (default: by kind). |
+| `name` | string | optional | Name (default: the code, or the kind's name). |
+| `panel` | integer | optional | Circuits: the distribution board feeding it (element id; default: the only board). |
+| `voltage` | number | optional | Circuits: nominal voltage, volts. |
+
+### `system_set`
+
+*edit* — Change a system or circuit: `params` is a merge patch over the values `systems_list` shows (`name`, `code`, `kind`, `color`, `panel`, `voltage`).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `params` | JSON | required | Values to change. |
+| `system` | id or name | required | System id, name or code. |
+
+### `system_delete`
+
+*edit* — Delete a system or circuit; its pipes, conduits and devices stay, outside any system.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `system` | id or name | required | System id, name or code. |
+
+### `system_assign`
+
+*edit* — Put elements in a system or circuit, or take them out (`remove`). A pipe belongs to one system (it moves); a conduit carries several circuits (one is added); a fixture or device connects to one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `elements` | [id, …] | required | Pipe, conduit and component ids. |
+| `system` | id or name | required | System id, name or code. |
+| `remove` | boolean | optional | Take them out instead. |
+
+### `circuit_loads`
+
+*query* — The load schedule of the circuits (of one board, or all): per circuit its devices, installed load (VA) and current at its voltage, with the total per board.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `panel` | integer | optional | Distribution board element id (default: every circuit). |
 
 ## Modifying elements
 
@@ -1000,11 +1087,11 @@ No parameters.
 
 ### `view_create`
 
-*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `schedule` (with `category`) or `sheet` (A3, numbered after the others).
+*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan` and `electrical_plan` (with `level`: the pipes, or the conduits and devices, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `schedule` (with `category`) or `sheet` (A3, numbered after the others).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule` or `sheet`. |
+| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule` or `sheet`. |
 | `category` | string | optional | Schedules: the category scheduled (default `wall`). |
 | `depth` | number | optional | Section depth beyond the cut line, meters (default 8). |
 | `direction` | string | optional | Elevations: `north`, `south` (default), `east` or `west`. |

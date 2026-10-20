@@ -22,6 +22,41 @@ pub fn default_roof_base(project: &Project, level: LevelId) -> f64 {
         .unwrap_or(3.0)
 }
 
+/// Elevation of a new pipe's center line above its level: supply pipes run
+/// in the walls, drains under the floor.
+pub fn pipe_offset(kind: Option<cc_core::SystemKind>) -> f64 {
+    use cc_core::SystemKind as K;
+    match kind {
+        Some(K::ColdWater | K::HotWater | K::Vent) => 0.6,
+        Some(K::Sanitary | K::Rainwater) => -0.3,
+        _ => 0.0,
+    }
+}
+
+/// Minimum fall of a horizontal drain of outside `diameter`, as in common
+/// drainage practice: 2 % up to 75 mm, 1 % from 100 mm.
+pub fn drain_slope(diameter: f64) -> f64 {
+    if diameter <= 0.0751 { 0.02 } else { 0.01 }
+}
+
+/// Elevation of a new conduit above its level: in the slab above (the level height).
+pub fn conduit_offset(project: &Project, level: LevelId) -> f64 {
+    project.level_height(level, 2.8)
+}
+
+/// Usual mounting height of an electrical device above its level (lights:
+/// the ceiling, at the level height).
+pub fn device_height(project: &Project, level: LevelId, device: cc_core::DeviceKind) -> f64 {
+    use cc_core::DeviceKind as D;
+    match device {
+        D::Outlet | D::DedicatedOutlet => 0.3,
+        D::Switch => 1.1,
+        D::WallLight => 2.1,
+        D::Panel => 1.3,
+        D::CeilingLight => project.level_height(level, 2.8),
+    }
+}
+
 /// Next free number among `existing` names (1 when none is numeric).
 pub fn next_number<'a>(existing: impl Iterator<Item = &'a str>) -> String {
     (existing.filter_map(|s| s.trim().parse::<u32>().ok()).max().unwrap_or(0) + 1).to_string()

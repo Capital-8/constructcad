@@ -144,6 +144,10 @@ pub enum ViewKind {
         /// Tag beams and columns with their mark and section.
         #[serde(default)]
         structure_tags: bool,
+        /// A building services plan: the discipline's pipes or conduits and
+        /// devices over the architecture, tagged. Other plans leave them out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mep: Option<MepDiscipline>,
     },
     CeilingPlan {
         level: LevelId,
@@ -194,7 +198,25 @@ pub struct View {
 impl ViewKind {
     /// An ordinary floor plan of `level` cut at 1.20 m.
     pub fn floor_plan(level: LevelId) -> Self {
-        ViewKind::FloorPlan { level, cut_height: 1.2, structural: false, structure_tags: false }
+        ViewKind::FloorPlan { level, cut_height: 1.2, structural: false, structure_tags: false, mep: None }
+    }
+}
+
+/// The building services shown by a services plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MepDiscipline {
+    /// Water supply, drainage and their fixtures.
+    Plumbing,
+    /// Conduits, outlets, switches, lights and boards.
+    Electrical,
+}
+
+impl MepDiscipline {
+    pub fn key(self) -> &'static str {
+        match self {
+            MepDiscipline::Plumbing => "discipline-plumbing",
+            MepDiscipline::Electrical => "discipline-electrical",
+        }
     }
 }
 

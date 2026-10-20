@@ -13,6 +13,7 @@
 //! meshes instead, and the definition then remembers the IFC class the
 //! object had, so it is written back as the same class.
 
+use crate::MepData;
 use crate::expr::{self, ExprError};
 use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
@@ -25,16 +26,19 @@ pub enum ComponentKind {
     Casework,
     Plumbing,
     Lighting,
+    /// Outlets, switches and distribution boards.
+    Electrical,
     #[default]
     Generic,
 }
 
 impl ComponentKind {
-    pub const ALL: [ComponentKind; 5] = [
+    pub const ALL: [ComponentKind; 6] = [
         ComponentKind::Furniture,
         ComponentKind::Casework,
         ComponentKind::Plumbing,
         ComponentKind::Lighting,
+        ComponentKind::Electrical,
         ComponentKind::Generic,
     ];
 
@@ -44,6 +48,7 @@ impl ComponentKind {
             ComponentKind::Casework => "comp-kind-casework",
             ComponentKind::Plumbing => "comp-kind-plumbing",
             ComponentKind::Lighting => "comp-kind-lighting",
+            ComponentKind::Electrical => "comp-kind-electrical",
             ComponentKind::Generic => "comp-kind-generic",
         }
     }
@@ -162,6 +167,9 @@ pub struct ComponentDef {
     /// IFC class of objects imported from IFC, written back on export.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ifc: Option<IfcClass>,
+    /// Plumbing fixture or electrical device data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mep: Option<crate::MepData>,
 }
 
 /// An IFC entity class with its predefined and object types.
@@ -465,6 +473,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let table = ComponentDef {
         kind: ComponentKind::Furniture,
         ifc: None,
+        mep: None,
         params: vec![length(&w, 1.2), length(&d, 0.8), length(&h, 0.75)],
         items,
     };
@@ -498,6 +507,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let chair = ComponentDef {
         kind: ComponentKind::Furniture,
         ifc: None,
+        mep: None,
         params: vec![length(&w, 0.45), length(&d, 0.5), length(&h, 0.9), length(&seat, 0.45)],
         items,
     };
@@ -507,6 +517,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let bed = ComponentDef {
         kind: ComponentKind::Furniture,
         ifc: None,
+        mep: None,
         params: vec![length(&w, 1.4), length(&d, 1.9), length(&h, 0.5)],
         items: vec![
             bx(
@@ -540,6 +551,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let sofa = ComponentDef {
         kind: ComponentKind::Furniture,
         ifc: None,
+        mep: None,
         params: vec![length(&w, 2.0), length(&d, 0.9), length(&h, 0.8), length(&seat, 0.42)],
         items: vec![
             bx(
@@ -594,6 +606,8 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let toilet = ComponentDef {
         kind: ComponentKind::Plumbing,
         ifc: None,
+        // Toilet with a close-coupled tank.
+        mep: Some(MepData::Fixture { drain_units: 6.0, supply_weight: 0.3, hot_water: false }),
         params: vec![length(&w, 0.38), length(&d, 0.65), length(&h, 0.78)],
         items: vec![
             ComponentItem {
@@ -627,6 +641,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let basin = ComponentDef {
         kind: ComponentKind::Plumbing,
         ifc: None,
+        mep: Some(MepData::Fixture { drain_units: 1.0, supply_weight: 0.3, hot_water: true }),
         params: vec![length(&w, 0.55), length(&d, 0.45), length(&h, 0.85)],
         items: vec![
             bx(
@@ -660,6 +675,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let wardrobe = ComponentDef {
         kind: ComponentKind::Casework,
         ifc: None,
+        mep: None,
         params: vec![length(&w, 1.6), length(&d, 0.6), length(&h, 2.2)],
         items: vec![bx(
             &n("tpl-part-body"),
@@ -674,6 +690,151 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
         )],
     };
     out.push((n("tpl-comp-wardrobe"), n("tpl-type-wardrobe"), wardrobe));
+    out.extend(mep_library(n));
+    out
+}
+
+/// The building-services part of the default library: plumbing fixtures
+/// and electrical devices. Wall-mounted devices have their back on the
+/// insertion point and stand out towards -Y; their elevation is the
+/// instance's base offset (the mounting height).
+pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)> {
+    use crate::DeviceKind as D;
+    let (w, d, h) = (n("tpl-param-width"), n("tpl-param-depth"), n("tpl-param-height"));
+    let porcelain = n("tpl-mat-porcelain");
+    let steel = n("tpl-mat-steel");
+    let plastic = n("tpl-mat-pvc");
+    let length = |name: &str, value: f64| ComponentParam {
+        name: name.to_string(),
+        value,
+        kind: ParamKind::Length,
+        instance: false,
+    };
+    let sizes = |width: f64, depth: f64, height: f64| vec![length(&w, width), length(&d, depth), length(&h, height)];
+    let piece = |name: &str, shape: ComponentShape, material: &str| ComponentItem {
+        name: name.to_string(),
+        shape,
+        material: material.to_string(),
+        in_plan: true,
+    };
+    // A box W x D x H with its back on the X axis, standing out towards -Y.
+    let wall_box = |z: &str| ComponentShape::Box {
+        x: format!("-{w} / 2"),
+        y: format!("-{d}"),
+        z: z.to_string(),
+        width: w.clone(),
+        depth: d.clone(),
+        height: h.clone(),
+    };
+    let def = |kind: ComponentKind, params: Vec<ComponentParam>, items: Vec<ComponentItem>, mep: MepData| {
+        ComponentDef { kind, params, items, ifc: None, mep: Some(mep) }
+    };
+    let device = |device: D, power: f64| MepData::Device { device, power };
+    let body = n("tpl-part-body");
+    let mut out = Vec::new();
+
+    // Shower head on its arm, high on the wall.
+    let shower = def(
+        ComponentKind::Plumbing,
+        sizes(0.15, 0.4, 2.1),
+        vec![piece(
+            &n("tpl-part-head"),
+            ComponentShape::Cylinder {
+                x: "0".into(),
+                y: format!("-{d}"),
+                z: h.clone(),
+                radius: format!("{w} / 2"),
+                height: "0.03".into(),
+            },
+            &steel,
+        )],
+        MepData::Fixture { drain_units: 2.0, supply_weight: 0.4, hot_water: true },
+    );
+    out.push((n("tpl-comp-shower"), n("tpl-type-shower"), shower));
+
+    // Kitchen sink: a countertop basin against the wall.
+    let sink = def(
+        ComponentKind::Plumbing,
+        sizes(1.2, 0.55, 0.9),
+        vec![piece(
+            &n("tpl-part-basin"),
+            ComponentShape::Box {
+                x: format!("-{w} / 2"),
+                y: format!("-{d}"),
+                z: format!("{h} - 0.2"),
+                width: w.clone(),
+                depth: d.clone(),
+                height: "0.2".into(),
+            },
+            &steel,
+        )],
+        MepData::Fixture { drain_units: 3.0, supply_weight: 0.7, hot_water: true },
+    );
+    out.push((n("tpl-comp-kitchen-sink"), n("tpl-type-kitchen-sink"), sink));
+
+    // Floor drain: a grate flush with the floor.
+    let drain = def(
+        ComponentKind::Plumbing,
+        sizes(0.15, 0.15, 0.01),
+        vec![piece(
+            &n("tpl-part-grate"),
+            ComponentShape::Box {
+                x: format!("-{w} / 2"),
+                y: format!("-{d} / 2"),
+                z: format!("-{h}"),
+                width: w.clone(),
+                depth: d.clone(),
+                height: h.clone(),
+            },
+            &steel,
+        )],
+        MepData::Fixture { drain_units: 0.0, supply_weight: 0.0, hot_water: false },
+    );
+    out.push((n("tpl-comp-floor-drain"), n("tpl-type-floor-drain"), drain));
+
+    let electrical = [
+        ("tpl-comp-outlet", "tpl-type-outlet", ComponentKind::Electrical, (0.1, 0.03, 0.1), device(D::Outlet, 100.0)),
+        (
+            "tpl-comp-dedicated-outlet",
+            "tpl-type-dedicated-outlet",
+            ComponentKind::Electrical,
+            (0.1, 0.03, 0.1),
+            device(D::DedicatedOutlet, 1500.0),
+        ),
+        ("tpl-comp-switch", "tpl-type-switch", ComponentKind::Electrical, (0.06, 0.03, 0.1), device(D::Switch, 0.0)),
+        (
+            "tpl-comp-wall-light",
+            "tpl-type-wall-light",
+            ComponentKind::Lighting,
+            (0.2, 0.1, 0.15),
+            device(D::WallLight, 60.0),
+        ),
+        ("tpl-comp-panel", "tpl-type-panel", ComponentKind::Electrical, (0.4, 0.1, 0.5), device(D::Panel, 0.0)),
+    ];
+    for (component, type_name, kind, (width, depth, height), mep) in electrical {
+        let material = if mep.device() == Some(D::Panel) { &steel } else { &plastic };
+        let item = piece(&body, wall_box("0"), material);
+        out.push((n(component), n(type_name), def(kind, sizes(width, depth, height), vec![item], mep)));
+    }
+
+    // Ceiling light: a disc hanging under the insertion point (on the ceiling).
+    let light = def(
+        ComponentKind::Lighting,
+        sizes(0.3, 0.3, 0.06),
+        vec![piece(
+            &body,
+            ComponentShape::Cylinder {
+                x: "0".into(),
+                y: "0".into(),
+                z: format!("-{h}"),
+                radius: format!("{w} / 2"),
+                height: h.clone(),
+            },
+            &porcelain,
+        )],
+        device(D::CeilingLight, 100.0),
+    );
+    out.push((n("tpl-comp-ceiling-light"), n("tpl-type-ceiling-light"), light));
     out
 }
 
@@ -694,7 +855,7 @@ mod tests {
     #[test]
     fn library_resolves_without_errors() {
         let lib = library(&pt);
-        assert_eq!(lib.len(), 7);
+        assert_eq!(lib.len(), 16);
         for (name, _, def) in &lib {
             let (parts, errors) = def.resolve(&BTreeMap::new());
             assert!(errors.is_empty(), "{name}: {errors:?}");

@@ -8,7 +8,8 @@ Checks:
   * every building element is contained in a storey and has a type;
   * every building element's geometry can be built, with openings cut;
   * built volumes match the exported base quantities;
-  * spaces are aggregated into a storey and their volume is area x height.
+  * spaces are aggregated into a storey and their volume is area x height;
+  * distribution systems and circuits group elements contained in a storey.
 
 Usage: python scripts/validate_ifc.py model.ifc
 """
@@ -26,6 +27,7 @@ ELEMENTS = (
     "IfcColumn", "IfcBeam", "IfcStair", "IfcRailing",
     "IfcFooting", "IfcReinforcingBar", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
     "IfcPipeSegment", "IfcStairFlight", "IfcMember",
+    "IfcCableCarrierSegment", "IfcOutlet", "IfcSwitchingDevice", "IfcElectricDistributionBoard",
 )
 REL_TOL = 1e-3
 
@@ -101,6 +103,17 @@ def main(path):
         area, height = quantity(space, "NetFloorArea"), quantity(space, "Height")
         if area is not None and height is not None and abs(volume - area * height) > REL_TOL * area * height:
             errors.append(f"{label}: volume {volume:.6f} differs from area x height {area * height:.6f}")
+
+    systems = model.by_type("IfcDistributionSystem")
+    print(f"  IfcDistributionSystem: {len(systems)}")
+    for system in systems:
+        label = f"{system.is_a()} {system.GlobalId} '{system.Name}'"
+        members = [m for rel in system.IsGroupedBy for m in rel.RelatedObjects]
+        if not members:
+            errors.append(f"{label}: groups no elements")
+        for member in members:
+            if ifcopenshell.util.element.get_container(member) is None:
+                errors.append(f"{label}: member {member.GlobalId} is not in a storey")
 
     for error in errors:
         print(f"ERROR {error}")

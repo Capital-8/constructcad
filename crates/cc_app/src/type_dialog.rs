@@ -274,6 +274,8 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     | TypeData::Beam { material, .. }
     | TypeData::Foundation { material, .. }
     | TypeData::Stair { material, .. }
+    | TypeData::Pipe { material, .. }
+    | TypeData::Conduit { material, .. }
     | TypeData::Railing { material, .. } = &ty.data
     {
         section(ui, "type-materials", t!("section-materials"), |ui| {
@@ -289,6 +291,8 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     | TypeData::Beam { material, .. }
                     | TypeData::Foundation { material, .. }
                     | TypeData::Stair { material, .. }
+                    | TypeData::Pipe { material, .. }
+                    | TypeData::Conduit { material, .. }
                     | TypeData::Railing { material, .. } => *material = m,
                     _ => {}
                 });
@@ -493,6 +497,15 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 length_row(ui, state, &t!("col-tread"), tid, "st", tread, |d, v| {
                     if let TypeData::Stair { tread, .. } = d {
                         *tread = v.clamp(0.1, 1.0);
+                    }
+                });
+            });
+        }
+        TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                length_row(ui, state, &t!("col-diameter"), tid, "pd", diameter, |d, v| {
+                    if let TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } = d {
+                        *diameter = v.clamp(0.005, 2.0);
                     }
                 });
             });

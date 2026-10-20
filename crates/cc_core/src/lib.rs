@@ -12,6 +12,7 @@ mod element;
 pub mod expr;
 mod ids;
 pub mod material;
+pub mod mep;
 mod persist;
 mod project;
 pub mod properties;
@@ -31,8 +32,9 @@ pub use element::{
     ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Rebar,
     RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
-pub use ids::{ElementId, ElementTypeId, GroupId, LevelId, Uid, ViewId};
+pub use ids::{ElementId, ElementTypeId, GroupId, LevelId, SystemId, Uid, ViewId};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
+pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
@@ -44,6 +46,6 @@ pub use types::{
     WallFunction, stair_layout,
 };
 pub use units::{AreaUnit, LengthUnit, NumberStyle, SlopeUnit, Units, VolumeUnit};
-pub use view::{CameraState, Direction, SheetSize, View, ViewCategory, ViewKind, Viewport};
+pub use view::{CameraState, Direction, MepDiscipline, SheetSize, View, ViewCategory, ViewKind, Viewport};
 
 pub use glam::{DVec2, DVec3};

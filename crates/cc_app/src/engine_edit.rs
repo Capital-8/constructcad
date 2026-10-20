@@ -124,6 +124,30 @@ pub fn info(state: &mut AppState, key: Option<u64>, f: impl FnOnce(&mut cc_core:
     run(state, key, command)
 }
 
+/// Change plumbing system or circuit `id` as `f` changes a copy (`system_set`).
+pub fn system(
+    state: &mut AppState,
+    id: cc_core::SystemId,
+    key: Option<u64>,
+    f: impl FnOnce(&mut cc_core::MepSystem),
+) -> bool {
+    let Some(old) = state.project().system(id).cloned() else { return false };
+    let mut new = old.clone();
+    f(&mut new);
+    if new == old {
+        return false;
+    }
+    let mut params = json(&new);
+    // Unset optional values are left out of the model's form; the patch clears them.
+    if let Some(o) = params.as_object_mut() {
+        for field in ["panel", "color"] {
+            o.entry(field).or_insert(serde_json::Value::Null);
+        }
+    }
+    let command = cc_engine::commands::mep::SystemSet { system: Ref::Id(id.0), params };
+    run(state, key, command)
+}
+
 /// Rename a level or change its elevation as `f` changes a copy (`level_set`).
 pub fn level(state: &mut AppState, id: LevelId, key: Option<u64>, f: impl FnOnce(&mut Level)) -> bool {
     let Some(old) = state.project().level(id).cloned() else { return false };

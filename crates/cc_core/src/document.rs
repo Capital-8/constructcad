@@ -17,6 +17,7 @@ struct Settings {
     pinned: std::collections::BTreeSet<ElementId>,
     joins: std::collections::BTreeSet<(ElementId, ElementId)>,
     groups: BTreeMap<crate::GroupId, crate::Group>,
+    systems: BTreeMap<crate::SystemId, crate::MepSystem>,
 }
 
 impl Settings {
@@ -29,6 +30,7 @@ impl Settings {
             pinned: p.pinned.clone(),
             joins: p.joins.clone(),
             groups: p.groups.clone(),
+            systems: p.systems.clone(),
         }
     }
 
@@ -40,6 +42,7 @@ impl Settings {
         p.pinned = self.pinned;
         p.joins = self.joins;
         p.groups = self.groups;
+        p.systems = self.systems;
     }
 }
 
@@ -191,6 +194,12 @@ impl<'a> EditCtx<'a> {
             if self.project.joined_with(id).next().is_some() {
                 self.touch_settings();
                 self.project.joins.retain(|&(a, b)| a != id && b != id);
+            }
+            if self.project.systems.values().any(|s| s.panel == Some(id)) {
+                // Circuits fed by a removed board stay, unfed.
+                for system in self.systems_mut().values_mut().filter(|s| s.panel == Some(id)) {
+                    system.panel = None;
+                }
             }
             if self.project.group_of(id).is_some() {
                 self.touch_settings();
@@ -366,6 +375,12 @@ impl<'a> EditCtx<'a> {
         self.touch_settings();
         self.project.groups.remove(&id);
         true
+    }
+
+    /// Plumbing systems and electrical circuits.
+    pub fn systems_mut(&mut self) -> &mut BTreeMap<crate::SystemId, crate::MepSystem> {
+        self.touch_settings();
+        &mut self.project.systems
     }
 
     pub fn units_mut(&mut self) -> &mut crate::Units {

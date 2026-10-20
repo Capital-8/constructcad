@@ -593,7 +593,10 @@ impl Command for RailingCreate {
     }
 }
 
-/// Place a component (furniture, fixture…) of a component type.
+/// Place a component (furniture, plumbing fixture, electrical device…) of a
+/// component type. Electrical devices default to their usual mounting height
+/// (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m,
+/// ceiling lights at the level height) and may be put on a circuit.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentPlace {
@@ -608,22 +611,41 @@ pub struct ComponentPlace {
     /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
-    /// Base above the level, meters.
+    /// Base above the level, meters (default 0; for devices, their mounting height).
     #[serde(default)]
     pub base_offset: Option<f64>,
+    /// Circuit or system id, name or code to connect it to.
+    #[serde(default)]
+    pub system: Option<Ref>,
 }
 
 impl Command for ComponentPlace {
     const NAME: &'static str = "component_place";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let level = refs::level_or_first(s.project(), self.level.as_ref())?;
+        let p = s.project();
+        let level = refs::level_or_first(p, self.level.as_ref())?;
+        let type_id = refs::type_of(p, Category::Component, Some(&self.type_ref))?;
+        let device = match p.element_type(type_id).map(|t| &t.data) {
+            Some(cc_core::TypeData::Component { def, .. }) => def.mep.and_then(|m| m.device()),
+            _ => None,
+        };
+        let height = device.map_or(0.0, |d| crate::defaults::device_height(p, level, d));
+        let system = self.system.as_ref().map(|r| refs::system(p, r)).transpose()?;
+        if let Some(id) = system {
+            let mep = match p.element_type(type_id).map(|t| &t.data) {
+                Some(cc_core::TypeData::Component { def, .. }) => def.mep,
+                _ => None,
+            };
+            super::mep::check_fits(p, super::mep::is_electrical(mep), id)?;
+        }
         let component = Component {
             position: point(self.position)?,
             rotation_deg: finite(self.rotation.unwrap_or(0.0), "rotation")?,
-            base_offset: finite(self.base_offset.unwrap_or(0.0), "base_offset")?,
+            base_offset: finite(self.base_offset.unwrap_or(height), "base_offset")?,
             overrides: Default::default(),
             properties: Vec::new(),
+            system,
         };
         let kind = ElementKind::Component(component);
         create(s, t!("tx-create-component"), level, Category::Component, Some(&self.type_ref), kind)

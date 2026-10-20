@@ -167,6 +167,10 @@ fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &s
 fn draw_components(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, ceiling: bool) {
     for e in project.elements.values().filter(|e| e.level == level) {
         let ElementKind::Component(c) = &e.kind else { continue };
+        // Floor plans leave electrical devices out: electrical plans draw their symbols.
+        if !ceiling && matches!(project.mep_data(e), Some(cc_core::MepData::Device { .. })) {
+            continue;
+        }
         for part in cc_geom::component_parts(project, e, c).into_iter().filter(|p| p.in_plan) {
             if !part.faces.is_empty() {
                 draw_mesh(d, &part.faces, cut_z, ceiling, e.id);
@@ -528,6 +532,7 @@ mod tests {
                 base_offset: 0.0,
                 overrides: Default::default(),
                 properties: Vec::new(),
+                system: None,
             });
             e.add_element(Element {
                 id,

@@ -1,0 +1,565 @@
+//! Building services: pipes and conduits, plumbing systems and electrical
+//! circuits, and what they add up to (lengths, loads, fixture units).
+
+use super::{add_element, created, edit, patch_value};
+use crate::defaults::{conduit_offset, drain_slope, pipe_offset};
+use crate::error::{EngineError, Result};
+use crate::refs::{self, Point, Ref, finite, point};
+use crate::registry::{Command, CommandKind};
+use crate::session::Session;
+use crate::t;
+use cc_core::{
+    Category, Element, ElementId, ElementKind, MepData, MepSegment, MepSystem, Project, SystemId, SystemKind,
+};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+fn kind_name(kind: SystemKind) -> String {
+    kind.name().to_string()
+}
+
+fn parse_kind(name: &str) -> Result<SystemKind> {
+    let wanted = name.trim().to_ascii_lowercase();
+    // Snake-case names, or the model's own variant names (`ColdWater`).
+    let found = SystemKind::ALL
+        .into_iter()
+        .find(|k| kind_name(*k) == wanted || format!("{k:?}").to_ascii_lowercase() == wanted);
+    found.ok_or_else(|| {
+        let names: Vec<String> = SystemKind::ALL.into_iter().map(kind_name).collect();
+        EngineError::invalid(format!("unknown system kind '{name}' (one of {})", names.join(", ")))
+    })
+}
+
+/// Whether `system` may hold something electrical (`Some(true)`), of the
+/// plumbing (`Some(false)`) or either (`None`).
+pub(crate) fn check_fits(p: &Project, electrical: Option<bool>, system: SystemId) -> Result<()> {
+    let Some(sys) = p.system(system) else {
+        return Err(EngineError::not_found(format!("no system with id {}", system.0)));
+    };
+    match electrical {
+        Some(electrical) if electrical != sys.kind.is_electrical() => {
+            Err(EngineError::invalid(t!("msg-system-mismatch", "system" => sys.name.clone())))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Whether an element of this MEP data is electrical (devices), of the plumbing (fixtures) or neither.
+pub(crate) fn is_electrical(mep: Option<MepData>) -> Option<bool> {
+    match mep {
+        Some(MepData::Device { .. }) => Some(true),
+        Some(MepData::Fixture { .. }) => Some(false),
+        None => None,
+    }
+}
+
+/// Whether `system` may hold element `e`: pipes and plumbing fixtures belong
+/// to piping systems, conduits and electrical devices to circuits.
+fn check_member(p: &Project, e: &Element, system: SystemId) -> Result<()> {
+    let electrical = match &e.kind {
+        ElementKind::Pipe(_) => Some(false),
+        ElementKind::Conduit(_) => Some(true),
+        ElementKind::Component(_) => is_electrical(p.mep_data(e)),
+        _ => return Err(EngineError::invalid(format!("element {} cannot belong to a system", e.id.0))),
+    };
+    check_fits(p, electrical, system)
+}
+
+fn system_out(p: &Project, id: SystemId) -> Value {
+    let Some(sys) = p.system(id) else { return json!({ "id": id.0 }) };
+    json!({
+        "id": id.0,
+        "name": sys.name,
+        "code": sys.code,
+        "kind": kind_name(sys.kind),
+        "color": sys.color(),
+        "panel": sys.panel.map(|e| e.0),
+        "voltage": sys.voltage,
+    })
+}
+
+/// The given plumbing system, or the first system of `kind`.
+fn optional_system(p: &Project, r: Option<&Ref>) -> Result<Option<SystemId>> {
+    r.map(|r| refs::system(p, r)).transpose()
+}
+
+/// Where a segment ends: `end`, or straight up or down from `start` (a riser).
+fn segment(start: Point, end: Option<Point>, offset: f64, end_offset: Option<f64>) -> Result<MepSegment> {
+    let start = point(start)?;
+    let end = end.map(point).transpose()?.unwrap_or(start);
+    let mut s = MepSegment::new(start, end, finite(offset, "offset")?);
+    if let Some(z) = end_offset {
+        s.end_offset = finite(z, "end_offset")?;
+    }
+    if s.plan_length() < 1e-3 && s.rise().abs() < 1e-3 {
+        return Err(EngineError::invalid(t!("msg-segment-empty")));
+    }
+    Ok(s)
+}
+
+/// Create a pipe from `start` to `end` (or a vertical riser at `start` up or
+/// down to `end_offset`), in a plumbing system. Its center line starts
+/// `offset` above the level (default: 0.60 m for supply and vent pipes,
+/// -0.30 m for drains). Drains fall along the flow by `slope` (percent;
+/// default 2 % up to 75 mm, 1 % above); other pipes are level unless
+/// `end_offset` or `slope` says otherwise.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct PipeCreate {
+    /// Start of the center line in plan.
+    pub start: Point,
+    /// End in plan (default: the start, for a riser).
+    #[serde(default)]
+    pub end: Option<Point>,
+    /// Level id or name (default: the lowest level).
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Pipe type id or name (default: the first pipe type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// Plumbing system id, name or code (e.g. "AF").
+    #[serde(default)]
+    pub system: Option<Ref>,
+    /// Elevation of the start above the level, meters.
+    #[serde(default)]
+    pub offset: Option<f64>,
+    /// Elevation of the end above the level, meters (overrides `slope`).
+    #[serde(default)]
+    pub end_offset: Option<f64>,
+    /// Fall from the start to the end, percent of the plan length.
+    #[serde(default)]
+    pub slope: Option<f64>,
+}
+
+impl Command for PipeCreate {
+    const NAME: &'static str = "pipe_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let level = refs::level_or_first(p, self.level.as_ref())?;
+        let type_id = refs::type_of(p, Category::Pipe, self.type_ref.as_ref())?;
+        let system = optional_system(p, self.system.as_ref())?;
+        if let Some(id) = system {
+            check_fits(p, Some(false), id)?;
+        }
+        let kind = system.and_then(|id| p.system(id)).map(|sys| sys.kind);
+        let offset = self.offset.unwrap_or_else(|| pipe_offset(kind));
+        let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
+        if self.end_offset.is_none() && !seg.is_vertical() {
+            let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
+            let slope = match self.slope {
+                Some(percent) => finite(percent, "slope")? / 100.0,
+                None if kind.is_some_and(SystemKind::is_drainage) => drain_slope(diameter),
+                None => 0.0,
+            };
+            seg.end_offset = seg.start_offset - slope * seg.plan_length();
+        }
+        seg.systems = system.into_iter().collect();
+        let id = edit(s, t!("tx-create-pipe"), |e| Ok(add_element(e, level, type_id, ElementKind::Pipe(seg))))?;
+        Ok(created(s, id))
+    }
+}
+
+/// Create a conduit from `start` to `end` (or a vertical drop at `start` to
+/// `end_offset`) carrying `circuits`. It runs `offset` above the level
+/// (default: in the slab above, at the level height).
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ConduitCreate {
+    /// Start of the center line in plan.
+    pub start: Point,
+    /// End in plan (default: the start, for a vertical drop).
+    #[serde(default)]
+    pub end: Option<Point>,
+    /// Level id or name (default: the lowest level).
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Conduit type id or name (default: the first conduit type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// Circuits it carries: ids, names or codes.
+    #[serde(default)]
+    pub circuits: Vec<Ref>,
+    /// Elevation of the start above the level, meters.
+    #[serde(default)]
+    pub offset: Option<f64>,
+    /// Elevation of the end above the level, meters (default: as the start).
+    #[serde(default)]
+    pub end_offset: Option<f64>,
+}
+
+impl Command for ConduitCreate {
+    const NAME: &'static str = "conduit_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let level = refs::level_or_first(p, self.level.as_ref())?;
+        let type_id = refs::type_of(p, Category::Conduit, self.type_ref.as_ref())?;
+        let mut circuits = Vec::new();
+        for r in &self.circuits {
+            let id = refs::system(p, r)?;
+            check_fits(p, Some(true), id)?;
+            if !circuits.contains(&id) {
+                circuits.push(id);
+            }
+        }
+        let offset = self.offset.unwrap_or_else(|| conduit_offset(p, level));
+        let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
+        seg.systems = circuits;
+        let id = edit(s, t!("tx-create-conduit"), |e| Ok(add_element(e, level, type_id, ElementKind::Conduit(seg))))?;
+        Ok(created(s, id))
+    }
+}
+
+/// List the plumbing systems and electrical circuits with what is in them:
+/// element count, pipe or conduit length, fixture units and supply weights
+/// of plumbing fixtures, and the devices and load of circuits.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SystemsList {}
+
+impl Command for SystemsList {
+    const NAME: &'static str = "systems_list";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let out: Vec<Value> = p
+            .systems
+            .keys()
+            .map(|id| {
+                let mut v = system_out(p, *id);
+                let totals = totals(p, *id);
+                if let Some(o) = v.as_object_mut() {
+                    o.extend(totals.as_object().cloned().unwrap_or_default());
+                }
+                v
+            })
+            .collect();
+        Ok(json!(out))
+    }
+}
+
+/// What a system adds up to.
+fn totals(p: &Project, id: SystemId) -> Value {
+    let (mut count, mut length, mut power, mut devices, mut units, mut weight) = (0, 0.0, 0.0, 0, 0.0, 0.0);
+    for e in p.system_members(id) {
+        count += 1;
+        if let Some(seg) = e.as_segment() {
+            length += seg.length();
+        }
+        match p.mep_data(e) {
+            Some(MepData::Device { power: va, .. }) => {
+                devices += 1;
+                power += va;
+            }
+            Some(MepData::Fixture { drain_units, supply_weight, .. }) => {
+                units += drain_units;
+                weight += supply_weight;
+            }
+            None => {}
+        }
+    }
+    let mut v = json!({"elements": count, "length": length});
+    let electrical = p.system(id).is_some_and(|s| s.kind.is_electrical());
+    if let Some(o) = v.as_object_mut() {
+        if electrical {
+            let volts = p.system(id).map_or(127.0, |s| s.voltage);
+            o.insert("devices".into(), json!(devices));
+            o.insert("power_va".into(), json!(power));
+            o.insert("current_a".into(), json!(if volts > 0.0 { power / volts } else { 0.0 }));
+        } else {
+            o.insert("drain_units".into(), json!(units));
+            o.insert("supply_weight".into(), json!(weight));
+        }
+    }
+    v
+}
+
+/// Create a plumbing system or an electrical circuit. `kind` is
+/// `cold_water`, `hot_water`, `sanitary`, `vent`, `rainwater`, `power` or
+/// `lighting`; circuits may name the board (`panel`, a component element;
+/// default: the project's only board, if it has one) feeding them and their
+/// voltage (default 127 V). A circuit's code defaults to the next free
+/// number on its board.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SystemCreate {
+    /// What it carries.
+    pub kind: String,
+    /// Name (default: the code, or the kind's name).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Short code shown in tags (e.g. "AF", a circuit number).
+    #[serde(default)]
+    pub code: Option<String>,
+    /// Display color `[r, g, b]` (default: by kind).
+    #[serde(default)]
+    pub color: Option<[u8; 3]>,
+    /// Circuits: the distribution board feeding it (element id; default: the only board).
+    #[serde(default)]
+    pub panel: Option<u64>,
+    /// Circuits: nominal voltage, volts.
+    #[serde(default)]
+    pub voltage: Option<f64>,
+}
+
+/// The distribution boards of the project.
+fn boards(p: &Project) -> Vec<ElementId> {
+    p.elements
+        .values()
+        .filter(|e| p.mep_data(e).and_then(|m| m.device()) == Some(cc_core::DeviceKind::Panel))
+        .map(|e| e.id)
+        .collect()
+}
+
+impl Command for SystemCreate {
+    const NAME: &'static str = "system_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let kind = parse_kind(&self.kind)?;
+        let panel = match self.panel.map(|id| refs::element(p, id)).transpose()? {
+            Some(panel) => {
+                check_panel(p, panel)?;
+                Some(panel)
+            }
+            None if kind.is_electrical() => match boards(p)[..] {
+                [only] => Some(only),
+                _ => None,
+            },
+            None => None,
+        };
+        let code = match self.code {
+            Some(c) => c.trim().to_string(),
+            None if kind.is_electrical() => crate::defaults::next_number(
+                p.systems.values().filter(|c| c.kind.is_electrical() && c.panel == panel).map(|c| c.code.as_str()),
+            ),
+            None => String::new(),
+        };
+        let name = match self.name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()) {
+            Some(n) => n,
+            None if kind.is_electrical() => t!("default-circuit-name", "n" => code.clone()),
+            None => crate::i18n::tr(kind.key()),
+        };
+        let voltage = refs::positive(self.voltage.unwrap_or(127.0), "voltage")?;
+        let system = MepSystem { name, code, kind, color: self.color, panel, voltage };
+        let id = edit(s, t!("tx-create-system"), |e| {
+            let id = SystemId(e.alloc_id());
+            e.systems_mut().insert(id, system);
+            Ok(id)
+        })?;
+        Ok(system_out(s.project(), id))
+    }
+}
+
+/// A distribution board: a component whose type is a panel device.
+fn check_panel(p: &Project, id: ElementId) -> Result<()> {
+    match p.element(id).and_then(|e| p.mep_data(e)).and_then(|m| m.device()) {
+        Some(cc_core::DeviceKind::Panel) => Ok(()),
+        _ => Err(EngineError::invalid(t!("msg-not-a-panel", "id" => id.0))),
+    }
+}
+
+/// Change a system or circuit: `params` is a merge patch over the values
+/// `systems_list` shows (`name`, `code`, `kind`, `color`, `panel`, `voltage`).
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SystemSet {
+    /// System id, name or code.
+    pub system: Ref,
+    /// Values to change.
+    pub params: Value,
+}
+
+impl Command for SystemSet {
+    const NAME: &'static str = "system_set";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let id = refs::system(p, &self.system)?;
+        let Some(current) = p.system(id).cloned() else {
+            return Err(EngineError::not_found(format!("no system with id {}", id.0)));
+        };
+        let mut patch = self.params.clone();
+        // Kinds are given by name, as in `system_create`.
+        if let Some(kind) = patch.get("kind").and_then(Value::as_str) {
+            let kind = parse_kind(kind)?;
+            if kind.is_electrical() != current.kind.is_electrical() && p.system_members(id).next().is_some() {
+                return Err(EngineError::rejected(t!("msg-system-kind-in-use")));
+            }
+            let kind = serde_json::to_value(kind).map_err(|e| EngineError::invalid(e.to_string()))?;
+            if let Some(o) = patch.as_object_mut() {
+                o.insert("kind".into(), kind);
+            }
+        }
+        if let Some(panel) = patch.get("panel").and_then(Value::as_u64) {
+            check_panel(p, refs::element(p, panel)?)?;
+        }
+        let updated: MepSystem = patch_value(&current, &patch)?;
+        if updated.name.trim().is_empty() {
+            return Err(EngineError::invalid("the name is empty"));
+        }
+        if !(updated.voltage.is_finite() && updated.voltage > 0.0) {
+            return Err(EngineError::invalid("voltage must be positive"));
+        }
+        edit(s, t!("tx-modify-system"), |e| {
+            e.systems_mut().insert(id, updated);
+            Ok(())
+        })?;
+        Ok(system_out(s.project(), id))
+    }
+}
+
+/// Delete a system or circuit; its pipes, conduits and devices stay, outside any system.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SystemDelete {
+    /// System id, name or code.
+    pub system: Ref,
+}
+
+impl Command for SystemDelete {
+    const NAME: &'static str = "system_delete";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let id = refs::system(p, &self.system)?;
+        let members: Vec<ElementId> = p.system_members(id).map(|e| e.id).collect();
+        edit(s, t!("tx-delete-system"), |e| {
+            for m in &members {
+                if let Some(el) = e.element_mut(*m) {
+                    detach(el, id);
+                }
+            }
+            e.systems_mut().remove(&id);
+            Ok(())
+        })?;
+        Ok(json!({"deleted": id.0, "detached": members.len()}))
+    }
+}
+
+fn detach(e: &mut Element, id: SystemId) {
+    match &mut e.kind {
+        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) => seg.systems.retain(|s| *s != id),
+        ElementKind::Component(c) if c.system == Some(id) => c.system = None,
+        _ => {}
+    }
+}
+
+/// Put elements in a system or circuit, or take them out (`remove`). A pipe
+/// belongs to one system (it moves); a conduit carries several circuits (one
+/// is added); a fixture or device connects to one.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SystemAssign {
+    /// Pipe, conduit and component ids.
+    pub elements: Vec<u64>,
+    /// System id, name or code.
+    pub system: Ref,
+    /// Take them out instead.
+    #[serde(default)]
+    pub remove: bool,
+}
+
+impl Command for SystemAssign {
+    const NAME: &'static str = "system_assign";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let id = refs::system(p, &self.system)?;
+        let ids = refs::elements(p, &self.elements)?;
+        for el in ids.iter().filter_map(|i| p.element(*i)) {
+            check_member(p, el, id)?;
+        }
+        let remove = self.remove;
+        edit(s, t!("tx-assign-system"), |e| {
+            for i in &ids {
+                let Some(el) = e.element_mut(*i) else { continue };
+                if remove {
+                    detach(el, id);
+                    continue;
+                }
+                match &mut el.kind {
+                    ElementKind::Pipe(seg) => seg.systems = vec![id],
+                    ElementKind::Conduit(seg) if !seg.systems.contains(&id) => seg.systems.push(id),
+                    ElementKind::Component(c) => c.system = Some(id),
+                    _ => {}
+                }
+            }
+            Ok(())
+        })?;
+        Ok(json!({"system": system_out(s.project(), id), "elements": self.elements}))
+    }
+}
+
+/// The load schedule of the circuits (of one board, or all): per circuit its
+/// devices, installed load (VA) and current at its voltage, with the total
+/// per board.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct CircuitLoads {
+    /// Distribution board element id (default: every circuit).
+    #[serde(default)]
+    pub panel: Option<u64>,
+}
+
+impl Command for CircuitLoads {
+    const NAME: &'static str = "circuit_loads";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let panel = self.panel.map(|id| refs::element(p, id)).transpose()?;
+        let mut circuits: Vec<(&SystemId, &MepSystem)> =
+            p.systems.iter().filter(|(_, c)| c.kind.is_electrical() && (panel.is_none() || c.panel == panel)).collect();
+        circuits.sort_by(|a, b| natural(&a.1.code, &b.1.code));
+        let mut boards: std::collections::BTreeMap<Option<u64>, f64> = Default::default();
+        let rows: Vec<Value> = circuits
+            .into_iter()
+            .map(|(id, c)| {
+                let devices: Vec<&Element> =
+                    p.system_members(*id).filter(|e| p.mep_data(e).and_then(|m| m.device()).is_some()).collect();
+                let power: f64 = devices.iter().filter_map(|e| p.mep_data(e)).map(|m| m.power()).sum();
+                *boards.entry(c.panel.map(|e| e.0)).or_default() += power;
+                json!({
+                    "id": id.0,
+                    "code": c.code,
+                    "name": c.name,
+                    "kind": kind_name(c.kind),
+                    "panel": c.panel.map(|e| e.0),
+                    "voltage": c.voltage,
+                    "devices": devices.len(),
+                    "power_va": power,
+                    "current_a": if c.voltage > 0.0 { power / c.voltage } else { 0.0 },
+                })
+            })
+            .collect();
+        let boards: Vec<Value> =
+            boards.into_iter().map(|(panel, power)| json!({"panel": panel, "power_va": power})).collect();
+        Ok(json!({"circuits": rows, "panels": boards}))
+    }
+}
+
+/// Numbers numerically, then text.
+fn natural(a: &str, b: &str) -> std::cmp::Ordering {
+    match (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {
+        (Ok(x), Ok(y)) => x.total_cmp(&y),
+        (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+        (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+        _ => a.cmp(b),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kinds_round_trip_by_name() {
+        for k in SystemKind::ALL {
+            assert_eq!(parse_kind(&kind_name(k)).ok(), Some(k));
+        }
+        assert_eq!(kind_name(SystemKind::ColdWater), "cold_water");
+        assert!(parse_kind("steam").is_err());
+    }
+}

@@ -51,6 +51,14 @@ pub enum ScheduleField {
     BarLength,
     /// Steel weight, kilograms.
     Weight,
+    /// Plumbing system or electrical circuits.
+    System,
+    /// Fall of a pipe per unit of length.
+    Slope,
+    /// Apparent power of an electrical device, VA.
+    Power,
+    /// Drainage fixture units of a plumbing fixture.
+    DrainUnits,
 }
 
 impl ScheduleField {
@@ -93,6 +101,10 @@ impl ScheduleField {
             ScheduleField::BarCount => "col-bar-count",
             ScheduleField::BarLength => "col-bar-length",
             ScheduleField::Weight => "col-weight",
+            ScheduleField::System => "col-system",
+            ScheduleField::Slope => "col-slope",
+            ScheduleField::Power => "col-power",
+            ScheduleField::DrainUnits => "col-drain-units",
         }
     }
 
@@ -113,7 +125,19 @@ impl ScheduleField {
             Category::Rebar => &[F::Host, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material],
             Category::Stair => &[F::Width, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => &[F::Length, F::Height],
-            Category::Component => &[F::ComponentName, F::ComponentKind, F::Width, F::Depth, F::Height, F::Volume],
+            Category::Pipe => &[F::Diameter, F::Length, F::System, F::Slope, F::Material],
+            Category::Conduit => &[F::Diameter, F::Length, F::System, F::Material],
+            Category::Component => &[
+                F::ComponentName,
+                F::ComponentKind,
+                F::Width,
+                F::Depth,
+                F::Height,
+                F::Volume,
+                F::System,
+                F::Power,
+                F::DrainUnits,
+            ],
             Category::Room => {
                 return vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter, F::Height, F::Volume, F::Comments];
             }
@@ -140,6 +164,8 @@ impl ScheduleField {
             Category::Rebar => vec![F::Host, F::Type, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight],
             Category::Stair => vec![F::Mark, F::Type, F::Level, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => vec![F::Mark, F::Type, F::Level, F::Length],
+            Category::Pipe => vec![F::Type, F::System, F::Level, F::Diameter, F::Length, F::Slope],
+            Category::Conduit => vec![F::Type, F::System, F::Level, F::Diameter, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
             Category::Grid | Category::Dimension | Category::Text => Vec::new(),

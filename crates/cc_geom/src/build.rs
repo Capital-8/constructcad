@@ -62,6 +62,8 @@ pub struct ModelGeometry {
     pub beams: BTreeMap<ElementId, BeamGeom>,
     /// Reinforcement sets: their bars, placed in their hosts.
     pub rebar: BTreeMap<ElementId, crate::rebar::RebarGeom>,
+    /// Pipes and conduits: their center lines and diameters.
+    pub segments: BTreeMap<ElementId, crate::mep::SegmentGeom>,
     /// Foundations: plan outline and elevations (strips meet at corners like beams).
     pub foundations: BTreeMap<ElementId, FoundationGeom>,
     /// Boundary of each enclosed room (missing when the room is not enclosed).
@@ -272,6 +274,7 @@ impl ModelGeometry {
         geom.build_structure(project);
         geom.rebar = crate::rebar::build_rebar(project, &geom.beams);
         geom.build_components(project);
+        geom.build_mep(project);
         geom.apply_joins(project);
         geom.build_rooms(project);
         geom

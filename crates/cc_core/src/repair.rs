@@ -79,6 +79,11 @@ fn element_is_valid(e: &Element) -> bool {
         }
         ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
         ElementKind::Component(c) => finite(&[c.rotation_deg, c.base_offset]) && c.position.is_finite(),
+        ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+            finite(&[s.start_offset, s.end_offset])
+                && finite_points(&[s.start, s.end])
+                && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
+        }
     }
 }
 
@@ -158,6 +163,9 @@ impl Project {
                     repairs += fit_shape(shape, *width, *height);
                 }
                 TypeData::Rebar { diameter, .. } => repairs += usize::from(fix_positive(diameter, 0.01)),
+                TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
+                    repairs += usize::from(fix_positive(diameter, 0.025));
+                }
                 TypeData::Foundation { width, length, thickness, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(length, 1.0))
@@ -180,6 +188,20 @@ impl Project {
                             p.value = 0.0;
                             repairs += 1;
                         }
+                    }
+                    let fix_nonnegative = |v: &mut f64| {
+                        let bad = !(v.is_finite() && *v >= 0.0);
+                        if bad {
+                            *v = 0.0;
+                        }
+                        usize::from(bad)
+                    };
+                    match &mut def.mep {
+                        Some(crate::MepData::Fixture { drain_units, supply_weight, .. }) => {
+                            repairs += fix_nonnegative(drain_units) + fix_nonnegative(supply_weight);
+                        }
+                        Some(crate::MepData::Device { power, .. }) => repairs += fix_nonnegative(power),
+                        None => {}
                     }
                 }
             }
@@ -260,6 +282,33 @@ impl Project {
                 c.overrides.retain(|_, v| v.is_finite());
                 repairs += before - c.overrides.len();
                 repairs += crate::properties::repair_sets(&mut c.properties);
+            }
+        }
+        // Systems: circuits fed by a missing board lose it, voltages are positive;
+        // elements drop references to missing systems (a pipe keeps one system).
+        for system in self.systems.values_mut() {
+            if system.panel.is_some_and(|p| !ids.contains(&p)) {
+                system.panel = None;
+                repairs += 1;
+            }
+            repairs += usize::from(fix_positive(&mut system.voltage, 127.0));
+        }
+        let systems = &self.systems;
+        for e in self.elements.values_mut() {
+            let max = if matches!(e.kind, ElementKind::Pipe(_)) { 1 } else { usize::MAX };
+            match &mut e.kind {
+                ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+                    let before = s.systems.len();
+                    let mut seen = std::collections::BTreeSet::new();
+                    s.systems.retain(|id| systems.contains_key(id) && seen.insert(*id));
+                    s.systems.truncate(max);
+                    repairs += before - s.systems.len();
+                }
+                ElementKind::Component(c) if c.system.is_some_and(|id| !systems.contains_key(&id)) => {
+                    c.system = None;
+                    repairs += 1;
+                }
+                _ => {}
             }
         }
         // Walls attached to a missing level keep their height, unconnected.
@@ -357,6 +406,62 @@ mod tests {
         assert_eq!(p.repair(), 0, "repair is idempotent");
     }
 
+    /// Crafted building-services data: references to missing systems and
+    /// boards, a pipe in two systems, an empty run and a NaN device power.
+    #[test]
+    fn building_services_are_repaired() {
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let pipe_t = p.default_type(Category::Pipe).unwrap();
+        let system = *p.systems.keys().next().unwrap();
+        let other = *p.systems.keys().nth(1).unwrap();
+        let add = |p: &mut Project, kind| {
+            let id = ElementId(p.alloc_id());
+            let e = Element {
+                id,
+                level,
+                type_id: pipe_t,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Default::default(),
+            };
+            p.elements.insert(id, e);
+            id
+        };
+        let mut run = crate::MepSegment::new(DVec2::ZERO, DVec2::new(2.0, 0.0), 0.5);
+        run.systems = vec![system, crate::SystemId(9999), other];
+        let pipe = add(&mut p, ElementKind::Pipe(run));
+        let empty = add(&mut p, ElementKind::Pipe(crate::MepSegment::new(DVec2::ONE, DVec2::ONE, 0.5)));
+        let circuit = crate::SystemId(p.alloc_id());
+        p.systems.insert(
+            circuit,
+            crate::MepSystem {
+                panel: Some(ElementId(424242)),
+                voltage: f64::NAN,
+                ..crate::MepSystem::new("1", "1", crate::SystemKind::Power)
+            },
+        );
+        let outlet = p
+            .types
+            .values_mut()
+            .find_map(|t| match &mut t.data {
+                crate::TypeData::Component { def, .. } if matches!(def.mep, Some(crate::MepData::Device { .. })) => {
+                    Some(def)
+                }
+                _ => None,
+            })
+            .unwrap();
+        outlet.mep = Some(crate::MepData::Device { device: crate::DeviceKind::Outlet, power: f64::NAN });
+        // The missing system, the second system, the empty run, the board, the voltage, the power.
+        assert_eq!(p.repair(), 6);
+        let Some(ElementKind::Pipe(s)) = p.element(pipe).map(|e| &e.kind) else { panic!("pipe removed") };
+        assert_eq!(s.systems, vec![system]);
+        assert!(p.element(empty).is_none());
+        assert!(p.systems.values().all(|s| s.panel.is_none() && s.voltage == 127.0));
+        assert_eq!(p.repair(), 0, "repair is idempotent");
+    }
+
     #[test]
     fn components_are_repaired_and_old_projects_get_the_library() {
         let mut p = Project::from_template();
@@ -375,6 +480,7 @@ mod tests {
                 base_offset: 0.0,
                 overrides,
                 properties: Vec::new(),
+                system: None,
             });
             p.elements.insert(
                 id,
@@ -398,7 +504,7 @@ mod tests {
         let mut old = Project::from_template();
         old.types.retain(|_, t| t.category() != Category::Component);
         old.ensure_annotation_types();
-        assert_eq!(old.types_of(Category::Component).count(), 7);
+        assert_eq!(old.types_of(Category::Component).count(), 16);
         assert!(old.materials.iter().any(|m| m.name == "Tecido"));
     }
 }

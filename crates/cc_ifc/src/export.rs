@@ -177,6 +177,8 @@ impl<'a> Exporter<'a> {
         self.write_structure();
         self.write_rebar();
         self.write_components();
+        self.write_segments();
+        self.write_systems();
         self.write_spaces();
         self.write_relationships();
     }
@@ -1022,6 +1024,83 @@ impl<'a> Exporter<'a> {
         }
     }
 
+    /// Pipes and conduits: a circle extruded along the run, placed at its start.
+    fn write_segments(&mut self) {
+        let project = self.project;
+        let geom = self.geom;
+        for g in geom.segments.values() {
+            let Some(e) = project.element(g.element) else { continue };
+            let Some(s) = e.as_segment() else { continue };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let Some(axis) = (g.b - g.a).try_normalize() else { continue };
+            let origin = DVec3::new(s.start.x, s.start.y, s.start_offset);
+            let frame = Frame { origin, x: axis.any_orthonormal_vector(), z: axis };
+            let placement = self.local_placement(Some(storey), frame);
+            let profile = self
+                .w
+                .add("IFCCIRCLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, Value::Null, g.diameter / 2.0]);
+            let item = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, self.identity, self.dir_z, g.length()]);
+            let color = project.system_color(e);
+            let name = e.systems().first().and_then(|id| project.system(*id)).map_or("Generic", |s| s.name.as_str());
+            let style = self.style(&format!("system {name}"), color, 0.0);
+            self.styled(item, style);
+            let shape = self.shape(vec![item], None);
+            let (entity, kind, qto) = match e.kind {
+                ElementKind::Conduit(_) => {
+                    ("IFCCABLECARRIERSEGMENT", "CONDUITSEGMENT", "Qto_CableCarrierSegmentBaseQuantities")
+                }
+                _ => ("IFCPIPESEGMENT", "RIGIDSEGMENT", "Qto_PipeSegmentBaseQuantities"),
+            };
+            let mut attrs = self.element_args(e, placement, shape);
+            attrs.push(Value::Enum(kind));
+            let product = self.w.add(entity, attrs);
+            self.products.insert(e.id, product);
+            self.register(e, product);
+            self.quantities(e, qto, &[("Length", Quantity::Length(g.length()))]);
+        }
+    }
+
+    /// Plumbing systems and electrical circuits grouping their written members.
+    fn write_systems(&mut self) {
+        let project = self.project;
+        let n = Value::Null;
+        for (id, system) in &project.systems {
+            let mut members: Vec<Id> =
+                project.system_members(*id).filter_map(|e| self.products.get(&e.id).copied()).collect();
+            if let Some(panel) = system.panel.and_then(|p| self.products.get(&p).copied()) {
+                members.insert(0, panel);
+            }
+            if members.is_empty() {
+                continue;
+            }
+            use cc_core::SystemKind as K;
+            let (entity, kind) = match system.kind {
+                K::ColdWater => ("IFCDISTRIBUTIONSYSTEM", "DOMESTICCOLDWATER"),
+                K::HotWater => ("IFCDISTRIBUTIONSYSTEM", "DOMESTICHOTWATER"),
+                K::Sanitary => ("IFCDISTRIBUTIONSYSTEM", "SEWAGE"),
+                K::Vent => ("IFCDISTRIBUTIONSYSTEM", "VENT"),
+                K::Rainwater => ("IFCDISTRIBUTIONSYSTEM", "RAINWATER"),
+                K::Power => ("IFCDISTRIBUTIONCIRCUIT", "ELECTRICAL"),
+                K::Lighting => ("IFCDISTRIBUTIONCIRCUIT", "LIGHTING"),
+            };
+            let gid = self.guid(&format!("system-{id}"));
+            let group = self.w.add(
+                entity,
+                args![
+                    gid,
+                    n.clone(),
+                    system.name.as_str(),
+                    n.clone(),
+                    n.clone(),
+                    opt_str(&system.code),
+                    Value::Enum(kind)
+                ],
+            );
+            let gid = self.guid(&format!("system-rel-{id}"));
+            self.w.add("IFCRELASSIGNSTOGROUP", args![gid, n.clone(), n.clone(), n.clone(), members, n.clone(), group]);
+        }
+    }
+
     // --- Materials and types ---
 
     fn material(&mut self, name: &str) -> Id {
@@ -1116,6 +1195,8 @@ impl<'a> Exporter<'a> {
                 };
                 (entity, extra)
             }
+            TypeData::Pipe { .. } => ("IFCPIPESEGMENTTYPE", args![Value::Enum("RIGIDSEGMENT")]),
+            TypeData::Conduit { .. } => ("IFCCABLECARRIERSEGMENTTYPE", args![Value::Enum("CONDUITSEGMENT")]),
             TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
             TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
             TypeData::Rebar { diameter, .. } => {
@@ -1163,6 +1244,8 @@ impl<'a> Exporter<'a> {
             | TypeData::Window { material, .. }
             | TypeData::Ceiling { material, .. }
             | TypeData::Foundation { material, .. }
+            | TypeData::Pipe { material, .. }
+            | TypeData::Conduit { material, .. }
             | TypeData::Rebar { material, .. } => Some(self.material(material)),
             TypeData::Component { def, .. } if !def.main_material().is_empty() => {
                 Some(self.material(def.main_material()))
@@ -1657,7 +1740,7 @@ fn component_class(def: &cc_core::ComponentDef) -> WrittenClass {
         }
         (Some(ifc), Some(proxy)) => written(proxy, "USERDEFINED", &crate::schema::display_name(&ifc.entity)),
         _ => {
-            let (entity, kind) = component_entity(def.kind);
+            let (entity, kind) = component_entity(def);
             match element_class(entity) {
                 Some(class) => written(class, kind, ""),
                 None => WrittenClass {
@@ -1698,11 +1781,23 @@ fn typed_value(v: &cc_core::properties::IfcValue) -> Value {
     }
 }
 
-fn component_entity(kind: cc_core::ComponentKind) -> (&'static str, &'static str) {
-    match kind {
+/// IFC entity and predefined type of a native component: by its device
+/// kind for electrical devices, else by its component kind.
+fn component_entity(def: &cc_core::ComponentDef) -> (&'static str, &'static str) {
+    use cc_core::DeviceKind as D;
+    if let Some(device) = def.mep.and_then(|m| m.device()) {
+        return match device {
+            D::Outlet | D::DedicatedOutlet => ("IFCOUTLET", "POWEROUTLET"),
+            D::Switch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
+            D::CeilingLight | D::WallLight => ("IFCLIGHTFIXTURE", "POINTSOURCE"),
+            D::Panel => ("IFCELECTRICDISTRIBUTIONBOARD", "DISTRIBUTIONBOARD"),
+        };
+    }
+    match def.kind {
         cc_core::ComponentKind::Furniture | cc_core::ComponentKind::Casework => ("IFCFURNITURE", "NOTDEFINED"),
         cc_core::ComponentKind::Plumbing => ("IFCSANITARYTERMINAL", "NOTDEFINED"),
         cc_core::ComponentKind::Lighting => ("IFCLIGHTFIXTURE", "NOTDEFINED"),
+        cc_core::ComponentKind::Electrical => ("IFCBUILDINGELEMENTPROXY", "NOTDEFINED"),
         cc_core::ComponentKind::Generic => ("IFCBUILDINGELEMENTPROXY", "NOTDEFINED"),
     }
 }

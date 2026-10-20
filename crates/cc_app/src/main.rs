@@ -26,6 +26,7 @@ mod ribbon;
 mod schedule_ui;
 mod sheet;
 mod state;
+mod systems_dialog;
 mod table;
 mod text_tool;
 mod theme;

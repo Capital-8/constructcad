@@ -12,6 +12,7 @@ pub mod format;
 pub mod hatch;
 mod joins;
 mod legend;
+mod mep;
 pub mod notes;
 mod plan;
 mod projected;
@@ -34,12 +35,17 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
     let mut d = match &view.kind {
         ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
-            let (structural, tags) = match view.kind {
-                ViewKind::FloorPlan { structural, structure_tags, .. } => (structural, structural || structure_tags),
-                _ => (false, false),
+            let (structural, tags, services) = match view.kind {
+                ViewKind::FloorPlan { structural, structure_tags, mep, .. } => {
+                    (structural, structural || structure_tags, mep)
+                }
+                _ => (false, false, None),
             };
             let mut d = plan_of(project, geom, *level, *cut_height, ceiling, structural, view.scale);
             joins::merge(project, &mut d);
+            if let Some(discipline) = services {
+                mep::services(&mut d, project, geom, *level, *cut_height, discipline, view.scale);
+            }
             annotate::plan_annotations(&mut d, project, geom, *level, ceiling, structural, view.scale);
             if tags {
                 annotate::structure_tags(&mut d, project, geom, *level, view.scale);
@@ -172,6 +178,7 @@ mod tests {
             base_offset: 0.0,
             overrides: Default::default(),
             properties: Vec::new(),
+            system: None,
         };
         project.elements.insert(
             id,

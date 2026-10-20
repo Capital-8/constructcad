@@ -19,14 +19,16 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 /// Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`),
 /// `section` (with `start`, `end` and optional `depth`), `elevation` (with
 /// `direction`: north, south, east or west), `structural_plan` (with `level`:
-/// a formwork plan of the structure, tagged), `three_d`, `analytical` (a 3D
+/// a formwork plan of the structure, tagged), `plumbing_plan` and
+/// `electrical_plan` (with `level`: the pipes, or the conduits and devices,
+/// over the architecture, tagged), `three_d`, `analytical` (a 3D
 /// view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types),
 /// `schedule` (with `category`) or `sheet` (A3, numbered after the others).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
-    /// `floor_plan`, `ceiling_plan`, `structural_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`,
-    /// `legend`, `schedule` or `sheet`.
+    /// `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`,
+    /// `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule` or `sheet`.
     pub kind: String,
     /// View name (default: by kind).
     #[serde(default)]
@@ -75,8 +77,26 @@ impl Command for ViewCreate {
             }
             "structural_plan" => {
                 let level = refs::level_or_first(p, self.level.as_ref())?;
-                let kind = ViewKind::FloorPlan { level, cut_height: 1.2, structural: true, structure_tags: true };
+                let kind =
+                    ViewKind::FloorPlan { level, cut_height: 1.2, structural: true, structure_tags: true, mep: None };
                 let name = t!("default-structural-plan-name", "level" => p.level_name(level));
+                (name, 50, kind, t!("tx-new-view"))
+            }
+            "plumbing_plan" | "electrical_plan" => {
+                let level = refs::level_or_first(p, self.level.as_ref())?;
+                let level_name = p.level_name(level);
+                let (discipline, name) = if self.kind == "plumbing_plan" {
+                    (cc_core::MepDiscipline::Plumbing, t!("default-plumbing-plan-name", "level" => level_name))
+                } else {
+                    (cc_core::MepDiscipline::Electrical, t!("default-electrical-plan-name", "level" => level_name))
+                };
+                let kind = ViewKind::FloorPlan {
+                    level,
+                    cut_height: 1.2,
+                    structural: false,
+                    structure_tags: false,
+                    mep: Some(discipline),
+                };
                 (name, 50, kind, t!("tx-new-view"))
             }
             "section" => {

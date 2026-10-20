@@ -689,6 +689,27 @@ pub fn open_structural_plan(state: &mut AppState) {
     }
 }
 
+/// Open the plumbing or electrical plan of the active level (or the lowest), creating it the first time.
+pub fn open_mep_plan(state: &mut AppState, discipline: cc_core::MepDiscipline) {
+    let Some(level) = state.active_level().or_else(|| state.project().levels.first().map(|l| l.id)) else { return };
+    let existing = state
+        .project()
+        .views
+        .values()
+        .find(|v| matches!(v.kind, ViewKind::FloorPlan { level: l, mep: Some(d), .. } if l == level && d == discipline))
+        .map(|v| v.id);
+    match existing {
+        Some(id) => state.open_view(id),
+        None => {
+            let kind = match discipline {
+                cc_core::MepDiscipline::Plumbing => "plumbing_plan",
+                cc_core::MepDiscipline::Electrical => "electrical_plan",
+            };
+            new_view(state, kind, Some(level), None);
+        }
+    }
+}
+
 /// Number the beams, columns and footings of the active level (or the whole project).
 pub fn number_structure(state: &mut AppState) {
     let level = state.active_level().map(|l| Ref::Id(l.0));
