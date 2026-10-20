@@ -73,6 +73,9 @@ pub struct AppState {
     pub open_requests: Vec<ViewId>,
     pub dialogs: Dialogs,
     pub ribbon_tab: RibbonTab,
+    /// The ribbon shows only its tabs; clicking one shows its panel over the views (`ribbon_peek`).
+    pub ribbon_collapsed: bool,
+    pub ribbon_peek: bool,
     /// Browser inline rename in progress.
     pub rename: Option<(ViewId, String)>,
     /// Selected viewport on a sheet: (sheet, viewport index).
@@ -137,6 +140,8 @@ impl AppState {
             open_requests: Vec::new(),
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
+            ribbon_collapsed: false,
+            ribbon_peek: false,
             rename: None,
             sheet_selection: None,
             message: String::new(),

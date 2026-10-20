@@ -23,6 +23,8 @@ pub struct Args {
 const LANGUAGE_KEY: &str = "language";
 /// eframe storage key of the recent projects (one path per line).
 const RECENT_KEY: &str = "recent_files";
+/// eframe storage key of the collapsed ribbon preference ("1" when collapsed).
+const RIBBON_KEY: &str = "ribbon_collapsed";
 
 pub struct ConstructApp {
     state: AppState,
@@ -43,6 +45,7 @@ impl ConstructApp {
         if let Some(recent) = cc.storage.and_then(|s| s.get_string(RECENT_KEY)) {
             state.recent = recent.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
         }
+        state.ribbon_collapsed = cc.storage.and_then(|s| s.get_string(RIBBON_KEY)).is_some_and(|v| v == "1");
         match path {
             Some(path) => actions::open_path(&mut state, path),
             None => {
@@ -148,6 +151,9 @@ impl ConstructApp {
         });
         if open {
             actions::guarded(state, PendingAction::Open);
+        }
+        if ctx.input_mut(|i| cmd(i, Key::F1)) {
+            crate::commands::run(state, ctx, crate::commands::UiCommand::ToggleRibbon);
         }
         if new {
             actions::guarded(state, PendingAction::New);
@@ -306,6 +312,7 @@ impl eframe::App for ConstructApp {
         storage.set_string(LANGUAGE_KEY, crate::i18n::language().code().to_string());
         let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         storage.set_string(RECENT_KEY, recent.join("\n"));
+        storage.set_string(RIBBON_KEY, if self.state.ribbon_collapsed { "1" } else { "0" }.to_string());
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {

@@ -140,6 +140,7 @@ fn big_button(
             y += size.y - 1.0;
         }
     }
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, selected, label));
     if enabled { response.on_hover_cursor(egui::CursorIcon::PointingHand) } else { response }
 }
 
@@ -190,6 +191,8 @@ fn stacked(ui: &mut Ui, state: &AppState, family: &[UiCommand]) -> Option<UiComm
                 let tones =
                     Tones { ink: color, ..Tones::of(theme::palette(ui.ctx()), command.badge(), enabled, selected) };
                 icons::paint_toned(painter, icon_rect, command.icon(), tones, command.badge());
+                let label = command.label(state);
+                r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, selected, &label));
                 let r = if enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
                 if command_tooltip(r, state, *command, why).clicked() && enabled {
                     clicked = Some(*command);
@@ -248,6 +251,7 @@ fn tab_title(ui: &mut Ui, label: &str, active: bool, width: f32) -> Response {
     if response.hovered() && !active {
         ui.painter().rect_filled(rect.shrink2(vec2(2.0, 3.0)), theme::RADIUS as f32, PALETTE.hover);
     }
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, label));
     let text_w = galley.size().x;
     ui.painter().galley(rect.center() - galley.size() / 2.0, galley, color);
     if active {
@@ -317,12 +321,16 @@ fn key_cap(ui: &mut Ui, keys: &str) {
 fn command_icon(ui: &mut Ui, state: &mut AppState, command: UiCommand) {
     let why = command.unavailable(state);
     let r = icon_button(ui, (command.icon(), command.badge()), why.is_none());
+    let label = command.label(state);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, why.is_none(), &label));
     if command_tooltip(r, state, command, why).clicked() {
         commands::run(state, &ui.ctx().clone(), command);
     }
 }
 
 pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
+    // Measured first: rows wider than the window grow the Ui's rectangle.
+    let full_width = ui.available_width();
     // Quick access toolbar at the top left, where desktop applications keep it.
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 1.0;
@@ -369,31 +377,160 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         .map(|(_, label)| ui.painter().layout_no_wrap(label.clone(), tab_font(true), PALETTE.text).size().x)
         .fold(0.0, f32::max)
         + 28.0;
+    // Narrow windows squeeze the titles, keeping room for the collapse button.
+    let width = width.min(((full_width - 40.0) / tabs.len() as f32).max(width - 24.0));
+    let collapsed = state.ribbon_collapsed;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         for (tab, label) in tabs {
-            if tab_title(ui, &label, state.ribbon_tab == tab, width).clicked() {
+            let active = state.ribbon_tab == tab && (!collapsed || state.ribbon_peek);
+            let r = tab_title(ui, &label, active, width);
+            // A double click collapses or expands; a click on a collapsed
+            // ribbon shows that tab's panel over the views, or hides it again.
+            if r.double_clicked() {
+                state.ribbon_collapsed = !state.ribbon_collapsed;
+                state.ribbon_peek = false;
+            } else if r.clicked() {
+                if collapsed {
+                    state.ribbon_peek = !(state.ribbon_peek && state.ribbon_tab == tab);
+                }
                 state.ribbon_tab = tab;
             }
         }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let command = UiCommand::ToggleRibbon;
+            let icon = if collapsed { Icon::ChevronDown } else { Icon::ChevronUp };
+            let r = icon_button(ui, (icon, None), true);
+            let label = command.label(state);
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+            if command_tooltip(r, state, command, None).clicked() {
+                commands::run(state, &ui.ctx().clone(), command);
+            }
+        });
     });
     let strip_bottom = ui.min_rect().bottom();
     ui.painter().hline(ui.max_rect().x_range(), strip_bottom + 3.0, Stroke::new(1.0, PALETTE.border));
-    ui.add_space(8.0);
-
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        match state.ribbon_tab {
-            RibbonTab::File => file_tab(ui, state),
-            RibbonTab::Architecture => architecture_tab(ui, state),
-            RibbonTab::Structure => structure_tab(ui, state),
-            RibbonTab::Modify => modify_tab(ui, state),
-            RibbonTab::Annotate => annotate_tab(ui, state),
-            RibbonTab::View => view_tab(ui, state),
-            RibbonTab::Manage => manage_tab(ui, state),
-        }
-    });
+    if !collapsed {
+        ui.add_space(8.0);
+        tab_row(ui, state, full_width);
+    } else if state.ribbon_peek {
+        peek(ui, state, strip_bottom + 4.0);
+    }
     ui.add_space(2.0);
+}
+
+/// The collapsed ribbon's panel, shown over the views until a command
+/// runs, Escape is pressed or the pointer clicks elsewhere.
+fn peek(ui: &mut Ui, state: &mut AppState, top: f32) {
+    let rect = ui.max_rect();
+    let palette = theme::palette(ui.ctx());
+    let frame = egui::Frame::new()
+        .fill(palette.panel)
+        .stroke(Stroke::new(1.0, palette.border))
+        .shadow(ui.style().visuals.popup_shadow)
+        .inner_margin(egui::Margin { left: 10, right: 10, top: 8, bottom: 4 });
+    let area = egui::Area::new(egui::Id::new("ribbon-peek"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::pos2(rect.left() - 10.0, top))
+        .show(ui.ctx(), |ui| {
+            frame.show(ui, |ui| {
+                ui.set_width(rect.width());
+                tab_row(ui, state, rect.width());
+            })
+        });
+    let panel = area.response.rect;
+    let (escape, outside) = ui.input(|i| {
+        let pos = i.pointer.interact_pos();
+        let outside = i.pointer.any_click() && pos.is_some_and(|p| p.y > top && !panel.contains(p));
+        (i.key_pressed(egui::Key::Escape), outside)
+    });
+    if escape || outside {
+        state.ribbon_peek = false;
+    }
+}
+
+/// Width of the arrows that scroll a ribbon wider than the window.
+const SCROLL_ARROW_WIDTH: f32 = 18.0;
+/// How far one arrow click scrolls.
+const SCROLL_STEP: f32 = 240.0;
+
+/// What the ribbon row measured last frame: content width, offset and visible width.
+#[derive(Clone, Copy, Default)]
+struct RowExtent {
+    content: f32,
+    offset: f32,
+    visible: f32,
+    /// Offset an arrow asked for, applied on the next frame.
+    pending: Option<f32>,
+}
+
+/// The active tab's groups. When they are wider than the window they
+/// scroll sideways, with arrows at the ends (and the mouse wheel).
+fn tab_row(ui: &mut Ui, state: &mut AppState, available: f32) {
+    let id = egui::Id::new(("ribbon-row", state.ribbon_tab as u8));
+    let mut extent: RowExtent = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+    let overflow = extent.content > available + 0.5;
+    ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let max_offset = (extent.content - extent.visible).max(0.0);
+        let mut target = extent.pending.take();
+        if overflow && scroll_arrow(ui, false, extent.offset > 0.5).clicked() {
+            target = Some((extent.offset - SCROLL_STEP).max(0.0));
+        }
+        let arrows = if overflow { 2.0 * SCROLL_ARROW_WIDTH } else { 0.0 };
+        let mut area = egui::ScrollArea::horizontal()
+            .id_salt(id)
+            .max_width((available - arrows).max(0.0))
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden);
+        if let Some(offset) = target {
+            area = area.horizontal_scroll_offset(offset);
+        }
+        let out = area.show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                match state.ribbon_tab {
+                    RibbonTab::File => file_tab(ui, state),
+                    RibbonTab::Architecture => architecture_tab(ui, state),
+                    RibbonTab::Structure => structure_tab(ui, state),
+                    RibbonTab::Modify => modify_tab(ui, state),
+                    RibbonTab::Annotate => annotate_tab(ui, state),
+                    RibbonTab::View => view_tab(ui, state),
+                    RibbonTab::Manage => manage_tab(ui, state),
+                }
+            });
+        });
+        if overflow && scroll_arrow(ui, true, extent.offset < max_offset - 0.5).clicked() {
+            extent.pending = Some((extent.offset + SCROLL_STEP).min(max_offset));
+            ui.ctx().request_repaint();
+        }
+        extent.content = out.content_size.x;
+        extent.offset = out.state.offset.x;
+        extent.visible = out.inner_rect.width();
+    });
+    if (extent.content > available + 0.5) != overflow {
+        // The arrows appear or go: lay out again with them.
+        ui.ctx().request_repaint();
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(id, extent));
+}
+
+/// An arrow at one end of an overflowing ribbon row.
+fn scroll_arrow(ui: &mut Ui, right: bool, enabled: bool) -> Response {
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, response) = ui.allocate_exact_size(vec2(SCROLL_ARROW_WIDTH, BUTTON_HEIGHT + 16.0), sense);
+    let palette = theme::palette(ui.ctx());
+    if enabled && response.hovered() {
+        ui.painter().rect_filled(rect, theme::RADIUS as f32, palette.hover);
+    }
+    let color = if enabled { palette.text_muted } else { palette.text_faint.gamma_multiply(0.5) };
+    let (c, d) = (rect.center(), if right { 1.0 } else { -1.0 });
+    let tip = c + vec2(3.0 * d, 0.0);
+    let stroke = Stroke::new(1.6, color);
+    ui.painter().line_segment([tip, tip + vec2(-6.0 * d, -6.0)], stroke);
+    ui.painter().line_segment([tip, tip + vec2(-6.0 * d, 6.0)], stroke);
+    let label = if right { t!("ribbon-scroll-right") } else { t!("ribbon-scroll-left") };
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &label));
+    response.on_hover_text(label)
 }
 
 /// Large buttons for `list`, in order.

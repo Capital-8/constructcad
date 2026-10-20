@@ -69,6 +69,7 @@ pub enum UiCommand {
     Materials,
     MacroRecord,
     MacroRun,
+    ToggleRibbon,
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
@@ -148,6 +149,7 @@ impl UiCommand {
             Materials,
             MacroRecord,
             MacroRun,
+            ToggleRibbon,
         ]);
         all
     }
@@ -209,6 +211,7 @@ impl UiCommand {
             Materials => Icon::Materials,
             MacroRecord => Icon::MacroRecord,
             MacroRun => Icon::MacroRun,
+            ToggleRibbon => Icon::ChevronUp,
         }
     }
 
@@ -284,6 +287,8 @@ impl UiCommand {
             MacroRecord if state.session.is_recording() => t!("action-macro-stop"),
             MacroRecord => t!("action-macro-record"),
             MacroRun => t!("action-macro-run"),
+            ToggleRibbon if state.ribbon_collapsed => t!("action-ribbon-expand"),
+            ToggleRibbon => t!("action-ribbon-collapse"),
         }
     }
 
@@ -364,6 +369,7 @@ impl UiCommand {
             Materials => t!("cmd-desc-materials"),
             MacroRecord => t!("hint-macro-record"),
             MacroRun => t!("hint-macro-run"),
+            ToggleRibbon => t!("cmd-desc-toggle-ribbon"),
         }
     }
 
@@ -414,6 +420,7 @@ impl UiCommand {
             MatchType => "MA",
             Section => "CT",
             ZoomFit => "ZE",
+            ToggleRibbon => "Ctrl+F1",
             _ => return None,
         })
     }
@@ -477,7 +484,7 @@ impl UiCommand {
         use UiCommand::*;
         let project_open = state.project_open && !state.show_home;
         match self {
-            Home | New | Open | ImportIfc | About => return None,
+            Home | New | Open | ImportIfc | About | ToggleRibbon => return None,
             _ if !project_open => return Some(t!("why-no-project")),
             _ => {}
         }
@@ -532,6 +539,7 @@ impl UiCommand {
             MatchType => *tool == Tool::MatchType,
             Section => *tool == Tool::Section,
             MacroRecord => state.session.is_recording(),
+            ToggleRibbon => state.ribbon_collapsed,
             _ => false,
         }
     }
@@ -589,6 +597,8 @@ pub fn invoke(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
 /// their most likely choice: the active level, the first elevation.
 pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
     use UiCommand::*;
+    // A ribbon panel shown over the views closes once a command runs.
+    state.ribbon_peek = false;
     match command {
         Home => state.show_home = true,
         New => actions::guarded(state, PendingAction::New),
@@ -692,6 +702,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Materials => state.dialogs.materials = true,
         MacroRecord => actions::toggle_macro_recording(state),
         MacroRun => actions::run_macro(state),
+        ToggleRibbon => state.ribbon_collapsed = !state.ribbon_collapsed,
     }
 }
 

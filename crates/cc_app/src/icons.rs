@@ -45,6 +45,7 @@ pub enum Icon {
     Text,
     Leader,
     ChevronDown,
+    ChevronUp,
     ChevronRight,
     Plus,
     Home,
@@ -83,7 +84,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 68] = [
+    pub const ALL: [Icon; 69] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -118,6 +119,7 @@ impl Icon {
         Icon::Text,
         Icon::Leader,
         Icon::ChevronDown,
+        Icon::ChevronUp,
         Icon::ChevronRight,
         Icon::Plus,
         Icon::Home,
@@ -191,6 +193,7 @@ impl Icon {
             Icon::Text => include_str!("../../../assets/icons/ui/text.svg"),
             Icon::Leader => include_str!("../../../assets/icons/ui/leader.svg"),
             Icon::ChevronDown => include_str!("../../../assets/icons/ui/chevron-down.svg"),
+            Icon::ChevronUp => include_str!("../../../assets/icons/ui/chevron-up.svg"),
             Icon::ChevronRight => include_str!("../../../assets/icons/ui/chevron-right.svg"),
             Icon::Plus => include_str!("../../../assets/icons/ui/plus.svg"),
             Icon::Home => include_str!("../../../assets/icons/ui/home.svg"),

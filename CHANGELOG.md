@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Macros (*Manage → Macros*): record the changes you make as a script of engine commands (`.ccmacro`, dragged values recorded once, cancelled dialogs left out) and play macros back; `ccad script` runs the same files.
 - Ribbon and quick access buttons are interface commands: each knows its label, shortcut, description, the engine command it runs and when it is available, so buttons enable themselves and their tooltips show the shortcut, what the command does, why it is unavailable (no selection, nothing to undo, no sheet open…) and the engine command scripts use for the same change. Two-letter shortcuts come from the same table and say why when they cannot run.
 - Two-tone interface icons: strokes in the ink tone and soft fills in the theme's tint, with badges for commands that create (new views, components), import, export or remove. Theme colors are tokens with a dark set alongside the light one, ready for a dark theme.
+- The ribbon collapses to its tabs (Ctrl+F1, a double click on a tab or the arrow at the end of the tabs) and the choice is remembered; while collapsed, a click on a tab shows its panel over the views until a command runs. When the window is narrower than a tab's groups, they scroll sideways with arrows at the ends.
 
 ### Changed
 
