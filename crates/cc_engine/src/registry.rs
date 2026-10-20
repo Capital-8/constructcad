@@ -158,9 +158,12 @@ registry![
         edit::ElementSet,
         edit::ElementsSetType,
     ],
-    "Dimensions" => [
+    "Dimensions and text" => [
         annotate::DimensionCreate,
         annotate::DimensionSetValue,
+        annotate::TextCreate,
+        annotate::TextAddLeader,
+        annotate::TextRemoveLeader,
     ],
     "Types, components, materials" => [
         types::TypeSet,

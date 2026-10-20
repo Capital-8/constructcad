@@ -55,7 +55,7 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 - **Estrutura e circulação**: pilares (retangulares ou circulares, topo preso a um nível), vigas, escadas retas (espelhos a partir do espelho máximo do tipo) e guarda-corpos; aba *Estrutura*; exportados como `IfcColumn`, `IfcBeam`, `IfcStair`, `IfcRailing`.
 - **Telhados**: plano, uma água, duas águas e quatro águas (a menor das águas que sobem de cada beiral), com cumeeira e espigões na planta; telhados inclinados saem no IFC como B-rep de faces.
 - **Ambientes**: clique dentro de paredes que delimitam ambientes para criar o ambiente; contorno, área e perímetro acompanham as paredes. Etiquetas na planta, tabela de ambientes e exportação como `IfcSpace`.
-- **Eixos e anotação**: eixos com bolhas em todas as plantas; cotas alinhadas, lineares, angulares, radiais e de diâmetro em qualquer vista 2D (aba *Anotar*); marcas de portas e janelas etiquetadas automaticamente.
+- **Eixos e anotação**: eixos com bolhas em todas as plantas; cotas alinhadas, lineares, angulares, radiais e de diâmetro em qualquer vista 2D (aba *Anotar*); textos de linha simples e multilinha (com quebra automática numa largura, giráveis, editados com duplo clique) com linhas de chamada de um ou dois segmentos terminadas em seta, seta aberta, triângulo, ponto, círculo, quadrado ou traço; marcas de portas e janelas etiquetadas automaticamente.
 - **Snapping**: extremidades, pontos médios, sobre a parede, ângulos de 15°, Shift para ortogonal, comprimento digitado + Enter.
 - **Edição**: seleção por clique ou janela (contida ou cruzada), mover arrastando, copiar com Ctrl+arrastar, excluir. Desfazer e refazer cobrem todas as edições.
 - **Componentes paramétricos**: mobiliário, louças e marcenaria feitos de caixas, cilindros e perfis extrudados cujas medidas são expressões sobre parâmetros nomeados (do tipo ou da instância). Editor de componentes com verificação imediata e pré-visualização em planta e vista frontal, biblioteca inicial (mesa, cadeira, cama, sofá, bacia sanitária, lavatório, armário), ferramenta *Componente* (CM), tabelas e legendas, arquivos `.ccomp` para compartilhar e exportação/importação IFC como `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` ou `IfcBuildingElementProxy`.
@@ -102,6 +102,7 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 | OF | Deslocamento paralelo | AL | Alinhar |
 | PN / UP | Fixar / Liberar | MA | Corresponder propriedades de tipo |
 | Ctrl+X / Ctrl+C | Recortar / Copiar | Ctrl+V | Colar |
+| TT | Texto | | |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 

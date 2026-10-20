@@ -33,6 +33,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Stair => Icon::Stair,
         Category::Railing => Icon::Railing,
         Category::Component => Icon::Component,
+        Category::Text => Icon::Text,
     }
 }
 
@@ -55,6 +56,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Paste => Icon::Paste,
         Tool::Dimension { mode, .. } => dimension_icon(*mode),
         Tool::MatchType => Icon::MatchType,
+        Tool::AddLeader { .. } => Icon::Leader,
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
 }
@@ -492,7 +494,32 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
             }
         }
     });
+    group(ui, t!("group-text"), |ui| {
+        let active = matches!(state.tool, Tool::Text { .. });
+        let label = t!("tool-text");
+        if big_button(ui, Icon::Text, &label, active, true, false).on_hover_text(format!("{label} (TT)")).clicked()
+            && let Some(tool) = Tool::for_category(state.project(), Category::Text)
+        {
+            state.set_tool(tool);
+            state.message = t!("hint-text");
+        }
+        let text = selected_text(state);
+        let adding = matches!(state.tool, Tool::AddLeader { .. });
+        let r = big_button(ui, Icon::Leader, &t!("tool-add-leader"), adding, text.is_some() || adding, false);
+        if r.on_hover_text(t!("hint-add-leader-button")).clicked()
+            && let Some(id) = text
+        {
+            state.set_tool(Tool::AddLeader { id });
+            state.message = t!("hint-add-leader");
+        }
+    });
     group(ui, t!("group-selection"), |ui| select_button(ui, state));
+}
+
+/// The text note selected alone, if any.
+pub fn selected_text(state: &AppState) -> Option<cc_core::ElementId> {
+    let [id] = state.selection.iter().copied().collect::<Vec<_>>()[..] else { return None };
+    matches!(state.project().element(id).map(|e| &e.kind), Some(cc_core::ElementKind::Text(_))).then_some(id)
 }
 
 fn modify_tab(ui: &mut Ui, state: &mut AppState) {
@@ -808,6 +835,8 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Dimension { mode, .. } => {
                 ui.label(theme::muted(crate::i18n::tr(mode.hint_key())));
             }
+            Tool::Text { .. } => crate::text_tool::options(ui, state, false),
+            Tool::AddLeader { .. } => crate::text_tool::options(ui, state, true),
             Tool::Column { .. } => {
                 ui.label(theme::muted(t!("hint-column")));
             }

@@ -414,3 +414,80 @@ fn the_example_macro_builds_a_house() {
     let room = run(&mut s, "elements_list", json!({"category": "room"}))[0]["id"].clone();
     assert!(run(&mut s, "element_get", json!({"id": room}))["derived"]["area"].as_f64().unwrap() > 20.0);
 }
+
+#[test]
+fn text_notes_with_leaders() {
+    let mut s = Session::default();
+    let plan = run(&mut s, "views_list", json!({"category": "floor_plan"}))[0]["id"].clone();
+    // Single-line text, then multiline text with a straight leader and a two-segment one.
+    let single = run(&mut s, "text_create", json!({"view": plan, "position": [1, 1], "text": "Living room"}));
+    assert!(single["params"]["width"].is_null());
+    let multi = run(
+        &mut s,
+        "text_create",
+        json!({
+            "view": plan, "position": [5, 5], "text": "Exposed concrete\nwith sealant", "width": 30.0,
+            "leaders": [
+                {"end": [2, 2]},
+                {"end": [9, 2], "elbow": [8, 4], "symbol": "Circle"}
+            ]
+        }),
+    );
+    let leaders = &multi["params"]["leaders"];
+    assert_eq!(leaders[0]["symbol"], "Arrow", "the type's symbol by default");
+    assert_eq!(leaders[1]["elbow"], json!([8.0, 4.0]));
+    assert_eq!(leaders[1]["symbol"], "Circle");
+    // The view draws the lines of text and the leaders.
+    let view = cc_core::ViewId(plan.as_u64().unwrap());
+    let drawing = s.drawing(view).unwrap();
+    let texts: Vec<&str> = drawing
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            cc_views::Prim::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    for t in ["Living room", "Exposed concrete", "with sealant"] {
+        assert!(texts.contains(&t), "{t} in {texts:?}");
+    }
+    // Edit the text, add and remove leaders, move it.
+    let id = multi["id"].clone();
+    let edited = run(&mut s, "element_set", json!({"id": id, "params": {"text": "Sealed concrete", "width": null}}));
+    assert_eq!(edited["params"]["text"], "Sealed concrete");
+    assert!(edited["params"]["width"].is_null(), "now single-line");
+    let added = run(&mut s, "text_add_leader", json!({"id": id, "end": [0, 9], "symbol": "Tick"}));
+    assert_eq!(added["params"]["leaders"].as_array().unwrap().len(), 3);
+    let removed = run(&mut s, "text_remove_leader", json!({"id": id, "index": 0}));
+    assert_eq!(removed["params"]["leaders"][0]["symbol"], "Circle");
+    assert_eq!(fails(&mut s, "text_remove_leader", json!({"id": id, "index": 9})), ErrorCode::NotFound);
+    let moved = run(&mut s, "elements_move", json!({"ids": [id], "delta": [1, 0]}));
+    assert_eq!(moved["changed"], json!([id]));
+    let after = run(&mut s, "element_get", json!({"id": id}));
+    assert_eq!(after["params"]["position"], json!([6.0, 5.0]));
+    assert_eq!(after["params"]["leaders"][0]["elbow"], json!([9.0, 4.0]), "leaders move with the text");
+    // Texts and leaders survive saving and opening.
+    let path = scratch("text.ccad");
+    run(&mut s, "project_save", json!({"path": path}));
+    let mut reopened = Session::default();
+    run(&mut reopened, "project_open", json!({"path": path}));
+    assert_eq!(run(&mut reopened, "element_get", json!({"id": id}))["params"], after["params"]);
+    // Refusals.
+    assert_eq!(
+        fails(&mut s, "text_create", json!({"view": plan, "position": [0, 0], "text": "  "})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(
+            &mut s,
+            "text_create",
+            json!({"view": plan, "position": [0, 0], "text": "x", "leaders": [{"end": [1, 1], "symbol": "Star"}]})
+        ),
+        ErrorCode::InvalidArguments
+    );
+    let schedule = run(&mut s, "view_create", json!({"kind": "schedule"}));
+    assert_eq!(
+        fails(&mut s, "text_create", json!({"view": schedule["id"], "position": [0, 0], "text": "x"})),
+        ErrorCode::InvalidArguments
+    );
+}

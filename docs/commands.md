@@ -10,7 +10,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
-- **Dimensions**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value)
+- **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport)
 
@@ -581,7 +581,7 @@ No parameters.
 | `ids` | [id, …] | required | Element ids. |
 | `type` | id or name | required | Type id or name. |
 
-## Dimensions
+## Dimensions and text
 
 ### `dimension_create`
 
@@ -606,6 +606,40 @@ No parameters.
 |---|---|---|---|
 | `id` | integer | required | Dimension element id. |
 | `value` | number | required | New value: meters, or degrees for angular dimensions. |
+
+### `text_create`
+
+*edit* — Place a text note in a 2D view (points in the view's drawing coordinates, as for dimensions). Without `width` it is single-line text (only line breaks in `text` break it); with `width` (paper millimeters) it is multiline text wrapped to that width. Leaders point from the text to what it describes, each with one segment or two (with an `elbow`).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Top left corner of the text. |
+| `text` | string | required | The text; a line break starts a new line. |
+| `view` | id or name | required | View id or name. |
+| `leaders` | [object, …] | optional | Leaders from the text. |
+| `rotation` | number | optional | Rotation in degrees counter-clockwise. |
+| `type` | id or name | optional | Text type id or name (default: the default text type). |
+| `width` | number | optional | Wrapping width in paper millimeters (multiline text). |
+
+### `text_add_leader`
+
+*edit* — Add a leader to a text note.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `end` | [x, y] | required | The point the leader points at, where its symbol is drawn. |
+| `id` | integer | required | Text element id. |
+| `elbow` | [x, y] | optional | A bend point that splits the leader in two segments (text → elbow → end). |
+| `symbol` | string | optional | End symbol: `Arrow`, `OpenArrow`, `Triangle`, `Dot`, `Circle`, `Square`, `FilledSquare`, `Tick` or `None` (default: the text type's symbol). |
+
+### `text_remove_leader`
+
+*edit* — Remove a leader from a text note.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `id` | integer | required | Text element id. |
+| `index` | integer | required | Index of the leader (from 0, as in `params.leaders`). |
 
 ## Types, components, materials
 

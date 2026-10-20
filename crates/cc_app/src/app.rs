@@ -288,6 +288,14 @@ impl ConstructApp {
                         state.message = t!("msg-section-hint");
                         Some(None)
                     }
+                    // Text works in any 2D view, so it skips the plan check.
+                    "TT" => {
+                        if let Some(tool) = Tool::for_category(state.project(), Category::Text) {
+                            state.set_tool(tool);
+                            state.message = t!("hint-text");
+                        }
+                        Some(None)
+                    }
                     "ZE" => {
                         zoom_fit(state);
                         Some(None)

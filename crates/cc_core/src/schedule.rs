@@ -94,7 +94,7 @@ impl ScheduleField {
             Category::Room => {
                 return vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter, F::Height, F::Volume, F::Comments];
             }
-            Category::Grid | Category::Dimension => return Vec::new(),
+            Category::Grid | Category::Dimension | Category::Text => return Vec::new(),
         };
         common.iter().chain(specific).chain(&type_info).copied().collect()
     }
@@ -115,7 +115,7 @@ impl ScheduleField {
             Category::Railing => vec![F::Mark, F::Type, F::Level, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
-            Category::Grid | Category::Dimension => Vec::new(),
+            Category::Grid | Category::Dimension | Category::Text => Vec::new(),
         }
     }
 }

@@ -76,6 +76,14 @@ pub enum Tool {
     Paste,
     /// Pick an element, then click others to give them its type.
     MatchType,
+    /// Place text notes (options in `AppState::text_options`).
+    Text {
+        type_id: ElementTypeId,
+    },
+    /// Add a leader to the text note `id`.
+    AddLeader {
+        id: ElementId,
+    },
 }
 
 impl Tool {
@@ -112,6 +120,8 @@ impl Tool {
             Tool::ToggleJoin => "tool-toggle-join",
             Tool::Paste => "action-paste",
             Tool::MatchType => "tool-match-type",
+            Tool::Text { .. } => "tool-text",
+            Tool::AddLeader { .. } => "tool-add-leader",
         }
     }
 
@@ -127,7 +137,8 @@ impl Tool {
             | Tool::Beam { type_id }
             | Tool::Stair { type_id }
             | Tool::Railing { type_id }
-            | Tool::Component { type_id } => Some(*type_id),
+            | Tool::Component { type_id }
+            | Tool::Text { type_id } => Some(*type_id),
             _ => None,
         }
     }
@@ -144,6 +155,7 @@ impl Tool {
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Railing { .. } => Some(Category::Railing),
             Tool::Component { .. } => Some(Category::Component),
+            Tool::Text { .. } => Some(Category::Text),
             _ => None,
         }
     }
@@ -161,6 +173,7 @@ impl Tool {
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
             Tool::Component { .. } => Tool::Component { type_id: id },
+            Tool::Text { .. } => Tool::Text { type_id: id },
             t => t,
         }
     }
@@ -180,6 +193,7 @@ impl Tool {
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
             Category::Component => Tool::Component { type_id },
+            Category::Text => Tool::Text { type_id },
         })
     }
 }
@@ -686,6 +700,15 @@ pub fn handle(
         // Dimensions work in any 2D view.
         (Tool::Dimension { type_id, mode }, _) => {
             dimension_tool(ui, resp, painter, state, view, (*type_id, *mode), xf, drawing)
+        }
+        // Text notes too.
+        (Tool::Text { type_id }, _) => {
+            let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
+            crate::text_tool::text_tool(ui, resp, painter, state, view, *type_id, xf, px_per_mm)
+        }
+        (Tool::AddLeader { id }, _) => {
+            let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
+            crate::text_tool::add_leader_tool(ui, resp, painter, state, view, *id, xf, px_per_mm)
         }
         (_, None) | (_, Some(_)) if !is_plan => {
             if resp.clicked() {

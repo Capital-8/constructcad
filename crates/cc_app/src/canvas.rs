@@ -290,11 +290,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     if let Some(p) = resp.hover_pos() {
         state.cursor = Some(xf.to_world(p));
     }
-    let editing = !zooming && crate::dim_edit::canvas(ui, &resp, &painter, state, view_id, &xf, px_per_mm, &drawing);
+    let editing = !zooming
+        && (crate::text_tool::canvas(&resp, state, view_id, &xf, &drawing)
+            || crate::dim_edit::canvas(ui, &resp, &painter, state, view_id, &xf, px_per_mm, &drawing));
     if !zooming && !editing {
         crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
     }
     crate::dim_edit::show(ui, state, view_id);
+    crate::text_tool::show(ui, state, view_id);
     let nav = state.view2d.get(&view_id).map(View2DState::nav).unwrap_or_default();
     if let Some(cmd) = view_toolbar(ui, state.zoom_default, rect, view_id, Some(view.scale), nav) {
         zoom(state, view_id, cmd, 1000.0 / view.scale.max(1) as f64);

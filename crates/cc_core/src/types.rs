@@ -13,6 +13,7 @@ pub enum Category {
     Room,
     Grid,
     Dimension,
+    Text,
     Column,
     Beam,
     Stair,
@@ -21,7 +22,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 14] = [
+    pub const ALL: [Category; 15] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -36,6 +37,7 @@ impl Category {
         Category::Room,
         Category::Grid,
         Category::Dimension,
+        Category::Text,
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
@@ -85,6 +87,7 @@ impl Category {
             Category::Room => "category-room",
             Category::Grid => "category-grid",
             Category::Dimension => "category-dimension",
+            Category::Text => "category-text",
             Category::Column => "category-column",
             Category::Beam => "category-beam",
             Category::Stair => "category-stair",
@@ -223,6 +226,12 @@ pub enum TypeData {
     Dimension {
         text_size: f64,
     },
+    /// Text notes of `size` paper millimeters; new leaders get `symbol`.
+    Text {
+        size: f64,
+        #[serde(default)]
+        symbol: crate::LeaderSymbol,
+    },
     Column {
         section: ColumnSection,
         material: String,
@@ -269,7 +278,9 @@ impl TypeData {
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => Vec::new(),
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {
+                Vec::new()
+            }
         }
     }
 
@@ -309,7 +320,7 @@ impl TypeData {
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => {}
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {}
         }
     }
 }
@@ -345,6 +356,7 @@ impl ElementType {
             TypeData::Room {} => Category::Room,
             TypeData::Grid { .. } => Category::Grid,
             TypeData::Dimension { .. } => Category::Dimension,
+            TypeData::Text { .. } => Category::Text,
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Stair { .. } => Category::Stair,
@@ -411,7 +423,7 @@ impl ElementType {
             TypeData::Wall { layers, .. } | TypeData::Roof { layers } => {
                 layers.first().map_or("", |l| l.material.as_str())
             }
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => "",
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => "",
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
             | TypeData::Stair { material, .. }

@@ -25,6 +25,7 @@ mod schedule_ui;
 mod sheet;
 mod state;
 mod table;
+mod text_tool;
 mod theme;
 mod thumbnails;
 mod tools;

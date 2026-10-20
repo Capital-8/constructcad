@@ -892,8 +892,10 @@ impl<'a> Exporter<'a> {
         let mut base =
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
-            // Rooms, grids and dimensions have no IFC type object.
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } => return None,
+            // Rooms, grids, dimensions and texts have no IFC type object.
+            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {
+                return None;
+            }
             TypeData::Component { ref def, .. } => {
                 let class = component_class(def);
                 // Classes whose schema type object is abstract go untyped.

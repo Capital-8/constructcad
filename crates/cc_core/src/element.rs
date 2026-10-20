@@ -30,6 +30,7 @@ pub enum ElementKind {
     Room(Room),
     Grid(Grid),
     Dimension(Box<Dimension>),
+    Text(Box<TextNote>),
     Column(Column),
     Beam(Beam),
     Stair(Stair),
@@ -49,6 +50,7 @@ impl Element {
             ElementKind::Room(_) => Category::Room,
             ElementKind::Grid(_) => Category::Grid,
             ElementKind::Dimension(_) => Category::Dimension,
+            ElementKind::Text(_) => Category::Text,
             ElementKind::Column(_) => Category::Column,
             ElementKind::Beam(_) => Category::Beam,
             ElementKind::Stair(_) => Category::Stair,
@@ -108,6 +110,15 @@ impl Element {
                 d.b += delta;
                 if let DimensionKind::Angular { vertex, .. } = &mut d.kind {
                     *vertex += delta;
+                }
+            }
+            ElementKind::Text(t) => {
+                t.position += delta;
+                for l in &mut t.leaders {
+                    l.end += delta;
+                    if let Some(e) = &mut l.elbow {
+                        *e += delta;
+                    }
                 }
             }
             ElementKind::Column(c) => c.position += delta,
@@ -319,6 +330,88 @@ pub struct Grid {
     pub start: DVec2,
     pub end: DVec2,
     pub name: String,
+}
+
+/// A text note in one view, in that view's drawing coordinates (like
+/// dimensions), optionally with leaders pointing at what it describes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextNote {
+    pub view: ViewId,
+    /// Insertion point: the top left corner of the text, before rotation.
+    pub position: DVec2,
+    /// The text; line breaks start new lines.
+    pub text: String,
+    /// Wrapping width in paper millimeters for multiline text; `None` for
+    /// single-line text (only explicit line breaks break it).
+    #[serde(default)]
+    pub width: Option<f64>,
+    /// Rotation in degrees counter-clockwise.
+    #[serde(default)]
+    pub rotation_deg: f64,
+    #[serde(default)]
+    pub leaders: Vec<Leader>,
+}
+
+/// A leader line from a text to what it points at: one segment, or two
+/// when it has an elbow (text → elbow → end).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Leader {
+    /// The point it points at, where the symbol is drawn.
+    pub end: DVec2,
+    /// Bend point splitting the leader in two segments.
+    #[serde(default)]
+    pub elbow: Option<DVec2>,
+    #[serde(default)]
+    pub symbol: LeaderSymbol,
+}
+
+/// The mark at the end of a leader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum LeaderSymbol {
+    /// Filled arrowhead.
+    #[default]
+    Arrow,
+    /// Open arrowhead (two strokes).
+    OpenArrow,
+    /// Outlined arrowhead.
+    Triangle,
+    /// Small filled circle.
+    Dot,
+    Circle,
+    Square,
+    FilledSquare,
+    /// Slanted stroke (architectural tick).
+    Tick,
+    None,
+}
+
+impl LeaderSymbol {
+    pub const ALL: [LeaderSymbol; 9] = [
+        LeaderSymbol::Arrow,
+        LeaderSymbol::OpenArrow,
+        LeaderSymbol::Triangle,
+        LeaderSymbol::Dot,
+        LeaderSymbol::Circle,
+        LeaderSymbol::Square,
+        LeaderSymbol::FilledSquare,
+        LeaderSymbol::Tick,
+        LeaderSymbol::None,
+    ];
+
+    /// Translation key of the symbol's name.
+    pub fn key(self) -> &'static str {
+        match self {
+            LeaderSymbol::Arrow => "leader-arrow",
+            LeaderSymbol::OpenArrow => "leader-open-arrow",
+            LeaderSymbol::Triangle => "leader-triangle",
+            LeaderSymbol::Dot => "leader-dot",
+            LeaderSymbol::Circle => "leader-circle",
+            LeaderSymbol::Square => "leader-square",
+            LeaderSymbol::FilledSquare => "leader-filled-square",
+            LeaderSymbol::Tick => "leader-tick",
+            LeaderSymbol::None => "leader-none",
+        }
+    }
 }
 
 /// A dimension in one view, in that view's drawing coordinates. What `a`,

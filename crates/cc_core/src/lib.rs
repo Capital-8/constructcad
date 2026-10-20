@@ -27,8 +27,8 @@ pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, 
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
-    Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted,
-    LocationLine, Railing, Roof, RoofShape, Room, Stair, Wall, WallTop,
+    Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted, Leader,
+    LeaderSymbol, LocationLine, Railing, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
 pub use ids::{ElementId, ElementTypeId, LevelId, Uid, ViewId};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};

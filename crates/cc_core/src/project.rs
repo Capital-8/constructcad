@@ -172,6 +172,8 @@ impl Project {
             (&n("tpl-type-room"), TypeData::Room {}),
             (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
             (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
+            (&n("tpl-type-text"), TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
+            (&n("tpl-type-text-large"), TypeData::Text { size: 3.5, symbol: crate::LeaderSymbol::Arrow }),
             (
                 &n("tpl-type-roof-tile"),
                 TypeData::Roof { layers: vec![finish(&n("tpl-mat-roof-tile"), 0.05), layer(&n("tpl-mat-wood"), 0.10)] },
@@ -289,6 +291,7 @@ impl Project {
             (Category::Room, "tpl-type-room", TypeData::Room {}),
             (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
             (Category::Dimension, "tpl-type-dimension", TypeData::Dimension { text_size: 2.5 }),
+            (Category::Text, "tpl-type-text", TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
         ];
         for (category, key, data) in defaults {
             if self.default_type(category).is_none() {
@@ -536,6 +539,8 @@ fn template_default(key: &str) -> &'static str {
         "tpl-type-railing" => "Guarda-corpo 1,10 m",
         "tpl-type-grid" => "Eixo 8 mm",
         "tpl-type-dimension" => "Cota linear 2,5 mm",
+        "tpl-type-text" => "Texto 2,5 mm",
+        "tpl-type-text-large" => "Texto 3,5 mm",
         "tpl-schedule-rooms" => "Tabela de ambientes",
         "tpl-room-name" => "Ambiente",
         "tpl-mat-fabric" => "Tecido",

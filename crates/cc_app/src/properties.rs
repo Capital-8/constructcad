@@ -356,6 +356,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 readonly_row(ui, &t!("prop-length"), format::length(g.start.distance(g.end)));
             });
         }
+        ElementKind::Text(note) => text_props(ui, state, id, note),
         ElementKind::Dimension(d) => {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 dimension_value_row(ui, state, id, d);
@@ -618,6 +619,80 @@ fn component_props(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core:
     }
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
         readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
+    });
+}
+
+/// A text note: its text, single-line or multiline (with a width), rotation and leaders.
+fn text_props(ui: &mut Ui, state: &mut AppState, id: ElementId, note: &cc_core::TextNote) {
+    let note = note.clone();
+    let set = |state: &mut AppState, field: &str, f: &dyn Fn(&mut cc_core::TextNote)| {
+        crate::engine_edit::element(state, id, Some(key((id, field))), |e| {
+            if let ElementKind::Text(n) = &mut e.kind {
+                f(n);
+            }
+        });
+    };
+    section(ui, "text", t!("section-text"), |ui| {
+        let mut text = note.text.clone();
+        let r = row(ui, &t!("prop-text"), |ui| ui.add(egui::TextEdit::multiline(&mut text).desired_rows(2)));
+        if r.changed() && !text.trim().is_empty() {
+            set(state, "text", &|n| n.text = text.clone());
+        }
+        finish(state, &r);
+        let mut multiline = note.width.is_some();
+        if row(ui, &t!("text-multiline"), |ui| ui.checkbox(&mut multiline, "")).changed() {
+            let width = multiline.then_some(state.text_options.width);
+            set(state, "multiline", &|n| n.width = width);
+        }
+        if let Some(width) = note.width {
+            let mut w = width;
+            let r = row(ui, &t!("prop-text-width"), |ui| {
+                ui.add(DragValue::new(&mut w).speed(1.0).range(5.0..=1000.0).suffix(" mm"))
+            });
+            if r.changed() {
+                set(state, "width", &|n| n.width = Some(w));
+            }
+            finish(state, &r);
+        }
+        let mut rot = note.rotation_deg;
+        let r = row(ui, &t!("prop-rotation"), |ui| ui.add(DragValue::new(&mut rot).speed(1.0).suffix("°")));
+        if r.changed() {
+            set(state, "rotation", &|n| n.rotation_deg = rot.rem_euclid(360.0));
+        }
+        finish(state, &r);
+        let view = state.project().view(note.view).map(|v| v.name.clone()).unwrap_or_default();
+        readonly_row(ui, &t!("prop-view"), view);
+    });
+    section(ui, "leaders", t!("section-leaders"), |ui| {
+        let mut remove = None;
+        for (i, leader) in note.leaders.iter().enumerate() {
+            let mut symbol = leader.symbol;
+            let label = format!("{} {}", t!("label-leader"), i + 1);
+            let (changed, removed) = row(ui, &label, |ui| {
+                ui.horizontal(|ui| {
+                    let changed = crate::text_tool::symbol_combo(ui, ("leader-symbol", id.0, i), &mut symbol);
+                    (changed, ui.button(t!("action-remove")).clicked())
+                })
+                .inner
+            });
+            if changed {
+                set(state, "leader-symbol", &|n| {
+                    if let Some(l) = n.leaders.get_mut(i) {
+                        l.symbol = symbol;
+                    }
+                });
+            }
+            if removed {
+                remove = Some(i);
+            }
+        }
+        if let Some(index) = remove {
+            crate::actions::run_command(state, cc_engine::commands::annotate::TextRemoveLeader { id: id.0, index });
+        }
+        if row(ui, "", |ui| ui.button(t!("tool-add-leader")).clicked()) {
+            state.set_tool(crate::tools::Tool::AddLeader { id });
+            state.message = t!("hint-add-leader");
+        }
     });
 }
 

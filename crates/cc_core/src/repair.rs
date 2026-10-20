@@ -46,6 +46,11 @@ fn element_is_valid(e: &Element) -> bool {
             };
             kind && d.offset.is_finite() && finite_points(&[d.a, d.b])
         }
+        ElementKind::Text(t) => {
+            let leaders = t.leaders.iter().all(|l| l.end.is_finite() && l.elbow.is_none_or(|e| e.is_finite()));
+            let width = t.width.is_none_or(|w| w.is_finite() && w > 0.0);
+            leaders && width && t.rotation_deg.is_finite() && t.position.is_finite()
+        }
         ElementKind::Column(c) => {
             finite(&[c.rotation_deg, c.base_offset, c.height]) && c.position.is_finite() && top_ok(c.top)
         }
@@ -100,6 +105,7 @@ impl Project {
                 TypeData::Ceiling { thickness, .. } => repairs += usize::from(fix_positive(thickness, 0.02)),
                 TypeData::Grid { bubble } => repairs += usize::from(fix_positive(bubble, 8.0)),
                 TypeData::Dimension { text_size } => repairs += usize::from(fix_positive(text_size, 2.5)),
+                TypeData::Text { size, .. } => repairs += usize::from(fix_positive(size, 2.5)),
                 TypeData::Room {} => {}
                 TypeData::Column { section, .. } => match section {
                     crate::ColumnSection::Rectangular { width, depth } => {
@@ -145,6 +151,7 @@ impl Project {
                             self.element(h.host).is_some_and(|w| w.as_wall().is_some())
                         }
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
+                        ElementKind::Text(t) => self.view(t.view).is_some(),
                         _ => true,
                     };
                     !(type_ok && level_ok && host_ok && element_is_valid(e))

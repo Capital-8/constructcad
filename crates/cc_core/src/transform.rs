@@ -123,6 +123,19 @@ impl Element {
                     d.offset = -d.offset;
                 }
             }
+            ElementKind::Text(note) => {
+                p(&mut note.position);
+                for l in &mut note.leaders {
+                    p(&mut l.end);
+                    if let Some(e) = &mut l.elbow {
+                        p(e);
+                    }
+                }
+                // Text stays readable: it turns with a rotation but is not mirrored.
+                if !t.mirror {
+                    note.rotation_deg = t.apply_angle_deg(note.rotation_deg);
+                }
+            }
             ElementKind::Column(c) => {
                 p(&mut c.position);
                 c.rotation_deg = t.apply_angle_deg(c.rotation_deg);
@@ -236,6 +249,7 @@ impl crate::Project {
                 .or_else(|| self.element(h.host))
                 .is_some_and(|w| w.as_wall().is_some()),
             ElementKind::Dimension(d) => self.view(d.view).is_some(),
+            ElementKind::Text(t) => self.view(t.view).is_some(),
             _ => true,
         };
         type_ok && other_ok && self.level(e.level).is_some()

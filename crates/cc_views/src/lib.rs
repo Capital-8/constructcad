@@ -11,6 +11,7 @@ pub mod export;
 pub mod format;
 pub mod hatch;
 mod legend;
+pub mod notes;
 mod plan;
 mod projected;
 mod schedule;
@@ -43,6 +44,7 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
     };
     annotate::dimensions(&mut d, project, view.id, view.scale);
+    notes::notes(&mut d, project, view.id, view.scale);
     Some(d)
 }
 

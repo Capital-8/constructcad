@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Text notes (*Annotate → Text*, TT) in any 2D view: single-line text, or multiline text word-wrapped to a width in paper millimeters; rotation; text types with their size and default leader symbol. Leaders are drawn from the text with one segment or two (an elbow), ending in an arrow, open arrow, triangle, dot, circle, square, filled square, tick or nothing; *Add Leader* adds more to a selected text. Double-click a text to edit it; the properties edit its text, width, rotation and each leader's symbol. Engine commands `text_create`, `text_add_leader` and `text_remove_leader`; texts move, copy and rotate with the other elements and stay readable when mirrored.
+
 - Engine (`cc_engine`): the operations of ConstructCAD as named commands that run without the GUI, each with typed JSON parameters and a generated JSON Schema — project files, undo/redo, project information, units and language; IFC import/export, sheet PDF/SVG, schedule CSV, component files; queries of categories, levels, types, elements (with derived length, height, thickness, volume, room area), views, materials and schedule tables; creation of walls, doors, windows, floors, ceilings, roofs, rooms, grids, columns, beams, stairs, railings and components with the drawing tools' defaults; move, copy/array, rotate, mirror, pin, flip, delete, wall joins, trim/extend, split, offset, align and end points; element, type, view and material parameters; types (duplicate, delete), components, materials, levels, views and sheets. Levels, types, views and materials are named by id or name; edits that would leave the model invalid are refused without an undo step.
 - `ccad` command line (`cc_cli`, no GUI dependencies): list commands and schemas, run one command (JSON or `key=value` arguments) or a script, open or import a project and save it afterwards. Included in release packages.
 - MCP server (`ccad mcp`): an in-house Model Context Protocol server over stdio exposing every engine command as a tool, so AI agents can build and edit models.
@@ -19,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `.ccad` format version 5 (text notes); older files still open.
 - The desktop app runs on the engine: its drawing tools, modify tools, properties, dialogs, clipboard, dimensions, document actions and undo/redo change the model through the same commands as the command line and MCP. Edits that would leave the model invalid are refused with a message; dragged values remain one undo step.
 - Deleting a level also unconnects columns and stairs whose top was attached to it.
 

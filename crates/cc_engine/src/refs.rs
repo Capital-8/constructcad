@@ -15,6 +15,13 @@ pub enum Ref {
     Name(String),
 }
 
+impl Default for Ref {
+    /// Id 0, which names nothing: a placeholder for required fields.
+    fn default() -> Self {
+        Ref::Id(0)
+    }
+}
+
 /// A point in plan, `[x, y]` in meters.
 pub type Point = [f64; 2];
 

@@ -59,7 +59,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Structure and circulation**: columns (rectangular or round, top attached to a level), beams, straight stairs (risers from the type's maximum riser) and railings; *Structure* tab; exported as `IfcColumn`, `IfcBeam`, `IfcStair`, `IfcRailing`.
 - **Roofs**: flat, shed, gable and hip (lowest of the planes rising from each eave), with ridges and hips in plan; pitched roofs export as faceted B-reps.
 - **Rooms**: click inside room-bounding walls to place a room; its boundary, area and perimeter follow the walls. Room tags in plans, room schedule and `IfcSpace` export.
-- **Grids and annotation**: grid lines with bubbles in every plan; aligned, linear, angular, radial and diameter dimensions in any 2D view (*Annotate* tab); door and window marks tagged automatically.
+- **Grids and annotation**: grid lines with bubbles in every plan; aligned, linear, angular, radial and diameter dimensions in any 2D view (*Annotate* tab); single-line and multiline text notes (word-wrapped to a width, rotatable, edited with a double click) with leaders of one or two segments ending in an arrow, open arrow, triangle, dot, circle, square or tick; door and window marks tagged automatically.
 - **Parametric components**: furniture, fixtures and casework made of boxes, cylinders and extruded profiles whose sizes are expressions over named parameters (type or instance). A component editor with live checking and plan/front previews, a starter library (table, chair, bed, sofa, toilet, washbasin, wardrobe), the *Component* tool (CM), schedules and legends, `.ccomp` files to share them, and IFC export/import as `IfcFurniture`, `IfcSanitaryTerminal`, `IfcLightFixture` or `IfcBuildingElementProxy`.
 - **Materials**: browser with identity, graphics (shading, transparency, surface and cut patterns), render appearance and physical properties; cut patterns show in plans and sections, transparency in 3D.
 - **Project units**: millimeters, centimeters or meters (and area, volume, angle, slope and currency formats) with decimals, symbols and digit grouping.
@@ -106,6 +106,7 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | OF | Offset | AL | Align |
 | PN / UP | Pin / Unpin | MA | Match type properties |
 | Ctrl+X / Ctrl+C | Cut / Copy | Ctrl+V | Paste |
+| TT | Text | | |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 
