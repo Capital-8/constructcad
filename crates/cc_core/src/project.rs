@@ -222,6 +222,11 @@ impl Project {
                     shape: SectionShape::I { web: 0.0071, flange: 0.0107 },
                 },
             ),
+            (&n("tpl-type-rebar-5"), TypeData::Rebar { diameter: 0.005, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-8"), TypeData::Rebar { diameter: 0.008, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-10"), TypeData::Rebar { diameter: 0.010, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-12"), TypeData::Rebar { diameter: 0.0125, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-16"), TypeData::Rebar { diameter: 0.016, material: n("tpl-mat-steel") }),
             (
                 &n("tpl-type-footing-pad"),
                 TypeData::Foundation {
@@ -285,12 +290,16 @@ impl Project {
             p.views.insert(id, View { id, name: name.into(), scale, kind });
             id
         };
-        let plan = add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::FloorPlan { level: ground, cut_height: 1.2 });
-        add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::FloorPlan { level: first, cut_height: 1.2 });
+        let plan = add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::floor_plan(ground));
+        add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::floor_plan(first));
         add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::CeilingPlan { level: ground, cut_height: 1.2 });
         add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::CeilingPlan { level: first, cut_height: 1.2 });
-        let threed =
-            add_view(&mut p, "{3D}", 100, ViewKind::ThreeD { camera: CameraState::default(), analytical: false });
+        let threed = add_view(
+            &mut p,
+            "{3D}",
+            100,
+            ViewKind::ThreeD { camera: CameraState::default(), analytical: false, rebar: false },
+        );
         for (name, direction) in [
             (&n("tpl-elev-north"), Direction::North),
             (&n("tpl-elev-south"), Direction::South),
@@ -405,6 +414,28 @@ impl Project {
             ] {
                 let id = ElementTypeId(self.alloc_id());
                 let data = TypeData::Foundation { kind, width, length: 1.0, thickness, material: concrete.clone() };
+                let name = template_default(key).to_string();
+                self.types
+                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+            }
+        }
+        // Projects created before reinforcement get the usual bar diameters, in steel.
+        if self.default_type(Category::Rebar).is_none() {
+            let steel = template_default("tpl-mat-steel").to_string();
+            if !self.materials.iter().any(|m| m.name == steel) {
+                let mut m = Material::new(steel.as_str(), [140, 146, 152]);
+                crate::material::template_properties(&mut m, crate::material::MaterialClass::Metal);
+                self.materials.push(m);
+            }
+            for (key, diameter) in [
+                ("tpl-type-rebar-5", 0.005),
+                ("tpl-type-rebar-8", 0.008),
+                ("tpl-type-rebar-10", 0.010),
+                ("tpl-type-rebar-12", 0.0125),
+                ("tpl-type-rebar-16", 0.016),
+            ] {
+                let id = ElementTypeId(self.alloc_id());
+                let data = TypeData::Rebar { diameter, material: steel.clone() };
                 let name = template_default(key).to_string();
                 self.types
                     .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
@@ -636,6 +667,14 @@ impl Project {
         self.elements.values().filter(move |e| e.as_hosted().is_some_and(|h| h.host == wall))
     }
 
+    /// The reinforcement sets of beam or column `host`.
+    pub fn rebar_of(&self, host: ElementId) -> impl Iterator<Item = (&Element, &crate::Rebar)> {
+        self.elements.values().filter_map(move |e| match &e.kind {
+            ElementKind::Rebar(r) if r.host == host => Some((e, r)),
+            _ => None,
+        })
+    }
+
     pub fn elements_of(&self, category: Category) -> impl Iterator<Item = &Element> {
         self.elements.values().filter(move |e| e.category() == category)
     }
@@ -726,6 +765,11 @@ fn template_default(key: &str) -> &'static str {
         "tpl-type-footing-pad" => "Sapata 100 x 100 x 40 cm",
         "tpl-type-footing-strip" => "Viga baldrame 20 x 40 cm",
         "tpl-type-footing-slab" => "Radier 30 cm",
+        "tpl-type-rebar-5" => "Barra Ø 5,0 mm",
+        "tpl-type-rebar-8" => "Barra Ø 8,0 mm",
+        "tpl-type-rebar-10" => "Barra Ø 10,0 mm",
+        "tpl-type-rebar-12" => "Barra Ø 12,5 mm",
+        "tpl-type-rebar-16" => "Barra Ø 16,0 mm",
         "tpl-param-width" => "Largura",
         "tpl-param-depth" => "Profundidade",
         "tpl-param-height" => "Altura",

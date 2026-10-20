@@ -124,20 +124,24 @@ pub fn analytical_model(project: &Project, geom: &ModelGeometry) -> AnalyticalMo
     for i in first_beam..lines.len() {
         for end in [false, true] {
             let p = if end { lines[i].b } else { lines[i].a };
+            // Beams beside it in plan, at a height where the depths meet (a beam
+            // far above or below stays apart); the nearest in space wins, so
+            // members in one vertical plane (a truss) find their own chord.
             let host = (first_beam..lines.len())
                 .filter(|&j| j != i)
-                .map(|j| (j, project_plan(lines[j].a, lines[j].b, p.truncate())))
-                .filter(|(j, (_, d))| *d <= lines[*j].half + REACH)
-                .min_by(|x, y| x.1.1.total_cmp(&y.1.1));
-            if let Some((j, (t, _))) = host {
-                let q = lines[j].a + (lines[j].b - lines[j].a) * t;
-                // Only where the two depths meet: a beam far above or below stays apart.
-                if (q.z - p.z).abs() <= lines[i].half.max(lines[j].half) * 4.0 + REACH {
-                    if end {
-                        lines[i].b = q;
-                    } else {
-                        lines[i].a = q;
-                    }
+                .filter_map(|j| {
+                    let (t, d) = project_plan(lines[j].a, lines[j].b, p.truncate());
+                    let q = lines[j].a + (lines[j].b - lines[j].a) * t;
+                    let near = d <= lines[j].half + REACH
+                        && (q.z - p.z).abs() <= lines[i].half.max(lines[j].half) * 4.0 + REACH;
+                    near.then_some((q, q.distance(p)))
+                })
+                .min_by(|x, y| x.1.total_cmp(&y.1));
+            if let Some((q, _)) = host {
+                if end {
+                    lines[i].b = q;
+                } else {
+                    lines[i].a = q;
                 }
             }
         }

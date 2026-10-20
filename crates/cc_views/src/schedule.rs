@@ -49,6 +49,8 @@ enum Value {
     Area(f64),
     Volume(f64),
     Money(f64),
+    /// Kilograms.
+    Weight(f64),
     Missing,
 }
 
@@ -62,6 +64,7 @@ impl Value {
             Value::Area(v) => Cell::Text(format::area(*v)),
             Value::Money(v) => Cell::Text(format::money(*v)),
             Value::Volume(v) => Cell::Text(format::volume(*v)),
+            Value::Weight(v) => Cell::Text(format!("{} kg", format::number(*v, 2))),
             Value::Missing => Cell::Text(String::new()),
         }
     }
@@ -69,7 +72,7 @@ impl Value {
     fn number(&self) -> Option<f64> {
         match self {
             Value::Count(n) => Some(*n as f64),
-            Value::Length(v) | Value::Area(v) | Value::Volume(v) | Value::Money(v) => Some(*v),
+            Value::Length(v) | Value::Area(v) | Value::Volume(v) | Value::Money(v) | Value::Weight(v) => Some(*v),
             _ => None,
         }
     }
@@ -102,6 +105,8 @@ fn summable(field: ScheduleField) -> bool {
         field,
         ScheduleField::Length
             | ScheduleField::CutLength
+            | ScheduleField::BarCount
+            | ScheduleField::Weight
             | ScheduleField::Area
             | ScheduleField::Volume
             | ScheduleField::Cost
@@ -180,6 +185,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Length => match &e.kind {
             ElementKind::Wall(w) => Value::Length(w.length()),
             ElementKind::Beam(b) => Value::Length(b.true_length()),
+            ElementKind::Rebar(_) => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.total_length())),
             ElementKind::Foundation(f) => match &f.shape {
                 cc_core::FoundationShape::Strip { start, end } => Value::Length(start.distance(*end)),
                 _ => Value::Missing,
@@ -241,7 +247,12 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Sill => e.as_hosted().map_or(Value::Missing, |h| Value::Length(h.sill_height)),
         F::Host => e
             .as_hosted()
-            .and_then(|h| project.element(h.host))
+            .map(|h| h.host)
+            .or(match &e.kind {
+                ElementKind::Rebar(r) => Some(r.host),
+                _ => None,
+            })
+            .and_then(|h| project.element(h))
             .map_or(Value::Missing, |w| text(&if w.mark.is_empty() { w.id.to_string() } else { w.mark.clone() })),
         F::Function => ty.and_then(|t| t.wall_function()).map_or(Value::Missing, |f| Value::Key(f.key())),
         F::Structural => match &e.kind {
@@ -265,6 +276,15 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         },
         F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
+        F::Diameter => match ty.map(|t| &t.data) {
+            Some(TypeData::Rebar { diameter, .. }) => {
+                Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
+            }
+            _ => Value::Missing,
+        },
+        F::BarCount => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Count(r.count())),
+        F::BarLength => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.bar_length())),
+        F::Weight => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Weight(r.weight())),
         F::Number => match &e.kind {
             ElementKind::Room(r) => text(&r.number),
             _ => Value::Missing,
@@ -329,6 +349,8 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category, def
                 let sum: f64 = rows.iter().filter_map(|(_, values)| values.get(i)?.number()).sum();
                 match f {
                     ScheduleField::Length | ScheduleField::CutLength => format::meters(sum),
+                    ScheduleField::BarCount => format::number(sum, 0),
+                    ScheduleField::Weight => format!("{} kg", format::number(sum, 2)),
                     ScheduleField::Volume => format::volume(sum),
                     ScheduleField::Area => format::area(sum),
                     ScheduleField::Cost => format::money(sum),

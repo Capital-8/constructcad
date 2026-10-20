@@ -43,6 +43,14 @@ pub enum ScheduleField {
     CutLength,
     /// Main material of the type.
     Material,
+    /// Bar diameter of reinforcement.
+    Diameter,
+    /// Number of bars in a reinforcement set.
+    BarCount,
+    /// Length of one bar.
+    BarLength,
+    /// Steel weight, kilograms.
+    Weight,
 }
 
 impl ScheduleField {
@@ -81,6 +89,10 @@ impl ScheduleField {
             ScheduleField::Section => "col-section",
             ScheduleField::CutLength => "col-cut-length",
             ScheduleField::Material => "col-material",
+            ScheduleField::Diameter => "col-diameter",
+            ScheduleField::BarCount => "col-bar-count",
+            ScheduleField::BarLength => "col-bar-length",
+            ScheduleField::Weight => "col-weight",
         }
     }
 
@@ -98,6 +110,7 @@ impl ScheduleField {
             Category::Column => &[F::Section, F::Height, F::Volume, F::Material, F::Structural],
             Category::Beam => &[F::Section, F::Length, F::CutLength, F::Volume, F::Material],
             Category::Foundation => &[F::Section, F::Length, F::Area, F::Thickness, F::Volume, F::Material],
+            Category::Rebar => &[F::Host, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material],
             Category::Stair => &[F::Width, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => &[F::Length, F::Height],
             Category::Component => &[F::ComponentName, F::ComponentKind, F::Width, F::Depth, F::Height, F::Volume],
@@ -124,6 +137,7 @@ impl ScheduleField {
                 vec![F::Mark, F::Type, F::Level, F::Section, F::Length, F::CutLength, F::Volume, F::Material]
             }
             Category::Foundation => vec![F::Mark, F::Type, F::Level, F::Section, F::Thickness, F::Volume, F::Material],
+            Category::Rebar => vec![F::Host, F::Type, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight],
             Category::Stair => vec![F::Mark, F::Type, F::Level, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => vec![F::Mark, F::Type, F::Level, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],

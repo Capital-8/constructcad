@@ -11,6 +11,7 @@ pub mod csg;
 mod cut;
 mod mesh;
 pub mod polygon;
+pub mod rebar;
 pub mod roofs;
 mod rooms;
 pub mod section;

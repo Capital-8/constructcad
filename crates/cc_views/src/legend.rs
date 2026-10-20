@@ -112,6 +112,10 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                     d.polyline(&pts, true, LineStyle::Cut, None);
                 }
             }
+            TypeData::Rebar { .. } => {
+                // A bar, drawn as a heavy line.
+                d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Cut, None);
+            }
             TypeData::Foundation { kind, width, thickness, .. } => {
                 // Section: a pad or strip its width wide, a slab as a band.
                 let w = if *kind == cc_core::FoundationKind::Slab { sample } else { *width };

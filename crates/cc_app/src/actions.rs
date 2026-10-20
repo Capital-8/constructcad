@@ -632,6 +632,94 @@ pub fn export_analytical(state: &mut AppState) {
     }
 }
 
+/// X bracing between the two selected columns.
+pub fn braces_x(state: &mut AppState) {
+    let columns = selected_columns(state);
+    let command =
+        cc_engine::commands::framing::BracesBetweenColumns { columns, pattern: Some("x".into()), type_ref: None };
+    if let Some(out) = run(state, command) {
+        let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
+        state.selection = ids.map(cc_core::ElementId).collect();
+    }
+}
+
+/// Typical reinforcement for the selected beams and columns, or all of the active level.
+pub fn typical_rebar(state: &mut AppState) {
+    let project = state.project();
+    let elements: Vec<u64> = state
+        .selection
+        .iter()
+        .filter(|id| project.element(**id).is_some_and(|e| matches!(e.category(), Category::Beam | Category::Column)))
+        .map(|id| id.0)
+        .collect();
+    let level = if elements.is_empty() { state.active_level().map(|l| Ref::Id(l.0)) } else { None };
+    if let Some(out) = run(state, cc_engine::commands::rebar::RebarTypical { elements, level }) {
+        let count = out["created"].as_array().map_or(0, Vec::len);
+        let skipped = out["skipped"].as_u64().unwrap_or(0);
+        state.message = t!("msg-rebar-placed", "count" => count, "skipped" => skipped);
+    }
+}
+
+/// Open the first 3D view showing reinforcement, creating one the first time.
+pub fn open_rebar_view(state: &mut AppState) {
+    let existing =
+        state.project().views.values().find(|v| matches!(v.kind, ViewKind::ThreeD { rebar: true, .. })).map(|v| v.id);
+    match existing {
+        Some(id) => state.open_view(id),
+        None => {
+            new_view(state, "rebar", None, None);
+        }
+    }
+}
+
+/// Open the structural plan of the active level (or the lowest), creating it the first time.
+pub fn open_structural_plan(state: &mut AppState) {
+    let Some(level) = state.active_level().or_else(|| state.project().levels.first().map(|l| l.id)) else { return };
+    let existing = state
+        .project()
+        .views
+        .values()
+        .find(|v| matches!(v.kind, ViewKind::FloorPlan { level: l, structural: true, .. } if l == level))
+        .map(|v| v.id);
+    match existing {
+        Some(id) => state.open_view(id),
+        None => {
+            new_view(state, "structural_plan", Some(level), None);
+        }
+    }
+}
+
+/// Number the beams, columns and footings of the active level (or the whole project).
+pub fn number_structure(state: &mut AppState) {
+    let level = state.active_level().map(|l| Ref::Id(l.0));
+    let command = cc_engine::commands::structure::StructureNumber { categories: Vec::new(), level };
+    if let Some(out) = run(state, command) {
+        state.message = t!("msg-numbered", "count" => out["numbered"].as_u64().unwrap_or(0));
+    }
+}
+
+/// The active view when it is a floor plan, with whether it shows structure tags.
+pub fn active_floor_plan(state: &AppState) -> Option<(ViewId, bool)> {
+    let id = state.active_view?;
+    match state.project().view(id)?.kind {
+        ViewKind::FloorPlan { structure_tags, structural, .. } => Some((id, structure_tags || structural)),
+        _ => None,
+    }
+}
+
+/// Show or hide the beam and column tags of the active floor plan.
+pub fn toggle_structure_tags(state: &mut AppState) {
+    let Some((id, on)) = active_floor_plan(state) else { return };
+    crate::engine_edit::view(state, id, None, |v| {
+        if let ViewKind::FloorPlan { structure_tags, structural, .. } = &mut v.kind {
+            *structure_tags = !on;
+            if on {
+                *structural = false;
+            }
+        }
+    });
+}
+
 /// Beams through the selected columns (the engine's `beams_between_columns`).
 pub fn beams_between_columns(state: &mut AppState) {
     let command =

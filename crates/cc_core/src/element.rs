@@ -37,6 +37,7 @@ pub enum ElementKind {
     Railing(Railing),
     Component(Component),
     Foundation(Foundation),
+    Rebar(Rebar),
 }
 
 impl Element {
@@ -58,6 +59,7 @@ impl Element {
             ElementKind::Railing(_) => Category::Railing,
             ElementKind::Component(_) => Category::Component,
             ElementKind::Foundation(_) => Category::Foundation,
+            ElementKind::Rebar(_) => Category::Rebar,
         }
     }
 
@@ -132,7 +134,8 @@ impl Element {
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Component(c) => c.position += delta,
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
-            ElementKind::Door(_) | ElementKind::Window(_) => {}
+            // Placed by their hosts.
+            ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}
         }
     }
 }
@@ -658,6 +661,46 @@ impl FoundationShape {
 pub struct Foundation {
     pub shape: FoundationShape,
     pub top_offset: f64,
+}
+
+/// Where a set of longitudinal bars lies in its host's section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum BarFace {
+    /// Along the top of a beam.
+    Top,
+    /// Along the bottom of a beam.
+    #[default]
+    Bottom,
+    /// Around a column's section (corners first).
+    Perimeter,
+}
+
+impl BarFace {
+    pub fn key(self) -> &'static str {
+        match self {
+            BarFace::Top => "bars-top",
+            BarFace::Bottom => "bars-bottom",
+            BarFace::Perimeter => "bars-perimeter",
+        }
+    }
+}
+
+/// How a set of bars is laid out in its host.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum RebarLayout {
+    /// `count` bars running along the host, on `face`.
+    Longitudinal { face: BarFace, count: u32 },
+    /// Closed stirrups (ties) around the section every `spacing` along the host.
+    Stirrups { spacing: f64 },
+}
+
+/// A set of reinforcing bars in a beam or column (`host`), `cover` from its
+/// faces; the type gives the bar diameter. The bars follow their host.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Rebar {
+    pub host: ElementId,
+    pub layout: RebarLayout,
+    pub cover: f64,
 }
 
 /// A straight stair run starting at `start` (bottom of the first riser,

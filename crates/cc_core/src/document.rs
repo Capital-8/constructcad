@@ -185,6 +185,7 @@ impl<'a> EditCtx<'a> {
                 continue;
             }
             pending.extend(self.project.hosted_by(id).map(|e| e.id));
+            pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);
             if self.project.joined_with(id).next().is_some() {

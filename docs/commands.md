@@ -8,7 +8,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_save`](#component_save)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
-- **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
+- **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
@@ -426,6 +426,75 @@ No parameters.
 |---|---|---|---|
 | `floors` | [id, …] | optional | Floor ids (default: every floor, or those of `level`). |
 | `level` | id or name | optional | Level id or name, when no floors are given. |
+
+### `structure_number`
+
+*edit* — Number the marks of beams, columns and pad footings (default: all three) in reading order: horizontal beams top to bottom then left to right, the other beams left to right then top to bottom, columns and footings top to bottom then left to right. Marks are a prefix per category (`V`, `P`, `S` in Portuguese; `B`, `C`, `F` in English) and a number.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `categories` | [string, …] | optional | Categories to number: `beam`, `column` and/or `foundation` (default: all three). |
+| `level` | id or name | optional | Level id or name (default: every level, numbered as one sequence per category). |
+
+### `brace_create`
+
+*edit* — Create a brace: a member between two points in space (`[x, y, z]`, `z` above the level), its axis through both. Its ends must not be one above the other.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `end` | [number, …] | required | End point `[x, y, z]`. |
+| `start` | [number, …] | required | Start point `[x, y, z]`. |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `type` | id or name | optional | Beam type id or name (default: the category's default type). |
+
+### `braces_between_columns`
+
+*edit* — Brace the bay between two columns: `x` (default) crosses two members from the base of each column to the top of the other, `diagonal` places one from the base of the first to the top of the second.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `columns` | [id, …] | required | The two column ids. |
+| `pattern` | string | optional | `x` or `diagonal`. |
+| `type` | id or name | optional | Beam type id or name (default: the category's default type). |
+
+### `truss_create`
+
+*edit* — Lay out a plane truss from `start` to `end`: a bottom and a top chord `height` apart, `panels` panels and the web of `pattern` (`pratt`, the default, `howe` or `warren`). Pratt and Howe trusses get a post at every panel point, Warren trusses only at the ends; posts are columns. The members form a group, so the truss moves as one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `end` | [x, y] | required | End of the truss in plan. |
+| `height` | number | required | Distance between the chord axes, meters. |
+| `start` | [x, y] | required | Start of the truss in plan. |
+| `bottom_offset` | number | optional | Elevation of the bottom chord's axis above the level (default: the level height minus `height`). |
+| `chord_type` | id or name | optional | Beam type of the chords (default: the category's default type). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `panels` | integer | optional | Number of panels (default: about one per 1.5 m). |
+| `pattern` | string | optional | `pratt`, `howe` or `warren`. |
+| `post_type` | id or name | optional | Column type of the posts (default: the first profile column type). |
+| `web_type` | id or name | optional | Beam type of the diagonals (default: the chord type). |
+
+### `rebar_create`
+
+*edit* — Add a set of bars to a beam or column: `layout` is `top` or `bottom` (beams), `perimeter` (columns) with `count` bars, or `stirrups` every `spacing`. The bars are `cover` inside the faces (default 2.5 cm) and follow the host.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `host` | integer | required | Beam or column id. |
+| `layout` | string | required | `top`, `bottom`, `perimeter` or `stirrups`. |
+| `count` | integer | optional | Number of longitudinal bars (default: 2 in beams, 4 in columns). |
+| `cover` | number | optional | Concrete cover, meters (default 0.025). |
+| `spacing` | number | optional | Stirrup spacing, meters (default 0.15). |
+| `type` | id or name | optional | Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups). |
+
+### `rebar_typical`
+
+*edit* — Give beams and columns without reinforcement a typical one: beams two (three when 20 cm wide or more) 10 mm bars at the bottom, two 8 mm at the top and 5 mm stirrups every 15 cm; columns four 10 mm bars (six in round ones) and 5 mm ties every 15 cm. Default: every beam and column of `level` (or of the project).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `elements` | [id, …] | optional | Beam and column ids (default: all of `level`, or of the project). |
+| `level` | id or name | optional | Level id or name, when no elements are given. |
 
 ### `analytical_model`
 
@@ -931,11 +1000,11 @@ No parameters.
 
 ### `view_create`
 
-*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `three_d`, `analytical` (a 3D view of the analytical model), `legend` (all types), `schedule` (with `category`) or `sheet` (A3, numbered after the others).
+*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `schedule` (with `category`) or `sheet` (A3, numbered after the others).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `kind` | string | required | `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`, `analytical`, `legend`, `schedule` or `sheet`. |
+| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule` or `sheet`. |
 | `category` | string | optional | Schedules: the category scheduled (default `wall`). |
 | `depth` | number | optional | Section depth beyond the cut line, meters (default 8). |
 | `direction` | string | optional | Elevations: `north`, `south` (default), `east` or `west`. |

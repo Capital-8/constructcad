@@ -20,10 +20,11 @@ pub enum Category {
     Railing,
     Component,
     Foundation,
+    Rebar,
 }
 
 impl Category {
-    pub const ALL: [Category; 16] = [
+    pub const ALL: [Category; 17] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -33,6 +34,7 @@ impl Category {
         Category::Column,
         Category::Beam,
         Category::Foundation,
+        Category::Rebar,
         Category::Stair,
         Category::Railing,
         Category::Component,
@@ -43,7 +45,7 @@ impl Category {
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 12] = [
+    pub const MODEL: [Category; 13] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -53,13 +55,14 @@ impl Category {
         Category::Column,
         Category::Beam,
         Category::Foundation,
+        Category::Rebar,
         Category::Stair,
         Category::Railing,
         Category::Component,
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 13] = [
+    pub const SCHEDULABLE: [Category; 14] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -69,6 +72,7 @@ impl Category {
         Category::Column,
         Category::Beam,
         Category::Foundation,
+        Category::Rebar,
         Category::Stair,
         Category::Railing,
         Category::Component,
@@ -98,6 +102,7 @@ impl Category {
             Category::Railing => "category-railing",
             Category::Component => "category-component",
             Category::Foundation => "category-foundation",
+            Category::Rebar => "category-rebar",
         }
     }
 }
@@ -249,6 +254,11 @@ pub enum TypeData {
         #[serde(default)]
         shape: SectionShape,
     },
+    /// Reinforcing bars of `diameter`.
+    Rebar {
+        diameter: f64,
+        material: String,
+    },
     /// Foundation: a pad `width` x `length`, a strip `width` wide or a slab,
     /// each `thickness` deep.
     Foundation {
@@ -292,6 +302,7 @@ impl TypeData {
             | TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
@@ -335,6 +346,7 @@ impl TypeData {
             | TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
@@ -471,6 +483,7 @@ impl ElementType {
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Foundation { .. } => Category::Foundation,
+            TypeData::Rebar { .. } => Category::Rebar,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { .. } => Category::Component,
@@ -539,6 +552,7 @@ impl ElementType {
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => material,
             TypeData::Component { def, .. } => def.main_material(),

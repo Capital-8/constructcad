@@ -41,12 +41,38 @@ pub fn plan(
     ceiling: bool,
     scale: u32,
 ) -> Drawing2D {
+    plan_of(project, geom, level, cut_height, ceiling, false, scale)
+}
+
+/// Whether a structural plan shows the element: slabs, the load-bearing
+/// walls and columns, beams and foundations.
+pub fn is_structural(e: &cc_core::Element) -> bool {
+    match &e.kind {
+        ElementKind::Wall(w) => w.structural,
+        ElementKind::Column(c) => c.structural,
+        ElementKind::Floor(_) | ElementKind::Beam(_) | ElementKind::Foundation(_) | ElementKind::Grid(_) => true,
+        _ => false,
+    }
+}
+
+/// A plan as [`plan`] draws it; a `structural` plan shows only the
+/// structure, with the beams above the cut drawn as seen from below.
+pub fn plan_of(
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    cut_height: f64,
+    ceiling: bool,
+    structural: bool,
+    scale: u32,
+) -> Drawing2D {
+    let shown = |e: &cc_core::Element| !structural || is_structural(e);
     let spacing = crate::cut::spacing(scale);
     let mut d = Drawing2D::default();
     let level_z = project.level_elevation(level);
     let cut_z = level_z + cut_height;
 
-    for e in project.elements.values().filter(|e| e.level == level) {
+    for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
         let id = Some(e.id);
         match &e.kind {
             ElementKind::Floor(f) if !ceiling => d.polyline(&f.boundary, true, LineStyle::Projection, id),
@@ -68,14 +94,18 @@ pub fn plan(
         }
     }
     if !ceiling {
-        draw_structure(&mut d, project, geom, level, cut_z, spacing);
+        draw_structure(&mut d, project, geom, level, cut_z, spacing, structural);
     }
-    draw_components(&mut d, project, level, cut_z, ceiling);
+    if !structural {
+        draw_components(&mut d, project, level, cut_z, ceiling);
+    }
 
-    for (e, _) in project.walls().filter(|(e, _)| e.level == level) {
+    for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
         if let Some(g) = geom.walls.get(&e.id) {
             draw_wall(&mut d, project, g, cut_z, spacing);
-            draw_openings(&mut d, project, g, ceiling);
+            if !structural {
+                draw_openings(&mut d, project, g, ceiling);
+            }
         }
     }
 
@@ -174,8 +204,9 @@ fn draw_structure(
     level: LevelId,
     cut_z: f64,
     spacing: f64,
+    structural: bool,
 ) {
-    for e in project.elements.values().filter(|e| e.level == level) {
+    for e in project.elements.values().filter(|e| e.level == level && (!structural || is_structural(e))) {
         let id = Some(e.id);
         let data = project.element_type(e.type_id).map(|t| &t.data);
         match (&e.kind, data) {
@@ -213,8 +244,11 @@ fn draw_structure(
                 // The body as framed into columns and other beams.
                 let Some(g) = geom.beams.get(&e.id) else { continue };
                 let (bottom, top) = g.z_bounds();
-                // Beams above the cut plane are dashed; cut beams are drawn heavy.
-                let style = if bottom > cut_z {
+                // Beams above the cut plane are dashed (in structural plans, seen
+                // from below, they are drawn); cut beams are drawn heavy.
+                let style = if bottom > cut_z && structural {
+                    LineStyle::Projection
+                } else if bottom > cut_z {
                     LineStyle::Hidden
                 } else if top >= cut_z {
                     LineStyle::Cut

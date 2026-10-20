@@ -353,6 +353,89 @@ impl Command for SlabJoinSupports {
     }
 }
 
+/// Number the marks of beams, columns and pad footings (default: all three)
+/// in reading order: horizontal beams top to bottom then left to right,
+/// the other beams left to right then top to bottom, columns and footings
+/// top to bottom then left to right. Marks are a prefix per category (`V`,
+/// `P`, `S` in Portuguese; `B`, `C`, `F` in English) and a number.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct StructureNumber {
+    /// Categories to number: `beam`, `column` and/or `foundation` (default: all three).
+    #[serde(default)]
+    pub categories: Vec<String>,
+    /// Level id or name (default: every level, numbered as one sequence per category).
+    #[serde(default)]
+    pub level: Option<Ref>,
+}
+
+impl Command for StructureNumber {
+    const NAME: &'static str = "structure_number";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let level = self.level.as_ref().map(|r| refs::level(p, r)).transpose()?;
+        let categories: Vec<Category> = if self.categories.is_empty() {
+            vec![Category::Beam, Category::Column, Category::Foundation]
+        } else {
+            self.categories.iter().map(|c| refs::category(c)).collect::<Result<_>>()?
+        };
+        if let Some(c) =
+            categories.iter().find(|c| !matches!(c, Category::Beam | Category::Column | Category::Foundation))
+        {
+            return Err(EngineError::invalid(format!("{} cannot be numbered here", refs::category_name(*c))));
+        }
+        // Rows round to 10 cm so elements on one line share it.
+        let row = |y: f64| -(y * 10.0).round();
+        let mut marks: Vec<(ElementId, String)> = Vec::new();
+        for category in categories {
+            let mut keyed: Vec<(i64, i64, f64, ElementId)> = p
+                .elements
+                .values()
+                .filter(|e| e.category() == category && level.is_none_or(|l| e.level == l))
+                .filter_map(|e| {
+                    let (horizontal, at) = match &e.kind {
+                        ElementKind::Beam(b) => {
+                            let d = b.end - b.start;
+                            (d.x.abs() >= d.y.abs(), (b.start + b.end) * 0.5)
+                        }
+                        ElementKind::Column(c) => (true, c.position),
+                        ElementKind::Foundation(f) => match f.shape {
+                            cc_core::FoundationShape::Pad { position, .. } => (true, position),
+                            _ => return None,
+                        },
+                        _ => return None,
+                    };
+                    let key =
+                        if horizontal { (0, row(at.y) as i64, at.x) } else { (1, (at.x * 10.0).round() as i64, -at.y) };
+                    Some((key.0, key.1, key.2, e.id))
+                })
+                .collect();
+            keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.total_cmp(&b.2)).then(a.3.cmp(&b.3)));
+            let prefix = match category {
+                Category::Beam => t!("mark-prefix-beam"),
+                Category::Column => t!("mark-prefix-column"),
+                _ => t!("mark-prefix-footing"),
+            };
+            marks.extend(keyed.iter().enumerate().map(|(i, k)| (k.3, format!("{prefix}{}", i + 1))));
+        }
+        if marks.is_empty() {
+            return Ok(json!({"numbered": 0}));
+        }
+        edit(s, t!("tx-structure-number"), |e| {
+            for (id, mark) in &marks {
+                if let Some(x) = e.element_mut(*id) {
+                    x.mark = mark.clone();
+                }
+            }
+            Ok(())
+        })?;
+        Ok(
+            json!({"numbered": marks.len(), "marks": marks.iter().map(|(id, m)| json!({"id": id.0, "mark": m})).collect::<Vec<_>>()}),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

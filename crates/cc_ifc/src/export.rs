@@ -175,6 +175,7 @@ impl<'a> Exporter<'a> {
             self.write_sketched(id);
         }
         self.write_structure();
+        self.write_rebar();
         self.write_components();
         self.write_spaces();
         self.write_relationships();
@@ -874,6 +875,60 @@ impl<'a> Exporter<'a> {
         }
     }
 
+    /// Reinforcement: one `IfcReinforcingBar` per set, each bar a disk swept
+    /// along its center line (stirrups closed).
+    fn write_rebar(&mut self) {
+        let project = self.project;
+        let geom = self.geom;
+        for set in geom.rebar.values() {
+            let Some(e) = project.element(set.element) else { continue };
+            let ElementKind::Rebar(r) = &e.kind else { continue };
+            let Some(ty) = project.element_type(e.type_id) else { continue };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let level_z = project.level_elevation(e.level);
+            let items: Vec<Id> = set
+                .bars
+                .iter()
+                .filter(|b| b.points.len() >= 2 && b.length() > 1e-6)
+                .map(|bar| {
+                    let pts: Vec<Id> = directrix(bar, set.diameter)
+                        .into_iter()
+                        .map(|p| self.point3(DVec3::new(p.x, p.y, p.z - level_z)))
+                        .collect();
+                    let line = self.w.add("IFCPOLYLINE", args![pts]);
+                    let n = Value::Null;
+                    self.w.add("IFCSWEPTDISKSOLID", args![line, set.diameter / 2.0, n.clone(), n.clone(), n])
+                })
+                .collect();
+            if items.is_empty() {
+                continue;
+            }
+            let style = self.material_style(ty.main_material());
+            for &item in &items {
+                self.styled(item, style);
+            }
+            let placement = self.local_placement(Some(storey), Frame::at(DVec3::ZERO));
+            let shape = self.shape_of_type(items, None, "AdvancedSweptSolid");
+            let mut attrs = self.element_args(e, placement, shape);
+            let area = std::f64::consts::PI * set.diameter * set.diameter / 4.0;
+            let kind = match r.layout {
+                cc_core::RebarLayout::Longitudinal { .. } => "MAIN",
+                cc_core::RebarLayout::Stirrups { .. } => "LIGATURE",
+            };
+            attrs.extend(args![
+                Value::Null,
+                set.diameter,
+                area,
+                set.bar_length(),
+                Value::Enum(kind),
+                Value::Enum("TEXTURED")
+            ]);
+            let product = self.w.add("IFCREINFORCINGBAR", attrs);
+            self.products.insert(e.id, product);
+            self.register(e, product);
+        }
+    }
+
     /// Components: one extrusion per piece in the component's own placement
     /// (insertion point and rotation), so importers recover the instance.
     fn write_components(&mut self) {
@@ -1063,6 +1118,14 @@ impl<'a> Exporter<'a> {
             }
             TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
             TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
+            TypeData::Rebar { diameter, .. } => {
+                let area = std::f64::consts::PI * diameter * diameter / 4.0;
+                let n = Value::Null;
+                (
+                    "IFCREINFORCINGBARTYPE",
+                    args![Value::Enum("NOTDEFINED"), diameter, area, n.clone(), n.clone(), n.clone(), n],
+                )
+            }
             TypeData::Foundation { kind: cc_core::FoundationKind::Pad, .. } => {
                 ("IFCFOOTINGTYPE", args![Value::Enum("PAD_FOOTING")])
             }
@@ -1099,7 +1162,8 @@ impl<'a> Exporter<'a> {
             TypeData::Door { material, .. }
             | TypeData::Window { material, .. }
             | TypeData::Ceiling { material, .. }
-            | TypeData::Foundation { material, .. } => Some(self.material(material)),
+            | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. } => Some(self.material(material)),
             TypeData::Component { def, .. } if !def.main_material().is_empty() => {
                 Some(self.material(def.main_material()))
             }
@@ -1518,6 +1582,20 @@ enum Quantity {
     Length(f64),
     Area(f64),
     Volume(f64),
+}
+
+/// The center line a bar is swept along. A closed stirrup starts in the
+/// middle of its first side and stops one diameter short of it, so the swept
+/// disk never meets itself.
+fn directrix(bar: &cc_geom::rebar::Bar, diameter: f64) -> Vec<DVec3> {
+    let pts = &bar.points;
+    if !bar.closed || pts.len() < 2 {
+        return pts.clone();
+    }
+    let (a, b) = (pts[0], pts[1]);
+    let mid = (a + b) * 0.5;
+    let back = (a - b).normalize_or_zero() * diameter.min(a.distance(b) * 0.25);
+    std::iter::once(mid).chain(pts[1..].iter().copied()).chain([a, mid + back]).collect()
 }
 
 /// Area of a column section as written: exact circles, profiles as their parts.

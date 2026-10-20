@@ -52,6 +52,10 @@ pub enum Tool {
     Footing {
         type_id: ElementTypeId,
     },
+    /// Click the two ends of a truss (options in `AppState::truss`); `type_id` is its chord type.
+    Truss {
+        type_id: ElementTypeId,
+    },
     Stair {
         type_id: ElementTypeId,
     },
@@ -115,6 +119,7 @@ impl Tool {
             Tool::Column { .. } => "tool-column",
             Tool::Beam { .. } => "tool-beam",
             Tool::Footing { .. } => "tool-footing",
+            Tool::Truss { .. } => "tool-truss",
             Tool::Stair { .. } => "tool-stair",
             Tool::Railing { .. } => "tool-railing",
             Tool::Component { .. } => "tool-component",
@@ -151,6 +156,7 @@ impl Tool {
             | Tool::Column { type_id }
             | Tool::Beam { type_id }
             | Tool::Footing { type_id }
+            | Tool::Truss { type_id }
             | Tool::Stair { type_id }
             | Tool::Railing { type_id }
             | Tool::Component { type_id }
@@ -169,6 +175,7 @@ impl Tool {
             Tool::Column { .. } => Some(Category::Column),
             Tool::Beam { .. } => Some(Category::Beam),
             Tool::Footing { .. } => Some(Category::Foundation),
+            Tool::Truss { .. } => Some(Category::Beam),
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Railing { .. } => Some(Category::Railing),
             Tool::Component { .. } => Some(Category::Component),
@@ -188,6 +195,7 @@ impl Tool {
             Tool::Column { .. } => Tool::Column { type_id: id },
             Tool::Beam { .. } => Tool::Beam { type_id: id },
             Tool::Footing { .. } => Tool::Footing { type_id: id },
+            Tool::Truss { .. } => Tool::Truss { type_id: id },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
             Tool::Component { .. } => Tool::Component { type_id: id },
@@ -202,6 +210,10 @@ impl Tool {
         if category == Category::Foundation {
             return foundation_type(project, cc_core::FoundationKind::Pad).map(|type_id| Tool::Footing { type_id });
         }
+        if category == Category::Rebar {
+            // Bars are added to beams and columns, not drawn.
+            return None;
+        }
         let type_id = project.default_type(category)?;
         Some(match category {
             Category::Wall => Tool::Wall { type_id },
@@ -212,7 +224,7 @@ impl Tool {
             Category::Dimension => Tool::Dimension { type_id, mode: DimensionMode::Aligned },
             Category::Column => Tool::Column { type_id },
             Category::Beam => Tool::Beam { type_id },
-            Category::Foundation => Tool::Footing { type_id },
+            Category::Foundation | Category::Rebar => Tool::Footing { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Railing => Tool::Railing { type_id },
             Category::Component => Tool::Component { type_id },
@@ -758,6 +770,7 @@ pub fn handle(
         (Tool::Column { type_id }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Truss { type_id }, Some(level)) => truss_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
         (
@@ -820,6 +833,73 @@ fn column_tool(
             ..Default::default()
         };
         run_create(state, command);
+    }
+}
+
+/// Truss tool options, kept between uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrussOptions {
+    /// Distance between the chord axes, meters.
+    pub height: f64,
+    /// Number of panels; 0 picks about one per 1.5 m.
+    pub panels: u32,
+    /// `pratt`, `howe` or `warren`.
+    pub pattern: &'static str,
+}
+
+impl Default for TrussOptions {
+    fn default() -> Self {
+        Self { height: 1.0, panels: 0, pattern: "pratt" }
+    }
+}
+
+/// The truss patterns, with their translation keys.
+pub const TRUSS_PATTERNS: [(&str, &str); 3] =
+    [("pratt", "truss-pratt"), ("howe", "truss-howe"), ("warren", "truss-warren")];
+
+/// Two clicks: the ends of a truss, laid out with the options bar's height, panels and pattern.
+fn truss_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let crossings = grid_crossings(state.project());
+    let anchor = state.interaction.anchor;
+    let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
+    draw_snap(painter, xf, s);
+    if let Some(a) = anchor {
+        painter.line_segment([xf.to_screen(a), xf.to_screen(s.point)], Stroke::new(1.5, PREVIEW));
+        temp_dimension(painter, xf, a, s.point, None, None, 0.1);
+    }
+    if resp.clicked() {
+        match anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.1 => {
+                let options = state.truss.clone();
+                let command = cc_engine::commands::framing::TrussCreate {
+                    start: a.to_array(),
+                    end: s.point.to_array(),
+                    height: options.height,
+                    panels: (options.panels > 0).then_some(options.panels),
+                    pattern: Some(options.pattern.to_string()),
+                    level: Some(Ref::Id(level.0)),
+                    chord_type: Some(Ref::Id(type_id.0)),
+                    ..Default::default()
+                };
+                if let Some(out) = crate::actions::run_command(state, command) {
+                    let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
+                    state.selection = ids.map(ElementId).collect();
+                }
+                state.interaction.anchor = None;
+            }
+            _ => {}
+        }
     }
 }
 

@@ -528,7 +528,7 @@ impl<'a> Importer<'a> {
             p.views.insert(id, View { id, name: name.to_string(), scale: 50, kind });
         };
         for (level, name) in &levels {
-            add_view(&mut self.p, name, ViewKind::FloorPlan { level: *level, cut_height: 1.2 });
+            add_view(&mut self.p, name, ViewKind::floor_plan(*level));
         }
         for (level, name) in &levels {
             add_view(&mut self.p, name, ViewKind::CeilingPlan { level: *level, cut_height: 1.2 });

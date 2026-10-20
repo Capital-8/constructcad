@@ -57,6 +57,13 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Beam(b) => {
             b.top_offset.is_finite() && b.end_offset.is_none_or(f64::is_finite) && finite_points(&[b.start, b.end])
         }
+        ElementKind::Rebar(r) => {
+            let layout = match r.layout {
+                crate::RebarLayout::Longitudinal { count, .. } => (1..=200).contains(&count),
+                crate::RebarLayout::Stirrups { spacing } => spacing.is_finite() && spacing >= 0.02,
+            };
+            layout && r.cover.is_finite() && r.cover >= 0.0
+        }
         ElementKind::Foundation(f) => {
             let shape = match &f.shape {
                 crate::FoundationShape::Pad { position, rotation_deg } => {
@@ -150,6 +157,7 @@ impl Project {
                     repairs += usize::from(fix_positive(width, 0.15)) + usize::from(fix_positive(height, 0.4));
                     repairs += fit_shape(shape, *width, *height);
                 }
+                TypeData::Rebar { diameter, .. } => repairs += usize::from(fix_positive(diameter, 0.01)),
                 TypeData::Foundation { width, length, thickness, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(length, 1.0))
@@ -189,6 +197,9 @@ impl Project {
                         ElementKind::Door(h) | ElementKind::Window(h) => {
                             self.element(h.host).is_some_and(|w| w.as_wall().is_some())
                         }
+                        ElementKind::Rebar(r) => self
+                            .element(r.host)
+                            .is_some_and(|h| matches!(h.kind, ElementKind::Beam(_) | ElementKind::Column(_))),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         _ => true,

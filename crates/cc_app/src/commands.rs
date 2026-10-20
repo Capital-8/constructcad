@@ -43,6 +43,14 @@ pub enum UiCommand {
     SlabJoinSupports,
     AnalyticalView,
     AnalyticalExport,
+    Truss,
+    BracesX,
+    TypicalRebar,
+    RebarView,
+    SteelSchedule,
+    StructuralPlan,
+    NumberStructure,
+    StructureTags,
     Dimension(DimensionMode),
     Text,
     AddLeader,
@@ -131,7 +139,8 @@ impl UiCommand {
         all.extend([NewComponent, LoadComponent, Select, SelectInstances]);
         all.extend([ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
-        all.extend([AnalyticalView, AnalyticalExport]);
+        all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
+        all.extend([StructuralPlan, NumberStructure, StructureTags]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -214,6 +223,14 @@ impl UiCommand {
             FoundationSlab => Icon::FoundationSlab,
             SlabJoinSupports => Icon::SlabSupports,
             AnalyticalView | AnalyticalExport => Icon::Analytical,
+            Truss => Icon::Truss,
+            BracesX => Icon::Brace,
+            TypicalRebar => Icon::Rebar,
+            RebarView => Icon::RebarView,
+            SteelSchedule => Icon::Schedule,
+            StructuralPlan => Icon::StructuralPlan,
+            NumberStructure => Icon::NumberMarks,
+            StructureTags => Icon::StructureTags,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             AddLeader => Icon::Leader,
@@ -262,9 +279,8 @@ impl UiCommand {
     pub fn badge(self) -> Option<Badge> {
         use UiCommand::*;
         match self {
-            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | StructuralSchedules | Sheet => {
-                Some(Badge::New)
-            }
+            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | StructuralSchedules | Sheet
+            | SteelSchedule | StructuralPlan => Some(Badge::New),
             ImportIfc | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | AnalyticalExport => Some(Badge::Export),
             Delete => Some(Badge::Remove),
@@ -305,6 +321,14 @@ impl UiCommand {
             SlabJoinSupports => t!("action-slab-join-supports"),
             AnalyticalView => t!("action-analytical-view"),
             AnalyticalExport => t!("action-analytical-export"),
+            Truss => t!("tool-truss"),
+            BracesX => t!("action-braces-x"),
+            TypicalRebar => t!("action-rebar-typical"),
+            RebarView => t!("action-rebar-view"),
+            SteelSchedule => t!("action-steel-schedule"),
+            StructuralPlan => t!("action-structural-plan"),
+            NumberStructure => t!("action-number-structure"),
+            StructureTags => t!("action-structure-tags"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             AddLeader => t!("tool-add-leader"),
@@ -401,6 +425,14 @@ impl UiCommand {
             SlabJoinSupports => t!("cmd-desc-slab-join-supports"),
             AnalyticalView => t!("cmd-desc-analytical-view"),
             AnalyticalExport => t!("cmd-desc-analytical-export"),
+            Truss => t!("cmd-desc-truss"),
+            BracesX => t!("cmd-desc-braces-x"),
+            TypicalRebar => t!("cmd-desc-rebar-typical"),
+            RebarView => t!("cmd-desc-rebar-view"),
+            SteelSchedule => t!("cmd-desc-steel-schedule"),
+            StructuralPlan => t!("cmd-desc-structural-plan"),
+            NumberStructure => t!("cmd-desc-number-structure"),
+            StructureTags => t!("cmd-desc-structure-tags"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
@@ -545,6 +577,12 @@ impl UiCommand {
             SlabJoinSupports => "slab_join_supports",
             AnalyticalView => "view_create",
             AnalyticalExport => "analytical_export",
+            Truss => "truss_create",
+            BracesX => "braces_between_columns",
+            TypicalRebar => "rebar_typical",
+            RebarView | SteelSchedule | StructuralPlan => "view_create",
+            NumberStructure => "structure_number",
+            StructureTags => "view_set",
             Place(_) => "component_place",
             NewComponent => "component_create",
             LoadComponent => "component_load",
@@ -621,6 +659,11 @@ impl UiCommand {
             FoundationSlab if crate::tools::foundation_type(project, cc_core::FoundationKind::Slab).is_none() => {
                 Some(t!("msg-no-type"))
             }
+            Truss if project.default_type(Category::Beam).is_none() => Some(t!("msg-no-type")),
+            BracesX if crate::actions::selected_columns(state).len() != 2 => Some(t!("msg-columns-two-exactly")),
+            TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
+            StructuralPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
+            StructureTags if crate::actions::active_floor_plan(state).is_none() => Some(t!("msg-plan-only")),
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
@@ -636,7 +679,9 @@ impl UiCommand {
         use UiCommand::*;
         let tool = &state.tool;
         match self {
-            Place(category) => tool.category() == Some(category) && *tool != Tool::Section,
+            Place(category) => tool.category() == Some(category) && !matches!(tool, Tool::Section | Tool::Truss { .. }),
+            Truss => matches!(tool, Tool::Truss { .. }),
+            StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select => *tool == Tool::Select,
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
@@ -682,6 +727,7 @@ fn place_label(category: Category) -> String {
         Category::Column => t!("tool-column"),
         Category::Beam => t!("tool-beam"),
         Category::Foundation => t!("tool-footing"),
+        Category::Rebar => t!("category-rebar"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::Component => t!("tool-component"),
@@ -703,6 +749,7 @@ fn place_description(category: Category) -> String {
         Category::Column => t!("cmd-desc-column"),
         Category::Beam => t!("cmd-desc-beam"),
         Category::Foundation => t!("cmd-desc-footing"),
+        Category::Rebar => t!("cmd-desc-rebar-typical"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::Component => t!("cmd-desc-component"),
@@ -768,6 +815,21 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         SlabJoinSupports => crate::actions::slab_join_supports(state),
         AnalyticalView => crate::actions::open_analytical_view(state),
         AnalyticalExport => crate::actions::export_analytical(state),
+        Truss => {
+            if let Some(type_id) = state.project().default_type(Category::Beam) {
+                state.set_tool(Tool::Truss { type_id });
+                state.message = t!("hint-truss");
+            }
+        }
+        BracesX => crate::actions::braces_x(state),
+        TypicalRebar => crate::actions::typical_rebar(state),
+        RebarView => crate::actions::open_rebar_view(state),
+        SteelSchedule => {
+            actions::new_schedule(state, Category::Rebar);
+        }
+        StructuralPlan => crate::actions::open_structural_plan(state),
+        NumberStructure => crate::actions::number_structure(state),
+        StructureTags => crate::actions::toggle_structure_tags(state),
         StructuralSchedules => {
             actions::new_schedule(state, Category::Column);
             actions::new_schedule(state, Category::Beam);

@@ -231,6 +231,12 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("start_join".into(), framing(beam.start));
         derived.insert("end_join".into(), framing(beam.end));
     }
+    if let Some(set) = geom.rebar.get(&id) {
+        derived.insert("count".into(), json!(set.count()));
+        derived.insert("bar_length".into(), json!(set.bar_length()));
+        derived.insert("total_length".into(), json!(set.total_length()));
+        derived.insert("weight".into(), json!(set.weight()));
+    }
     if let Some(boundary) = geom.rooms.get(&id) {
         derived.insert("area".into(), json!(polygon::area(boundary)));
         derived.insert("perimeter".into(), json!(polygon::perimeter(boundary)));

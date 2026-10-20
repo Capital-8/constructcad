@@ -138,6 +138,12 @@ pub enum ViewKind {
     FloorPlan {
         level: LevelId,
         cut_height: f64,
+        /// A structural (formwork) plan: only the structure, with section tags.
+        #[serde(default)]
+        structural: bool,
+        /// Tag beams and columns with their mark and section.
+        #[serde(default)]
+        structure_tags: bool,
     },
     CeilingPlan {
         level: LevelId,
@@ -148,6 +154,9 @@ pub enum ViewKind {
         /// Show the analytical model (member lines and nodes) over a faint model.
         #[serde(default)]
         analytical: bool,
+        /// Show the reinforcing bars over a faint model.
+        #[serde(default)]
+        rebar: bool,
     },
     Elevation {
         direction: Direction,
@@ -180,6 +189,13 @@ pub struct View {
     /// Scale denominator (50 means 1:50).
     pub scale: u32,
     pub kind: ViewKind,
+}
+
+impl ViewKind {
+    /// An ordinary floor plan of `level` cut at 1.20 m.
+    pub fn floor_plan(level: LevelId) -> Self {
+        ViewKind::FloorPlan { level, cut_height: 1.2, structural: false, structure_tags: false }
+    }
 }
 
 impl View {

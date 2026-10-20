@@ -381,6 +381,19 @@ pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState)
     d
 }
 
+/// The reinforcing bars seen along the camera, tagged with their sets.
+pub fn rebar(geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
+    let frame = Frame::looking(DVec3::ZERO, camera.forward());
+    let mut d = Drawing2D::default();
+    for set in geom.rebar.values() {
+        for bar in &set.bars {
+            let pts: Vec<DVec2> = bar.points.iter().map(|p| frame.project(*p)).collect();
+            d.polyline(&pts, bar.closed, crate::LineStyle::Projection, Some(set.element));
+        }
+    }
+    d
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

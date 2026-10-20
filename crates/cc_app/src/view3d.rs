@@ -208,7 +208,8 @@ pub fn fit_camera(camera: &mut CameraState, geom: &cc_geom::ModelGeometry, aspec
 }
 
 pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Option<&egui_wgpu::RenderState>) {
-    let Some(ViewKind::ThreeD { camera, analytical }) = state.project().view(view_id).map(|v| v.kind.clone()) else {
+    let Some(ViewKind::ThreeD { camera, analytical, rebar }) = state.project().view(view_id).map(|v| v.kind.clone())
+    else {
         return;
     };
     let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
@@ -316,6 +317,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let mesh = if analytical {
             let model = cc_geom::analytical::analytical_model(&state.session.doc.project, geom);
             SceneMesh::build_analytical(geom, &model, &state.selection)
+        } else if rebar {
+            SceneMesh::build_rebar(geom, &state.selection)
         } else {
             SceneMesh::build(geom, &state.selection, &[])
         };

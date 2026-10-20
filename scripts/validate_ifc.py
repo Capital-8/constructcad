@@ -24,7 +24,7 @@ import ifcopenshell.validate
 ELEMENTS = (
     "IfcWall", "IfcDoor", "IfcWindow", "IfcSlab", "IfcCovering", "IfcRoof",
     "IfcColumn", "IfcBeam", "IfcStair", "IfcRailing",
-    "IfcFooting", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
+    "IfcFooting", "IfcReinforcingBar", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
     "IfcPipeSegment", "IfcStairFlight", "IfcMember",
 )
 REL_TOL = 1e-3

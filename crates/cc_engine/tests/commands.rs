@@ -833,3 +833,100 @@ fn slabs_join_their_supports_and_the_analytical_model() {
     let view = run(&mut s, "view_create", json!({"kind": "analytical"}));
     assert_eq!(view["params"]["analytical"], json!(true), "{view}");
 }
+
+#[test]
+fn reinforcement_of_beams_and_columns() {
+    let mut s = Session::default();
+    // A 0.15 x 0.40 beam, 5 m long, free; a 0.20 x 0.20 column, 3 m tall.
+    let beam = id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [5, 0], "top_offset": 3.0})));
+    let column = id(&run(&mut s, "column_create", json!({"position": [9, 9], "height": 3.0})));
+    let out = run(&mut s, "rebar_typical", json!({"elements": [beam, column]}));
+    // Beam: bottom, top and stirrups; column: longitudinal and ties.
+    assert_eq!(out["created"].as_array().unwrap().len(), 5, "{out}");
+    let again = run(&mut s, "rebar_typical", json!({"elements": [beam, column]}));
+    assert_eq!(again["skipped"].as_u64(), Some(2));
+
+    let sets: Vec<Value> =
+        out["created"].as_array().unwrap().iter().map(|i| run(&mut s, "element_get", json!({"id": i}))).collect();
+    let bottom = sets.iter().find(|x| x["params"]["layout"]["Longitudinal"]["face"] == json!("Bottom")).unwrap();
+    // Two bars from cover to cover: 5 m - 2 x 0.025.
+    assert_eq!(bottom["derived"]["count"], json!(2));
+    assert!((bottom["derived"]["bar_length"].as_f64().unwrap() - 4.95).abs() < 1e-9, "{bottom}");
+    // 10 mm bars weigh 0.617 kg/m.
+    let weight = bottom["derived"]["weight"].as_f64().unwrap();
+    assert!((weight - 2.0 * 4.95 * std::f64::consts::PI * 0.01 * 0.01 / 4.0 * 7850.0).abs() < 1e-9);
+    // Stirrups every 0.15 over 4.95 m: 33 spaces, 34 stirrups, each around a 0.10 x 0.35 loop.
+    let stirrups =
+        sets.iter().find(|x| x["params"]["layout"]["Stirrups"].is_object() && x["params"]["host"] == json!(beam));
+    let stirrups = stirrups.unwrap();
+    assert_eq!(stirrups["derived"]["count"], json!(34));
+    assert!((stirrups["derived"]["bar_length"].as_f64().unwrap() - 2.0 * (0.095 + 0.345)).abs() < 1e-9, "{stirrups}");
+    // A column's bars run its height.
+    let bars =
+        sets.iter().find(|x| x["params"]["host"] == json!(column) && x["params"]["layout"]["Longitudinal"].is_object());
+    assert!((bars.unwrap()["derived"]["bar_length"].as_f64().unwrap() - 3.0).abs() < 1e-9);
+
+    // Bars go with their host.
+    let n = |s: &mut Session| run(s, "elements_list", json!({"category": "rebar"})).as_array().unwrap().len();
+    assert_eq!(n(&mut s), 5);
+    run(&mut s, "elements_delete", json!({"ids": [beam]}));
+    assert_eq!(n(&mut s), 2);
+    // Only beams and columns take reinforcement; layouts are checked.
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0, 5], "end": [4, 5]})));
+    assert_eq!(fails(&mut s, "rebar_create", json!({"host": wall, "layout": "top"})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "rebar_create", json!({"host": column, "layout": "zigzag"})), ErrorCode::InvalidArguments);
+    let ties = run(&mut s, "rebar_create", json!({"host": column, "layout": "stirrups", "spacing": 0.2}));
+    assert_eq!(ties["params"]["layout"], json!({"Stirrups": {"spacing": 0.2}}));
+    // The steel schedule.
+    run(&mut s, "view_create", json!({"kind": "schedule", "category": "rebar"}));
+}
+
+#[test]
+fn trusses_braces_numbering_and_structural_plans() {
+    let mut s = Session::default();
+    // A Pratt truss, 6 m in 4 panels, 1 m deep: 2 chords, 4 diagonals, 5 posts.
+    let out = run(
+        &mut s,
+        "truss_create",
+        json!({"start": [0, 0], "end": [6, 0], "height": 1.0, "panels": 4, "bottom_offset": 2.0}),
+    );
+    assert_eq!(out["created"].as_array().unwrap().len(), 11, "{out}");
+    let group = run(&mut s, "groups_list", json!({}));
+    assert_eq!(group.as_array().unwrap().len(), 1);
+    // Its analytical model: all members meet at the 10 panel points.
+    let m = run(&mut s, "analytical_model", json!({}));
+    assert_eq!(m["nodes"].as_array().unwrap().len(), 10, "{m}");
+    assert_eq!(
+        fails(&mut s, "truss_create", json!({"start": [0, 0], "end": [6, 0], "height": 1.0, "pattern": "k"})),
+        ErrorCode::InvalidArguments
+    );
+
+    // X bracing between two columns: two members from base to top.
+    let a = id(&run(&mut s, "column_create", json!({"position": [0, 10], "height": 3.0})));
+    let b = id(&run(&mut s, "column_create", json!({"position": [4, 10], "height": 3.0})));
+    let out = run(&mut s, "braces_between_columns", json!({"columns": [a, b]}));
+    let braces = out["created"].as_array().unwrap();
+    assert_eq!(braces.len(), 2);
+    let brace = run(&mut s, "element_get", json!({"id": braces[0]}));
+    assert_eq!(
+        (brace["params"]["top_offset"].clone(), brace["params"]["end_offset"].clone()),
+        (json!(0.0), json!(3.0))
+    );
+    assert_eq!(fails(&mut s, "braces_between_columns", json!({"columns": [a]})), ErrorCode::InvalidArguments);
+    assert_eq!(
+        fails(&mut s, "brace_create", json!({"start": [1, 1, 0], "end": [1, 1, 3]})),
+        ErrorCode::InvalidArguments
+    );
+
+    // Numbering in reading order: the upper column first.
+    let c = id(&run(&mut s, "column_create", json!({"position": [0, 20], "height": 3.0})));
+    let out = run(&mut s, "structure_number", json!({"categories": ["column"]}));
+    assert!(out["numbered"].as_u64().unwrap() >= 3);
+    let mark = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["mark"].clone();
+    assert_eq!(mark(&mut s, c), json!("P1"));
+    assert_eq!((mark(&mut s, a), mark(&mut s, b)), (json!("P2"), json!("P3")));
+
+    // A structural plan: tagged with marks and sections.
+    let plan = run(&mut s, "view_create", json!({"kind": "structural_plan"}));
+    assert_eq!(plan["params"]["structural"], json!(true), "{plan}");
+}
