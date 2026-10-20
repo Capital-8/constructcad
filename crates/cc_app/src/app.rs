@@ -5,7 +5,7 @@ use crate::state::{AppState, PendingAction};
 use crate::theme::PALETTE;
 use crate::tools::Tool;
 use crate::{actions, browser, canvas, dialogs, properties, ribbon, schedule_ui, sheet, t, theme, view3d};
-use cc_core::{Category, Document, Project, ViewCategory, ViewId};
+use cc_core::{Document, Project, ViewCategory, ViewId};
 use egui::{Event, Key, Modifiers, Ui, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
@@ -232,80 +232,9 @@ impl ConstructApp {
                 if state.key_buffer.len() > 2 {
                     state.key_buffer.remove(0);
                 }
-                let matched = match state.key_buffer.as_str() {
-                    "WA" => Some(Some(Category::Wall)),
-                    "DR" => Some(Some(Category::Door)),
-                    "WN" => Some(Some(Category::Window)),
-                    "SB" => Some(Some(Category::Floor)),
-                    "FO" => Some(Some(Category::Ceiling)),
-                    "TE" => Some(Some(Category::Roof)),
-                    "MD" => {
-                        state.set_tool(Tool::Select);
-                        Some(None)
-                    }
-                    "RM" => Some(Some(Category::Room)),
-                    "CL" => Some(Some(Category::Column)),
-                    "PN" | "UP" => {
-                        let pin = state.key_buffer == "PN";
-                        crate::modify::set_pinned(state, pin);
-                        Some(None)
-                    }
-                    "TR" | "TX" | "SL" | "OF" | "AL" => {
-                        let tool = match state.key_buffer.as_str() {
-                            "TR" => Tool::TrimCorner,
-                            "TX" => Tool::TrimExtend,
-                            "SL" => Tool::Split,
-                            "OF" => Tool::Offset,
-                            _ => Tool::Align,
-                        };
-                        crate::modify::start_pick(state, tool);
-                        Some(None)
-                    }
-                    "MV" | "CO" | "RO" | "MM" | "DM" | "AR" => {
-                        let tool = match state.key_buffer.as_str() {
-                            "MV" => Tool::Move,
-                            "CO" => Tool::Copy,
-                            "RO" => Tool::Rotate,
-                            "MM" => Tool::Mirror { draw: false },
-                            "DM" => Tool::Mirror { draw: true },
-                            _ => Tool::Array,
-                        };
-                        crate::modify::start(state, tool);
-                        Some(None)
-                    }
-                    "MA" => {
-                        crate::clipboard::start_match_type(state);
-                        Some(None)
-                    }
-                    "CM" => Some(Some(Category::Component)),
-                    "BM" => Some(Some(Category::Beam)),
-                    "ST" => Some(Some(Category::Stair)),
-                    "RA" => Some(Some(Category::Railing)),
-                    "GR" => Some(Some(Category::Grid)),
-                    "DI" => Some(Some(Category::Dimension)),
-                    "CT" => {
-                        state.set_tool(Tool::Section);
-                        state.message = t!("msg-section-hint");
-                        Some(None)
-                    }
-                    // Text works in any 2D view, so it skips the plan check.
-                    "TT" => {
-                        if let Some(tool) = Tool::for_category(state.project(), Category::Text) {
-                            state.set_tool(tool);
-                            state.message = t!("hint-text");
-                        }
-                        Some(None)
-                    }
-                    "ZE" => {
-                        zoom_fit(state);
-                        Some(None)
-                    }
-                    _ => None,
-                };
-                if let Some(category) = matched {
-                    if let Some(c) = category {
-                        actions::activate_category_tool(state, c);
-                    }
+                // Two-letter shortcuts come from the command table, as the tooltips show them.
+                if let Some(command) = crate::commands::UiCommand::from_keys(&state.key_buffer) {
+                    crate::commands::invoke(state, ctx, command);
                     state.key_buffer.clear();
                 }
             }

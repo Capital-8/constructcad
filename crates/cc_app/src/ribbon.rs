@@ -1,8 +1,9 @@
 //! Ribbon, options bar and status bar.
 
 use crate::actions;
+use crate::commands::{self, UiCommand};
 use crate::icons::{self, Icon};
-use crate::state::{AppState, PendingAction, RibbonTab};
+use crate::state::{AppState, RibbonTab};
 use crate::t;
 use crate::theme::{self, PALETTE};
 use crate::tools::{DimensionMode, Tool, walls_loop};
@@ -133,14 +134,6 @@ fn big_button(ui: &mut Ui, icon: Icon, label: &str, selected: bool, enabled: boo
     if enabled { response.on_hover_cursor(egui::CursorIcon::PointingHand) } else { response }
 }
 
-/// A small icon-only ribbon button for stacks; its name is the tooltip.
-pub struct StackButton {
-    pub icon: Icon,
-    pub tooltip: String,
-    pub enabled: bool,
-    pub selected: bool,
-}
-
 /// Rows of a stacked family: families of 2 or 4 use two rows (one column,
 /// or 2 x 2), everything else three.
 fn stack_rows(n: usize) -> usize {
@@ -150,22 +143,24 @@ fn stack_rows(n: usize) -> usize {
 /// One family of related commands as small icon buttons in columns of
 /// two or three (see [`stack_rows`]); each family starts its own column,
 /// so unrelated commands never share one. Two-row columns are centered on
-/// the large buttons' height. Returns the index of the clicked button.
-fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
+/// the large buttons' height. Returns the clicked command.
+fn stacked(ui: &mut Ui, state: &AppState, family: &[UiCommand]) -> Option<UiCommand> {
     let mut clicked = None;
-    let rows = stack_rows(buttons.len());
+    let rows = stack_rows(family.len());
     let size = vec2(28.0, (BUTTON_HEIGHT - 4.0) / 3.0);
     let column_h = rows as f32 * size.y + (rows as f32 - 1.0) * 2.0;
-    for (column, chunk) in buttons.chunks(rows).enumerate() {
+    for chunk in family.chunks(rows) {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
             ui.add_space(((BUTTON_HEIGHT - column_h) / 2.0).max(0.0));
-            for (row, b) in chunk.iter().enumerate() {
-                let sense = if b.enabled { Sense::click() } else { Sense::hover() };
+            for command in chunk {
+                let why = command.unavailable(state);
+                let (enabled, selected) = (why.is_none(), command.selected(state));
+                let sense = if enabled { Sense::click() } else { Sense::hover() };
                 let (rect, r) = ui.allocate_exact_size(size, sense);
                 let painter = ui.painter();
                 let radius = theme::RADIUS as f32;
-                if b.selected {
+                if selected {
                     painter.rect_filled(rect, radius, PALETTE.accent_soft);
                     painter.rect_stroke(
                         rect,
@@ -173,20 +168,20 @@ fn stacked(ui: &mut Ui, buttons: &[StackButton]) -> Option<usize> {
                         Stroke::new(1.0, PALETTE.accent.gamma_multiply(0.55)),
                         StrokeKind::Inside,
                     );
-                } else if b.enabled && r.hovered() {
+                } else if enabled && r.hovered() {
                     let fill = if r.is_pointer_button_down_on() { PALETTE.pressed } else { PALETTE.hover };
                     painter.rect_filled(rect, radius, fill);
                 }
-                let color = match (b.enabled, b.selected) {
+                let color = match (enabled, selected) {
                     (false, _) => PALETTE.text_faint,
                     (true, true) => PALETTE.accent_text,
                     (true, false) => PALETTE.text,
                 };
                 let icon_rect = egui::Rect::from_center_size(rect.center(), vec2(STACK_ICON_SIZE, STACK_ICON_SIZE));
-                icons::paint(painter, icon_rect, b.icon, color);
-                let r = if b.enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
-                if r.on_hover_text(&b.tooltip).clicked() && b.enabled {
-                    clicked = Some(column * rows + row);
+                icons::paint(painter, icon_rect, command.icon(), color);
+                let r = if enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r };
+                if command_tooltip(r, state, *command, why).clicked() && enabled {
+                    clicked = Some(*command);
                 }
             }
         });
@@ -252,20 +247,66 @@ fn tab_title(ui: &mut Ui, label: &str, active: bool, width: f32) -> Response {
     response
 }
 
-fn tool_button(ui: &mut Ui, state: &mut AppState, label: String, shortcut: &str, category: Category) {
-    let active = state.tool.category() == Some(category) && state.tool != Tool::Section;
-    let r = big_button(ui, category_icon(category), &label, active, true, false)
-        .on_hover_text(format!("{label} — {} {shortcut}", t!("hint-shortcut")));
-    if r.clicked() {
-        actions::activate_category_tool(state, category);
+/// A large ribbon button for `command`: its state, label and tooltip come from the command.
+fn command_button(ui: &mut Ui, state: &mut AppState, command: UiCommand) {
+    if command_big(ui, state, command, false).clicked() {
+        commands::run(state, &ui.ctx().clone(), command);
     }
 }
 
-fn select_button(ui: &mut Ui, state: &mut AppState) {
-    let r = big_button(ui, Icon::Select, &t!("tool-select"), state.tool == Tool::Select, true, false)
-        .on_hover_text(format!("{} — MD / Esc", t!("tool-select")));
-    if r.clicked() {
-        state.set_tool(Tool::Select);
+/// A large ribbon button for `command` that opens a menu (the caller attaches it).
+fn command_menu(ui: &mut Ui, state: &AppState, command: UiCommand) -> Response {
+    command_big(ui, state, command, true)
+}
+
+fn command_big(ui: &mut Ui, state: &AppState, command: UiCommand, dropdown: bool) -> Response {
+    let why = command.unavailable(state);
+    let label = command.label(state);
+    let r = big_button(ui, command.icon(), &label, command.selected(state), why.is_none(), dropdown);
+    command_tooltip(r, state, command, why)
+}
+
+/// The rich tooltip of a command: title and shortcut, what it does, why it
+/// is unavailable, and the engine command that scripts call for the same change.
+pub fn command_tooltip(response: Response, state: &AppState, command: UiCommand, why: Option<String>) -> Response {
+    let title = command.title(state);
+    response.on_hover_ui(|ui| {
+        ui.set_max_width(300.0);
+        ui.spacing_mut().item_spacing.y = 4.0;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(&title).family(theme::semibold()).color(PALETTE.text));
+            if let Some(keys) = command.shortcut() {
+                key_cap(ui, keys);
+            }
+        });
+        ui.label(theme::muted(command.description()));
+        if let Some(why) = &why {
+            ui.label(RichText::new(t!("tip-unavailable", "reason" => why)).color(PALETTE.warning));
+        }
+        if let Some(name) = command.engine() {
+            ui.label(RichText::new(t!("tip-engine", "command" => name)).size(11.0).color(PALETTE.text_faint));
+        }
+    })
+}
+
+/// A keyboard shortcut drawn as a key cap.
+fn key_cap(ui: &mut Ui, keys: &str) {
+    egui::Frame::new()
+        .fill(PALETTE.surface)
+        .stroke(Stroke::new(1.0, PALETTE.border))
+        .corner_radius(3)
+        .inner_margin(egui::Margin::symmetric(5, 1))
+        .show(ui, |ui| {
+            ui.label(RichText::new(keys).size(11.0).color(PALETTE.text_muted));
+        });
+}
+
+/// A small quick access button for `command`.
+fn command_icon(ui: &mut Ui, state: &mut AppState, command: UiCommand) {
+    let why = command.unavailable(state);
+    let r = icon_button(ui, command.icon(), why.is_none());
+    if command_tooltip(r, state, command, why).clicked() {
+        commands::run(state, &ui.ctx().clone(), command);
     }
 }
 
@@ -280,47 +321,25 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             ui.painter().image(logo.id(), mark, uv, egui::Color32::WHITE);
         }
         ui.add_space(8.0);
-        if icon_button(ui, Icon::Home, true).on_hover_text(t!("action-home")).clicked() {
-            state.show_home = true;
+        let divider = |ui: &mut Ui| {
+            let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
+            ui.painter().vline(div.center().x, div.y_range(), Stroke::new(1.0, PALETTE.border));
+        };
+        for command in [UiCommand::Home, UiCommand::New, UiCommand::Open, UiCommand::Save] {
+            command_icon(ui, state, command);
         }
-        if icon_button(ui, Icon::New, true).on_hover_text(format!("{} (Ctrl+N)", t!("action-new"))).clicked() {
-            actions::guarded(state, PendingAction::New);
-        }
-        if icon_button(ui, Icon::Open, true).on_hover_text(format!("{} (Ctrl+O)", t!("action-open"))).clicked() {
-            actions::guarded(state, PendingAction::Open);
-        }
-        if icon_button(ui, Icon::Save, true).on_hover_text(format!("{} (Ctrl+S)", t!("action-save"))).clicked() {
-            actions::save(state, false);
-        }
-        let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
-        ui.painter().vline(div.center().x, div.y_range(), Stroke::new(1.0, PALETTE.border));
-        let undo_name = state.session.doc.undo_name().map(|n| format!(": {n}")).unwrap_or_default();
-        let undo = icon_button(ui, Icon::Undo, state.session.doc.can_undo());
-        if undo.on_hover_text(format!("{}{undo_name} (Ctrl+Z)", t!("action-undo"))).clicked() {
-            let _ = state.session.run(cc_engine::commands::project::Undo {});
-        }
-        let redo = icon_button(ui, Icon::Redo, state.session.doc.can_redo());
-        if redo.on_hover_text(format!("{} (Ctrl+Y)", t!("action-redo"))).clicked() {
-            let _ = state.session.run(cc_engine::commands::project::Redo {});
-        }
+        divider(ui);
+        command_icon(ui, state, UiCommand::Undo);
+        command_icon(ui, state, UiCommand::Redo);
         // Frequent commands that already live in the ribbon.
-        let (div, _) = ui.allocate_exact_size(vec2(9.0, 18.0), Sense::hover());
-        ui.painter().vline(div.center().x, div.y_range(), Stroke::new(1.0, PALETTE.border));
-        let sheet = actions::active_sheet(state).is_some();
-        let pdf_hint = if sheet { t!("action-export-pdf") } else { t!("hint-export-sheet") };
-        if icon_button(ui, Icon::Export, sheet).on_hover_text(pdf_hint).clicked() {
-            actions::export_sheet(state, actions::SheetFormat::Pdf);
-        }
-        let dim = format!("{} (DI)", t!("tool-dimension"));
-        if icon_button(ui, Icon::Dimension, true).on_hover_text(dim).clicked() {
-            actions::activate_category_tool(state, Category::Dimension);
-        }
-        if icon_button(ui, Icon::View3D, true).on_hover_text(t!("action-default-3d")).clicked() {
-            actions::open_default_3d(state);
-        }
-        if icon_button(ui, Icon::Section, true).on_hover_text(format!("{} (CT)", t!("tool-section"))).clicked() {
-            state.set_tool(Tool::Section);
-            state.message = t!("msg-section-hint");
+        divider(ui);
+        for command in [
+            UiCommand::ExportPdf,
+            UiCommand::Dimension(DimensionMode::Aligned),
+            UiCommand::Default3D,
+            UiCommand::Section,
+        ] {
+            command_icon(ui, state, command);
         }
     });
     // Ribbon tab titles, all as wide as the widest (measured bold, as when active).
@@ -365,46 +384,18 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     ui.add_space(2.0);
 }
 
+/// Large buttons for `list`, in order.
+fn command_buttons(ui: &mut Ui, state: &mut AppState, list: &[UiCommand]) {
+    for command in list {
+        command_button(ui, state, *command);
+    }
+}
+
 fn file_tab(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("group-project"), |ui| {
-        if big_button(ui, Icon::New, &t!("action-new"), false, true, false).on_hover_text("Ctrl+N").clicked() {
-            actions::guarded(state, PendingAction::New);
-        }
-        if big_button(ui, Icon::Open, &t!("action-open"), false, true, false).on_hover_text("Ctrl+O").clicked() {
-            actions::guarded(state, PendingAction::Open);
-        }
-        if big_button(ui, Icon::Save, &t!("action-save"), false, true, false).on_hover_text("Ctrl+S").clicked() {
-            actions::save(state, false);
-        }
-        let save_as = big_button(ui, Icon::SaveAs, &t!("action-save-as"), false, true, false);
-        if save_as.on_hover_text("Ctrl+Shift+S").clicked() {
-            actions::save(state, true);
-        }
-        let close = big_button(ui, Icon::CloseProject, &t!("action-close-project"), false, true, false);
-        if close.on_hover_text("Ctrl+W").clicked() {
-            actions::guarded(state, PendingAction::Close);
-        }
-    });
-    group(ui, t!("group-import"), |ui| {
-        if big_button(ui, Icon::Open, &t!("action-import-ifc"), false, true, false).clicked() {
-            actions::guarded(state, PendingAction::ImportIfc);
-        }
-    });
-    group(ui, t!("group-export"), |ui| {
-        if big_button(ui, Icon::Export, &t!("action-export-ifc"), false, true, false).clicked() {
-            actions::export_ifc(state);
-        }
-        let sheet = actions::active_sheet(state).is_some();
-        for (label, format) in
-            [(t!("action-export-pdf"), actions::SheetFormat::Pdf), (t!("action-export-svg"), actions::SheetFormat::Svg)]
-        {
-            let r = big_button(ui, Icon::Sheet, &label, false, sheet, false);
-            let r = if sheet { r } else { r.on_hover_text(t!("hint-export-sheet")) };
-            if sheet && r.clicked() {
-                actions::export_sheet(state, format);
-            }
-        }
-    });
+    use UiCommand::{CloseProject, ExportIfc, ExportPdf, ExportSvg, ImportIfc, New, Open, Save, SaveAs};
+    group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[New, Open, Save, SaveAs, CloseProject]));
+    group(ui, t!("group-import"), |ui| command_button(ui, state, ImportIfc));
+    group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportPdf, ExportSvg]));
     group(ui, t!("group-settings"), |ui| {
         ui.allocate_ui_with_layout(vec2(170.0, BUTTON_HEIGHT), Layout::top_down(Align::Min), |ui| {
             ui.add_space(6.0);
@@ -418,58 +409,36 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
             actions::set_language(state, lang);
         });
     });
-    group(ui, t!("group-help"), |ui| {
-        if big_button(ui, Icon::About, &t!("dlg-about"), false, true, false).clicked() {
-            state.dialogs.about = true;
-        }
-    });
+    group(ui, t!("group-help"), |ui| command_button(ui, state, UiCommand::About));
+}
+
+fn place(category: Category) -> UiCommand {
+    UiCommand::Place(category)
 }
 
 fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("group-build"), |ui| {
-        tool_button(ui, state, t!("tool-wall"), "WA", Category::Wall);
-        tool_button(ui, state, t!("tool-door"), "DR", Category::Door);
-        tool_button(ui, state, t!("tool-window"), "WN", Category::Window);
-    });
-    group(ui, t!("group-horizontal"), |ui| {
-        tool_button(ui, state, t!("tool-floor"), "SB", Category::Floor);
-        tool_button(ui, state, t!("tool-ceiling"), "FO", Category::Ceiling);
-        tool_button(ui, state, t!("tool-roof"), "TE", Category::Roof);
-    });
-    group(ui, t!("group-circulation"), |ui| {
-        tool_button(ui, state, t!("tool-stair"), "ST", Category::Stair);
-        tool_button(ui, state, t!("tool-railing"), "RA", Category::Railing);
-    });
-    group(ui, t!("group-room"), |ui| {
-        tool_button(ui, state, t!("tool-room"), "RM", Category::Room);
-    });
+    use Category::*;
+    let buttons = |list: &[Category]| list.iter().map(|c| place(*c)).collect::<Vec<_>>();
+    group(ui, t!("group-build"), |ui| command_buttons(ui, state, &buttons(&[Wall, Door, Window])));
+    group(ui, t!("group-horizontal"), |ui| command_buttons(ui, state, &buttons(&[Floor, Ceiling, Roof])));
+    group(ui, t!("group-circulation"), |ui| command_buttons(ui, state, &buttons(&[Stair, Railing])));
+    group(ui, t!("group-room"), |ui| command_button(ui, state, place(Room)));
     group(ui, t!("group-model"), |ui| {
-        tool_button(ui, state, t!("tool-component"), "CM", Category::Component);
-        if big_button(ui, Icon::Plus, &t!("action-new-component"), false, true, false).clicked() {
-            state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
-        }
-        if big_button(ui, Icon::Open, &t!("action-load-component"), false, true, false).clicked() {
-            actions::load_component(state);
-        }
+        command_buttons(ui, state, &[place(Component), UiCommand::NewComponent, UiCommand::LoadComponent]);
     });
-    group(ui, t!("group-datum"), |ui| {
-        tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
-    });
-    group(ui, t!("group-selection"), |ui| select_button(ui, state));
+    group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Grid)));
+    group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
 }
 
 fn structure_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-structure"), |ui| {
-        tool_button(ui, state, t!("tool-column"), "CL", Category::Column);
-        tool_button(ui, state, t!("tool-beam"), "BM", Category::Beam);
+        command_buttons(ui, state, &[place(Category::Column), place(Category::Beam)]);
     });
-    group(ui, t!("group-datum"), |ui| {
-        tool_button(ui, state, t!("tool-grid"), "GR", Category::Grid);
-    });
-    group(ui, t!("group-selection"), |ui| select_button(ui, state));
+    group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Category::Grid)));
+    group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
 }
 
-fn dimension_icon(mode: DimensionMode) -> Icon {
+pub fn dimension_icon(mode: DimensionMode) -> Icon {
     match mode {
         DimensionMode::Aligned => Icon::Dimension,
         DimensionMode::Linear => Icon::DimLinear,
@@ -481,39 +450,10 @@ fn dimension_icon(mode: DimensionMode) -> Icon {
 
 fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-dimension"), |ui| {
-        for mode in DimensionMode::ALL {
-            let active = matches!(state.tool, Tool::Dimension { mode: m, .. } if m == mode);
-            let label = crate::i18n::tr(mode.key());
-            let r = big_button(ui, dimension_icon(mode), &label, active, true, false);
-            let r = if mode == DimensionMode::Aligned { r.on_hover_text(format!("{label} (DI)")) } else { r };
-            if r.clicked()
-                && let Some(Tool::Dimension { type_id, .. }) = Tool::for_category(state.project(), Category::Dimension)
-            {
-                state.set_tool(Tool::Dimension { type_id, mode });
-                state.message = crate::i18n::tr(mode.hint_key());
-            }
-        }
+        command_buttons(ui, state, &DimensionMode::ALL.map(UiCommand::Dimension));
     });
-    group(ui, t!("group-text"), |ui| {
-        let active = matches!(state.tool, Tool::Text { .. });
-        let label = t!("tool-text");
-        if big_button(ui, Icon::Text, &label, active, true, false).on_hover_text(format!("{label} (TT)")).clicked()
-            && let Some(tool) = Tool::for_category(state.project(), Category::Text)
-        {
-            state.set_tool(tool);
-            state.message = t!("hint-text");
-        }
-        let text = selected_text(state);
-        let adding = matches!(state.tool, Tool::AddLeader { .. });
-        let r = big_button(ui, Icon::Leader, &t!("tool-add-leader"), adding, text.is_some() || adding, false);
-        if r.on_hover_text(t!("hint-add-leader-button")).clicked()
-            && let Some(id) = text
-        {
-            state.set_tool(Tool::AddLeader { id });
-            state.message = t!("hint-add-leader");
-        }
-    });
-    group(ui, t!("group-selection"), |ui| select_button(ui, state));
+    group(ui, t!("group-text"), |ui| command_buttons(ui, state, &[UiCommand::Text, UiCommand::AddLeader]));
+    group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
 }
 
 /// The text note selected alone, if any.
@@ -522,81 +462,30 @@ pub fn selected_text(state: &AppState) -> Option<cc_core::ElementId> {
     matches!(state.project().element(id).map(|e| &e.kind), Some(cc_core::ElementKind::Text(_))).then_some(id)
 }
 
+/// Families of small buttons, each starting its own column.
+fn stacks(ui: &mut Ui, state: &mut AppState, families: &[&[UiCommand]]) {
+    for family in families {
+        if let Some(command) = stacked(ui, state, family) {
+            commands::run(state, &ui.ctx().clone(), command);
+        }
+    }
+}
+
 fn modify_tab(ui: &mut Ui, state: &mut AppState) {
-    let has_sel = !state.selection.is_empty();
-    group(ui, t!("group-selection"), |ui| select_button(ui, state));
-    group(ui, t!("group-clipboard"), |ui| clipboard_group(ui, state, has_sel));
+    use UiCommand::*;
+    group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
+    group(ui, t!("group-clipboard"), |ui| clipboard_group(ui, state));
     group(ui, t!("group-modify"), |ui| {
-        let tip = |key: &str, keys: &str| format!("{} ({keys})", crate::i18n::tr(key));
-        let tools = [
-            (Tool::Move, Icon::Move, tip("tool-move", "MV")),
-            (Tool::Copy, Icon::Copy, tip("tool-copy", "CO")),
-            (Tool::Rotate, Icon::Rotate, tip("tool-rotate", "RO")),
-            (Tool::Mirror { draw: false }, Icon::MirrorPick, tip("tool-mirror-pick", "MM")),
-            (Tool::Mirror { draw: true }, Icon::MirrorDraw, tip("tool-mirror-draw", "DM")),
-            (Tool::Array, Icon::Array, tip("tool-array", "AR")),
-        ];
-        let buttons: Vec<StackButton> = tools
-            .iter()
-            .map(|(tool, icon, tooltip)| StackButton {
-                icon: *icon,
-                tooltip: tooltip.clone(),
-                enabled: has_sel || state.tool == *tool,
-                selected: state.tool == *tool,
-            })
-            .collect();
-        if let Some(i) = stacked(ui, &buttons)
-            && let Some((tool, _, _)) = tools.get(i)
-        {
-            crate::modify::start(state, tool.clone());
-        }
+        let transforms: &[UiCommand] = &[Move, CopyElements, Rotate, MirrorPick, MirrorDraw, Array];
         // Geometry edits pick their elements, no selection needed.
-        let picks = [
-            (Tool::Align, Icon::Align, tip("tool-align", "AL")),
-            (Tool::Offset, Icon::Offset, tip("tool-offset", "OF")),
-            (Tool::TrimCorner, Icon::TrimCorner, tip("tool-trim-corner", "TR")),
-            (Tool::TrimExtend, Icon::TrimExtend, tip("tool-trim-extend", "TX")),
-            (Tool::Split, Icon::Split, tip("tool-split", "SL")),
-            (Tool::ToggleJoin, Icon::Join, crate::i18n::tr("tool-toggle-join")),
-        ];
-        let buttons: Vec<StackButton> = picks
-            .iter()
-            .map(|(tool, icon, tooltip)| StackButton {
-                icon: *icon,
-                tooltip: tooltip.clone(),
-                enabled: true,
-                selected: state.tool == *tool,
-            })
-            .collect();
-        if let Some(i) = stacked(ui, &buttons)
-            && let Some((tool, _, _)) = picks.get(i)
-        {
-            crate::modify::start_pick(state, tool.clone());
-        }
-        let pins = [
-            StackButton { icon: Icon::Pin, tooltip: tip("action-pin", "PN"), enabled: has_sel, selected: false },
-            StackButton { icon: Icon::Unpin, tooltip: tip("action-unpin", "UP"), enabled: has_sel, selected: false },
-            StackButton {
-                icon: Icon::Delete,
-                tooltip: format!("{} (Delete)", t!("action-delete")),
-                enabled: has_sel,
-                selected: false,
-            },
-        ];
-        match stacked(ui, &pins) {
-            Some(0) => crate::modify::set_pinned(state, true),
-            Some(1) => crate::modify::set_pinned(state, false),
-            Some(2) => state.delete_selection(),
-            _ => {}
-        }
+        let picks: &[UiCommand] = &[Align, Offset, TrimCorner, TrimExtend, Split, ToggleJoin];
+        stacks(ui, state, &[transforms, picks, &[Pin, Unpin, Delete]]);
     });
 }
 
 /// Paste (a menu of where to paste), then cut, copy and match type.
-fn clipboard_group(ui: &mut Ui, state: &mut AppState, has_sel: bool) {
-    let can_paste = !state.clipboard.is_empty();
-    let pasting = state.tool == Tool::Paste;
-    let r = big_button(ui, Icon::Paste, &t!("action-paste"), pasting, can_paste, true);
+fn clipboard_group(ui: &mut Ui, state: &mut AppState) {
+    let r = command_menu(ui, state, UiCommand::Paste);
     egui::Popup::menu(&r).show(|ui| {
         if ui.button(format!("{} (Ctrl+V)", t!("paste-click"))).clicked() {
             crate::clipboard::paste(state);
@@ -609,61 +498,24 @@ fn clipboard_group(ui: &mut Ui, state: &mut AppState, has_sel: bool) {
             crate::clipboard::paste_aligned(state, true);
         }
     });
-    let buttons = [
-        StackButton {
-            icon: Icon::Cut,
-            tooltip: format!("{} (Ctrl+X)", t!("action-cut")),
-            enabled: has_sel,
-            selected: false,
-        },
-        StackButton {
-            icon: Icon::Copy,
-            tooltip: format!("{} (Ctrl+C)", t!("action-copy")),
-            enabled: has_sel,
-            selected: false,
-        },
-        StackButton {
-            icon: Icon::MatchType,
-            tooltip: format!("{} (MA)", t!("tool-match-type")),
-            enabled: true,
-            selected: state.tool == Tool::MatchType,
-        },
-    ];
-    match stacked(ui, &buttons) {
-        Some(0) => crate::clipboard::cut(ui.ctx(), state),
-        Some(1) => {
-            crate::clipboard::copy(ui.ctx(), state);
-        }
-        Some(2) => crate::clipboard::start_match_type(state),
-        _ => {}
-    }
+    stacks(ui, state, &[&[UiCommand::Cut, UiCommand::ClipboardCopy, UiCommand::MatchType]]);
 }
 
 fn view_tab(ui: &mut Ui, state: &mut AppState) {
     let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
     group(ui, t!("group-create-views"), |ui| {
-        for (ceiling, icon, label) in [
-            (false, Icon::FloorPlan, t!("view-new-floor-plan")),
-            (true, Icon::CeilingPlan, t!("view-new-ceiling-plan")),
-        ] {
-            let r = big_button(ui, icon, &label, false, true, true);
+        for command in [UiCommand::FloorPlan, UiCommand::CeilingPlan] {
+            let r = command_menu(ui, state, command);
             egui::Popup::menu(&r).show(|ui| {
                 for (id, name) in &levels {
                     if ui.button(name).clicked() {
-                        actions::new_plan(state, *id, ceiling);
+                        actions::new_plan(state, *id, command == UiCommand::CeilingPlan);
                     }
                 }
             });
         }
-        if big_button(ui, Icon::View3D, &t!("view-new-3d"), false, true, false).clicked() {
-            actions::new_3d(state);
-        }
-        let section = big_button(ui, Icon::Section, &t!("tool-section"), state.tool == Tool::Section, true, false);
-        if section.on_hover_text(format!("{} — CT", t!("tool-section"))).clicked() {
-            state.set_tool(Tool::Section);
-            state.message = t!("msg-section-hint");
-        }
-        let r = big_button(ui, Icon::Elevation, &t!("view-elevations"), false, true, true);
+        command_buttons(ui, state, &[UiCommand::New3D, UiCommand::Section]);
+        let r = command_menu(ui, state, UiCommand::Elevations);
         egui::Popup::menu(&r).show(|ui| {
             let elevations: Vec<_> =
                 state.project().views_of(ViewCategory::Elevation).map(|v| (v.id, v.name.clone())).collect();
@@ -675,10 +527,8 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         });
     });
     group(ui, t!("group-documentation"), |ui| {
-        if big_button(ui, Icon::Legend, &t!("view-new-legend"), false, true, false).clicked() {
-            actions::new_legend(state);
-        }
-        let r = big_button(ui, Icon::Schedule, &t!("view-new-schedule"), false, true, true);
+        command_button(ui, state, UiCommand::Legend);
+        let r = command_menu(ui, state, UiCommand::Schedule);
         egui::Popup::menu(&r).show(|ui| {
             for c in Category::SCHEDULABLE {
                 if ui.button(actions::t_category(c)).clicked() {
@@ -686,44 +536,15 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
                 }
             }
         });
-        if big_button(ui, Icon::Sheet, &t!("view-new-sheet"), false, true, false).clicked() {
-            actions::new_sheet(state);
-        }
+        command_button(ui, state, UiCommand::Sheet);
     });
-    group(ui, t!("group-navigate"), |ui| {
-        if big_button(ui, Icon::ZoomFit, &t!("action-zoom-fit"), false, true, false).on_hover_text("ZE").clicked() {
-            crate::app::zoom_fit(state);
-        }
-    });
+    group(ui, t!("group-navigate"), |ui| command_button(ui, state, UiCommand::ZoomFit));
 }
 
 fn manage_tab(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("group-project"), |ui| {
-        if big_button(ui, Icon::ProjectInfo, &t!("dlg-project-info"), false, true, false).clicked() {
-            state.dialogs.project_info = true;
-        }
-        if big_button(ui, Icon::Dimension, &t!("dlg-units"), false, true, false).clicked() {
-            state.dialogs.units = true;
-        }
-        if big_button(ui, Icon::Levels, &t!("dlg-levels"), false, true, false).clicked() {
-            state.dialogs.levels = true;
-        }
-        if big_button(ui, Icon::Materials, &t!("dlg-materials"), false, true, false).clicked() {
-            state.dialogs.materials = true;
-        }
-    });
-    group(ui, t!("group-macros"), |ui| {
-        let recording = state.session.is_recording();
-        let label = if recording { t!("action-macro-stop") } else { t!("action-macro-record") };
-        let record = big_button(ui, Icon::MacroRecord, &label, recording, true, false);
-        if record.on_hover_text(t!("hint-macro-record")).clicked() {
-            actions::toggle_macro_recording(state);
-        }
-        let run = big_button(ui, Icon::MacroRun, &t!("action-macro-run"), false, !recording, false);
-        if run.on_hover_text(t!("hint-macro-run")).clicked() {
-            actions::run_macro(state);
-        }
-    });
+    use UiCommand::*;
+    group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[ProjectInfo, Units, Levels, Materials]));
+    group(ui, t!("group-macros"), |ui| command_buttons(ui, state, &[MacroRecord, MacroRun]));
 }
 
 /// Context options for the active tool (options bar).

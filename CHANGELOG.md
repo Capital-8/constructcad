@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Documentation of the engine, the command line, scripts, macros and MCP (`docs/automation.md`, `docs/automacao.md`), a command reference generated from the catalog (`docs/commands.md`, `ccad reference`; a test keeps it current) and an example script (`examples/small_house.ccmacro`).
 - Doors and windows can be placed by a point near a wall, without its id; sheets can be referred to by number.
 - Macros (*Manage → Macros*): record the changes you make as a script of engine commands (`.ccmacro`, dragged values recorded once, cancelled dialogs left out) and play macros back; `ccad script` runs the same files.
+- Ribbon and quick access buttons are interface commands: each knows its label, shortcut, description, the engine command it runs and when it is available, so buttons enable themselves and their tooltips show the shortcut, what the command does, why it is unavailable (no selection, nothing to undo, no sheet open…) and the engine command scripts use for the same change. Two-letter shortcuts come from the same table and say why when they cannot run.
 
 ### Changed
 

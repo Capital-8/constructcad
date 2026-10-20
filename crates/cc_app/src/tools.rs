@@ -199,7 +199,7 @@ impl Tool {
 }
 
 /// What the dimension tool places.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum DimensionMode {
     #[default]
     Aligned,
