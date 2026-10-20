@@ -763,6 +763,102 @@ impl Command for MepConnect {
     }
 }
 
+/// Size the building services from their networks (simplified tables of
+/// common Brazilian practice): drains by the fixture units upstream, water
+/// pipes by the flow from the fixtures' weights (at most 3 m/s), circuits
+/// by their current (breaker, copper conductor) and the voltage drop to the
+/// farthest device (at most 4 %). Diameters in mm, lengths in m.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MepSizing {}
+
+impl Command for MepSizing {
+    const NAME: &'static str = "mep_sizing";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let (p, geom) = s.project_and_geometry();
+        let code = |id: SystemId| p.system(id).map_or(String::new(), |x| x.label().to_string());
+        let pipes: Vec<Value> = cc_geom::sizing::size_pipes(p, geom)
+            .into_iter()
+            .map(|x| {
+                json!({
+                    "id": x.run.0,
+                    "system": code(x.system),
+                    "kind": kind_name(x.kind),
+                    "load": x.load,
+                    "flow_l_s": x.flow,
+                    "speed_m_s": x.speed,
+                    "diameter_mm": (x.diameter * 1000.0).round(),
+                    "required_mm": (x.required * 1000.0).round(),
+                    "ok": x.ok(),
+                })
+            })
+            .collect();
+        let circuits: Vec<Value> = cc_geom::sizing::size_circuits(p, geom)
+            .into_iter()
+            .map(|x| {
+                json!({
+                    "id": x.system.0,
+                    "code": code(x.system),
+                    "power_va": x.power,
+                    "voltage": x.voltage,
+                    "current_a": x.current,
+                    "breaker_a": x.breaker,
+                    "conductor_mm2": x.conductor,
+                    "length_m": x.length,
+                    "voltage_drop_pct": x.drop,
+                    "ok": x.ok(),
+                })
+            })
+            .collect();
+        Ok(json!({"pipes": pipes, "circuits": circuits}))
+    }
+}
+
+/// Give each sized pipe the smallest pipe type of the project at least as
+/// wide as `mep_sizing` requires. Pipes already wide enough keep their type
+/// unless `downsize` is set.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MepSizeApply {
+    /// Also narrow pipes wider than required.
+    #[serde(default)]
+    pub downsize: bool,
+}
+
+impl Command for MepSizeApply {
+    const NAME: &'static str = "mep_size_apply";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let (p, geom) = s.project_and_geometry();
+        let mut changes = Vec::new();
+        for x in cc_geom::sizing::size_pipes(p, geom) {
+            if x.ok() && !self.downsize {
+                continue;
+            }
+            let Some(type_id) = pipe_type_for(p, x.required) else { continue };
+            let wide_enough =
+                p.element_type(type_id).and_then(|t| t.diameter()).is_some_and(|d| d >= x.required - 1e-6);
+            if wide_enough && p.element(x.run).is_some_and(|e| e.type_id != type_id) {
+                changes.push((x.run, type_id));
+            }
+        }
+        if changes.is_empty() {
+            return Ok(json!({"changed": []}));
+        }
+        let ids: Vec<ElementId> = changes.iter().map(|c| c.0).collect();
+        edit(s, t!("tx-mep-size"), |e| {
+            for (id, type_id) in changes {
+                if let Some(el) = e.element_mut(id) {
+                    el.type_id = type_id;
+                }
+            }
+            Ok(())
+        })?;
+        Ok(json!({"changed": super::ids_json(&ids)}))
+    }
+}
+
 /// Numbers numerically, then text.
 fn natural(a: &str, b: &str) -> std::cmp::Ordering {
     match (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {

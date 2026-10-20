@@ -119,6 +119,129 @@ fn body(ui: &mut Ui, state: &mut AppState) {
     fittings(ui, state);
 }
 
+/// The sizing of the pipes and circuits (`mep_sizing`), with a button that
+/// gives undersized pipes the required diameters (`mep_size_apply`).
+pub fn sizing(ctx: &Context, state: &mut AppState) {
+    if !state.dialogs.sizing {
+        return;
+    }
+    let Ok(out) = state.session.run(mep::MepSizing {}) else { return };
+    let mut apply = false;
+    let response = Dialog::new("mep-sizing", t!("dlg-mep-sizing")).width(760.0).show(
+        ctx,
+        |ui| {
+            let n = |v: &serde_json::Value, d: usize| {
+                v.as_f64().map_or(String::from("–"), |x| cc_views::format::number(x, d))
+            };
+            let status = |ok: &serde_json::Value| {
+                if ok.as_bool() == Some(true) {
+                    RichText::new(t!("sizing-ok")).color(PALETTE.text_muted)
+                } else {
+                    RichText::new(t!("sizing-undersized")).color(PALETTE.warning)
+                }
+            };
+            let header = |ui: &mut Ui, cols: Vec<String>| {
+                for h in cols {
+                    ui.label(RichText::new(h).color(PALETTE.text_muted));
+                }
+                ui.end_row();
+            };
+            let pipes = out["pipes"].as_array().cloned().unwrap_or_default();
+            ui.label(RichText::new(t!("sizing-pipes")).strong());
+            if pipes.is_empty() {
+                ui.label(RichText::new(t!("sizing-no-pipes")).color(PALETTE.text_muted));
+            }
+            egui::ScrollArea::vertical().id_salt("sizing-pipes").max_height(240.0).show(ui, |ui| {
+                egui::Grid::new("sizing-pipes").num_columns(7).striped(true).spacing([14.0, 4.0]).show(ui, |ui| {
+                    if !pipes.is_empty() {
+                        header(
+                            ui,
+                            vec![
+                                t!("col-system"),
+                                t!("sizing-element"),
+                                t!("sizing-load"),
+                                t!("sizing-flow"),
+                                t!("col-diameter"),
+                                t!("sizing-required"),
+                                String::new(),
+                            ],
+                        );
+                    }
+                    for p in &pipes {
+                        ui.label(p["system"].as_str().unwrap_or(""));
+                        ui.label(format!("E{}", p["id"]));
+                        let unit = if p["kind"] == "sanitary" { t!("col-drain-units") } else { t!("sizing-weights") };
+                        ui.label(format!("{} {unit}", n(&p["load"], 1)));
+                        ui.label(if p["flow_l_s"].is_null() {
+                            "–".into()
+                        } else {
+                            format!("{} l/s", n(&p["flow_l_s"], 2))
+                        });
+                        ui.label(format!("Ø{}", n(&p["diameter_mm"], 0)));
+                        ui.label(format!("Ø{}", n(&p["required_mm"], 0)));
+                        ui.label(status(&p["ok"]));
+                        ui.end_row();
+                    }
+                });
+            });
+            let undersized = pipes.iter().any(|p| p["ok"] == false);
+            if ui.add_enabled(undersized, egui::Button::new(t!("sizing-apply"))).clicked() {
+                apply = true;
+            }
+            ui.add_space(8.0);
+            let circuits = out["circuits"].as_array().cloned().unwrap_or_default();
+            ui.label(RichText::new(t!("sizing-circuits")).strong());
+            egui::Grid::new("sizing-circuits").num_columns(8).striped(true).spacing([14.0, 4.0]).show(ui, |ui| {
+                if !circuits.is_empty() {
+                    header(
+                        ui,
+                        vec![
+                            t!("info-number"),
+                            t!("col-power"),
+                            t!("col-current"),
+                            t!("sizing-breaker"),
+                            t!("sizing-conductor"),
+                            t!("prop-length"),
+                            t!("sizing-drop"),
+                            String::new(),
+                        ],
+                    );
+                }
+                for c in &circuits {
+                    ui.label(c["code"].as_str().unwrap_or(""));
+                    ui.label(format!("{} VA", n(&c["power_va"], 0)));
+                    ui.label(format!("{} A", n(&c["current_a"], 1)));
+                    ui.label(format!("{} A", n(&c["breaker_a"], 0)));
+                    ui.label(format!("{} mm²", n(&c["conductor_mm2"], 1)));
+                    ui.label(if c["length_m"].is_null() {
+                        "–".into()
+                    } else {
+                        format!("{} m", n(&c["length_m"], 1))
+                    });
+                    ui.label(if c["voltage_drop_pct"].is_null() {
+                        "–".into()
+                    } else {
+                        format!("{} %", n(&c["voltage_drop_pct"], 2))
+                    });
+                    ui.label(status(&c["ok"]));
+                    ui.end_row();
+                }
+            });
+            ui.add_space(6.0);
+            ui.label(RichText::new(t!("sizing-note")).size(11.0).color(PALETTE.text_faint));
+        },
+        |f| {
+            f.primary(t!("action-close"));
+        },
+    );
+    if apply && let Some(out) = crate::actions::run_command(state, mep::MepSizeApply { downsize: false }) {
+        state.message = t!("msg-sized", "count" => out["changed"].as_array().map_or(0, Vec::len));
+    }
+    if response.clicked.is_some() || response.dismissed {
+        state.dialogs.sizing = false;
+    }
+}
+
 /// The fittings takeoff: how many of each kind, angle and diameter.
 fn fittings(ui: &mut Ui, state: &mut AppState) {
     let Ok(out) = state.session.run(mep::MepFittings { level: None }) else { return };

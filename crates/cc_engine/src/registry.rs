@@ -167,6 +167,8 @@ registry![
         mep::CircuitLoads,
         mep::MepFittings,
         mep::MepConnect,
+        mep::MepSizing,
+        mep::MepSizeApply,
     ],
     "Modifying elements" => [
         modify::ElementsDelete,

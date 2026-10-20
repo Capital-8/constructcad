@@ -99,6 +99,12 @@ impl Session {
         &self.geom
     }
 
+    /// The project with its current geometry.
+    pub fn project_and_geometry(&mut self) -> (&Project, &ModelGeometry) {
+        self.sync();
+        (&self.doc.project, &self.geom)
+    }
+
     /// Drawing of a graphical view (cached per revision).
     pub fn drawing(&mut self, view: ViewId) -> Option<Rc<Drawing2D>> {
         let rev = self.doc.revision();

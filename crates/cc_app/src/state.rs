@@ -60,6 +60,8 @@ pub struct Dialogs {
     pub about: bool,
     /// Plumbing systems and electrical circuits.
     pub systems: bool,
+    /// Sizing of the pipes and circuits.
+    pub sizing: bool,
 }
 
 pub struct AppState {

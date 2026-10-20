@@ -9,7 +9,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_save`](#component_save)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
-- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect)
+- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
@@ -705,6 +705,20 @@ No parameters.
 |---|---|---|---|
 | `elements` | [id, …] | required | Fixture and device ids. |
 | `system` | id or name | optional | Only to this system or circuit (id, name or code). |
+
+### `mep_sizing`
+
+*query* — Size the building services from their networks (simplified tables of common Brazilian practice): drains by the fixture units upstream, water pipes by the flow from the fixtures' weights (at most 3 m/s), circuits by their current (breaker, copper conductor) and the voltage drop to the farthest device (at most 4 %). Diameters in mm, lengths in m.
+
+No parameters.
+
+### `mep_size_apply`
+
+*edit* — Give each sized pipe the smallest pipe type of the project at least as wide as `mep_sizing` requires. Pipes already wide enough keep their type unless `downsize` is set.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `downsize` | boolean | optional | Also narrow pipes wider than required. |
 
 ## Modifying elements
 

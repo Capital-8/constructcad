@@ -1127,3 +1127,63 @@ fn fixtures_and_devices_connect_to_the_networks() {
     let wall = id(&run(&mut s, "wall_create", json!({"start": [0, 8], "end": [4, 8]})));
     assert_eq!(fails(&mut s, "mep_connect", json!({"elements": [wall]})), ErrorCode::InvalidArguments);
 }
+
+#[test]
+fn sizing_drains_water_pipes_and_circuits() {
+    let mut s = Session::default();
+    let pipe_types: Vec<(u64, f64)> = run(&mut s, "types_list", json!({"category": "pipe"}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| (id(t), run(&mut s, "type_get", json!({"type": id(t)}))["params"]["diameter"].as_f64().unwrap()))
+        .collect();
+    let of = |d: f64| pipe_types.iter().find(|t| (t.1 - d).abs() < 1e-9).unwrap().0;
+    // A 40 mm drain and a 20 mm cold water main, both too small for what they will carry.
+    let drain = id(&run(
+        &mut s,
+        "pipe_create",
+        json!({"start": [0, 0], "end": [8, 0], "system": "sanitary", "type": of(0.04)}),
+    ));
+    let water = id(&run(
+        &mut s,
+        "pipe_create",
+        json!({"start": [0, 0.1], "end": [8, 0.1], "system": "cold_water", "type": of(0.02)}),
+    ));
+    let toilet = mep_type(&mut s, "Fixture");
+    let mut fixtures = Vec::new();
+    for x in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] {
+        fixtures.push(id(&run(&mut s, "component_place", json!({"position": [x, 1.5], "type": toilet}))));
+    }
+    run(&mut s, "mep_connect", json!({"elements": fixtures}));
+    let sizing = run(&mut s, "mep_sizing", json!({}));
+    let pipe = |id: u64| sizing["pipes"].as_array().unwrap().iter().find(|p| p["id"] == json!(id)).unwrap().clone();
+    // Seven toilets: 42 fixture units at the outlet, 100 mm.
+    let main = pipe(drain);
+    assert_eq!(main["load"], json!(42.0), "{main}");
+    assert_eq!((main["required_mm"].clone(), main["ok"].clone()), (json!(100.0), json!(false)));
+    // Their weights add up to 2.1: 0.43 l/s, still within 20 mm at the source.
+    let supply = pipe(water);
+    assert!((supply["load"].as_f64().unwrap() - 2.1).abs() < 1e-9, "{supply}");
+    assert!((supply["flow_l_s"].as_f64().unwrap() - 0.3 * 2.1f64.sqrt()).abs() < 1e-9);
+    assert_eq!(supply["required_mm"], json!(20.0));
+    // Applying widens the drain main; the water main stays.
+    let applied = run(&mut s, "mep_size_apply", json!({}));
+    assert!(applied["changed"].as_array().unwrap().contains(&json!(drain)), "{applied}");
+    assert_eq!(run(&mut s, "element_get", json!({"id": drain}))["type"]["id"], json!(of(0.1)));
+    assert_eq!(run(&mut s, "element_get", json!({"id": water}))["type"]["id"], json!(of(0.02)));
+
+    // A 3000 VA circuit 51 m from its board (no conduits: measured straight).
+    let panel_t = mep_type(&mut s, "Panel");
+    run(&mut s, "component_place", json!({"position": [0, 0], "type": panel_t, "base_offset": 1.3}));
+    let circuit = id(&run(&mut s, "system_create", json!({"kind": "power"})));
+    let outlet = mep_type(&mut s, "DedicatedOutlet");
+    for _ in 0..2 {
+        run(&mut s, "component_place", json!({"position": [40, 10], "type": outlet, "system": circuit}));
+    }
+    let sizing = run(&mut s, "mep_sizing", json!({}));
+    let c = sizing["circuits"].as_array().unwrap().iter().find(|c| c["id"] == json!(circuit)).unwrap().clone();
+    // 23.6 A: a 25 A breaker; 4 mm² would carry it but drops 8.5 %, 10 mm² drops 3.4 %.
+    assert_eq!((c["breaker_a"].clone(), c["conductor_mm2"].clone()), (json!(25.0), json!(10.0)), "{c}");
+    assert!((c["length_m"].as_f64().unwrap() - 51.0).abs() < 1e-9);
+    assert!(c["voltage_drop_pct"].as_f64().unwrap() < 4.0 && c["ok"] == json!(true));
+}

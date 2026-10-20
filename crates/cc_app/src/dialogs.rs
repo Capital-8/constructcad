@@ -29,6 +29,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::component_editor::show(ctx, state);
     crate::schedule_ui::dialog(ctx, state);
     crate::systems_dialog::show(ctx, state);
+    crate::systems_dialog::sizing(ctx, state);
     confirm(ctx, state);
     error(ctx, state);
     about(ctx, state);
