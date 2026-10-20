@@ -33,7 +33,19 @@ All commits must be signed off under the [Developer Certificate of Origin 1.1](h
 git commit -s
 ```
 
-This appends a line like `Signed-off-by: Your Name <you@example.com>` to the commit message. It must match the commit author.
+This appends a line like `Signed-off-by: Your Name <you@example.com>` to the commit message. It must match the commit author exactly, so check `git config user.name` and `git config user.email` first. Any name you are known by is fine, but not an anonymous one.
+
+**Forgot to sign off?** The *DCO sign-off* check on your pull request lists the commits without it. Sign off the commits in your branch and update the pull request:
+
+```sh
+git fetch https://github.com/francisreboucas/constructcad.git main
+git rebase --signoff FETCH_HEAD   # adds the line to every commit since main
+git push --force-with-lease
+```
+
+For only the last commit, `git commit --amend --no-edit -s` followed by `git push --force-with-lease` is enough. Commits made in the GitHub web editor can be signed off by adding the `Signed-off-by:` line to the commit message.
+
+If you cannot rewrite your branch, say in the pull request that you agree to the DCO for its commits and a maintainer can sign them off on your behalf when merging.
 
 ## Development setup
 

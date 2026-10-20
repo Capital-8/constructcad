@@ -77,15 +77,35 @@ jobs:
           fetch-depth: 0
       - name: Check Signed-off-by lines
         run: |
-          status=0
-          for sha in $(git rev-list --no-merges ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}); do
+          base=${{ github.event.pull_request.base.sha }}
+          missing=0
+          for sha in $(git rev-list --no-merges "$base..${{ github.event.pull_request.head.sha }}"); do
             author="$(git show -s --format='%an <%ae>' "$sha")"
             if ! git show -s --format=%B "$sha" | grep -qF "Signed-off-by: $author"; then
-              echo "::error::Commit $sha is missing 'Signed-off-by: $author'"
-              status=1
+              echo "::error::Commit $(git show -s --format='%h "%s"' "$sha") needs the line 'Signed-off-by: $author'"
+              missing=$((missing + 1))
             fi
           done
-          if [ "$status" -ne 0 ]; then
-            echo "Sign off your commits with 'git commit -s' (see CONTRIBUTING.md)."
+          if [ "$missing" -eq 0 ]; then
+            echo "Every commit is signed off."
+            exit 0
           fi
-          exit $status
+          {
+            echo "## DCO sign-off missing"
+            echo
+            echo "$missing commit(s) lack a \`Signed-off-by\` line matching their author. Signing off certifies the"
+            echo "[Developer Certificate of Origin](https://developercertificate.org/): that you wrote the change"
+            echo "or have the right to submit it under the project's license."
+            echo
+            echo "To sign off the commits already in this pull request, run in your branch:"
+            echo
+            echo '```sh'
+            echo "git fetch https://github.com/${{ github.repository }}.git ${{ github.event.pull_request.base.ref }}"
+            echo "git rebase --signoff $base"
+            echo "git push --force-with-lease"
+            echo '```'
+            echo
+            echo "From then on, commit with \`git commit -s\`. The sign-off must use the same name and email as the"
+            echo "commit author (\`git config user.name\` / \`user.email\`). See CONTRIBUTING.md for details."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
