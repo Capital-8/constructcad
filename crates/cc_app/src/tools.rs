@@ -440,6 +440,11 @@ fn snap(
             ends.extend_from_slice(s);
         }
     }
+    // Risers of other floors passing through the level.
+    if let Some(level) = level {
+        let risers = project.segments_at(level).filter(|(e, _)| e.level != level);
+        ends.extend(risers.map(|(_, s)| s.start));
+    }
     let nearest = |pts: &[DVec2]| {
         pts.iter().map(|p| (*p, p.distance(raw))).filter(|(_, d)| *d <= r).min_by(|a, b| a.1.total_cmp(&b.1))
     };
@@ -881,6 +886,9 @@ pub struct MepOptions {
     pub slope: Option<f64>,
     /// Elevation where the next run of a chain starts (the end of the last one).
     pub chain: Option<f64>,
+    /// Elevation a chain goes up or down to at its last point before the next
+    /// run (a vertical run), set by changing the elevation while drawing.
+    pub rise: Option<f64>,
 }
 
 /// The device kind of a component type, if it is an electrical device.
@@ -907,7 +915,9 @@ pub fn mep_component_type(project: &Project, device: bool) -> Option<ElementType
 }
 
 /// Clicks chain pipe or conduit runs: each ends where the next one starts,
-/// at the elevation the last one reached (a sloped drain keeps falling).
+/// at the elevation the last one reached (a sloped drain keeps falling). A
+/// new elevation set while drawing makes a vertical run at the last point
+/// first; clicking that point again makes only the vertical run.
 #[allow(clippy::too_many_arguments)]
 fn segment_tool(
     ui: &Ui,
@@ -931,6 +941,11 @@ fn segment_tool(
         let [r, g, b] = sys.color();
         Color32::from_rgb(r, g, b)
     });
+    if let Some(a) = anchor
+        && state.mep.rise.is_some()
+    {
+        painter.circle_stroke(xf.to_screen(a), (diameter / 2.0 * xf.scale).max(4.0) as f32, Stroke::new(1.5, color));
+    }
     if let Some(a) = anchor {
         let half = (diameter / 2.0).max(1.0 / xf.scale);
         let n = (s.point - a).normalize_or_zero().perp() * half;
@@ -944,41 +959,54 @@ fn segment_tool(
     let Some(a) = anchor else {
         state.interaction.anchor = Some(s.point);
         state.mep.chain = None;
+        state.mep.rise = None;
         return;
     };
+    let level_ref = Some(Ref::Id(level.0));
+    let create = |state: &mut AppState, end: Option<DVec2>, offset: Option<f64>, end_offset: Option<f64>| {
+        if pipe {
+            let command = cc_engine::commands::mep::PipeCreate {
+                start: a.to_array(),
+                end: end.map(|p| p.to_array()),
+                level: level_ref.clone(),
+                type_ref: Some(Ref::Id(type_id.0)),
+                system: state.mep.system.map(|id| Ref::Id(id.0)),
+                offset,
+                end_offset,
+                slope: state.mep.slope,
+            };
+            crate::actions::run_command(state, command)
+        } else {
+            let command = cc_engine::commands::mep::ConduitCreate {
+                start: a.to_array(),
+                end: end.map(|p| p.to_array()),
+                level: level_ref.clone(),
+                type_ref: Some(Ref::Id(type_id.0)),
+                circuits: state.mep.circuit.map(|id| Ref::Id(id.0)).into_iter().collect(),
+                offset,
+                end_offset,
+            };
+            crate::actions::run_command(state, command)
+        }
+    };
+    let select = |state: &mut AppState, out: &serde_json::Value| {
+        if let Some(id) = out["id"].as_u64() {
+            state.selection = BTreeSet::from([ElementId(id)]);
+        }
+    };
+    if let (Some(to), Some(from)) = (state.mep.rise.take(), state.mep.chain)
+        && (to - from).abs() > 1e-3
+        && let Some(out) = create(state, None, Some(from), Some(to))
+    {
+        select(state, &out);
+        state.mep.chain = Some(to);
+    }
     if a.distance(s.point) <= 0.01 {
         return;
     }
     let offset = state.mep.chain.or(state.mep.offset);
-    let level_ref = Some(Ref::Id(level.0));
-    let out = if pipe {
-        let command = cc_engine::commands::mep::PipeCreate {
-            start: a.to_array(),
-            end: Some(s.point.to_array()),
-            level: level_ref,
-            type_ref: Some(Ref::Id(type_id.0)),
-            system: state.mep.system.map(|id| Ref::Id(id.0)),
-            offset,
-            end_offset: None,
-            slope: state.mep.slope,
-        };
-        crate::actions::run_command(state, command)
-    } else {
-        let command = cc_engine::commands::mep::ConduitCreate {
-            start: a.to_array(),
-            end: Some(s.point.to_array()),
-            level: level_ref,
-            type_ref: Some(Ref::Id(type_id.0)),
-            circuits: state.mep.circuit.map(|id| Ref::Id(id.0)).into_iter().collect(),
-            offset,
-            end_offset: None,
-        };
-        crate::actions::run_command(state, command)
-    };
-    if let Some(out) = out {
-        if let Some(id) = out["id"].as_u64() {
-            state.selection = BTreeSet::from([ElementId(id)]);
-        }
+    if let Some(out) = create(state, Some(s.point), offset, None) {
+        select(state, &out);
         state.mep.chain = out["params"]["end_offset"].as_f64();
         state.interaction.anchor = Some(s.point);
     }

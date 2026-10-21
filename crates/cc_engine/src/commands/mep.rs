@@ -98,10 +98,36 @@ fn segment(start: Point, end: Option<Point>, offset: f64, end_offset: Option<f64
     Ok(s)
 }
 
+/// The elevation above `level` where a new run starting at `start` joins a
+/// run of its network there (pipes of `system`, any conduit; risers of other
+/// floors included): the run's elevation at that point, or on a riser the
+/// height nearest `wanted` within it.
+fn joined_offset(
+    p: &Project,
+    level: cc_core::LevelId,
+    start: Point,
+    conduit: bool,
+    system: Option<SystemId>,
+    wanted: f64,
+) -> Option<f64> {
+    let start = point(start).ok()?;
+    p.segments_at(level)
+        .filter(|(e, seg)| match e.kind {
+            ElementKind::Pipe(_) => !conduit && seg.system() == system,
+            _ => conduit,
+        })
+        .filter_map(|(_, seg)| {
+            let (q, z) = nearest_on(&seg, start, wanted);
+            (q.distance(start) <= cc_geom::mep_net::TOL).then_some(z)
+        })
+        .min_by(|a, b| (a - wanted).abs().total_cmp(&(b - wanted).abs()))
+}
+
 /// Create a pipe from `start` to `end` (or a vertical riser at `start` up or
 /// down to `end_offset`), in a plumbing system. Its center line starts
-/// `offset` above the level (default: 0.60 m for supply and vent pipes,
-/// -0.30 m for drains). Drains fall along the flow by `slope` (percent;
+/// `offset` above the level (default: where it starts on a pipe of its
+/// system, such as the end of a run or a riser; else 0.60 m for supply and
+/// vent pipes, -0.30 m for drains). Drains fall along the flow by `slope` (percent;
 /// default 2 % up to 75 mm, 1 % above); other pipes are level unless
 /// `end_offset` or `slope` says otherwise.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
@@ -144,7 +170,10 @@ impl Command for PipeCreate {
             check_fits(p, Some(false), id)?;
         }
         let kind = system.and_then(|id| p.system(id)).map(|sys| sys.kind);
-        let offset = self.offset.unwrap_or_else(|| pipe_offset(kind));
+        let offset = self.offset.unwrap_or_else(|| {
+            let wanted = pipe_offset(kind);
+            joined_offset(p, level, self.start, false, system, wanted).unwrap_or(wanted)
+        });
         let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
         if self.end_offset.is_none() && !seg.is_vertical() {
             let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
@@ -163,7 +192,8 @@ impl Command for PipeCreate {
 
 /// Create a conduit from `start` to `end` (or a vertical drop at `start` to
 /// `end_offset`) carrying `circuits`. It runs `offset` above the level
-/// (default: in the slab above, at the level height).
+/// (default: where it starts on another conduit, such as the end of a run or
+/// a vertical drop; else in the slab above, at the level height).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ConduitCreate {
@@ -204,7 +234,10 @@ impl Command for ConduitCreate {
                 circuits.push(id);
             }
         }
-        let offset = self.offset.unwrap_or_else(|| conduit_offset(p, level));
+        let offset = self.offset.unwrap_or_else(|| {
+            let wanted = conduit_offset(p, level);
+            joined_offset(p, level, self.start, true, None, wanted).unwrap_or(wanted)
+        });
         let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
         seg.systems = circuits;
         let id = edit(s, t!("tx-create-conduit"), |e| Ok(add_element(e, level, type_id, ElementKind::Conduit(seg))))?;
@@ -587,7 +620,7 @@ impl Command for MepFittings {
 }
 
 /// Connect plumbing fixtures and electrical devices to the nearest pipe or
-/// conduit of their level. A fixture gets a branch to the nearest sanitary
+/// conduit of their level (or riser of another floor passing through it). A fixture gets a branch to the nearest sanitary
 /// drain (falling towards it, with a drop from the floor), and to the
 /// nearest cold (and, when it takes it, hot) water pipe; a device gets a
 /// conduit to the nearest conduit, with a drop from its mounting height,
@@ -631,16 +664,10 @@ fn pipe_type_for(p: &Project, diameter: f64) -> Option<cc_core::ElementTypeId> {
     types.iter().find(|(d, _)| *d >= diameter - 1e-6).or(types.last()).map(|x| x.1)
 }
 
-/// The runs of `level` as (element, run), pipes or conduits.
-fn runs_on(p: &Project, level: cc_core::LevelId, conduit: bool) -> Vec<(&Element, &MepSegment)> {
-    p.elements
-        .values()
-        .filter(|r| r.level == level)
-        .filter_map(|r| match (&r.kind, conduit) {
-            (ElementKind::Pipe(seg), false) | (ElementKind::Conduit(seg), true) => Some((r, seg)),
-            _ => None,
-        })
-        .collect()
+/// The runs seen from `level` as (element, run with elevations above the
+/// level), pipes or conduits: its own and the risers of other floors through it.
+fn runs_on(p: &Project, level: cc_core::LevelId, conduit: bool) -> Vec<(&Element, MepSegment)> {
+    p.segments_at(level).filter(|(r, _)| matches!(r.kind, ElementKind::Conduit(_)) == conduit).collect()
 }
 
 /// The run nearest `p` in plan among `runs`, with the point and elevation there.
@@ -686,7 +713,7 @@ impl Command for MepConnect {
                             Some(o) => seg.system() == Some(o),
                             None => seg.system().and_then(|x| p.system(x)).is_some_and(|x| x.kind == kind),
                         };
-                        let candidates = pipes.iter().copied().filter(|(_, seg)| fits(seg));
+                        let candidates = pipes.iter().filter(|(_, seg)| fits(seg)).map(|(r, seg)| (*r, seg));
                         let Some((run_el, seg, q, zq)) = nearest_run(candidates, c.position, base) else { continue };
                         let drain = kind.is_drainage();
                         // Fixture branches as in common drainage practice: 100 mm for toilets.
@@ -721,8 +748,10 @@ impl Command for MepConnect {
                 }
                 MepData::Device { .. } => {
                     let conduits = runs_on(p, e.level, true);
-                    let candidates =
-                        conduits.iter().copied().filter(|(_, seg)| only.is_none_or(|o| seg.systems.contains(&o)));
+                    let candidates = conduits
+                        .iter()
+                        .filter(|(_, seg)| only.is_none_or(|o| seg.systems.contains(&o)))
+                        .map(|(r, seg)| (*r, seg));
                     if let Some((run_el, seg, q, zq)) = nearest_run(candidates, c.position, base) {
                         let systems = match c.system.or(only) {
                             Some(circuit) => vec![circuit],

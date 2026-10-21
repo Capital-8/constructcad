@@ -608,7 +608,7 @@ No parameters.
 
 ### `pipe_create`
 
-*edit* — Create a pipe from `start` to `end` (or a vertical riser at `start` up or down to `end_offset`), in a plumbing system. Its center line starts `offset` above the level (default: 0.60 m for supply and vent pipes, -0.30 m for drains). Drains fall along the flow by `slope` (percent; default 2 % up to 75 mm, 1 % above); other pipes are level unless `end_offset` or `slope` says otherwise.
+*edit* — Create a pipe from `start` to `end` (or a vertical riser at `start` up or down to `end_offset`), in a plumbing system. Its center line starts `offset` above the level (default: where it starts on a pipe of its system, such as the end of a run or a riser; else 0.60 m for supply and vent pipes, -0.30 m for drains). Drains fall along the flow by `slope` (percent; default 2 % up to 75 mm, 1 % above); other pipes are level unless `end_offset` or `slope` says otherwise.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -623,7 +623,7 @@ No parameters.
 
 ### `conduit_create`
 
-*edit* — Create a conduit from `start` to `end` (or a vertical drop at `start` to `end_offset`) carrying `circuits`. It runs `offset` above the level (default: in the slab above, at the level height).
+*edit* — Create a conduit from `start` to `end` (or a vertical drop at `start` to `end_offset`) carrying `circuits`. It runs `offset` above the level (default: where it starts on another conduit, such as the end of a run or a vertical drop; else in the slab above, at the level height).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -699,7 +699,7 @@ No parameters.
 
 ### `mep_connect`
 
-*edit* — Connect plumbing fixtures and electrical devices to the nearest pipe or conduit of their level. A fixture gets a branch to the nearest sanitary drain (falling towards it, with a drop from the floor), and to the nearest cold (and, when it takes it, hot) water pipe; a device gets a conduit to the nearest conduit, with a drop from its mounting height, carrying its circuit. Branches end on the runs, which forms tees. `system` connects only to that system or circuit.
+*edit* — Connect plumbing fixtures and electrical devices to the nearest pipe or conduit of their level (or riser of another floor passing through it). A fixture gets a branch to the nearest sanitary drain (falling towards it, with a drop from the floor), and to the nearest cold (and, when it takes it, hot) water pipe; a device gets a conduit to the nearest conduit, with a drop from its mounting height, carrying its circuit. Branches end on the runs, which forms tees. `system` connects only to that system or circuit.
 
 | Parameter | Type | | Description |
 |---|---|---|---|

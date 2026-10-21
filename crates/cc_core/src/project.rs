@@ -561,6 +561,33 @@ impl Project {
         }
     }
 
+    /// A pipe or conduit run as seen from `level`, with its elevations above
+    /// that level: the level's own runs, and the vertical runs of other levels
+    /// that pass through it (risers between floors, reaching at least its floor
+    /// and starting below its top). `None` for other elements and runs.
+    pub fn segment_at(&self, element: &Element, level: LevelId) -> Option<crate::MepSegment> {
+        let s = element.as_segment()?;
+        if element.level == level {
+            return Some(s.clone());
+        }
+        if !s.is_vertical() || self.level(level).is_none() {
+            return None;
+        }
+        let shift = self.level_elevation(element.level) - self.level_elevation(level);
+        let (lo, hi) = (s.start_offset.min(s.end_offset) + shift, s.start_offset.max(s.end_offset) + shift);
+        let top = self.level_height(level, 3.0);
+        (hi >= -0.01 && lo < top - 0.01 && shift.is_finite()).then(|| crate::MepSegment {
+            start_offset: s.start_offset + shift,
+            end_offset: s.end_offset + shift,
+            ..s.clone()
+        })
+    }
+
+    /// The pipe and conduit runs seen from `level` (see [`Project::segment_at`]).
+    pub fn segments_at(&self, level: LevelId) -> impl Iterator<Item = (&Element, crate::MepSegment)> {
+        self.elements.values().filter_map(move |e| Some((e, self.segment_at(e, level)?)))
+    }
+
     /// Elements in system `id`: its pipes, the conduits carrying the circuit
     /// and the components connected to it.
     pub fn system_members(&self, id: crate::SystemId) -> impl Iterator<Item = &Element> {

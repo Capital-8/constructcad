@@ -767,7 +767,12 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
     let mut offset = state.mep.offset.unwrap_or(default_offset);
     if ui.add(crate::properties::length_drag(&mut offset).speed(0.01)).changed() {
         state.mep.offset = Some(offset);
-        state.mep.chain = None;
+        // While drawing, the chain goes up or down to it at its last point.
+        if state.interaction.anchor.is_some() && state.mep.chain.is_some() {
+            state.mep.rise = Some(offset);
+        } else {
+            state.mep.chain = None;
+        }
     }
     if pipe {
         ui.label(t!("col-slope"));

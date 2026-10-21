@@ -143,10 +143,14 @@ impl MepNetwork {
         // Each run's nodes with their parameter along it.
         let mut along: BTreeMap<ElementId, Vec<(f64, usize)>> = BTreeMap::new();
         let mut runs = Vec::new();
+        // Nodes placed by a riser only: a horizontal run meeting them gives its level
+        // (the floor where the fitting is drawn).
+        let mut by_riser: Vec<bool> = Vec::new();
         for g in segments.values() {
             let Some(e) = project.element(g.element) else { continue };
             let Some((category, system)) = group(e) else { continue };
             runs.push((g, category, system, e.level));
+            let vertical = e.as_segment().is_some_and(cc_core::MepSegment::is_vertical);
             for (t, p) in [(0.0, g.a), (1.0, g.b)] {
                 let (cx, cy, cz) = cell(p);
                 let mut found = None;
@@ -165,10 +169,15 @@ impl MepNetwork {
                 }
                 let n = found.unwrap_or_else(|| {
                     net.nodes.push(NetNode { point: p, category, system, level: e.level });
+                    by_riser.push(vertical);
                     let n = net.nodes.len() - 1;
                     grid.entry((category, system, (cx, cy, cz))).or_default().push(n);
                     n
                 });
+                if !vertical && let Some(flag) = by_riser.get_mut(n).filter(|f| **f) {
+                    *flag = false;
+                    net.nodes[n].level = e.level;
+                }
                 along.entry(g.element).or_default().push((t, n));
             }
         }
@@ -299,8 +308,12 @@ mod tests {
     use cc_core::{Document, Element, MepSegment};
 
     fn add(doc: &mut Document, kind: ElementKind, category: Category) -> ElementId {
+        add_on(doc, 0, kind, category)
+    }
+
+    fn add_on(doc: &mut Document, floor: usize, kind: ElementKind, category: Category) -> ElementId {
         doc.edit("t", |e| {
-            let level = e.project().levels[0].id;
+            let level = e.project().levels[floor].id;
             let type_id = e.project().default_type(category).unwrap();
             let id = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -352,5 +365,27 @@ mod tests {
         add(&mut doc, ElementKind::Pipe(b), Category::Pipe);
         let geom = crate::ModelGeometry::build(&doc.project);
         assert!(geom.mep.fittings.is_empty());
+    }
+
+    #[test]
+    fn risers_connect_runs_of_two_floors() {
+        let mut doc = Document::new(Project::from_template());
+        let (ground, first) = (doc.project.levels[0].id, doc.project.levels[1].id);
+        // A riser drawn on the ground floor from 0.5 m up to 0.5 m above the first floor (3 m).
+        let mut riser = run([2.0, 0.0], [2.0, 0.0], 0.5);
+        riser.end_offset = 3.5;
+        add(&mut doc, ElementKind::Pipe(run([0.0, 0.0], [2.0, 0.0], 0.5)), Category::Pipe);
+        add(&mut doc, ElementKind::Pipe(riser), Category::Pipe);
+        add_on(&mut doc, 1, ElementKind::Pipe(run([2.0, 0.0], [2.0, 3.0], 0.5)), Category::Pipe);
+        // A branch upstairs ending on the middle of the riser, from a wall at 1.5 m below the first floor.
+        add_on(&mut doc, 1, ElementKind::Pipe(run([4.0, 0.0], [2.0, 0.0], -1.5)), Category::Pipe);
+        let geom = crate::ModelGeometry::build(&doc.project);
+        let mut found: Vec<(LevelId, FittingKind)> = geom.mep.fittings.iter().map(|f| (f.level, f.kind)).collect();
+        found.sort_by_key(|(l, k)| (l.0, k.key()));
+        // Elbows at both ends of the riser, each on the floor of its horizontal run, and a tee on it.
+        let elbow = |l| (l, FittingKind::Elbow { angle: 90.0 });
+        assert_eq!(found.len(), 3, "{found:?}");
+        assert!(found.contains(&elbow(ground)) && found.contains(&elbow(first)), "{found:?}");
+        assert!(found.contains(&(first, FittingKind::Tee)), "{found:?}");
     }
 }

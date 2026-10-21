@@ -31,12 +31,15 @@ pub(crate) fn services(
     scale: u32,
 ) {
     let mm = scale as f64 / 1000.0;
-    for e in project.elements.values().filter(|e| e.level == level) {
+    for e in project.elements.values() {
         match (&e.kind, discipline) {
             (ElementKind::Pipe(_), MepDiscipline::Plumbing) | (ElementKind::Conduit(_), MepDiscipline::Electrical) => {
-                segment(d, project, geom, e, cut_height, mm);
+                // The level's runs and the risers of other levels passing through it.
+                if let Some(s) = project.segment_at(e, level) {
+                    segment(d, project, geom, e, &s, cut_height, mm);
+                }
             }
-            (ElementKind::Component(c), MepDiscipline::Electrical) => {
+            (ElementKind::Component(c), MepDiscipline::Electrical) if e.level == level => {
                 if let Some(MepData::Device { device, power }) = project.mep_data(e) {
                     let circuit = c.system.and_then(|s| project.system(s)).map(|s| s.label().to_string());
                     let frame = Frame { origin: c.position, angle: c.rotation_deg.to_radians(), mm };
@@ -105,8 +108,17 @@ fn tag(project: &Project, e: &Element, diameter: f64) -> String {
     }
 }
 
-fn segment(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, e: &Element, cut_height: f64, mm: f64) {
-    let (Some(s), Some(g)) = (e.as_segment(), geom.segments.get(&e.id)) else { return };
+/// Run `e` with its elevations `s` above the plan's level.
+fn segment(
+    d: &mut Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    e: &Element,
+    s: &cc_core::MepSegment,
+    cut_height: f64,
+    mm: f64,
+) {
+    let Some(g) = geom.segments.get(&e.id) else { return };
     let color = project.system_color(e);
     let conduit = matches!(e.kind, ElementKind::Conduit(_));
     // Pipes above the cut plane are dashed; conduits only when they run in the floor.
@@ -314,6 +326,21 @@ mod tests {
             let d = crate::generate(&doc.project, &geom, &plan(mep)).unwrap();
             assert!(d.prims.iter().all(|p| p.element() != Some(pipe)));
         }
+        // The riser reaches the first floor: its plan shows it, without the ground floor's run.
+        let first = doc.project.levels[1].id;
+        let upstairs = cc_core::View {
+            kind: ViewKind::FloorPlan {
+                level: first,
+                cut_height: 1.2,
+                structural: false,
+                structure_tags: false,
+                mep: Some(MepDiscipline::Plumbing),
+            },
+            ..plan(None)
+        };
+        let d = crate::generate(&doc.project, &geom, &upstairs).unwrap();
+        assert_eq!(d.hit_test(DVec2::new(5.0, 0.0), 0.01), Some(riser));
+        assert!(d.prims.iter().all(|p| p.element() != Some(pipe)));
     }
 
     #[test]

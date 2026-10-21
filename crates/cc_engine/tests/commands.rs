@@ -1129,6 +1129,45 @@ fn fixtures_and_devices_connect_to_the_networks() {
 }
 
 #[test]
+fn runs_connect_through_risers_between_floors() {
+    let mut s = Session::default();
+    let first = run(&mut s, "levels_list", json!({}))[1]["id"].as_u64().unwrap();
+    let elevation = |s: &mut Session, out: &Value| {
+        let p = &run(s, "element_get", json!({"id": id(out)}))["params"];
+        (p["start_offset"].as_f64().unwrap(), p["end_offset"].as_f64().unwrap())
+    };
+    // A cold water run on the ground floor; a riser from its end takes its elevation
+    // and goes up to 0.6 m above the first floor (3 m).
+    run(&mut s, "pipe_create", json!({"start": [0, 0], "end": [4, 0], "system": "cold_water", "offset": 0.4}));
+    let riser = run(&mut s, "pipe_create", json!({"start": [4, 0], "system": "cold_water", "end_offset": 3.6}));
+    assert_eq!(elevation(&mut s, &riser), (0.4, 3.6));
+    // Upstairs, a run from the riser starts at its top, seen from the first floor.
+    let upper =
+        run(&mut s, "pipe_create", json!({"start": [4, 0], "end": [4, 3], "system": "cold_water", "level": first}));
+    assert!((elevation(&mut s, &upper).0 - 0.6).abs() < 1e-9, "{upper}");
+    let fittings = run(&mut s, "mep_fittings", json!({"level": first}));
+    assert_eq!(fittings["fittings"][0]["kind"], json!("elbow"), "{fittings}");
+    assert_eq!(run(&mut s, "mep_fittings", json!({}))["total"], json!(2));
+
+    // A drain stack from under the ground floor to the first floor; a fixture
+    // upstairs connects to it, and a conduit drop leaves a run at its end.
+    run(&mut s, "pipe_create", json!({"start": [6, 0], "system": "sanitary", "offset": -0.3, "end_offset": 3.5}));
+    let fixture_t = mep_type(&mut s, "Fixture");
+    let wc = id(&run(&mut s, "component_place", json!({"position": [6, 1.5], "type": fixture_t, "level": first})));
+    let out = run(&mut s, "mep_connect", json!({"elements": [wc], "system": "sanitary"}));
+    assert_eq!(out["skipped"], json!(0), "{out}");
+    let branch = out["created"].as_array().unwrap().last().unwrap().clone();
+    let branch = run(&mut s, "element_get", json!({"id": branch}));
+    assert_eq!(branch["params"]["end"], json!([6.0, 0.0]), "{branch}");
+    let fittings = run(&mut s, "mep_fittings", json!({"level": first}));
+    assert!(fittings["fittings"].as_array().unwrap().iter().any(|f| f["kind"] == json!("tee")), "{fittings}");
+
+    run(&mut s, "conduit_create", json!({"start": [0, 5], "end": [3, 5], "offset": 2.9}));
+    let drop = run(&mut s, "conduit_create", json!({"start": [3, 5], "end_offset": 0.3}));
+    assert_eq!(elevation(&mut s, &drop), (2.9, 0.3));
+}
+
+#[test]
 fn sizing_drains_water_pipes_and_circuits() {
     let mut s = Session::default();
     let pipe_types: Vec<(u64, f64)> = run(&mut s, "types_list", json!({"category": "pipe"}))
