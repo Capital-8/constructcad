@@ -102,7 +102,7 @@ Os botões do ribbon, os títulos das abas, as setas de rolagem, os itens da pal
 ### Adicionar um comando à interface
 
 1. Primeiro, faça da alteração um comando do motor (veja *Para desenvolvedores* no [guia de automação](automacao.md)).
-2. Acrescente uma variante a `UiCommand` em `crates/cc_app/src/commands.rs`. Depois preencha `icon`, `label`, `description` (uma chave i18n `cmd-desc-…` nos dois arquivos `.ftl`), `shortcut` (se houver), `engine` (o nome do comando do motor), `badge`, `unavailable` (um motivo traduzido para cada estado em que não pode rodar), `selected` (para ferramentas) e `run`. Inclua-o em `UiCommand::all`.
+2. Acrescente uma variante a `UiCommand` em `crates/cc_app/src/commands.rs`. Depois preencha `icon`, `label`, `description` (uma chave i18n `cmd-desc-…` em todos os arquivos `.ftl`), `shortcut` (se houver), `engine` (o nome do comando do motor), `badge`, `unavailable` (um motivo traduzido para cada estado em que não pode rodar), `selected` (para ferramentas) e `run`. Inclua-o em `UiCommand::all`.
 3. Coloque-o num grupo do ribbon com `command_button` (grande) ou numa família de botões pequenos com `stacks` (`crates/cc_app/src/ribbon.rs`).
 
 A dica, a habilitação, o item da paleta e um atalho de duas letras saem todos do comando. Os testes verificam que cada nome do motor existe no catálogo, que os atalhos não se repetem e que todo comando aparece no ribbon com nome acessível.

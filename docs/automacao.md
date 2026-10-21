@@ -68,7 +68,8 @@ ccad [opções] mcp                  serve os comandos por MCP (stdio)
 -p, --project <arquivo>   abre um projeto antes (.ccad, ou .ifc para importar)
 --save                    salva o projeto no fim (no próprio arquivo)
 --save-as <arquivo>       salva o projeto no fim em <arquivo>
---lang <en|pt-BR>         idioma dos nomes padrão e mensagens (também CCAD_LANG)
+--lang <código>           idioma dos nomes padrão e mensagens (também CCAD_LANG):
+                          en, pt-BR, es, fr, de, it, pl ou uk-UA
 ```
 
 Os argumentos de `run` podem ser um objeto JSON, `@arquivo.json`, `-` (entrada padrão) ou pares `chave=valor`, cujos valores são lidos como JSON quando possível e como texto caso contrário:

@@ -102,7 +102,7 @@ The ribbon buttons, tab titles, scroll arrows, palette entries, browser rows, ho
 ### Adding a command to the interface
 
 1. Make the change an engine command first (see *For developers* in the [automation guide](automation.md)).
-2. Add a variant to `UiCommand` in `crates/cc_app/src/commands.rs`. Then fill in its `icon`, `label`, `description` (an i18n key `cmd-desc-…` in both `.ftl` files), `shortcut` (if any), `engine` (the engine command's name), `badge`, `unavailable` (a localized reason for each state in which it cannot run), `selected` (for tools) and `run`. Add it to `UiCommand::all`.
+2. Add a variant to `UiCommand` in `crates/cc_app/src/commands.rs`. Then fill in its `icon`, `label`, `description` (an i18n key `cmd-desc-…` in every `.ftl` file), `shortcut` (if any), `engine` (the engine command's name), `badge`, `unavailable` (a localized reason for each state in which it cannot run), `selected` (for tools) and `run`. Add it to `UiCommand::all`.
 3. Place it in a ribbon group with `command_button` (large) or in a family of small buttons with `stacks` (`crates/cc_app/src/ribbon.rs`).
 
 The tooltip, enabling, the palette entry and a two-letter shortcut all follow from the command. Tests check that each engine name exists in the catalog, that shortcuts are unique, and that every command appears in the ribbon with an accessible name.
