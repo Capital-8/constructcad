@@ -28,6 +28,8 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Roof => Icon::Roof,
         Category::Room => Icon::Room,
         Category::Grid => Icon::Grid,
+        Category::Foundation => Icon::Footing,
+        Category::Rebar => Icon::Rebar,
         Category::Dimension => Icon::Dimension,
         Category::Column => Icon::Column,
         Category::Beam => Icon::Beam,
@@ -584,11 +586,26 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
 }
 
 fn structure_tab(ui: &mut Ui, state: &mut AppState) {
+    use UiCommand::*;
     group(ui, t!("group-structure"), |ui| {
-        command_buttons(ui, state, &[place(Category::Column), place(Category::Beam)]);
+        command_buttons(ui, state, &[place(Category::Column), place(Category::Beam), place(Category::Foundation)]);
+    });
+    // Layout from grids and foundations under what exists, as small stacked buttons.
+    group(ui, t!("group-framing"), |ui| {
+        stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[BracesX, Truss]]);
+    });
+    group(ui, t!("group-foundation"), |ui| {
+        stacks(ui, state, &[&[FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab]]);
+    });
+    group(ui, t!("group-reinforcement"), |ui| stacks(ui, state, &[&[TypicalRebar, RebarView, SteelSchedule]]));
+    group(ui, t!("group-analytical"), |ui| {
+        stacks(ui, state, &[&[SlabJoinSupports, AnalyticalView, AnalyticalExport]]);
+    });
+    group(ui, t!("group-documentation"), |ui| {
+        stacks(ui, state, &[&[StructuralPlan, NumberStructure, StructuralSchedules]]);
     });
     group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Category::Grid)));
-    group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
+    group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
 }
 
 pub fn dimension_icon(mode: DimensionMode) -> Icon {
@@ -606,6 +623,7 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
         command_buttons(ui, state, &DimensionMode::ALL.map(UiCommand::Dimension));
     });
     group(ui, t!("group-text"), |ui| command_buttons(ui, state, &[UiCommand::Text, UiCommand::AddLeader]));
+    group(ui, t!("group-tags"), |ui| command_button(ui, state, UiCommand::StructureTags));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
 }
 
@@ -819,6 +837,31 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Beam { .. } => {
                 ui.label(theme::muted(t!("hint-beam")));
+            }
+            Tool::Footing { .. } => {
+                ui.label(theme::muted(t!("hint-footing")));
+            }
+            Tool::Truss { .. } => {
+                let o = &mut state.truss;
+                ui.label(t!("prop-truss-height"));
+                ui.add(crate::properties::length_drag(&mut o.height).speed(0.01).range(0.1..=20.0));
+                ui.label(t!("prop-truss-panels"));
+                ui.add(
+                    DragValue::new(&mut o.panels)
+                        .range(0..=100)
+                        .custom_formatter(|n, _| if n < 0.5 { t!("truss-panels-auto") } else { format!("{n:.0}") }),
+                );
+                let current = crate::tools::TRUSS_PATTERNS
+                    .iter()
+                    .find(|(p, _)| *p == o.pattern)
+                    .map_or(String::new(), |(_, key)| crate::i18n::tr(key));
+                egui::ComboBox::from_id_salt("truss-pattern").selected_text(current).show_ui(ui, |ui| {
+                    for (pattern, key) in crate::tools::TRUSS_PATTERNS {
+                        ui.selectable_value(&mut o.pattern, pattern, crate::i18n::tr(key));
+                    }
+                });
+                ui.separator();
+                ui.label(theme::muted(t!("hint-truss")));
             }
             Tool::Stair { .. } => {
                 ui.label(theme::muted(t!("hint-stair")));

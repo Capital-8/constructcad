@@ -66,6 +66,8 @@ pub struct AppState {
     pub interaction: Interaction,
     /// Options of the transform tools.
     pub modify: crate::modify::ModifyOptions,
+    /// Options of the truss tool.
+    pub truss: crate::tools::TrussOptions,
     pub active_view: Option<ViewId>,
     pub view2d: HashMap<ViewId, View2DState>,
     pub view3d: HashMap<ViewId, View3DState>,
@@ -136,6 +138,7 @@ impl AppState {
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),
+            truss: Default::default(),
             active_view: None,
             view2d: HashMap::new(),
             view3d: HashMap::new(),

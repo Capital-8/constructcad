@@ -25,12 +25,13 @@ pub fn plan_annotations(
     geom: &ModelGeometry,
     level: LevelId,
     ceiling: bool,
+    structural: bool,
     scale: u32,
 ) {
     let mm = mm(scale);
     for e in project.elements.values() {
         match &e.kind {
-            ElementKind::Room(room) if e.level == level => {
+            ElementKind::Room(room) if e.level == level && !structural => {
                 if let Some(boundary) = geom.rooms.get(&e.id) {
                     d.fill(boundary.clone(), HIGHLIGHT_ONLY, Some(e.id));
                     let area = format::area(polygon::area(boundary));
@@ -53,8 +54,73 @@ pub fn plan_annotations(
             _ => {}
         }
     }
-    if !ceiling {
+    if !ceiling && !structural {
         opening_tags(d, project, geom, level, mm);
+    }
+}
+
+/// A length in centimeters, without decimals when whole.
+fn cm(meters: f64) -> String {
+    let v = meters * 100.0;
+    if (v - v.round()).abs() < 1e-6 { format!("{v:.0}") } else { format!("{v:.1}") }
+}
+
+/// A section's size in centimeters: `15×40`, `Ø30`.
+pub fn section_label(data: &TypeData) -> Option<String> {
+    use cc_core::ColumnSection as C;
+    Some(match data {
+        TypeData::Beam { width, height, .. } => format!("{}×{}", cm(*width), cm(*height)),
+        TypeData::Column { section: C::Round { diameter } | C::Pipe { diameter, .. }, .. } => {
+            format!("Ø{}", cm(*diameter))
+        }
+        TypeData::Column { section, .. } => {
+            let (w, d) = section.size();
+            format!("{}×{}", cm(w), cm(d))
+        }
+        TypeData::Foundation { kind: cc_core::FoundationKind::Pad, width, length, .. } => {
+            format!("{}×{}", cm(*width), cm(*length))
+        }
+        _ => return None,
+    })
+}
+
+/// Tags of the beams, columns and pad footings of `level`: their mark and
+/// section (`V1 15×40`). Beam tags run along the beam, beside it; column
+/// and footing tags sit above and to the right.
+pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, scale: u32) {
+    let mm = mm(scale);
+    for e in project.elements.values().filter(|e| e.level == level) {
+        let Some(section) = project.element_type(e.type_id).and_then(|t| section_label(&t.data)) else { continue };
+        let text = if e.mark.is_empty() { section } else { format!("{} {section}", e.mark) };
+        match &e.kind {
+            ElementKind::Beam(_) => {
+                let Some(g) = geom.beams.get(&e.id) else { continue };
+                let u = (g.start_ext.0.max(g.start_ext.1) + g.end_ext.0.min(g.end_ext.1)) / 2.0;
+                // Readable: text runs left to right or bottom to top.
+                let mut dir = g.dir;
+                if dir.x < -1e-9 || (dir.x.abs() <= 1e-9 && dir.y < 0.0) {
+                    dir = -dir;
+                }
+                let up = dir.perp();
+                let p = g.world(u, 0.0) + up * (g.half + 1.0 * mm);
+                d.text_at(p, &text, 2.5, Anchor::CenterBottom, dir.y.atan2(dir.x));
+            }
+            ElementKind::Column(c) if c.structural => {
+                let Some(TypeData::Column { section, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
+                    continue;
+                };
+                let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
+                let hi = outline.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
+                d.text_at(hi + DVec2::splat(1.0 * mm), &text, 2.5, Anchor::LeftBottom, 0.0);
+            }
+            ElementKind::Foundation(_) => {
+                let Some(g) = geom.foundations.get(&e.id) else { continue };
+                let lo = g.footprint.iter().fold(DVec2::splat(f64::INFINITY), |a, p| a.min(*p));
+                let hi = g.footprint.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
+                d.text_at(DVec2::new(hi.x + mm, lo.y), &text, 2.5, Anchor::LeftBottom, 0.0);
+            }
+            _ => {}
+        }
     }
 }
 

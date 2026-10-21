@@ -19,10 +19,12 @@ pub enum Category {
     Stair,
     Railing,
     Component,
+    Foundation,
+    Rebar,
 }
 
 impl Category {
-    pub const ALL: [Category; 15] = [
+    pub const ALL: [Category; 17] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -31,6 +33,8 @@ impl Category {
         Category::Roof,
         Category::Column,
         Category::Beam,
+        Category::Foundation,
+        Category::Rebar,
         Category::Stair,
         Category::Railing,
         Category::Component,
@@ -41,7 +45,7 @@ impl Category {
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 11] = [
+    pub const MODEL: [Category; 13] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -50,13 +54,15 @@ impl Category {
         Category::Roof,
         Category::Column,
         Category::Beam,
+        Category::Foundation,
+        Category::Rebar,
         Category::Stair,
         Category::Railing,
         Category::Component,
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 12] = [
+    pub const SCHEDULABLE: [Category; 14] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -65,6 +71,8 @@ impl Category {
         Category::Roof,
         Category::Column,
         Category::Beam,
+        Category::Foundation,
+        Category::Rebar,
         Category::Stair,
         Category::Railing,
         Category::Component,
@@ -93,6 +101,8 @@ impl Category {
             Category::Stair => "category-stair",
             Category::Railing => "category-railing",
             Category::Component => "category-component",
+            Category::Foundation => "category-foundation",
+            Category::Rebar => "category-rebar",
         }
     }
 }
@@ -236,10 +246,26 @@ pub enum TypeData {
         section: ColumnSection,
         material: String,
     },
-    /// Beam section `width` x `height`.
+    /// Beam section `width` x `height`, solid or a profile within that box.
     Beam {
         width: f64,
         height: f64,
+        material: String,
+        #[serde(default)]
+        shape: SectionShape,
+    },
+    /// Reinforcing bars of `diameter`.
+    Rebar {
+        diameter: f64,
+        material: String,
+    },
+    /// Foundation: a pad `width` x `length`, a strip `width` wide or a slab,
+    /// each `thickness` deep.
+    Foundation {
+        kind: FoundationKind,
+        width: f64,
+        length: f64,
+        thickness: f64,
         material: String,
     },
     /// Straight stair: risers at most `max_riser` high, treads `tread` deep.
@@ -275,6 +301,8 @@ impl TypeData {
             | TypeData::Ceiling { material, .. }
             | TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
+            | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
@@ -317,6 +345,8 @@ impl TypeData {
             | TypeData::Ceiling { material, .. }
             | TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
+            | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
@@ -328,8 +358,101 @@ impl TypeData {
 /// Cross-section of a column type.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ColumnSection {
-    Rectangular { width: f64, depth: f64 },
-    Round { diameter: f64 },
+    Rectangular {
+        width: f64,
+        depth: f64,
+    },
+    Round {
+        diameter: f64,
+    },
+    /// A profile (I, channel, angle, tube) within a `width` x `depth` box.
+    Profile {
+        width: f64,
+        depth: f64,
+        shape: SectionShape,
+    },
+    /// A circular hollow section.
+    Pipe {
+        diameter: f64,
+        wall: f64,
+    },
+}
+
+impl ColumnSection {
+    /// The bounding box, `(width, depth)`.
+    pub fn size(&self) -> (f64, f64) {
+        match *self {
+            ColumnSection::Rectangular { width, depth } | ColumnSection::Profile { width, depth, .. } => (width, depth),
+            ColumnSection::Round { diameter } | ColumnSection::Pipe { diameter, .. } => (diameter, diameter),
+        }
+    }
+}
+
+/// What fills a section's `width` x `depth` box. Profiles are laid out as in
+/// steel tables: the web of an I or channel runs along the depth, the legs of
+/// an angle lie on the left and bottom sides of the box, and the flanges of a
+/// channel point to the right.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum SectionShape {
+    #[default]
+    Solid,
+    /// I or H: two flanges `flange` thick joined by a web `web` thick.
+    I { web: f64, flange: f64 },
+    /// Channel (U): a web on the left and two flanges.
+    Channel { web: f64, flange: f64 },
+    /// Angle (L): two legs `thickness` thick.
+    Angle { thickness: f64 },
+    /// Rectangular hollow section with walls `wall` thick.
+    Tube { wall: f64 },
+}
+
+impl SectionShape {
+    pub fn key(&self) -> &'static str {
+        match self {
+            SectionShape::Solid => "section-solid",
+            SectionShape::I { .. } => "section-i",
+            SectionShape::Channel { .. } => "section-channel",
+            SectionShape::Angle { .. } => "section-angle",
+            SectionShape::Tube { .. } => "section-tube",
+        }
+    }
+
+    /// The same shape with each thickness clamped to fit a `width` x `depth` box.
+    pub fn fitted(self, width: f64, depth: f64) -> Self {
+        let fit = |t: f64, max: f64| if t.is_finite() { t.clamp(max.min(0.001), max) } else { max };
+        match self {
+            SectionShape::Solid => self,
+            SectionShape::I { web, flange } => {
+                SectionShape::I { web: fit(web, width), flange: fit(flange, depth * 0.5) }
+            }
+            SectionShape::Channel { web, flange } => {
+                SectionShape::Channel { web: fit(web, width), flange: fit(flange, depth * 0.5) }
+            }
+            SectionShape::Angle { thickness } => SectionShape::Angle { thickness: fit(thickness, width.min(depth)) },
+            SectionShape::Tube { wall } => SectionShape::Tube { wall: fit(wall, width.min(depth) * 0.5) },
+        }
+    }
+}
+
+/// What a foundation type is: a pad under a column, a strip under a wall or a slab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum FoundationKind {
+    #[default]
+    Pad,
+    Strip,
+    Slab,
+}
+
+impl FoundationKind {
+    pub const ALL: [FoundationKind; 3] = [FoundationKind::Pad, FoundationKind::Strip, FoundationKind::Slab];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            FoundationKind::Pad => "foundation-pad",
+            FoundationKind::Strip => "foundation-strip",
+            FoundationKind::Slab => "foundation-slab",
+        }
+    }
 }
 
 /// An element type: the shared parameters of a group of instances.
@@ -359,6 +482,8 @@ impl ElementType {
             TypeData::Text { .. } => Category::Text,
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
+            TypeData::Foundation { .. } => Category::Foundation,
+            TypeData::Rebar { .. } => Category::Rebar,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { .. } => Category::Component,
@@ -375,7 +500,7 @@ impl ElementType {
     /// Total thickness for layered types, 0 for openings.
     pub fn thickness(&self) -> f64 {
         match &self.data {
-            TypeData::Ceiling { thickness, .. } => *thickness,
+            TypeData::Ceiling { thickness, .. } | TypeData::Foundation { thickness, .. } => *thickness,
             _ => self.layers().iter().map(|l| l.thickness).sum(),
         }
     }
@@ -426,6 +551,8 @@ impl ElementType {
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => "",
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
+            | TypeData::Foundation { material, .. }
+            | TypeData::Rebar { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Railing { material, .. } => material,
             TypeData::Component { def, .. } => def.main_material(),

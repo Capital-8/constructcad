@@ -8,8 +8,8 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::{
-    Beam, Category, Ceiling, Column, Component, ElementKind, Floor, Grid, Hosted, LevelId, LocationLine, Project,
-    Railing, Roof, RoofShape, Room, Stair, TypeData, Wall, WallTop,
+    Beam, BeamLateral, BeamVertical, Category, Ceiling, Column, Component, ElementKind, Floor, Grid, Hosted, LevelId,
+    LocationLine, Project, Railing, Roof, RoofShape, Room, Stair, TypeData, Wall, WallTop,
 };
 use cc_geom::polygon;
 use glam::DVec2;
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A top constraint: attached to a level (with an offset) or a fixed height.
-fn top(p: &Project, top_level: Option<&Ref>, top_offset: Option<f64>) -> Result<Option<WallTop>> {
+pub(crate) fn top(p: &Project, top_level: Option<&Ref>, top_offset: Option<f64>) -> Result<Option<WallTop>> {
     match top_level {
         Some(r) => Ok(Some(WallTop::Level {
             level: refs::level(p, r)?,
@@ -240,7 +240,7 @@ pub struct SketchArgs {
     pub offset: Option<f64>,
 }
 
-fn sketch(s: &Session, a: &SketchArgs, category: Category) -> Result<(LevelId, Vec<DVec2>)> {
+pub(crate) fn sketch(s: &Session, a: &SketchArgs, category: Category) -> Result<(LevelId, Vec<DVec2>)> {
     let p = s.project();
     let level = refs::level_or_first(p, a.level.as_ref())?;
     let pts = match (&a.boundary, a.from_walls) {
@@ -451,8 +451,8 @@ impl Command for ColumnCreate {
     }
 }
 
-/// Create a beam from `start` to `end`; its top is `top_offset` above the level
-/// (default: the level's height).
+/// Create a beam from `start` to `end`; its location line is `top_offset` above the level
+/// (default: the level's height), at the top of the section unless `vertical` says otherwise.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct BeamCreate {
@@ -466,9 +466,27 @@ pub struct BeamCreate {
     /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Top of the beam above the level, meters (default: the level height).
+    /// Elevation of the location line above the level, meters (default: the level height).
     #[serde(default)]
     pub top_offset: Option<f64>,
+    /// Elevation of the location line at the end, when it differs from the start (a sloped beam).
+    #[serde(default)]
+    pub end_offset: Option<f64>,
+    /// Line across the section the axis follows: `center` (default), `left` or `right` face.
+    #[serde(default)]
+    pub lateral: Option<String>,
+    /// Height of the section at the location elevation: `top` (default), `center` or `bottom`.
+    #[serde(default)]
+    pub vertical: Option<String>,
+}
+
+/// A beam justification by name.
+fn justification<T: Copy>(value: Option<&str>, all: &[(&str, T)], what: &str) -> Result<Option<T>> {
+    let Some(v) = value else { return Ok(None) };
+    all.iter().find(|(name, _)| *name == v).map(|(_, j)| Some(*j)).ok_or_else(|| {
+        let names: Vec<&str> = all.iter().map(|(n, _)| *n).collect();
+        EngineError::invalid(format!("{what} must be one of {}, not '{v}'", names.join(", ")))
+    })
 }
 
 impl Command for BeamCreate {
@@ -482,7 +500,16 @@ impl Command for BeamCreate {
         let p = s.project();
         let level = refs::level_or_first(p, self.level.as_ref())?;
         let top_offset = finite(self.top_offset.unwrap_or_else(|| p.level_height(level, 3.0)), "top_offset")?;
-        let beam = Beam { start, end, top_offset };
+        let mut beam = Beam::new(start, end, top_offset);
+        beam.end_offset = self.end_offset.map(|z| finite(z, "end_offset")).transpose()?;
+        let lateral = [("center", BeamLateral::Center), ("left", BeamLateral::Left), ("right", BeamLateral::Right)];
+        let vertical = [("top", BeamVertical::Top), ("center", BeamVertical::Center), ("bottom", BeamVertical::Bottom)];
+        if let Some(j) = justification(self.lateral.as_deref(), &lateral, "lateral")? {
+            beam.lateral = j;
+        }
+        if let Some(j) = justification(self.vertical.as_deref(), &vertical, "vertical")? {
+            beam.vertical = j;
+        }
         create(s, t!("tx-create-beam"), level, Category::Beam, self.type_ref.as_ref(), ElementKind::Beam(beam))
     }
 }

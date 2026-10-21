@@ -20,7 +20,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
           - os: macos-latest
@@ -61,7 +61,7 @@ jobs:
   release:
     name: Publish release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

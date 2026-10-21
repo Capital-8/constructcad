@@ -33,6 +33,24 @@ pub enum UiCommand {
     LoadComponent,
     Select,
     SelectInstances,
+    ColumnsAtGrids,
+    BeamsOnGrids,
+    BeamsBetweenColumns,
+    StructuralSchedules,
+    FootingsUnderColumns,
+    StripFootingsUnderWalls,
+    FoundationSlab,
+    SlabJoinSupports,
+    AnalyticalView,
+    AnalyticalExport,
+    Truss,
+    BracesX,
+    TypicalRebar,
+    RebarView,
+    SteelSchedule,
+    StructuralPlan,
+    NumberStructure,
+    StructureTags,
     Dimension(DimensionMode),
     Text,
     AddLeader,
@@ -80,7 +98,7 @@ pub enum UiCommand {
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
-const PLACED: [Category; 13] = [
+const PLACED: [Category; 14] = [
     Category::Wall,
     Category::Door,
     Category::Window,
@@ -94,6 +112,7 @@ const PLACED: [Category; 13] = [
     Category::Grid,
     Category::Column,
     Category::Beam,
+    Category::Foundation,
 ];
 
 impl UiCommand {
@@ -118,6 +137,10 @@ impl UiCommand {
         ];
         all.extend(PLACED.map(Place));
         all.extend([NewComponent, LoadComponent, Select, SelectInstances]);
+        all.extend([ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
+        all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
+        all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
+        all.extend([StructuralPlan, NumberStructure, StructureTags]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -191,6 +214,23 @@ impl UiCommand {
             NewComponent | LoadComponent => Icon::Component,
             Select => Icon::Select,
             SelectInstances => Icon::SelectInstances,
+            ColumnsAtGrids => Icon::ColumnsAtGrids,
+            BeamsOnGrids => Icon::BeamsOnGrids,
+            BeamsBetweenColumns => Icon::BeamsBetweenColumns,
+            StructuralSchedules => Icon::Schedule,
+            FootingsUnderColumns => Icon::FootingsUnderColumns,
+            StripFootingsUnderWalls => Icon::StripFooting,
+            FoundationSlab => Icon::FoundationSlab,
+            SlabJoinSupports => Icon::SlabSupports,
+            AnalyticalView | AnalyticalExport => Icon::Analytical,
+            Truss => Icon::Truss,
+            BracesX => Icon::Brace,
+            TypicalRebar => Icon::Rebar,
+            RebarView => Icon::RebarView,
+            SteelSchedule => Icon::Schedule,
+            StructuralPlan => Icon::StructuralPlan,
+            NumberStructure => Icon::NumberMarks,
+            StructureTags => Icon::StructureTags,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             AddLeader => Icon::Leader,
@@ -239,9 +279,10 @@ impl UiCommand {
     pub fn badge(self) -> Option<Badge> {
         use UiCommand::*;
         match self {
-            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | Sheet => Some(Badge::New),
+            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | StructuralSchedules | Sheet
+            | SteelSchedule | StructuralPlan => Some(Badge::New),
             ImportIfc | LoadComponent => Some(Badge::Import),
-            ExportPdf | ExportSvg => Some(Badge::Export),
+            ExportPdf | ExportSvg | AnalyticalExport => Some(Badge::Export),
             Delete => Some(Badge::Remove),
             _ => None,
         }
@@ -270,6 +311,24 @@ impl UiCommand {
             LoadComponent => t!("action-load-component"),
             Select => t!("tool-select"),
             SelectInstances => t!("action-select-instances"),
+            ColumnsAtGrids => t!("action-columns-at-grids"),
+            BeamsOnGrids => t!("action-beams-on-grids"),
+            BeamsBetweenColumns => t!("action-beams-between-columns"),
+            StructuralSchedules => t!("action-structural-schedules"),
+            FootingsUnderColumns => t!("action-footings-under-columns"),
+            StripFootingsUnderWalls => t!("action-strip-footings-under-walls"),
+            FoundationSlab => t!("tool-foundation-slab"),
+            SlabJoinSupports => t!("action-slab-join-supports"),
+            AnalyticalView => t!("action-analytical-view"),
+            AnalyticalExport => t!("action-analytical-export"),
+            Truss => t!("tool-truss"),
+            BracesX => t!("action-braces-x"),
+            TypicalRebar => t!("action-rebar-typical"),
+            RebarView => t!("action-rebar-view"),
+            SteelSchedule => t!("action-steel-schedule"),
+            StructuralPlan => t!("action-structural-plan"),
+            NumberStructure => t!("action-number-structure"),
+            StructureTags => t!("action-structure-tags"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             AddLeader => t!("tool-add-leader"),
@@ -356,6 +415,24 @@ impl UiCommand {
             LoadComponent => t!("cmd-desc-load-component"),
             Select => t!("cmd-desc-select"),
             SelectInstances => t!("cmd-desc-select-instances"),
+            ColumnsAtGrids => t!("cmd-desc-columns-at-grids"),
+            BeamsOnGrids => t!("cmd-desc-beams-on-grids"),
+            BeamsBetweenColumns => t!("cmd-desc-beams-between-columns"),
+            StructuralSchedules => t!("cmd-desc-structural-schedules"),
+            FootingsUnderColumns => t!("cmd-desc-footings-under-columns"),
+            StripFootingsUnderWalls => t!("cmd-desc-strip-footings-under-walls"),
+            FoundationSlab => t!("cmd-desc-foundation-slab"),
+            SlabJoinSupports => t!("cmd-desc-slab-join-supports"),
+            AnalyticalView => t!("cmd-desc-analytical-view"),
+            AnalyticalExport => t!("cmd-desc-analytical-export"),
+            Truss => t!("cmd-desc-truss"),
+            BracesX => t!("cmd-desc-braces-x"),
+            TypicalRebar => t!("cmd-desc-rebar-typical"),
+            RebarView => t!("cmd-desc-rebar-view"),
+            SteelSchedule => t!("cmd-desc-steel-schedule"),
+            StructuralPlan => t!("cmd-desc-structural-plan"),
+            NumberStructure => t!("cmd-desc-number-structure"),
+            StructureTags => t!("cmd-desc-structure-tags"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
@@ -431,6 +508,7 @@ impl UiCommand {
             Place(Category::Grid) => "GR",
             Place(Category::Column) => "CL",
             Place(Category::Beam) => "BM",
+            Place(Category::Foundation) => "FT",
             Select => "MD",
             SelectInstances => "SA",
             Group => "GP",
@@ -476,6 +554,9 @@ impl UiCommand {
             ExportPdf | ExportSvg => "sheet_export",
             Undo => "undo",
             SelectInstances => "elements_list",
+            ColumnsAtGrids => "columns_at_grids",
+            BeamsOnGrids => "beams_on_grids",
+            BeamsBetweenColumns => "beams_between_columns",
             Redo => "redo",
             Place(Category::Wall) => "wall_create",
             Place(Category::Door) => "door_create",
@@ -489,6 +570,19 @@ impl UiCommand {
             Place(Category::Grid) => "grid_create",
             Place(Category::Column) => "column_create",
             Place(Category::Beam) => "beam_create",
+            Place(Category::Foundation) => "footing_create",
+            FootingsUnderColumns => "footings_under_columns",
+            StripFootingsUnderWalls => "strip_footings_under_walls",
+            FoundationSlab => "foundation_slab_create",
+            SlabJoinSupports => "slab_join_supports",
+            AnalyticalView => "view_create",
+            AnalyticalExport => "analytical_export",
+            Truss => "truss_create",
+            BracesX => "braces_between_columns",
+            TypicalRebar => "rebar_typical",
+            RebarView | SteelSchedule | StructuralPlan => "view_create",
+            NumberStructure => "structure_number",
+            StructureTags => "view_set",
             Place(_) => "component_place",
             NewComponent => "component_create",
             LoadComponent => "component_load",
@@ -551,6 +645,25 @@ impl UiCommand {
             Pin | Unpin | Delete | Cut | ClipboardCopy | SelectInstances if !has_sel => Some(t!("msg-select-first")),
             SelectInstances if state.active_view.is_none() => Some(t!("why-no-view")),
             Group if state.selection.len() < 2 => Some(t!("msg-group-two")),
+            ColumnsAtGrids if crate::actions::grids_for(state).len() < 2 => Some(t!("msg-grids-two")),
+            BeamsOnGrids if crate::actions::grids_for(state).is_empty() => Some(t!("why-no-grids")),
+            BeamsBetweenColumns if crate::actions::selected_columns(state).len() < 2 => Some(t!("msg-columns-two")),
+            FootingsUnderColumns if Tool::for_category(project, Category::Foundation).is_none() => {
+                Some(t!("msg-no-type"))
+            }
+            StripFootingsUnderWalls
+                if crate::tools::foundation_type(project, cc_core::FoundationKind::Strip).is_none() =>
+            {
+                Some(t!("msg-no-type"))
+            }
+            FoundationSlab if crate::tools::foundation_type(project, cc_core::FoundationKind::Slab).is_none() => {
+                Some(t!("msg-no-type"))
+            }
+            Truss if project.default_type(Category::Beam).is_none() => Some(t!("msg-no-type")),
+            BracesX if crate::actions::selected_columns(state).len() != 2 => Some(t!("msg-columns-two-exactly")),
+            TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
+            StructuralPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
+            StructureTags if crate::actions::active_floor_plan(state).is_none() => Some(t!("msg-plan-only")),
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
@@ -566,7 +679,9 @@ impl UiCommand {
         use UiCommand::*;
         let tool = &state.tool;
         match self {
-            Place(category) => tool.category() == Some(category) && *tool != Tool::Section,
+            Place(category) => tool.category() == Some(category) && !matches!(tool, Tool::Section | Tool::Truss { .. }),
+            Truss => matches!(tool, Tool::Truss { .. }),
+            StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select => *tool == Tool::Select,
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
@@ -589,6 +704,7 @@ impl UiCommand {
             Paste => *tool == Tool::Paste,
             MatchType => *tool == Tool::MatchType,
             Section => *tool == Tool::Section,
+            FoundationSlab => matches!(tool, Tool::Sketch { category: Category::Foundation, .. }),
             MacroRecord => state.session.is_recording(),
             ToggleRibbon => state.ribbon_collapsed,
             _ => false,
@@ -610,6 +726,8 @@ fn place_label(category: Category) -> String {
         Category::Grid => t!("tool-grid"),
         Category::Column => t!("tool-column"),
         Category::Beam => t!("tool-beam"),
+        Category::Foundation => t!("tool-footing"),
+        Category::Rebar => t!("category-rebar"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::Component => t!("tool-component"),
@@ -630,6 +748,8 @@ fn place_description(category: Category) -> String {
         Category::Grid => t!("cmd-desc-grid"),
         Category::Column => t!("cmd-desc-column"),
         Category::Beam => t!("cmd-desc-beam"),
+        Category::Foundation => t!("cmd-desc-footing"),
+        Category::Rebar => t!("cmd-desc-rebar-typical"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::Component => t!("cmd-desc-component"),
@@ -681,6 +801,39 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Select => state.set_tool(Tool::Select),
         SelectInstances => crate::actions::select_instances(state),
         Group => crate::actions::group_selection(state),
+        ColumnsAtGrids => crate::actions::columns_at_grids(state),
+        BeamsOnGrids => crate::actions::beams_on_grids(state),
+        BeamsBetweenColumns => crate::actions::beams_between_columns(state),
+        FootingsUnderColumns => crate::actions::footings_under_columns(state),
+        StripFootingsUnderWalls => crate::actions::strip_footings_under_walls(state),
+        FoundationSlab => {
+            if let Some(type_id) = crate::tools::foundation_type(state.project(), cc_core::FoundationKind::Slab) {
+                state.set_tool(Tool::Sketch { category: Category::Foundation, type_id });
+                state.message = t!("hint-foundation-slab");
+            }
+        }
+        SlabJoinSupports => crate::actions::slab_join_supports(state),
+        AnalyticalView => crate::actions::open_analytical_view(state),
+        AnalyticalExport => crate::actions::export_analytical(state),
+        Truss => {
+            if let Some(type_id) = state.project().default_type(Category::Beam) {
+                state.set_tool(Tool::Truss { type_id });
+                state.message = t!("hint-truss");
+            }
+        }
+        BracesX => crate::actions::braces_x(state),
+        TypicalRebar => crate::actions::typical_rebar(state),
+        RebarView => crate::actions::open_rebar_view(state),
+        SteelSchedule => {
+            actions::new_schedule(state, Category::Rebar);
+        }
+        StructuralPlan => crate::actions::open_structural_plan(state),
+        NumberStructure => crate::actions::number_structure(state),
+        StructureTags => crate::actions::toggle_structure_tags(state),
+        StructuralSchedules => {
+            actions::new_schedule(state, Category::Column);
+            actions::new_schedule(state, Category::Beam);
+        }
         Ungroup => crate::actions::ungroup_selection(state),
         Dimension(mode) => {
             if let Some(Tool::Dimension { type_id, .. }) = Tool::for_category(state.project(), Category::Dimension) {

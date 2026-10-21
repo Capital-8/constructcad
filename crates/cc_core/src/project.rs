@@ -1,7 +1,8 @@
 use crate::material::Material;
 use crate::{
     CameraState, Category, ColumnSection, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId,
-    Layer, LayerFunction, LevelId, SheetSize, TypeData, View, ViewCategory, ViewId, ViewKind, Viewport, WallFunction,
+    FoundationKind, Layer, LayerFunction, LevelId, SectionShape, SheetSize, TypeData, View, ViewCategory, ViewId,
+    ViewKind, Viewport, WallFunction,
 };
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
@@ -114,6 +115,7 @@ impl Project {
             (&n("tpl-mat-screed"), [190, 185, 175], C::Mortar),
             (&n("tpl-mat-fabric"), [120, 132, 150], C::Fabric),
             (&n("tpl-mat-porcelain"), [240, 240, 236], C::Ceramic),
+            (&n("tpl-mat-steel"), [140, 146, 152], C::Metal),
         ]
         .into_iter()
         .map(|(name, color, class)| {
@@ -180,7 +182,81 @@ impl Project {
                 &n("tpl-type-column-round"),
                 TypeData::Column { section: ColumnSection::Round { diameter: 0.3 }, material: n("tpl-mat-concrete") },
             ),
-            (&n("tpl-type-beam"), TypeData::Beam { width: 0.15, height: 0.4, material: n("tpl-mat-concrete") }),
+            (
+                &n("tpl-type-beam"),
+                TypeData::Beam {
+                    width: 0.15,
+                    height: 0.4,
+                    material: n("tpl-mat-concrete"),
+                    shape: SectionShape::Solid,
+                },
+            ),
+            (
+                &n("tpl-type-column-steel-h"),
+                TypeData::Column {
+                    section: ColumnSection::Profile {
+                        width: 0.2,
+                        depth: 0.2,
+                        shape: SectionShape::I { web: 0.009, flange: 0.015 },
+                    },
+                    material: n("tpl-mat-steel"),
+                },
+            ),
+            (
+                &n("tpl-type-column-steel-tube"),
+                TypeData::Column {
+                    section: ColumnSection::Profile {
+                        width: 0.15,
+                        depth: 0.15,
+                        shape: SectionShape::Tube { wall: 0.006 },
+                    },
+                    material: n("tpl-mat-steel"),
+                },
+            ),
+            (
+                &n("tpl-type-beam-steel-i"),
+                TypeData::Beam {
+                    width: 0.15,
+                    height: 0.3,
+                    material: n("tpl-mat-steel"),
+                    shape: SectionShape::I { web: 0.0071, flange: 0.0107 },
+                },
+            ),
+            (&n("tpl-type-rebar-5"), TypeData::Rebar { diameter: 0.005, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-8"), TypeData::Rebar { diameter: 0.008, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-10"), TypeData::Rebar { diameter: 0.010, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-12"), TypeData::Rebar { diameter: 0.0125, material: n("tpl-mat-steel") }),
+            (&n("tpl-type-rebar-16"), TypeData::Rebar { diameter: 0.016, material: n("tpl-mat-steel") }),
+            (
+                &n("tpl-type-footing-pad"),
+                TypeData::Foundation {
+                    kind: FoundationKind::Pad,
+                    width: 1.0,
+                    length: 1.0,
+                    thickness: 0.4,
+                    material: n("tpl-mat-concrete"),
+                },
+            ),
+            (
+                &n("tpl-type-footing-strip"),
+                TypeData::Foundation {
+                    kind: FoundationKind::Strip,
+                    width: 0.2,
+                    length: 1.0,
+                    thickness: 0.4,
+                    material: n("tpl-mat-concrete"),
+                },
+            ),
+            (
+                &n("tpl-type-footing-slab"),
+                TypeData::Foundation {
+                    kind: FoundationKind::Slab,
+                    width: 1.0,
+                    length: 1.0,
+                    thickness: 0.3,
+                    material: n("tpl-mat-concrete"),
+                },
+            ),
             (
                 &n("tpl-type-stair"),
                 TypeData::Stair { width: 1.0, max_riser: 0.18, tread: 0.28, material: n("tpl-mat-concrete") },
@@ -214,11 +290,16 @@ impl Project {
             p.views.insert(id, View { id, name: name.into(), scale, kind });
             id
         };
-        let plan = add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::FloorPlan { level: ground, cut_height: 1.2 });
-        add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::FloorPlan { level: first, cut_height: 1.2 });
+        let plan = add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::floor_plan(ground));
+        add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::floor_plan(first));
         add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::CeilingPlan { level: ground, cut_height: 1.2 });
         add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::CeilingPlan { level: first, cut_height: 1.2 });
-        let threed = add_view(&mut p, "{3D}", 100, ViewKind::ThreeD { camera: CameraState::default() });
+        let threed = add_view(
+            &mut p,
+            "{3D}",
+            100,
+            ViewKind::ThreeD { camera: CameraState::default(), analytical: false, rebar: false },
+        );
         for (name, direction) in [
             (&n("tpl-elev-north"), Direction::North),
             (&n("tpl-elev-south"), Direction::South),
@@ -284,7 +365,12 @@ impl Project {
             (
                 Category::Beam,
                 "tpl-type-beam",
-                TypeData::Beam { width: 0.15, height: 0.4, material: template_default("tpl-mat-concrete").to_string() },
+                TypeData::Beam {
+                    width: 0.15,
+                    height: 0.4,
+                    material: template_default("tpl-mat-concrete").to_string(),
+                    shape: SectionShape::Solid,
+                },
             ),
             (
                 Category::Stair,
@@ -313,6 +399,43 @@ impl Project {
         for (category, key, data) in defaults {
             if self.default_type(category).is_none() {
                 let id = ElementTypeId(self.alloc_id());
+                let name = template_default(key).to_string();
+                self.types
+                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+            }
+        }
+        // Projects created before foundations get a pad, a strip and a slab type.
+        if self.default_type(Category::Foundation).is_none() {
+            let concrete = template_default("tpl-mat-concrete").to_string();
+            for (key, kind, width, thickness) in [
+                ("tpl-type-footing-pad", crate::FoundationKind::Pad, 1.0, 0.4),
+                ("tpl-type-footing-strip", crate::FoundationKind::Strip, 0.2, 0.4),
+                ("tpl-type-footing-slab", crate::FoundationKind::Slab, 1.0, 0.3),
+            ] {
+                let id = ElementTypeId(self.alloc_id());
+                let data = TypeData::Foundation { kind, width, length: 1.0, thickness, material: concrete.clone() };
+                let name = template_default(key).to_string();
+                self.types
+                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+            }
+        }
+        // Projects created before reinforcement get the usual bar diameters, in steel.
+        if self.default_type(Category::Rebar).is_none() {
+            let steel = template_default("tpl-mat-steel").to_string();
+            if !self.materials.iter().any(|m| m.name == steel) {
+                let mut m = Material::new(steel.as_str(), [140, 146, 152]);
+                crate::material::template_properties(&mut m, crate::material::MaterialClass::Metal);
+                self.materials.push(m);
+            }
+            for (key, diameter) in [
+                ("tpl-type-rebar-5", 0.005),
+                ("tpl-type-rebar-8", 0.008),
+                ("tpl-type-rebar-10", 0.010),
+                ("tpl-type-rebar-12", 0.0125),
+                ("tpl-type-rebar-16", 0.016),
+            ] {
+                let id = ElementTypeId(self.alloc_id());
+                let data = TypeData::Rebar { diameter, material: steel.clone() };
                 let name = template_default(key).to_string();
                 self.types
                     .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
@@ -406,6 +529,42 @@ impl Project {
         };
         let shift = wall.normal() * -line;
         (wall.start + shift, wall.end + shift)
+    }
+
+    /// The beam's body centerline: its location line moved across by the
+    /// lateral justification.
+    pub fn beam_axis(&self, element: &Element, beam: &crate::Beam) -> (DVec2, DVec2) {
+        let width = match self.element_type(element.type_id).map(|t| &t.data) {
+            Some(crate::TypeData::Beam { width, .. }) => *width,
+            _ => 0.0,
+        };
+        let normal = (beam.end - beam.start).normalize_or_zero().perp();
+        let shift = match beam.lateral {
+            crate::BeamLateral::Center => DVec2::ZERO,
+            // The location line runs along the left face: the body lies to its right.
+            crate::BeamLateral::Left => -normal * (width * 0.5),
+            crate::BeamLateral::Right => normal * (width * 0.5),
+        };
+        (beam.start + shift, beam.end + shift)
+    }
+
+    /// Bottom and top elevations of a beam at its start, from its location
+    /// elevation and vertical justification. A sloped beam's section stays
+    /// square to its axis, so its vertical depth is a little more than its height.
+    pub fn beam_z(&self, element: &Element, beam: &crate::Beam) -> (f64, f64) {
+        let height = match self.element_type(element.type_id).map(|t| &t.data) {
+            Some(crate::TypeData::Beam { height, .. }) => *height,
+            _ => 0.0,
+        };
+        let length = beam.length();
+        let slope = if length > 1e-9 { beam.rise() / length } else { 0.0 };
+        let height = height * slope.hypot(1.0);
+        let z = self.level_elevation(element.level) + beam.top_offset;
+        match beam.vertical {
+            crate::BeamVertical::Top => (z - height, z),
+            crate::BeamVertical::Center => (z - height * 0.5, z + height * 0.5),
+            crate::BeamVertical::Bottom => (z, z + height),
+        }
     }
 
     /// Allocate a new unique id (shared by all id kinds).
@@ -508,6 +667,14 @@ impl Project {
         self.elements.values().filter(move |e| e.as_hosted().is_some_and(|h| h.host == wall))
     }
 
+    /// The reinforcement sets of beam or column `host`.
+    pub fn rebar_of(&self, host: ElementId) -> impl Iterator<Item = (&Element, &crate::Rebar)> {
+        self.elements.values().filter_map(move |e| match &e.kind {
+            ElementKind::Rebar(r) if r.host == host => Some((e, r)),
+            _ => None,
+        })
+    }
+
     pub fn elements_of(&self, category: Category) -> impl Iterator<Item = &Element> {
         self.elements.values().filter(move |e| e.category() == category)
     }
@@ -591,6 +758,18 @@ fn template_default(key: &str) -> &'static str {
         "tpl-room-name" => "Ambiente",
         "tpl-mat-fabric" => "Tecido",
         "tpl-mat-porcelain" => "Louça",
+        "tpl-mat-steel" => "Aço",
+        "tpl-type-column-steel-h" => "Pilar metálico H 200 x 200",
+        "tpl-type-column-steel-tube" => "Pilar metálico tubo 150 x 150 x 6",
+        "tpl-type-beam-steel-i" => "Viga metálica I 300 x 150",
+        "tpl-type-footing-pad" => "Sapata 100 x 100 x 40 cm",
+        "tpl-type-footing-strip" => "Viga baldrame 20 x 40 cm",
+        "tpl-type-footing-slab" => "Radier 30 cm",
+        "tpl-type-rebar-5" => "Barra Ø 5,0 mm",
+        "tpl-type-rebar-8" => "Barra Ø 8,0 mm",
+        "tpl-type-rebar-10" => "Barra Ø 10,0 mm",
+        "tpl-type-rebar-12" => "Barra Ø 12,5 mm",
+        "tpl-type-rebar-16" => "Barra Ø 16,0 mm",
         "tpl-param-width" => "Largura",
         "tpl-param-depth" => "Profundidade",
         "tpl-param-height" => "Altura",

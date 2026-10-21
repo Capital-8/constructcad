@@ -49,6 +49,8 @@ enum Value {
     Area(f64),
     Volume(f64),
     Money(f64),
+    /// Kilograms.
+    Weight(f64),
     Missing,
 }
 
@@ -62,6 +64,7 @@ impl Value {
             Value::Area(v) => Cell::Text(format::area(*v)),
             Value::Money(v) => Cell::Text(format::money(*v)),
             Value::Volume(v) => Cell::Text(format::volume(*v)),
+            Value::Weight(v) => Cell::Text(format!("{} kg", format::number(*v, 2))),
             Value::Missing => Cell::Text(String::new()),
         }
     }
@@ -69,7 +72,7 @@ impl Value {
     fn number(&self) -> Option<f64> {
         match self {
             Value::Count(n) => Some(*n as f64),
-            Value::Length(v) | Value::Area(v) | Value::Volume(v) | Value::Money(v) => Some(*v),
+            Value::Length(v) | Value::Area(v) | Value::Volume(v) | Value::Money(v) | Value::Weight(v) => Some(*v),
             _ => None,
         }
     }
@@ -98,7 +101,16 @@ fn text_of(v: &Value) -> String {
 
 /// Whether a field's values add up in the totals row.
 fn summable(field: ScheduleField) -> bool {
-    matches!(field, ScheduleField::Length | ScheduleField::Area | ScheduleField::Volume | ScheduleField::Cost)
+    matches!(
+        field,
+        ScheduleField::Length
+            | ScheduleField::CutLength
+            | ScheduleField::BarCount
+            | ScheduleField::Weight
+            | ScheduleField::Area
+            | ScheduleField::Volume
+            | ScheduleField::Cost
+    )
 }
 
 /// Net side area of a wall: length x height minus its openings.
@@ -109,6 +121,31 @@ fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall) -> f64 {
         .map(|(w, h)| w * h)
         .sum();
     (w.length() * project.wall_height(e, w) - openings).max(0.0)
+}
+
+/// A section as text: its size, with the profile's letter (I, U, L), a box
+/// for tubes and Ø for round sections.
+fn section_text(section: cc_core::ColumnSection) -> String {
+    use cc_core::{ColumnSection as C, SectionShape as S};
+    let l = format::length;
+    match section {
+        C::Rectangular { width, depth } | C::Profile { width, depth, shape: S::Solid } => {
+            format!("{} × {}", l(width), l(depth))
+        }
+        C::Round { diameter } => format!("Ø {}", l(diameter)),
+        C::Pipe { diameter, wall } => format!("Ø {} × {}", l(diameter), l(wall)),
+        C::Profile { width, depth, shape } => {
+            let shape = shape.fitted(width, depth);
+            let (letter, thickness) = match shape {
+                S::I { web, flange } => ("I", format!("{} / {}", l(web), l(flange))),
+                S::Channel { web, flange } => ("U", format!("{} / {}", l(web), l(flange))),
+                S::Angle { thickness } => ("L", l(thickness)),
+                S::Tube { wall } => ("□", l(wall)),
+                S::Solid => ("", String::new()),
+            };
+            format!("{letter} {} × {} × {thickness}", l(width), l(depth))
+        }
+    }
 }
 
 /// Width (X), depth (Y) and height of a component's pieces in its own frame.
@@ -147,7 +184,12 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Cost => info.and_then(|i| i.cost).map_or(Value::Missing, Value::Money),
         F::Length => match &e.kind {
             ElementKind::Wall(w) => Value::Length(w.length()),
-            ElementKind::Beam(b) => Value::Length(b.length()),
+            ElementKind::Beam(b) => Value::Length(b.true_length()),
+            ElementKind::Rebar(_) => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.total_length())),
+            ElementKind::Foundation(f) => match &f.shape {
+                cc_core::FoundationShape::Strip { start, end } => Value::Length(start.distance(*end)),
+                _ => Value::Missing,
+            },
             ElementKind::Railing(r) => Value::Length(r.length()),
             _ => Value::Missing,
         },
@@ -187,6 +229,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Area => match &e.kind {
             ElementKind::Wall(w) => Value::Area(wall_area(project, e, w)),
             ElementKind::Room(_) => room_boundary.map_or(Value::Missing, |b| Value::Area(polygon::area(b))),
+            ElementKind::Foundation(_) => {
+                geom.foundations.get(&e.id).map_or(Value::Missing, |g| Value::Area(polygon::area(&g.footprint)))
+            }
             _ => e.sketch().map_or(Value::Missing, |s| Value::Area(polygon::area(s))),
         },
         F::Perimeter => match &e.kind {
@@ -202,13 +247,44 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Sill => e.as_hosted().map_or(Value::Missing, |h| Value::Length(h.sill_height)),
         F::Host => e
             .as_hosted()
-            .and_then(|h| project.element(h.host))
+            .map(|h| h.host)
+            .or(match &e.kind {
+                ElementKind::Rebar(r) => Some(r.host),
+                _ => None,
+            })
+            .and_then(|h| project.element(h))
             .map_or(Value::Missing, |w| text(&if w.mark.is_empty() { w.id.to_string() } else { w.mark.clone() })),
         F::Function => ty.and_then(|t| t.wall_function()).map_or(Value::Missing, |f| Value::Key(f.key())),
         F::Structural => match &e.kind {
             ElementKind::Wall(w) => Value::Key(if w.structural { "value-yes" } else { "value-no" }),
+            ElementKind::Column(c) => Value::Key(if c.structural { "value-yes" } else { "value-no" }),
             _ => Value::Missing,
         },
+        F::Section => match ty.map(|t| &t.data) {
+            Some(TypeData::Column { section, .. }) => Value::Text(section_text(*section)),
+            Some(TypeData::Beam { width, height, shape, .. }) => {
+                let section = cc_core::ColumnSection::Profile { width: *width, depth: *height, shape: *shape };
+                Value::Text(section_text(section))
+            }
+            Some(TypeData::Foundation { kind: cc_core::FoundationKind::Pad, width, length, .. }) => {
+                Value::Text(format!("{} × {}", format::length(*width), format::length(*length)))
+            }
+            Some(TypeData::Foundation { kind: cc_core::FoundationKind::Strip, width, .. }) => {
+                Value::Text(format::length(*width))
+            }
+            _ => Value::Missing,
+        },
+        F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
+        F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
+        F::Diameter => match ty.map(|t| &t.data) {
+            Some(TypeData::Rebar { diameter, .. }) => {
+                Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
+            }
+            _ => Value::Missing,
+        },
+        F::BarCount => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Count(r.count())),
+        F::BarLength => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.bar_length())),
+        F::Weight => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Weight(r.weight())),
         F::Number => match &e.kind {
             ElementKind::Room(r) => text(&r.number),
             _ => Value::Missing,
@@ -272,7 +348,9 @@ pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category, def
                 }
                 let sum: f64 = rows.iter().filter_map(|(_, values)| values.get(i)?.number()).sum();
                 match f {
-                    ScheduleField::Length => format::meters(sum),
+                    ScheduleField::Length | ScheduleField::CutLength => format::meters(sum),
+                    ScheduleField::BarCount => format::number(sum, 0),
+                    ScheduleField::Weight => format!("{} kg", format::number(sum, 2)),
                     ScheduleField::Volume => format::volume(sum),
                     ScheduleField::Area => format::area(sum),
                     ScheduleField::Cost => format::money(sum),
@@ -355,6 +433,29 @@ mod tests {
         let t = schedule(&project, &geom, Category::Window, &filtered);
         assert_eq!(t.rows.len(), 1);
         assert_eq!(t.totals[0], "1");
+    }
+
+    #[test]
+    fn structural_quantities() {
+        let (project, geom) = sample();
+        // The porch beam spans 5 m between two 0.20 m columns: 4.80 m of body.
+        let t = schedule(&project, &geom, Category::Beam, &ScheduleDef::default());
+        let col = |t: &Table, key: &str| t.headers.iter().position(|h| *h == key).unwrap();
+        assert_eq!(t.rows.len(), 1);
+        let row = &t.rows[0].cells;
+        assert_eq!(
+            row[col(&t, "col-section")],
+            Cell::Text(format!("{} × {}", format::length(0.15), format::length(0.4)))
+        );
+        assert_eq!(row[col(&t, "col-length")], Cell::Text(format::meters(5.0)));
+        assert_eq!(row[col(&t, "col-cut-length")], Cell::Text(format::meters(4.8)));
+        assert_eq!(row[col(&t, "col-volume")], Cell::Text(format::volume(0.15 * 0.4 * 4.8)));
+        assert_ne!(row[col(&t, "col-material")], Cell::Text(String::new()));
+        assert_eq!(t.totals[col(&t, "col-cut-length")], format::meters(4.8));
+        let t = schedule(&project, &geom, Category::Column, &ScheduleDef::default());
+        assert_eq!(t.rows.len(), 2);
+        let section = format!("{} × {}", format::length(0.2), format::length(0.2));
+        assert!(t.rows.iter().all(|r| r.cells[col(&t, "col-section")] == Cell::Text(section.clone())));
     }
 
     #[test]

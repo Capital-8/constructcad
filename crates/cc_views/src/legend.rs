@@ -93,13 +93,33 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             }
             TypeData::Column { section, .. } => {
                 let c = o + DVec2::new(0.4, 0.0);
-                let outline = cc_geom::column_outline(*section, c, 0.0);
-                d.fill(outline.clone(), POCHE, None);
-                d.polyline(&outline, true, LineStyle::Cut, None);
+                for part in cc_geom::section::column_parts(*section, c, 0.0) {
+                    d.fill(part, POCHE, None);
+                }
+                for outline in cc_geom::section::column_loops(*section, c, 0.0) {
+                    d.polyline(&outline, true, LineStyle::Cut, None);
+                }
             }
-            TypeData::Beam { width, height, .. } => {
+            TypeData::Beam { width, height, shape, .. } => {
                 // Section of the beam.
-                let r = [o, o + DVec2::new(*width, 0.0), o + DVec2::new(*width, *height), o + DVec2::new(0.0, *height)];
+                let c = o + DVec2::new(width * 0.5, height * 0.5);
+                for (a, b) in cc_geom::section::shape_rects(*shape, *width, *height) {
+                    let r = vec![c + a, c + DVec2::new(b.x, a.y), c + b, c + DVec2::new(a.x, b.y)];
+                    d.fill(r, POCHE, None);
+                }
+                for outline in cc_geom::section::shape_loops(*shape, *width, *height) {
+                    let pts: Vec<DVec2> = outline.iter().map(|p| c + *p).collect();
+                    d.polyline(&pts, true, LineStyle::Cut, None);
+                }
+            }
+            TypeData::Rebar { .. } => {
+                // A bar, drawn as a heavy line.
+                d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Cut, None);
+            }
+            TypeData::Foundation { kind, width, thickness, .. } => {
+                // Section: a pad or strip its width wide, a slab as a band.
+                let w = if *kind == cc_core::FoundationKind::Slab { sample } else { *width };
+                let r = [o, o + DVec2::new(w, 0.0), o + DVec2::new(w, *thickness), o + DVec2::new(0.0, *thickness)];
                 d.fill(r.to_vec(), POCHE, None);
                 d.polyline(&r, true, LineStyle::Cut, None);
             }

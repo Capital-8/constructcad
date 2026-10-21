@@ -23,6 +23,8 @@ pub struct Palette {
     form: Option<Form>,
     /// Focus the search field on the next frame.
     focus: bool,
+    /// Not shown yet: the click that opened it (a button) must not close it.
+    fresh: bool,
 }
 
 struct EngineCommand {
@@ -47,7 +49,7 @@ impl Palette {
             .filter(|c| c.kind != cc_engine::CommandKind::File)
             .map(|c| EngineCommand { name: c.name, description: c.description, schema: c.input_schema })
             .collect();
-        Palette { catalog, focus: true, ..Default::default() }
+        Palette { catalog, focus: true, fresh: true, ..Default::default() }
     }
 }
 
@@ -259,9 +261,11 @@ pub fn show(ctx: &egui::Context, state: &mut AppState) {
             });
         });
     // Esc closes (a form goes back to the search first); so does a click elsewhere.
+    let fresh = std::mem::take(&mut palette.fresh);
     let (escape, outside) = ctx.input(|i| {
         let pos = i.pointer.interact_pos();
-        (i.key_pressed(Key::Escape), i.pointer.any_click() && pos.is_some_and(|p| !area.response.rect.contains(p)))
+        let click = !fresh && i.pointer.any_click();
+        (i.key_pressed(Key::Escape), click && pos.is_some_and(|p| !area.response.rect.contains(p)))
     });
     if escape && palette.form.is_some() {
         palette.form = None;

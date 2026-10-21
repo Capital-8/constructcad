@@ -227,3 +227,90 @@ fn reimport_reuses_template_types() {
         assert_eq!(names.len(), n, "duplicate {category:?} type names");
     }
 }
+
+#[test]
+fn framed_beams_round_trip() {
+    use cc_core::{Beam, Column, Document, WallTop};
+    // A column with a beam framed into it, mitered where it meets a second beam.
+    let mut doc = Document::new(Project::from_template());
+    doc.edit("framing", |e| {
+        let level = e.project().levels[0].id;
+        let add = |e: &mut cc_core::EditCtx, category, kind| {
+            let type_id = e.project().default_type(category).unwrap();
+            let id = cc_core::ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Uid::default(),
+            });
+        };
+        let column = Column {
+            position: DVec2::ZERO,
+            rotation_deg: 0.0,
+            base_offset: 0.0,
+            height: 3.0,
+            top: WallTop::Unconnected,
+            structural: true,
+        };
+        add(e, Category::Column, ElementKind::Column(column));
+        add(e, Category::Beam, ElementKind::Beam(Beam::new(DVec2::ZERO, DVec2::new(4.0, 0.0), 3.0)));
+        add(e, Category::Beam, ElementKind::Beam(Beam::new(DVec2::new(4.0, 0.0), DVec2::new(4.0, 3.0), 3.0)));
+        // Away from the frame (the check expects a wall).
+        let wall = cc_core::Wall { start: DVec2::new(10.0, 0.0), end: DVec2::new(12.0, 0.0), ..Default::default() };
+        add(e, Category::Wall, ElementKind::Wall(wall));
+    });
+    let original = doc.project;
+    let before = cc_geom::ModelGeometry::build(&original);
+    assert!(before.beams.values().any(|g| !g.is_square()), "a mitered beam");
+    check(&original);
+    // The imported beams frame the same way.
+    let (imported, _) = round_trip(&original);
+    let after = cc_geom::ModelGeometry::build(&imported);
+    let footprints = |g: &cc_geom::ModelGeometry, p: &Project| {
+        let mut v: Vec<(Uid, [DVec2; 4])> =
+            g.beams.values().filter_map(|b| Some((p.element(b.element)?.uid, b.footprint()))).collect();
+        v.sort_by_key(|(uid, _)| *uid);
+        v
+    };
+    let (a, b) = (footprints(&before, &original), footprints(&after, &imported));
+    assert_eq!(a.len(), 2);
+    for ((ua, fa), (ub, fb)) in a.iter().zip(&b) {
+        assert_eq!(ua, ub);
+        for (p, q) in fa.iter().zip(fb) {
+            close2(*p, *q, 1e-6, "framed beam corner");
+        }
+    }
+}
+
+#[test]
+fn structure_fixture_exports_foundations_profiles_and_cut_slabs() {
+    let project = load(include_str!("fixtures/structure.ccad"));
+    let text = export(&project, &ExportOptions::default());
+    let lines = |entity: &str| text.lines().filter(|l| l.contains(&format!("={entity}("))).collect::<Vec<_>>();
+    // Pads under the four columns and strips under the four walls; a raft as a base slab.
+    let footings = lines("IFCFOOTING");
+    assert_eq!(footings.len(), 8);
+    assert_eq!(footings.iter().filter(|l| l.contains(".PAD_FOOTING.")).count(), 4);
+    assert!(lines("IFCSLAB").iter().any(|l| l.contains(".BASESLAB.")));
+    // Steel profiles as parametric profiles.
+    for profile in [
+        "IFCISHAPEPROFILEDEF",
+        "IFCUSHAPEPROFILEDEF",
+        "IFCLSHAPEPROFILEDEF",
+        "IFCRECTANGLEHOLLOWPROFILEDEF",
+        "IFCCIRCLEHOLLOWPROFILEDEF",
+    ] {
+        assert!(!lines(profile).is_empty(), "{profile}");
+    }
+    // The sloped beams and the slab cut by its supports are B-reps, in `Brep` representations only.
+    let breps: Vec<String> =
+        lines("IFCFACETEDBREP").iter().filter_map(|l| l.split('=').next()).map(str::to_string).collect();
+    assert!(!breps.is_empty());
+    let uses = |l: &str| breps.iter().any(|b| l.contains(&format!("{b},")) || l.contains(&format!("{b})")));
+    let representations = lines("IFCSHAPEREPRESENTATION");
+    assert!(representations.iter().filter(|l| uses(l)).all(|l| l.contains("'Brep'")));
+}

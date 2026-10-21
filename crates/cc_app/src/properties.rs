@@ -303,18 +303,63 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 readonly_row(ui, &t!("prop-height"), format::length(top - base));
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
+            reinforcement(ui, state, id);
         }
+        ElementKind::Rebar(r) => rebar_props(ui, state, &el, r),
         ElementKind::Beam(b) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
-                length_row(ui, state, &t!("prop-top-offset"), id, "beam-top", b.top_offset, |e, v| {
+                length_row(ui, state, &t!("prop-elevation-offset"), id, "beam-top", b.top_offset, |e, v| {
                     if let ElementKind::Beam(b) = &mut e.kind {
                         b.top_offset = v;
                     }
                 });
+                let end = b.end_offset.unwrap_or(b.top_offset);
+                length_row(ui, state, &t!("prop-end-elevation-offset"), id, "beam-end", end, |e, v| {
+                    if let ElementKind::Beam(b) = &mut e.kind {
+                        // Level again when the end returns to the start's elevation.
+                        b.end_offset = ((v - b.top_offset).abs() > 1e-9).then_some(v);
+                    }
+                });
+                beam_justification(ui, state, id, b);
+                for (label, at_start, value) in
+                    [(t!("prop-join-start"), true, b.join_start), (t!("prop-join-end"), false, b.join_end)]
+                {
+                    let mut on = value;
+                    if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+                        crate::engine_edit::element(state, id, None, |x| {
+                            if let ElementKind::Beam(b) = &mut x.kind {
+                                *(if at_start { &mut b.join_start } else { &mut b.join_end }) = on;
+                            }
+                        });
+                    }
+                }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 readonly_row(ui, &t!("prop-length"), format::length(b.length()));
+                if b.end_offset.is_some() {
+                    readonly_row(ui, &t!("prop-true-length"), format::length(b.true_length()));
+                }
+                if let Some(g) = state.session.geom().beams.get(&id) {
+                    readonly_row(ui, &t!("prop-cut-length"), format::length(g.cut_length()));
+                }
+                readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
+            });
+            reinforcement(ui, state, id);
+        }
+        ElementKind::Foundation(f) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-top-offset"), id, "foundation-top", f.top_offset, |e, v| {
+                    if let ElementKind::Foundation(f) = &mut e.kind {
+                        f.top_offset = v;
+                    }
+                });
+            });
+            section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                if let Some(g) = state.session.geom().foundations.get(&id).cloned() {
+                    readonly_row(ui, &t!("col-area"), format::area(cc_geom::polygon::area(&g.footprint)));
+                }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
         }
@@ -797,6 +842,130 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
     });
 }
 
+/// The bar count or the stirrup spacing of a reinforcement set, editable.
+fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &str, layout: cc_core::RebarLayout) {
+    use cc_core::RebarLayout as L;
+    match layout {
+        L::Longitudinal { count, .. } => {
+            let mut n = count;
+            let r = row(ui, label, |ui| ui.add(DragValue::new(&mut n).range(1..=200).suffix(" ×")));
+            if r.changed() {
+                modify(state, id, "rebar-count", |e| {
+                    if let ElementKind::Rebar(x) = &mut e.kind
+                        && let L::Longitudinal { count, .. } = &mut x.layout
+                    {
+                        *count = n;
+                    }
+                });
+            }
+            finish(state, &r);
+        }
+        L::Stirrups { spacing } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::Stirrups { spacing } = &mut x.layout
+                {
+                    *spacing = v.max(0.02);
+                }
+            });
+        }
+    }
+}
+
+/// What a set is, in a word: its face, or stirrups.
+fn rebar_role(layout: cc_core::RebarLayout) -> String {
+    match layout {
+        cc_core::RebarLayout::Longitudinal { face, .. } => tr(face.key()),
+        cc_core::RebarLayout::Stirrups { .. } => t!("bars-stirrups"),
+    }
+}
+
+/// The reinforcement sets of a beam or column: each editable or removable,
+/// and a button adding a typical reinforcement when there is none.
+fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
+    let sets: Vec<(ElementId, cc_core::RebarLayout, String)> = state
+        .project()
+        .rebar_of(host)
+        .map(|(e, r)| (e.id, r.layout, state.project().type_name(e.type_id).to_string()))
+        .collect();
+    section(ui, "reinforcement", t!("section-reinforcement"), |ui| {
+        let mut remove = None;
+        for (id, layout, name) in &sets {
+            let label = format!("{} · {name}", rebar_role(*layout));
+            rebar_layout_row(ui, state, *id, &label, *layout);
+            if row(ui, "", |ui| ui.small_button(t!("action-remove-rebar")).clicked()) {
+                remove = Some(*id);
+            }
+        }
+        if let Some(id) = remove {
+            crate::actions::run_command(state, cc_engine::commands::modify::ElementsDelete { ids: vec![id.0] });
+        }
+        if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
+            let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };
+            crate::actions::run_command(state, command);
+        }
+        if !sets.is_empty() {
+            let geom = state.session.geom();
+            let weight: f64 = sets.iter().filter_map(|(id, ..)| geom.rebar.get(id)).map(|r| r.weight()).sum();
+            readonly_row(ui, &t!("col-weight"), format!("{} kg", format::number(weight, 2)));
+        }
+    });
+}
+
+/// A reinforcement set: its layout, cover and quantities.
+fn rebar_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Rebar) {
+    let id = el.id;
+    section(ui, "constraints", t!("section-reinforcement"), |ui| {
+        let host = state
+            .project()
+            .element(r.host)
+            .map_or(String::new(), |h| if h.mark.is_empty() { tr(h.category().key()) } else { h.mark.clone() });
+        readonly_row(ui, &t!("col-host"), host);
+        rebar_layout_row(ui, state, id, &rebar_role(r.layout), r.layout);
+        length_row(ui, state, &t!("prop-cover"), id, "rebar-cover", r.cover, |e, v| {
+            if let ElementKind::Rebar(x) = &mut e.kind {
+                x.cover = v.max(0.0);
+            }
+        });
+    });
+    if let Some(set) = state.session.geom().rebar.get(&id).cloned() {
+        section(ui, "dimensions", t!("section-dimensions"), |ui| {
+            readonly_row(ui, &t!("col-bar-count"), set.count().to_string());
+            readonly_row(ui, &t!("col-bar-length"), format::length(set.bar_length()));
+            readonly_row(ui, &t!("prop-length"), format::length(set.total_length()));
+            readonly_row(ui, &t!("col-weight"), format!("{} kg", format::number(set.weight(), 2)));
+        });
+    }
+}
+
+/// Lateral and vertical justification of a beam: which line of its section
+/// the location line follows.
+fn beam_justification(ui: &mut Ui, state: &mut AppState, id: cc_core::ElementId, b: &cc_core::Beam) {
+    use cc_core::{BeamLateral, BeamVertical};
+    let (mut lateral, mut vertical) = (b.lateral, b.vertical);
+    row(ui, &t!("prop-lateral-justification"), |ui| {
+        egui::ComboBox::from_id_salt(("beam-lateral", id.0)).selected_text(tr(lateral.key())).show_ui(ui, |ui| {
+            for j in BeamLateral::ALL {
+                ui.selectable_value(&mut lateral, j, tr(j.key()));
+            }
+        });
+    });
+    row(ui, &t!("prop-vertical-justification"), |ui| {
+        egui::ComboBox::from_id_salt(("beam-vertical", id.0)).selected_text(tr(vertical.key())).show_ui(ui, |ui| {
+            for j in BeamVertical::ALL {
+                ui.selectable_value(&mut vertical, j, tr(j.key()));
+            }
+        });
+    });
+    if (lateral, vertical) != (b.lateral, b.vertical) {
+        crate::engine_edit::element(state, id, None, |x| {
+            if let ElementKind::Beam(b) = &mut x.kind {
+                (b.lateral, b.vertical) = (lateral, vertical);
+            }
+        });
+    }
+}
+
 /// Base and top constraints, location line and room bounding of a wall.
 fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core::Wall) {
     use cc_core::{LocationLine, WallTop};
@@ -1030,7 +1199,15 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             if scale != view.scale {
                 crate::engine_edit::view(state, id, None, |v| v.scale = scale);
             }
-            if let ViewKind::ThreeD { .. } = view.kind {
+            if let ViewKind::ThreeD { analytical, .. } = view.kind {
+                let mut on = analytical;
+                if row(ui, &t!("prop-analytical"), |ui| ui.checkbox(&mut on, "")).changed() {
+                    crate::engine_edit::view(state, id, None, |v| {
+                        if let ViewKind::ThreeD { analytical, .. } = &mut v.kind {
+                            *analytical = on;
+                        }
+                    });
+                }
                 let clicked = row(ui, "", |ui| ui.button(t!("action-zoom-fit")).clicked());
                 if clicked && let Some(v3) = state.view3d.get_mut(&id) {
                     v3.request_fit();
@@ -1040,7 +1217,21 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
     }
 
     match &view.kind {
-        ViewKind::FloorPlan { level, cut_height } | ViewKind::CeilingPlan { level, cut_height } => {
+        ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height } => {
+            if let ViewKind::FloorPlan { structural, structure_tags, .. } = view.kind {
+                section(ui, "structure-display", t!("section-structural"), |ui| {
+                    let (mut s, mut tags) = (structural, structure_tags);
+                    let a = row(ui, &t!("prop-structural-plan"), |ui| ui.checkbox(&mut s, "")).changed();
+                    let b = row(ui, &t!("prop-structure-tags"), |ui| ui.checkbox(&mut tags, "")).changed();
+                    if a || b {
+                        crate::engine_edit::view(state, id, None, |x| {
+                            if let ViewKind::FloorPlan { structural, structure_tags, .. } = &mut x.kind {
+                                (*structural, *structure_tags) = (s, tags);
+                            }
+                        });
+                    }
+                });
+            }
             section(ui, "extents", t!("section-extents"), |ui| {
                 readonly_row(ui, &t!("prop-level"), state.project().level_name(*level).to_string());
                 let mut h = *cut_height;

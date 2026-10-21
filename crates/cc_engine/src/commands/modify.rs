@@ -264,11 +264,13 @@ impl Command for ElementFlip {
     }
 }
 
-/// Allow or disallow joining at one end of a wall.
+/// Allow or disallow joining at one end of a wall or beam. A wall end joins
+/// other walls; a beam end stops at the face of a structural column it lies
+/// in, or meets other beams at the same depth (mitered corners, butt joints).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WallJoin {
-    /// Wall id.
+    /// Wall or beam id.
     pub id: u64,
     /// `start` or `end`.
     pub end: String,
@@ -290,12 +292,20 @@ impl Command for WallJoin {
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
         let start = at_start(&self.end)?;
-        edit(s, t!("tx-wall-join"), |e| match e.element_mut(id).map(|x| &mut x.kind) {
+        let name = match s.project().element(id).map(|x| &x.kind) {
+            Some(ElementKind::Beam(_)) => t!("tx-beam-join"),
+            _ => t!("tx-wall-join"),
+        };
+        edit(s, name, |e| match e.element_mut(id).map(|x| &mut x.kind) {
             Some(ElementKind::Wall(w)) => {
                 *(if start { &mut w.join_start } else { &mut w.join_end }) = self.joined;
                 Ok(())
             }
-            _ => Err(EngineError::invalid("not a wall")),
+            Some(ElementKind::Beam(b)) => {
+                *(if start { &mut b.join_start } else { &mut b.join_end }) = self.joined;
+                Ok(())
+            }
+            _ => Err(EngineError::invalid("not a wall or beam")),
         })?;
         Ok(super::created(s, id))
     }

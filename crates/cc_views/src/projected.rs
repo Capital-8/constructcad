@@ -353,6 +353,47 @@ pub fn axonometric(_project: &Project, geom: &ModelGeometry, camera: &CameraStat
     render(geom, &Frame::looking(DVec3::ZERO, camera.forward()), None)
 }
 
+/// The analytical model seen along the camera: member lines (columns and
+/// beams) and nodes, supports marked with a triangle.
+pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
+    let frame = Frame::looking(DVec3::ZERO, camera.forward());
+    let model = cc_geom::analytical::analytical_model(project, geom);
+    let mut d = Drawing2D::default();
+    for m in &model.members {
+        if let Some((a, b)) = model.line(m) {
+            let style = match m.kind {
+                cc_geom::analytical::MemberKind::Column => crate::LineStyle::Cut,
+                cc_geom::analytical::MemberKind::Beam => crate::LineStyle::Projection,
+            };
+            d.line(frame.project(a), frame.project(b), style, Some(m.element));
+        }
+    }
+    for n in &model.nodes {
+        let p = frame.project(n.position);
+        let r = 0.08;
+        let marker: Vec<DVec2> = if n.support {
+            vec![p, p + DVec2::new(r, -1.6 * r), p + DVec2::new(-r, -1.6 * r)]
+        } else {
+            (0..8).map(|i| p + DVec2::from_angle(i as f64 * std::f64::consts::FRAC_PI_4) * (r * 0.5)).collect()
+        };
+        d.polyline(&marker, true, crate::LineStyle::Thin, None);
+    }
+    d
+}
+
+/// The reinforcing bars seen along the camera, tagged with their sets.
+pub fn rebar(geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
+    let frame = Frame::looking(DVec3::ZERO, camera.forward());
+    let mut d = Drawing2D::default();
+    for set in geom.rebar.values() {
+        for bar in &set.bars {
+            let pts: Vec<DVec2> = bar.points.iter().map(|p| frame.project(*p)).collect();
+            d.polyline(&pts, bar.closed, crate::LineStyle::Projection, Some(set.element));
+        }
+    }
+    d
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -17,8 +17,8 @@ use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
-    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, TypeData, Uid, View, ViewId, ViewKind,
-    Wall, WallFunction, WallTop,
+    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, TypeData, Uid, View, ViewId,
+    ViewKind, Wall, WallFunction, WallTop,
 };
 use cc_geom::polygon;
 use glam::{DAffine3, DVec2, DVec3};
@@ -528,7 +528,7 @@ impl<'a> Importer<'a> {
             p.views.insert(id, View { id, name: name.to_string(), scale: 50, kind });
         };
         for (level, name) in &levels {
-            add_view(&mut self.p, name, ViewKind::FloorPlan { level: *level, cut_height: 1.2 });
+            add_view(&mut self.p, name, ViewKind::floor_plan(*level));
         }
         for (level, name) in &levels {
             add_view(&mut self.p, name, ViewKind::CeilingPlan { level: *level, cut_height: 1.2 });
@@ -1249,6 +1249,8 @@ impl<'a> Importer<'a> {
         let fallback = match section {
             ColumnSection::Rectangular { width, depth } => format!("{:.0} x {:.0}", width * 100.0, depth * 100.0),
             ColumnSection::Round { diameter } => format!("Ø {:.0}", diameter * 100.0),
+            ColumnSection::Profile { width, depth, .. } => format!("{:.0} x {:.0}", width * 100.0, depth * 100.0),
+            ColumnSection::Pipe { diameter, .. } => format!("Ø {:.0}", diameter * 100.0),
         };
         let same = move |s: &ColumnSection| match (s, section) {
             (ColumnSection::Rectangular { width: a, depth: b }, ColumnSection::Rectangular { width: c, depth: d }) => {
@@ -1582,6 +1584,22 @@ impl<'a> Importer<'a> {
         }
         let (_, body) = self.product(e);
         let Some((_, z1)) = body.z_range() else { return false };
+        // A plan footprint extruded upwards along an axis: the axis keeps the
+        // beam's own length (the body's ends include its joins).
+        if let Some((a, b)) = body.axis
+            && let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical())
+        {
+            let Some(dir) = (b - a).try_normalize() else { return false };
+            let footprint = ex.footprint();
+            let across: Vec<f64> = footprint.iter().map(|p| (*p - a).dot(dir.perp())).collect();
+            let (v0, v1) =
+                across.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
+            if !across.iter().all(|v| (v - v0).abs() < 1e-3 || (v - v1).abs() < 1e-3) {
+                return false;
+            }
+            let n = dir.perp() * ((v0 + v1) / 2.0);
+            return self.add_beam(id, e, (a + n, b + n), (v1 - v0, ex.vector.z.abs()), z1);
+        }
         let Some(ex) = body.sole_extrusion().filter(|e| e.profile.is_simple()).cloned() else { return false };
         let (center, x, w, h) = ex.profile.rect();
         let (start, end, width, height) = if ex.is_vertical() {
@@ -1600,7 +1618,19 @@ impl<'a> Importer<'a> {
         } else {
             return false;
         };
-        if start.distance(end) < 0.01 || !(start.is_finite() && end.is_finite()) {
+        self.add_beam(id, e, (start, end), (width, height), z1)
+    }
+
+    /// A native beam along `start`-`end` with its top at `z1`.
+    fn add_beam(
+        &mut self,
+        id: u32,
+        e: &Entity,
+        (start, end): (DVec2, DVec2),
+        (width, height): (f64, f64),
+        z1: f64,
+    ) -> bool {
+        if start.distance(end) < 0.01 || !(start.is_finite() && end.is_finite() && width > 1e-6 && height > 1e-6) {
             return false;
         }
         let (level, elevation) = self.level_for(id, z1 - height);
@@ -1612,10 +1642,10 @@ impl<'a> Importer<'a> {
             name,
             format!("{:.0} x {:.0}", width * 100.0, height * 100.0),
             uid,
-            |d| matches!(d, TypeData::Beam { width: a, height: b, .. } if (a - width).abs() < TYPE_TOL && (b - height).abs() < TYPE_TOL),
-            || TypeData::Beam { width, height, material },
+            |d| matches!(d, TypeData::Beam { width: a, height: b, shape: SectionShape::Solid, .. } if (a - width).abs() < TYPE_TOL && (b - height).abs() < TYPE_TOL),
+            || TypeData::Beam { width, height, material, shape: SectionShape::Solid },
         );
-        let beam = Beam { start, end, top_offset: z1 - elevation };
+        let beam = Beam::new(start, end, z1 - elevation);
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
         true
     }

@@ -54,13 +54,40 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Column(c) => {
             finite(&[c.rotation_deg, c.base_offset, c.height]) && c.position.is_finite() && top_ok(c.top)
         }
-        ElementKind::Beam(b) => b.top_offset.is_finite() && finite_points(&[b.start, b.end]),
+        ElementKind::Beam(b) => {
+            b.top_offset.is_finite() && b.end_offset.is_none_or(f64::is_finite) && finite_points(&[b.start, b.end])
+        }
+        ElementKind::Rebar(r) => {
+            let layout = match r.layout {
+                crate::RebarLayout::Longitudinal { count, .. } => (1..=200).contains(&count),
+                crate::RebarLayout::Stirrups { spacing } => spacing.is_finite() && spacing >= 0.02,
+            };
+            layout && r.cover.is_finite() && r.cover >= 0.0
+        }
+        ElementKind::Foundation(f) => {
+            let shape = match &f.shape {
+                crate::FoundationShape::Pad { position, rotation_deg } => {
+                    position.is_finite() && rotation_deg.is_finite()
+                }
+                crate::FoundationShape::Strip { start, end } => finite_points(&[*start, *end]),
+                crate::FoundationShape::Slab { boundary } => boundary.len() >= 3 && finite_points(boundary),
+            };
+            shape && f.top_offset.is_finite()
+        }
         ElementKind::Stair(s) => {
             finite(&[s.direction_deg, s.base_offset, s.height]) && s.start.is_finite() && top_ok(s.top)
         }
         ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
         ElementKind::Component(c) => finite(&[c.rotation_deg, c.base_offset]) && c.position.is_finite(),
     }
+}
+
+/// Fit a profile's thicknesses into its box; returns how many changed (0 or 1).
+fn fit_shape(shape: &mut crate::SectionShape, width: f64, depth: f64) -> usize {
+    let fitted = shape.fitted(width, depth);
+    let changed = fitted != *shape;
+    *shape = fitted;
+    usize::from(changed)
 }
 
 /// Replace a non-finite or non-positive value by `fallback`; returns whether it changed.
@@ -112,9 +139,29 @@ impl Project {
                         repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
                     }
                     crate::ColumnSection::Round { diameter } => repairs += usize::from(fix_positive(diameter, 0.3)),
+                    crate::ColumnSection::Profile { width, depth, shape } => {
+                        repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
+                        repairs += fit_shape(shape, *width, *depth);
+                    }
+                    crate::ColumnSection::Pipe { diameter, wall } => {
+                        repairs += usize::from(fix_positive(diameter, 0.2));
+                        let fitted =
+                            if wall.is_finite() { wall.clamp(0.001, *diameter * 0.5) } else { *diameter * 0.5 };
+                        if fitted != *wall {
+                            *wall = fitted;
+                            repairs += 1;
+                        }
+                    }
                 },
-                TypeData::Beam { width, height, .. } => {
+                TypeData::Beam { width, height, shape, .. } => {
                     repairs += usize::from(fix_positive(width, 0.15)) + usize::from(fix_positive(height, 0.4));
+                    repairs += fit_shape(shape, *width, *height);
+                }
+                TypeData::Rebar { diameter, .. } => repairs += usize::from(fix_positive(diameter, 0.01)),
+                TypeData::Foundation { width, length, thickness, .. } => {
+                    repairs += usize::from(fix_positive(width, 1.0))
+                        + usize::from(fix_positive(length, 1.0))
+                        + usize::from(fix_positive(thickness, 0.4));
                 }
                 TypeData::Stair { width, max_riser, tread, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
@@ -150,6 +197,9 @@ impl Project {
                         ElementKind::Door(h) | ElementKind::Window(h) => {
                             self.element(h.host).is_some_and(|w| w.as_wall().is_some())
                         }
+                        ElementKind::Rebar(r) => self
+                            .element(r.host)
+                            .is_some_and(|h| matches!(h.kind, ElementKind::Beam(_) | ElementKind::Column(_))),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         _ => true,

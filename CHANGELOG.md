@@ -8,6 +8,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Structural framing joins: a beam end that lies in a structural column stops at the column's face (along the face when the column is rotated), and beam ends at a common depth meet like walls — mitered at corners, butted against the side of a beam they end on, with a collinear pair running through junctions of three or more. Beams resting on a column, or at another depth, are left whole. Plans, sections, 3D, volumes and IFC export use the framed body; IFC beams carry their location line as an axis, so they come back with their own length and frame again on import.
+- *Modify → Allow/Disallow Join* works on beam ends too. Beams gain *Join at Start*/*Join at End* properties and a read-only *Cut Length*; `wall_join` accepts beams, and `element_get` reports a beam's `cut_length` and what each end is framed into (`start_join`, `end_join`).
+- Structural layout from grids (*Structure → Framing*): *Columns at Grids* places a column at every intersection of the selected grids (or all grids) on the active level, *Beams on Grids* places a beam between neighboring columns along each grid, and *Beams Between Columns* chains beams through the selected columns. Places and spans already modeled are skipped, and each run is one undo step. Engine commands `columns_at_grids`, `beams_on_grids` and `beams_between_columns`.
+- Beam justification: the location line can follow the center or either face of the section (*Lateral Justification*) and sit at its top, center or bottom (*Vertical Justification*); joins work on the body, mirrors keep the body on its side, and `beam_create` takes `lateral` and `vertical`. The beam offset is now labeled *Elevation Offset*.
+- Structural quantities: column and beam schedules gain *Section*, *Cut Length* (with a total) and *Material* fields (columns also *Structural*), shown by default in new schedules; *Structure → Structural Schedules* creates both.
+- Foundations, a new category (*Structure → Foundation*): pad footings (FT, click their centers; *Footings Under Columns* centers and turns one under each column at its base), strip footings / ground beams (*Ground Beams Under Walls*, along each wall's centerline at its base, meeting at corners like beams) and foundation slabs (rafts, sketched or under the loop of walls). Types set the kind, size and depth; plans draw foundations dashed under the floor and cut where the plane passes through them; schedules list section, length, area, thickness, volume and material. IFC export writes `IfcFooting` (pad or strip) and `IfcSlab` `BASESLAB` with their type objects and base quantities. Engine commands `footing_create`, `strip_footing_create`, `foundation_slab_create`, `footings_under_columns` and `strip_footings_under_walls`.
+- Sloped beams: a beam's end can sit at another elevation (*End Elevation Offset*, `beam_create` `end_offset`); the section stays square to the axis, the true length and volume follow the slope, splitting keeps the slope, and IFC export writes the body as a B-rep.
+- Steel and hollow sections: column types can be I/H, channel (U), angle (L), rectangular tube or round tube, and beam types I/H, U, L or tube, edited in the type dialog (section kind, size, web, flange or wall thickness, kept within the section). 3D, plans, legends and schedules draw and measure the real profile; IFC export uses the parametric IFC profiles (`IfcIShapeProfileDef`, `IfcUShapeProfileDef`, `IfcLShapeProfileDef`, `IfcRectangleHollowProfileDef`, `IfcCircleHollowProfileDef`). The template gains steel column and beam types and a steel material.
+- *Join Slabs to Supports* (*Structure → Analysis*, `slab_join_supports`): joins floors with the beams, structural columns and structural walls whose bodies overlap them, so the shared volume counts once and sections show one piece.
+- Analytical model: structural columns and beams as center lines between shared nodes — beams framed into columns end on the column axis, beams ending on beams end on their line, members split where others connect, column bases are supports. *Analytical Model* opens a 3D view of it over the model drawn faint (any 3D view can switch with its *Analytical Model* property; `view_create` kind `analytical`); `analytical_model` returns it as JSON and *Export Analytical Model* (`analytical_export`) saves it for structural analysis programs.
+- Reinforcement, a new category: sets of bars in beams (top and bottom bars, stirrups) and columns (longitudinal bars around the section, ties), with their cover and bar type (5 to 16 mm in the template). Bars follow their host and go with it; *Structure → Reinforcement*: *Typical Reinforcement* for the selected (or all) beams and columns, a *Reinforcement View* (3D, bars over the faint model) and a *Steel Schedule* (host, diameter, bar count, bar length, total length and weight, with totals). Beam and column properties list their sets, editable and removable. IFC export writes `IfcReinforcingBar`s (swept disks along each bar) with their type objects. Engine commands `rebar_create` and `rebar_typical`; `element_get` reports count, lengths and weight.
+- Bracing and trusses (*Structure → Framing*): *X Bracing* between two selected columns (`braces_between_columns`, or `brace_create` between any two points in space) and the *Truss* tool, which lays out Pratt, Howe or Warren trusses from two clicks with the height and panels of the options bar (`truss_create`): chords and diagonals are sloped beams, posts are columns, grouped. The analytical model connects their members at the panel points.
+- Structural plans (*Structure → Documentation → Structural Plan*, `view_create` kind `structural_plan`): floor plans showing only the structure — slabs, structural walls and columns, beams (seen from below) and foundations — tagged with mark and section (`V1 15×40`, `P1 20×20`). *Annotate → Structural Tags* shows the same tags in any floor plan, and plans gain *Structural Plan* and *Structural Tags* properties. *Number Structure* (`structure_number`) numbers beams, columns and pad footings in reading order.
+
+### Changed
+
+- `.ccad` format version 7 (foundations, steel sections, sloped beams, reinforcement, structural plans); older files still open.
+- Elements cut by joined geometry (other than walls) are exported to IFC with their cut body as a B-rep, matching their exported volume.
+- `*_set` commands replace an enum value given as another variant (a column section switching from rectangular to a profile) instead of merging the two.
+- IFC validation tessellates curved profiles finely enough to compare their volumes, and CI validates a structural fixture.
+
+## [0.2.1] - 2026-10-20
+
+### Fixed
+
+- The command palette button after the ribbon tabs did nothing: the click that opened the palette closed it again in the same frame. Ctrl+Shift+P was not affected.
+
+### Changed
+
+- Contributing: the DCO check lists the commits without a sign-off and explains how to add it; commits made in the GitHub web editor are signed off automatically.
+
+## [0.2.0] - 2026-10-20
+
+### Added
+
 - Text notes (*Annotate → Text*, TT) in any 2D view: single-line text, or multiline text word-wrapped to a width in paper millimeters; rotation; text types with their size and default leader symbol. Leaders are drawn from the text with one segment or two (an elbow), ending in an arrow, open arrow, triangle, dot, circle, square, filled square, tick or nothing; *Add Leader* adds more to a selected text. Double-click a text to edit it; the properties edit its text, width, rotation and each leader's symbol. Engine commands `text_create`, `text_add_leader` and `text_remove_leader`; texts move, copy and rotate with the other elements and stay readable when mirrored.
 - Engine (`cc_engine`): the operations of ConstructCAD as named commands that run without the GUI, each with typed JSON parameters and a generated JSON Schema — project files, undo/redo, project information, units and language; IFC import/export, sheet PDF/SVG, schedule CSV, component files; queries of categories, levels, types, elements (with derived length, height, thickness, volume, room area), views, materials and schedule tables; creation of walls, doors, windows, floors, ceilings, roofs, rooms, grids, columns, beams, stairs, railings and components with the drawing tools' defaults; move, copy/array, rotate, mirror, pin, flip, delete, wall joins, trim/extend, split, offset, align and end points; element, type, view and material parameters; types (duplicate, delete), components, materials, levels, views and sheets. Levels, types, views and materials are named by id or name; edits that would leave the model invalid are refused without an undo step.
 - `ccad` command line (`cc_cli`, no GUI dependencies): list commands and schemas, run one command (JSON or `key=value` arguments) or a script, open or import a project and save it afterwards. Included in release packages.
@@ -103,5 +138,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/francisreboucas/constructcad/releases/tag/v0.1.0

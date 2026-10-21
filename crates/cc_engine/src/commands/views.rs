@@ -18,12 +18,15 @@ fn view_out(s: &Session, id: ViewId) -> Value {
 
 /// Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`),
 /// `section` (with `start`, `end` and optional `depth`), `elevation` (with
-/// `direction`: north, south, east or west), `three_d`, `legend` (all types),
+/// `direction`: north, south, east or west), `structural_plan` (with `level`:
+/// a formwork plan of the structure, tagged), `three_d`, `analytical` (a 3D
+/// view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types),
 /// `schedule` (with `category`) or `sheet` (A3, numbered after the others).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
-    /// `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`, `legend`, `schedule` or `sheet`.
+    /// `floor_plan`, `ceiling_plan`, `structural_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`,
+    /// `legend`, `schedule` or `sheet`.
     pub kind: String,
     /// View name (default: by kind).
     #[serde(default)]
@@ -64,11 +67,17 @@ impl Command for ViewCreate {
             "floor_plan" | "ceiling_plan" => {
                 let level = refs::level_or_first(p, self.level.as_ref())?;
                 let kind = if self.kind == "floor_plan" {
-                    ViewKind::FloorPlan { level, cut_height: 1.2 }
+                    ViewKind::floor_plan(level)
                 } else {
                     ViewKind::CeilingPlan { level, cut_height: 1.2 }
                 };
                 (p.level_name(level).to_string(), 50, kind, t!("tx-new-view"))
+            }
+            "structural_plan" => {
+                let level = refs::level_or_first(p, self.level.as_ref())?;
+                let kind = ViewKind::FloorPlan { level, cut_height: 1.2, structural: true, structure_tags: true };
+                let name = t!("default-structural-plan-name", "level" => p.level_name(level));
+                (name, 50, kind, t!("tx-new-view"))
             }
             "section" => {
                 let (Some(a), Some(b)) = (self.start, self.end) else {
@@ -100,7 +109,25 @@ impl Command for ViewCreate {
                 (
                     t!("default-3d-name", "n" => n),
                     100,
-                    ViewKind::ThreeD { camera: CameraState::default() },
+                    ViewKind::ThreeD { camera: CameraState::default(), analytical: false, rebar: false },
+                    t!("tx-new-view"),
+                )
+            }
+            "analytical" => {
+                let n = count(p, ViewCategory::ThreeD) + 1;
+                (
+                    t!("default-analytical-name", "n" => n),
+                    100,
+                    ViewKind::ThreeD { camera: CameraState::default(), analytical: true, rebar: false },
+                    t!("tx-new-view"),
+                )
+            }
+            "rebar" => {
+                let n = count(p, ViewCategory::ThreeD) + 1;
+                (
+                    t!("default-rebar-view-name", "n" => n),
+                    50,
+                    ViewKind::ThreeD { camera: CameraState::default(), analytical: false, rebar: true },
                     t!("tx-new-view"),
                 )
             }

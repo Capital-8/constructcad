@@ -202,6 +202,9 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         }
         ElementKind::Beam(b) => {
             derived.insert("length".into(), json!(b.length()));
+            if b.end_offset.is_some() {
+                derived.insert("true_length".into(), json!(b.true_length()));
+            }
         }
         ElementKind::Railing(r) => {
             derived.insert("length".into(), json!(r.length()));
@@ -216,6 +219,23 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     let geom = s.geometry();
     if geom.solids_of(id).next().is_some() {
         derived.insert("volume".into(), json!(geom.volume(id)));
+    }
+    if let Some(beam) = geom.beams.get(&id) {
+        // Where each end is framed: a column's face, other beams, or free.
+        let framing = |end: cc_geom::BeamEnd| match end {
+            cc_geom::BeamEnd::Free => json!("free"),
+            cc_geom::BeamEnd::Beam => json!("beam"),
+            cc_geom::BeamEnd::Column(c) => json!({"column": c.0}),
+        };
+        derived.insert("cut_length".into(), json!(beam.cut_length()));
+        derived.insert("start_join".into(), framing(beam.start));
+        derived.insert("end_join".into(), framing(beam.end));
+    }
+    if let Some(set) = geom.rebar.get(&id) {
+        derived.insert("count".into(), json!(set.count()));
+        derived.insert("bar_length".into(), json!(set.bar_length()));
+        derived.insert("total_length".into(), json!(set.total_length()));
+        derived.insert("weight".into(), json!(set.weight()));
     }
     if let Some(boundary) = geom.rooms.get(&id) {
         derived.insert("area".into(), json!(polygon::area(boundary)));
@@ -238,7 +258,8 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
 }
 
 /// An element with all its parameters (`params`, editable with `element_set`) and derived values
-/// (length, height, thickness, volume, room area and perimeter).
+/// (length, height, thickness, volume, room area and perimeter; for beams the length after joins
+/// and what each end is framed into).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementGet {

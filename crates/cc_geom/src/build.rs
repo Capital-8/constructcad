@@ -1,3 +1,4 @@
+use crate::beam::{BeamGeom, BeamInput, ColumnInput, resolve_beams};
 use crate::polygon;
 use crate::wall::{Opening, WallGeom, WallLine, resolve_join};
 use crate::{Ray, Solid};
@@ -57,6 +58,12 @@ pub fn hosted_parts(data: &TypeData, width: f64, height: f64, half: f64) -> Vec<
 pub struct ModelGeometry {
     pub solids: Vec<Solid>,
     pub walls: BTreeMap<ElementId, WallGeom>,
+    /// Beams with their ends framed into columns and other beams.
+    pub beams: BTreeMap<ElementId, BeamGeom>,
+    /// Reinforcement sets: their bars, placed in their hosts.
+    pub rebar: BTreeMap<ElementId, crate::rebar::RebarGeom>,
+    /// Foundations: plan outline and elevations (strips meet at corners like beams).
+    pub foundations: BTreeMap<ElementId, FoundationGeom>,
     /// Boundary of each enclosed room (missing when the room is not enclosed).
     pub rooms: BTreeMap<ElementId, Vec<DVec2>>,
     /// Ridge and hip lines of pitched roofs, in plan.
@@ -64,6 +71,22 @@ pub struct ModelGeometry {
     /// Volume a joined wall shares with the elements that cut it, taken
     /// off its quantity (a wall's body stays whole; see [`Self::volume`]).
     pub join_deductions: BTreeMap<ElementId, f64>,
+}
+
+/// A foundation's body: a vertical prism.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FoundationGeom {
+    pub element: ElementId,
+    /// Plan outline, counter-clockwise.
+    pub footprint: Vec<DVec2>,
+    /// Bottom and top elevations.
+    pub z_range: (f64, f64),
+}
+
+impl FoundationGeom {
+    pub fn volume(&self) -> f64 {
+        polygon::area(&self.footprint) * (self.z_range.1 - self.z_range.0)
+    }
 }
 
 /// An axis-aligned box in a horizontal frame: `origin`, plan axes `u`/`v`
@@ -191,16 +214,17 @@ pub fn railing_parts(project: &Project, element: &cc_core::Element, railing: &cc
     parts
 }
 
-/// Plan outline of a column section (counter-clockwise).
+/// Plan outline of a column section's bounding shape (counter-clockwise):
+/// its box, or its circle for round sections.
 pub fn column_outline(section: cc_core::ColumnSection, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
     let u = DVec2::from_angle(rotation_deg.to_radians());
     let v = u.perp();
     match section {
-        cc_core::ColumnSection::Rectangular { width, depth } => {
+        cc_core::ColumnSection::Rectangular { width, depth } | cc_core::ColumnSection::Profile { width, depth, .. } => {
             let (w, d) = (width / 2.0, depth / 2.0);
             [(-w, -d), (w, -d), (w, d), (-w, d)].iter().map(|&(a, b)| position + u * a + v * b).collect()
         }
-        cc_core::ColumnSection::Round { diameter } => (0..24)
+        cc_core::ColumnSection::Round { diameter } | cc_core::ColumnSection::Pipe { diameter, .. } => (0..24)
             .map(|i| position + DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU) * (diameter / 2.0))
             .collect(),
     }
@@ -243,7 +267,10 @@ impl ModelGeometry {
         geom.build_walls(project);
         geom.build_hosted(project);
         geom.build_slabs(project);
+        geom.build_beams(project);
+        geom.build_foundations(project);
         geom.build_structure(project);
+        geom.rebar = crate::rebar::build_rebar(project, &geom.beams);
         geom.build_components(project);
         geom.apply_joins(project);
         geom.build_rooms(project);
@@ -262,6 +289,23 @@ impl ModelGeometry {
             return vec![mesh(&closed.to_solid([0, 0, 0]))];
         }
         self.solids_of(id).map(mesh).collect()
+    }
+
+    /// Volume the bodies of `a` and `b` share (0 when they only touch). Bodies
+    /// already cut by a join have lost what they shared.
+    pub fn shared_volume(&self, a: ElementId, b: ElementId) -> f64 {
+        let (ma, mb) = (self.closed_meshes(a), self.closed_meshes(b));
+        let mut total = 0.0;
+        for x in &ma {
+            for y in mb.iter().filter(|y| crate::csg::bounds_overlap(x, y)) {
+                if let Some(common) = crate::csg::intersect(x, y) {
+                    let mut s = Solid::new(a, Category::Wall, [0, 0, 0]);
+                    s.add_polygons(common);
+                    total += s.volume().max(0.0);
+                }
+            }
+        }
+        total
     }
 
     /// Joined geometry: the cut element loses the volume it shares with
@@ -328,20 +372,13 @@ impl ModelGeometry {
             match (&e.kind, &ty.data) {
                 (ElementKind::Column(c), TypeData::Column { section, .. }) => {
                     let (base, top) = project.column_span(e, c);
-                    s.add_prism(&column_outline(*section, c.position, c.rotation_deg), |_| base, |_| top);
-                }
-                (ElementKind::Beam(b), TypeData::Beam { width, height, .. }) => {
-                    let Some(u) = (b.end - b.start).try_normalize() else { continue };
-                    let top = project.level_elevation(e.level) + b.top_offset;
-                    BoxPart {
-                        origin: b.start,
-                        u,
-                        v: u.perp(),
-                        u_range: (0.0, b.length()),
-                        v_range: (-width / 2.0, width / 2.0),
-                        z_range: (top - height, top),
+                    for part in crate::section::column_parts(*section, c.position, c.rotation_deg) {
+                        s.add_prism(&part, |_| base, |_| top);
                     }
-                    .add_to(&mut s);
+                }
+                (ElementKind::Beam(_), TypeData::Beam { .. }) => {
+                    let Some(g) = self.beams.get(&e.id) else { continue };
+                    g.add_to(&mut s);
                 }
                 (ElementKind::Stair(st), TypeData::Stair { .. }) => {
                     let Some(g) = stair_geom(project, e, st) else { continue };
@@ -352,6 +389,97 @@ impl ModelGeometry {
                 }
                 _ => continue,
             }
+            if !s.faces.is_empty() {
+                self.solids.push(s);
+            }
+        }
+    }
+
+    /// Beams framed into the structural columns and the other beams they meet.
+    fn build_beams(&mut self, project: &Project) {
+        let mut beams = Vec::new();
+        let mut columns = Vec::new();
+        for e in project.elements.values() {
+            match (&e.kind, project.element_type(e.type_id).map(|t| &t.data)) {
+                (ElementKind::Beam(b), Some(TypeData::Beam { width, height, shape, .. })) if b.length() > 1e-6 => {
+                    // Joins work on the body centerline, whatever the justification.
+                    let (start, end) = project.beam_axis(e, b);
+                    let section = crate::section::shape_rects(*shape, *width, *height)
+                        .into_iter()
+                        .map(|(a, b)| (DVec2::new(a.x, a.y + height / 2.0), DVec2::new(b.x, b.y + height / 2.0)))
+                        .collect();
+                    beams.push(BeamInput {
+                        element: e.id,
+                        start,
+                        end,
+                        half: width / 2.0,
+                        z_range: project.beam_z(e, b),
+                        slope: b.rise() / b.length(),
+                        section,
+                        join_start: b.join_start,
+                        join_end: b.join_end,
+                    });
+                }
+                (ElementKind::Column(c), Some(TypeData::Column { section, .. })) if c.structural => {
+                    columns.push(ColumnInput {
+                        element: e.id,
+                        outline: column_outline(*section, c.position, c.rotation_deg),
+                        z_range: project.column_span(e, c),
+                    });
+                }
+                _ => {}
+            }
+        }
+        self.beams = resolve_beams(&beams, &columns).into_iter().map(|g| (g.element, g)).collect();
+    }
+
+    /// Pads, strips (meeting at corners and tees like beams) and slabs.
+    fn build_foundations(&mut self, project: &Project) {
+        let mut strips = Vec::new();
+        for e in project.elements.values() {
+            let ElementKind::Foundation(f) = &e.kind else { continue };
+            let Some(TypeData::Foundation { width, length, thickness, .. }) =
+                project.element_type(e.type_id).map(|t| &t.data)
+            else {
+                continue;
+            };
+            let top = project.level_elevation(e.level) + f.top_offset;
+            let z_range = (top - thickness, top);
+            let footprint = match &f.shape {
+                cc_core::FoundationShape::Pad { position, rotation_deg } => {
+                    let section = cc_core::ColumnSection::Rectangular { width: *width, depth: *length };
+                    column_outline(section, *position, *rotation_deg)
+                }
+                cc_core::FoundationShape::Slab { boundary } => polygon::ccw(boundary),
+                cc_core::FoundationShape::Strip { start, end } => {
+                    if start.distance(*end) > 1e-6 {
+                        strips.push(BeamInput {
+                            element: e.id,
+                            start: *start,
+                            end: *end,
+                            half: width / 2.0,
+                            z_range,
+                            slope: 0.0,
+                            section: Vec::new(),
+                            join_start: true,
+                            join_end: true,
+                        });
+                    }
+                    continue;
+                }
+            };
+            self.foundations.insert(e.id, FoundationGeom { element: e.id, footprint, z_range });
+        }
+        for g in resolve_beams(&strips, &[]) {
+            let footprint = g.footprint().to_vec();
+            self.foundations.insert(g.element, FoundationGeom { element: g.element, footprint, z_range: g.z_range });
+        }
+        for (id, g) in &self.foundations {
+            let Some(e) = project.element(*id) else { continue };
+            let material = project.element_type(e.type_id).map_or("", |t| t.main_material());
+            let mut s = Solid::of_material(*id, Category::Foundation, project, material);
+            let (z0, z1) = g.z_range;
+            s.add_prism(&g.footprint, |_| z0, |_| z1);
             if !s.faces.is_empty() {
                 self.solids.push(s);
             }
@@ -652,11 +780,7 @@ mod tests {
                 mark: String::new(),
                 comments: String::new(),
                 uid: Default::default(),
-                kind: ElementKind::Beam(cc_core::Beam {
-                    start: DVec2::new(0.0, 3.0),
-                    end: DVec2::new(8.0, 3.0),
-                    top_offset,
-                }),
+                kind: ElementKind::Beam(cc_core::Beam::new(DVec2::new(0.0, 3.0), DVec2::new(8.0, 3.0), top_offset)),
             });
         });
         (doc, beam)
@@ -815,7 +939,8 @@ mod tests {
             let beam = add(
                 e,
                 Category::Beam,
-                ElementKind::Beam(Beam { start: DVec2::ZERO, end: DVec2::new(3.0, 4.0), top_offset: 3.0 }),
+                // Clear of the column, so its length stays whole.
+                ElementKind::Beam(Beam::new(DVec2::new(1.0, 0.0), DVec2::new(4.0, 4.0), 3.0)),
             );
             (stair, column, beam)
         });
@@ -830,6 +955,46 @@ mod tests {
         assert!((g.volume(stair) - expected).abs() < 1e-9, "{} vs {expected}", g.volume(stair));
         assert!((g.volume(column) - 0.2 * 0.2 * 3.0).abs() < 1e-9);
         assert!((g.volume(beam) - 0.15 * 0.4 * 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn beam_justification_moves_the_body() {
+        use cc_core::{Beam, BeamLateral, BeamVertical};
+        let (mut doc, beam) = house_with_beam(3.0);
+        let (width, height) = beam_size(&doc.project, beam);
+        let body = |doc: &Document| {
+            let g = ModelGeometry::build(&doc.project).beams[&beam].clone();
+            let ys: Vec<f64> = g.footprint().iter().map(|p| p.y).collect();
+            let lo = ys.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = ys.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            ((lo, hi), g.z_range)
+        };
+        let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+        // Centered, with the top at the location elevation (the beam runs along +X at y = 3).
+        let (y, z) = body(&doc);
+        assert!(close(y, (3.0 - width / 2.0, 3.0 + width / 2.0)) && close(z, (3.0 - height, 3.0)), "{y:?} {z:?}");
+        let set = |doc: &mut Document, lateral, vertical| {
+            doc.edit("justify", |e| {
+                if let Some(ElementKind::Beam(b)) = e.element_mut(beam).map(|x| &mut x.kind) {
+                    (b.lateral, b.vertical) = (lateral, vertical);
+                }
+            });
+        };
+        // Left face on the line: the body lies to its right (towards -Y).
+        set(&mut doc, BeamLateral::Left, BeamVertical::Bottom);
+        let (y, z) = body(&doc);
+        assert!(close(y, (3.0 - width, 3.0)) && close(z, (3.0, 3.0 + height)), "{y:?} {z:?}");
+        set(&mut doc, BeamLateral::Right, BeamVertical::Center);
+        let (y, z) = body(&doc);
+        assert!(close(y, (3.0, 3.0 + width)) && close(z, (3.0 - height / 2.0, 3.0 + height / 2.0)), "{y:?} {z:?}");
+        // A mirror across X keeps the body on the same side of the mirrored line.
+        let mut b = Beam::new(DVec2::ZERO, DVec2::X, 0.0);
+        b.lateral = BeamLateral::Left;
+        let mut e = doc.project.element(beam).unwrap().clone();
+        e.kind = ElementKind::Beam(b);
+        e.transform(&cc_core::PlanTransform::mirror_across(DVec2::ZERO, DVec2::X));
+        let ElementKind::Beam(m) = &e.kind else { panic!("beam") };
+        assert_eq!(m.lateral, BeamLateral::Right);
     }
 
     #[test]

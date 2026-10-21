@@ -41,12 +41,38 @@ pub fn plan(
     ceiling: bool,
     scale: u32,
 ) -> Drawing2D {
+    plan_of(project, geom, level, cut_height, ceiling, false, scale)
+}
+
+/// Whether a structural plan shows the element: slabs, the load-bearing
+/// walls and columns, beams and foundations.
+pub fn is_structural(e: &cc_core::Element) -> bool {
+    match &e.kind {
+        ElementKind::Wall(w) => w.structural,
+        ElementKind::Column(c) => c.structural,
+        ElementKind::Floor(_) | ElementKind::Beam(_) | ElementKind::Foundation(_) | ElementKind::Grid(_) => true,
+        _ => false,
+    }
+}
+
+/// A plan as [`plan`] draws it; a `structural` plan shows only the
+/// structure, with the beams above the cut drawn as seen from below.
+pub fn plan_of(
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    cut_height: f64,
+    ceiling: bool,
+    structural: bool,
+    scale: u32,
+) -> Drawing2D {
+    let shown = |e: &cc_core::Element| !structural || is_structural(e);
     let spacing = crate::cut::spacing(scale);
     let mut d = Drawing2D::default();
     let level_z = project.level_elevation(level);
     let cut_z = level_z + cut_height;
 
-    for e in project.elements.values().filter(|e| e.level == level) {
+    for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
         let id = Some(e.id);
         match &e.kind {
             ElementKind::Floor(f) if !ceiling => d.polyline(&f.boundary, true, LineStyle::Projection, id),
@@ -68,14 +94,18 @@ pub fn plan(
         }
     }
     if !ceiling {
-        draw_structure(&mut d, project, level, cut_z, spacing);
+        draw_structure(&mut d, project, geom, level, cut_z, spacing, structural);
     }
-    draw_components(&mut d, project, level, cut_z, ceiling);
+    if !structural {
+        draw_components(&mut d, project, level, cut_z, ceiling);
+    }
 
-    for (e, _) in project.walls().filter(|(e, _)| e.level == level) {
+    for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
         if let Some(g) = geom.walls.get(&e.id) {
             draw_wall(&mut d, project, g, cut_z, spacing);
-            draw_openings(&mut d, project, g, ceiling);
+            if !structural {
+                draw_openings(&mut d, project, g, ceiling);
+            }
         }
     }
 
@@ -167,36 +197,65 @@ fn draw_mesh(d: &mut Drawing2D, faces: &[Vec<glam::DVec3>], cut_z: f64, ceiling:
     plan.above.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Hidden, id));
 }
 
-fn draw_structure(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, spacing: f64) {
-    for e in project.elements.values().filter(|e| e.level == level) {
+fn draw_structure(
+    d: &mut Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    cut_z: f64,
+    spacing: f64,
+    structural: bool,
+) {
+    for e in project.elements.values().filter(|e| e.level == level && (!structural || is_structural(e))) {
         let id = Some(e.id);
         let data = project.element_type(e.type_id).map(|t| &t.data);
         match (&e.kind, data) {
             (ElementKind::Column(c), Some(TypeData::Column { section, .. })) => {
-                let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
+                let loops = cc_geom::section::column_loops(*section, c.position, c.rotation_deg);
                 let (base, top) = project.column_span(e, c);
-                if base <= cut_z && cut_z <= top {
+                let style = if base <= cut_z && cut_z <= top {
                     let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
-                    crate::cut::cut_fill(d, project, material, outline.clone(), spacing, id);
-                    d.polyline(&outline, true, LineStyle::Cut, id);
+                    for part in cc_geom::section::column_parts(*section, c.position, c.rotation_deg) {
+                        crate::cut::cut_fill(d, project, material, part, spacing, id);
+                    }
+                    LineStyle::Cut
+                } else if base > cut_z {
+                    LineStyle::Hidden
                 } else {
-                    let style = if base > cut_z { LineStyle::Hidden } else { LineStyle::Projection };
-                    d.polyline(&outline, true, style, id);
+                    LineStyle::Projection
+                };
+                for outline in &loops {
+                    d.polyline(outline, true, style, id);
                 }
             }
-            (ElementKind::Beam(b), Some(TypeData::Beam { width, height, .. })) => {
-                let Some(u) = (b.end - b.start).try_normalize() else { continue };
-                let n = u.perp() * (width / 2.0);
-                let top = project.level_elevation(e.level) + b.top_offset;
-                // Beams above the cut plane are dashed; cut beams are drawn heavy.
-                let style = if top - height > cut_z {
+            (ElementKind::Foundation(_), Some(TypeData::Foundation { .. })) => {
+                // Foundations lie under the floor: dashed, unless the cut plane passes through them.
+                let Some(g) = geom.foundations.get(&e.id) else { continue };
+                let (bottom, top) = g.z_range;
+                if bottom <= cut_z && cut_z <= top {
+                    let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
+                    crate::cut::cut_fill(d, project, material, g.footprint.clone(), spacing, id);
+                    d.polyline(&g.footprint, true, LineStyle::Cut, id);
+                } else {
+                    d.polyline(&g.footprint, true, LineStyle::Hidden, id);
+                }
+            }
+            (ElementKind::Beam(_), Some(TypeData::Beam { .. })) => {
+                // The body as framed into columns and other beams.
+                let Some(g) = geom.beams.get(&e.id) else { continue };
+                let (bottom, top) = g.z_bounds();
+                // Beams above the cut plane are dashed (in structural plans, seen
+                // from below, they are drawn); cut beams are drawn heavy.
+                let style = if bottom > cut_z && structural {
+                    LineStyle::Projection
+                } else if bottom > cut_z {
                     LineStyle::Hidden
                 } else if top >= cut_z {
                     LineStyle::Cut
                 } else {
                     LineStyle::Projection
                 };
-                d.polyline(&[b.start - n, b.end - n, b.end + n, b.start + n], true, style, id);
+                d.polyline(&g.footprint(), true, style, id);
             }
             (ElementKind::Stair(st), Some(TypeData::Stair { .. })) => {
                 if let Some(g) = cc_geom::stair_geom(project, e, st) {

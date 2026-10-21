@@ -21,7 +21,7 @@ mod sheet;
 pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout};
 pub use drawing::{Anchor, Drawing2D, LineStyle, Prim};
 pub use legend::legend;
-pub use plan::plan;
+pub use plan::{is_structural, plan, plan_of};
 pub use projected::{Frame, axonometric, elevation, section};
 pub use schedule::{Cell, Row, Table, schedule, to_csv};
 pub use sheet::{MARGIN, PlacedViewport, Sheet, TITLE_H, TITLE_W, TitleLabels, compose as compose_sheet};
@@ -32,11 +32,18 @@ use cc_geom::ModelGeometry;
 /// Drawing for any graphical view (`None` for schedules and sheets).
 pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<Drawing2D> {
     let mut d = match &view.kind {
-        ViewKind::FloorPlan { level, cut_height } | ViewKind::CeilingPlan { level, cut_height } => {
+        ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
-            let mut d = plan(project, geom, *level, *cut_height, ceiling, view.scale);
+            let (structural, tags) = match view.kind {
+                ViewKind::FloorPlan { structural, structure_tags, .. } => (structural, structural || structure_tags),
+                _ => (false, false),
+            };
+            let mut d = plan_of(project, geom, *level, *cut_height, ceiling, structural, view.scale);
             joins::merge(project, &mut d);
-            annotate::plan_annotations(&mut d, project, geom, *level, ceiling, view.scale);
+            annotate::plan_annotations(&mut d, project, geom, *level, ceiling, structural, view.scale);
+            if tags {
+                annotate::structure_tags(&mut d, project, geom, *level, view.scale);
+            }
             d
         }
         ViewKind::Elevation { direction } => elevation(project, geom, *direction),
@@ -45,7 +52,9 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
             joins::merge(project, &mut d);
             d
         }
-        ViewKind::ThreeD { camera } => axonometric(project, geom, camera),
+        ViewKind::ThreeD { camera, analytical: true, .. } => projected::analytical(project, geom, camera),
+        ViewKind::ThreeD { camera, rebar: true, .. } => projected::rebar(geom, camera),
+        ViewKind::ThreeD { camera, .. } => axonometric(project, geom, camera),
         ViewKind::Legend { types } => legend(project, types, view.scale),
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
     };
@@ -201,5 +210,61 @@ mod tests {
         let types: Vec<_> = project.types_of(Category::Component).map(|t| t.id).collect();
         let legend = legend(&project, &types, 50);
         assert!(legend.prims.iter().filter(|p| matches!(p, Prim::Line { .. })).count() > 20);
+    }
+
+    #[test]
+    fn analytical_view_draws_members_and_nodes() {
+        let project = cc_core::from_ron(include_str!("../../cc_ifc/tests/fixtures/structure.ccad")).unwrap();
+        let geom = ModelGeometry::build(&project);
+        let model = cc_geom::analytical::analytical_model(&project, &geom);
+        let mut view = project.views_of(ViewCategory::ThreeD).next().unwrap().clone();
+        let ViewKind::ThreeD { analytical, .. } = &mut view.kind else { panic!("3D view") };
+        *analytical = true;
+        let d = generate(&project, &geom, &view).unwrap();
+        // One line per member (tagged with its element), one marker per node.
+        let members = d.prims.iter().filter(|p| matches!(p, crate::Prim::Line { element: Some(_), .. })).count();
+        assert_eq!(members, model.members.len());
+        assert!(model.nodes.iter().any(|n| n.support));
+        // The physical model is not drawn.
+        assert!(!d.prims.iter().any(|p| matches!(p, crate::Prim::Fill { .. })));
+    }
+
+    #[test]
+    fn structural_plans_show_only_the_structure_tagged() {
+        let project = cc_core::from_ron(include_str!("../../cc_ifc/tests/fixtures/structure.ccad")).unwrap();
+        let geom = ModelGeometry::build(&project);
+        let mut view = project.views_of(ViewCategory::FloorPlan).next().unwrap().clone();
+        let elements = |d: &Drawing2D| -> std::collections::BTreeSet<cc_core::ElementId> {
+            d.prims
+                .iter()
+                .filter_map(|p| match p {
+                    crate::Prim::Line { element, .. } | crate::Prim::Fill { element, .. } => *element,
+                    _ => None,
+                })
+                .collect()
+        };
+        let ordinary = generate(&project, &geom, &view).unwrap();
+        let ViewKind::FloorPlan { structural, .. } = &mut view.kind else { panic!("floor plan") };
+        *structural = true;
+        let d = generate(&project, &geom, &view).unwrap();
+        // The (non-structural) walls go; beams and columns stay.
+        let walls: Vec<_> = project.walls().map(|(e, _)| e.id).collect();
+        assert!(walls.iter().all(|w| elements(&ordinary).contains(w)));
+        assert!(walls.iter().all(|w| !elements(&d).contains(w)));
+        let beams = project.elements_of(Category::Beam).filter(|e| e.level == view.level().unwrap()).count();
+        let texts: Vec<&str> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                crate::Prim::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        // Beams and columns are tagged with their (numbered) mark and section in centimeters.
+        let tagged = |prefix: char, section: &str| {
+            texts.iter().filter(|t| t.starts_with(prefix) && t.ends_with(&format!(" {section}"))).count()
+        };
+        assert!(tagged('V', "15×40") >= beams.min(1), "{texts:?}");
+        assert!(tagged('P', "20×20") >= 1, "{texts:?}");
     }
 }

@@ -1,15 +1,20 @@
 //! The commands, by area. Each is a parameter struct implementing
 //! [`crate::Command`]; [`crate::catalog`] lists them all.
 
+pub mod analytical;
 pub mod annotate;
 pub mod create;
 pub mod edit;
+pub mod foundation;
+pub mod framing;
 pub mod io;
 pub mod levels;
 pub mod materials;
 pub mod modify;
 pub mod project;
 pub mod query;
+pub mod rebar;
+pub mod structure;
 pub mod types;
 pub mod views;
 
@@ -57,10 +62,28 @@ pub(crate) fn variant(v: Value) -> (String, Value) {
     }
 }
 
+/// Whether `v` is an enum value in serde's form: one key, a variant name.
+fn variant_name(v: &serde_json::Map<String, Value>) -> Option<&str> {
+    let mut keys = v.keys();
+    match (keys.next(), keys.next()) {
+        (Some(k), None) if k.starts_with(|c: char| c.is_ascii_uppercase()) => Some(k),
+        _ => None,
+    }
+}
+
 /// Merge patch: objects merge key by key, anything else (arrays, numbers,
 /// `null` for an optional value) replaces. Unlike RFC 7396, `null` sets a
 /// field to null rather than removing it (model fields are never absent).
+/// An enum value given as another variant (`{"Round": ..}` over
+/// `{"Rectangular": ..}`) replaces the old one.
 pub(crate) fn merge(target: &mut Value, patch: &Value) {
+    if let (Value::Object(t), Value::Object(p)) = (&*target, patch)
+        && let (Some(a), Some(b)) = (variant_name(t), variant_name(p))
+        && a != b
+    {
+        *target = patch.clone();
+        return;
+    }
     match (target, patch) {
         (Value::Object(t), Value::Object(p)) => {
             for (k, v) in p {

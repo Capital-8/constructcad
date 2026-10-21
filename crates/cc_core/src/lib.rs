@@ -27,8 +27,9 @@ pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, 
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
-    Beam, Ceiling, Column, Component, Dimension, DimensionKind, Element, ElementKind, Floor, Grid, Hosted, Leader,
-    LeaderSymbol, LocationLine, Railing, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
+    BarFace, Beam, BeamLateral, BeamVertical, Ceiling, Column, Component, Dimension, DimensionKind, Element,
+    ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Rebar,
+    RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
 pub use ids::{ElementId, ElementTypeId, GroupId, LevelId, Uid, ViewId};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
@@ -39,7 +40,8 @@ pub use project::{Group, Level, Project, ProjectInfo, can_join_geometry, join_pr
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use transform::PlanTransform;
 pub use types::{
-    Category, ColumnSection, ElementType, Layer, LayerFunction, TypeData, TypeInfo, WallFunction, stair_layout,
+    Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, TypeData, TypeInfo,
+    WallFunction, stair_layout,
 };
 pub use units::{AreaUnit, LengthUnit, NumberStyle, SlopeUnit, Units, VolumeUnit};
 pub use view::{CameraState, Direction, SheetSize, View, ViewCategory, ViewKind, Viewport};

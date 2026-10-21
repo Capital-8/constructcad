@@ -37,6 +37,20 @@ pub enum ScheduleField {
     Depth,
     ComponentName,
     ComponentKind,
+    /// Section size of a column or beam.
+    Section,
+    /// Length of a beam's body after its joins.
+    CutLength,
+    /// Main material of the type.
+    Material,
+    /// Bar diameter of reinforcement.
+    Diameter,
+    /// Number of bars in a reinforcement set.
+    BarCount,
+    /// Length of one bar.
+    BarLength,
+    /// Steel weight, kilograms.
+    Weight,
 }
 
 impl ScheduleField {
@@ -72,6 +86,13 @@ impl ScheduleField {
             ScheduleField::Depth => "col-depth",
             ScheduleField::ComponentName => "col-component",
             ScheduleField::ComponentKind => "col-component-kind",
+            ScheduleField::Section => "col-section",
+            ScheduleField::CutLength => "col-cut-length",
+            ScheduleField::Material => "col-material",
+            ScheduleField::Diameter => "col-diameter",
+            ScheduleField::BarCount => "col-bar-count",
+            ScheduleField::BarLength => "col-bar-length",
+            ScheduleField::Weight => "col-weight",
         }
     }
 
@@ -86,8 +107,10 @@ impl ScheduleField {
             Category::Window => &[F::Width, F::Height, F::Sill, F::Host],
             Category::Floor | Category::Ceiling => &[F::Thickness, F::Area, F::Perimeter, F::Volume],
             Category::Roof => &[F::Thickness, F::Area, F::Perimeter, F::Volume],
-            Category::Column => &[F::Height, F::Volume],
-            Category::Beam => &[F::Length, F::Volume],
+            Category::Column => &[F::Section, F::Height, F::Volume, F::Material, F::Structural],
+            Category::Beam => &[F::Section, F::Length, F::CutLength, F::Volume, F::Material],
+            Category::Foundation => &[F::Section, F::Length, F::Area, F::Thickness, F::Volume, F::Material],
+            Category::Rebar => &[F::Host, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material],
             Category::Stair => &[F::Width, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => &[F::Length, F::Height],
             Category::Component => &[F::ComponentName, F::ComponentKind, F::Width, F::Depth, F::Height, F::Volume],
@@ -109,8 +132,12 @@ impl ScheduleField {
             Category::Floor | Category::Ceiling | Category::Roof => {
                 vec![F::Mark, F::Type, F::Level, F::Area, F::Perimeter, F::Volume]
             }
-            Category::Column => vec![F::Mark, F::Type, F::Level, F::Height, F::Volume],
-            Category::Beam => vec![F::Mark, F::Type, F::Level, F::Length, F::Volume],
+            Category::Column => vec![F::Mark, F::Type, F::Level, F::Section, F::Height, F::Volume, F::Material],
+            Category::Beam => {
+                vec![F::Mark, F::Type, F::Level, F::Section, F::Length, F::CutLength, F::Volume, F::Material]
+            }
+            Category::Foundation => vec![F::Mark, F::Type, F::Level, F::Section, F::Thickness, F::Volume, F::Material],
+            Category::Rebar => vec![F::Host, F::Type, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight],
             Category::Stair => vec![F::Mark, F::Type, F::Level, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Railing => vec![F::Mark, F::Type, F::Level, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
