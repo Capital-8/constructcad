@@ -58,7 +58,7 @@ fn app_icon() -> egui::IconData {
     eframe::icon_data::from_png_bytes(theme::APP_ICON_PNG).unwrap_or_default()
 }
 
-/// `constructcad [project.ccad] [--view NAME]... [--lang pt-BR|en]`
+/// `constructcad [project.ccad] [--view NAME]... [--lang en|pt-BR|es|fr|de|it|pl|uk-UA]`
 fn parse_args(args: impl Iterator<Item = String>) -> app::Args {
     let mut out = app::Args::default();
     let mut args = args.peekable();

@@ -84,11 +84,11 @@ No parameters.
 
 ### `language_set`
 
-*edit* — Language of default names, messages and sheet labels (`en` or `pt-BR`).
+*edit* — Language of default names, messages and sheet labels (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `pl` or `uk-UA`).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `language` | string | required | Language code: `en` or `pt-BR`. |
+| `language` | string | required | Language code: `en`, `pt-BR`, `es`, `fr`, `de`, `it`, `pl` or `uk-UA`. |
 
 ### `ifc_import`
 

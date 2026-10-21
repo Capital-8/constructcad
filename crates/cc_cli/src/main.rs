@@ -32,7 +32,8 @@ Options:
   -p, --project <file>   open a project (.ccad, or .ifc to import) first
   --save                 save the project afterwards (to its file)
   --save-as <file>       save the project afterwards to <file>
-  --lang <en|pt-BR>      language of default names (default: the system's)
+  --lang <code>          language of default names (default: the system's):
+                         en, pt-BR, es, fr, de, it, pl or uk-UA
   -h, --help             this help
 
 Environment: CCAD_LANG sets the language like --lang.
