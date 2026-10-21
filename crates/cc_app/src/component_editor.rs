@@ -1,5 +1,7 @@
-//! Component editor: the parameters and solid pieces of a parametric
-//! component, with expression checking and a plan / front preview.
+//! Component editor: the parameters and pieces of a parametric component
+//! (boxes, cylinders, profiles of lines and arcs extruded or revolved on the
+//! plan, front or side plane, voids), with expression checking and plan,
+//! front and 3D previews.
 //!
 //! The editor works on a copy of the definition. OK applies it to every
 //! type of the component in one undo step (each type keeps its own values
@@ -11,11 +13,11 @@ use crate::t;
 use crate::theme::{self, PALETTE};
 use cc_core::component::PartError;
 use cc_core::{
-    ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ElementTypeId, ParamKind, TypeData,
-    expr,
+    ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ElementTypeId, ParamKind, ProfilePoint,
+    SketchPlane, TypeData, expr,
 };
 use egui::{Color32, Context, Pos2, RichText, Sense, Stroke, Ui, vec2};
-use glam::DVec2;
+use glam::{DVec2, DVec3};
 
 /// An open component editor.
 #[derive(Debug, Clone)]
@@ -76,6 +78,7 @@ impl Editor {
                 },
                 material: String::new(),
                 in_plan: true,
+                void: false,
             }],
         };
         Editor {
@@ -305,17 +308,40 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
                     radius: "0.25".into(),
                     height: "0.5".into(),
                 },
-                _ => ComponentShape::Extrusion {
+                2 => ComponentShape::Extrusion {
                     points: vec![("0".into(), "0".into()), ("0.5".into(), "0".into()), ("0".into(), "0.5".into())],
                     z: "0".into(),
                     height: "0.5".into(),
                 },
+                // A 0.5 m square seen from the front, extruded 0.5 m back.
+                3 => ComponentShape::Profile {
+                    plane: SketchPlane::Front,
+                    points: square(),
+                    offset: "0".into(),
+                    depth: "0.5".into(),
+                },
+                // The same square turned about the vertical axis through the origin.
+                _ => ComponentShape::Revolution {
+                    plane: SketchPlane::Front,
+                    points: square(),
+                    offset: "0".into(),
+                    axis: "0".into(),
+                    angle: "360".into(),
+                },
             }
         };
-        for (k, key) in ["comp-add-box", "comp-add-cylinder", "comp-add-extrusion"].iter().enumerate() {
+        let keys =
+            ["comp-add-box", "comp-add-cylinder", "comp-add-extrusion", "comp-add-profile", "comp-add-revolution"];
+        for (k, key) in keys.iter().enumerate() {
             if ui.button(tr(key)).clicked() {
                 let name = format!("{} {}", t!("comp-piece"), ed.def.items.len() + 1);
-                ed.def.items.push(ComponentItem { name, shape: defaults(k), material: String::new(), in_plan: true });
+                ed.def.items.push(ComponentItem {
+                    name,
+                    shape: defaults(k),
+                    material: String::new(),
+                    in_plan: true,
+                    void: false,
+                });
                 ed.selected = ed.def.items.len() - 1;
             }
         }
@@ -353,6 +379,9 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
         ui.end_row();
         ui.label("");
         ui.checkbox(&mut item.in_plan, t!("comp-piece-in-plan"));
+        ui.end_row();
+        ui.label("");
+        ui.checkbox(&mut item.void, t!("comp-piece-void")).on_hover_text(t!("comp-piece-void-tip"));
         ui.end_row();
     });
     let lookup = |name: &str| values.get(name).copied();
@@ -412,6 +441,21 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
             }
             ui.end_row();
         }
+        ComponentShape::Profile { plane, points, offset, depth } => {
+            plane_combo(ui, plane);
+            let normal = plane_axes(*plane).2;
+            field(ui, &format!("{} ({normal})", t!("comp-field-offset")), offset);
+            field(ui, &format!("{} (+{normal})", t!("comp-field-extrusion")), depth);
+            profile_points(ui, *plane, points, &lookup);
+        }
+        ComponentShape::Revolution { plane, points, offset, axis, angle } => {
+            plane_combo(ui, plane);
+            let (u, _, normal) = plane_axes(*plane);
+            field(ui, &format!("{} ({normal})", t!("comp-field-offset")), offset);
+            field(ui, &format!("{} ({u})", t!("comp-field-axis")), axis);
+            field(ui, &t!("comp-field-angle"), angle);
+            profile_points(ui, *plane, points, &lookup);
+        }
         ComponentShape::Mesh { vertices, faces } => {
             ui.label(theme::muted(t!("comp-field-mesh")));
             ui.label(t!("comp-mesh-size", "vertices" => vertices.len(), "faces" => faces.len()));
@@ -420,43 +464,143 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
     });
 }
 
-/// Plan (top) and front (from -Y) views of the resolved pieces.
+/// A 0.5 m square profile from the origin.
+fn square() -> Vec<ProfilePoint> {
+    vec![
+        ProfilePoint::new("0", "0"),
+        ProfilePoint::new("0.5", "0"),
+        ProfilePoint::new("0.5", "0.5"),
+        ProfilePoint::new("0", "0.5"),
+    ]
+}
+
+/// Names of a plane's U and V axes and of its normal axis in the component frame.
+fn plane_axes(plane: SketchPlane) -> (&'static str, &'static str, &'static str) {
+    match plane {
+        SketchPlane::Plan => ("X", "Y", "Z"),
+        SketchPlane::Front => ("X", "Z", "Y"),
+        SketchPlane::Side => ("Y", "Z", "X"),
+    }
+}
+
+fn plane_combo(ui: &mut Ui, plane: &mut SketchPlane) {
+    ui.label(theme::muted(t!("comp-field-plane")));
+    egui::ComboBox::from_id_salt("comp-plane").selected_text(tr(plane.key())).width(180.0).show_ui(ui, |ui| {
+        for p in SketchPlane::ALL {
+            ui.selectable_value(plane, p, tr(p.key()));
+        }
+    });
+    ui.end_row();
+}
+
+/// The points of a profile: U and V on the plane and, for an arc to the
+/// next point, its radius (empty for a straight segment).
+fn profile_points(
+    ui: &mut Ui,
+    plane: SketchPlane,
+    points: &mut Vec<ProfilePoint>,
+    lookup: &dyn Fn(&str) -> Option<f64>,
+) {
+    let (u, v, _) = plane_axes(plane);
+    ui.label("");
+    ui.label(theme::muted(format!("{u} · {v} · {}", t!("comp-field-arc"))).size(11.0))
+        .on_hover_text(t!("comp-field-arc-tip"));
+    ui.end_row();
+    let mut remove = None;
+    let n = points.len();
+    for (i, p) in points.iter_mut().enumerate() {
+        ui.label(theme::muted(format!("{} {}", t!("comp-point"), i + 1)));
+        ui.horizontal(|ui| {
+            let mut error = None;
+            for (text, width) in [(&mut p.u, 120.0), (&mut p.v, 120.0), (&mut p.radius, 70.0)] {
+                // An empty radius is a straight segment; coordinates are always checked.
+                let check = !text.trim().is_empty() || width > 100.0;
+                let result = if check { expr::eval(text, lookup).err() } else { None };
+                let edit = egui::TextEdit::singleline(text).desired_width(width).font(egui::TextStyle::Monospace);
+                ui.add(if result.is_some() { edit.text_color(PALETTE.danger) } else { edit });
+                error = error.or(result);
+            }
+            if n > 3 && ui.add(egui::Button::new("×").small()).on_hover_text(t!("comp-point-remove")).clicked() {
+                remove = Some(i);
+            }
+            if let Some(e) = error {
+                ui.label(RichText::new(e.to_string()).color(PALETTE.danger).size(11.0));
+            }
+        });
+        ui.end_row();
+    }
+    if let Some(i) = remove {
+        points.remove(i);
+    }
+    ui.label("");
+    if ui.button(t!("comp-point-add")).clicked() {
+        let last = points.last().map(|p| ProfilePoint::new(p.u.clone(), p.v.clone())).unwrap_or_default();
+        points.push(last);
+    }
+    ui.end_row();
+}
+
+/// How a preview looks at the pieces: a rotation taking the viewer's
+/// direction to +Z (so the edges seen from above are the ones it shows).
+fn view_transform(view: usize) -> impl Fn(DVec3) -> DVec3 {
+    move |p: DVec3| match view {
+        0 => p,
+        // From the front (-Y), Z up.
+        1 => DVec3::new(p.x, p.z, -p.y),
+        // From the front, right and above.
+        _ => {
+            let eye = DVec3::new(1.0, -1.0, 1.0).normalize();
+            let right = (-eye).cross(DVec3::Z).normalize();
+            let up = right.cross(-eye);
+            DVec3::new(p.dot(right), p.dot(up), p.dot(eye))
+        }
+    }
+}
+
+/// A piece's index, whether it is a void, and its edges in a preview.
+type PieceEdges = (usize, bool, Vec<(DVec2, DVec2)>);
+
+/// Plan (top), front (from -Y) and 3D views of the pieces, voids cut out
+/// (and drawn in the warning color); the selected piece is highlighted.
 fn preview(ui: &mut Ui, ed: &Editor) {
     ui.label(theme::muted(t!("comp-preview")).size(12.0));
-    let (parts, _) = ed.def.resolve(&Default::default());
+    let solids = cc_geom::resolve_component(&ed.def, &Default::default());
+    let (all, _) = ed.def.resolve(&Default::default());
+    let pieces: Vec<(usize, bool, Vec<Vec<DVec3>>)> = solids
+        .iter()
+        .map(|p| (p.item, false, cc_geom::component::faces_of(p)))
+        .chain(all.iter().filter(|p| p.void).map(|p| (p.item, true, cc_geom::component::faces_of(p))))
+        .collect();
     let width = ui.available_width();
-    let size = vec2(width, 230.0);
-    for (label, front) in [(t!("comp-preview-plan"), false), (t!("comp-preview-front"), true)] {
+    let size = vec2(width, 180.0);
+    let labels = [t!("comp-preview-plan"), t!("comp-preview-front"), t!("comp-preview-3d")];
+    for (view, label) in labels.iter().enumerate() {
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 4.0, PALETTE.sheet_bg);
         painter.text(
             rect.left_top() + vec2(6.0, 4.0),
             egui::Align2::LEFT_TOP,
-            &label,
+            label,
             egui::FontId::proportional(11.0),
             PALETTE.text_muted,
         );
-        // 2D outlines of every piece in this view.
-        let outlines: Vec<(usize, Vec<DVec2>)> = parts
+        // Edges of every piece seen in this view, in drawing coordinates.
+        let look = view_transform(view);
+        let edges: Vec<PieceEdges> = pieces
             .iter()
-            .map(|p| {
-                let pts = if front {
-                    let (lo, hi) = p
-                        .footprint
-                        .iter()
-                        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), q| (lo.min(q.x), hi.max(q.x)));
-                    vec![DVec2::new(lo, p.z0), DVec2::new(hi, p.z0), DVec2::new(hi, p.z1), DVec2::new(lo, p.z1)]
-                } else {
-                    p.footprint.clone()
-                };
-                (p.item, pts)
+            .map(|(item, void, faces)| {
+                let turned: Vec<Vec<DVec3>> = faces.iter().map(|f| f.iter().map(|p| look(*p)).collect()).collect();
+                let lines =
+                    cc_geom::plan_edges(&turned).into_iter().map(|(a, b)| (a.truncate(), b.truncate())).collect();
+                (*item, *void, lines)
             })
             .collect();
-        let Some((lo, hi)) =
-            outlines.iter().flat_map(|(_, o)| o.iter()).fold(None, |acc: Option<(DVec2, DVec2)>, p| {
-                Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
-            })
+        let Some((lo, hi)) = edges
+            .iter()
+            .filter(|(_, void, _)| !*void)
+            .flat_map(|(_, _, l)| l.iter().flat_map(|(a, b)| [*a, *b]))
+            .fold(None, |acc: Option<(DVec2, DVec2)>, p| Some(acc.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p)))))
         else {
             continue;
         };
@@ -469,29 +613,35 @@ fn preview(ui: &mut Ui, ed: &Editor) {
             Pos2::new(inner.center().x + q.x as f32, inner.center().y - q.y as f32)
         };
         // Origin cross.
-        let o = to(DVec2::ZERO);
+        let o = to(look(DVec3::ZERO).truncate());
         if inner.expand(10.0).contains(o) {
             let s = Stroke::new(1.0, PALETTE.text_faint);
             painter.line_segment([o - vec2(6.0, 0.0), o + vec2(6.0, 0.0)], s);
             painter.line_segment([o - vec2(0.0, 6.0), o + vec2(0.0, 6.0)], s);
         }
         let selected = ed.selected;
-        for (item, pts) in
-            outlines.iter().filter(|(i, _)| *i != selected).chain(outlines.iter().filter(|(i, _)| *i == selected))
-        {
-            let screen: Vec<Pos2> = pts.iter().map(|p| to(*p)).collect();
-            let color = if *item == selected { PALETTE.accent } else { Color32::from_gray(60) };
-            painter
-                .add(egui::Shape::closed_line(screen, Stroke::new(if *item == selected { 2.0 } else { 1.0 }, color)));
+        let order = edges.iter().filter(|(i, ..)| *i != selected).chain(edges.iter().filter(|(i, ..)| *i == selected));
+        for (item, void, lines) in order {
+            let color = match (*item == selected, *void) {
+                (true, _) => PALETTE.accent,
+                (false, true) => PALETTE.danger,
+                (false, false) => Color32::from_gray(60),
+            };
+            let stroke = Stroke::new(if *item == selected { 1.6 } else { 1.0 }, color);
+            for (a, b) in lines {
+                painter.line_segment([to(*a), to(*b)], stroke);
+            }
         }
-        let dims = format!("{} × {}", cc_views::format::length(extent.x), cc_views::format::length(extent.y));
-        painter.text(
-            rect.right_bottom() - vec2(6.0, 4.0),
-            egui::Align2::RIGHT_BOTTOM,
-            dims,
-            egui::FontId::proportional(11.0),
-            PALETTE.text_muted,
-        );
+        if view < 2 {
+            let dims = format!("{} × {}", cc_views::format::length(extent.x), cc_views::format::length(extent.y));
+            painter.text(
+                rect.right_bottom() - vec2(6.0, 4.0),
+                egui::Align2::RIGHT_BOTTOM,
+                dims,
+                egui::FontId::proportional(11.0),
+                PALETTE.text_muted,
+            );
+        }
         ui.add_space(6.0);
     }
 }

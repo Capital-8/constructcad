@@ -169,7 +169,7 @@ fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> 
     let (parts, _) = def.resolve(&c.overrides);
     let mut lo = glam::DVec3::splat(f64::INFINITY);
     let mut hi = glam::DVec3::splat(f64::NEG_INFINITY);
-    for p in &parts {
+    for p in parts.iter().filter(|p| !p.void) {
         for q in &p.footprint {
             lo = lo.min(q.extend(p.z0));
             hi = hi.max(q.extend(p.z1));

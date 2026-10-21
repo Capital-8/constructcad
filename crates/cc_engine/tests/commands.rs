@@ -1129,6 +1129,60 @@ fn fixtures_and_devices_connect_to_the_networks() {
 }
 
 #[test]
+fn components_from_profiles_revolutions_and_voids() {
+    let mut s = Session::default();
+    // A countertop basin: a slab drawn from the front with a rounded front
+    // edge (seen from the side), and a round bowl turned about the vertical
+    // axis, cut out of it.
+    let def = json!({
+        "kind": "Plumbing",
+        "params": [
+            {"name": "W", "value": 0.6, "kind": "Length"},
+            {"name": "T", "value": 0.2, "kind": "Length"},
+            {"name": "R", "value": 0.15, "kind": "Length"}
+        ],
+        "items": [
+            {"name": "slab", "material": "", "shape": {"Profile": {
+                "plane": "Front",
+                "points": [{"u": "-W / 2", "v": "0"}, {"u": "W / 2", "v": "0"}, {"u": "W / 2", "v": "T"}, {"u": "-W / 2", "v": "T"}],
+                "offset": "-0.25", "depth": "0.5"}}},
+            {"name": "bowl", "void": true, "shape": {"Revolution": {
+                "plane": "Front",
+                "points": [{"u": "0", "v": "0.05"}, {"u": "R", "v": "0.05"}, {"u": "R", "v": "T + 0.1"}, {"u": "0", "v": "T + 0.1"}],
+                "offset": "0", "axis": "0", "angle": "360"}}}
+        ]
+    });
+    let ty = run(&mut s, "component_create", json!({"name": "Bancada com cuba", "def": def}));
+    let shape = &ty["params"]["def"]["items"][1];
+    assert_eq!(shape["void"], json!(true), "{ty}");
+    assert_eq!(shape["shape"]["Revolution"]["plane"], json!("Front"));
+    let basin = id(&run(&mut s, "component_place", json!({"position": [2, 2], "type": id(&ty)})));
+    // 0.6 x 0.2 x 0.5 less a 48-sided bowl of radius 0.15, 0.15 deep.
+    let volume = run(&mut s, "element_get", json!({"id": basin}))["derived"]["volume"].as_f64().unwrap();
+    let bowl = 0.5 * 48.0 * 0.15f64.powi(2) * (std::f64::consts::TAU / 48.0).sin() * 0.15;
+    assert!((volume - (0.06 - bowl)).abs() < 1e-6, "{volume}");
+
+    // An arc on the side plane: a quarter round nosing of radius T; a
+    // profile crossing its revolution axis is refused.
+    let nosing = json!({"params": [{"name": "T", "value": 0.2, "kind": "Length"}], "items": [{"name": "n", "shape": {"Profile": {
+        "plane": "Side",
+        "points": [{"u": "0", "v": "0"}, {"u": "T", "v": "0", "radius": "T"}, {"u": "0", "v": "T"}],
+        "offset": "0", "depth": "1"}}}]});
+    let nosing = id(&run(&mut s, "component_create", json!({"name": "Boleado", "def": nosing})));
+    let placed = id(&run(&mut s, "component_place", json!({"position": [5, 5], "type": nosing})));
+    let volume = run(&mut s, "element_get", json!({"id": placed}))["derived"]["volume"].as_f64().unwrap();
+    let quarter = std::f64::consts::PI * 0.04 / 4.0;
+    assert!(volume < quarter && volume > quarter * 0.99, "{volume}");
+    let crossing = json!({"items": [{"name": "x", "shape": {"Revolution": {
+        "plane": "Front", "points": [{"u": "-1", "v": "0"}, {"u": "1", "v": "0"}, {"u": "1", "v": "1"}],
+        "offset": "0", "axis": "0", "angle": "360"}}}]});
+    assert_eq!(
+        fails(&mut s, "component_create", json!({"name": "Errado", "def": crossing})),
+        ErrorCode::InvalidArguments
+    );
+}
+
+#[test]
 fn runs_connect_through_risers_between_floors() {
     let mut s = Session::default();
     let first = run(&mut s, "levels_list", json!({}))[1]["id"].as_u64().unwrap();

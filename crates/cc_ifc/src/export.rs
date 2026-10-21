@@ -947,7 +947,7 @@ impl<'a> Exporter<'a> {
                 Some(storey),
                 Frame::horizontal(DVec3::new(c.position.x, c.position.y, c.base_offset), rot),
             );
-            let (parts, _) = def.resolve(&c.overrides);
+            let parts = cc_geom::resolve_component(def, &c.overrides);
             // Shapes mix no representation types: with any mesh piece, all pieces are face sets.
             let tessellated = parts.iter().any(|p| !p.faces.is_empty());
             let mut items = Vec::new();

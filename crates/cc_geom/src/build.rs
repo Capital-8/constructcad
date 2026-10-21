@@ -75,6 +75,8 @@ pub struct ModelGeometry {
     /// Volume a joined wall shares with the elements that cut it, taken
     /// off its quantity (a wall's body stays whole; see [`Self::volume`]).
     pub join_deductions: BTreeMap<ElementId, f64>,
+    /// Solid pieces of each placed component in the world, voids cut out.
+    pub components: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
 }
 
 /// A foundation's body: a vertical prism.
@@ -234,9 +236,11 @@ pub fn column_outline(section: cc_core::ColumnSection, position: DVec2, rotation
     }
 }
 
-/// Pieces of a placed component in world coordinates: footprints rotated
-/// and moved to the insertion point, elevations absolute. Pieces whose
-/// expressions fail are left out (the component editor reports them).
+/// Solid pieces of a placed component in world coordinates (voids cut
+/// out): footprints rotated and moved to the insertion point, elevations
+/// absolute. Pieces whose expressions fail are left out (the component
+/// editor reports them). [`ModelGeometry::components`] holds them for every
+/// component of the model.
 pub fn component_parts(
     project: &Project,
     element: &cc_core::Element,
@@ -245,9 +249,18 @@ pub fn component_parts(
     let Some(TypeData::Component { def, .. }) = project.element_type(element.type_id).map(|t| &t.data) else {
         return Vec::new();
     };
+    place_parts(project, element, component, crate::resolve_component(def, &component.overrides))
+}
+
+/// Pieces in a component's frame moved to where `component` stands.
+fn place_parts(
+    project: &Project,
+    element: &cc_core::Element,
+    component: &cc_core::Component,
+    parts: Vec<cc_core::component::ComponentPart>,
+) -> Vec<cc_core::component::ComponentPart> {
     let rot = DVec2::from_angle(component.rotation_deg.to_radians());
     let z = project.level_elevation(element.level) + component.base_offset;
-    let (parts, _) = def.resolve(&component.overrides);
     parts
         .into_iter()
         .map(|mut p| {
@@ -351,21 +364,32 @@ impl ModelGeometry {
         }
     }
 
-    /// One solid per resolved piece of each component, colored by its material.
+    /// One solid per resolved piece of each component, colored by its
+    /// material. Components of one type and the same instance values share
+    /// the resolution (and its boolean cuts).
     fn build_components(&mut self, project: &Project) {
+        type Key = (cc_core::ElementTypeId, Vec<(String, u64)>);
+        let mut resolved: std::collections::HashMap<Key, Vec<cc_core::component::ComponentPart>> = Default::default();
         for e in project.elements.values() {
             let ElementKind::Component(c) = &e.kind else { continue };
-            for part in component_parts(project, e, c) {
+            let Some(TypeData::Component { def, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
+                continue;
+            };
+            let key = (e.type_id, c.overrides.iter().map(|(k, v)| (k.clone(), v.to_bits())).collect());
+            let local = resolved.entry(key).or_insert_with(|| crate::resolve_component(def, &c.overrides)).clone();
+            let parts = place_parts(project, e, c, local);
+            for part in &parts {
                 let mut s = Solid::of_material(e.id, e.category(), project, &part.material);
                 if part.faces.is_empty() {
                     s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
                 } else {
-                    s.add_polygons(part.faces);
+                    s.add_polygons(part.faces.clone());
                 }
                 if !s.faces.is_empty() {
                     self.solids.push(s);
                 }
             }
+            self.components.insert(e.id, parts);
         }
     }
 

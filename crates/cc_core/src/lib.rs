@@ -14,6 +14,7 @@ mod ids;
 pub mod material;
 pub mod mep;
 mod persist;
+pub mod profile;
 mod project;
 pub mod properties;
 mod repair;
@@ -38,6 +39,7 @@ pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
+pub use profile::{ProfilePoint, SketchPlane};
 pub use project::{Group, Level, Project, ProjectInfo, can_join_geometry, join_priority};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use transform::PlanTransform;

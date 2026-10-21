@@ -7,6 +7,7 @@
 pub mod analytical;
 mod beam;
 mod build;
+pub mod component;
 pub mod csg;
 mod cut;
 pub mod mep;
@@ -26,6 +27,7 @@ pub use build::{
     BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, StairGeom, column_outline, component_parts,
     hosted_parts, railing_parts, stair_geom,
 };
+pub use component::resolve_component;
 pub use cut::{clip_polygon, face_plane_segments};
 pub use mep::{SegmentGeom, segment_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};

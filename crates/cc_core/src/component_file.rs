@@ -124,9 +124,7 @@ fn validate(file: &ComponentFile) -> Result<(), ComponentFileError> {
         }
     }
     for item in &def.items {
-        if let crate::ComponentShape::Extrusion { points, .. } = &item.shape
-            && points.len() > MAX_POINTS
-        {
+        if item.shape.point_count() > MAX_POINTS {
             return bad("too many profile points");
         }
         if let crate::ComponentShape::Mesh { vertices, faces } = &item.shape

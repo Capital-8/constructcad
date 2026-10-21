@@ -97,7 +97,7 @@ pub fn plan_of(
         draw_structure(&mut d, project, geom, level, cut_z, spacing, structural);
     }
     if !structural {
-        draw_components(&mut d, project, level, cut_z, ceiling);
+        draw_components(&mut d, project, geom, level, cut_z, ceiling);
     }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
@@ -164,14 +164,23 @@ fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &s
 /// Outlines of component pieces marked for plans: in floor plans the pieces
 /// starting below the cut (pieces above it dashed), in ceiling plans only
 /// the pieces above the cut (light fixtures and the like).
-fn draw_components(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, ceiling: bool) {
+fn draw_components(
+    d: &mut Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    cut_z: f64,
+    ceiling: bool,
+) {
     for e in project.elements.values().filter(|e| e.level == level) {
-        let ElementKind::Component(c) = &e.kind else { continue };
+        if !matches!(e.kind, ElementKind::Component(_)) {
+            continue;
+        }
         // Floor plans leave electrical devices out: electrical plans draw their symbols.
         if !ceiling && matches!(project.mep_data(e), Some(cc_core::MepData::Device { .. })) {
             continue;
         }
-        for part in cc_geom::component_parts(project, e, c).into_iter().filter(|p| p.in_plan) {
+        for part in geom.components.get(&e.id).into_iter().flatten().filter(|p| p.in_plan) {
             if !part.faces.is_empty() {
                 draw_mesh(d, &part.faces, cut_z, ceiling, e.id);
                 continue;
@@ -513,7 +522,7 @@ mod tests {
             vec![2, 0, 4, 6],
         ];
         let shape = ComponentShape::Mesh { vertices: (0..8).map(v).collect(), faces };
-        let item = ComponentItem { name: "m".into(), shape, material: String::new(), in_plan: true };
+        let item = ComponentItem { name: "m".into(), shape, material: String::new(), in_plan: true, void: false };
         let id = doc.edit("t", |e| {
             let type_id = ElementTypeId(e.alloc_id());
             let def = ComponentDef { items: vec![item], ..Default::default() };

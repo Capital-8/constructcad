@@ -1035,7 +1035,7 @@ No parameters.
 
 ### `component_create`
 
-*edit* — Create a component type: `def` holds its parameters and pieces (boxes, cylinders, extrusions whose fields are expressions over the parameters), shaped like a component type's `params.def` in `type_get`.
+*edit* — Create a component type: `def` holds its parameters and pieces, shaped like a component type's `params.def` in `type_get`. A piece's `shape` is a `Box` {x, y, z, width, depth, height}, a `Cylinder` {x, y, z, radius, height}, an `Extrusion` {points: [[x, y], …], z, height} (a plan outline extruded up), a `Profile` {plane: `Plan`, `Front` or `Side`, points: [{u, v, radius}, …], offset, depth} (lines and arcs drawn on a plane: u, v are x, y in plan, x, z from the front and y, z from the side; the plane stands at `offset` on the remaining axis and extrudes `depth` along it; a point's optional `radius` makes the segment to the next point an arc, positive bulging outwards) or a `Revolution` {plane, points, offset, axis, angle} (the profile turned about the line u = axis of its plane). Every field is an expression over the parameters (meters, degrees). A piece with `void: true` is cut out of the solid pieces it overlaps.
 
 | Parameter | Type | | Description |
 |---|---|---|---|

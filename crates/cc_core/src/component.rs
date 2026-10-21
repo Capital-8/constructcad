@@ -2,10 +2,13 @@
 //! casework…) whose solids are sized by named parameters.
 //!
 //! A [`ComponentDef`] lists numeric parameters and solid pieces. Each piece
-//! is a box, a cylinder or an extruded profile whose coordinates and sizes
-//! are [`crate::expr`] expressions over the parameters, in the component's
-//! local frame: origin at the insertion point, X to the right, Y to the
-//! back, Z up, meters. Types of the same component share the definition and
+//! is a box, a cylinder, a plan outline extruded upwards, or a profile of
+//! lines and arcs drawn on the plan, front or side plane and extruded across
+//! it or revolved about an axis ([`crate::profile`]); its coordinates and
+//! sizes are [`crate::expr`] expressions over the parameters, in the
+//! component's local frame: origin at the insertion point, X to the right,
+//! Y to the back, Z up, meters. A piece marked `void` is cut out of the
+//! solid pieces it overlaps. Types of the same component share the definition and
 //! differ in parameter values; parameters marked `instance` can be
 //! overridden per element.
 //!
@@ -15,6 +18,7 @@
 
 use crate::MepData;
 use crate::expr::{self, ExprError};
+pub use crate::profile::{ProfilePoint, SketchPlane};
 use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -99,6 +103,13 @@ pub enum ComponentShape {
     Cylinder { x: String, y: String, z: String, radius: String, height: String },
     /// Closed profile in plan extruded upwards from `z`.
     Extrusion { points: Vec<(String, String)>, z: String, height: String },
+    /// Closed profile of lines and arcs on `plane`, placed at `offset` on the
+    /// axis normal to the plane (Z, Y or X) and extruded `depth` along it.
+    Profile { plane: SketchPlane, points: Vec<ProfilePoint>, offset: String, depth: String },
+    /// Closed profile on `plane` (placed at `offset` on its normal axis) turned
+    /// `angle` degrees about the line `u = axis` of the plane (vertical in
+    /// the front and side planes).
+    Revolution { plane: SketchPlane, points: Vec<ProfilePoint>, offset: String, axis: String, angle: String },
     /// Fixed polyhedral surface (not parametric): vertices in the component
     /// frame and faces as counter-clockwise (seen from outside) index loops.
     Mesh { vertices: Vec<[f64; 3]>, faces: Vec<Vec<u32>> },
@@ -121,6 +132,19 @@ impl ComponentShape {
                 out.push(("height", height));
                 out
             }
+            ComponentShape::Profile { points, offset, depth, .. } => {
+                let mut out = profile_expressions(points);
+                out.push(("offset", offset));
+                out.push(("depth", depth));
+                out
+            }
+            ComponentShape::Revolution { points, offset, axis, angle, .. } => {
+                let mut out = profile_expressions(points);
+                out.push(("offset", offset));
+                out.push(("axis", axis));
+                out.push(("angle", angle));
+                out
+            }
             ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
@@ -135,9 +159,46 @@ impl ComponentShape {
                 out.push(height);
                 out
             }
+            ComponentShape::Profile { points, offset, depth, .. } => {
+                let mut out = profile_expressions_mut(points);
+                out.push(offset);
+                out.push(depth);
+                out
+            }
+            ComponentShape::Revolution { points, offset, axis, angle, .. } => {
+                let mut out = profile_expressions_mut(points);
+                out.extend([offset, axis, angle]);
+                out
+            }
             ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
+
+    /// Number of outline points of a profile (0 for boxes, cylinders and meshes).
+    pub fn point_count(&self) -> usize {
+        match self {
+            ComponentShape::Extrusion { points, .. } => points.len(),
+            ComponentShape::Profile { points, .. } | ComponentShape::Revolution { points, .. } => points.len(),
+            _ => 0,
+        }
+    }
+}
+
+/// The expressions of a profile's points (an arc's radius only when set).
+fn profile_expressions(points: &[ProfilePoint]) -> Vec<(&'static str, &String)> {
+    let mut out = Vec::with_capacity(points.len() * 2);
+    for p in points {
+        out.push(("u", &p.u));
+        out.push(("v", &p.v));
+        if !p.radius.trim().is_empty() {
+            out.push(("radius", &p.radius));
+        }
+    }
+    out
+}
+
+fn profile_expressions_mut(points: &mut [ProfilePoint]) -> Vec<&mut String> {
+    points.iter_mut().flat_map(|p| [&mut p.u, &mut p.v, &mut p.radius]).collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -150,10 +211,17 @@ pub struct ComponentItem {
     /// The piece's outline is drawn in plans.
     #[serde(default = "yes")]
     pub in_plan: bool,
+    /// The piece is cut out of the solid pieces it overlaps instead of adding to them.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub void: bool,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -189,8 +257,9 @@ pub struct IfcClass {
 }
 
 /// A resolved piece: a prism of `footprint` between `z0` and `z1`, in the
-/// component's local frame. Mesh pieces carry their faces, with the convex
-/// hull of the vertices as footprint and their height range.
+/// component's local frame. Meshes, profiles on the front and side planes
+/// and revolutions carry their faces, with the convex hull of the vertices
+/// as footprint and their height range.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComponentPart {
     pub item: usize,
@@ -199,7 +268,9 @@ pub struct ComponentPart {
     pub z1: f64,
     pub material: String,
     pub in_plan: bool,
-    /// Faces of a mesh piece (empty for prisms).
+    /// Cut out of the other pieces (see `cc_geom::resolve_component`).
+    pub void: bool,
+    /// Faces of a piece that is not a vertical prism (empty for prisms).
     pub faces: Vec<Vec<DVec3>>,
 }
 
@@ -252,6 +323,9 @@ impl ComponentDef {
         for (i, item) in self.items.iter().enumerate() {
             let resolved = match &item.shape {
                 ComponentShape::Mesh { vertices, faces } => resolve_mesh(vertices, faces),
+                ComponentShape::Profile { .. } | ComponentShape::Revolution { .. } => {
+                    resolve_profile(&item.shape, &lookup)
+                }
                 shape => resolve_shape(shape, &lookup).map(|(footprint, z0, z1)| (footprint, z0, z1, Vec::new())),
             };
             match resolved {
@@ -262,6 +336,7 @@ impl ComponentDef {
                     z1,
                     material: item.material.clone(),
                     in_plan: item.in_plan,
+                    void: item.void,
                     faces,
                 }),
                 Err(e) => errors.push((i, e)),
@@ -321,6 +396,45 @@ fn replace_name(text: &str, old: &str, new: &str) -> String {
 /// Faces of a mesh piece, its footprint hull and height range. Faces with
 /// fewer than three valid vertices are left out.
 type ResolvedMesh = (Vec<DVec2>, f64, f64, Vec<Vec<DVec3>>);
+
+/// A profile piece: a plan profile extruded upwards is a prism (its outline
+/// the footprint); other profiles and revolutions become faces.
+fn resolve_profile(shape: &ComponentShape, lookup: &dyn Fn(&str) -> Option<f64>) -> Result<ResolvedMesh, PartError> {
+    use crate::profile::{self, ProfileError};
+    let ev =
+        |field: &'static str, text: &str| expr::eval(text, lookup).map_err(|error| PartError::Expr { field, error });
+    let from = |e: ProfileError| match e {
+        ProfileError::Expr { field, error } => PartError::Expr { field, error },
+        ProfileError::Degenerate => PartError::Degenerate,
+    };
+    let faces = match shape {
+        ComponentShape::Profile { plane, points, offset, depth } => {
+            let outline = profile::outline(points, lookup).map_err(from)?;
+            let offset = ev("offset", offset)?;
+            let depth = ev("depth", depth)?;
+            if depth <= 1e-6 {
+                return Err(PartError::Degenerate);
+            }
+            if *plane == SketchPlane::Plan {
+                return Ok((outline, offset, offset + depth, Vec::new()));
+            }
+            profile::extrude(*plane, &outline, offset, depth)
+        }
+        ComponentShape::Revolution { plane, points, offset, axis, angle } => {
+            let outline = profile::outline(points, lookup).map_err(from)?;
+            let (offset, axis, angle) = (ev("offset", offset)?, ev("axis", axis)?, ev("angle", angle)?);
+            profile::revolve(*plane, &outline, offset, axis, angle).map_err(from)?
+        }
+        _ => return Err(PartError::Degenerate),
+    };
+    let all: Vec<DVec3> = faces.iter().flatten().copied().collect();
+    let (z0, z1) = all.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
+    if faces.is_empty() || !all.iter().all(|p| p.is_finite()) {
+        return Err(PartError::Degenerate);
+    }
+    let footprint = convex_hull(&all.iter().map(|p| p.truncate()).collect::<Vec<_>>());
+    Ok((footprint, z0, z1, faces))
+}
 
 fn resolve_mesh(vertices: &[[f64; 3]], faces: &[Vec<u32>]) -> Result<ResolvedMesh, PartError> {
     let point = |i: &u32| {
@@ -407,7 +521,9 @@ fn resolve_shape(
             }
             Ok((footprint, z, z + h))
         }
-        ComponentShape::Mesh { .. } => Err(PartError::Degenerate),
+        ComponentShape::Mesh { .. } | ComponentShape::Profile { .. } | ComponentShape::Revolution { .. } => {
+            Err(PartError::Degenerate)
+        }
     }
 }
 
@@ -439,6 +555,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
             shape: ComponentShape::Box { x, y, z, width: sw, depth: sd, height: sh },
             material: material.to_string(),
             in_plan: plan,
+            void: false,
         }
     };
     let s = |v: &str| v.to_string();
@@ -621,6 +738,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 },
                 material: porcelain.clone(),
                 in_plan: true,
+                void: false,
             },
             bx(
                 &n("tpl-part-tank"),
@@ -666,6 +784,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 },
                 material: porcelain.clone(),
                 in_plan: false,
+                void: false,
             },
         ],
     };
@@ -716,6 +835,7 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
         shape,
         material: material.to_string(),
         in_plan: true,
+        void: false,
     };
     // A box W x D x H with its back on the X axis, standing out towards -Y.
     let wall_box = |z: &str| ComponentShape::Box {
@@ -925,6 +1045,7 @@ mod tests {
             },
             material: String::new(),
             in_plan: true,
+            void: false,
         };
         let def = ComponentDef { items: vec![item.clone()], ..Default::default() };
         let (parts, errors) = def.resolve(&BTreeMap::new());

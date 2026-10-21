@@ -20,9 +20,13 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
         let plan: Vec<Vec<DVec2>> = match &t.data {
             // Devices are shown by their plan symbol.
             TypeData::Component { .. } if device.is_some() => Vec::new(),
-            TypeData::Component { def, .. } => {
-                def.resolve(&Default::default()).0.into_iter().filter(|p| p.in_plan).map(|p| p.footprint).collect()
-            }
+            TypeData::Component { def, .. } => def
+                .resolve(&Default::default())
+                .0
+                .into_iter()
+                .filter(|p| p.in_plan && !p.void)
+                .map(|p| p.footprint)
+                .collect(),
             _ => Vec::new(),
         };
         let plan_bounds = plan.iter().flatten().fold(None, |acc: Option<(DVec2, DVec2)>, p| {
