@@ -45,7 +45,7 @@ The bundled example project was authored in Portuguese, so its view names are in
 
 ## Languages
 
-The interface is available in **English** and **Portuguese (Brazil)**, switchable under *File → Language*. The choice is saved between sessions. On first run the system language is used, and `--lang pt-BR|en` forces a language.
+The interface is available in **English**, **Portuguese (Brazil)**, **Spanish**, **French**, **German**, **Italian**, **Polish** and **Ukrainian**, switchable under *File → Language*. The choice is saved between sessions. On first run the system language is used, and `--lang en|pt-BR|es|fr|de|it|pl|uk-UA` forces a language.
 
 New projects get level, material, type and view names in the active language. Existing projects keep their names, since they are part of the data. The decimal separator follows the language (comma or point).
 

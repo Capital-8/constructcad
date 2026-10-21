@@ -10,16 +10,37 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub enum Language {
     PtBr,
     En,
+    Es,
+    Fr,
+    De,
+    It,
+    Pl,
+    Uk,
 }
 
 impl Language {
-    pub const ALL: [Language; 2] = [Language::PtBr, Language::En];
+    pub const ALL: [Language; 8] = [
+        Language::PtBr,
+        Language::En,
+        Language::Es,
+        Language::Fr,
+        Language::De,
+        Language::It,
+        Language::Pl,
+        Language::Uk,
+    ];
 
     /// BCP 47 code, used for persistence.
     pub fn code(self) -> &'static str {
         match self {
             Language::PtBr => "pt-BR",
             Language::En => "en",
+            Language::Es => "es",
+            Language::Fr => "fr",
+            Language::De => "de",
+            Language::It => "it",
+            Language::Pl => "pl",
+            Language::Uk => "uk-UA",
         }
     }
 
@@ -28,18 +49,29 @@ impl Language {
         match self {
             Language::PtBr => "Português (Brasil)",
             Language::En => "English",
+            Language::Es => "Español",
+            Language::Fr => "Français",
+            Language::De => "Deutsch",
+            Language::It => "Italiano",
+            Language::Pl => "Polski",
+            Language::Uk => "Українська",
         }
     }
 
     pub fn from_code(code: &str) -> Option<Language> {
         let code = code.to_ascii_lowercase();
-        if code.starts_with("pt") {
-            Some(Language::PtBr)
-        } else if code.starts_with("en") {
-            Some(Language::En)
-        } else {
-            None
-        }
+        let lang = match code.get(..2)? {
+            "pt" => Language::PtBr,
+            "en" => Language::En,
+            "es" => Language::Es,
+            "fr" => Language::Fr,
+            "de" => Language::De,
+            "it" => Language::It,
+            "pl" => Language::Pl,
+            "uk" => Language::Uk,
+            _ => return None,
+        };
+        Some(lang)
     }
 
     /// Language of the operating system, English when unsupported.
@@ -52,6 +84,12 @@ impl Language {
         match self {
             Language::PtBr => include_str!("../../../assets/i18n/pt-BR.ftl"),
             Language::En => include_str!("../../../assets/i18n/en.ftl"),
+            Language::Es => include_str!("../../../assets/i18n/es.ftl"),
+            Language::Fr => include_str!("../../../assets/i18n/fr.ftl"),
+            Language::De => include_str!("../../../assets/i18n/de.ftl"),
+            Language::It => include_str!("../../../assets/i18n/it.ftl"),
+            Language::Pl => include_str!("../../../assets/i18n/pl.ftl"),
+            Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
         }
     }
 
@@ -61,7 +99,7 @@ impl Language {
 
     /// Whether numbers use a decimal comma.
     pub fn decimal_comma(self) -> bool {
-        matches!(self, Language::PtBr)
+        !matches!(self, Language::En)
     }
 }
 
@@ -139,7 +177,15 @@ mod tests {
     fn language_codes() {
         assert_eq!(Language::from_code("pt_BR"), Some(Language::PtBr));
         assert_eq!(Language::from_code("en-US"), Some(Language::En));
-        assert_eq!(Language::from_code("fr-FR"), None);
+        assert_eq!(Language::from_code("es-MX"), Some(Language::Es));
+        assert_eq!(Language::from_code("es-ES"), Some(Language::Es));
+        assert_eq!(Language::from_code("fr-FR"), Some(Language::Fr));
+        assert_eq!(Language::from_code("de_DE"), Some(Language::De));
+        assert_eq!(Language::from_code("it-IT"), Some(Language::It));
+        assert_eq!(Language::from_code("pl-PL"), Some(Language::Pl));
+        assert_eq!(Language::from_code("uk-UA"), Some(Language::Uk));
+        assert_eq!(Language::from_code("ja-JP"), None);
+        assert_eq!(Language::from_code("p"), None);
         for l in Language::ALL {
             assert_eq!(Language::from_code(l.code()), Some(l));
         }

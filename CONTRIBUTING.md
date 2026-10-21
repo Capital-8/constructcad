@@ -91,9 +91,9 @@ cargo test --workspace
 
 ## Translations
 
-1. Copy `assets/i18n/en.ftl` to `assets/i18n/<locale>.ftl` (for example `es.ftl`).
+1. Copy `assets/i18n/en.ftl` to `assets/i18n/<locale>.ftl` (for example `nl.ftl`).
 2. Translate the values, keeping keys and `{ $placeholders }` unchanged.
-3. Register the language in `Language` in `crates/cc_app/src/i18n.rs`.
+3. Register the language in `Language` in `crates/cc_engine/src/i18n.rs` (`ALL`, `code`, `native_name`, `from_code`, `source`, and `decimal_comma` if it uses a decimal point).
 4. Run `cargo test --workspace` to verify keys and placeholders.
 
 ## License

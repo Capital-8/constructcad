@@ -353,7 +353,9 @@ fn layer_source(source: &str, layer: Layer) -> String {
             .replace(SOFT, "\u{1}")
             .replace(r##"fill="#fff""##, r#"fill="none""#)
             .replace(r##"stroke="#fff""##, r#"stroke="none""#)
-            .replace('\u{1}', r##"fill="#fff" stroke="none""##),
+            // Strokes are off above (soft fills inherit the root's); adding
+            // `stroke` here would duplicate the attribute where a fill sets it.
+            .replace('\u{1}', r##"fill="#fff""##),
     }
 }
 
@@ -515,6 +517,18 @@ mod tests {
                 p.a() > 128 && (x == 0 || y == 0 || x == 19 || y == 19)
             });
             assert_eq!(edge.count(), 0, "{icon:?} touches the border");
+        }
+    }
+
+    /// Soft fills rasterize too, also when the filled path already sets its stroke.
+    #[test]
+    fn every_soft_fill_rasterizes() {
+        for icon in Icon::ALL {
+            if !icon.source().contains(r#"fill-opacity=".2""#) {
+                continue;
+            }
+            let image = rasterize(icon, Layer::Tint, 20).unwrap_or_else(|| panic!("{icon:?} fill does not rasterize"));
+            assert!(image.pixels.iter().any(|p| p.a() > 0), "{icon:?} fill is empty");
         }
     }
 
