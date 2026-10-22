@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
 ### Added
 
 - Structural framing joins: a beam end that lies in a structural column stops at the column's face (along the face when the column is rotated), and beam ends at a common depth meet like walls — mitered at corners, butted against the side of a beam they end on, with a collinear pair running through junctions of three or more. Beams resting on a column, or at another depth, are left whole. Plans, sections, 3D, volumes and IFC export use the framed body; IFC beams carry their location line as an axis, so they come back with their own length and frame again on import.
@@ -41,12 +43,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - In plumbing and electrical plans, the architecture is drawn faint (a new faint pen, with fills lightened) so the services stand out.
   - Engine commands `pipe_create`, `conduit_create`, `systems_list`, `system_create`, `system_set`, `system_delete`, `system_assign` and `circuit_loads` (installed load and current per circuit and board). `component_place` takes a `system`. Systems resolve by id, name, code or kind.
 
+- Component pieces can be profiles of lines and arcs drawn on the plan, front or side plane, extruded along the plane's normal or revolved about an axis in the plane, and any piece can be a void cut out of the solid pieces it overlaps. Plans, 3D, schedules, legends and IFC export use the resolved pieces; the component editor edits them and previews plan, front and 3D edges of the real faces.
+- Interface languages: Ukrainian, Spanish, French, German, Italian and Polish, chosen in the language menu, by `--lang` or from the system locale. Every language except English uses a decimal comma.
+
 ### Changed
 
 - `.ccad` format version 8 (foundations, steel sections, sloped beams, reinforcement, structural plans, pipes, conduits, systems and MEP component data); older files still open and get the MEP types, library and plumbing systems.
 - Elements cut by joined geometry (other than walls) are exported to IFC with their cut body as a B-rep, matching their exported volume.
 - `*_set` commands replace an enum value given as another variant (a column section switching from rectangular to a profile) instead of merging the two.
 - IFC validation tessellates curved profiles finely enough to compare their volumes, and CI validates a structural fixture.
+
+### Fixed
+
+- Seven ribbon icons (column, schedule, stair, text, truss, 3D view, window) were drawn without their soft fill.
 
 ## [0.2.1] - 2026-10-20
 
@@ -157,7 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/francisreboucas/constructcad/releases/tag/v0.1.0
