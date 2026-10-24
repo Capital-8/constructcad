@@ -16,6 +16,7 @@ mod ids;
 pub mod material;
 pub mod mep;
 mod persist;
+pub mod phase;
 pub mod profile;
 mod project;
 pub mod properties;
@@ -39,12 +40,15 @@ pub use graphics::{
     CategoryGraphics, FillGraphics, FilterOp, FilterParam, FilterRule, FilterUse, GraphicOverride, LineGraphics,
     LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
 };
-pub use ids::{ElementId, ElementTypeId, FilterId, GroupId, LevelId, SystemId, TemplateId, Uid, ViewId};
+pub use ids::{
+    ElementId, ElementTypeId, FilterId, GroupId, LevelId, PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
+};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, load, load_with_repairs, save, to_ron,
 };
+pub use phase::{Phase, PhaseDisplay, PhaseFilter, PhaseGraphics, PhaseState, PhaseStatus};
 pub use profile::{ProfilePoint, SketchPlane};
 pub use project::{Group, Level, Project, ProjectInfo, can_join_geometry, join_priority};
 pub use schedule::{ScheduleDef, ScheduleField};

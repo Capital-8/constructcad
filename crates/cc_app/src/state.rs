@@ -332,6 +332,8 @@ impl AppState {
             comments: String::new(),
             uid: Default::default(),
             kind: kind.clone(),
+            phase_created: Default::default(),
+            phase_demolished: None,
         }
         .category();
         let id = self.session.doc.edit(name, |e| {
@@ -349,6 +351,8 @@ impl AppState {
                 comments: String::new(),
                 kind,
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         });
         self.selection = BTreeSet::from([id]);

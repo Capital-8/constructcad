@@ -515,30 +515,70 @@ impl ModelGeometry {
         }
     }
 
-    /// Footprints of the room-bounding walls of `level`.
-    pub fn bounding_footprints(&self, project: &Project, level: cc_core::LevelId) -> Vec<Vec<DVec2>> {
+    /// Footprints of the room-bounding walls of `level`; with a phase (an
+    /// index into the project's phases), only of the walls standing at its
+    /// end (built by then and not demolished in it or before).
+    pub fn bounding_footprints(
+        &self,
+        project: &Project,
+        level: cc_core::LevelId,
+        phase: Option<usize>,
+    ) -> Vec<Vec<DVec2>> {
         project
             .walls()
             .filter(|(e, w)| e.level == level && w.room_bounding)
+            .filter(|(e, _)| phase.is_none_or(|ph| project.stands_after(e, ph)))
             .filter_map(|(e, _)| self.walls.get(&e.id))
             .map(|g| g.footprint())
             .collect()
     }
 
-    /// Boundary of the room that would enclose `point` on `level`.
-    pub fn room_at(&self, project: &Project, level: cc_core::LevelId, point: DVec2) -> Option<Vec<DVec2>> {
-        crate::room_boundary(&self.bounding_footprints(project, level), point)
+    /// Boundary of the room that would enclose `point` on `level`, in
+    /// `phase` (unknown: the last phase).
+    pub fn room_at(
+        &self,
+        project: &Project,
+        level: cc_core::LevelId,
+        point: DVec2,
+        phase: Option<cc_core::PhaseId>,
+    ) -> Option<Vec<DVec2>> {
+        let phase = phase.and_then(|ph| project.phase_index(ph)).or(project.phases.len().checked_sub(1));
+        crate::room_boundary(&self.bounding_footprints(project, level, phase), point)
     }
 
+    /// Rooms are bounded by the walls standing at the end of the phase
+    /// they are created in.
     fn build_rooms(&mut self, project: &Project) {
-        let mut footprints: BTreeMap<cc_core::LevelId, Vec<Vec<DVec2>>> = BTreeMap::new();
+        let phased = !project.phases.is_empty();
+        let mut footprints: BTreeMap<(cc_core::LevelId, usize), Vec<Vec<DVec2>>> = BTreeMap::new();
         for e in project.elements.values() {
             let ElementKind::Room(room) = &e.kind else { continue };
-            let walls = footprints.entry(e.level).or_insert_with(|| self.bounding_footprints(project, e.level));
+            let phase = project.created_index(e);
+            let walls = footprints
+                .entry((e.level, phase))
+                .or_insert_with(|| self.bounding_footprints(project, e.level, phased.then_some(phase)));
             if let Some(boundary) = crate::room_boundary(walls, room.position) {
                 self.rooms.insert(e.id, boundary);
             }
         }
+    }
+
+    /// Geometry of the model as a view of phase number `phase` shows it:
+    /// only the elements standing in it or built in it, so doors of later
+    /// phases do not open existing walls and walls join only with walls of
+    /// the phase. Rooms of earlier phases keep their boundaries from `full`
+    /// (the geometry of the whole model).
+    pub fn build_phase(project: &Project, phase: usize, full: &ModelGeometry) -> Self {
+        let mut present = project.clone();
+        present.elements.retain(|_, e| project.present_at(e, phase));
+        present.joins.retain(|(a, b)| present.elements.contains_key(a) && present.elements.contains_key(b));
+        let mut geom = Self::build(&present);
+        for (id, boundary) in &full.rooms {
+            if present.elements.get(id).is_some_and(|e| present.created_index(e) < phase) {
+                geom.rooms.insert(*id, boundary.clone());
+            }
+        }
+        geom
     }
 
     fn build_walls(&mut self, project: &Project) {
@@ -783,6 +823,8 @@ mod tests {
                         height: 3.0,
                         ..Default::default()
                     }),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
                 });
             }
             let id = ElementId(e.alloc_id());
@@ -800,6 +842,8 @@ mod tests {
                     flip_facing: false,
                     flip_hand: false,
                 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             let id = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -810,6 +854,8 @@ mod tests {
                 comments: String::new(),
                 uid: Default::default(),
                 kind: ElementKind::Floor(Floor { boundary: pts.to_vec(), height_offset: 0.0 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
         });
         doc
@@ -832,6 +878,8 @@ mod tests {
                 comments: String::new(),
                 uid: Default::default(),
                 kind: ElementKind::Beam(cc_core::Beam::new(DVec2::new(0.0, 3.0), DVec2::new(8.0, 3.0), top_offset)),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
         });
         (doc, beam)
@@ -923,6 +971,8 @@ mod tests {
                     comments: String::new(),
                     uid: Default::default(),
                     kind,
+                    phase_created: Default::default(),
+                    phase_demolished: None,
                 })
             };
             let arc =
@@ -1030,6 +1080,8 @@ mod tests {
                     comments: String::new(),
                     kind,
                     uid: Default::default(),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
                 })
             };
             let top = WallTop::Level { level: upper, offset: 0.0 };

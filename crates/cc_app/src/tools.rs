@@ -1366,7 +1366,7 @@ fn room_tool(
     xf: &Xf,
 ) {
     let Some(p) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
-    let boundary = state.session.geom().room_at(state.project(), level, p);
+    let boundary = state.session.geom().room_at(state.project(), level, p, state.session.doc.creation_phase);
     if let Some(b) = &boundary {
         let pts: Vec<Pos2> = b.iter().map(|q| xf.to_screen(*q)).collect();
         crate::paint::fill_polygon(painter, pts.clone(), PREVIEW.gamma_multiply(0.18));

@@ -13,6 +13,7 @@ pub mod levels;
 pub mod materials;
 pub mod mep;
 pub mod modify;
+pub mod phases;
 pub mod project;
 pub mod query;
 pub mod rebar;
@@ -43,8 +44,17 @@ pub(crate) fn check(p: &Project) -> Result<()> {
 /// Add an element (doors and windows get the next free mark).
 pub(crate) fn add_element(e: &mut EditCtx, level: LevelId, type_id: ElementTypeId, kind: ElementKind) -> ElementId {
     let id = ElementId(e.alloc_id());
-    let mut element =
-        Element { id, level, type_id, mark: String::new(), comments: String::new(), kind, uid: Default::default() };
+    let mut element = Element {
+        id,
+        level,
+        type_id,
+        mark: String::new(),
+        comments: String::new(),
+        kind,
+        uid: Default::default(),
+        phase_created: Default::default(),
+        phase_demolished: None,
+    };
     if matches!(element.category(), Category::Door | Category::Window) {
         element.mark = e.project().next_mark(element.category());
     }

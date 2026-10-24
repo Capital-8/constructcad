@@ -436,7 +436,8 @@ impl Command for RoomCreate {
         let position = point(self.point)?;
         let level = refs::level_or_first(s.project(), self.level.as_ref())?;
         let project = s.project().clone();
-        if s.geometry().room_at(&project, level, position).is_none() {
+        let phase = s.doc.creation_phase;
+        if s.geometry().room_at(&project, level, position, phase).is_none() {
             return Err(EngineError::rejected("the point is not enclosed by room-bounding walls"));
         }
         let p = s.project();

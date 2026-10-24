@@ -190,6 +190,13 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Type => text(project.type_name(e.type_id)),
         F::Level => text(project.level_name(e.level)),
         F::Comments => text(&e.comments),
+        F::PhaseCreated if e.category().is_phased() => {
+            project.phases.get(project.created_index(e)).map_or(Value::Missing, |ph| text(&ph.name))
+        }
+        F::PhaseDemolished => {
+            e.phase_demolished.and_then(|d| project.phase(d)).map_or(Value::Missing, |ph| text(&ph.name))
+        }
+        F::PhaseCreated => Value::Missing,
         F::TypeMark => info.map_or(Value::Missing, |i| text(&i.type_mark)),
         F::Description => info.map_or(Value::Missing, |i| text(&i.description)),
         F::Manufacturer => info.map_or(Value::Missing, |i| text(&i.manufacturer)),
@@ -391,8 +398,20 @@ fn default_order(a: &Element, b: &Element) -> Ordering {
 }
 
 pub fn schedule(project: &Project, geom: &ModelGeometry, category: Category, def: &ScheduleDef) -> Table {
+    schedule_where(project, geom, category, def, &mut |_| true)
+}
+
+/// A schedule of the elements `keep` accepts (those a schedule view's
+/// phase and phase filter show, see [`crate::graphics::PhaseView`]).
+pub fn schedule_where(
+    project: &Project,
+    geom: &ModelGeometry,
+    category: Category,
+    def: &ScheduleDef,
+    keep: &mut dyn FnMut(&Element) -> bool,
+) -> Table {
     let fields = def.fields_for(category);
-    let mut elements: Vec<&Element> = project.elements_of(category).collect();
+    let mut elements: Vec<&Element> = project.elements_of(category).filter(|e| keep(e)).collect();
     elements.sort_by(|a, b| default_order(a, b));
 
     let mut rows: Vec<(&Element, Vec<Value>)> =

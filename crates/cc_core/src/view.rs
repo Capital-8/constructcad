@@ -208,9 +208,29 @@ pub struct View {
     /// copied from it on every edit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<crate::TemplateId>,
+    /// The phase the view shows the model in (see [`crate::phase`]).
+    #[serde(default)]
+    pub phase: crate::PhaseId,
+    /// Which statuses the view shows, and how (`None`: all, by category).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_filter: Option<crate::PhaseFilterId>,
 }
 
 impl ViewKind {
+    /// Whether views of this kind show the model in a phase (plans,
+    /// elevations, sections, 3D views and schedules).
+    pub fn is_phased(&self) -> bool {
+        matches!(
+            self,
+            ViewKind::FloorPlan { .. }
+                | ViewKind::CeilingPlan { .. }
+                | ViewKind::ThreeD { .. }
+                | ViewKind::Elevation { .. }
+                | ViewKind::Section { .. }
+                | ViewKind::Schedule { .. }
+        )
+    }
+
     /// An ordinary floor plan of `level` cut at 1.20 m.
     pub fn floor_plan(level: LevelId) -> Self {
         ViewKind::FloorPlan { level, cut_height: 1.2, structural: false, structure_tags: false, mep: None }
@@ -236,9 +256,18 @@ impl MepDiscipline {
 }
 
 impl View {
-    /// A view with default graphics and no template.
+    /// A view with default graphics, no template, in the (default) last phase.
     pub fn new(id: ViewId, name: impl Into<String>, scale: u32, kind: ViewKind) -> Self {
-        Self { id, name: name.into(), scale, kind, graphics: Default::default(), template: None }
+        Self {
+            id,
+            name: name.into(),
+            scale,
+            kind,
+            graphics: Default::default(),
+            template: None,
+            phase: Default::default(),
+            phase_filter: None,
+        }
     }
 
     pub fn category(&self) -> ViewCategory {

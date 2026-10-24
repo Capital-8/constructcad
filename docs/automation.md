@@ -55,6 +55,17 @@ ccad -p house.ccad run filter_elements filter=Long
 
 *Temporary hide/isolate* (`view_temporary` with `action` `hide`, `isolate`, `hide_category`, `isolate_category` or `reset`) is display state of the session, not a model change: it is not saved, not undone and not printed (sheets and exports show the view whole). `view_temporary_apply` makes it permanent (hidden in the view, categories turned off) as one undo step.
 
+**Construction phases.** A renovation is modeled in phases (`phases_list`; the template has *Existing* and *New Construction*): every model element is built in a phase (`phase_created`) and may be demolished in the same or a later one (`phase_demolished`), as `element_get` shows. `phase_create` (at the end or `before` another), `phase_set` (rename, or move with `index`; a move that would demolish elements before building them is refused) and `phase_delete` (a phase in use needs `merge_into`) manage them. New elements are built in the session's creation phase (`phase_creation_set`; the active view's in the app, else the last phase), copies too. `elements_phase_set` sets `created` and `demolished` (`null`: standing) and `elements_demolish` demolishes in a `phase` or the phase of a `view`. Doors, windows and rebar follow their hosts: they are never older than their host and are demolished with it unless demolished earlier. Dimensions, text and grids have no phase.
+
+```sh
+ccad -p house.ccad --save run elements_phase_set 'ids=[12, 13]' created=Existing
+ccad -p house.ccad --save run elements_demolish 'ids=[13]' view=Térreo
+ccad -p house.ccad --save run view_set view=Térreo 'phase_filter=Show Previous + Demo'
+ccad -p house.ccad run phases_list
+```
+
+Each plan, elevation, section, 3D view and schedule shows the model in its `phase` with a `phase_filter` (`view_set`; view templates control the filter, not the phase). Relative to the view's phase an element is *existing* (built earlier, standing), *demolished* (in this phase), *new* (built in this phase) or *temporary* (built and demolished in it); elements built later or demolished earlier are not shown. Phase filters (`phase_filters_list`, `phase_filter_create`, `phase_filter_set`, `phase_filter_delete`; the template has *Show All*, *Show Complete*, *Show New*, *Show Previous + Demo*, *Show Previous + New*, *Show Previous Phase* and *Show Demo + New*) map each status to `not_displayed`, `by_category` or `overridden`, which uses the project's graphics of the status (`phase_graphics_get`, `phase_graphics_set`: existing faint, demolished dashed without cut pattern, temporary faint and dashed), below element overrides and view filters and above the category. A view whose phase leaves elements out gets geometry of its own: doors of later phases do not open existing walls and walls join only with walls of the phase. A room is bounded by the walls standing at the end of the phase it is created in, so walls demolished in that phase or earlier do not bound it. Schedules list what their phase and filter show and offer the fields `PhaseCreated` and `PhaseDemolished` (also usable in filter rules as `phase_created`, `phase_demolished`).
+
 **Validation and undo.** Every edit is one undo step (`undo`, `redo`). An edit that would leave the model invalid — a door pointing at a missing wall, a negative size, a reference to nothing — is refused and leaves no trace. Pinned elements are not moved, trimmed or deleted.
 
 **Errors.** A failed command returns `{"error": {"code": …, "message": …}}`. Messages are in the session's language (`--lang`, `language_set`).

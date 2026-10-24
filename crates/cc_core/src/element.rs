@@ -17,6 +17,12 @@ pub struct Element {
     /// Persistent unique id (IFC GlobalId and similar).
     #[serde(default)]
     pub uid: Uid,
+    /// The phase the element is built in (see [`crate::phase`]).
+    #[serde(default)]
+    pub phase_created: crate::PhaseId,
+    /// The phase the element is demolished in (not before it is built).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_demolished: Option<crate::PhaseId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

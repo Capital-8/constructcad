@@ -392,8 +392,9 @@ impl Project {
             f.rules.retain(|r| r.value.len() <= 1000);
             repairs += before - f.rules.len();
         }
+        repairs += self.repair_phases();
         for t in self.templates.values_mut() {
-            repairs += t.repair(&self.filters);
+            repairs += t.repair(&self.filters, &self.phase_filters);
         }
         let elements = &self.elements;
         let exists = |id: crate::ElementId| elements.contains_key(&id);
@@ -414,6 +415,60 @@ impl Project {
                     repairs += usize::from(*view != before);
                 }
                 None => {}
+            }
+        }
+        repairs
+    }
+}
+
+impl Project {
+    /// Phases, phase filters and the phases of elements and views; returns
+    /// how many repairs were made.
+    fn repair_phases(&mut self) -> usize {
+        let mut repairs = 0;
+        let mut seen = std::collections::BTreeSet::new();
+        let before = self.phases.len();
+        self.phases.retain(|p| p.id.0 != 0 && seen.insert(p.id));
+        repairs += before - self.phases.len();
+        for p in &mut self.phases {
+            if p.name.trim().is_empty() {
+                p.name = p.id.to_string();
+                repairs += 1;
+            }
+        }
+        for (id, f) in &mut self.phase_filters {
+            if f.id != *id {
+                f.id = *id;
+                repairs += 1;
+            }
+        }
+        repairs += self.phase_graphics.repair();
+        let fixes = if self.phases.is_empty() {
+            // No phases: nothing may refer to one.
+            self.elements
+                .values()
+                .filter(|e| e.phase_created.0 != 0 || e.phase_demolished.is_some())
+                .map(|e| (e.id, crate::PhaseId(0), None))
+                .collect()
+        } else {
+            self.phase_fixes()
+        };
+        repairs += fixes.len();
+        for (id, created, demolished) in fixes {
+            if let Some(e) = self.elements.get_mut(&id) {
+                e.phase_created = created;
+                e.phase_demolished = demolished;
+            }
+        }
+        let last = self.last_phase().unwrap_or_default();
+        for v in self.views.values_mut() {
+            if v.phase.0 != 0 && !self.phases.iter().any(|p| p.id == v.phase) {
+                v.phase = last;
+                repairs += 1;
+            }
+            if v.phase_filter.is_some_and(|f| !self.phase_filters.contains_key(&f)) {
+                v.phase_filter = None;
+                repairs += 1;
             }
         }
         repairs
@@ -443,6 +498,8 @@ mod tests {
                     comments: String::new(),
                     kind,
                     uid: Default::default(),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
                 },
             );
             id
@@ -484,6 +541,8 @@ mod tests {
                 comments: String::new(),
                 kind: ElementKind::Wall(wall),
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             };
             p.elements.insert(id, e);
             ids.push(id);
@@ -515,6 +574,8 @@ mod tests {
                 comments: String::new(),
                 kind,
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             };
             p.elements.insert(id, e);
             id
@@ -582,6 +643,8 @@ mod tests {
                     comments: String::new(),
                     kind,
                     uid: Default::default(),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
                 },
             );
         }

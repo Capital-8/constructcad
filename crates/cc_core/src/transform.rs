@@ -286,7 +286,8 @@ impl crate::EditCtx<'_> {
     /// transform, on `level` when given (hosted elements whose wall was not
     /// copied stay on that wall's level). Elements whose type, level, view
     /// or wall no longer exist are skipped, and walls attached to a missing
-    /// level become unconnected. Returns the new ids.
+    /// level become unconnected. Copies are built in the creation phase
+    /// (see [`crate::phase`]). Returns the new ids.
     pub fn paste_elements(
         &mut self,
         set: &[Element],
@@ -301,6 +302,8 @@ impl crate::EditCtx<'_> {
                 let mut c = (*el).clone();
                 c.id = ElementId(self.alloc_id());
                 c.uid = Default::default();
+                // Copies are built in the creation phase.
+                (c.phase_created, c.phase_demolished) = (Default::default(), None);
                 c.transform(t);
                 if let Some(level) = level {
                     c.level = level;
@@ -324,6 +327,8 @@ impl crate::EditCtx<'_> {
                 let mut c = (*el).clone();
                 c.id = ElementId(self.alloc_id());
                 c.uid = Default::default();
+                // Copies are built in the creation phase.
+                (c.phase_created, c.phase_demolished) = (Default::default(), None);
                 c.mark = self.project().next_mark(c.category());
                 let host = set
                     .iter()

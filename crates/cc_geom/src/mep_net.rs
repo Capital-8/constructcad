@@ -324,6 +324,8 @@ mod tests {
                 comments: String::new(),
                 uid: Default::default(),
                 kind,
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             id
         })

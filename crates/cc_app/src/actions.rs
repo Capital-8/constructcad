@@ -88,7 +88,17 @@ pub fn rename_view(state: &mut AppState, id: ViewId, name: String) {
     if name.trim().is_empty() {
         return;
     }
-    run(state, views::ViewSet { view: Ref::Id(id.0), name: Some(name), scale: None, params: None });
+    run(
+        state,
+        views::ViewSet {
+            view: Ref::Id(id.0),
+            name: Some(name),
+            scale: None,
+            params: None,
+            phase: None,
+            phase_filter: None,
+        },
+    );
 }
 
 /// Sheet that already shows `view`, if any.

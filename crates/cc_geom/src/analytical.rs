@@ -199,7 +199,17 @@ mod tests {
                 let type_id = e.project().default_type(category).unwrap();
                 let id = ElementId(e.alloc_id());
                 let (mark, comments, uid) = (String::new(), String::new(), Default::default());
-                e.add_element(Element { id, level, type_id, mark, comments, kind, uid });
+                e.add_element(Element {
+                    id,
+                    level,
+                    type_id,
+                    mark,
+                    comments,
+                    kind,
+                    uid,
+                    phase_created: Default::default(),
+                    phase_demolished: None,
+                });
                 ids.push(id);
             };
             for x in [0.0, 5.0] {

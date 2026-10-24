@@ -80,7 +80,7 @@ fn store(e: &mut EditCtx, target: Target, graphics: ViewGraphics) -> Result<()> 
 }
 
 /// Apply a merge patch (`null` resets an attribute) to overrides.
-fn patched(current: &GraphicOverride, patch: Option<&Value>, reset: bool) -> Result<GraphicOverride> {
+pub(crate) fn patched(current: &GraphicOverride, patch: Option<&Value>, reset: bool) -> Result<GraphicOverride> {
     let base = if reset { GraphicOverride::default() } else { *current };
     let mut out = match patch {
         Some(p) => patch_value(&base, p)?,
@@ -95,7 +95,7 @@ fn patched(current: &GraphicOverride, patch: Option<&Value>, reset: bool) -> Res
     Ok(out)
 }
 
-fn overrides_json(o: &GraphicOverride) -> Value {
+pub(crate) fn overrides_json(o: &GraphicOverride) -> Value {
     serde_json::to_value(o).unwrap_or(json!({}))
 }
 
@@ -794,6 +794,7 @@ pub(crate) fn template_json(p: &Project, t: &ViewTemplate) -> Value {
         "discipline": discipline_name(t.discipline),
         "structural": t.structural,
         "structure_tags": t.structure_tags,
+        "phase_filter": t.phase_filter.and_then(|f| p.phase_filter(f)).map(|f| json!({"id": f.id.0, "name": f.name})),
         "graphics": graphics_json(p, &t.graphics),
         "views": p.views.values().filter(|v| v.template == Some(t.id)).map(|v| v.id.0).collect::<Vec<_>>(),
     })
@@ -905,8 +906,12 @@ pub struct TemplateSet {
     /// Floor plans: tag beams and columns.
     #[serde(default)]
     pub structure_tags: Option<bool>,
+    /// Phase filter (id or name), or `null` for none.
+    #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
+    pub phase_filter: Option<Option<Ref>>,
     /// Which properties the template controls: `scale`, `categories`,
-    /// `filters`, `cut_height`, `discipline`, `structural` (true/false).
+    /// `filters`, `cut_height`, `discipline`, `structural`, `phase_filter`
+    /// (true/false).
     #[serde(default)]
     pub include: Option<Value>,
 }
@@ -940,6 +945,11 @@ impl Command for TemplateSet {
         }
         if let Some(v) = self.structure_tags {
             t.structure_tags = v;
+        }
+        match &self.phase_filter {
+            Some(Some(r)) => t.phase_filter = Some(refs::phase_filter(p, r)?),
+            Some(None) => t.phase_filter = None,
+            None => {}
         }
         if let Some(patch) = &self.include {
             t.include = patch_value(&t.include, patch)?;

@@ -34,6 +34,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 comments: String::new(),
                 kind,
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         };
 

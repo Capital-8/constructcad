@@ -234,6 +234,8 @@ fn arc_walls_round_trip() {
                 comments: String::new(),
                 kind,
                 uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         };
         let arc = Wall { start: DVec2::new(4.0, 0.0), end: DVec2::new(-4.0, 0.0), bulge: 1.0, ..Default::default() };
@@ -314,6 +316,8 @@ fn framed_beams_round_trip() {
                 comments: String::new(),
                 kind,
                 uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
         };
         let column = Column {

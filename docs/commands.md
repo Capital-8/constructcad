@@ -15,6 +15,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
+- **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
 
 ## Project and files
 
@@ -1139,13 +1140,15 @@ No parameters.
 
 ### `view_set`
 
-*edit* — Change a view: name, scale and its `params` as `view_get` shows them (merged: cut height, section depth, legend types, schedule fields, sort, filter and totals, sheet number and size, viewport positions…).
+*edit* — Change a view: name, scale, phase and phase filter, and its `params` as `view_get` shows them (merged: cut height, section depth, legend types, schedule fields, sort, filter and totals, sheet number and size, viewport positions…).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
 | `name` | string | optional | New name. |
 | `params` | JSON | optional | Fields of the view's parameters to change, shaped like `params` in `view_get`. |
+| `phase` | id or name | optional | Phase the view shows (id or name; plans, elevations, sections, 3D views, schedules). |
+| `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none (every status by category). |
 | `scale` | integer | optional | Scale denominator (e.g. 100 for 1:100). |
 
 ### `view_duplicate`
@@ -1346,8 +1349,9 @@ No parameters.
 | `template` | id or name | required | Template id or name. |
 | `cut_height` | number | optional | Plans: cut plane height, meters. |
 | `discipline` | string | optional | Floor plans: `none`, `plumbing` or `electrical` (services over a faint architecture). |
-| `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural` (true/false). |
+| `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural`, `phase_filter` (true/false). |
 | `name` | string | optional | New name. |
+| `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none. |
 | `scale` | integer | optional | Scale denominator. |
 | `structural` | boolean | optional | Floor plans: structural (formwork) display. |
 | `structure_tags` | boolean | optional | Floor plans: tag beams and columns. |
@@ -1396,3 +1400,125 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `view` | id or name | required | View id or name. |
+
+## Phases
+
+### `phases_list`
+
+*query* — The project's construction phases in time order, with how many elements each builds and demolishes and how many views show it.
+
+No parameters.
+
+### `phase_create`
+
+*edit* — Add a construction phase, at the end (the latest) or before another. Elements and views keep their phases.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique). |
+| `before` | id or name | optional | Insert before this phase (id or name; default: after the last). |
+| `description` | string | optional | Description. |
+
+### `phase_set`
+
+*edit* — Rename a phase, change its description, or move it to another place in time (`index`, 0 = earliest). A move that would put an element's demolition before its construction is refused.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `phase` | id or name | required | Phase id or name. |
+| `description` | string | optional | New description. |
+| `index` | integer | optional | New position in time order (0 = earliest). |
+| `name` | string | optional | New name. |
+
+### `phase_delete`
+
+*edit* — Delete a phase. A phase that elements are built or demolished in, or that views show, needs `merge_into`: they move to that phase (an element then built and demolished in the same phase is temporary). The last remaining phase cannot be deleted.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `phase` | id or name | required | Phase id or name. |
+| `merge_into` | id or name | optional | Phase that takes over its elements and views. |
+
+### `elements_phase_set`
+
+*edit* — Set the phase elements are built in and/or demolished in (`null`: not demolished). A demolition cannot come before the construction. Doors, windows and rebar follow their hosts: they are never built before them and are demolished with them (unless demolished earlier).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `ids` | [id, …] | required | Element ids. |
+| `created` | id or name | optional | Phase built in (id or name). |
+| `demolished` | id or name | optional | Phase demolished in (id or name), or `null` to keep it standing. |
+
+### `elements_demolish`
+
+*edit* — Demolish elements in a phase: `phase` when given, else the phase of `view`, else the phase new elements are built in (the last by default). Their doors, windows and rebar go with them (unless demolished earlier). Elements not built by then, or already demolished earlier, are refused.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `ids` | [id, …] | required | Element ids. |
+| `phase` | id or name | optional | Phase id or name. |
+| `view` | id or name | optional | Or the view whose phase to use. |
+
+### `phase_creation_set`
+
+*query* — Set the phase new elements are built in by this session (the active view's phase in the application): display state, not saved, not undone. `phase` (id or name), or the phase of `view`; neither resets it to the last phase.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `phase` | id or name | optional | Phase id or name. |
+| `view` | id or name | optional | Or the view whose phase to use. |
+
+### `phase_filters_list`
+
+*query* — The phase filters: for each status (`existing`, `demolished`, `new`, `temporary`) whether views using the filter show it `by_category`, `overridden` (with the status graphics, see `phase_graphics_get`) or `not_displayed`.
+
+No parameters.
+
+### `phase_filter_create`
+
+*edit* — Create a phase filter; statuses not given show `by_category`.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique). |
+| `demolished` | string | optional | Demolished elements. |
+| `existing` | string | optional | Existing elements: `by_category`, `overridden` or `not_displayed`. |
+| `new` | string | optional | New elements. |
+| `temporary` | string | optional | Temporary elements. |
+
+### `phase_filter_set`
+
+*edit* — Change a phase filter: its name or how it shows each status. Views using it follow.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Phase filter id or name. |
+| `demolished` | string | optional | Demolished elements. |
+| `existing` | string | optional | Existing elements: `by_category`, `overridden` or `not_displayed`. |
+| `name` | string | optional | New name. |
+| `new` | string | optional | New elements. |
+| `temporary` | string | optional | Temporary elements. |
+
+### `phase_filter_delete`
+
+*edit* — Delete a phase filter; views and view templates using it are left without one (showing every status by category).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Phase filter id or name. |
+
+### `phase_graphics_get`
+
+*query* — The graphics of each phase status (`existing`, `demolished`, `new`, `temporary`), used by phase filters that show a status `overridden`. Overrides are shaped as in `view_graphics_get`.
+
+No parameters.
+
+### `phase_graphics_set`
+
+*edit* — Change the graphics of a phase status: `overrides` is merged into the current ones (`null` resets an attribute; see `view_graphics_get`), `reset` clears them first.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `status` | string | required | `existing`, `demolished`, `new` or `temporary`. |
+| `overrides` | JSON | optional | Overrides to merge. |
+| `reset` | boolean | optional | Clear the status overrides before merging. |

@@ -423,6 +423,8 @@ mod tests {
                     height: 3.0,
                     ..Default::default()
                 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         });
         (doc, id)

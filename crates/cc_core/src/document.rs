@@ -20,6 +20,9 @@ struct Settings {
     systems: BTreeMap<crate::SystemId, crate::MepSystem>,
     filters: BTreeMap<crate::FilterId, crate::ViewFilter>,
     templates: BTreeMap<crate::TemplateId, crate::ViewTemplate>,
+    phases: Vec<crate::Phase>,
+    phase_filters: BTreeMap<crate::PhaseFilterId, crate::PhaseFilter>,
+    phase_graphics: crate::PhaseGraphics,
 }
 
 impl Settings {
@@ -35,6 +38,9 @@ impl Settings {
             systems: p.systems.clone(),
             filters: p.filters.clone(),
             templates: p.templates.clone(),
+            phases: p.phases.clone(),
+            phase_filters: p.phase_filters.clone(),
+            phase_graphics: p.phase_graphics,
         }
     }
 
@@ -49,6 +55,9 @@ impl Settings {
         p.systems = self.systems;
         p.filters = self.filters;
         p.templates = self.templates;
+        p.phases = self.phases;
+        p.phase_filters = self.phase_filters;
+        p.phase_graphics = self.phase_graphics;
     }
 }
 
@@ -132,6 +141,8 @@ impl Transaction {
 pub struct EditCtx<'a> {
     project: &'a mut Project,
     tx: Transaction,
+    /// The phase new elements are built in (else the last one).
+    creation_phase: Option<crate::PhaseId>,
 }
 
 impl<'a> EditCtx<'a> {
@@ -452,6 +463,69 @@ impl<'a> EditCtx<'a> {
         }
     }
 
+    /// Construction phases, in time order.
+    pub fn phases_mut(&mut self) -> &mut Vec<crate::Phase> {
+        self.touch_settings();
+        &mut self.project.phases
+    }
+
+    /// Phase filters.
+    pub fn phase_filters_mut(&mut self) -> &mut BTreeMap<crate::PhaseFilterId, crate::PhaseFilter> {
+        self.touch_settings();
+        &mut self.project.phase_filters
+    }
+
+    /// Graphics of each phase status.
+    pub fn phase_graphics_mut(&mut self) -> &mut crate::PhaseGraphics {
+        self.touch_settings();
+        &mut self.project.phase_graphics
+    }
+
+    /// Keep phases consistent: elements and views added by this edit get
+    /// the creation phase (views: the last phase and the default phase
+    /// filter), and hosted elements follow their hosts
+    /// ([`Project::phase_fixes`]).
+    fn sync_phases(&mut self) {
+        let p = &*self.project;
+        let Some(last) = p.last_phase() else { return };
+        let creation = self.creation_phase.filter(|c| p.phase(*c).is_some()).unwrap_or(last);
+        let added: Vec<ElementId> = self
+            .tx
+            .elements
+            .iter()
+            .filter(|(id, c)| c.0.is_none() && p.elements.get(id).is_some_and(|e| p.phase(e.phase_created).is_none()))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in added {
+            if let Some(e) = self.project.elements.get_mut(&id) {
+                e.phase_created = creation;
+            }
+        }
+        let p = &*self.project;
+        let filter = p.default_phase_filter();
+        let views: Vec<ViewId> = self
+            .tx
+            .views
+            .iter()
+            .filter(|(id, c)| c.0.is_none() && p.views.get(id).is_some_and(|v| p.phase(v.phase).is_none()))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in views {
+            if let Some(v) = self.project.views.get_mut(&id) {
+                v.phase = last;
+                if v.phase_filter.is_none() {
+                    v.phase_filter = filter;
+                }
+            }
+        }
+        for (id, created, demolished) in self.project.phase_fixes() {
+            if let Some(e) = self.element_mut(id) {
+                e.phase_created = created;
+                e.phase_demolished = demolished;
+            }
+        }
+    }
+
     pub fn units_mut(&mut self) -> &mut crate::Units {
         self.touch_settings();
         &mut self.project.units
@@ -461,6 +535,7 @@ impl<'a> EditCtx<'a> {
     fn finish(mut self) -> Transaction {
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_dimensions();
+        self.sync_phases();
         self.sync_views();
         let p = &*self.project;
         self.tx.elements.retain(|id, c| {
@@ -495,6 +570,9 @@ pub struct Document {
     saved_revision: u64,
     /// Merge key of the last recorded transaction, for coalescing.
     last_merge_key: Option<u64>,
+    /// The phase new elements are built in (the active view's; `None`:
+    /// the last phase). Display state: not saved, not undone.
+    pub creation_phase: Option<crate::PhaseId>,
 }
 
 impl Document {
@@ -508,6 +586,7 @@ impl Document {
             revision: 1,
             saved_revision: 1,
             last_merge_key: None,
+            creation_phase: None,
         }
     }
 
@@ -552,7 +631,11 @@ impl Document {
     }
 
     fn edit_impl<R>(&mut self, name: String, merge_key: Option<u64>, f: impl FnOnce(&mut EditCtx) -> R) -> R {
-        let mut ctx = EditCtx { project: &mut self.project, tx: Transaction { name, ..Default::default() } };
+        let mut ctx = EditCtx {
+            project: &mut self.project,
+            tx: Transaction { name, ..Default::default() },
+            creation_phase: self.creation_phase,
+        };
         let result = f(&mut ctx);
         let tx = ctx.finish();
         if !tx.is_empty() {
@@ -590,8 +673,11 @@ impl Document {
         f: impl FnOnce(&mut EditCtx) -> Result<R, E>,
         check: impl FnOnce(&Project) -> Result<(), E>,
     ) -> Result<R, E> {
-        let mut ctx =
-            EditCtx { project: &mut self.project, tx: Transaction { name: name.into(), ..Default::default() } };
+        let mut ctx = EditCtx {
+            project: &mut self.project,
+            tx: Transaction { name: name.into(), ..Default::default() },
+            creation_phase: self.creation_phase,
+        };
         let result = f(&mut ctx);
         let tx = ctx.finish();
         let outcome = result.and_then(|r| check(&self.project).map(|()| r));
@@ -709,6 +795,8 @@ mod tests {
                     height: 3.0,
                     ..Default::default()
                 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         })
     }
@@ -752,6 +840,8 @@ mod tests {
                     flip_facing: false,
                     flip_hand: false,
                 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         });
         doc.edit("delete", |e| e.remove_element(wall));
@@ -786,6 +876,8 @@ mod tests {
                     comments: String::new(),
                     kind,
                     uid: Default::default(),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
                 });
             }
             let selfie = ElementId(e.alloc_id());
@@ -804,6 +896,8 @@ mod tests {
                 comments: String::new(),
                 kind,
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             e.remove_element(selfie);
             (a, b)

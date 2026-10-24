@@ -236,6 +236,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         _ => {}
     }
     let pinned = p.is_pinned(id);
+    let (phase_created, phase_demolished) = super::phases::element_phases_json(p, &e);
     let joined_with: Vec<u64> = p.joined_with(id).map(|j| j.0).collect();
     let group = p.group_of(id).map(|g| g.0);
     let level = json!({"id": e.level.0, "name": p.level_name(e.level)});
@@ -281,6 +282,8 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         "mark": e.mark,
         "comments": e.comments,
         "pinned": pinned,
+        "phase_created": phase_created,
+        "phase_demolished": phase_demolished,
         "joined_with": joined_with,
         "group": group,
         "params": params,
@@ -310,6 +313,7 @@ impl Command for ElementGet {
 pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
     let v = s.project().view(id)?;
     let (_, params) = variant(to_json(&v.kind));
+    let (phase, phase_filter) = super::phases::view_phase_json(s.project(), v);
     Some(json!({
         "id": v.id.0,
         "name": v.name,
@@ -317,6 +321,8 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "scale": v.scale,
         "params": params,
         "template": v.template.map(|t| t.0),
+        "phase": phase,
+        "phase_filter": phase_filter,
     }))
 }
 

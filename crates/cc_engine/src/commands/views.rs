@@ -214,9 +214,10 @@ fn capitalized(s: &str) -> String {
     c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
 }
 
-/// Change a view: name, scale and its `params` as `view_get` shows them
-/// (merged: cut height, section depth, legend types, schedule fields, sort,
-/// filter and totals, sheet number and size, viewport positions…).
+/// Change a view: name, scale, phase and phase filter, and its `params` as
+/// `view_get` shows them (merged: cut height, section depth, legend types,
+/// schedule fields, sort, filter and totals, sheet number and size,
+/// viewport positions…).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
@@ -230,6 +231,12 @@ pub struct ViewSet {
     /// Fields of the view's parameters to change, shaped like `params` in `view_get`.
     #[serde(default)]
     pub params: Option<Value>,
+    /// Phase the view shows (id or name; plans, elevations, sections, 3D views, schedules).
+    #[serde(default)]
+    pub phase: Option<Ref>,
+    /// Phase filter (id or name), or `null` for none (every status by category).
+    #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
+    pub phase_filter: Option<Option<Ref>>,
 }
 
 impl Command for ViewSet {
@@ -248,9 +255,21 @@ impl Command for ViewSet {
         {
             return Err(EngineError::invalid("the name is empty"));
         }
+        let phase = self.phase.as_ref().map(|r| refs::phase(p, r)).transpose()?;
+        let phase_filter = match &self.phase_filter {
+            Some(Some(r)) => Some(Some(refs::phase_filter(p, r)?)),
+            Some(None) => Some(None),
+            None => None,
+        };
+        if (phase.is_some() || phase_filter.is_some()) && !view.kind.is_phased() {
+            return Err(EngineError::invalid("this view has no phase"));
+        }
         // Properties the view's template controls stay as the template has them.
         if let Some(t) = view.template.and_then(|t| p.template(t)) {
             let mut new = view.clone();
+            if let Some(f) = phase_filter {
+                new.phase_filter = f;
+            }
             if let Some(sc) = self.scale {
                 new.scale = sc.max(1);
             }
@@ -273,6 +292,12 @@ impl Command for ViewSet {
             }
             if let Some(k) = kind {
                 v.kind = k;
+            }
+            if let Some(ph) = phase {
+                v.phase = ph;
+            }
+            if let Some(f) = phase_filter {
+                v.phase_filter = f;
             }
             Ok(())
         })?;

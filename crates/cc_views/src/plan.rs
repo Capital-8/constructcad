@@ -480,6 +480,8 @@ mod tests {
                     height: 3.0,
                     ..Default::default()
                 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             let dr = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -496,6 +498,8 @@ mod tests {
                     flip_facing: false,
                     flip_hand: false,
                 }),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             (w, dr)
         });
@@ -534,6 +538,8 @@ mod tests {
                 comments: String::new(),
                 uid: Default::default(),
                 kind: ElementKind::Wall(wall),
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             w
         });
@@ -618,6 +624,8 @@ mod tests {
                 comments: String::new(),
                 uid: Default::default(),
                 kind,
+                phase_created: Default::default(),
+                phase_demolished: None,
             });
             id
         });

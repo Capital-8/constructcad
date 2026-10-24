@@ -59,6 +59,10 @@ pub enum ScheduleField {
     Power,
     /// Drainage fixture units of a plumbing fixture.
     DrainUnits,
+    /// The phase the element is built in.
+    PhaseCreated,
+    /// The phase the element is demolished in.
+    PhaseDemolished,
 }
 
 impl ScheduleField {
@@ -105,6 +109,8 @@ impl ScheduleField {
             ScheduleField::Slope => "col-slope",
             ScheduleField::Power => "col-power",
             ScheduleField::DrainUnits => "col-drain-units",
+            ScheduleField::PhaseCreated => "col-phase-created",
+            ScheduleField::PhaseDemolished => "col-phase-demolished",
         }
     }
 
@@ -113,6 +119,7 @@ impl ScheduleField {
         use ScheduleField as F;
         let common = [F::Mark, F::Type, F::Level, F::Comments];
         let type_info = [F::TypeMark, F::Description, F::Manufacturer, F::Model, F::FireRating, F::Cost];
+        let phases = [F::PhaseCreated, F::PhaseDemolished];
         let specific: &[F] = match category {
             Category::Wall => &[F::Length, F::Height, F::Thickness, F::Area, F::Volume, F::Function, F::Structural],
             Category::Door => &[F::Width, F::Height, F::Host],
@@ -139,11 +146,22 @@ impl ScheduleField {
                 F::DrainUnits,
             ],
             Category::Room => {
-                return vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter, F::Height, F::Volume, F::Comments];
+                return vec![
+                    F::Number,
+                    F::Name,
+                    F::Level,
+                    F::Area,
+                    F::Perimeter,
+                    F::Height,
+                    F::Volume,
+                    F::Comments,
+                    F::PhaseCreated,
+                    F::PhaseDemolished,
+                ];
             }
             Category::Grid | Category::Dimension | Category::Text => return Vec::new(),
         };
-        common.iter().chain(specific).chain(&type_info).copied().collect()
+        common.iter().chain(specific).chain(&type_info).chain(&phases).copied().collect()
     }
 
     /// Fields shown by a new schedule of `category`.

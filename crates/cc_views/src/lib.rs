@@ -26,7 +26,7 @@ pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, halftone
 pub use legend::legend;
 pub use plan::{is_structural, plan, plan_of};
 pub use projected::{Frame, axonometric, elevation, section};
-pub use schedule::{Cell, Row, Table, field_value, schedule, to_csv};
+pub use schedule::{Cell, Row, Table, field_value, schedule, schedule_where, to_csv};
 pub use sheet::{MARGIN, PlacedViewport, Sheet, TITLE_H, TITLE_W, TitleLabels, compose as compose_sheet};
 
 use cc_core::{Project, View, ViewKind};
@@ -240,6 +240,8 @@ mod tests {
                 comments: String::new(),
                 kind: cc_core::ElementKind::Component(component),
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             },
         );
         assert_eq!(project.repair(), 0);

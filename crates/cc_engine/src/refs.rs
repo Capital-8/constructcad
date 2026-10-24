@@ -215,3 +215,39 @@ pub fn template(p: &Project, r: &Ref) -> Result<cc_core::TemplateId> {
         }
     }
 }
+
+/// A construction phase by id or name.
+pub fn phase(p: &Project, r: &Ref) -> Result<cc_core::PhaseId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::PhaseId(*id);
+            p.phase(id).map(|_| id).ok_or_else(|| EngineError::not_found(format!("no phase with id {}", id.0)))
+        }
+        Ref::Name(n) => unique("phase", n, p.phases.iter().filter(|x| matches(&x.name, n)).map(|x| x.id).collect()),
+    }
+}
+
+/// A phase filter by id or name.
+pub fn phase_filter(p: &Project, r: &Ref) -> Result<cc_core::PhaseFilterId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::PhaseFilterId(*id);
+            p.phase_filter(id)
+                .map(|_| id)
+                .ok_or_else(|| EngineError::not_found(format!("no phase filter with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            unique("phase filter", n, p.phase_filters.values().filter(|f| matches(&f.name, n)).map(|f| f.id).collect())
+        }
+    }
+}
+
+/// Deserialize an optional field that may also be `null`: absent gives
+/// `None`, `null` gives `Some(None)` (use with `#[serde(default)]`).
+pub fn nullable<'de, D, T>(d: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(d).map(Some)
+}

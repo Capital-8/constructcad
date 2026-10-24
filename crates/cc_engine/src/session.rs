@@ -17,6 +17,9 @@ pub struct Session {
     recording: Option<Vec<Recorded>>,
     geom: ModelGeometry,
     geom_revision: Option<u64>,
+    /// Geometry of the phases (by index) whose views leave elements out,
+    /// with the revision it was built at.
+    phase_geoms: HashMap<usize, (u64, ModelGeometry)>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
     sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
     /// Elements temporarily hidden or isolated per view: display state, not
@@ -54,6 +57,7 @@ impl Session {
             recording: None,
             geom: ModelGeometry::default(),
             geom_revision: None,
+            phase_geoms: HashMap::new(),
             drawings: HashMap::new(),
             sheets: HashMap::new(),
             temporary: HashMap::new(),
@@ -91,7 +95,55 @@ impl Session {
         }
         self.geom = ModelGeometry::build(&self.doc.project);
         self.geom_revision = Some(rev);
+        self.phase_geoms.retain(|_, (r, _)| *r == rev);
         true
+    }
+
+    /// The phase (an index) whose own geometry `view` shows, when its phase
+    /// leaves elements out (see [`ModelGeometry::build_phase`]).
+    fn phase_of_view(&self, view: ViewId) -> Option<usize> {
+        let p = &self.doc.project;
+        let v = p.view(view)?;
+        if !v.kind.is_phased() {
+            return None;
+        }
+        let index = p.view_phase(v).and_then(|ph| p.phase_index(ph))?;
+        p.phase_differs(index).then_some(index)
+    }
+
+    /// Build (if needed) the geometry `view` shows; returns its phase key.
+    fn sync_view(&mut self, view: ViewId) -> Option<usize> {
+        self.sync();
+        let index = self.phase_of_view(view)?;
+        let rev = self.doc.revision();
+        if self.phase_geoms.get(&index).is_none_or(|(r, _)| *r != rev) {
+            let g = ModelGeometry::build_phase(&self.doc.project, index, &self.geom);
+            self.phase_geoms.insert(index, (rev, g));
+        }
+        Some(index)
+    }
+
+    fn geom_of(&self, key: Option<usize>) -> &ModelGeometry {
+        key.and_then(|k| self.phase_geoms.get(&k)).map_or(&self.geom, |(_, g)| g)
+    }
+
+    /// Geometry of the model as `view` shows it, in its phase: only the
+    /// elements of that phase join, open walls and bound rooms. The whole
+    /// model's geometry when the phase leaves nothing out.
+    pub fn view_geometry(&mut self, view: ViewId) -> &ModelGeometry {
+        let key = self.sync_view(view);
+        self.geom_of(key)
+    }
+
+    /// [`Session::view_geometry`] as of the last sync (the GUI calls
+    /// [`Session::view_geometry`] once a frame per open view first); falls
+    /// back to the whole model's geometry when the phase's is not built.
+    pub fn geom_for(&self, view: ViewId) -> &ModelGeometry {
+        let rev = self.doc.revision();
+        match self.phase_of_view(view).and_then(|k| self.phase_geoms.get(&k)) {
+            Some((r, g)) if *r == rev => g,
+            _ => &self.geom,
+        }
     }
 
     /// Derived geometry as of the last [`Session::sync`] (callers that keep
@@ -122,10 +174,11 @@ impl Session {
             return Some(d.clone());
         }
         self.sync_units();
-        self.geometry();
+        let key = self.sync_view(view);
         let v = self.doc.project.view(view)?;
         let temporary = self.temporary.get(&view);
-        let d = Rc::new(cc_views::generate_temporary(&self.doc.project, &self.geom, v, &crate::i18n::tr, temporary)?);
+        let geom = self.geom_of(key);
+        let d = Rc::new(cc_views::generate_temporary(&self.doc.project, geom, v, &crate::i18n::tr, temporary)?);
         self.drawings.insert(view, (rev, d.clone()));
         Some(d)
     }
@@ -136,9 +189,9 @@ impl Session {
             return self.drawing(view);
         }
         self.sync_units();
-        self.geometry();
+        let key = self.sync_view(view);
         let v = self.doc.project.view(view)?;
-        Some(Rc::new(cc_views::generate_labeled(&self.doc.project, &self.geom, v, &crate::i18n::tr)?))
+        Some(Rc::new(cc_views::generate_labeled(&self.doc.project, self.geom_of(key), v, &crate::i18n::tr)?))
     }
 
     /// What is temporarily hidden or isolated in `view`.
@@ -194,7 +247,8 @@ impl Session {
         Some(s)
     }
 
-    /// A schedule table of a schedule view, with the project's units.
+    /// A schedule table of a schedule view, with the project's units: the
+    /// elements its phase and phase filter show.
     pub fn schedule(&mut self, view: ViewId) -> Option<cc_views::Table> {
         let (category, def) = match &self.doc.project.view(view)?.kind {
             ViewKind::Schedule { category, def } => (*category, def.clone()),
@@ -202,7 +256,9 @@ impl Session {
         };
         self.sync_units();
         self.geometry();
-        Some(cc_views::schedule(&self.doc.project, &self.geom, category, &def))
+        let p = &self.doc.project;
+        let phase = cc_views::graphics::PhaseView::of(p, p.view(view)?);
+        Some(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| phase.is_none_or(|ph| ph.shows(p, e))))
     }
 
     /// Run a typed command (the way the GUI calls the engine): it goes

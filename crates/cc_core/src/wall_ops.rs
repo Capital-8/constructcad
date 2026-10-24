@@ -274,6 +274,8 @@ mod tests {
                         comments: String::new(),
                         kind,
                         uid: Default::default(),
+                        phase_created: Default::default(),
+                        phase_demolished: None,
                     })
                 })
                 .collect()
@@ -320,6 +322,8 @@ mod tests {
                 comments: String::new(),
                 kind: ElementKind::Door(hosted),
                 uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             })
         });
         // Split at x = 6: the door (at 8) moves to the second wall at 2.

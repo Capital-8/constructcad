@@ -59,6 +59,15 @@ pub struct Project {
     /// View templates.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub templates: BTreeMap<crate::TemplateId, crate::ViewTemplate>,
+    /// Construction phases, in time order (see [`crate::phase`]).
+    #[serde(default)]
+    pub phases: Vec<crate::Phase>,
+    /// Phase filters views choose from.
+    #[serde(default)]
+    pub phase_filters: BTreeMap<crate::PhaseFilterId, crate::PhaseFilter>,
+    /// Graphics of each phase status, where a phase filter overrides it.
+    #[serde(default, skip_serializing_if = "crate::phase::phase_graphics_is_default")]
+    pub phase_graphics: crate::PhaseGraphics,
     next_id: u64,
 }
 
@@ -87,6 +96,9 @@ impl Project {
             systems: BTreeMap::new(),
             filters: BTreeMap::new(),
             templates: BTreeMap::new(),
+            phases: Vec::new(),
+            phase_filters: BTreeMap::new(),
+            phase_graphics: crate::PhaseGraphics::default(),
             next_id: 1,
         }
     }
@@ -356,6 +368,7 @@ impl Project {
                 ],
             },
         );
+        p.ensure_phases(&n);
         p.ensure_uids();
         p
     }
@@ -869,7 +882,7 @@ impl Project {
 }
 
 /// Portuguese names of the default template, keyed like the translation files.
-fn template_default(key: &str) -> &'static str {
+pub(crate) fn template_default(key: &str) -> &'static str {
     match key {
         "tpl-project-name" => "Novo projeto",
         "tpl-level-ground" => "Térreo",
@@ -998,6 +1011,15 @@ fn template_default(key: &str) -> &'static str {
         "tpl-type-wall-light" => "Arandela 60 VA",
         "tpl-type-panel" => "Quadro de distribuição de embutir",
         "tpl-type-ceiling-light" => "Luminária de teto 100 VA",
+        "tpl-phase-existing" => "Existente",
+        "tpl-phase-new" => "Construção nova",
+        "tpl-phase-filter-all" => "Mostrar tudo",
+        "tpl-phase-filter-complete" => "Mostrar completo",
+        "tpl-phase-filter-new" => "Mostrar novo",
+        "tpl-phase-filter-previous-demo" => "Mostrar anterior + demolição",
+        "tpl-phase-filter-previous-new" => "Mostrar anterior + novo",
+        "tpl-phase-filter-previous" => "Mostrar fase anterior",
+        "tpl-phase-filter-demo-new" => "Mostrar demolição + novo",
         _ => "?",
     }
 }

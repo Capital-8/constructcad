@@ -870,7 +870,17 @@ impl<'a> Importer<'a> {
         let id = ElementId(self.p.alloc_id());
         let uid = e.arg(0).as_str().and_then(guid::decode).map(Uid).unwrap_or_default();
         let comments = e.arg(3).as_str().unwrap_or_default().to_string();
-        let element = Element { id, level, type_id, mark, comments, kind, uid };
+        let element = Element {
+            id,
+            level,
+            type_id,
+            mark,
+            comments,
+            kind,
+            uid,
+            phase_created: Default::default(),
+            phase_demolished: None,
+        };
         *self.report.imported.entry(element.category()).or_default() += 1;
         self.p.elements.insert(id, element);
     }
@@ -1739,6 +1749,8 @@ impl<'a> Importer<'a> {
                 comments: String::new(),
                 kind: ElementKind::Grid(grid),
                 uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
             };
             *self.report.imported.entry(Category::Grid).or_default() += 1;
             self.p.elements.insert(element, el);

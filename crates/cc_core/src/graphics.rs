@@ -8,7 +8,8 @@
 //!
 //! Overrides combine attribute by attribute: an element's own override
 //! beats the filters, the first matching filter beats later ones, and the
-//! filters beat the category. An element is hidden when it is hidden in the
+//! filters beat the element's phase status overrides (see [`crate::phase`]),
+//! which beat the category. An element is hidden when it is hidden in the
 //! view, its category is hidden, or any matching filter hides it.
 
 use crate::{Category, ElementId, FilterId, MepDiscipline, Pattern, ScheduleField, TemplateId, View, ViewKind};
@@ -16,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Dash pattern of a line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub enum LinePattern {
     #[default]
     Solid,
@@ -255,6 +256,18 @@ impl ViewGraphics {
         category: Category,
         matches: &mut dyn FnMut(FilterId) -> bool,
     ) -> Option<GraphicOverride> {
+        self.resolve_phased(id, category, matches, &GraphicOverride::default())
+    }
+
+    /// [`Self::resolve`] with the overrides of the element's phase status,
+    /// which rank below the filters and above the category.
+    pub fn resolve_phased(
+        &self,
+        id: ElementId,
+        category: Category,
+        matches: &mut dyn FnMut(FilterId) -> bool,
+        phase: &GraphicOverride,
+    ) -> Option<GraphicOverride> {
         if self.hidden.contains(&id) {
             return None;
         }
@@ -271,7 +284,7 @@ impl ViewGraphics {
                 out = out.or(&f.overrides);
             }
         }
-        Some(out.or(&cat.overrides))
+        Some(out.or(phase).or(&cat.overrides))
     }
 
     /// Drop references to missing filters and elements and invalid values;
@@ -469,11 +482,22 @@ pub struct TemplateIncludes {
     pub discipline: bool,
     /// Floor plans: structural (formwork) display and structure tags.
     pub structural: bool,
+    /// The phase filter (not the phase: views of one template can show
+    /// different phases).
+    pub phase_filter: bool,
 }
 
 impl Default for TemplateIncludes {
     fn default() -> Self {
-        Self { scale: true, categories: true, filters: true, cut_height: true, discipline: true, structural: true }
+        Self {
+            scale: true,
+            categories: true,
+            filters: true,
+            cut_height: true,
+            discipline: true,
+            structural: true,
+            phase_filter: true,
+        }
     }
 }
 
@@ -496,6 +520,8 @@ pub struct ViewTemplate {
     pub structural: bool,
     #[serde(default)]
     pub structure_tags: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_filter: Option<crate::PhaseFilterId>,
 }
 
 fn default_cut() -> f64 {
@@ -518,6 +544,7 @@ impl ViewTemplate {
             discipline: None,
             structural: false,
             structure_tags: false,
+            phase_filter: view.phase_filter,
         };
         match &view.kind {
             ViewKind::FloorPlan { cut_height, structural, structure_tags, mep, .. } => {
@@ -559,6 +586,9 @@ impl ViewTemplate {
         if inc.filters {
             view.graphics.filters = self.graphics.filters.clone();
         }
+        if inc.phase_filter {
+            view.phase_filter = self.phase_filter;
+        }
         match &mut view.kind {
             ViewKind::FloorPlan { cut_height, structural, structure_tags, mep, .. } => {
                 if inc.cut_height {
@@ -578,8 +608,16 @@ impl ViewTemplate {
     }
 
     /// Reset invalid values; returns how many.
-    pub fn repair(&mut self, filters: &BTreeMap<FilterId, ViewFilter>) -> usize {
+    pub fn repair(
+        &mut self,
+        filters: &BTreeMap<FilterId, ViewFilter>,
+        phase_filters: &BTreeMap<crate::PhaseFilterId, crate::PhaseFilter>,
+    ) -> usize {
         let mut n = self.graphics.repair(filters, Some(&|_| false));
+        if self.phase_filter.is_some_and(|f| !phase_filters.contains_key(&f)) {
+            self.phase_filter = None;
+            n += 1;
+        }
         if self.scale == 0 {
             self.scale = 100;
             n += 1;

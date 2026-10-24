@@ -1,11 +1,13 @@
 //! View graphics applied to drawings: hidden categories, filters and
-//! elements leave the drawing, and the resolved overrides change the pens
-//! of lines and the colors and patterns of fills (see [`cc_core::graphics`]).
+//! elements leave the drawing, as do elements the view's phase and phase
+//! filter leave out, and the resolved overrides change the pens of lines and
+//! the colors and patterns of fills (see [`cc_core::graphics`] and
+//! [`cc_core::phase`]).
 
 use crate::{Drawing2D, LineStyle, Pen, Prim, format};
 use cc_core::{
-    Element, ElementId, FilterParam, GraphicOverride, LineGraphics, Pattern, Project, TemporaryVisibility, View,
-    ViewFilter, ViewGraphics,
+    Element, ElementId, FilterParam, GraphicOverride, LineGraphics, Pattern, PhaseDisplay, PhaseFilter, PhaseState,
+    Project, TemporaryVisibility, View, ViewFilter, ViewGraphics,
 };
 use cc_geom::ModelGeometry;
 use std::collections::HashMap;
@@ -28,6 +30,45 @@ pub fn filter_elements(project: &Project, geom: &ModelGeometry, filter: &ViewFil
     project.elements.values().filter(|e| filter_matches(project, geom, filter, e)).map(|e| e.id).collect()
 }
 
+/// A view's phase (an index into the project's phases) and phase filter.
+#[derive(Debug, Clone, Copy)]
+pub struct PhaseView<'a> {
+    pub index: usize,
+    pub filter: Option<&'a PhaseFilter>,
+}
+
+impl<'a> PhaseView<'a> {
+    /// The phase of `view`, or `None` for views without one (legends,
+    /// sheets, diagrams) or projects without phases.
+    pub fn of(project: &'a Project, view: &View) -> Option<Self> {
+        if !view.kind.is_phased() {
+            return None;
+        }
+        let index = project.view_phase(view).and_then(|ph| project.phase_index(ph))?;
+        Some(Self { index, filter: view.phase_filter.and_then(|f| project.phase_filter(f)) })
+    }
+
+    /// The phase overrides of `e` in the view, or `None` when the view
+    /// does not show it (absent from the phase, or a status the filter does
+    /// not display).
+    pub fn style(&self, project: &Project, e: &Element) -> Option<GraphicOverride> {
+        match project.phase_state_at(e, self.index) {
+            PhaseState::Unphased => Some(GraphicOverride::default()),
+            PhaseState::Absent => None,
+            PhaseState::Status(status) => match self.filter.map_or(PhaseDisplay::ByCategory, |f| f.display(status)) {
+                PhaseDisplay::NotDisplayed => None,
+                PhaseDisplay::ByCategory => Some(GraphicOverride::default()),
+                PhaseDisplay::Overridden => Some(*project.phase_graphics.get(status)),
+            },
+        }
+    }
+
+    /// Whether the view shows `e`.
+    pub fn shows(&self, project: &Project, e: &Element) -> bool {
+        self.style(project, e).is_some()
+    }
+}
+
 /// Resolves the graphics of elements in one view (cached per element).
 pub struct Resolver<'a> {
     project: &'a Project,
@@ -35,6 +76,9 @@ pub struct Resolver<'a> {
     graphics: &'a ViewGraphics,
     temporary: Option<&'a TemporaryVisibility>,
     cache: HashMap<ElementId, Option<GraphicOverride>>,
+    phase: Option<PhaseView<'a>>,
+    /// Every element of the view shows by category (or not at all) in its phase.
+    phase_trivial: bool,
 }
 
 impl<'a> Resolver<'a> {
@@ -44,12 +88,15 @@ impl<'a> Resolver<'a> {
         view: &'a View,
         temporary: Option<&'a TemporaryVisibility>,
     ) -> Self {
-        Self { project, geom, graphics: &view.graphics, temporary, cache: HashMap::new() }
+        let phase = PhaseView::of(project, view);
+        let phase_trivial = phase
+            .is_none_or(|ph| project.elements.values().all(|e| ph.style(project, e).is_some_and(|g| g.is_empty())));
+        Self { project, geom, graphics: &view.graphics, temporary, cache: HashMap::new(), phase, phase_trivial }
     }
 
     /// Whether the view draws everything as generated.
     pub fn is_trivial(&self) -> bool {
-        self.graphics.is_empty() && self.temporary.is_none_or(|t| t.is_empty())
+        self.graphics.is_empty() && self.temporary.is_none_or(|t| t.is_empty()) && self.phase_trivial
     }
 
     /// The overrides of an element, or `None` when it is hidden. Ids that
@@ -63,9 +110,15 @@ impl<'a> Resolver<'a> {
             Some(e) if self.temporary.is_some_and(|t| !t.shows(id, e.category())) => None,
             Some(e) => {
                 let (project, geom) = (self.project, self.geom);
-                self.graphics.resolve(id, e.category(), &mut |f| {
-                    project.filter(f).is_some_and(|filter| filter_matches(project, geom, filter, e))
-                })
+                match self.phase.map_or(Some(GraphicOverride::default()), |ph| ph.style(project, e)) {
+                    None => None,
+                    Some(phase) => self.graphics.resolve_phased(
+                        id,
+                        e.category(),
+                        &mut |f| project.filter(f).is_some_and(|filter| filter_matches(project, geom, filter, e)),
+                        &phase,
+                    ),
+                }
             }
         };
         self.cache.insert(id, s);

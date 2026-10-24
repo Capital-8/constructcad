@@ -24,6 +24,15 @@ id_type!(GroupId, "G");
 id_type!(SystemId, "S");
 id_type!(FilterId, "F");
 id_type!(TemplateId, "VT");
+id_type!(PhaseId, "PH");
+id_type!(PhaseFilterId, "PF");
+
+impl Default for PhaseId {
+    /// Unassigned: read as the last phase until one is given.
+    fn default() -> Self {
+        PhaseId(0)
+    }
+}
 
 /// Globally unique, persistent identifier of a model object (128 bits),
 /// kept across saves so exports such as IFC keep stable ids. Zero means
