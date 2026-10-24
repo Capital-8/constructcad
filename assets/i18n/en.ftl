@@ -223,6 +223,7 @@ tool-window = Window
 tool-floor = Floor
 tool-ceiling = Ceiling
 tool-roof = Roof
+tool-roof-opening = Roof Opening
 tool-section = Section
 
 # Actions
@@ -272,6 +273,7 @@ hint-wall-arc = Click the start and end of the arc, then a point on it · Esc en
 hint-wall-arc-point = Click a point on the arc
 hint-hosted = Hover over a wall and click · Space flips the opening
 hint-sketch = Click the vertices · click the first point or press Enter to finish · Backspace removes the last one
+hint-roof-opening = Click the vertices of the opening (courtyard) inside the roof · click the first point or press Enter to finish
 hint-from-walls = Creates the boundary from the closed walls on this level
 
 # Options bar
@@ -362,6 +364,9 @@ prop-sill = Sill Height
 prop-flip-facing = Flip Facing
 prop-flip-hand = Flip Hand
 prop-overhang = Overhang
+prop-roof-openings = Openings
+action-roof-add-opening = Add Opening
+action-roof-remove-openings = Remove Openings
 prop-roof-shape = Shape
 prop-slope = Slope
 prop-direction = Direction

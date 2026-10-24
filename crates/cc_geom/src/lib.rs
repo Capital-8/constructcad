@@ -19,6 +19,7 @@ pub mod roofs;
 mod rooms;
 pub mod section;
 pub mod sizing;
+pub mod skeleton;
 mod solid;
 mod wall;
 

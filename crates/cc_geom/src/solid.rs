@@ -226,6 +226,55 @@ impl Solid {
         f.push(Face::new(vec![p(u1, v0, z0), p(u1, v1, z0), p(u1, v1, z1), p(u1, v0, z1)], u3));
     }
 
+    /// Append a prism like [`Self::add_prism`] with openings: `holes` are
+    /// outlines inside `footprint` (either winding).
+    pub fn add_prism_with_holes(
+        &mut self,
+        footprint: &[DVec2],
+        holes: &[Vec<DVec2>],
+        bottom: impl Fn(DVec2) -> f64,
+        top: impl Fn(DVec2) -> f64,
+    ) {
+        if holes.is_empty() {
+            self.add_prism(footprint, bottom, top);
+            return;
+        }
+        let fp = polygon::ccw(footprint);
+        if fp.len() < 3 {
+            return;
+        }
+        let holes: Vec<Vec<DVec2>> = holes
+            .iter()
+            .filter(|h| h.len() >= 3)
+            .map(|h| {
+                let mut h = polygon::ccw(h);
+                h.reverse();
+                h
+            })
+            .collect();
+        let lift = |p: DVec2, z: f64| DVec3::new(p.x, p.y, z);
+        for t in polygon::triangulate_with_holes(&fp, &holes) {
+            let top_pts: Vec<DVec3> = t.iter().map(|&p| lift(p, top(p))).collect();
+            let bottom_pts: Vec<DVec3> = t.iter().rev().map(|&p| lift(p, bottom(p))).collect();
+            let n = |pts: &[DVec3]| (pts[1] - pts[0]).cross(pts[2] - pts[0]);
+            let (tn, bn) = (n(&top_pts), n(&bottom_pts));
+            self.faces.push(Face::new(top_pts, tn));
+            self.faces.push(Face::new(bottom_pts, bn));
+        }
+        // Sides: the outline counter-clockwise, the holes clockwise, all facing out of the solid.
+        for ring in std::iter::once(&fp).chain(holes.iter()) {
+            let n = ring.len();
+            for i in 0..n {
+                let (a, b) = (ring[i], ring[(i + 1) % n]);
+                let out = -(b - a).normalize_or_zero().perp();
+                self.faces.push(Face::new(
+                    vec![lift(a, bottom(a)), lift(b, bottom(b)), lift(b, top(b)), lift(a, top(a))],
+                    DVec3::new(out.x, out.y, 0.0),
+                ));
+            }
+        }
+    }
+
     /// Append a prism between two copies of a polygon: `bottom(p)`/`top(p)` give
     /// the z of each footprint vertex (planar surfaces only).
     pub fn add_prism(&mut self, footprint: &[DVec2], bottom: impl Fn(DVec2) -> f64, top: impl Fn(DVec2) -> f64) {

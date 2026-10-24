@@ -95,8 +95,8 @@ fn check(original: &Project) {
                 close(a.height_offset, b.height_offset, TOL, "ceiling offset");
             }
             (ElementKind::Roof(a), ElementKind::Roof(b)) => {
-                let fp =
-                    |r: &cc_core::Roof| cc_geom::polygon::area(&cc_geom::polygon::offset(&r.footprint, r.overhang));
+                let fp = cc_geom::roofs::plan_area;
+                assert_eq!(a.holes.len(), b.holes.len(), "roof openings");
                 match (a.shape, b.shape) {
                     (RoofShape::Flat, RoofShape::Flat) => {
                         close(fp(a), fp(b), TOL, "flat roof area");
@@ -112,9 +112,9 @@ fn check(original: &Project) {
                     }
                     (RoofShape::Gable { slope: s0, .. }, RoofShape::Gable { slope: s1, .. })
                     | (RoofShape::Hip { slope: s0 }, RoofShape::Hip { slope: s1 }) => {
-                        // Pitched roofs come back from their B-rep: the slope is estimated.
-                        close(s0, s1, 0.05, "pitched slope");
-                        close(fp(a), fp(b), 0.05 * fp(a), "pitched footprint");
+                        // Pitched roofs come back from their B-rep: slope and outline (with the overhang).
+                        close(s0, s1, 1e-6, "pitched slope");
+                        close(fp(a), fp(b), 1e-6 * fp(a), "pitched footprint");
                     }
                     (x, y) => panic!("roof shape {x:?} came back as {y:?}"),
                 }
@@ -202,7 +202,7 @@ fn check(original: &Project) {
     let mut again = imported.clone();
     assert_eq!(again.repair(), 0, "imported project needed repairs");
     let text = export(&again, &ExportOptions::default());
-    assert!(text.contains("IFCWALL("));
+    assert!(original.walls().next().is_none() || text.contains("IFCWALL("));
 }
 
 #[test]
@@ -270,6 +270,11 @@ fn arc_walls_round_trip() {
         assert_eq!(ua, ub);
         close(*va, *vb, 1e-6, "arc wall volume");
     }
+}
+
+#[test]
+fn roof_fixture_round_trips() {
+    check(&load(include_str!("fixtures/roofs.ccad")));
 }
 
 #[test]

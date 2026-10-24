@@ -1380,3 +1380,53 @@ fn arc_walls_through_commands() {
     let host = run(&mut s, "element_get", json!({"id": door["params"]["host"]}));
     assert!(host["derived"]["radius"].is_number());
 }
+
+/// Pitched roofs over concave outlines and around courtyards: analytic
+/// heights, a valley, exact volumes; bad openings are refused.
+#[test]
+fn roofs_over_any_footprint() {
+    let mut s = Session::default();
+    let thickness = |s: &mut Session, roof: &Value| {
+        let t = run(s, "type_get", json!({"type": roof["type"]["id"]}));
+        t["params"]["layers"].as_array().unwrap().iter().map(|l| l["thickness"].as_f64().unwrap()).sum::<f64>()
+    };
+    // An L: arms 4 m wide, a hip roof at 50 %.
+    let l = json!([[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]]);
+    let roof = run(&mut s, "roof_create", json!({"boundary": l, "offset": 3.0, "overhang": 0.0}));
+    let roof = run(&mut s, "element_set", json!({"id": id(&roof), "params": {"shape": {"Hip": {"slope": 0.5}}}}));
+    let ridges = roof["derived"]["ridges"].as_array().unwrap();
+    let valley = ridges.iter().any(|r| {
+        let (a, b) = (
+            (r[0][0].as_f64().unwrap(), r[0][1].as_f64().unwrap()),
+            (r[1][0].as_f64().unwrap(), r[1][1].as_f64().unwrap()),
+        );
+        let at = |p: (f64, f64), q: (f64, f64)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9;
+        (at(a, (4.0, 4.0)) && at(b, (2.0, 2.0))) || (at(b, (4.0, 4.0)) && at(a, (2.0, 2.0)))
+    });
+    assert!(valley, "a valley from the inner corner: {ridges:?}");
+    let t = thickness(&mut s, &roof);
+    let volume = roof["derived"]["volume"].as_f64().unwrap();
+    let expected = 64.0 * t * (1.0f64 + 0.25).sqrt();
+    assert!((volume - expected).abs() < 1e-6, "{volume} vs {expected}");
+
+    // A courtyard: a 12 m square around a 4 m one, with no overhang.
+    let outer = json!([[20, 0], [32, 0], [32, 12], [20, 12]]);
+    let hole = json!([[24, 4], [28, 4], [28, 8], [24, 8]]);
+    let roof = run(&mut s, "roof_create", json!({"boundary": outer, "holes": [hole], "offset": 3.0, "overhang": 0.0}));
+    assert!((roof["derived"]["plan_area"].as_f64().unwrap() - 128.0).abs() < 1e-9);
+    let flat_volume = roof["derived"]["volume"].as_f64().unwrap();
+    assert!((flat_volume - 128.0 * t).abs() < 1e-6, "{flat_volume}");
+    let roof = run(&mut s, "element_set", json!({"id": id(&roof), "params": {"shape": {"Hip": {"slope": 1.0}}}}));
+    let volume = roof["derived"]["volume"].as_f64().unwrap();
+    assert!((volume - 128.0 * t * 2f64.sqrt()).abs() < 1e-6, "{volume}");
+    // The ridge runs 2 m above the eaves, midway between them: around the courtyard.
+    let ridges = roof["derived"]["ridges"].as_array().unwrap();
+    assert!(ridges.len() >= 8, "{ridges:?}");
+
+    // Openings must lie inside, apart.
+    let outer = json!([[0, 20], [10, 20], [10, 30], [0, 30]]);
+    let outside = json!({"boundary": outer, "holes": [[[8, 22], [12, 22], [12, 24], [8, 24]]]});
+    assert_eq!(fails(&mut s, "roof_create", outside), ErrorCode::InvalidArguments);
+    let overlapping = json!({"boundary": outer, "holes": [[[2, 22], [5, 22], [5, 25], [2, 25]], [[4, 24], [7, 24], [7, 27], [4, 27]]]});
+    assert_eq!(fails(&mut s, "roof_create", overlapping), ErrorCode::InvalidArguments);
+}

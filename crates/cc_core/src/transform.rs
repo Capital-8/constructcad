@@ -96,7 +96,7 @@ impl Element {
             ElementKind::Floor(f) => f.boundary.iter_mut().for_each(p),
             ElementKind::Ceiling(c) => c.boundary.iter_mut().for_each(p),
             ElementKind::Roof(r) => {
-                r.footprint.iter_mut().for_each(p);
+                r.footprint.iter_mut().chain(r.holes.iter_mut().flatten()).for_each(p);
                 match &mut r.shape {
                     RoofShape::Flat | RoofShape::Hip { .. } => {}
                     RoofShape::Shed { direction_deg, .. } => *direction_deg = t.apply_angle_deg(*direction_deg),

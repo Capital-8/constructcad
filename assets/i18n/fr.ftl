@@ -223,6 +223,7 @@ tool-window = Fenêtre
 tool-floor = Sol
 tool-ceiling = Plafond
 tool-roof = Toit
+tool-roof-opening = Ouverture de toit
 tool-section = Coupe
 
 # Actions
@@ -272,6 +273,7 @@ hint-wall-arc = Cliquez le début et la fin de l'arc, puis un point de l'arc · 
 hint-wall-arc-point = Cliquez un point de l'arc
 hint-hosted = Survolez un mur et cliquez · Espace retourne l'ouverture
 hint-sketch = Cliquez les sommets · cliquez le premier point ou appuyez sur Entrée pour terminer · Retour arrière supprime le dernier
+hint-roof-opening = Cliquez les sommets de l'ouverture (patio) dans le toit · cliquez le premier point ou appuyez sur Entrée pour terminer
 hint-from-walls = Crée le contour à partir des murs fermés de ce niveau
 
 # Barre d'options
@@ -362,6 +364,9 @@ prop-sill = Hauteur d'allège
 prop-flip-facing = Inverser l'orientation
 prop-flip-hand = Inverser le sens
 prop-overhang = Débord
+prop-roof-openings = Ouvertures
+action-roof-add-opening = Ajouter une ouverture
+action-roof-remove-openings = Supprimer les ouvertures
 prop-roof-shape = Forme
 prop-slope = Pente
 prop-direction = Direction

@@ -327,6 +327,7 @@ No parameters.
 |---|---|---|---|
 | `boundary` | [[x, y], …] | optional | Closed outline (at least 3 points); omit with `from_walls`. |
 | `from_walls` | boolean | optional | Follow the loop of walls of the level (exterior faces; interior faces for ceilings). |
+| `holes` | [[[x, y], …], …] | optional | Openings through the roof (courtyards): closed outlines inside the boundary, apart from each other. Pitched roofs slope down to their eaves too. |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
 | `overhang` | number | optional | Overhang beyond the outline, meters (default 0.5). |

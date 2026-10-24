@@ -1194,6 +1194,22 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
             r.overhang = v.max(0.0);
         }
     });
+    // Openings (courtyards): sketch one more, or remove them all.
+    let holes = r.holes.len();
+    row(ui, &t!("prop-roof-openings"), |ui| {
+        ui.label(holes.to_string());
+        if ui.button(t!("action-roof-add-opening")).clicked() {
+            state.set_tool(crate::tools::Tool::RoofOpening { roof: id });
+            state.message = t!("hint-roof-opening");
+        }
+        if holes > 0 && ui.button(t!("action-roof-remove-openings")).clicked() {
+            crate::engine_edit::element(state, id, None, |e| {
+                if let ElementKind::Roof(r) = &mut e.kind {
+                    r.holes.clear();
+                }
+            });
+        }
+    });
     // Shape: 0 flat, 1 shed, 2 gable, 3 hip.
     let index = |shape: RoofShape| match shape {
         RoofShape::Flat => 0,

@@ -315,3 +315,36 @@ fn wall_tool_has_an_arc_mode() {
     harness.run();
     assert!(!harness.state().wall_arc);
 }
+
+/// A roof gets an opening (a courtyard) sketched inside it; one outside is refused.
+#[test]
+fn roof_openings_are_added_inside_the_roof() {
+    let mut state = sample_state();
+    let (roof, footprint) = state
+        .project()
+        .elements
+        .values()
+        .find_map(|e| match &e.kind {
+            cc_core::ElementKind::Roof(r) => Some((e.id, r.footprint.clone())),
+            _ => None,
+        })
+        .unwrap();
+    let lo = footprint.iter().fold(glam::DVec2::splat(f64::MAX), |a, p| a.min(*p));
+    let hi = footprint.iter().fold(glam::DVec2::splat(f64::MIN), |a, p| a.max(*p));
+    let c = (lo + hi) * 0.5;
+    let square = |c: glam::DVec2| {
+        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].iter().map(|&(x, y)| c + glam::DVec2::new(x, y)).collect()
+    };
+    let holes = |state: &AppState| match &state.project().element(roof).unwrap().kind {
+        cc_core::ElementKind::Roof(r) => r.holes.len(),
+        _ => 0,
+    };
+    state.set_tool(crate::tools::Tool::RoofOpening { roof });
+    crate::tools::add_roof_opening(&mut state, roof, square(hi + glam::DVec2::splat(5.0)));
+    assert_eq!(holes(&state), 0, "outside the roof");
+    crate::tools::add_roof_opening(&mut state, roof, square(c));
+    assert_eq!(holes(&state), 1);
+    assert_eq!(state.tool, crate::tools::Tool::Select);
+    state.sync();
+    assert!(state.session.geom().roof_ridges.contains_key(&roof));
+}

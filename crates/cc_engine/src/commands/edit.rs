@@ -57,6 +57,9 @@ impl Command for ElementSet {
             }
             super::create::check_arc(p, type_id.unwrap_or(element.type_id), w)?;
         }
+        if let Some(cc_core::ElementKind::Roof(r)) = kind.as_ref() {
+            super::create::check_roof_holes(r)?;
+        }
         let hosted: Vec<_> = p.hosted_by(id).map(|h| h.id).collect();
         edit(s, t!("tx-modify"), |e| {
             if let Some(level) = level {

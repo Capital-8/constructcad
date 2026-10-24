@@ -131,7 +131,9 @@ impl Element {
             }
             ElementKind::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
             ElementKind::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
-            ElementKind::Roof(r) => r.footprint.iter_mut().for_each(|p| *p += delta),
+            ElementKind::Roof(r) => {
+                r.footprint.iter_mut().chain(r.holes.iter_mut().flatten()).for_each(|p| *p += delta)
+            }
             ElementKind::Room(r) => r.position += delta,
             ElementKind::Grid(g) => {
                 g.start += delta;
@@ -393,6 +395,26 @@ pub struct Roof {
     pub base_offset: f64,
     pub overhang: f64,
     pub shape: RoofShape,
+    /// Openings through the roof (courtyards), closed outlines inside the
+    /// footprint; pitched roofs slope down to their eaves too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<DVec2>>,
+}
+
+impl Roof {
+    /// A roof over `footprint` with no openings.
+    pub fn new(footprint: Vec<DVec2>, base_offset: f64, overhang: f64, shape: RoofShape) -> Self {
+        Self { footprint, base_offset, overhang, shape, holes: Vec::new() }
+    }
+
+    /// Plan area: the footprint less its openings.
+    pub fn area(&self) -> f64 {
+        let area = |p: &[DVec2]| {
+            let n = p.len();
+            (0..n).map(|i| p[i].perp_dot(p[(i + 1) % n])).sum::<f64>().abs() * 0.5
+        };
+        (area(&self.footprint) - self.holes.iter().map(|h| area(h)).sum::<f64>()).max(0.0)
+    }
 }
 
 /// A room: the space enclosed by room-bounding walls around `position`.

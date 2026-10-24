@@ -223,6 +223,7 @@ tool-window = Вікно
 tool-floor = Перекриття
 tool-ceiling = Стеля
 tool-roof = Дах
+tool-roof-opening = Отвір у даху
 tool-section = Розріз
 
 # Дії
@@ -272,6 +273,7 @@ hint-wall-arc = Клацніть початок і кінець дуги, пот
 hint-wall-arc-point = Клацніть точку на дузі
 hint-hosted = Наведіть курсор на стіну та клацніть · клавіша пробілу змінює бік прорізу
 hint-sketch = Клацайте вершини контуру · щоб завершити, клацніть першу точку або натисніть Enter · Backspace видаляє останню вершину
+hint-roof-opening = Клацайте вершини отвору (внутрішнього двору) всередині даху · щоб завершити, клацніть першу точку або натисніть Enter
 hint-from-walls = Створює контур за замкненими стінами на поточному рівні
 
 # Панель параметрів
@@ -362,6 +364,9 @@ prop-sill = Висота підвіконня
 prop-flip-facing = Розвернути напрямок
 prop-flip-hand = Змінити бік відкривання
 prop-overhang = Звис
+prop-roof-openings = Отвори
+action-roof-add-opening = Додати отвір
+action-roof-remove-openings = Видалити отвори
 prop-roof-shape = Форма
 prop-slope = Ухил
 prop-direction = Напрямок

@@ -128,6 +128,88 @@ impl Body {
     }
 }
 
+/// Outline loops (the outer one first, counter-clockwise; then openings)
+/// and slope of a roof body: its vertical faces stand on the outline, its
+/// sloped faces share one slope (0 when there are none); also the uphill
+/// direction of the first upward sloped face. `None` when the faces do not
+/// close into loops or slopes differ.
+fn roof_outline(faces: &[Vec<DVec3>]) -> Option<(Vec<Vec<DVec2>>, f64, Option<DVec2>)> {
+    let mut segments: Vec<(DVec2, DVec2)> = Vec::new();
+    let mut slope: Option<f64> = None;
+    let mut uphill: Option<DVec2> = None;
+    for f in faces.iter().take(100_000) {
+        let n = f.len();
+        if n < 3 {
+            continue;
+        }
+        let normal: DVec3 = (0..n).map(|i| f[i].cross(f[(i + 1) % n])).sum();
+        let len = normal.length();
+        if !len.is_finite() || len <= 1e-12 {
+            continue;
+        }
+        let normal = normal / len;
+        let run = normal.truncate().length();
+        if normal.z.abs() < 1e-9 {
+            // A vertical face: its plan extent along its own direction.
+            let dir = normal.truncate().perp().normalize_or_zero();
+            let (lo, hi) = f.iter().map(|p| p.truncate()).fold((None::<DVec2>, None::<DVec2>), |(lo, hi), p| {
+                let t = p.dot(dir);
+                (Some(lo.filter(|l| l.dot(dir) <= t).unwrap_or(p)), Some(hi.filter(|h| h.dot(dir) >= t).unwrap_or(p)))
+            });
+            if let (Some(a), Some(b)) = (lo, hi)
+                && a.distance(b) > 1e-6
+            {
+                segments.push((a, b));
+            }
+        } else if run > 1e-9 {
+            let s = run / normal.z.abs();
+            if normal.z > 0.0 && uphill.is_none() {
+                uphill = (-normal.truncate()).try_normalize();
+            }
+            match slope {
+                Some(x) if (x - s).abs() > 1e-6 * x.max(1.0) => return None,
+                _ => slope = Some(s),
+            }
+        }
+    }
+    // Chain the plan segments into loops (each point joins two segments).
+    let tol = 1e-6;
+    let mut loops: Vec<Vec<DVec2>> = Vec::new();
+    let mut rest = segments;
+    let mut guard = rest.len() + 1;
+    while let Some((a, b)) = rest.pop() {
+        let mut ring = vec![a];
+        let mut at = b;
+        while at.distance(a) > tol && guard > 0 {
+            guard -= 1;
+            let i = rest.iter().position(|(p, q)| p.distance(at) <= tol || q.distance(at) <= tol)?;
+            let (p, q) = rest.swap_remove(i);
+            ring.push(at);
+            at = if p.distance(at) <= tol { q } else { p };
+        }
+        // Points where the outline goes straight on are not corners.
+        let n = ring.len();
+        let ring: Vec<DVec2> = (0..n)
+            .filter(|&i| {
+                let (p, c, q) = (ring[(i + n - 1) % n], ring[i], ring[(i + 1) % n]);
+                (c - p).perp_dot(q - c).abs() > 1e-9 * (c - p).length() * (q - c).length() || (c - p).dot(q - c) < 0.0
+            })
+            .map(|i| ring[i])
+            .collect();
+        if ring.len() >= 3 && polygon::area(&ring) > 1e-6 {
+            loops.push(ring);
+        }
+    }
+    if loops.is_empty() {
+        return None;
+    }
+    loops.sort_by(|a, b| polygon::area(b).total_cmp(&polygon::area(a)));
+    if let Some(outer) = loops.first_mut() {
+        *outer = polygon::ccw(outer);
+    }
+    Some((loops, slope.unwrap_or(0.0), uphill))
+}
+
 /// An arc wall: an axis on a circular arc and a footprint whose points all
 /// lie on two circles concentric with it, at equal distances from the axis.
 /// Returns its ends, bulge and thickness.
@@ -1136,6 +1218,41 @@ impl<'a> Importer<'a> {
         if let Some((footprint, z0, _, thickness)) = Self::sketch(&body, false) {
             return self.add_roof(id, e, footprint, z0, thickness, RoofShape::Flat);
         }
+        // Roofs as written by this program: one closed body whose vertical
+        // faces (eaves and gables) outline the roof and its openings, and
+        // whose sloped faces share one slope.
+        if matches!(predefined, "GABLE_ROOF" | "HIP_ROOF" | "FLAT_ROOF" | "SHED_ROOF")
+            && let [solid] = body.solids.as_slice()
+            && let Some((loops, slope, uphill)) = roof_outline(&solid.mesh)
+            && let Some((z0, z1)) = body.z_range()
+        {
+            let mut loops = loops.into_iter();
+            if let Some(outer) = loops.next() {
+                let shape = match predefined {
+                    "HIP_ROOF" if slope > 0.0 => RoofShape::Hip { slope },
+                    "GABLE_ROOF" if slope > 0.0 => {
+                        let n = outer.len();
+                        let longest = (0..n)
+                            .map(|i| outer[(i + 1) % n] - outer[i])
+                            .max_by(|a, b| a.length().total_cmp(&b.length()))
+                            .unwrap_or(DVec2::X);
+                        RoofShape::Gable { slope, ridge_deg: longest.y.atan2(longest.x).to_degrees() }
+                    }
+                    "SHED_ROOF" if slope > 0.0 => {
+                        let d = uphill.unwrap_or(DVec2::X);
+                        RoofShape::Shed { slope, direction_deg: d.y.atan2(d.x).to_degrees() }
+                    }
+                    _ => RoofShape::Flat,
+                };
+                let thickness = match shape {
+                    RoofShape::Flat => z1 - z0,
+                    _ if layered > 0.0 => layered,
+                    _ => 0.15,
+                };
+                let holes: Vec<Vec<DVec2>> = loops.collect();
+                return self.add_roof_with_holes(id, e, outer, holes, z0, thickness, shape);
+            }
+        }
         // Pitched roofs as written by this program (one body with the roof
         // shape named): footprint hull, slope from the rise over the half width.
         // Other bodies keep their exact geometry as generic objects.
@@ -1187,6 +1304,20 @@ impl<'a> Importer<'a> {
         thickness: f64,
         shape: RoofShape,
     ) -> bool {
+        self.add_roof_with_holes(id, e, footprint, Vec::new(), z0, thickness, shape)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn add_roof_with_holes(
+        &mut self,
+        id: u32,
+        e: &Entity,
+        footprint: Vec<DVec2>,
+        holes: Vec<Vec<DVec2>>,
+        z0: f64,
+        thickness: f64,
+        shape: RoofShape,
+    ) -> bool {
         if thickness < 1e-3 {
             return false;
         }
@@ -1202,7 +1333,8 @@ impl<'a> Importer<'a> {
             |d| matches!(d, TypeData::Roof { layers } if (layers.iter().map(|l| l.thickness).sum::<f64>() - thickness).abs() < TYPE_TOL),
             || TypeData::Roof { layers },
         );
-        let roof = Roof { footprint, base_offset: z0 - elevation, overhang: 0.0, shape };
+        let mut roof = Roof::new(footprint, z0 - elevation, 0.0, shape);
+        roof.holes = holes;
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Roof(roof));
         true
     }

@@ -223,6 +223,7 @@ tool-window = Fenster
 tool-floor = Geschossdecke
 tool-ceiling = Unterdecke
 tool-roof = Dach
+tool-roof-opening = Dachöffnung
 tool-section = Schnitt
 
 # Aktionen
@@ -272,6 +273,7 @@ hint-wall-arc = Anfang und Ende des Bogens klicken, dann einen Punkt auf dem Bog
 hint-wall-arc-point = Einen Punkt auf dem Bogen klicken
 hint-hosted = Über eine Wand fahren und klicken · Leertaste spiegelt die Öffnung
 hint-sketch = Die Eckpunkte klicken · zum Abschließen den ersten Punkt klicken oder Enter drücken · Rücktaste entfernt den letzten
+hint-roof-opening = Die Eckpunkte der Öffnung (Innenhof) im Dach klicken · zum Abschließen den ersten Punkt klicken oder Enter drücken
 hint-from-walls = Erstellt die Begrenzung aus den geschlossenen Wänden dieser Ebene
 
 # Optionsleiste
@@ -362,6 +364,9 @@ prop-sill = Brüstungshöhe
 prop-flip-facing = Seite spiegeln
 prop-flip-hand = Anschlag spiegeln
 prop-overhang = Überstand
+prop-roof-openings = Öffnungen
+action-roof-add-opening = Öffnung hinzufügen
+action-roof-remove-openings = Öffnungen entfernen
 prop-roof-shape = Form
 prop-slope = Neigung
 prop-direction = Richtung

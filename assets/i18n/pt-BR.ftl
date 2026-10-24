@@ -223,6 +223,7 @@ tool-window = Janela
 tool-floor = Piso
 tool-ceiling = Forro
 tool-roof = Telhado
+tool-roof-opening = Abertura no telhado
 tool-section = Corte
 
 # Ações
@@ -272,6 +273,7 @@ hint-wall-arc = Clique o início e o fim do arco, depois um ponto do arco · Esc
 hint-wall-arc-point = Clique um ponto do arco
 hint-hosted = Passe o cursor sobre uma parede e clique · Espaço inverte a abertura
 hint-sketch = Clique os vértices · clique no primeiro ponto ou Enter para concluir · Backspace remove o último
+hint-roof-opening = Clique os vértices da abertura (pátio) dentro do telhado · clique no primeiro ponto ou Enter para concluir
 hint-from-walls = Cria o contorno a partir das paredes fechadas deste nível
 
 # Barra de opções
@@ -362,6 +364,9 @@ prop-sill = Peitoril
 prop-flip-facing = Inverter face
 prop-flip-hand = Inverter lado
 prop-overhang = Beiral
+prop-roof-openings = Aberturas
+action-roof-add-opening = Adicionar abertura
+action-roof-remove-openings = Remover aberturas
 prop-roof-shape = Forma
 prop-slope = Inclinação
 prop-direction = Direção

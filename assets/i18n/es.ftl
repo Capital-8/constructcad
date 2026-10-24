@@ -223,6 +223,7 @@ tool-window = Ventana
 tool-floor = Losa
 tool-ceiling = Cielorraso
 tool-roof = Cubierta
+tool-roof-opening = Abertura en la cubierta
 tool-section = Sección
 
 # Acciones
@@ -272,6 +273,7 @@ hint-wall-arc = Haga clic en el inicio y el final del arco, luego en un punto de
 hint-wall-arc-point = Haga clic en un punto del arco
 hint-hosted = Pase el cursor sobre un muro y haga clic · Espacio invierte la abertura
 hint-sketch = Haga clic en los vértices · haga clic en el primer punto o pulse Enter para terminar · Retroceso quita el último
+hint-roof-opening = Haga clic en los vértices de la abertura (patio) dentro de la cubierta · haga clic en el primer punto o pulse Enter para terminar
 hint-from-walls = Crea el contorno a partir de los muros cerrados de este nivel
 
 # Barra de opciones
@@ -362,6 +364,9 @@ prop-sill = Altura del alféizar
 prop-flip-facing = Invertir orientación
 prop-flip-hand = Invertir mano
 prop-overhang = Alero
+prop-roof-openings = Aberturas
+action-roof-add-opening = Añadir abertura
+action-roof-remove-openings = Quitar aberturas
 prop-roof-shape = Forma
 prop-slope = Pendiente
 prop-direction = Dirección

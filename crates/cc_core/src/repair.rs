@@ -284,6 +284,13 @@ impl Project {
                 repairs += crate::properties::repair_sets(&mut c.properties);
             }
         }
+        // Roof openings need three finite points.
+        for e in self.elements.values_mut() {
+            let ElementKind::Roof(r) = &mut e.kind else { continue };
+            let before = r.holes.len();
+            r.holes.retain(|h| h.len() >= 3 && finite_points(h));
+            repairs += before - r.holes.len();
+        }
         // Arc walls: a bulge that is not a number makes the wall straight, one
         // past a nearly full circle is clamped, a negligible one is dropped.
         for e in self.elements.values_mut() {

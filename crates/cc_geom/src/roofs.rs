@@ -1,8 +1,11 @@
-//! Pitched roofs (gable and hip): the roof surface is the lowest of the planes
-//! rising from each sloped eave, so each plane owns the part of the footprint
-//! where it is below all others. For a convex footprint with every eave
-//! sloped this is the hip roof (its straight skeleton); with only the eaves
-//! parallel to the ridge sloped, the other edges become gable ends.
+//! Pitched roofs (gable and hip) over any footprint, courtyards included:
+//! every sloped eave raises a plane and every gable edge a vertical plane;
+//! the weighted straight skeleton ([`crate::skeleton`]) gives the part of
+//! each plane over the footprint, with its hips, valleys and ridges.
+//!
+//! The older construction, kept as a fallback when the skeleton fails,
+//! takes the lowest of the planes rising from each sloped eave: right for
+//! convex footprints only.
 
 use crate::polygon;
 use crate::{Face, Solid};
@@ -134,6 +137,79 @@ pub fn add_pitched_roof(solid: &mut Solid, footprint: &[DVec2], eaves: &[Eave], 
     }
 }
 
+/// Plan area covered by a roof: its outline grown by the overhang, less
+/// its openings shrunk by it.
+pub fn plan_area(r: &cc_core::Roof) -> f64 {
+    let holes: f64 = r
+        .holes
+        .iter()
+        .map(|h| polygon::offset(h, -r.overhang))
+        .filter(|h| h.len() >= 3 && polygon::signed_area(h) > 0.0)
+        .map(|h| polygon::area(&h))
+        .sum();
+    (polygon::area(&polygon::offset(&r.footprint, r.overhang)) - holes).max(0.0)
+}
+
+/// Edge weights of a footprint's loops for the skeleton: sloped eaves move
+/// in by `1 / slope` per unit of height, gables (edges further than 45°
+/// from the ridge direction, when there is one) stay.
+pub fn eave_weights(loops: &[Vec<DVec2>], slope: f64, ridge: Option<DVec2>) -> Vec<Vec<f64>> {
+    loops
+        .iter()
+        .map(|pts| {
+            let n = pts.len();
+            (0..n)
+                .map(|i| {
+                    let dir = (pts[(i + 1) % n] - pts[i]).normalize_or_zero();
+                    let sloped = ridge.is_none_or(|r| dir.dot(r).abs() >= std::f64::consts::FRAC_1_SQRT_2);
+                    if sloped && slope > 0.0 { 1.0 / slope } else { 0.0 }
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Add the closed solid of a roof from its skeleton: each plane's part
+/// lifted from `base` (its underside) with `thickness` measured vertically,
+/// flat tops where the planes never close, and vertical faces along the
+/// eaves and the gables.
+pub fn add_skeleton_roof(solid: &mut Solid, sk: &crate::skeleton::Skeleton, base: f64, thickness: f64) {
+    let up = DVec3::Z * thickness;
+    let mut surface = |pts: &[DVec2], height: &dyn Fn(DVec2) -> f64| {
+        let under: Vec<DVec3> = pts.iter().map(|&p| DVec3::new(p.x, p.y, base + height(p))).collect();
+        let top: Vec<DVec3> = under.iter().map(|&p| p + up).collect();
+        let mut under = under;
+        under.reverse();
+        let (tn, un) = (plane_normal(&top), plane_normal(&under));
+        if tn != DVec3::ZERO && un != DVec3::ZERO {
+            solid.faces.push(Face::new(top, tn));
+            solid.faces.push(Face::new(under, un));
+        }
+    };
+    for (plane, pts) in &sk.faces {
+        surface(pts, &|p| sk.face_height(*plane, p));
+    }
+    for (height, pts) in &sk.flats {
+        surface(pts, &|_| *height);
+    }
+    let mut strip = |a: DVec3, b: DVec3, out: DVec2| {
+        let mut quad = vec![a, b, b + up, a + up];
+        let out = DVec3::new(out.x, out.y, 0.0);
+        if plane_normal(&quad).dot(out) < 0.0 {
+            quad.reverse();
+        }
+        solid.faces.push(Face::new(quad, out));
+    };
+    for plane in sk.planes.iter().filter(|p| p.weight > 0.0) {
+        let a = plane.origin;
+        let b = a + plane.dir * plane.length;
+        strip(DVec3::new(a.x, a.y, base), DVec3::new(b.x, b.y, base), -plane.dir.perp());
+    }
+    for &(p, t0, q, t1, out) in &sk.gables {
+        strip(DVec3::new(p.x, p.y, base + t0), DVec3::new(q.x, q.y, base + t1), out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +247,45 @@ mod tests {
         assert!((s.volume() - 60.0 * thickness).abs() < 1e-9, "{}", s.volume());
         let (_, hi) = s.bounds().unwrap();
         assert!((hi.z - (3.0 + slope * 3.0 + thickness)).abs() < 1e-9);
+    }
+
+    fn skeleton_solid(loops: &[Vec<DVec2>], slope: f64, ridge: Option<DVec2>, thickness: f64) -> Solid {
+        let weights = eave_weights(loops, slope, ridge);
+        let sk = crate::skeleton::skeleton(loops, &weights).unwrap();
+        let mut s = Solid::new(ElementId(1), Category::Roof, [0; 3]);
+        add_skeleton_roof(&mut s, &sk, 3.0, thickness);
+        s
+    }
+
+    #[test]
+    fn skeleton_roofs_are_closed_slabs() {
+        let l = vec![
+            DVec2::new(0.0, 0.0),
+            DVec2::new(10.0, 0.0),
+            DVec2::new(10.0, 4.0),
+            DVec2::new(4.0, 4.0),
+            DVec2::new(4.0, 10.0),
+            DVec2::new(0.0, 10.0),
+        ];
+        let courtyard = [
+            rect(12.0, 12.0),
+            vec![DVec2::new(4.0, 4.0), DVec2::new(4.0, 8.0), DVec2::new(8.0, 8.0), DVec2::new(8.0, 4.0)],
+        ];
+        for (loops, area) in [(vec![rect(10.0, 6.0)], 60.0), (vec![l], 64.0), (courtyard.to_vec(), 128.0)] {
+            for ridge in [None, Some(DVec2::X)] {
+                let s = skeleton_solid(&loops, 0.5, ridge, 0.2);
+                // A constant vertical thickness: plan area x thickness.
+                assert!((s.volume() - area * 0.2).abs() < 1e-6, "{ridge:?}: {} vs {}", s.volume(), area * 0.2);
+            }
+        }
+        // A square hip roof peaks at half its width times the slope.
+        let s = skeleton_solid(&[rect(8.0, 8.0)], 0.6, None, 0.1);
+        let (_, hi) = s.bounds().unwrap();
+        assert!((hi.z - (3.0 + 4.0 * 0.6 + 0.1)).abs() < 1e-9);
+        // Equal slopes: the sloped faces' true areas sum to the footprint over cos(slope).
+        let sk = crate::skeleton::skeleton(&[rect(10.0, 6.0)], &eave_weights(&[rect(10.0, 6.0)], 0.75, None)).unwrap();
+        let true_area: f64 = sk.faces.iter().map(|(_, f)| polygon::area(f) * (1.0f64 + 0.75 * 0.75).sqrt()).sum();
+        assert!((true_area - 60.0 * 1.25).abs() < 1e-9);
     }
 
     #[test]

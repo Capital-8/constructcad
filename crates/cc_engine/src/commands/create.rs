@@ -348,6 +348,48 @@ pub struct RoofCreate {
     /// Overhang beyond the outline, meters (default 0.5).
     #[serde(default)]
     pub overhang: Option<f64>,
+    /// Openings through the roof (courtyards): closed outlines inside the boundary,
+    /// apart from each other. Pitched roofs slope down to their eaves too.
+    #[serde(default)]
+    pub holes: Vec<Vec<Point>>,
+}
+
+/// A roof's openings must be outlines with an area, inside its footprint
+/// (clear of its edges) and apart from each other.
+pub(crate) fn check_roof_holes(roof: &Roof) -> Result<()> {
+    let bad = |m: &str| Err(EngineError::invalid(m.to_string()));
+    for (i, h) in roof.holes.iter().enumerate() {
+        if h.len() < 3 || polygon::area(h) < 1e-4 {
+            return bad("an opening needs at least 3 points and an area");
+        }
+        let crosses = |a: &[DVec2], b: &[DVec2]| {
+            (0..a.len())
+                .any(|i| (0..b.len()).any(|j| segments_cross(a[i], a[(i + 1) % a.len()], b[j], b[(j + 1) % b.len()])))
+        };
+        if !h.iter().all(|p| polygon::contains(&roof.footprint, *p)) || crosses(h, &roof.footprint) {
+            return bad("an opening must lie inside the roof's outline");
+        }
+        for other in roof.holes.iter().skip(i + 1) {
+            if crosses(h, other)
+                || other.iter().any(|p| polygon::contains(h, *p))
+                || h.iter().any(|p| polygon::contains(other, *p))
+            {
+                return bad("openings must not overlap");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether segments `a`-`b` and `c`-`d` cross or touch.
+fn segments_cross(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
+    let side = |p: DVec2, q: DVec2, r: DVec2| (q - p).perp_dot(r - p);
+    let (d1, d2, d3, d4) = (side(c, d, a), side(c, d, b), side(a, b, c), side(a, b, d));
+    if ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0)) {
+        return true;
+    }
+    let on = |p: DVec2, q: DVec2, r: DVec2| polygon::closest_on_segment(p, q, r).0.distance(r) < 1e-6;
+    on(c, d, a) || on(c, d, b) || on(a, b, c) || on(a, b, d)
 }
 
 impl Command for RoofCreate {
@@ -360,7 +402,9 @@ impl Command for RoofCreate {
             None => default_roof_base(s.project(), level),
         };
         let overhang = finite(self.overhang.unwrap_or(0.5), "overhang")?.max(0.0);
-        let roof = Roof { footprint, base_offset, overhang, shape: RoofShape::Flat };
+        let mut roof = Roof::new(footprint, base_offset, overhang, RoofShape::Flat);
+        roof.holes = self.holes.iter().map(|h| points(h)).collect::<Result<_>>()?;
+        check_roof_holes(&roof)?;
         create(s, t!("tx-create-roof"), level, Category::Roof, self.sketch.type_ref.as_ref(), ElementKind::Roof(roof))
     }
 }

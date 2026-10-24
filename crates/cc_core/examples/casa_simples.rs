@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             DVec2::new(-0.075, 6.075),
         ];
         add(e, floor_t, "", ElementKind::Floor(Floor { boundary: slab.clone(), height_offset: 0.0 }));
-        let roof = Roof { footprint: slab, base_offset: 3.0, overhang: 0.5, shape: RoofShape::Hip { slope: 0.35 } };
+        let roof = Roof::new(slab, 3.0, 0.5, RoofShape::Hip { slope: 0.35 });
         add(e, roof_t, "", ElementKind::Roof(roof));
 
         // A stair in the living room up to the upper level.

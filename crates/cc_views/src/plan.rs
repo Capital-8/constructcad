@@ -86,6 +86,13 @@ pub fn plan_of(
                 if r.overhang > 0.0 {
                     d.polyline(&r.footprint, true, LineStyle::Hidden, id);
                 }
+                // Courtyards: the eaves reach over them by the overhang.
+                for hole in &r.holes {
+                    d.polyline(&polygon::offset(hole, -r.overhang), true, LineStyle::Projection, id);
+                    if r.overhang > 0.0 {
+                        d.polyline(hole, true, LineStyle::Hidden, id);
+                    }
+                }
                 for &(a, b) in geom.roof_ridges.get(&e.id).into_iter().flatten() {
                     d.line(a, b, LineStyle::Projection, id);
                 }

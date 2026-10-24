@@ -1642,7 +1642,10 @@ impl<'a> Exporter<'a> {
                     "CEILING",
                 )
             }
-            ElementKind::Roof(r) if matches!(r.shape, RoofShape::Gable { .. } | RoofShape::Hip { .. }) => {
+            // Pitched roofs, and any roof with openings, as their computed solid.
+            ElementKind::Roof(r)
+                if matches!(r.shape, RoofShape::Gable { .. } | RoofShape::Hip { .. }) || !r.holes.is_empty() =>
+            {
                 self.write_pitched_roof(e, r, storey);
                 return;
             }
@@ -1729,7 +1732,7 @@ impl<'a> Exporter<'a> {
                 );
             }
             ElementKind::Roof(r) => {
-                let projected = polygon::area(&polygon::offset(&r.footprint, r.overhang));
+                let projected = cc_geom::roofs::plan_area(r);
                 let slope = match r.shape {
                     RoofShape::Flat => 0.0,
                     RoofShape::Shed { slope, .. } | RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } => slope,
@@ -1745,7 +1748,7 @@ impl<'a> Exporter<'a> {
         }
     }
 
-    /// Gable and hip roofs as a faceted B-rep of the computed roof solid.
+    /// Gable and hip roofs (and roofs with openings) as a faceted B-rep of the computed roof solid.
     fn write_pitched_roof(&mut self, e: &Element, r: &cc_core::Roof, storey: Id) {
         let project = self.project;
         let geom = self.geom;
@@ -1760,16 +1763,21 @@ impl<'a> Exporter<'a> {
         let style = self.material_style(ty.main_material());
         self.styled(body, style);
         let shape = self.shape_of_type(vec![body], None, "Brep");
-        let kind = if matches!(r.shape, RoofShape::Hip { .. }) { "HIP_ROOF" } else { "GABLE_ROOF" };
+        let kind = match r.shape {
+            RoofShape::Hip { .. } => "HIP_ROOF",
+            RoofShape::Gable { .. } => "GABLE_ROOF",
+            RoofShape::Shed { .. } => "SHED_ROOF",
+            RoofShape::Flat => "FLAT_ROOF",
+        };
         let mut attrs = self.element_args(e, placement, shape);
         attrs.push(Value::Enum(kind));
         let product = self.w.add("IFCROOF", attrs);
         self.products.insert(e.id, product);
         self.register(e, product);
-        let projected = polygon::area(&polygon::offset(&r.footprint, r.overhang));
+        let projected = cc_geom::roofs::plan_area(r);
         let slope = match r.shape {
-            RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } => slope,
-            _ => 0.0,
+            RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } | RoofShape::Shed { slope, .. } => slope,
+            RoofShape::Flat => 0.0,
         };
         self.quantities(
             e,

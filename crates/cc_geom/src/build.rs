@@ -660,32 +660,52 @@ impl ModelGeometry {
                     s.add_prism(&c.boundary, |_| bottom, |_| bottom + thk);
                 }
                 ElementKind::Roof(r) => {
-                    let fp = polygon::offset(&r.footprint, r.overhang);
+                    let fp = polygon::ccw(&polygon::offset(&r.footprint, r.overhang));
+                    // Openings shrink by the overhang (the eaves reach over them), clockwise.
+                    let holes: Vec<Vec<DVec2>> = r
+                        .holes
+                        .iter()
+                        .map(|h| {
+                            let mut h = polygon::offset(h, -r.overhang);
+                            h.reverse();
+                            h
+                        })
+                        .filter(|h| h.len() >= 3 && polygon::signed_area(h) < 0.0)
+                        .collect();
                     let base = level_z + r.base_offset;
                     match r.shape {
-                        RoofShape::Flat => s.add_prism(&fp, |_| base, |_| base + thk),
+                        RoofShape::Flat => s.add_prism_with_holes(&fp, &holes, |_| base, |_| base + thk),
                         RoofShape::Shed { slope, direction_deg } => {
                             let a = direction_deg.to_radians();
                             let d = DVec2::new(a.cos(), a.sin());
                             let min = fp.iter().map(|p| p.dot(d)).fold(f64::INFINITY, f64::min);
                             let vertical_thk = thk * (1.0 + slope * slope).sqrt();
                             let bottom = move |p: DVec2| base + slope * (p.dot(d) - min);
-                            s.add_prism(&fp, bottom, move |p| bottom(p) + vertical_thk);
+                            s.add_prism_with_holes(&fp, &holes, bottom, move |p| bottom(p) + vertical_thk);
                         }
                         RoofShape::Gable { slope, .. } | RoofShape::Hip { slope } => {
-                            let fp = polygon::ccw(&fp);
                             let ridge = match r.shape {
                                 RoofShape::Gable { ridge_deg, .. } => Some(DVec2::from_angle(ridge_deg.to_radians())),
                                 _ => None,
                             };
-                            let eaves = crate::roofs::sloped_eaves(&fp, ridge);
-                            if eaves.is_empty() {
-                                s.add_prism(&fp, |_| base, |_| base + thk);
-                            } else {
-                                let vertical_thk = thk * (1.0 + slope * slope).sqrt();
-                                crate::roofs::add_pitched_roof(&mut s, &fp, &eaves, slope, base, vertical_thk);
-                                let regions = crate::roofs::roof_regions(&fp, &eaves);
-                                self.roof_ridges.insert(e.id, crate::roofs::ridge_lines(&fp, &regions));
+                            let vertical_thk = thk * (1.0 + slope * slope).sqrt();
+                            let mut loops = vec![fp.clone()];
+                            loops.extend(holes.iter().cloned());
+                            let weights = crate::roofs::eave_weights(&loops, slope, ridge);
+                            let sloped = weights.iter().flatten().any(|w| *w > 0.0);
+                            match crate::skeleton::skeleton(&loops, &weights) {
+                                Ok(sk) if sloped => {
+                                    crate::roofs::add_skeleton_roof(&mut s, &sk, base, vertical_thk);
+                                    self.roof_ridges.insert(e.id, sk.lines);
+                                }
+                                // Should the skeleton fail, the lowest planes of the outline.
+                                Err(_) if sloped && holes.is_empty() => {
+                                    let eaves = crate::roofs::sloped_eaves(&fp, ridge);
+                                    crate::roofs::add_pitched_roof(&mut s, &fp, &eaves, slope, base, vertical_thk);
+                                    let regions = crate::roofs::roof_regions(&fp, &eaves);
+                                    self.roof_ridges.insert(e.id, crate::roofs::ridge_lines(&fp, &regions));
+                                }
+                                _ => s.add_prism_with_holes(&fp, &holes, |_| base, |_| base + thk),
                             }
                         }
                     }

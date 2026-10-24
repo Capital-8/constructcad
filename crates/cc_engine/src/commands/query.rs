@@ -261,6 +261,13 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("total_length".into(), json!(set.total_length()));
         derived.insert("weight".into(), json!(set.weight()));
     }
+    if let Some(lines) = geom.roof_ridges.get(&id) {
+        // Ridges, hips and valleys in plan.
+        derived.insert("ridges".into(), json!(lines.iter().map(|(a, b)| [[a.x, a.y], [b.x, b.y]]).collect::<Vec<_>>()));
+    }
+    if let ElementKind::Roof(r) = &e.kind {
+        derived.insert("plan_area".into(), json!(cc_geom::roofs::plan_area(r)));
+    }
     if let Some(boundary) = geom.rooms.get(&id) {
         derived.insert("area".into(), json!(polygon::area(boundary)));
         derived.insert("perimeter".into(), json!(polygon::perimeter(boundary)));

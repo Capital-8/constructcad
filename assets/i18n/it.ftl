@@ -223,6 +223,7 @@ tool-window = Finestra
 tool-floor = Solaio
 tool-ceiling = Controsoffitto
 tool-roof = Copertura
+tool-roof-opening = Apertura in copertura
 tool-section = Sezione
 
 # Azioni
@@ -272,6 +273,7 @@ hint-wall-arc = Fai clic sull'inizio e sulla fine dell'arco, poi su un punto del
 hint-wall-arc-point = Fai clic su un punto dell'arco
 hint-hosted = Passa sopra un muro e fai clic · Spazio inverte l'apertura
 hint-sketch = Fai clic sui vertici · fai clic sul primo punto o premi Enter per finire · Backspace rimuove l'ultimo
+hint-roof-opening = Fai clic sui vertici dell'apertura (cortile) dentro la copertura · fai clic sul primo punto o premi Enter per finire
 hint-from-walls = Crea il contorno dai muri chiusi di questo livello
 
 # Barra delle opzioni
@@ -362,6 +364,9 @@ prop-sill = Altezza davanzale
 prop-flip-facing = Inverti lato
 prop-flip-hand = Inverti verso di apertura
 prop-overhang = Sporto
+prop-roof-openings = Aperture
+action-roof-add-opening = Aggiungi apertura
+action-roof-remove-openings = Rimuovi aperture
 prop-roof-shape = Forma
 prop-slope = Pendenza
 prop-direction = Direzione

@@ -247,6 +247,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             ElementKind::Foundation(_) => {
                 geom.foundations.get(&e.id).map_or(Value::Missing, |g| Value::Area(polygon::area(&g.footprint)))
             }
+            ElementKind::Roof(r) => Value::Area(r.area()),
             _ => e.sketch().map_or(Value::Missing, |s| Value::Area(polygon::area(s))),
         },
         F::Perimeter => match &e.kind {

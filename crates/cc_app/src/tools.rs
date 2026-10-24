@@ -106,6 +106,10 @@ pub enum Tool {
     AddLeader {
         id: ElementId,
     },
+    /// Sketch an opening (a courtyard) in the roof `roof`.
+    RoofOpening {
+        roof: ElementId,
+    },
 }
 
 impl Tool {
@@ -152,6 +156,7 @@ impl Tool {
             Tool::MatchType => "tool-match-type",
             Tool::Text { .. } => "tool-text",
             Tool::AddLeader { .. } => "tool-add-leader",
+            Tool::RoofOpening { .. } => "tool-roof-opening",
         }
     }
 
@@ -812,6 +817,11 @@ pub fn handle(
             sketch_tool(ui, resp, painter, state, level, *category, *type_id, xf)
         }
         (Tool::Section, level) => section_tool(ui, resp, painter, state, level, xf),
+        (Tool::RoofOpening { roof }, Some(level)) => {
+            if let Some(pts) = sketch_input(ui, resp, painter, state, level, xf) {
+                add_roof_opening(state, *roof, pts);
+            }
+        }
         (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
         (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Column { type_id }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
@@ -2027,6 +2037,40 @@ fn sketch_tool(
     type_id: ElementTypeId,
     xf: &Xf,
 ) {
+    if let Some(pts) = sketch_input(ui, resp, painter, state, level, xf) {
+        finish_sketch(state, level, category, type_id, pts);
+    }
+}
+
+/// Add the sketched outline `pts` as an opening of `roof` (refused, with a
+/// message, when it is not inside the roof or overlaps another opening).
+pub fn add_roof_opening(state: &mut AppState, roof: ElementId, pts: Vec<DVec2>) {
+    if pts.len() < 3 || polygon::area(&pts) < 1e-4 {
+        state.message = t!("msg-sketch-invalid");
+        return;
+    }
+    let added = crate::engine_edit::element(state, roof, None, |e| {
+        if let ElementKind::Roof(r) = &mut e.kind {
+            r.holes.push(pts);
+        }
+    });
+    state.interaction.points.clear();
+    if added {
+        state.set_tool(Tool::Select);
+        state.selection = BTreeSet::from([roof]);
+    }
+}
+
+/// Points of an outline sketched with clicks: closing it (a click on the
+/// first point, or Enter) returns them.
+fn sketch_input(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    xf: &Xf,
+) -> Option<Vec<DVec2>> {
     if ui.input(|i| i.key_pressed(Key::Backspace)) && state.typed.is_empty() {
         state.interaction.points.pop();
     }
@@ -2057,18 +2101,18 @@ fn sketch_tool(
         point = Some(s.point);
     }
     if finish_key && pts.len() >= 3 {
-        finish_sketch(state, level, category, type_id, pts);
-        return;
+        return Some(pts);
     }
     if resp.clicked()
         && let Some(p) = point
     {
         if pts.len() >= 3 && p.distance(pts[0]) * xf.scale < SNAP_PX {
-            finish_sketch(state, level, category, type_id, pts);
+            return Some(pts);
         } else if pts.last().is_none_or(|l| l.distance(p) > 1e-3) {
             state.interaction.points.push(p);
         }
     }
+    None
 }
 
 pub fn finish_sketch(
@@ -2092,7 +2136,7 @@ pub fn finish_sketch(
         Category::Floor => run_create(state, create::FloorCreate { sketch }),
         Category::Ceiling => run_create(state, create::CeilingCreate { sketch }),
         Category::Foundation => run_create(state, cc_engine::commands::foundation::FoundationSlabCreate { sketch }),
-        _ => run_create(state, create::RoofCreate { sketch, overhang: None }),
+        _ => run_create(state, create::RoofCreate { sketch, overhang: None, holes: Vec::new() }),
     };
     state.interaction.points.clear();
 }

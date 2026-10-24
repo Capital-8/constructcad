@@ -223,6 +223,7 @@ tool-window = Okno
 tool-floor = Strop
 tool-ceiling = Sufit
 tool-roof = Dach
+tool-roof-opening = Otwór w dachu
 tool-section = Przekrój
 
 # Akcje
@@ -272,6 +273,7 @@ hint-wall-arc = Kliknij początek i koniec łuku, a potem punkt na łuku · Esc 
 hint-wall-arc-point = Kliknij punkt na łuku
 hint-hosted = Najedź na ścianę i kliknij · Spacja odwraca otwór
 hint-sketch = Kliknij wierzchołki · kliknij pierwszy punkt lub naciśnij Enter, aby zakończyć · Backspace usuwa ostatni
+hint-roof-opening = Kliknij wierzchołki otworu (dziedzińca) wewnątrz dachu · kliknij pierwszy punkt lub naciśnij Enter, aby zakończyć
 hint-from-walls = Tworzy obrys z zamkniętych ścian na tym poziomie
 
 # Pasek opcji
@@ -362,6 +364,9 @@ prop-sill = Wysokość parapetu
 prop-flip-facing = Odwróć stronę
 prop-flip-hand = Odwróć kierunek otwierania
 prop-overhang = Okap
+prop-roof-openings = Otwory
+action-roof-add-opening = Dodaj otwór
+action-roof-remove-openings = Usuń otwory
 prop-roof-shape = Kształt
 prop-slope = Nachylenie
 prop-direction = Kierunek
