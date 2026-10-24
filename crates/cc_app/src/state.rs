@@ -121,6 +121,8 @@ pub struct AppState {
     pub project_open: bool,
     /// Recently opened or saved projects, most recent first.
     pub recent: Vec<std::path::PathBuf>,
+    /// Update checks and the notice of a newer release.
+    pub updates: crate::update::Updates,
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
     /// Samples whose thumbnail was already requested this session.
     pub requested_samples: std::collections::BTreeSet<&'static str>,
@@ -175,6 +177,7 @@ impl AppState {
             show_home: false,
             project_open: true,
             recent: Vec::new(),
+            updates: Default::default(),
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),
             clipboard: Default::default(),
@@ -194,10 +197,12 @@ impl AppState {
         textures.append(&mut self.textures_to_free);
         let generation = self.generation + 1;
         let recent = std::mem::take(&mut self.recent);
+        let updates = std::mem::take(&mut self.updates);
         let jobs = std::mem::take(&mut self.thumbnail_jobs);
         let requested = std::mem::take(&mut self.requested_samples);
         *self = Self::new(doc);
         self.recent = recent;
+        self.updates = updates;
         self.thumbnail_jobs = jobs;
         self.requested_samples = requested;
         self.textures_to_free = textures;

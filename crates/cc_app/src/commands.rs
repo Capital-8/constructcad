@@ -24,6 +24,7 @@ pub enum UiCommand {
     ExportPdf,
     ExportSvg,
     About,
+    CheckUpdates,
     Undo,
     Redo,
     Default3D,
@@ -142,6 +143,7 @@ impl UiCommand {
             ExportPdf,
             ExportSvg,
             About,
+            CheckUpdates,
             Undo,
             Redo,
             Default3D,
@@ -220,6 +222,7 @@ impl UiCommand {
             ExportIfc => Icon::Export,
             ExportPdf | ExportSvg | Sheet => Icon::Sheet,
             About => Icon::About,
+            CheckUpdates => Icon::Update,
             Undo => Icon::Undo,
             Redo => Icon::Redo,
             Default3D | New3D => Icon::View3D,
@@ -327,6 +330,7 @@ impl UiCommand {
             ExportPdf => t!("action-export-pdf"),
             ExportSvg => t!("action-export-svg"),
             About => t!("dlg-about"),
+            CheckUpdates => t!("action-check-updates"),
             Undo => t!("action-undo"),
             Redo => t!("action-redo"),
             Default3D => t!("action-default-3d"),
@@ -440,6 +444,7 @@ impl UiCommand {
             ExportPdf => t!("cmd-desc-export-pdf"),
             ExportSvg => t!("cmd-desc-export-svg"),
             About => t!("cmd-desc-about"),
+            CheckUpdates => t!("cmd-desc-check-updates"),
             Undo => t!("cmd-desc-undo"),
             Redo => t!("cmd-desc-redo"),
             Default3D => t!("cmd-desc-default-3d"),
@@ -675,7 +680,7 @@ impl UiCommand {
         use UiCommand::*;
         let project_open = state.project_open && !state.show_home;
         match self {
-            Home | New | Open | ImportIfc | About | ToggleRibbon | CommandPalette => return None,
+            Home | New | Open | ImportIfc | About | CheckUpdates | ToggleRibbon | CommandPalette => return None,
             _ if !project_open => return Some(t!("why-no-project")),
             _ => {}
         }
@@ -866,6 +871,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         ExportPdf => actions::export_sheet(state, actions::SheetFormat::Pdf),
         ExportSvg => actions::export_sheet(state, actions::SheetFormat::Svg),
         About => state.dialogs.about = true,
+        CheckUpdates => state.updates.start(ctx, true),
         Undo => {
             actions::run_command(state, cc_engine::commands::project::Undo {});
         }

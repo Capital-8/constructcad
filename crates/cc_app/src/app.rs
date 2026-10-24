@@ -25,6 +25,12 @@ const LANGUAGE_KEY: &str = "language";
 const RECENT_KEY: &str = "recent_files";
 /// eframe storage key of the collapsed ribbon preference ("1" when collapsed).
 const RIBBON_KEY: &str = "ribbon_collapsed";
+/// eframe storage key of the automatic update check preference ("0" when off).
+const UPDATE_AUTO_KEY: &str = "update_check_auto";
+/// eframe storage key of the time of the last update check (seconds since the Unix epoch).
+const UPDATE_LAST_KEY: &str = "update_check_last";
+/// eframe storage key of the version whose update notice the user skipped.
+const UPDATE_SKIPPED_KEY: &str = "update_skipped_version";
 
 pub struct ConstructApp {
     state: AppState,
@@ -46,6 +52,11 @@ impl ConstructApp {
             state.recent = recent.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
         }
         state.ribbon_collapsed = cc.storage.and_then(|s| s.get_string(RIBBON_KEY)).is_some_and(|v| v == "1");
+        let stored = |key| cc.storage.and_then(|s| s.get_string(key));
+        state.updates.auto = stored(UPDATE_AUTO_KEY).is_none_or(|v| v != "0");
+        state.updates.last_check = stored(UPDATE_LAST_KEY).and_then(|v| v.parse().ok());
+        state.updates.skipped = stored(UPDATE_SKIPPED_KEY).and_then(|v| crate::update::Version::parse(&v));
+        state.updates.start_if_due(&cc.egui_ctx);
         match path {
             Some(path) => actions::open_path(&mut state, path),
             None => {
@@ -316,11 +327,16 @@ impl eframe::App for ConstructApp {
         let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         storage.set_string(RECENT_KEY, recent.join("\n"));
         storage.set_string(RIBBON_KEY, if self.state.ribbon_collapsed { "1" } else { "0" }.to_string());
+        let updates = &self.state.updates;
+        storage.set_string(UPDATE_AUTO_KEY, if updates.auto { "1" } else { "0" }.to_string());
+        storage.set_string(UPDATE_LAST_KEY, updates.last_check.map(|t| t.to_string()).unwrap_or_default());
+        storage.set_string(UPDATE_SKIPPED_KEY, updates.skipped.map(|v| v.to_string()).unwrap_or_default());
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.state.sync();
+        self.state.updates.poll();
         self.state.follow_selection();
         if !self.state.textures_to_free.is_empty()
             && let Some(rs) = frame.wgpu_render_state()

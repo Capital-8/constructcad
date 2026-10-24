@@ -95,6 +95,14 @@ fn nav_item(ui: &mut Ui, icon: Icon, label: &str, selected: bool) {
 
 fn content(ui: &mut Ui, state: &mut AppState) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        if state.updates.available.is_some() {
+            egui::Frame::new()
+                .fill(PALETTE.accent_soft)
+                .corner_radius(theme::RADIUS)
+                .inner_margin(egui::Margin::symmetric(12, 8))
+                .show(ui, |ui| crate::update::notice(ui, &mut state.updates));
+            ui.add_space(16.0);
+        }
         ui.label(RichText::new(t!("home-recent")).family(theme::semibold()).size(20.0).color(PALETTE.text));
         ui.add_space(20.0);
 

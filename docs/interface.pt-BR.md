@@ -93,6 +93,15 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
 
+## Aviso de atualização
+
+O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa nem instala nada por conta própria.
+
+- **Quando**: ao iniciar, no máximo uma vez por dia, em segundo plano (a janela nunca espera por isso). *Arquivo → Verificar atualizações* (também no diálogo *Sobre*) verifica na hora e informa "está atualizado", a nova versão ou que não foi possível verificar.
+- **O que é contatado**: uma requisição HTTPS à API do GitHub, `https://api.github.com/repos/francisreboucas/constructcad/releases/latest`, que devolve a última versão publicada. A requisição envia os dados usuais de conexão (seu endereço IP) e o agente `ConstructCAD/<versão>`; nenhum dado de projeto, identificador ou informação de uso. Vale para ela a declaração de privacidade do GitHub.
+- **O que aparece**: quando a versão publicada é mais nova que a em uso (pré-lançamentos são ignorados), um aviso aparece na barra de status e na tela inicial: *Baixar* abre a página da versão no navegador, *Ignorar esta versão* esconde o aviso até sair uma versão posterior, e × o esconde até a próxima verificação. Qualquer falha (sem conexão, tempo esgotado, proxy, limite de requisições) é silenciosa.
+- **Como desligar**: desmarque *Verificar atualizações automaticamente* em *Arquivo → Sobre*. A variável de ambiente `CONSTRUCTCAD_NO_UPDATE_CHECK=1` desliga toda verificação, automática ou pedida (útil em CI, quiosques e instalações sem rede). O ConstructCAD guarda a hora da última verificação, a versão ignorada e a opção junto com as outras preferências.
+
 ## Acessibilidade
 
 Os botões do ribbon, os títulos das abas, as setas de rolagem, os itens da paleta, as linhas do navegador, os cartões da tela inicial, os botões de fechar dos diálogos, as seções de propriedades e o botão de início do cubo de vista são desenhados pelo próprio ConstructCAD. Eles informam à interface de acessibilidade do sistema seu papel (botão, item selecionável, cabeçalho recolhível), seu nome e seu estado (habilitado, selecionado, expandido), para que leitores de tela possam anunciá-los.

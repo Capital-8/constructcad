@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- ConstructCAD.app; build-app.sh replaces @VERSION@. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleName</key>
+  <string>ConstructCAD</string>
+  <key>CFBundleDisplayName</key>
+  <string>ConstructCAD</string>
+  <key>CFBundleIdentifier</key>
+  <string>io.github.francisreboucas.constructcad</string>
+  <key>CFBundleExecutable</key>
+  <string>constructcad</string>
+  <key>CFBundleIconFile</key>
+  <string>ConstructCAD</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.graphics-design</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>GPL-3.0-or-later</string>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>ConstructCAD Project</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSHandlerRank</key>
+      <string>Owner</string>
+      <key>CFBundleTypeIconFile</key>
+      <string>ConstructCAD</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>io.github.francisreboucas.constructcad.project</string>
+      </array>
+    </dict>
+  </array>
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>io.github.francisreboucas.constructcad.project</string>
+      <key>UTTypeDescription</key>
+      <string>ConstructCAD Project</string>
+      <key>UTTypeIconFile</key>
+      <string>ConstructCAD</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+        <string>public.content</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>ccad</string>
+        </array>
+        <key>public.mime-type</key>
+        <string>application/x-constructcad</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

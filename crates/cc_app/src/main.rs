@@ -36,21 +36,24 @@ mod type_dialog;
 #[cfg(test)]
 mod ui_tests;
 mod units_dialog;
+mod update;
 mod view3d;
 mod view_cube;
 
 fn main() -> eframe::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     let args = parse_args(std::env::args().skip(1));
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1440.0, 900.0])
-            .with_min_inner_size([900.0, 600.0])
-            .with_title("ConstructCAD")
-            .with_icon(app_icon()),
-        renderer: eframe::Renderer::Wgpu,
-        ..Default::default()
-    };
+    let viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1440.0, 900.0])
+        .with_min_inner_size([900.0, 600.0])
+        .with_title("ConstructCAD")
+        .with_icon(app_icon());
+    // The Wayland app id / X11 class names the desktop file (packaging/linux),
+    // so desktops show its icon. eframe keeps its settings under the same
+    // (lowercased) folder name on Linux, so nothing moves.
+    #[cfg(target_os = "linux")]
+    let viewport = viewport.with_app_id("constructcad");
+    let options = eframe::NativeOptions { viewport, renderer: eframe::Renderer::Wgpu, ..Default::default() };
     eframe::run_native("ConstructCAD", options, Box::new(|cc| Ok(Box::new(app::ConstructApp::new(cc, args)))))
 }
 

@@ -126,3 +126,19 @@ fn mcp_session() {
 fn cc_count() -> usize {
     ccad(&["commands"], "").1.as_array().unwrap().len()
 }
+
+#[test]
+fn version() {
+    for flag in ["--version", "-V"] {
+        let (code, out, err) = ccad(&[flag], "");
+        assert_eq!(code, 0, "{err}");
+        assert_eq!(
+            out,
+            Value::String(format!(
+                "ccad {}
+",
+                env!("CARGO_PKG_VERSION")
+            ))
+        );
+    }
+}

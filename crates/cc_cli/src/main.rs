@@ -34,6 +34,7 @@ Options:
   --save-as <file>       save the project afterwards to <file>
   --lang <code>          language of default names (default: the system's):
                          en, pt-BR, es, fr, de, it, pl or uk-UA
+  -V, --version          the version
   -h, --help             this help
 
 Environment: CCAD_LANG sets the language like --lang.
@@ -53,6 +54,7 @@ fn parse_options(args: Vec<String>) -> Result<Options, String> {
         match a.as_str() {
             "-p" | "--project" => o.project = Some(it.next().ok_or("--project needs a file")?.into()),
             "--save" => o.save = true,
+            "-V" | "--version" => o.rest.push("--version".into()),
             "--save-as" => o.save_as = Some(it.next().ok_or("--save-as needs a file")?.into()),
             "--lang" => {
                 let code = it.next().ok_or("--lang needs a language")?;
@@ -150,6 +152,10 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     };
     match sub.as_str() {
+        "--version" => {
+            println!("ccad {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
         "-h" | "--help" | "help" => {
             print!("{USAGE}");
             ExitCode::SUCCESS

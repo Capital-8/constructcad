@@ -569,7 +569,7 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
             actions::set_language(state, lang);
         });
     });
-    group(ui, t!("group-help"), |ui| command_button(ui, state, UiCommand::About));
+    group(ui, t!("group-help"), |ui| command_buttons(ui, state, &[UiCommand::About, UiCommand::CheckUpdates]));
 }
 
 fn place(category: Category) -> UiCommand {
@@ -1059,7 +1059,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
     });
 }
 
-pub fn status_bar(ui: &mut Ui, state: &AppState) {
+pub fn status_bar(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         if let Some(c) = state.cursor {
             let coords = format!("X {:>9}  Y {:>9}", format::meters(c.x), format::meters(c.y));
@@ -1080,6 +1080,10 @@ pub fn status_bar(ui: &mut Ui, state: &AppState) {
             ui.separator();
         }
         ui.label(theme::muted(&state.message));
+        if state.updates.available.is_some() {
+            ui.separator();
+            crate::update::notice(ui, &mut state.updates);
+        }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let file = state
                 .session

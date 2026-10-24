@@ -29,6 +29,18 @@ Every button's tooltip shows its shortcut, what it does, why it is unavailable w
 |---|---|---|
 | [![Section with cut hatching and levels](docs/screenshots/section.png)](docs/screenshots/section.png) | [![A3 sheet with an elevation and a section](docs/screenshots/sheet.png)](docs/screenshots/sheet.png) | [![Door schedule](docs/screenshots/schedule.png)](docs/screenshots/schedule.png) |
 
+## Installing
+
+Each [release](https://github.com/francisreboucas/constructcad/releases) has installers, plain archives and a `SHA256SUMS.txt` to check them against:
+
+| System | Installer | Archive |
+|---|---|---|
+| Windows (x64) | `constructcad-vX.Y.Z-x86_64.msi`: installs under Program Files with a Start menu shortcut, opens `.ccad` files, and optionally adds `ccad` to the PATH. Newer versions upgrade it in place. | `…-x86_64-pc-windows-msvc.zip` |
+| Linux (x86_64) | `constructcad_X.Y.Z_amd64.deb` (Debian, Ubuntu: `sudo apt install ./constructcad_X.Y.Z_amd64.deb`) or `constructcad-vX.Y.Z-x86_64.AppImage` (`chmod +x` it and run it). Both register the desktop entry and icon; the `.deb` also the `.ccad` file type and `ccad` in `/usr/bin`. | `…-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS | `constructcad-vX.Y.Z-aarch64-apple-darwin.dmg` (Apple silicon) or `…-x86_64-apple-darwin.dmg` (Intel): drag *ConstructCAD* to *Applications*. | `…-apple-darwin.tar.gz` (also has `ccad`) |
+
+The builds are not code-signed yet. On Windows, SmartScreen may warn about an unknown publisher: choose *More info → Run anyway*. On macOS, Gatekeeper blocks the first launch: right-click (Control-click) the app and choose *Open*, or, on macOS 15 and later, open it once and then click *Open Anyway* in *System Settings → Privacy & Security*. The Linux builds need a recent distribution (glibc 2.39, as in Ubuntu 24.04) and a Vulkan or OpenGL driver.
+
 ## Running
 
 Requires a recent stable Rust toolchain (edition 2024).
@@ -42,6 +54,10 @@ cargo run -p cc_core --example casa_simples                      # regenerate th
 ```
 
 The bundled example project was authored in Portuguese, so its view names are in Portuguese.
+
+### Update notice
+
+At startup (at most once a day) the app asks the GitHub API for the latest release and, if it is newer, shows a notice with a link to its page; it never downloads anything. Turn it off in *File → About* or with `CONSTRUCTCAD_NO_UPDATE_CHECK=1`; see [the interface guide](docs/interface.md#update-notice) for what is contacted. `ccad --version` prints the version.
 
 ## Languages
 
