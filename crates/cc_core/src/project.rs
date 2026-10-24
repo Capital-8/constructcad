@@ -53,6 +53,12 @@ pub struct Project {
     /// Plumbing systems and electrical circuits.
     #[serde(default)]
     pub systems: BTreeMap<crate::SystemId, crate::MepSystem>,
+    /// Named view filters (categories and rules), applied by views.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub filters: BTreeMap<crate::FilterId, crate::ViewFilter>,
+    /// View templates.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub templates: BTreeMap<crate::TemplateId, crate::ViewTemplate>,
     next_id: u64,
 }
 
@@ -79,6 +85,8 @@ impl Project {
             joins: Default::default(),
             groups: BTreeMap::new(),
             systems: BTreeMap::new(),
+            filters: BTreeMap::new(),
+            templates: BTreeMap::new(),
             next_id: 1,
         }
     }
@@ -304,7 +312,7 @@ impl Project {
 
         let add_view = |p: &mut Project, name: &str, scale: u32, kind: ViewKind| {
             let id = ViewId(p.alloc_id());
-            p.views.insert(id, View { id, name: name.into(), scale, kind });
+            p.views.insert(id, View::new(id, name, scale, kind));
             id
         };
         let plan = add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::floor_plan(ground));
@@ -833,6 +841,14 @@ impl Project {
 
     pub fn view(&self, id: ViewId) -> Option<&View> {
         self.views.get(&id)
+    }
+
+    pub fn filter(&self, id: crate::FilterId) -> Option<&crate::ViewFilter> {
+        self.filters.get(&id)
+    }
+
+    pub fn template(&self, id: crate::TemplateId) -> Option<&crate::ViewTemplate> {
+        self.templates.get(&id)
     }
 
     /// A fresh mark for a new element: the next number among its category.

@@ -135,7 +135,7 @@ fn segment(
         let pts = circle(s.start, r);
         d.fill(pts.clone(), [color[0], color[1], color[2], 255], Some(e.id));
         d.polyline(&pts, true, style, Some(e.id));
-        d.text(s.start + DVec2::new(r + mm, r + mm), text, 2.0);
+        d.tag_text(s.start + DVec2::new(r + mm, r + mm), text, 2.0, Anchor::LeftBottom, 0.0, Some(e.id));
         return;
     }
     // At least 0.8 mm on paper, so the system's color reads.
@@ -161,7 +161,7 @@ fn segment(
     } else {
         text
     };
-    d.text_at(mid, text, 2.0, Anchor::CenterBottom, angle);
+    d.tag_text(mid, text, 2.0, Anchor::CenterBottom, angle, Some(e.id));
 }
 
 /// Where a symbol is drawn: the device's insertion point and rotation.
@@ -191,7 +191,7 @@ pub(crate) fn symbol(
     id: Option<cc_core::ElementId>,
 ) {
     let style = LineStyle::Projection;
-    let label = |d: &mut Drawing2D, at: DVec2, text: &str| d.text_at(at, text, 2.0, Anchor::Center, 0.0);
+    let label = |d: &mut Drawing2D, at: DVec2, text: &str| d.tag_text(at, text, 2.0, Anchor::Center, 0.0, id);
     match device {
         DeviceKind::Outlet | DeviceKind::DedicatedOutlet => {
             // Base on the wall, apex into the room.
@@ -299,11 +299,13 @@ mod tests {
         let geom = ModelGeometry::build(&doc.project);
         // The run and the elbow where the riser leaves it.
         assert_eq!(geom.solids_of(pipe).count(), 2);
-        let plan = |mep| cc_core::View {
-            id: cc_core::ViewId(999),
-            name: String::new(),
-            scale: 50,
-            kind: ViewKind::FloorPlan { level, cut_height: 1.2, structural: false, structure_tags: false, mep },
+        let plan = |mep| {
+            cc_core::View::new(
+                cc_core::ViewId(999),
+                "",
+                50,
+                ViewKind::FloorPlan { level, cut_height: 1.2, structural: false, structure_tags: false, mep },
+            )
         };
         let d = crate::generate(&doc.project, &geom, &plan(Some(MepDiscipline::Plumbing))).unwrap();
         let texts: Vec<&str> = d

@@ -733,6 +733,15 @@ impl ModelGeometry {
         self.solids_of(id).map(Solid::volume).sum()
     }
 
+    /// The nearest solid along `ray` among the elements `shown` accepts.
+    pub fn pick_where(&self, ray: Ray, shown: &mut dyn FnMut(ElementId) -> bool) -> Option<(ElementId, f64)> {
+        self.solids
+            .iter()
+            .filter_map(|s| s.raycast(ray).map(|t| (s.element, t)))
+            .filter(|(e, _)| shown(*e))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+    }
+
     /// Closest element hit by `ray`, skipping categories in `hidden`.
     pub fn pick(&self, ray: Ray, hidden: &[Category]) -> Option<(ElementId, f64)> {
         self.solids

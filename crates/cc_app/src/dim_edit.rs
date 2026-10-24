@@ -371,7 +371,7 @@ mod tests {
                 .prims
                 .iter()
                 .find_map(|p| match p {
-                    Prim::Line { a, b, element: Some(e), style: cc_views::LineStyle::Cut }
+                    Prim::Line { a, b, element: Some(e), style: cc_views::LineStyle::Cut, .. }
                         if *e == id && ((a.y - b.y).abs() < 1e-9) == horizontal && a.distance(*b) > 1.0 =>
                     {
                         Some((*a, *b))
@@ -499,7 +499,7 @@ fn nearest_along(
     };
     let mut best: Option<f64> = None;
     for prim in &drawing.prims {
-        let Prim::Line { a, b, style, element: Some(e) } = prim else { continue };
+        let Prim::Line { a, b, style, element: Some(e), .. } = prim else { continue };
         let style_ok =
             matches!(style, cc_views::LineStyle::Cut | cc_views::LineStyle::Projection | cc_views::LineStyle::Center);
         if skip.contains(e) || !style_ok || !reference(e) {

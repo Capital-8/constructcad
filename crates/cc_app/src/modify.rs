@@ -74,10 +74,10 @@ fn ghost(drawing: &Drawing2D, ids: &BTreeSet<ElementId>, t: &PlanTransform) -> D
     let mut d = Drawing2D::default();
     for p in &drawing.prims {
         match p {
-            Prim::Line { a, b, style, element: Some(e) } if ids.contains(e) => {
+            Prim::Line { a, b, style, element: Some(e), .. } if ids.contains(e) => {
                 d.line(t.apply(*a), t.apply(*b), *style, Some(*e));
             }
-            Prim::Fill { pts, color, element: Some(e) } if ids.contains(e) && color[3] > 0 => {
+            Prim::Fill { pts, color, element: Some(e), .. } if ids.contains(e) && color[3] > 0 => {
                 d.fill(pts.iter().map(|q| t.apply(*q)).collect(), *color, Some(*e));
             }
             _ => {}

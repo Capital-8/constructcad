@@ -78,10 +78,10 @@ fn trim_lines(
     let prims = std::mem::take(&mut d.prims);
     for prim in prims {
         match prim {
-            Prim::Line { a, b, style, element: Some(id) } if id == element && styles.contains(&style) => {
+            Prim::Line { a, b, style, element: Some(id), pen } if id == element && styles.contains(&style) => {
                 for (p, q) in split(region, a, b) {
                     if keep(style, place(region, p, q)) {
-                        d.prims.push(Prim::Line { a: p, b: q, style, element: Some(id) });
+                        d.prims.push(Prim::Line { a: p, b: q, style, element: Some(id), pen });
                     }
                 }
             }
@@ -98,7 +98,7 @@ pub(crate) fn merge(project: &Project, d: &mut Drawing2D) {
     // Cut regions are the opaque fills of each element.
     let mut regions: BTreeMap<ElementId, Vec<Vec<DVec2>>> = BTreeMap::new();
     for prim in &d.prims {
-        if let Prim::Fill { pts, color, element: Some(id) } = prim
+        if let Prim::Fill { pts, color, element: Some(id), .. } = prim
             && color[3] > 0
         {
             regions.entry(*id).or_default().push(pts.clone());
@@ -113,7 +113,7 @@ pub(crate) fn merge(project: &Project, d: &mut Drawing2D) {
         let same = material(cutting).is_some_and(|m| Some(m) == material(cut));
         // The cut element's outline, hatch and layer lines stop inside the
         // cutting one; its outline along the cutting one's goes when they merge.
-        trim_lines(d, cut, by, &[LineStyle::Cut, LineStyle::Thin], |style, place| match place {
+        trim_lines(d, cut, by, &[LineStyle::Cut, LineStyle::Thin, LineStyle::Hatch], |style, place| match place {
             Place::Inside => false,
             Place::Boundary => !same && style == LineStyle::Cut,
             Place::Outside => true,

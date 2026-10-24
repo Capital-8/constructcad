@@ -26,7 +26,7 @@ pub(crate) fn cut_fill(
     id: Option<ElementId>,
 ) {
     let Some(fill) = project.material(material).map(|m| m.graphics.cut).filter(|f| !f.is_empty()) else {
-        d.fill(poly, POCHE, id);
+        d.cut_fill(poly, POCHE, id);
         return;
     };
     let rgba = |c: [u8; 3]| [c[0], c[1], c[2], 255];
@@ -35,14 +35,14 @@ pub(crate) fn cut_fill(
         (_, Pattern::Solid) => rgba(fill.background_color),
         _ => [255, 255, 255, 255],
     };
-    d.fill(poly.clone(), base, id);
+    d.cut_fill(poly.clone(), base, id);
     for pattern in [fill.background, fill.foreground] {
         if matches!(pattern, Pattern::Solid | Pattern::None) {
             continue;
         }
         for (a, b) in crate::hatch::hatch(pattern, &poly, spacing) {
             // Tagged with the element, so joined geometry can trim them.
-            d.line(a, b, LineStyle::Thin, id);
+            d.line(a, b, LineStyle::Hatch, id);
         }
     }
 }

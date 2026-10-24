@@ -68,15 +68,23 @@ pub fn compose(
         let map = |p: DVec2| vp.center + (p - anchor) * k;
         for prim in &drawing.prims {
             d.prims.push(match prim {
-                Prim::Line { a, b, style, element } => {
-                    Prim::Line { a: map(*a), b: map(*b), style: *style, element: *element }
+                Prim::Line { a, b, style, element, pen } => {
+                    Prim::Line { a: map(*a), b: map(*b), style: *style, element: *element, pen: *pen }
                 }
-                Prim::Fill { pts, color, element } => {
-                    Prim::Fill { pts: pts.iter().map(|p| map(*p)).collect(), color: *color, element: *element }
-                }
-                Prim::Text { pos, text, size, anchor, angle } => {
-                    Prim::Text { pos: map(*pos), text: text.clone(), size: *size, anchor: *anchor, angle: *angle }
-                }
+                Prim::Fill { pts, color, element, cut } => Prim::Fill {
+                    pts: pts.iter().map(|p| map(*p)).collect(),
+                    color: *color,
+                    element: *element,
+                    cut: *cut,
+                },
+                Prim::Text { pos, text, size, anchor, angle, element } => Prim::Text {
+                    pos: map(*pos),
+                    text: text.clone(),
+                    size: *size,
+                    anchor: *anchor,
+                    angle: *angle,
+                    element: *element,
+                },
             });
         }
         let half = (hi - lo) * 0.5 * k;

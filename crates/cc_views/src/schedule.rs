@@ -341,6 +341,46 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
     }
 }
 
+/// A field's value for view filters: its text (keys reduced to their last
+/// word, e.g. `yes`, `exterior`) and, for quantities, its number in SI
+/// units (meters, square and cubic meters; yes/no as 1/0; diameters in
+/// meters). `None` when the element has no value.
+pub fn field_value(
+    project: &Project,
+    geom: &ModelGeometry,
+    e: &Element,
+    field: ScheduleField,
+) -> Option<(String, Option<f64>)> {
+    let v = value(project, geom, e, field);
+    match v {
+        Value::Missing => None,
+        Value::Key(k) => {
+            let word = k.rsplit('-').next().unwrap_or(k).to_string();
+            let number = match word.as_str() {
+                "yes" => Some(1.0),
+                "no" => Some(0.0),
+                _ => None,
+            };
+            Some((word, number))
+        }
+        Value::Text(t) => {
+            let number = match (field, project.element_type(e.type_id).map(|t| &t.data)) {
+                (
+                    ScheduleField::Diameter,
+                    Some(
+                        TypeData::Rebar { diameter, .. }
+                        | TypeData::Pipe { diameter, .. }
+                        | TypeData::Conduit { diameter, .. },
+                    ),
+                ) => Some(*diameter),
+                _ => t.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite()),
+            };
+            Some((t, number))
+        }
+        other => Some((text_of(&other), other.number())),
+    }
+}
+
 /// Default row order: by mark (rooms by number), naturally, then by id.
 fn default_order(a: &Element, b: &Element) -> Ordering {
     let key = |e: &Element| match &e.kind {

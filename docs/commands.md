@@ -14,6 +14,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport)
+- **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 
 ## Project and files
 
@@ -1181,3 +1182,217 @@ No parameters.
 |---|---|---|---|
 | `sheet` | id or name | required | A level, type, view or material: its numeric id or its name. |
 | `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
+
+## View graphics
+
+### `view_graphics_get`
+
+*query* — The visibility/graphics of a view (or of a view template): every category's visibility and overrides, the applied filters in order, the element overrides and hidden elements, the view's template and what it controls, and what is temporarily hidden or isolated. Overrides are objects like `{"cut_lines": {"color": [255, 0, 0], "weight": 0.5, "pattern": "Dash"}, "projection_lines": {..}, "cut_fill": {"color": [..], "pattern": "Solid"}, "surface_fill": {..}, "halftone": true, "transparency": 0.5}` (absent attributes are not overridden).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `template` | id or name | optional | Or a view template id or name. |
+| `view` | id or name | optional | View id or name. |
+
+### `view_graphics_set`
+
+*edit* — Show or hide a category in a view (or view template) and change its graphic overrides: `overrides` is merged into the current ones (`null` resets one attribute; see `view_graphics_get`), `reset` clears them first. Refused when the view's template controls its categories.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `category` | string | required | Category (`wall`, `door`, `room`, `dimension`…). |
+| `overrides` | JSON | optional | Overrides to merge. |
+| `reset` | boolean | optional | Clear the category's overrides before merging. |
+| `template` | id or name | optional | Or a view template id or name. |
+| `view` | id or name | optional | View id or name. |
+| `visible` | boolean | optional | Show (`true`) or hide (`false`) the category. |
+
+### `element_override_set`
+
+*edit* — Override the graphics of elements in one view (they keep their category's and filters' graphics for what is not overridden): `overrides` is merged into each element's (`null` resets an attribute), `reset` clears them first, so `reset` alone removes the overrides.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `ids` | [id, …] | required | Element ids. |
+| `view` | id or name | required | View id or name. |
+| `overrides` | JSON | optional | Overrides to merge (see `view_graphics_get`). |
+| `reset` | boolean | optional | Clear the elements' overrides before merging. |
+
+### `element_hide_in_view`
+
+*edit* — Hide elements in one view (`hidden: false` shows them again). Hidden elements stay in the model and in other views.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `ids` | [id, …] | required | Element ids. |
+| `view` | id or name | required | View id or name. |
+| `hidden` | boolean | optional | Hide (default) or unhide. |
+
+### `filters_list`
+
+*query* — The project's view filters with their categories and rules.
+
+No parameters.
+
+### `filter_create`
+
+*edit* — Create a view filter: the elements of `categories` (all when empty) that pass its rules — all of them, or any with `any`; a filter without rules matches every element of its categories. Apply it to views with `view_filter_add`.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique). |
+| `any` | boolean | optional | Match when any rule passes (default: all must pass). |
+| `categories` | [string, …] | optional | Categories (`wall`, `door`…); empty for all. |
+| `rules` | [object, …] | optional | Rules on parameters. |
+
+### `filter_set`
+
+*edit* — Change a view filter: name, categories, rules (replaced as a whole) or how rules combine. Views that apply it follow.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+| `any` | boolean | optional | Match when any rule passes (`false`: all must pass). |
+| `categories` | [string, …] | optional | New categories (empty for all). |
+| `name` | string | optional | New name. |
+| `rules` | [object, …] | optional | New rules (replace the old ones). |
+
+### `filter_delete`
+
+*edit* — Delete a view filter (views and templates stop applying it).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+
+### `filter_elements`
+
+*query* — The elements a view filter matches (only those drawn in `view` when given).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+| `view` | id or name | optional | Only elements drawn in this view. |
+
+### `view_filter_add`
+
+*edit* — Apply a filter to a view (or view template), at `index` in the list (default last: the first matching filter wins for each attribute), hiding what it matches (`visible: false`) or overriding its graphics.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+| `index` | integer | optional | Position in the view's filter list (0 = first). |
+| `overrides` | JSON | optional | Overrides of the matching elements (see `view_graphics_get`). |
+| `template` | id or name | optional | Or a view template id or name. |
+| `view` | id or name | optional | View id or name. |
+| `visible` | boolean | optional | Show (default) or hide the matching elements. |
+
+### `view_filter_set`
+
+*edit* — Change how a view (or view template) applies a filter: visibility of the matching elements, whether it is enabled, and its overrides (merged; `reset` clears them first).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+| `enabled` | boolean | optional | Apply the filter (`false` keeps it listed without effect). |
+| `overrides` | JSON | optional | Overrides to merge (see `view_graphics_get`). |
+| `reset` | boolean | optional | Clear the overrides before merging. |
+| `template` | id or name | optional | Or a view template id or name. |
+| `view` | id or name | optional | View id or name. |
+| `visible` | boolean | optional | Show (`true`) or hide (`false`) the matching elements. |
+
+### `view_filter_remove`
+
+*edit* — Stop applying a filter in a view (or view template).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+| `template` | id or name | optional | Or a view template id or name. |
+| `view` | id or name | optional | View id or name. |
+
+### `view_filter_move`
+
+*edit* — Move a filter to `index` in a view's (or view template's) filter list (0 = first, the highest priority).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `filter` | id or name | required | Filter id or name. |
+| `index` | integer | required | New position (0 = first). |
+| `template` | id or name | optional | Or a view template id or name. |
+| `view` | id or name | optional | View id or name. |
+
+### `templates_list`
+
+*query* — The project's view templates: the properties each holds, which of them it controls (`include`) and the views that follow it.
+
+No parameters.
+
+### `template_create`
+
+*edit* — Create a view template, from the properties of `view` when given (scale, category graphics, filters, plan cut height, building services display, structural display), else with defaults. Every property is controlled (`include`) until changed with `template_set`.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique). |
+| `view` | id or name | optional | View to take the properties from. |
+
+### `template_set`
+
+*edit* — Change a view template: name, properties and which of them it controls (`include`, merged: `{"scale": false}` lets views keep their own scale). Views that follow the template change with it, in the same undo step.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `template` | id or name | required | Template id or name. |
+| `cut_height` | number | optional | Plans: cut plane height, meters. |
+| `discipline` | string | optional | Floor plans: `none`, `plumbing` or `electrical` (services over a faint architecture). |
+| `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural` (true/false). |
+| `name` | string | optional | New name. |
+| `scale` | integer | optional | Scale denominator. |
+| `structural` | boolean | optional | Floor plans: structural (formwork) display. |
+| `structure_tags` | boolean | optional | Floor plans: tag beams and columns. |
+
+### `template_delete`
+
+*edit* — Delete a view template; views that follow it keep their current properties and become free.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `template` | id or name | required | Template id or name. |
+
+### `view_template_apply`
+
+*edit* — Copy a template's properties into views once (they stay free to change). Views that follow another template are refused.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `template` | id or name | required | Template id or name. |
+| `views` | [id or name, …] | required | View ids or names. |
+
+### `view_template_assign`
+
+*edit* — Make views follow a template (`template: null` frees them): the properties it controls are copied now and whenever the template changes, and cannot be changed in the view.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `views` | [id or name, …] | required | View ids or names. |
+| `template` | id or name | optional | Template id or name, or null to unassign. |
+
+### `view_temporary`
+
+*query* — Temporarily hide or isolate elements or categories in a view, or reset. This is display state, not a model change: it is not saved, not undone and not printed (sheets and exports show the view as it is); the application marks the view while it is active. `action`: `hide` and `isolate` (the elements `ids`), `hide_category` and `isolate_category` (`categories`, and the categories of `ids`), or `reset`. Hiding adds to what is already hidden; isolating replaces it.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `action` | string | required | `hide`, `isolate`, `hide_category`, `isolate_category` or `reset`. |
+| `view` | id or name | required | View id or name. |
+| `categories` | [string, …] | optional | Category names. |
+| `ids` | [id, …] | optional | Element ids. |
+
+### `view_temporary_apply`
+
+*edit* — Make a view's temporary hiding permanent: hidden elements become hidden in the view and hidden categories are turned off; when isolating, every other element drawn in the view is hidden in it. The temporary state is then reset. One undo step.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `view` | id or name | required | View id or name. |

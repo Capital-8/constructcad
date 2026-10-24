@@ -13,7 +13,7 @@ pub struct View3DState {
     pub camera: CameraState,
     renderer: Option<Renderer3D>,
     pub texture: Option<egui::TextureId>,
-    mesh_key: Option<(u64, u64)>,
+    mesh_key: Option<(u64, u64, u64)>,
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
     fit_requested: bool,
@@ -190,6 +190,22 @@ impl View3DState {
     }
 }
 
+/// How view graphics show in 3D: the surface color (a solid surface fill or
+/// its color), transparency, halftone and the projection line color for edges.
+fn solid_style(g: &cc_core::GraphicOverride) -> cc_render::SolidStyle {
+    let fill = g.surface_fill;
+    let color = match fill.pattern {
+        Some(cc_core::Pattern::None) => Some([255, 255, 255]),
+        _ => fill.color,
+    };
+    cc_render::SolidStyle {
+        color,
+        transparency: g.transparency,
+        halftone: g.halftone == Some(true),
+        edges: g.projection_lines.color,
+    }
+}
+
 fn selection_hash(sel: &BTreeSet<cc_core::ElementId>) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     sel.hash(&mut h);
@@ -297,7 +313,15 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let ny = 1.0 - (pos.y - rect.top()) / rect.height() * 2.0;
         let ray = pick_ray(&v3.camera, aspect, nx, ny);
         let ctrl = ui.input(|i| i.modifiers.command);
-        match geom.pick(ray, &[]) {
+        let (project, temporary) = (&state.session.doc.project, state.session.temporary(view_id));
+        let picked = match project.view(view_id) {
+            Some(view) => {
+                let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
+                geom.pick_where(ray, &mut |e| resolver.style(e).is_some())
+            }
+            None => geom.pick(ray, &[]),
+        };
+        match picked {
             Some((id, _)) if ctrl => {
                 if !state.selection.remove(&id) {
                     state.selection.insert(id);
@@ -310,7 +334,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
 
     // Upload geometry when the model or selection changed.
-    let key = (state.session.doc.revision(), selection_hash(&state.selection));
+    let key = (state.session.doc.revision(), selection_hash(&state.selection), state.session.temporary_revision());
     let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
     if v3.mesh_key != Some(key) {
         let geom = state.session.geom();
@@ -320,7 +344,15 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         } else if rebar {
             SceneMesh::build_rebar(geom, &state.selection)
         } else {
-            SceneMesh::build(geom, &state.selection, &[])
+            let project = &state.session.doc.project;
+            match project.view(view_id) {
+                Some(view) => {
+                    let temporary = state.session.temporary(view_id);
+                    let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
+                    SceneMesh::build(geom, &state.selection, &mut |e| resolver.style(e).map(|g| solid_style(&g)))
+                }
+                None => SceneMesh::build_plain(geom, &state.selection),
+            }
         };
         renderer.upload(&rs.device, &mesh);
         v3.mesh_key = Some(key);

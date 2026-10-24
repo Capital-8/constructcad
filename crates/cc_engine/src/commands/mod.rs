@@ -7,6 +7,7 @@ pub mod create;
 pub mod edit;
 pub mod foundation;
 pub mod framing;
+pub mod graphics;
 pub mod io;
 pub mod levels;
 pub mod materials;

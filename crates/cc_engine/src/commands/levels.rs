@@ -54,7 +54,7 @@ impl Command for LevelCreate {
             if plans {
                 for kind in [ViewKind::floor_plan(id), ViewKind::CeilingPlan { level: id, cut_height: 1.2 }] {
                     let vid = ViewId(e.alloc_id());
-                    e.add_view(View { id: vid, name: name.clone(), scale: 50, kind });
+                    e.add_view(View::new(vid, name.clone(), 50, kind));
                 }
             }
             Ok(id)

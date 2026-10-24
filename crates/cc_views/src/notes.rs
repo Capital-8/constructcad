@@ -158,7 +158,7 @@ pub fn draw_note(d: &mut Drawing2D, note: &TextNote, size: f64, scale: u32, id: 
     }
     for (pos, line) in &layout.lines {
         if !line.is_empty() {
-            d.text_at(*pos, line.clone(), size, Anchor::LeftBottom, layout.angle);
+            d.tag_text(*pos, line.clone(), size, Anchor::LeftBottom, layout.angle, id);
         }
     }
     for leader in &note.leaders {

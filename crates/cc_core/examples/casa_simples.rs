@@ -178,21 +178,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let section = ViewId(e.alloc_id());
-        e.add_view(View {
-            id: section,
-            name: "Corte 1".into(),
-            scale: 50,
-            kind: ViewKind::Section { start: DVec2::new(3.0, -1.5), end: DVec2::new(3.0, 7.5), depth: 10.0 },
-        });
+        e.add_view(View::new(
+            section,
+            "Corte 1",
+            50,
+            ViewKind::Section { start: DVec2::new(3.0, -1.5), end: DVec2::new(3.0, 7.5), depth: 10.0 },
+        ));
         // Put the south elevation and section on a second sheet.
         let south =
             p.views_of(ViewCategory::Elevation).find(|v| v.name == "Sul").map(|v| v.id).ok_or("no south elevation")?;
         let sheet = ViewId(e.alloc_id());
-        e.add_view(View {
-            id: sheet,
-            name: "Elevação e corte".into(),
-            scale: 1,
-            kind: ViewKind::Sheet {
+        e.add_view(View::new(
+            sheet,
+            "Elevação e corte",
+            1,
+            ViewKind::Sheet {
                 number: "A102".into(),
                 size: cc_core::SheetSize::A3,
                 viewports: vec![
@@ -200,7 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Viewport { view: section, center: DVec2::new(310.0, 170.0) },
                 ],
             },
-        });
+        ));
         Ok(())
     })?;
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/casa_simples.ccad");

@@ -168,7 +168,7 @@ pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>) -> Dra
                         let material = ty.map_or("", |t| t.data.cut_material());
                         crate::cut::cut_fill(&mut d, c.project, material, pts, c.spacing, Some(solid.element));
                     }
-                    None => d.fill(pts, POCHE, Some(solid.element)),
+                    None => d.cut_fill(pts, POCHE, Some(solid.element)),
                 }
             }
             for (a, b) in segs {
@@ -480,7 +480,7 @@ mod tests {
         let hatch = d
             .prims
             .iter()
-            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: Some(e), .. } if *e == id))
+            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Hatch, element: Some(e), .. } if *e == id))
             .count();
         assert!(hatch > 0);
         assert!(d.elements_in(DVec2::splat(-100.0), DVec2::splat(100.0), false).contains(&id));

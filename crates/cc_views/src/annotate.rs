@@ -103,7 +103,7 @@ pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry
                 }
                 let up = dir.perp();
                 let p = g.world(u, 0.0) + up * (g.half + 1.0 * mm);
-                d.text_at(p, &text, 2.5, Anchor::CenterBottom, dir.y.atan2(dir.x));
+                d.tag_text(p, &text, 2.5, Anchor::CenterBottom, dir.y.atan2(dir.x), Some(e.id));
             }
             ElementKind::Column(c) if c.structural => {
                 let Some(TypeData::Column { section, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
@@ -111,13 +111,13 @@ pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry
                 };
                 let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
                 let hi = outline.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
-                d.text_at(hi + DVec2::splat(1.0 * mm), &text, 2.5, Anchor::LeftBottom, 0.0);
+                d.tag_text(hi + DVec2::splat(1.0 * mm), &text, 2.5, Anchor::LeftBottom, 0.0, Some(e.id));
             }
             ElementKind::Foundation(_) => {
                 let Some(g) = geom.foundations.get(&e.id) else { continue };
                 let lo = g.footprint.iter().fold(DVec2::splat(f64::INFINITY), |a, p| a.min(*p));
                 let hi = g.footprint.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
-                d.text_at(DVec2::new(hi.x + mm, lo.y), &text, 2.5, Anchor::LeftBottom, 0.0);
+                d.tag_text(DVec2::new(hi.x + mm, lo.y), &text, 2.5, Anchor::LeftBottom, 0.0, Some(e.id));
             }
             _ => {}
         }
@@ -126,9 +126,9 @@ pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry
 
 fn room_tag(d: &mut Drawing2D, p: DVec2, name: &str, number: &str, area: &str, mm: f64, id: cc_core::ElementId) {
     let line = 3.6 * mm;
-    d.text_at(p + DVec2::new(0.0, 0.4 * mm), name, 2.5, Anchor::CenterBottom, 0.0);
-    d.text_at(p - DVec2::new(0.0, line - 0.4 * mm), number, 2.2, Anchor::CenterBottom, 0.0);
-    d.text_at(p - DVec2::new(0.0, 2.0 * line - 0.4 * mm), area, 2.0, Anchor::CenterBottom, 0.0);
+    d.tag_text(p + DVec2::new(0.0, 0.4 * mm), name, 2.5, Anchor::CenterBottom, 0.0, Some(id));
+    d.tag_text(p - DVec2::new(0.0, line - 0.4 * mm), number, 2.2, Anchor::CenterBottom, 0.0, Some(id));
+    d.tag_text(p - DVec2::new(0.0, 2.0 * line - 0.4 * mm), area, 2.0, Anchor::CenterBottom, 0.0, Some(id));
     let width = (name.chars().count().max(number.chars().count()).max(area.chars().count()) as f64 * 1.6 + 2.0) * mm;
     let (x0, x1) = (p.x - width / 2.0, p.x + width / 2.0);
     let (y0, y1) = (p.y - 2.0 * line, p.y + 3.4 * mm);
@@ -146,7 +146,7 @@ fn grid_line(d: &mut Drawing2D, start: DVec2, end: DVec2, name: &str, bubble_mm:
         (0..32).map(|i| center + DVec2::from_angle(i as f64 / 32.0 * std::f64::consts::TAU) * r).collect();
     d.polyline(&circle, true, LineStyle::Annotation, Some(id));
     d.fill(circle, PICK_AREA, Some(id));
-    d.text_at(center, name, bubble_mm * 0.45, Anchor::Center, 0.0);
+    d.tag_text(center, name, bubble_mm * 0.45, Anchor::Center, 0.0, Some(id));
 }
 
 fn opening_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, mm: f64) {
@@ -176,7 +176,7 @@ fn opening_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, leve
                     (0..6).map(|i| c + DVec2::from_angle(i as f64 / 6.0 * std::f64::consts::TAU) * r).collect();
                 d.polyline(&hex, true, LineStyle::Annotation, Some(e.id));
             }
-            d.text_at(c, &e.mark, 2.0, Anchor::Center, 0.0);
+            d.tag_text(c, &e.mark, 2.0, Anchor::Center, 0.0, Some(e.id));
         }
     }
 }
@@ -197,7 +197,7 @@ pub fn dimensions(d: &mut Drawing2D, project: &Project, view: ViewId, scale: u32
         for (a, b, style) in layout.lines {
             d.line(a, b, style, id);
         }
-        d.text_at(layout.text_pos, layout.text, text_size, Anchor::CenterBottom, layout.text_angle);
+        d.tag_text(layout.text_pos, layout.text, text_size, Anchor::CenterBottom, layout.text_angle, id);
     }
 }
 

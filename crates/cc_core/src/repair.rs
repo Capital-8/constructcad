@@ -385,6 +385,37 @@ impl Project {
                 repairs += 1;
             }
         }
+
+        // View graphics: filters, templates and the elements they refer to.
+        for f in self.filters.values_mut() {
+            let before = f.rules.len();
+            f.rules.retain(|r| r.value.len() <= 1000);
+            repairs += before - f.rules.len();
+        }
+        for t in self.templates.values_mut() {
+            repairs += t.repair(&self.filters);
+        }
+        let elements = &self.elements;
+        let exists = |id: crate::ElementId| elements.contains_key(&id);
+        for view in self.views.values_mut() {
+            repairs += view.graphics.repair(&self.filters, Some(&exists));
+            match view.template.map(|t| self.templates.get(&t)) {
+                Some(None) => {
+                    view.template = None;
+                    repairs += 1;
+                }
+                Some(Some(_)) if !crate::ViewTemplate::applies_to(&view.kind) => {
+                    view.template = None;
+                    repairs += 1;
+                }
+                Some(Some(t)) => {
+                    let before = view.clone();
+                    t.apply(view);
+                    repairs += usize::from(*view != before);
+                }
+                None => {}
+            }
+        }
         repairs
     }
 }

@@ -18,6 +18,79 @@ pub enum LineStyle {
     Center,
     /// Background linework (the architecture under building services).
     Faint,
+    /// Lines of a cut pattern (drawn like `Thin`; view graphics replace them
+    /// when they override the cut pattern).
+    Hatch,
+}
+
+/// Graphic overrides of one line (view graphics); `None` keeps the style's pen.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Pen {
+    pub color: Option<[u8; 3]>,
+    /// Width on paper, millimeters.
+    pub weight: Option<f64>,
+    pub pattern: Option<cc_core::LinePattern>,
+    /// Mixed with white.
+    pub halftone: bool,
+}
+
+/// A line's pen resolved: width in paper millimeters, color and dash lengths
+/// in paper millimeters (empty: continuous).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedPen {
+    pub width: f64,
+    pub color: [u8; 3],
+    pub dashes: &'static [f64],
+}
+
+impl LineStyle {
+    /// The default pen of the style: width (paper mm) and color.
+    pub fn pen(self) -> (f64, [u8; 3]) {
+        match self {
+            LineStyle::Cut => (0.5, [10, 10, 10]),
+            LineStyle::Projection => (0.25, [45, 45, 45]),
+            LineStyle::Thin | LineStyle::Hatch => (0.13, [95, 95, 95]),
+            LineStyle::Hidden => (0.18, [120, 120, 120]),
+            LineStyle::Annotation => (0.18, [30, 90, 170]),
+            LineStyle::Center => (0.18, [30, 90, 170]),
+            LineStyle::Faint => (0.13, [175, 175, 175]),
+        }
+    }
+
+    /// Dash pattern of the style, paper millimeters.
+    pub fn dashes(self) -> &'static [f64] {
+        match self {
+            LineStyle::Hidden => cc_core::LinePattern::ShortDash.dashes_mm(),
+            LineStyle::Center => cc_core::LinePattern::DashDot.dashes_mm(),
+            _ => &[],
+        }
+    }
+
+    /// The pen of a line of this style with its overrides.
+    pub fn resolve(self, pen: Option<&Pen>) -> ResolvedPen {
+        let (width, color) = self.pen();
+        let mut out = ResolvedPen { width, color, dashes: self.dashes() };
+        if let Some(p) = pen {
+            if let Some(c) = p.color {
+                out.color = c;
+            }
+            if let Some(w) = p.weight.filter(|w| w.is_finite() && *w > 0.0) {
+                out.width = w.min(10.0);
+            }
+            if let Some(pattern) = p.pattern {
+                out.dashes = pattern.dashes_mm();
+            }
+            if p.halftone {
+                out.color = halftone(out.color);
+            }
+        }
+        out
+    }
+}
+
+/// A color mixed two thirds with white (faint drawing).
+pub fn halftone(c: [u8; 3]) -> [u8; 3] {
+    c.map(|v| (f64::from(v) + (255.0 - f64::from(v)) * 0.66).round() as u8)
 }
 
 /// Which point of a text box sits at its position.
@@ -37,12 +110,16 @@ pub enum Prim {
         b: DVec2,
         style: LineStyle,
         element: Option<ElementId>,
+        /// Overrides from the view's graphics.
+        pen: Option<Pen>,
     },
     /// Simple polygon fill (any winding, may be concave).
     Fill {
         pts: Vec<DVec2>,
         color: [u8; 4],
         element: Option<ElementId>,
+        /// A cut region (plans, sections), not a surface seen beyond the cut.
+        cut: bool,
     },
     /// Text placed by `anchor` at `pos`, rotated by `angle` radians
     /// (counter-clockwise); `size` is paper height in millimeters.
@@ -52,6 +129,8 @@ pub enum Prim {
         size: f64,
         anchor: Anchor,
         angle: f64,
+        /// The element the text annotates (hidden with it).
+        element: Option<ElementId>,
     },
 }
 
@@ -59,8 +138,7 @@ impl Prim {
     /// The element a primitive belongs to, if any.
     pub fn element(&self) -> Option<ElementId> {
         match self {
-            Prim::Line { element, .. } | Prim::Fill { element, .. } => *element,
-            Prim::Text { .. } => None,
+            Prim::Line { element, .. } | Prim::Fill { element, .. } | Prim::Text { element, .. } => *element,
         }
     }
 }
@@ -74,7 +152,7 @@ pub struct Drawing2D {
 impl Drawing2D {
     pub fn line(&mut self, a: DVec2, b: DVec2, style: LineStyle, element: Option<ElementId>) {
         if a.distance_squared(b) > 1e-14 {
-            self.prims.push(Prim::Line { a, b, style, element });
+            self.prims.push(Prim::Line { a, b, style, element, pen: None });
         }
     }
 
@@ -89,7 +167,14 @@ impl Drawing2D {
 
     pub fn fill(&mut self, pts: Vec<DVec2>, color: [u8; 4], element: Option<ElementId>) {
         if pts.len() >= 3 {
-            self.prims.push(Prim::Fill { pts, color, element });
+            self.prims.push(Prim::Fill { pts, color, element, cut: false });
+        }
+    }
+
+    /// A fill of a cut region.
+    pub fn cut_fill(&mut self, pts: Vec<DVec2>, color: [u8; 4], element: Option<ElementId>) {
+        if pts.len() >= 3 {
+            self.prims.push(Prim::Fill { pts, color, element, cut: true });
         }
     }
 
@@ -98,7 +183,20 @@ impl Drawing2D {
     }
 
     pub fn text_at(&mut self, pos: DVec2, text: impl Into<String>, size: f64, anchor: Anchor, angle: f64) {
-        self.prims.push(Prim::Text { pos, text: text.into(), size, anchor, angle });
+        self.prims.push(Prim::Text { pos, text: text.into(), size, anchor, angle, element: None });
+    }
+
+    /// Text that annotates `element` (a tag, a dimension value…).
+    pub fn tag_text(
+        &mut self,
+        pos: DVec2,
+        text: impl Into<String>,
+        size: f64,
+        anchor: Anchor,
+        angle: f64,
+        element: Option<ElementId>,
+    ) {
+        self.prims.push(Prim::Text { pos, text: text.into(), size, anchor, angle, element });
     }
 
     /// Circular arc approximated with line segments.
@@ -142,7 +240,7 @@ impl Drawing2D {
         }
         self.prims.iter().rev().find_map(|prim| match prim {
             // Fully transparent fills only show selection (room areas); they are not picked.
-            Prim::Fill { pts, element: Some(id), color } if color[3] > 0 && cc_geom::polygon::contains(pts, p) => {
+            Prim::Fill { pts, element: Some(id), color, .. } if color[3] > 0 && cc_geom::polygon::contains(pts, p) => {
                 Some(*id)
             }
             _ => None,

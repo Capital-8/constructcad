@@ -202,7 +202,7 @@ impl Command for ViewCreate {
         let scale = self.scale.unwrap_or(scale).max(1);
         let id = edit(s, tx, |e| {
             let id = ViewId(e.alloc_id());
-            Ok(e.add_view(View { id, name, scale, kind }))
+            Ok(e.add_view(View::new(id, name, scale, kind)))
         })?;
         Ok(view_out(s, id))
     }
@@ -247,6 +247,21 @@ impl Command for ViewSet {
             && n.trim().is_empty()
         {
             return Err(EngineError::invalid("the name is empty"));
+        }
+        // Properties the view's template controls stay as the template has them.
+        if let Some(t) = view.template.and_then(|t| p.template(t)) {
+            let mut new = view.clone();
+            if let Some(sc) = self.scale {
+                new.scale = sc.max(1);
+            }
+            if let Some(k) = &kind {
+                new.kind = k.clone();
+            }
+            let mut kept = new.clone();
+            t.apply(&mut kept);
+            if kept != new {
+                return Err(EngineError::rejected(t!("msg-controlled-by-template", "template" => t.name.clone())));
+            }
         }
         edit(s, t!("tx-modify-view"), |e| {
             let v = e.view_mut(id).ok_or_else(|| EngineError::not_found("view"))?;

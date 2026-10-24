@@ -1,4 +1,4 @@
-use cc_core::{Category, ElementId};
+use cc_core::ElementId;
 use cc_geom::ModelGeometry;
 use std::collections::BTreeSet;
 
@@ -27,17 +27,47 @@ fn srgb_to_linear(c: u8) -> f32 {
 
 const SELECTED: [u8; 3] = [70, 150, 255];
 
+/// View graphics of an element's solids in 3D; `None` keeps the material's.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SolidStyle {
+    pub color: Option<[u8; 3]>,
+    /// 0 (opaque) to 1.
+    pub transparency: Option<f64>,
+    /// Faces and edges mixed with white.
+    pub halftone: bool,
+    /// Edge color.
+    pub edges: Option<[u8; 3]>,
+}
+
 impl SceneMesh {
-    pub fn build(geom: &ModelGeometry, selected: &BTreeSet<ElementId>, hidden: &[Category]) -> Self {
+    /// The model's solids; `style` gives each element's view graphics
+    /// (`None` hides it).
+    pub fn build(
+        geom: &ModelGeometry,
+        selected: &BTreeSet<ElementId>,
+        style: &mut dyn FnMut(ElementId) -> Option<SolidStyle>,
+    ) -> Self {
         let mut mesh = Self::default();
-        for solid in geom.solids.iter().filter(|s| !hidden.contains(&s.category)) {
+        let mut styles: std::collections::HashMap<ElementId, Option<SolidStyle>> = Default::default();
+        for solid in &geom.solids {
+            let Some(st) = *styles.entry(solid.element).or_insert_with(|| style(solid.element)) else { continue };
             let sel = selected.contains(&solid.element);
-            let base = if sel { SELECTED } else { solid.color };
+            let mut base = st.color.unwrap_or(solid.color);
+            if st.halftone {
+                base = base.map(|v| (f32::from(v) + (255.0 - f32::from(v)) * 0.66).round() as u8);
+            }
+            let base = if sel { SELECTED } else { base };
+            let transparency = st.transparency.unwrap_or(solid.transparency).clamp(0.0, 1.0) as f32;
             // Selected solids stay opaque so they read clearly.
-            let alpha = if sel { 1.0 } else { (1.0 - solid.transparency as f32).clamp(0.08, 1.0) };
+            let alpha = if sel { 1.0 } else { (1.0 - transparency).clamp(0.08, 1.0) };
             let color = [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), alpha];
             let target = if alpha < 0.999 { &mut mesh.transparent_indices } else { &mut mesh.indices };
-            let edge_color = if sel { [0.02, 0.15, 0.6, 1.0] } else { [0.02, 0.02, 0.025, 1.0] };
+            let edge_color = match (sel, st.edges) {
+                (true, _) => [0.02, 0.15, 0.6, 1.0],
+                (false, Some(c)) => [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2]), 1.0],
+                (false, None) if st.halftone => [0.45, 0.45, 0.46, 1.0],
+                (false, None) => [0.02, 0.02, 0.025, 1.0],
+            };
             for face in &solid.faces {
                 let start = mesh.vertices.len() as u32;
                 let normal = face.normal.as_vec3().to_array();
@@ -55,6 +85,11 @@ impl SceneMesh {
             }
         }
         mesh
+    }
+
+    /// Every solid as its material shows it.
+    pub fn build_plain(geom: &ModelGeometry, selected: &BTreeSet<ElementId>) -> Self {
+        Self::build(geom, selected, &mut |_| Some(SolidStyle::default()))
     }
 
     /// The reinforcing bars (those of the selected hosts or sets highlighted)
@@ -140,7 +175,7 @@ mod tests {
     fn transparent_materials_go_to_the_blended_pass() {
         let project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
         let geom = ModelGeometry::build(&project);
-        let mesh = SceneMesh::build(&geom, &BTreeSet::new(), &[]);
+        let mesh = SceneMesh::build_plain(&geom, &BTreeSet::new());
         // Window glass (60 % transparent in the template) is blended; walls are not.
         assert!(!mesh.transparent_indices.is_empty());
         assert!(!mesh.indices.is_empty());
@@ -149,7 +184,16 @@ mod tests {
         assert!(glass.iter().all(|v| (v.color[3] - 0.4).abs() < 1e-6));
         // A selected window is drawn opaque.
         let window = project.elements.values().find(|e| matches!(e.kind, cc_core::ElementKind::Window(_))).unwrap().id;
-        let sel = SceneMesh::build(&geom, &BTreeSet::from([window]), &[]);
+        let sel = SceneMesh::build_plain(&geom, &BTreeSet::from([window]));
         assert!(sel.transparent_indices.len() < mesh.transparent_indices.len());
+        // View graphics: a hidden window leaves the mesh, an opaque override takes it out of the blended pass.
+        let hidden = SceneMesh::build(&geom, &BTreeSet::new(), &mut |e| (e != window).then(SolidStyle::default));
+        assert!(hidden.vertices.len() < mesh.vertices.len());
+        let opaque = SolidStyle { transparency: Some(0.0), color: Some([255, 0, 0]), ..Default::default() };
+        let solid = SceneMesh::build(&geom, &BTreeSet::new(), &mut |e| {
+            Some(if e == window { opaque } else { SolidStyle::default() })
+        });
+        assert!(solid.transparent_indices.len() < mesh.transparent_indices.len());
+        assert!(solid.vertices.iter().any(|v| v.color == [1.0, 0.0, 0.0, 1.0]));
     }
 }

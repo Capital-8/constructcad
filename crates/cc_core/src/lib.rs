@@ -11,6 +11,7 @@ pub mod dim_refs;
 mod document;
 mod element;
 pub mod expr;
+pub mod graphics;
 mod ids;
 pub mod material;
 pub mod mep;
@@ -34,7 +35,11 @@ pub use element::{
     ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Rebar,
     RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
-pub use ids::{ElementId, ElementTypeId, GroupId, LevelId, SystemId, Uid, ViewId};
+pub use graphics::{
+    CategoryGraphics, FillGraphics, FilterOp, FilterParam, FilterRule, FilterUse, GraphicOverride, LineGraphics,
+    LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
+};
+pub use ids::{ElementId, ElementTypeId, FilterId, GroupId, LevelId, SystemId, TemplateId, Uid, ViewId};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind};
 pub use persist::{

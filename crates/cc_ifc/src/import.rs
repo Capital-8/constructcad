@@ -632,7 +632,7 @@ impl<'a> Importer<'a> {
         let levels: Vec<(LevelId, String)> = self.p.levels.iter().map(|l| (l.id, l.name.clone())).collect();
         let add_view = |p: &mut Project, name: &str, kind: ViewKind| {
             let id = ViewId(p.alloc_id());
-            p.views.insert(id, View { id, name: name.to_string(), scale: 50, kind });
+            p.views.insert(id, View::new(id, name, 50, kind));
         };
         for (level, name) in &levels {
             add_view(&mut self.p, name, ViewKind::floor_plan(*level));

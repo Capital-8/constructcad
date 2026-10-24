@@ -10,6 +10,7 @@ mod diagram;
 mod drawing;
 pub mod export;
 pub mod format;
+pub mod graphics;
 pub mod hatch;
 mod joins;
 mod legend;
@@ -21,11 +22,11 @@ mod schedule;
 mod sheet;
 
 pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout};
-pub use drawing::{Anchor, Drawing2D, LineStyle, Prim};
+pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, halftone};
 pub use legend::legend;
 pub use plan::{is_structural, plan, plan_of};
 pub use projected::{Frame, axonometric, elevation, section};
-pub use schedule::{Cell, Row, Table, schedule, to_csv};
+pub use schedule::{Cell, Row, Table, field_value, schedule, to_csv};
 pub use sheet::{MARGIN, PlacedViewport, Sheet, TITLE_H, TITLE_W, TitleLabels, compose as compose_sheet};
 
 use cc_core::{Project, View, ViewKind};
@@ -37,13 +38,25 @@ pub fn generate(project: &Project, geom: &ModelGeometry, view: &View) -> Option<
     generate_labeled(project, geom, view, &|key| key.to_string())
 }
 
-/// Drawing for any graphical view; `label` translates the headings drawn
-/// by the view itself (diagrams).
+/// Drawing for any graphical view, with the view's graphics applied;
+/// `label` translates the headings drawn by the view itself (diagrams).
 pub fn generate_labeled(
     project: &Project,
     geom: &ModelGeometry,
     view: &View,
     label: &dyn Fn(&str) -> String,
+) -> Option<Drawing2D> {
+    generate_temporary(project, geom, view, label, None)
+}
+
+/// Drawing for any graphical view with its graphics and, when given, the
+/// elements temporarily hidden or isolated in it.
+pub fn generate_temporary(
+    project: &Project,
+    geom: &ModelGeometry,
+    view: &View,
+    label: &dyn Fn(&str) -> String,
+    temporary: Option<&cc_core::TemporaryVisibility>,
 ) -> Option<Drawing2D> {
     let mut d = match &view.kind {
         ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height } => {
@@ -82,6 +95,7 @@ pub fn generate_labeled(
     };
     annotate::dimensions(&mut d, project, view.id, view.scale);
     notes::notes(&mut d, project, view.id, view.scale);
+    graphics::apply(&mut d, &mut graphics::Resolver::new(project, geom, view, temporary), view.scale);
     Some(d)
 }
 
@@ -90,7 +104,9 @@ pub fn generate_labeled(
 fn fade(d: &mut Drawing2D) {
     for prim in &mut d.prims {
         match prim {
-            Prim::Line { style, .. } if matches!(style, LineStyle::Cut | LineStyle::Projection | LineStyle::Thin) => {
+            Prim::Line { style, .. }
+                if matches!(style, LineStyle::Cut | LineStyle::Projection | LineStyle::Thin | LineStyle::Hatch) =>
+            {
                 *style = LineStyle::Faint;
             }
             Prim::Fill { color, .. } => {

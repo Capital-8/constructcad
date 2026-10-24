@@ -335,7 +335,7 @@ fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spa
         if state == ColumnCut::Cut {
             // Each layer with its material's cut pattern.
             if g.layers.is_empty() {
-                d.fill(poly.to_vec(), POCHE, id);
+                d.cut_fill(poly.to_vec(), POCHE, id);
             }
             for (v0, v1, material) in &g.layers {
                 let at = |v: f64| {
@@ -508,7 +508,7 @@ mod tests {
         assert_eq!(fills, 2 * layers, "wall cut split by the door");
         // The template's masonry core is hatched (the hatch belongs to the wall).
         let hatched =
-            |p: &Prim| matches!(p, Prim::Line { style: LineStyle::Thin, element: Some(e), .. } if *e == wall_id);
+            |p: &Prim| matches!(p, Prim::Line { style: LineStyle::Hatch, element: Some(e), .. } if *e == wall_id);
         assert!(d.prims.iter().any(hatched));
         assert_eq!(d.hit_test(DVec2::new(1.0, 0.0), 0.01), Some(wall_id));
         // On the open leaf, drawn from the hinge at u = 2.1 on the left face.
@@ -544,7 +544,7 @@ mod tests {
             .prims
             .iter()
             .filter_map(|p| match p {
-                Prim::Line { a, b, style: LineStyle::Cut, element: Some(e) } if *e == wall_id => Some((*a, *b)),
+                Prim::Line { a, b, style: LineStyle::Cut, element: Some(e), .. } if *e == wall_id => Some((*a, *b)),
                 _ => None,
             })
             .collect();
@@ -628,7 +628,7 @@ mod tests {
             .prims
             .iter()
             .filter_map(|p| match p {
-                Prim::Line { a, b, style: LineStyle::Cut, element: Some(e) } if *e == id => Some((*a, *b)),
+                Prim::Line { a, b, style: LineStyle::Cut, element: Some(e), .. } if *e == id => Some((*a, *b)),
                 _ => None,
             })
             .collect();

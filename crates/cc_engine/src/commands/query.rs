@@ -316,6 +316,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "category": snake(&format!("{:?}", v.category())),
         "scale": v.scale,
         "params": params,
+        "template": v.template.map(|t| t.0),
     }))
 }
 

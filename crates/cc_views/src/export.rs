@@ -2,31 +2,9 @@
 //! and PDF. Both writers are self-contained: the PDF uses the standard
 //! Helvetica font, so no font is embedded.
 
-use crate::{Anchor, Drawing2D, LineStyle, Prim};
+use crate::{Anchor, Drawing2D, Prim};
 use glam::DVec2;
 use std::fmt::Write as _;
-
-/// Pen width (mm) and color of a line style on paper.
-fn pen(style: LineStyle) -> (f64, [u8; 3]) {
-    match style {
-        LineStyle::Cut => (0.5, [10, 10, 10]),
-        LineStyle::Projection => (0.25, [45, 45, 45]),
-        LineStyle::Thin => (0.13, [95, 95, 95]),
-        LineStyle::Hidden => (0.18, [120, 120, 120]),
-        LineStyle::Annotation => (0.18, [30, 90, 170]),
-        LineStyle::Center => (0.18, [30, 90, 170]),
-        LineStyle::Faint => (0.13, [175, 175, 175]),
-    }
-}
-
-/// Dash pattern (mm) of a line style; empty for solid lines.
-fn dashes(style: LineStyle) -> &'static [f64] {
-    match style {
-        LineStyle::Hidden => &[1.5, 1.0],
-        LineStyle::Center => &[6.0, 1.0, 1.0, 1.0],
-        _ => &[],
-    }
-}
 
 const TEXT_GRAY: u8 = 20;
 
@@ -78,9 +56,10 @@ pub fn to_svg(drawing: &Drawing2D, paper: DVec2) -> String {
     let _ = writeln!(s, r#"<g stroke-linecap="round" fill="none">"#);
     for prim in &drawing.prims {
         match prim {
-            Prim::Line { a, b, style, .. } => {
-                let (width, [r, g, bl]) = pen(*style);
-                let dash = dashes(*style);
+            Prim::Line { a, b, style, pen, .. } => {
+                let resolved = style.resolve(pen.as_ref());
+                let (width, [r, g, bl]) = (resolved.width, resolved.color);
+                let dash = resolved.dashes;
                 let dash = if dash.is_empty() {
                     String::new()
                 } else {
@@ -111,7 +90,7 @@ pub fn to_svg(drawing: &Drawing2D, paper: DVec2) -> String {
                     points.join(" ")
                 );
             }
-            Prim::Text { pos, text, size, anchor, angle } => {
+            Prim::Text { pos, text, size, anchor, angle, .. } => {
                 if text.trim().is_empty() {
                     continue;
                 }
@@ -210,9 +189,10 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
     let _ = writeln!(Utf8(&mut content), "{} 0 0 {} 0 0 cm 1 J 1 j", num(PT_PER_MM), num(PT_PER_MM));
     for prim in &drawing.prims {
         match prim {
-            Prim::Line { a, b, style, .. } => {
-                let (width, color) = pen(*style);
-                let dash: Vec<String> = dashes(*style).iter().map(|v| num(*v)).collect();
+            Prim::Line { a, b, style, pen, .. } => {
+                let resolved = style.resolve(pen.as_ref());
+                let (width, color) = (resolved.width, resolved.color);
+                let dash: Vec<String> = resolved.dashes.iter().map(|v| num(*v)).collect();
                 let _ = writeln!(
                     Utf8(&mut content),
                     "{} RG {} w [{}] 0 d {} {} m {} {} l S",
@@ -245,7 +225,7 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
                 }
                 let _ = writeln!(Utf8(&mut content), "q {gs}{} rg {path}h f Q", rgb([r, g, b]));
             }
-            Prim::Text { pos, text, size, anchor, angle } => {
+            Prim::Text { pos, text, size, anchor, angle, .. } => {
                 let bytes: Vec<u8> = text.chars().map(win_ansi).collect();
                 if text.trim().is_empty() {
                     continue;
@@ -332,6 +312,7 @@ impl std::fmt::Write for Utf8<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::LineStyle;
 
     fn sample() -> Drawing2D {
         let mut d = Drawing2D::default();

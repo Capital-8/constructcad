@@ -18,6 +18,8 @@ struct Settings {
     joins: std::collections::BTreeSet<(ElementId, ElementId)>,
     groups: BTreeMap<crate::GroupId, crate::Group>,
     systems: BTreeMap<crate::SystemId, crate::MepSystem>,
+    filters: BTreeMap<crate::FilterId, crate::ViewFilter>,
+    templates: BTreeMap<crate::TemplateId, crate::ViewTemplate>,
 }
 
 impl Settings {
@@ -31,6 +33,8 @@ impl Settings {
             joins: p.joins.clone(),
             groups: p.groups.clone(),
             systems: p.systems.clone(),
+            filters: p.filters.clone(),
+            templates: p.templates.clone(),
         }
     }
 
@@ -43,6 +47,8 @@ impl Settings {
         p.joins = self.joins;
         p.groups = self.groups;
         p.systems = self.systems;
+        p.filters = self.filters;
+        p.templates = self.templates;
     }
 }
 
@@ -394,6 +400,58 @@ impl<'a> EditCtx<'a> {
         &mut self.project.systems
     }
 
+    /// View filters.
+    pub fn filters_mut(&mut self) -> &mut BTreeMap<crate::FilterId, crate::ViewFilter> {
+        self.touch_settings();
+        &mut self.project.filters
+    }
+
+    /// View templates (views that follow one are updated when the edit ends).
+    pub fn templates_mut(&mut self) -> &mut BTreeMap<crate::TemplateId, crate::ViewTemplate> {
+        self.touch_settings();
+        &mut self.project.templates
+    }
+
+    /// Keep view graphics consistent with the model: drop overrides of
+    /// missing elements and missing filters, unassign missing templates,
+    /// and copy each template's controlled properties into its views.
+    fn sync_views(&mut self) {
+        // Templates drop filters that no longer exist.
+        let filters = &self.project.filters;
+        let stale = self
+            .project
+            .templates
+            .values()
+            .any(|t| t.graphics.filters.iter().any(|f| !filters.contains_key(&f.filter)));
+        if stale {
+            let filters = filters.clone();
+            for t in self.templates_mut().values_mut() {
+                t.graphics.filters.retain(|f| filters.contains_key(&f.filter));
+            }
+        }
+        let p = &*self.project;
+        let changed: Vec<(ViewId, View)> = p
+            .views
+            .values()
+            .filter(|v| v.template.is_some() || !v.graphics.is_empty())
+            .filter_map(|v| {
+                let mut new = v.clone();
+                match new.template.map(|t| p.templates.get(&t)) {
+                    Some(Some(t)) => t.apply(&mut new),
+                    Some(None) => new.template = None,
+                    None => {}
+                }
+                new.graphics.repair(&p.filters, Some(&|id| p.elements.contains_key(&id)));
+                (new != *v).then_some((v.id, new))
+            })
+            .collect();
+        for (id, view) in changed {
+            if let Some(v) = self.view_mut(id) {
+                *v = view;
+            }
+        }
+    }
+
     pub fn units_mut(&mut self) -> &mut crate::Units {
         self.touch_settings();
         &mut self.project.units
@@ -403,6 +461,7 @@ impl<'a> EditCtx<'a> {
     fn finish(mut self) -> Transaction {
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_dimensions();
+        self.sync_views();
         let p = &*self.project;
         self.tx.elements.retain(|id, c| {
             c.1 = p.elements.get(id).cloned();

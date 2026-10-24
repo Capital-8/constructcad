@@ -189,3 +189,29 @@ pub fn category(name: &str) -> Result<Category> {
 pub fn category_name(c: Category) -> String {
     format!("{c:?}").to_lowercase()
 }
+
+/// A view filter by id or name.
+pub fn filter(p: &Project, r: &Ref) -> Result<cc_core::FilterId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::FilterId(*id);
+            p.filter(id).map(|_| id).ok_or_else(|| EngineError::not_found(format!("no filter with id {}", id.0)))
+        }
+        Ref::Name(n) => unique("filter", n, p.filters.values().filter(|f| matches(&f.name, n)).map(|f| f.id).collect()),
+    }
+}
+
+/// A view template by id or name.
+pub fn template(p: &Project, r: &Ref) -> Result<cc_core::TemplateId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::TemplateId(*id);
+            p.template(id)
+                .map(|_| id)
+                .ok_or_else(|| EngineError::not_found(format!("no view template with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            unique("view template", n, p.templates.values().filter(|t| matches(&t.name, n)).map(|t| t.id).collect())
+        }
+    }
+}

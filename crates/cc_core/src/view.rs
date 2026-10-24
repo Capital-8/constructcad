@@ -201,6 +201,13 @@ pub struct View {
     /// Scale denominator (50 means 1:50).
     pub scale: u32,
     pub kind: ViewKind,
+    /// Category visibility and overrides, filters, element overrides.
+    #[serde(default, skip_serializing_if = "crate::ViewGraphics::is_empty")]
+    pub graphics: crate::ViewGraphics,
+    /// The template the view follows: the properties it controls are
+    /// copied from it on every edit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<crate::TemplateId>,
 }
 
 impl ViewKind {
@@ -229,6 +236,11 @@ impl MepDiscipline {
 }
 
 impl View {
+    /// A view with default graphics and no template.
+    pub fn new(id: ViewId, name: impl Into<String>, scale: u32, kind: ViewKind) -> Self {
+        Self { id, name: name.into(), scale, kind, graphics: Default::default(), template: None }
+    }
+
     pub fn category(&self) -> ViewCategory {
         match self.kind {
             ViewKind::FloorPlan { .. } => ViewCategory::FloorPlan,

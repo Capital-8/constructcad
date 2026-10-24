@@ -40,6 +40,21 @@ ccad -p house.ccad --save run element_set id=57 'params={"shape": {"Gable": {"sl
 
 Objects merge field by field; arrays and plain values replace; `null` clears an optional value. `material_set`, `units_set` (shaped like `material_get`, `units_get`) work alike.
 
+**View graphics.** What a view shows and how is part of the view: `view_graphics_get` lists every category's visibility and overrides, the applied filters and the element overrides; `view_graphics_set` shows or hides a category and overrides its projection and cut lines (color, weight in paper mm, pattern), surface and cut fills (color, pattern), halftone and transparency; `element_override_set` and `element_hide_in_view` do the same for single elements in one view. Overrides are objects like `{"cut_lines": {"color": [255, 0, 0], "weight": 0.5, "pattern": "Dash"}, "cut_fill": {"pattern": "Solid", "color": [200, 200, 200]}, "halftone": true, "transparency": 0.4}`; they merge like `params` (`null` resets an attribute, `reset: true` starts over). They apply to plans, ceiling plans, elevations, sections, 3D views, sheets and PDF/SVG exports.
+
+```sh
+ccad -p house.ccad --save run view_graphics_set view=Térreo category=door visible=false
+ccad -p house.ccad --save run filter_create name=Long 'categories=["wall"]' 'rules=[{"param": "length", "op": "greater", "value": 5}]'
+ccad -p house.ccad --save run view_filter_add view=Térreo filter=Long 'overrides={"cut_lines": {"color": [255, 0, 0]}}'
+ccad -p house.ccad run filter_elements filter=Long
+```
+
+*Filters* (`filter_create`, `filter_set`, `filter_delete`, `filters_list`, `filter_elements`) select elements by category and rules on parameters — any schedule field (`type`, `mark`, `comments`, `level`, `material`, `system`, `structural`, `width`, `height`, `thickness`, `length`, `area`, `volume`, `diameter`…) or `elevation` (of the element's level) — with `equals`, `not_equals`, `contains`, `not_contains`, `begins_with`, `not_begins_with`, `greater`, `greater_or_equal`, `less`, `less_or_equal`, `has_value` and `has_no_value`, all of them (default) or any (`any: true`). Quantities are compared in SI units (meters), text without case. A view applies filters in order (`view_filter_add`, `view_filter_set`, `view_filter_move`, `view_filter_remove`): the first matching filter wins for each attribute, an element's own overrides beat the filters, and filters beat the category; an element is hidden when it is hidden in the view, its category is off, or any matching filter hides it.
+
+*View templates* (`template_create` from a view, `template_set`, `template_delete`, `templates_list`) hold a scale, category graphics, filters, the plan cut height, the building services display (services over a faint architecture) and the structural display, each with an `include` flag. `view_template_apply` copies them into views once; `view_template_assign` makes views follow a template: the included properties are copied now and on every change of the template (in the same undo step), and editing them in the view is refused. Deleting a template frees its views, which keep their properties.
+
+*Temporary hide/isolate* (`view_temporary` with `action` `hide`, `isolate`, `hide_category`, `isolate_category` or `reset`) is display state of the session, not a model change: it is not saved, not undone and not printed (sheets and exports show the view whole). `view_temporary_apply` makes it permanent (hidden in the view, categories turned off) as one undo step.
+
 **Validation and undo.** Every edit is one undo step (`undo`, `redo`). An edit that would leave the model invalid — a door pointing at a missing wall, a negative size, a reference to nothing — is refused and leaves no trace. Pinned elements are not moved, trimmed or deleted.
 
 **Errors.** A failed command returns `{"error": {"code": …, "message": …}}`. Messages are in the session's language (`--lang`, `language_set`).

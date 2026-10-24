@@ -9,5 +9,5 @@ mod mesh;
 mod renderer;
 
 pub use camera::{pick_ray, view_proj};
-pub use mesh::{SceneMesh, Vertex};
+pub use mesh::{SceneMesh, SolidStyle, Vertex};
 pub use renderer::Renderer3D;

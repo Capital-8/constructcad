@@ -19,6 +19,11 @@ pub struct Session {
     geom_revision: Option<u64>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
     sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
+    /// Elements temporarily hidden or isolated per view: display state, not
+    /// part of the model (not saved, not undone).
+    temporary: HashMap<ViewId, cc_core::TemporaryVisibility>,
+    /// Counts changes of `temporary` (3D views rebuild their meshes on it).
+    temporary_revision: u64,
 }
 
 /// A command recorded in a macro.
@@ -51,6 +56,8 @@ impl Session {
             geom_revision: None,
             drawings: HashMap::new(),
             sheets: HashMap::new(),
+            temporary: HashMap::new(),
+            temporary_revision: 0,
         }
     }
 
@@ -105,7 +112,8 @@ impl Session {
         (&self.doc.project, &self.geom)
     }
 
-    /// Drawing of a graphical view (cached per revision).
+    /// Drawing of a graphical view, with what is temporarily hidden or
+    /// isolated in it left out (cached per revision).
     pub fn drawing(&mut self, view: ViewId) -> Option<Rc<Drawing2D>> {
         let rev = self.doc.revision();
         if let Some((r, d)) = self.drawings.get(&view)
@@ -116,9 +124,42 @@ impl Session {
         self.sync_units();
         self.geometry();
         let v = self.doc.project.view(view)?;
-        let d = Rc::new(cc_views::generate_labeled(&self.doc.project, &self.geom, v, &crate::i18n::tr)?);
+        let temporary = self.temporary.get(&view);
+        let d = Rc::new(cc_views::generate_temporary(&self.doc.project, &self.geom, v, &crate::i18n::tr, temporary)?);
         self.drawings.insert(view, (rev, d.clone()));
         Some(d)
+    }
+
+    /// Drawing of a view as printed: without temporary hiding or isolation.
+    pub fn printed_drawing(&mut self, view: ViewId) -> Option<Rc<Drawing2D>> {
+        if !self.temporary.contains_key(&view) {
+            return self.drawing(view);
+        }
+        self.sync_units();
+        self.geometry();
+        let v = self.doc.project.view(view)?;
+        Some(Rc::new(cc_views::generate_labeled(&self.doc.project, &self.geom, v, &crate::i18n::tr)?))
+    }
+
+    /// What is temporarily hidden or isolated in `view`.
+    pub fn temporary(&self, view: ViewId) -> Option<&cc_core::TemporaryVisibility> {
+        self.temporary.get(&view)
+    }
+
+    /// Set (or, with `None` or an empty set, reset) what is temporarily
+    /// hidden or isolated in `view`. Not an edit: nothing to undo or save.
+    pub fn set_temporary(&mut self, view: ViewId, temporary: Option<cc_core::TemporaryVisibility>) {
+        match temporary.filter(|t| !t.is_empty()) {
+            Some(t) => self.temporary.insert(view, t),
+            None => self.temporary.remove(&view),
+        };
+        self.drawings.remove(&view);
+        self.temporary_revision += 1;
+    }
+
+    /// Changes whenever any view's temporary visibility changes.
+    pub fn temporary_revision(&self) -> u64 {
+        self.temporary_revision
     }
 
     /// Drop cached drawings (after a language change alters their text).
@@ -146,7 +187,7 @@ impl Session {
         };
         let ViewKind::Sheet { viewports, .. } = &sheet_view.kind else { return None };
         let drawings: HashMap<ViewId, Rc<Drawing2D>> =
-            viewports.iter().filter_map(|vp| Some((vp.view, self.drawing(vp.view)?))).collect();
+            viewports.iter().filter_map(|vp| Some((vp.view, self.printed_drawing(vp.view)?))).collect();
         let s =
             Rc::new(cc_views::compose_sheet(&self.doc.project, &sheet_view, &labels, |v| drawings.get(&v).cloned())?);
         self.sheets.insert(view, (rev, s.clone()));

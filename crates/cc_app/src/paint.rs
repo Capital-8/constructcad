@@ -30,11 +30,15 @@ impl Xf {
     }
 }
 
+/// Screen points per paper millimeter of pen width (the default pens are
+/// drawn at about this ratio).
+const PX_PER_PEN_MM: f32 = 4.0;
+
 pub fn stroke_for(style: LineStyle, highlighted: bool) -> Stroke {
     let (width, color) = match style {
         LineStyle::Cut => (2.0, Color32::from_gray(10)),
         LineStyle::Projection => (1.0, Color32::from_gray(45)),
-        LineStyle::Thin => (0.6, Color32::from_gray(95)),
+        LineStyle::Thin | LineStyle::Hatch => (0.6, Color32::from_gray(95)),
         LineStyle::Hidden => (0.8, Color32::from_gray(120)),
         LineStyle::Annotation => (0.9, Color32::from_rgb(30, 90, 170)),
         LineStyle::Center => (0.8, Color32::from_rgb(30, 90, 170)),
@@ -103,7 +107,7 @@ pub fn paint_drawing(painter: &Painter, d: &Drawing2D, xf: &Xf, opts: &PaintOpti
     let clip = painter.clip_rect().expand(50.0);
     for prim in &d.prims {
         match prim {
-            Prim::Fill { pts, color, element } => {
+            Prim::Fill { pts, color, element, .. } => {
                 if opts.only.is_some_and(|only| !element.is_some_and(|e| only.contains(&e))) {
                     continue;
                 }
@@ -118,7 +122,7 @@ pub fn paint_drawing(painter: &Painter, d: &Drawing2D, xf: &Xf, opts: &PaintOpti
                 };
                 fill_polygon(painter, screen, c);
             }
-            Prim::Line { a, b, style, element } => {
+            Prim::Line { a, b, style, element, pen } => {
                 if opts.only.is_some_and(|only| !element.is_some_and(|e| only.contains(&e))) {
                     continue;
                 }
@@ -128,10 +132,32 @@ pub fn paint_drawing(painter: &Painter, d: &Drawing2D, xf: &Xf, opts: &PaintOpti
                     continue;
                 }
                 let mut stroke = stroke_for(*style, hl);
+                // View graphics overrides: paper millimeters at the screen's pen scale.
+                let mut dashes: Option<Vec<f32>> = None;
+                if let Some(p) = pen {
+                    let r = style.resolve(Some(p));
+                    if !hl {
+                        stroke.color = Color32::from_rgb(r.color[0], r.color[1], r.color[2]);
+                    }
+                    if p.weight.is_some() {
+                        stroke.width = (r.width as f32 * PX_PER_PEN_MM).clamp(0.4, 8.0) + if hl { 0.6 } else { 0.0 };
+                    }
+                    if p.pattern.is_some() {
+                        dashes = Some(r.dashes.iter().map(|d| (*d as f32 * PX_PER_PEN_MM).max(1.0)).collect());
+                    }
+                }
                 if let Some(m) = opts.mono {
                     stroke.color = m;
                 }
-                if *style == LineStyle::Hidden {
+                if let Some(pattern) = dashes {
+                    if pattern.len() >= 2 {
+                        let (on, off): (Vec<f32>, Vec<f32>) =
+                            pattern.chunks(2).filter(|c| c.len() == 2).map(|c| (c[0], c[1])).unzip();
+                        painter.extend(Shape::dashed_line_with_offset(&[pa, pb], stroke, &on, &off, 0.0));
+                    } else {
+                        painter.line_segment([pa, pb], stroke);
+                    }
+                } else if *style == LineStyle::Hidden {
                     painter.extend(Shape::dashed_line(&[pa, pb], stroke, 6.0, 4.0));
                 } else if *style == LineStyle::Center {
                     // Dash-dot.
@@ -140,7 +166,7 @@ pub fn paint_drawing(painter: &Painter, d: &Drawing2D, xf: &Xf, opts: &PaintOpti
                     painter.line_segment([pa, pb], stroke);
                 }
             }
-            Prim::Text { pos, text, size, anchor, angle } => {
+            Prim::Text { pos, text, size, anchor, angle, .. } => {
                 if opts.only.is_some() {
                     continue;
                 }

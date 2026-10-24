@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 9;
+pub const FORMAT_VERSION: u32 = 10;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
@@ -49,7 +49,8 @@ pub fn from_ron_with_repairs(text: &str) -> Result<(Project, usize), PersistErro
     }
     // Version 1 files have no persistent ids; versions 2 and 3 only add fields
     // with defaults; version 4 adds dimension kinds (older files: aligned);
-    // version 9 adds arc walls (older files: straight).
+    // version 9 adds arc walls (older files: straight); version 10 adds view
+    // graphics, filters and templates (older files: none).
     let mut project = file.project;
     let repairs = project.repair();
     project.ensure_uids();

@@ -40,6 +40,21 @@ ccad -p casa.ccad --save run element_set id=57 'params={"shape": {"Gable": {"slo
 
 Objetos se mesclam campo a campo; listas e valores simples substituem; `null` limpa um valor opcional. `material_set` e `units_set` (no formato de `material_get` e `units_get`) funcionam do mesmo jeito.
 
+**Gráficos das vistas.** O que uma vista mostra e como faz parte da vista: `view_graphics_get` lista a visibilidade e as sobreposições de cada categoria, os filtros aplicados e as sobreposições de elementos; `view_graphics_set` mostra ou oculta uma categoria e sobrepõe suas linhas em projeção e de corte (cor, espessura em mm de papel, padrão), preenchimentos de superfície e de corte (cor, padrão), meio-tom e transparência; `element_override_set` e `element_hide_in_view` fazem o mesmo para elementos numa vista. As sobreposições são objetos como `{"cut_lines": {"color": [255, 0, 0], "weight": 0.5, "pattern": "Dash"}, "cut_fill": {"pattern": "Solid", "color": [200, 200, 200]}, "halftone": true, "transparency": 0.4}` e se mesclam como `params` (`null` redefine um atributo, `reset: true` recomeça). Valem em plantas, plantas de forro, elevações, cortes, vistas 3D, folhas e exportações PDF/SVG.
+
+```sh
+ccad -p casa.ccad --save run view_graphics_set view=Térreo category=door visible=false
+ccad -p casa.ccad --save run filter_create name=Longas 'categories=["wall"]' 'rules=[{"param": "length", "op": "greater", "value": 5}]'
+ccad -p casa.ccad --save run view_filter_add view=Térreo filter=Longas 'overrides={"cut_lines": {"color": [255, 0, 0]}}'
+ccad -p casa.ccad run filter_elements filter=Longas
+```
+
+*Filtros* (`filter_create`, `filter_set`, `filter_delete`, `filters_list`, `filter_elements`) selecionam elementos por categoria e regras sobre parâmetros — qualquer campo de tabela (`type`, `mark`, `comments`, `level`, `material`, `system`, `structural`, `width`, `height`, `thickness`, `length`, `area`, `volume`, `diameter`…) ou `elevation` (do nível do elemento) — com `equals`, `not_equals`, `contains`, `not_contains`, `begins_with`, `not_begins_with`, `greater`, `greater_or_equal`, `less`, `less_or_equal`, `has_value` e `has_no_value`, todas as regras (padrão) ou qualquer uma (`any: true`). Quantidades são comparadas em unidades do SI (metros); texto, sem diferenciar maiúsculas. Uma vista aplica filtros em ordem (`view_filter_add`, `view_filter_set`, `view_filter_move`, `view_filter_remove`): o primeiro filtro que corresponde vence em cada atributo, as sobreposições do próprio elemento vencem os filtros e os filtros vencem a categoria; um elemento fica oculto se estiver oculto na vista, se a categoria estiver desligada ou se algum filtro correspondente o ocultar.
+
+*Modelos de vista* (`template_create` a partir de uma vista, `template_set`, `template_delete`, `templates_list`) guardam escala, gráficos das categorias, filtros, altura de corte das plantas, exibição de instalações (sobre a arquitetura esmaecida) e exibição estrutural, cada um com uma marca `include`. `view_template_apply` copia-os para vistas uma vez; `view_template_assign` faz as vistas seguirem o modelo: as propriedades incluídas são copiadas agora e a cada mudança do modelo (no mesmo passo de desfazer), e editá-las na vista é recusado. Excluir um modelo libera as vistas, que mantêm suas propriedades.
+
+*Ocultar/isolar temporário* (`view_temporary` com `action` `hide`, `isolate`, `hide_category`, `isolate_category` ou `reset`) é estado de exibição da sessão, não uma mudança do modelo: não é salvo, não entra no desfazer e não é impresso (folhas e exportações mostram a vista inteira). `view_temporary_apply` o torna permanente (oculto na vista, categorias desligadas) como um passo de desfazer.
+
 **Validação e desfazer.** Cada edição é um passo de desfazer (`undo`, `redo`). Uma edição que deixaria o modelo inválido — uma porta numa parede inexistente, uma medida negativa, uma referência a nada — é recusada sem deixar rastro. Elementos fixados não são movidos, aparados nem excluídos.
 
 **Erros.** Um comando que falha devolve `{"error": {"code": …, "message": …}}`, com a mensagem no idioma da sessão (`--lang`, `language_set`).
