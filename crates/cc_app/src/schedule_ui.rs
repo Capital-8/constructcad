@@ -20,8 +20,11 @@ fn cell_text(cell: &Cell) -> String {
 
 pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     let Some(view) = state.project().view(view_id).cloned() else { return };
-    let ViewKind::Schedule { category, def } = view.kind.clone() else { return };
-    let table = cc_views::schedule(state.project(), state.session.geom(), category, &def);
+    if !matches!(view.kind, ViewKind::Schedule { .. }) {
+        return;
+    }
+    // The elements the schedule's phase and phase filter show.
+    let table = state.session.schedule(view_id).unwrap_or_default();
 
     egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.horizontal(|ui| {

@@ -507,6 +507,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             crate::actions::run_command(state, cc_engine::commands::modify::ElementsPin { ids: vec![id.0], pinned });
         }
     });
+    crate::phases_dialog::element_rows(ui, state, &el);
     section(ui, "ifc", t!("section-ifc"), |ui| {
         readonly_row(ui, &t!("prop-ifc-guid"), cc_ifc::guid::encode(el.uid.0));
     });
@@ -1452,6 +1453,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         }
         ViewKind::ThreeD { .. } | ViewKind::Legend { .. } | ViewKind::Elevation { .. } | ViewKind::Diagram { .. } => {}
     }
+    crate::phases_dialog::view_section(ui, state, id);
 
     section(ui, "identity", t!("section-identity"), |ui| {
         view_text_row(ui, state, id, &t!("prop-name"), "name", view.name.clone(), |v, s| v.name = s);

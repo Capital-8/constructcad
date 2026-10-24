@@ -103,6 +103,12 @@ As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto
 - Com elementos selecionados, **Sobrepor gráficos** muda seus gráficos só na vista ativa e **Ocultar na vista** (EH) os oculta nela (reexibidos em Visibilidade/gráficos).
 - **Ocultar/isolar** (temporário): HH oculta a seleção, HI a isola, HC e IC ocultam ou isolam suas categorias, HR redefine. Enquanto ativo, a vista ganha uma borda colorida e um aviso com *Redefinir* e *Tornar permanente*. A ocultação temporária não é salva, não entra no desfazer e não é impressa.
 
+## Fases de construção
+
+- **Gerenciar → Fases** tem três abas. *Fases* lista as fases do projeto da mais antiga para a mais recente, com nome, descrição e quantos elementos são construídos e demolidos em cada uma; *Adicionar* acrescenta uma no fim, *Inserir antes* põe uma antes da selecionada, ↑ ↓ reordenam (uma mudança que poria uma demolição antes da construção é recusada), e excluir uma fase passa seus elementos e vistas para a fase escolhida em *Mesclar elementos e vistas em*. *Filtros de fase* define, para cada filtro, como aparecem os elementos existentes, demolidos, novos e temporários: *Não exibido*, *Por categoria* ou *Substituído*. *Gráficos de fase* define as sobreposições de cada estado (as mesmas células de Visibilidade/gráficos). OK mantém as mudanças; Cancelar as desfaz.
+- As propriedades da vista (plantas, elevações, cortes, vistas 3D, tabelas) têm a seção *Fases* com sua *Fase* e *Filtro de fase*; o filtro fica só para leitura quando o modelo da vista o controla. Os elementos mostram *Fase de criação* e *Fase de demolição*. Elementos novos são construídos na fase da vista ativa.
+- **Modificar → Demolir** (DE) demole os elementos clicados na fase da planta, elevação ou corte ativo; suas portas e janelas vão junto.
+
 ## Aviso de atualização
 
 O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa nem instala nada por conta própria.

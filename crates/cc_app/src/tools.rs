@@ -110,6 +110,8 @@ pub enum Tool {
     RoofOpening {
         roof: ElementId,
     },
+    /// Click elements to demolish them in the view's phase.
+    Demolish,
 }
 
 impl Tool {
@@ -154,6 +156,7 @@ impl Tool {
             Tool::JoinGeometry { unjoin: true } => "tool-unjoin-geometry",
             Tool::Paste => "action-paste",
             Tool::MatchType => "tool-match-type",
+            Tool::Demolish => "tool-demolish",
             Tool::Text { .. } => "tool-text",
             Tool::AddLeader { .. } => "tool-add-leader",
             Tool::RoofOpening { .. } => "tool-roof-opening",
@@ -786,6 +789,8 @@ pub fn handle(
         (Tool::Select, _) => select(ui, resp, painter, state, is_plan, xf, drawing),
         // Matching types works in any 2D view.
         (Tool::MatchType, _) => crate::clipboard::match_type_tool(resp, painter, state, xf, drawing),
+        // Demolishing works in plans, elevations and sections.
+        (Tool::Demolish, _) => crate::phases_dialog::demolish_tool(resp, painter, state, view, xf, drawing),
         // Dimensions work in any 2D view.
         (Tool::Dimension { type_id, mode }, _) => {
             dimension_tool(ui, resp, painter, state, view, (*type_id, *mode), xf, drawing)

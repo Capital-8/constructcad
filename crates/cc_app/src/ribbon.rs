@@ -64,6 +64,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Paste => Icon::Paste,
         Tool::Dimension { mode, .. } => dimension_icon(*mode),
         Tool::MatchType => Icon::MatchType,
+        Tool::Demolish => Icon::Demolish,
         Tool::AddLeader { .. } => Icon::Leader,
         Tool::RoofOpening { .. } => category_icon(Category::Roof),
         _ => tool.category().map_or(Icon::Select, category_icon),
@@ -672,6 +673,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-measure"), |ui| command_button(ui, state, Measure));
     group(ui, t!("group-geometry"), |ui| command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry]));
     group(ui, t!("group-group"), |ui| command_buttons(ui, state, &[Group, Ungroup]));
+    group(ui, t!("group-phasing"), |ui| command_button(ui, state, Demolish));
 }
 
 /// Paste (a menu of where to paste), then cut, copy and match type.
@@ -751,6 +753,7 @@ fn manage_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
     group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[ProjectInfo, Units, Levels, Materials]));
     group(ui, t!("group-graphics"), |ui| command_buttons(ui, state, &[ViewTemplates, ViewFilters]));
+    group(ui, t!("group-phasing"), |ui| command_button(ui, state, Phases));
     group(ui, t!("group-macros"), |ui| command_buttons(ui, state, &[MacroRecord, MacroRun]));
 }
 
@@ -1054,6 +1057,9 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::MatchType => {
                 ui.label(theme::muted(t!("hint-match-type")));
+            }
+            Tool::Demolish => {
+                ui.label(theme::muted(t!("hint-demolish")));
             }
             Tool::Mirror { draw } => {
                 ui.checkbox(&mut state.modify.mirror_copy, t!("opt-copy"));

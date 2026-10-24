@@ -88,6 +88,7 @@ As traduções ficam em `assets/i18n/*.ftl`. Um teste garante que todos os idiom
 - **Elevações e cortes**: remoção de linhas ocultas, hachura de corte e níveis anotados.
 - **Tabelas** de todas as categorias do modelo e de ambientes: escolha e ordem dos campos (da instância, do tipo e calculados, como comprimento, área e volume), ordenação, filtro, totais e exportação para CSV.
 - **Folhas** A0–A4: carimbo com dados do projeto e viewports arrastáveis em escala; exportação vetorial para PDF e SVG (*Arquivo → Exportar PDF/SVG…*), idêntica à tela.
+- **Fases de construção** (reformas): elementos são construídos e demolidos em fases ordenadas; cada vista mostra uma fase por um filtro de fase (existente, demolido, novo e temporário pela categoria, substituído ou oculto). *Gerenciar → Fases* edita fases, filtros e seus gráficos; *Modificar → Demolir* (DE) demole elementos na fase da vista.
 - **Gerenciar**: informações do projeto, níveis (cada nível novo cria suas plantas) e materiais.
 - **Arquivo `.ccad`**: RON versionado e legível; o salvamento é atômico.
 - **Exportação IFC4** (*Arquivo → Exportar IFC…*): pavimentos, paredes com aberturas, portas, janelas, pisos, forros, telhados, estrutura e componentes como sólidos extrudados (objetos importados como conjuntos de faces na classe original), com tipos, camadas de materiais, cores e quantitativos. Gerada pelo escritor STEP do próprio ConstructCAD, sem bibliotecas IFC de terceiros.
@@ -124,6 +125,7 @@ Quem não tem o Revit pode usar ferramentas independentes de terceiros que conve
 | TT | Texto | Ctrl+Shift+P | Paleta de comandos |
 | Ctrl+F1 | Recolher / expandir o ribbon | SA | Selecionar todas as instâncias na vista |
 | GP / UG | Agrupar / Desagrupar | ME | Medir entre duas referências |
+| DE | Demolir (na fase da vista) | | |
 
 Navegação 2D: roda do mouse dá zoom e o botão do meio faz pan. Navegação 3D: arrastar com o botão esquerdo orbita, botão direito ou do meio faz pan e a roda dá zoom.
 

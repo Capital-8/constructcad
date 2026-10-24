@@ -120,11 +120,13 @@ pub enum Icon {
     Isolate,
     OverrideGraphics,
     ResetTemporary,
+    Phases,
+    Demolish,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 109] = [
+    pub const ALL: [Icon; 111] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -234,6 +236,8 @@ impl Icon {
         Icon::Isolate,
         Icon::OverrideGraphics,
         Icon::ResetTemporary,
+        Icon::Phases,
+        Icon::Demolish,
     ];
 
     /// The icon's SVG source.
@@ -348,6 +352,8 @@ impl Icon {
             Icon::Isolate => include_str!("../../../assets/icons/ui/isolate.svg"),
             Icon::OverrideGraphics => include_str!("../../../assets/icons/ui/override-graphics.svg"),
             Icon::ResetTemporary => include_str!("../../../assets/icons/ui/reset-temporary.svg"),
+            Icon::Phases => include_str!("../../../assets/icons/ui/phases.svg"),
+            Icon::Demolish => include_str!("../../../assets/icons/ui/demolish.svg"),
         }
     }
 }

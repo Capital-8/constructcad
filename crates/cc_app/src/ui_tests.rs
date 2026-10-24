@@ -432,3 +432,72 @@ fn graphics_dialog_snapshots() {
     results.add(harness.try_snapshot("view_templates"));
     results.unwrap();
 }
+
+fn phases_harness(state: AppState) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(1000.0, 640.0), egui::Theme::Light, |ui, state| {
+        crate::phases_dialog::show(ui.ctx(), state)
+    })
+}
+
+#[test]
+fn phases_dialog_adds_a_phase_and_cancel_undoes() {
+    let mut state = sample_state();
+    let depth = state.session.doc.undo_depth();
+    let phases = state.project().phases.len();
+    crate::phases_dialog::open(&mut state);
+    let mut harness = phases_harness(state);
+    harness.get_by_label(&t!("ph-add")).click();
+    harness.run();
+    assert_eq!(harness.state().project().phases.len(), phases + 1);
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert_eq!(harness.state().project().phases.len(), phases);
+    assert_eq!(harness.state().session.doc.undo_depth(), depth);
+    assert!(harness.state().dialogs.phases.is_none());
+}
+
+#[test]
+fn phases_dialog_ok_keeps_one_undo_step() {
+    let mut state = sample_state();
+    let depth = state.session.doc.undo_depth();
+    let filters = state.project().phase_filters.len();
+    crate::phases_dialog::open(&mut state);
+    let mut harness = phases_harness(state);
+    harness.get_by_label(&t!("ph-add")).click();
+    harness.run();
+    harness.get_by_label(&t!("ph-tab-filters")).click();
+    harness.run();
+    harness.get_by_label(&t!("ph-new-filter")).click();
+    harness.run();
+    assert_eq!(harness.state().project().phase_filters.len(), filters + 1);
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.phases.is_none());
+    assert_eq!(harness.state().project().phase_filters.len(), filters + 1);
+    // OK keeps both edits.
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 2);
+}
+
+#[test]
+fn phases_dialog_snapshots() {
+    if !snapshots_requested() {
+        return;
+    }
+    let mut results = egui_kittest::SnapshotResults::new();
+    // The dialog opens on the phases tab.
+    for (tab, name) in
+        [(None, "phases"), (Some("ph-tab-filters"), "phase_filters"), (Some("ph-tab-graphics"), "phase_graphics")]
+    {
+        let mut state = sample_state();
+        crate::phases_dialog::open(&mut state);
+        let mut harness = phases_harness(state);
+        if let Some(tab) = tab {
+            harness.get_by_label(&crate::i18n::tr(tab)).click();
+        }
+        for _ in 0..3 {
+            harness.run();
+        }
+        results.add(harness.try_snapshot(name));
+    }
+    results.unwrap();
+}

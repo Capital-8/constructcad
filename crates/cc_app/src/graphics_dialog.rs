@@ -51,7 +51,7 @@ pub struct Edits {
 }
 
 impl Edits {
-    fn begin(state: &mut AppState) -> Self {
+    pub(crate) fn begin(state: &mut AppState) -> Self {
         let owns = state.dialogs.edit_start.is_none();
         if owns {
             session::begin(state);
@@ -60,7 +60,7 @@ impl Edits {
         Self { start: state.session.doc.undo_depth(), owns }
     }
 
-    fn finish(self, state: &mut AppState, ok: bool) {
+    pub(crate) fn finish(self, state: &mut AppState, ok: bool) {
         state.session.doc.break_merge();
         match (ok, self.owns) {
             (true, true) => session::commit(state),
@@ -105,13 +105,17 @@ pub struct TemplateManager {
     edits: Edits,
 }
 
-fn key(v: impl Hash) -> u64 {
+pub(crate) fn key(v: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     v.hash(&mut h);
     h.finish()
 }
 
-fn run<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, merge: Option<u64>, command: C) -> bool {
+pub(crate) fn run<C: cc_engine::Command + serde::Serialize>(
+    state: &mut AppState,
+    merge: Option<u64>,
+    command: C,
+) -> bool {
     let result = match merge {
         Some(k) => state.session.run_merged(k, command),
         None => state.session.run(command),
@@ -125,7 +129,7 @@ fn run<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, merge: Op
     }
 }
 
-fn overrides_json(o: &GraphicOverride) -> serde_json::Value {
+pub(crate) fn overrides_json(o: &GraphicOverride) -> serde_json::Value {
     serde_json::to_value(o).unwrap_or_default()
 }
 
@@ -383,7 +387,7 @@ fn halftone_cell(ui: &mut Ui, label: &str, value: &mut Option<bool>, enabled: bo
 }
 
 /// The override cells of one row, in the column order of [`override_headers`].
-fn override_cells(ui: &mut Ui, ov: &mut GraphicOverride, enabled: bool) -> bool {
+pub(crate) fn override_cells(ui: &mut Ui, ov: &mut GraphicOverride, enabled: bool) -> bool {
     let mut changed = false;
     changed |= line_cell(ui, &t!("vg-projection-lines"), &mut ov.projection_lines, enabled);
     changed |= fill_cell(ui, &t!("vg-surface-fill"), &mut ov.surface_fill, enabled);
@@ -394,11 +398,11 @@ fn override_cells(ui: &mut Ui, ov: &mut GraphicOverride, enabled: bool) -> bool 
     changed
 }
 
-fn header(ui: &mut Ui, text: String) {
+pub(crate) fn header(ui: &mut Ui, text: String) {
     ui.label(RichText::new(text).size(11.5).color(PALETTE.text_muted));
 }
 
-fn override_headers(ui: &mut Ui) {
+pub(crate) fn override_headers(ui: &mut Ui) {
     for k in ["vg-projection-lines", "vg-surface-fill", "vg-cut-lines", "vg-cut-fill", "vg-halftone", "vg-transparency"]
     {
         header(ui, tr(k));
@@ -1137,6 +1141,25 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
             }
         });
         ui.end_row();
+
+        changed |= ui.checkbox(&mut include.phase_filter, "").changed();
+        ui.label(t!("prop-phase-filter"));
+        let filters: Vec<(cc_core::PhaseFilterId, String)> =
+            state.project().phase_filters.values().map(|f| (f.id, f.name.clone())).collect();
+        let name = |id: Option<cc_core::PhaseFilterId>| {
+            id.and_then(|i| filters.iter().find(|(f, _)| *f == i)).map_or(t!("ph-filter-none"), |(_, n)| n.clone())
+        };
+        let mut pf = t.phase_filter;
+        egui::ComboBox::from_id_salt(("tpl-phase-filter", id)).selected_text(name(pf)).show_ui(ui, |ui| {
+            ui.selectable_value(&mut pf, None, t!("ph-filter-none"));
+            for (f, n) in &filters {
+                ui.selectable_value(&mut pf, Some(*f), n);
+            }
+        });
+        if pf != t.phase_filter {
+            set.phase_filter = Some(pf.map(|f| Ref::Id(f.0)));
+        }
+        ui.end_row();
     });
     if changed {
         set.include = serde_json::to_value(include).ok();
@@ -1146,6 +1169,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         || set.discipline.is_some()
         || set.structural.is_some()
         || set.structure_tags.is_some()
+        || set.phase_filter.is_some()
         || set.include.is_some();
     if any {
         run(state, Some(key(("template", id))), set);

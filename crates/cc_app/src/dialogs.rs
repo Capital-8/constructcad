@@ -31,6 +31,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::systems_dialog::show(ctx, state);
     crate::systems_dialog::sizing(ctx, state);
     crate::graphics_dialog::show(ctx, state);
+    crate::phases_dialog::show(ctx, state);
     confirm(ctx, state);
     error(ctx, state);
     about(ctx, state);

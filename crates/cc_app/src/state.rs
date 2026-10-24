@@ -70,6 +70,8 @@ pub struct Dialogs {
     pub filters: Option<crate::graphics_dialog::FilterEditor>,
     /// The view template manager.
     pub templates: Option<crate::graphics_dialog::TemplateManager>,
+    /// Phases, phase filters and phase graphics.
+    pub phases: Option<crate::phases_dialog::PhasesDialog>,
 }
 
 pub struct AppState {
@@ -223,6 +225,14 @@ impl AppState {
     pub fn sync(&mut self) {
         // Drawings, schedules and fields format quantities with the project units.
         cc_views::format::set_units(&self.session.doc.project.units);
+        // New elements are built in the active view's phase.
+        let project = &self.session.doc.project;
+        let view = self.active_view.and_then(|v| project.view(v)).filter(|v| v.kind.is_phased());
+        let phase = view.and_then(|v| project.view_phase(v));
+        if phase != self.session.doc.creation_phase {
+            let phase = phase.map(|p| cc_engine::Ref::Id(p.0));
+            let _ = self.session.run(cc_engine::commands::phases::PhaseCreationSet { phase, view: None });
+        }
         if self.session.sync() {
             let project = &self.session.doc.project;
             self.selection.retain(|id| project.elements.contains_key(id));

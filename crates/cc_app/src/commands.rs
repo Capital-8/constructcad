@@ -108,6 +108,8 @@ pub enum UiCommand {
     TempIsolateCategory,
     TempReset,
     TempPermanent,
+    Phases,
+    Demolish,
     ProjectInfo,
     Units,
     Levels,
@@ -215,6 +217,8 @@ impl UiCommand {
             TempIsolateCategory,
             TempReset,
             TempPermanent,
+            Phases,
+            Demolish,
             ProjectInfo,
             Units,
             Levels,
@@ -318,6 +322,8 @@ impl UiCommand {
             HideInView | TempHide | TempHideCategory | TempPermanent => Icon::Hide,
             TempIsolate | TempIsolateCategory => Icon::Isolate,
             TempReset => Icon::ResetTemporary,
+            Phases => Icon::Phases,
+            Demolish => Icon::Demolish,
             ProjectInfo => Icon::ProjectInfo,
             Units => Icon::Dimension,
             Levels => Icon::Levels,
@@ -442,6 +448,8 @@ impl UiCommand {
             TempIsolateCategory => t!("action-temp-isolate-category"),
             TempReset => t!("action-temp-reset"),
             TempPermanent => t!("action-temp-permanent"),
+            Phases => t!("action-phases"),
+            Demolish => t!("tool-demolish"),
             ProjectInfo => t!("dlg-project-info"),
             Units => t!("dlg-units"),
             Levels => t!("dlg-levels"),
@@ -571,6 +579,8 @@ impl UiCommand {
             TempIsolateCategory => t!("cmd-desc-temp-isolate-category"),
             TempReset => t!("cmd-desc-temp-reset"),
             TempPermanent => t!("cmd-desc-temp-permanent"),
+            Phases => t!("cmd-desc-phases"),
+            Demolish => t!("cmd-desc-demolish"),
             ProjectInfo => t!("cmd-desc-project-info"),
             Units => t!("cmd-desc-units"),
             Levels => t!("cmd-desc-levels"),
@@ -643,6 +653,7 @@ impl UiCommand {
             TempHideCategory => "HC",
             TempIsolateCategory => "IC",
             TempReset => "HR",
+            Demolish => "DE",
             ToggleRibbon => "Ctrl+F1",
             CommandPalette => "Ctrl+Shift+P",
             _ => return None,
@@ -733,6 +744,8 @@ impl UiCommand {
             HideInView => "element_hide_in_view",
             TempHide | TempIsolate | TempHideCategory | TempIsolateCategory | TempReset => "view_temporary",
             TempPermanent => "view_temporary_apply",
+            Phases => "phase_set",
+            Demolish => "elements_demolish",
             Units => "units_set",
             Levels => "level_set",
             Materials => "material_set",
@@ -816,6 +829,7 @@ impl UiCommand {
             TempReset | TempPermanent if graphics_view(state).and_then(|v| state.session.temporary(v)).is_none() => {
                 Some(t!("msg-nothing-temporary"))
             }
+            Demolish if phase_view(state).is_none() => Some(t!("why-no-phase-view")),
             MacroRun if state.session.is_recording() => Some(t!("why-recording")),
             _ => None,
         }
@@ -855,6 +869,7 @@ impl UiCommand {
             UnjoinGeometry => *tool == Tool::JoinGeometry { unjoin: true },
             Paste => *tool == Tool::Paste,
             MatchType => *tool == Tool::MatchType,
+            Demolish => *tool == Tool::Demolish,
             Section => *tool == Tool::Section,
             FoundationSlab => matches!(tool, Tool::Sketch { category: Category::Foundation, .. }),
             MacroRecord => state.session.is_recording(),
@@ -862,6 +877,21 @@ impl UiCommand {
             _ => false,
         }
     }
+}
+
+/// The active view when it is a 2D view with a phase (plans, elevations, sections).
+pub fn phase_view(state: &AppState) -> Option<cc_core::ViewId> {
+    state.active_view.filter(|v| {
+        state.project().view(*v).is_some_and(|v| {
+            matches!(
+                v.kind,
+                cc_core::ViewKind::FloorPlan { .. }
+                    | cc_core::ViewKind::CeilingPlan { .. }
+                    | cc_core::ViewKind::Elevation { .. }
+                    | cc_core::ViewKind::Section { .. }
+            )
+        })
+    })
 }
 
 /// The active view when it has visibility/graphics (plans, elevations, sections, 3D).
@@ -1113,6 +1143,11 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         TempIsolateCategory => actions::temporary(state, "isolate_category"),
         TempReset => actions::temporary(state, "reset"),
         TempPermanent => actions::temporary_permanent(state),
+        Phases => crate::phases_dialog::open(state),
+        Demolish => {
+            state.set_tool(Tool::Demolish);
+            state.message = t!("hint-demolish");
+        }
         ProjectInfo => state.dialogs.project_info = true,
         Units => state.dialogs.units = true,
         Levels => state.dialogs.levels = true,

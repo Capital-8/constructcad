@@ -242,7 +242,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         return;
     };
 
-    let geom = state.session.geom();
+    // The geometry of the view's phase.
+    state.session.view_geometry(view_id);
+    let geom = state.session.geom_for(view_id);
     let v3 = state.view3d.entry(view_id).or_insert_with(|| {
         let mut v = View3DState::new(camera);
         if geom.bounds().is_some() && camera == CameraState::default() {
@@ -337,7 +339,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     let key = (state.session.doc.revision(), selection_hash(&state.selection), state.session.temporary_revision());
     let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
     if v3.mesh_key != Some(key) {
-        let geom = state.session.geom();
+        let geom = state.session.geom_for(view_id);
         let mesh = if analytical {
             let model = cc_geom::analytical::analytical_model(&state.session.doc.project, geom);
             SceneMesh::build_analytical(geom, &model, &state.selection)
@@ -391,7 +393,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
     if cube.home {
         let home = CameraState::default();
-        fit_camera(&mut v3.camera, state.session.geom(), aspect);
+        fit_camera(&mut v3.camera, state.session.geom_for(view_id), aspect);
         v3.turn_to(home.yaw_deg, home.pitch_deg, now);
         ui.ctx().request_repaint();
     }

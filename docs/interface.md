@@ -103,6 +103,12 @@ Two-letter keys work while a view has the focus and no text field is being edite
 - With elements selected, **Override Graphics** changes their graphics in the active view only and **Hide in View** (EH) hides them there (shown again from Visibility/Graphics).
 - **Hide/Isolate** (temporary): HH hides the selection, HI isolates it, HC and IC hide or isolate its categories, HR resets. While active, the view has a colored border and a chip with *Reset* and *Make Permanent*. Temporary hiding is not saved, not undone and not printed.
 
+## Construction phases
+
+- **Manage → Phases** has three tabs. *Phases* lists the project's phases from earliest to latest with their name, description and how many elements are built and demolished in each; *Add* appends one, *Insert Before* puts one before the selected phase, ↑ ↓ reorder (a move that would put a demolition before its construction is refused), and deleting a phase moves its elements and views into the phase chosen under *Merge elements and views into*. *Phase Filters* sets, for each filter, how existing, demolished, new and temporary elements show: *Not Displayed*, *By Category* or *Overridden*. *Phase Graphics* sets the overrides used for each status (the same cells as Visibility/Graphics). OK keeps the changes, Cancel undoes them.
+- The view's properties (plans, elevations, sections, 3D views, schedules) have a *Phasing* section with its *Phase* and *Phase Filter*; the filter is read-only when the view's template controls it. Elements show *Phase Created* and *Phase Demolished*. New elements are built in the active view's phase.
+- **Modify → Demolish** (DE) demolishes the clicked elements in the active plan's, elevation's or section's phase; their doors and windows go with them.
+
 ## Update notice
 
 ConstructCAD tells you when a newer version is published; it never downloads or installs anything by itself.
