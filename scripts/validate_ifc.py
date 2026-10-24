@@ -9,7 +9,9 @@ Checks:
   * every building element's geometry can be built, with openings cut;
   * built volumes match the exported base quantities;
   * spaces are aggregated into a storey and their volume is area x height;
-  * distribution systems and circuits group elements contained in a storey.
+  * distribution systems and circuits group elements contained in a storey;
+  * construction phase statuses (Pset_*Common.Status) are IFC4 enumeration
+    values, one per element.
 
 Usage: python scripts/validate_ifc.py model.ifc
 """
@@ -30,6 +32,7 @@ ELEMENTS = (
     "IfcCableCarrierSegment", "IfcPipeFitting", "IfcCableCarrierFitting", "IfcOutlet", "IfcSwitchingDevice", "IfcElectricDistributionBoard",
 )
 REL_TOL = 1e-3
+STATUSES = {"NEW", "EXISTING", "DEMOLISH", "TEMPORARY", "OTHER", "NOTKNOWN", "UNSET"}
 
 
 def quantity(element, name):
@@ -114,6 +117,23 @@ def main(path):
         for member in members:
             if ifcopenshell.util.element.get_container(member) is None:
                 errors.append(f"{label}: member {member.GlobalId} is not in a storey")
+
+    statuses = 0
+    for element in model.by_type("IfcElement"):
+        found = [
+            pset["Status"]
+            for name, pset in ifcopenshell.util.element.get_psets(element, psets_only=True).items()
+            if name.startswith("Pset_") and name.endswith("Common") and "Status" in pset
+        ]
+        statuses += len(found)
+        label = f"{element.is_a()} {element.GlobalId} '{element.Name}'"
+        if len(found) > 1:
+            errors.append(f"{label}: {len(found)} statuses")
+        for status in found:
+            values = status if isinstance(status, (list, tuple)) else [status]
+            if not values or any(v not in STATUSES for v in values):
+                errors.append(f"{label}: status {status!r} is not an IFC4 element status")
+    print(f"  Status: {statuses}")
 
     for error in errors:
         print(f"ERROR {error}")

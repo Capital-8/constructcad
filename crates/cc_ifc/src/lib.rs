@@ -16,7 +16,7 @@ pub mod parse;
 mod schema;
 pub mod step;
 
-pub use export::{ExportOptions, export, export_to_file};
+pub use export::{ExportOptions, export, export_to_file, ifc_status};
 pub use guid::guid;
 pub use import::{ImportError, ImportReport, import, import_file};
 pub use schema::display_name;

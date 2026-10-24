@@ -29,6 +29,8 @@ const MAX_PROPERTY_DEPTH: usize = 8;
 /// Most openings cut from one product.
 const MAX_OPENINGS: usize = 1000;
 const MAX_PARENT_DEPTH: usize = 16;
+/// Most construction phases read from a file.
+const MAX_PHASES: usize = 100;
 /// Length tolerance when matching types (meters).
 const TYPE_TOL: f64 = 0.001;
 
@@ -298,6 +300,8 @@ struct Importer<'a> {
     walls: HashMap<u32, ElementId>,
     /// Products with parts aggregated into them (e.g. roofs made of slabs).
     has_parts: HashMap<u32, usize>,
+    /// Imported elements and their IFC instances (their phases are read at the end).
+    products: Vec<(ElementId, u32)>,
 }
 
 fn clean_polygon(pts: Vec<DVec2>) -> Vec<DVec2> {
@@ -337,6 +341,7 @@ impl<'a> Importer<'a> {
             item_styles: HashMap::new(),
             walls: HashMap::new(),
             has_parts: HashMap::new(),
+            products: Vec::new(),
         };
         im.scale = im.unit("LENGTHUNIT");
         im.area = im.unit_opt("AREAUNIT").unwrap_or(im.scale * im.scale);
@@ -628,7 +633,100 @@ impl<'a> Importer<'a> {
         self.report.levels = self.p.levels.len();
     }
 
+    /// Text values of property `name` in the property sets of `owner` whose
+    /// name passes `set` (single and enumerated values).
+    fn pset_texts(&self, owner: u32, set: &dyn Fn(&str) -> bool, name: &str) -> Vec<&'a str> {
+        let f = self.f;
+        let mut out = Vec::new();
+        for pset in self.psets_of.get(&owner).into_iter().flatten().filter_map(|s| f.get(*s)) {
+            if pset.name != "IFCPROPERTYSET" || !pset.arg(2).as_str().is_some_and(set) {
+                continue;
+            }
+            for prop in pset.arg(4).as_list().iter().filter_map(|p| f.deref(p)) {
+                if prop.arg(0).as_str() != Some(name) {
+                    continue;
+                }
+                match prop.name.as_str() {
+                    "IFCPROPERTYSINGLEVALUE" => out.extend(prop.arg(2).as_str()),
+                    "IFCPROPERTYENUMERATEDVALUE" => out.extend(prop.arg(2).as_list().iter().filter_map(Param::as_str)),
+                    _ => {}
+                }
+            }
+        }
+        out
+    }
+
+    /// Construction phases: the project's phases when the file lists them
+    /// (as this program writes them), then each element's phases by name,
+    /// or else from its IFC `Status` relative to the last phase (existing:
+    /// built in the phase before it; demolished: built before it and
+    /// demolished in it; new and temporary: built in it).
+    fn import_phases(&mut self) {
+        let phases_set = |n: &str| n == crate::export::PHASES_PSET;
+        let mut names: Vec<(usize, String)> = Vec::new();
+        for pset in self.psets_of.get(&self.project_id).into_iter().flatten().filter_map(|s| self.f.get(*s)) {
+            if pset.name != "IFCPROPERTYSET" || !pset.arg(2).as_str().is_some_and(phases_set) {
+                continue;
+            }
+            for prop in pset.arg(4).as_list().iter().filter_map(|p| self.f.deref(p)).take(MAX_PHASES) {
+                let (Some(index), Some(name)) =
+                    (prop.arg(0).as_str().and_then(|i| i.trim().parse::<usize>().ok()), prop.arg(2).as_str())
+                else {
+                    continue;
+                };
+                let name = name.trim();
+                if !name.is_empty() && !names.iter().any(|(_, n)| n.eq_ignore_ascii_case(name)) {
+                    names.push((index, name.to_string()));
+                }
+            }
+        }
+        names.sort_by_key(|(i, _)| *i);
+        if !names.is_empty() {
+            self.p.phases = names
+                .into_iter()
+                .map(|(_, name)| cc_core::Phase {
+                    id: cc_core::PhaseId(self.p.alloc_id()),
+                    name,
+                    description: String::new(),
+                })
+                .collect();
+        }
+        let Some(last) = self.p.phases.len().checked_sub(1) else { return };
+        let phase_at = |p: &Project, i: usize| p.phases.get(i).map(|ph| ph.id);
+        let by_name =
+            |p: &Project, n: &str| p.phases.iter().find(|ph| ph.name.eq_ignore_ascii_case(n.trim())).map(|ph| ph.id);
+        let previous = last.saturating_sub(1);
+        for (element, ifc) in std::mem::take(&mut self.products) {
+            let phasing = |n: &str| n == crate::export::PHASING_PSET;
+            let created = self.pset_texts(ifc, &phasing, "PhaseCreated").first().and_then(|n| by_name(&self.p, n));
+            let demolished =
+                self.pset_texts(ifc, &phasing, "PhaseDemolished").first().and_then(|n| by_name(&self.p, n));
+            let common = |n: &str| n.starts_with("Pset_") && n.ends_with("Common");
+            let status = self.pset_texts(ifc, &common, "Status").into_iter().find_map(cc_core::PhaseStatus::from_ifc);
+            let (created, demolished) = match (created, status) {
+                (Some(c), _) => (Some(c), demolished),
+                (None, Some(st)) => {
+                    use cc_core::PhaseStatus as S;
+                    let (c, d) = match st {
+                        S::New => (last, None),
+                        S::Existing => (previous, None),
+                        S::Demolished => (previous, Some(last)),
+                        S::Temporary => (last, Some(last)),
+                    };
+                    (phase_at(&self.p, c), d.and_then(|d| phase_at(&self.p, d)))
+                }
+                (None, None) => (None, None),
+            };
+            let Some(e) = self.p.elements.get_mut(&element) else { continue };
+            if let Some(c) = created {
+                e.phase_created = c;
+            }
+            e.phase_demolished = demolished;
+        }
+    }
+
     fn finish(&mut self) {
+        self.import_phases();
         let levels: Vec<(LevelId, String)> = self.p.levels.iter().map(|l| (l.id, l.name.clone())).collect();
         let add_view = |p: &mut Project, name: &str, kind: ViewKind| {
             let id = ViewId(p.alloc_id());
@@ -642,6 +740,12 @@ impl<'a> Importer<'a> {
         }
         self.p.ensure_annotation_types();
         self.p.ensure_uids();
+        // New plans show the last phase with the default phase filter.
+        let (last, filter) = (self.p.last_phase().unwrap_or_default(), self.p.default_phase_filter());
+        for v in self.p.views.values_mut().filter(|v| self.p.phases.iter().all(|ph| ph.id != v.phase)) {
+            v.phase = last;
+            v.phase_filter = v.phase_filter.or(filter);
+        }
         self.p.repair();
     }
 
@@ -866,8 +970,17 @@ impl<'a> Importer<'a> {
         self.type_entity(id).and_then(|t| t.arg(0).as_str()).and_then(guid::decode).map(Uid)
     }
 
-    fn add_element(&mut self, e: &Entity, level: LevelId, type_id: ElementTypeId, mark: String, kind: ElementKind) {
+    fn add_element(
+        &mut self,
+        ifc: u32,
+        e: &Entity,
+        level: LevelId,
+        type_id: ElementTypeId,
+        mark: String,
+        kind: ElementKind,
+    ) {
         let id = ElementId(self.p.alloc_id());
+        self.products.push((id, ifc));
         let uid = e.arg(0).as_str().and_then(guid::decode).map(Uid).unwrap_or_default();
         let comments = e.arg(3).as_str().unwrap_or_default().to_string();
         let element = Element {
@@ -1018,7 +1131,7 @@ impl<'a> Importer<'a> {
         );
         let wall =
             Wall { base_offset: z0 - elevation, height: z1 - z0, structural: structural.unwrap_or(false), ..wall };
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Wall(wall));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Wall(wall));
         if let Some(element) = self.p.elements.keys().next_back().copied() {
             self.walls.insert(id, element);
         }
@@ -1115,7 +1228,7 @@ impl<'a> Importer<'a> {
         };
         let hosted = Hosted { host, offset, sill_height: sill, flip_facing: false, flip_hand: false };
         let kind = if category == Category::Door { ElementKind::Door(hosted) } else { ElementKind::Window(hosted) };
-        self.add_element(e, host_element.level, type_id, Self::tag(e), kind);
+        self.add_element(id, e, host_element.level, type_id, Self::tag(e), kind);
         true
     }
 
@@ -1161,7 +1274,7 @@ impl<'a> Importer<'a> {
             || TypeData::Floor { layers },
         );
         let floor = Floor { boundary, height_offset: z1 - elevation };
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Floor(floor));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Floor(floor));
         true
     }
 
@@ -1187,7 +1300,7 @@ impl<'a> Importer<'a> {
             || TypeData::Ceiling { thickness, material },
         );
         let ceiling = Ceiling { boundary, height_offset: z0 - elevation };
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Ceiling(ceiling));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Ceiling(ceiling));
         true
     }
 
@@ -1345,7 +1458,7 @@ impl<'a> Importer<'a> {
         );
         let mut roof = Roof::new(footprint, z0 - elevation, 0.0, shape);
         roof.holes = holes;
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Roof(roof));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Roof(roof));
         true
     }
 
@@ -1392,7 +1505,7 @@ impl<'a> Importer<'a> {
             name: e.arg(7).as_str().unwrap_or_default().to_string(),
             height,
         };
-        self.add_element(e, level, type_id, String::new(), ElementKind::Room(room));
+        self.add_element(id, e, level, type_id, String::new(), ElementKind::Room(room));
         true
     }
 
@@ -1452,7 +1565,7 @@ impl<'a> Importer<'a> {
             top: WallTop::Unconnected,
             structural: true,
         };
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Column(column));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Column(column));
         true
     }
 
@@ -1500,7 +1613,7 @@ impl<'a> Importer<'a> {
         let mut out = Vec::new();
         for set in self.psets_of.get(&owner).into_iter().flatten().filter_map(|s| f.get(*s)) {
             let name = set.arg(2).as_str().unwrap_or_default().to_string();
-            if name == crate::export::COMPONENT_PSET {
+            if name == crate::export::COMPONENT_PSET || name == crate::export::PHASING_PSET {
                 continue;
             }
             let (quantities, properties) = match set.name.as_str() {
@@ -1511,6 +1624,11 @@ impl<'a> Importer<'a> {
                 // Predefined property sets (door linings…) and others.
                 _ => continue,
             };
+            // A common set's `Status` is read as the element's phases.
+            let mut properties = properties;
+            if name.starts_with("Pset_") && name.ends_with("Common") {
+                properties.retain(|p| p.name != "Status");
+            }
             if !properties.is_empty() {
                 out.push(PropertySet { name, quantities, properties });
             }
@@ -1695,7 +1813,7 @@ impl<'a> Importer<'a> {
             overrides,
             properties,
         };
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Component(c));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Component(c));
         true
     }
 
@@ -1825,7 +1943,7 @@ impl<'a> Importer<'a> {
             || TypeData::Beam { width, height, material, shape: SectionShape::Solid },
         );
         let beam = Beam::new(start, end, z1 - elevation);
-        self.add_element(e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
         true
     }
 }

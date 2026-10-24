@@ -386,3 +386,65 @@ fn structure_fixture_exports_foundations_profiles_and_cut_slabs() {
     let representations = lines("IFCSHAPEREPRESENTATION");
     assert!(representations.iter().filter(|l| uses(l)).all(|l| l.contains("'Brep'")));
 }
+
+/// Phases of an element by name: (created, demolished).
+fn phase_names(p: &Project, e: &Element) -> (String, Option<String>) {
+    let created = p.phases.get(p.created_index(e)).map(|ph| ph.name.clone()).unwrap_or_default();
+    (created, e.phase_demolished.map(|d| p.phase_name(d)))
+}
+
+#[test]
+fn phases_round_trip() {
+    let original = load(include_str!("fixtures/phases.ccad"));
+    check(&original);
+    let text = export(&original, &ExportOptions::default());
+    // Statuses relative to the last phase, in the common property sets.
+    for status in ["'EXISTING'", "'DEMOLISH'", "'NEW'", "'TEMPORARY'"] {
+        assert!(text.contains(&format!("IFCPROPERTYENUMERATEDVALUE('Status',$,(IFCLABEL({status}))")), "{status}");
+    }
+    let (imported, _) = import(&text, Project::from_template()).unwrap();
+    let names = |p: &Project| p.phases.iter().map(|ph| ph.name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(&imported), names(&original));
+    let lookup = by_uid(&imported);
+    let mut checked = 0;
+    for e in original.elements.values().filter(|e| e.category().is_phased()) {
+        let Some(i) = lookup.get(&e.uid) else { continue };
+        assert_eq!(phase_names(&imported, i), phase_names(&original, e), "phases of {:?} {}", e.category(), e.id);
+        checked += 1;
+    }
+    assert!(checked >= 12, "{checked}");
+    assert_eq!(imported.clone().repair(), 0);
+}
+
+#[test]
+fn ifc_status_maps_to_phases() {
+    // Without this program's phase sets, `Status` alone decides: existing
+    // elements are built in the phase before the last, demolished ones are
+    // demolished in the last, new and temporary ones are built in it.
+    let original = load(include_str!("fixtures/phases.ccad"));
+    let text = export(&original, &ExportOptions::default())
+        .replace("'ConstructCAD_Phasing'", "'Other_Phasing'")
+        .replace("'ConstructCAD_Phases'", "'Other_Phases'");
+    let (imported, _) = import(&text, Project::from_template()).unwrap();
+    assert_eq!(imported.phases.len(), 2);
+    let (first, last) = (imported.phases[0].id, imported.phases[1].id);
+    let lookup = by_uid(&imported);
+    let mut seen = std::collections::BTreeSet::new();
+    for e in original.elements.values().filter(|e| matches!(e.category(), Category::Wall | Category::Door)) {
+        let i = lookup[&e.uid];
+        let expected = match cc_ifc::ifc_status(&original, e).unwrap() {
+            cc_core::PhaseStatus::Existing => (first, None),
+            cc_core::PhaseStatus::Demolished => (first, Some(last)),
+            cc_core::PhaseStatus::New => (last, None),
+            cc_core::PhaseStatus::Temporary => (last, Some(last)),
+        };
+        seen.insert(cc_ifc::ifc_status(&original, e).unwrap());
+        assert_eq!((i.phase_created, i.phase_demolished), expected, "{:?} {}", e.category(), e.id);
+    }
+    assert_eq!(seen.len(), 4);
+    // The status is read as phases, not kept as an imported property.
+    assert!(imported.elements.values().all(|e| match &e.kind {
+        ElementKind::Component(c) => c.properties.iter().all(|s| s.properties.iter().all(|p| p.name != "Status")),
+        _ => true,
+    }));
+}

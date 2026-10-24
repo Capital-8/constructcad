@@ -102,6 +102,8 @@ struct Exporter<'a> {
     usage_objects: BTreeMap<Id, Vec<Id>>,
     /// Storey and its placement per level.
     storeys: BTreeMap<LevelId, (Id, Id)>,
+    /// Elements whose `Status` went into a common property set of their own.
+    status_written: std::collections::BTreeSet<ElementId>,
 }
 
 impl<'a> Exporter<'a> {
@@ -136,6 +138,7 @@ impl<'a> Exporter<'a> {
             typed: BTreeMap::new(),
             contained: BTreeMap::new(),
             storeys: BTreeMap::new(),
+            status_written: Default::default(),
         }
     }
 
@@ -150,14 +153,31 @@ impl<'a> Exporter<'a> {
 
     /// `Pset_*` property set with single values, attached to `objects`.
     fn property_set(&mut self, tag: &str, name: &str, objects: Vec<Id>, props: Vec<(&str, Value)>) {
-        if props.is_empty() || objects.is_empty() {
+        self.property_set_status(tag, name, objects, props, None);
+    }
+
+    /// [`Self::property_set`] with the enumerated `Status` of a construction
+    /// phase (`NEW`, `EXISTING`, `DEMOLISH`, `TEMPORARY`).
+    fn property_set_status(
+        &mut self,
+        tag: &str,
+        name: &str,
+        objects: Vec<Id>,
+        props: Vec<(&str, Value)>,
+        status: Option<cc_core::PhaseStatus>,
+    ) {
+        if (props.is_empty() && status.is_none()) || objects.is_empty() {
             return;
         }
         let n = Value::Null;
-        let props: Vec<Id> = props
+        let mut props: Vec<Id> = props
             .into_iter()
             .map(|(name, value)| self.w.add("IFCPROPERTYSINGLEVALUE", args![name, n.clone(), value, n.clone()]))
             .collect();
+        if let Some(st) = status {
+            let values = vec![Value::Typed("IFCLABEL", Box::new(st.ifc().into()))];
+            props.push(self.w.add("IFCPROPERTYENUMERATEDVALUE", args!["Status", n.clone(), values, n.clone()]));
+        }
         let gid = self.guid(&format!("pset-{tag}"));
         let set = self.w.add("IFCPROPERTYSET", args![gid, n.clone(), name, n.clone(), props]);
         let gid = self.guid(&format!("pset-rel-{tag}"));
@@ -188,7 +208,52 @@ impl<'a> Exporter<'a> {
         let fittings = self.write_fittings();
         self.write_systems(&fittings);
         self.write_spaces();
+        self.write_phasing(project_id);
         self.write_relationships();
+    }
+
+    /// Construction phases: the project's phases in order (a set on the
+    /// project), and for each element its `Status` relative to the last
+    /// phase in its common property set (building elements) and the names
+    /// of its phases in [`PHASING_PSET`]. Elements sharing values share
+    /// the sets.
+    fn write_phasing(&mut self, project_id: Id) {
+        let project = self.project;
+        if project.phases.is_empty() {
+            return;
+        }
+        let names: Vec<(String, Value)> = project
+            .phases
+            .iter()
+            .enumerate()
+            .map(|(i, ph)| ((i + 1).to_string(), Value::Typed("IFCLABEL", Box::new(ph.name.as_str().into()))))
+            .collect();
+        let props = names.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+        self.property_set("phases", PHASES_PSET, vec![project_id], props);
+        let mut common: BTreeMap<(&'static str, cc_core::PhaseStatus), Vec<Id>> = BTreeMap::new();
+        let mut phasing: BTreeMap<(usize, Option<usize>), Vec<Id>> = BTreeMap::new();
+        for (&id, &product) in &self.products {
+            let Some(e) = project.element(id) else { continue };
+            let Some(status) = ifc_status(project, e) else { continue };
+            if !self.status_written.contains(&id)
+                && let Some(set) = common_pset(project, e)
+            {
+                common.entry((set, status)).or_default().push(product);
+            }
+            phasing.entry((project.created_index(e), project.demolished_index(e))).or_default().push(product);
+        }
+        for ((set, status), objects) in common {
+            self.property_set_status(&format!("status-{set}-{}", status.ifc()), set, objects, Vec::new(), Some(status));
+        }
+        let label =
+            |i: usize| project.phases.get(i).map(|ph| Value::Typed("IFCLABEL", Box::new(ph.name.as_str().into())));
+        for ((created, demolished), objects) in phasing {
+            let mut props = Vec::new();
+            props.extend(label(created).map(|v| ("PhaseCreated", v)));
+            props.extend(demolished.and_then(label).map(|v| ("PhaseDemolished", v)));
+            let tag = format!("phasing-{created}-{}", demolished.map_or(-1, |d| d as i64));
+            self.property_set(&tag, PHASING_PSET, objects, props);
+        }
     }
 
     /// Enclosed rooms as `IfcSpace`s aggregated into their storey.
@@ -880,7 +945,9 @@ impl<'a> Exporter<'a> {
                 self.quantities(e, set, quantities);
             }
             if let Some((name, props)) = product.props {
-                self.property_set(&format!("pset-{}-{name}", e.id), name, vec![id], props);
+                let status = ifc_status(self.project, e);
+                self.status_written.insert(e.id);
+                self.property_set_status(&format!("pset-{}-{name}", e.id), name, vec![id], props, status);
             }
         }
     }
@@ -1472,7 +1539,9 @@ impl<'a> Exporter<'a> {
         if let Some(rating) = ty.map(|t| t.info.fire_rating.clone()).filter(|r| !r.is_empty()) {
             props.push(("FireRating", Value::Typed("IFCLABEL", Box::new(rating.into()))));
         }
-        self.property_set(&format!("wall-{}", e.id), "Pset_WallCommon", vec![product], props);
+        let status = ifc_status(project, e);
+        self.status_written.insert(e.id);
+        self.property_set_status(&format!("wall-{}", e.id), "Pset_WallCommon", vec![product], props, status);
 
         let opening_area: f64 = g.openings.iter().map(|o| (o.u1 - o.u0) * (o.z1 - o.z0)).sum();
         let thickness = 2.0 * h;
@@ -1877,6 +1946,45 @@ fn section_area(section: cc_core::ColumnSection) -> f64 {
 
 /// Property set with the instance parameter values of components.
 pub const COMPONENT_PSET: &str = "ConstructCAD_Parameters";
+/// Property set of an element's construction phases (`PhaseCreated`, `PhaseDemolished`).
+pub const PHASING_PSET: &str = "ConstructCAD_Phasing";
+/// Property set of the project's phases, in time order (properties `1`, `2`…).
+pub const PHASES_PSET: &str = "ConstructCAD_Phases";
+
+/// An element's IFC `Status` relative to the project's last phase (an
+/// element demolished before it reads as demolished); `None` for
+/// annotations and projects without phases.
+pub fn ifc_status(project: &Project, e: &Element) -> Option<cc_core::PhaseStatus> {
+    let last = project.phases.len().checked_sub(1)?;
+    match project.phase_state_at(e, last) {
+        cc_core::PhaseState::Status(st) => Some(st),
+        cc_core::PhaseState::Absent => Some(cc_core::PhaseStatus::Demolished),
+        cc_core::PhaseState::Unphased => None,
+    }
+}
+
+/// The IFC4 common property set holding the `Status` of an element's
+/// class (building elements as this program writes them; components and
+/// building services keep theirs in [`PHASING_PSET`] only).
+fn common_pset(project: &Project, e: &Element) -> Option<&'static str> {
+    Some(match &e.kind {
+        ElementKind::Wall(_) => "Pset_WallCommon",
+        ElementKind::Door(_) => "Pset_DoorCommon",
+        ElementKind::Window(_) => "Pset_WindowCommon",
+        ElementKind::Floor(_) => "Pset_SlabCommon",
+        ElementKind::Ceiling(_) => "Pset_CoveringCommon",
+        ElementKind::Roof(_) => "Pset_RoofCommon",
+        ElementKind::Column(_) => "Pset_ColumnCommon",
+        ElementKind::Beam(_) => "Pset_BeamCommon",
+        ElementKind::Stair(_) => "Pset_StairCommon",
+        ElementKind::Railing(_) => "Pset_RailingCommon",
+        ElementKind::Foundation(_) => match project.element_type(e.type_id).map(|t| &t.data) {
+            Some(TypeData::Foundation { kind: cc_core::FoundationKind::Slab, .. }) => "Pset_SlabCommon",
+            _ => "Pset_FootingCommon",
+        },
+        _ => return None,
+    })
+}
 
 /// IFC entity and predefined type of a component kind.
 /// How a component is written: its stored IFC class when the schema table
