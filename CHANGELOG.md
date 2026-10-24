@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-24
+
 ### Added
 
 - Arc walls: a wall's location line can be a circular arc. The wall tool gains *Line*/*Arc* modes in the options bar; in *Arc* mode click the start, the end and then a point on the arc (with a live preview, radius and length), and the chain goes on from the arc's end. Layers, faces and cut patterns follow concentric arcs; arc walls join straight and arc walls at corners, tees and junctions (faces meet where their lines and circles cross; walls continuing along a common tangent butt square), host doors and windows along the arc (offsets measured along the centerline, frames square to the wall at the opening), bound rooms and give floors and roofs drawn from walls their curve. Length, side area and volume are exact (along the centerline arc). Plans draw the arcs (radial and diameter dimensions pick them), and elevations, sections and 3D draw curved faces without seams between facets. Splitting keeps each part on the arc, offsetting makes a concentric copy, end handles and move, rotate, mirror and copy keep the arc; trimming, extending and aligning need straight walls. The properties show the arc angle (editable) and radius.
@@ -191,7 +193,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/francisreboucas/constructcad/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/francisreboucas/constructcad/compare/v0.1.0...v0.2.0
