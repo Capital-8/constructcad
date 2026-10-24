@@ -23,11 +23,20 @@ A dica de cada botão mostra o atalho, o que ele faz, por que está indisponíve
 
 ## Capturas de tela
 
-![Planta e vista 3D do projeto de exemplo](docs/screenshots/plan-3d.png)
+![Planta e vista 3D da casa de exemplo: planta em L com uma parede em arco sob um telhado de quatro águas](docs/screenshots/pt-BR/hero.png)
 
-| Corte | Folha | Tabela |
-|---|---|---|
-| [![Corte com hachura e níveis](docs/screenshots/section.png)](docs/screenshots/section.png) | [![Folha A3 com uma elevação e um corte](docs/screenshots/sheet.png)](docs/screenshots/sheet.png) | [![Tabela de portas](docs/screenshots/schedule.png)](docs/screenshots/schedule.png) |
+A casa de exemplo, construída por [`examples/showcase.ccmacro`](examples/showcase.ccmacro) só com comandos do motor e salva em [`examples/showcase.ccad`](examples/showcase.ccad); as imagens são capturadas do aplicativo por [`scripts/screenshots.ps1`](scripts/screenshots.ps1).
+
+| | |
+|---|---|
+| [![Vista 3D do telhado sobre a parede em arco](docs/screenshots/pt-BR/roof-3d.png)](docs/screenshots/pt-BR/roof-3d.png) | [![Planta hidrossanitária](docs/screenshots/pt-BR/plumbing.png)](docs/screenshots/pt-BR/plumbing.png) |
+| Telhado de quatro águas calculado pelo esqueleto reto sobre a parede em arco | Planta hidrossanitária: água fria e esgoto sobre a arquitetura esmaecida, com diâmetros e declividades |
+| [![Planta elétrica e diagrama do quadro](docs/screenshots/pt-BR/electrical.png)](docs/screenshots/pt-BR/electrical.png) | [![Planta de forma e vista das armaduras](docs/screenshots/pt-BR/structure.png)](docs/screenshots/pt-BR/structure.png) |
+| Planta elétrica com circuitos e eletrodutos, ao lado do diagrama unifilar e do quadro de cargas | Planta de forma com pilares, vigas e sapatas identificados, e as armaduras em 3D |
+| [![Planta de reforma e planta filtrada](docs/screenshots/pt-BR/graphics.png)](docs/screenshots/pt-BR/graphics.png) | [![Corte](docs/screenshots/pt-BR/section.png)](docs/screenshots/pt-BR/section.png) |
+| Fases de obra (existente, demolido, novo) e filtros de vista colorindo as paredes pela espessura | Corte com hachura, níveis e o telhado |
+| [![Folha](docs/screenshots/pt-BR/sheet.png)](docs/screenshots/pt-BR/sheet.png) | [![Tabela de ambientes](docs/screenshots/pt-BR/schedule.png)](docs/screenshots/pt-BR/schedule.png) |
+| Folha A3 com a planta, um corte e a vista 3D | Tabela de ambientes com totais |
 
 ## Instalar
 

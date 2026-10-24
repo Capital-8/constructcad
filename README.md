@@ -23,11 +23,20 @@ Every button's tooltip shows its shortcut, what it does, why it is unavailable w
 
 ## Screenshots
 
-![Floor plan and 3D view of the example project](docs/screenshots/plan-3d.png)
+![Floor plan and 3D view of the showcase house: an L-shaped plan with an arc wall under a hip roof](docs/screenshots/en/hero.png)
 
-| Section | Sheet | Schedule |
-|---|---|---|
-| [![Section with cut hatching and levels](docs/screenshots/section.png)](docs/screenshots/section.png) | [![A3 sheet with an elevation and a section](docs/screenshots/sheet.png)](docs/screenshots/sheet.png) | [![Door schedule](docs/screenshots/schedule.png)](docs/screenshots/schedule.png) |
+The showcase house, built by [`examples/showcase.ccmacro`](examples/showcase.ccmacro) with engine commands only and saved as [`examples/showcase.ccad`](examples/showcase.ccad); the images are captured from the app by [`scripts/screenshots.ps1`](scripts/screenshots.ps1).
+
+| | |
+|---|---|
+| [![3D view of the hip roof over the arc wall](docs/screenshots/en/roof-3d.png)](docs/screenshots/en/roof-3d.png) | [![Plumbing plan](docs/screenshots/en/plumbing.png)](docs/screenshots/en/plumbing.png) |
+| Hip roof computed by the straight skeleton over the arc wall | Plumbing plan: cold water and drains over the faded architecture, with sizes and slopes |
+| [![Electrical plan and panel diagram](docs/screenshots/en/electrical.png)](docs/screenshots/en/electrical.png) | [![Structural plan and reinforcement view](docs/screenshots/en/structure.png)](docs/screenshots/en/structure.png) |
+| Electrical plan with circuits and conduits, beside the board's single-line diagram and load schedule | Structural plan with tagged columns, beams and footings, and the reinforcement in 3D |
+| [![Renovation plan and filtered plan](docs/screenshots/en/graphics.png)](docs/screenshots/en/graphics.png) | [![Section](docs/screenshots/en/section.png)](docs/screenshots/en/section.png) |
+| Construction phases (existing, demolished, new) and view filters coloring walls by thickness | Section with cut hatching, levels and the roof |
+| [![Sheet](docs/screenshots/en/sheet.png)](docs/screenshots/en/sheet.png) | [![Room schedule](docs/screenshots/en/schedule.png)](docs/screenshots/en/schedule.png) |
+| A3 sheet with the plan, a section and the 3D view | Room schedule with totals |
 
 ## Installing
 

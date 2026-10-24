@@ -415,6 +415,33 @@ fn the_example_macro_builds_a_house() {
     assert!(run(&mut s, "element_get", json!({"id": room}))["derived"]["area"].as_f64().unwrap() > 20.0);
 }
 
+/// The showcase macro (the project of the README screenshots) keeps working,
+/// and the ids its later steps name still point at what they expect.
+#[test]
+fn the_showcase_macro_builds_its_project() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/showcase.ccmacro");
+    let steps = cc_engine::script::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut s = Session::default();
+    cc_engine::script::run(&mut s, &steps).unwrap_or_else(|(_, e)| panic!("step {}: {}", e.index + 1, e.error));
+    let count = |s: &mut Session, c: &str| run(s, "elements_list", json!({"category": c})).as_array().unwrap().len();
+    assert_eq!([count(&mut s, "wall"), count(&mut s, "door"), count(&mut s, "room")], [13, 5, 5]);
+    assert!(count(&mut s, "rebar") > 0 && count(&mut s, "pipe") > 0 && count(&mut s, "conduit") > 0);
+    let get = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}));
+    assert!(get(&mut s, 97)["params"]["bulge"].as_f64().unwrap() > 0.0, "the arc wall");
+    assert!(get(&mut s, 116)["params"]["shape"]["Hip"].is_object(), "the hip roof");
+    assert_eq!(get(&mut s, 94)["phase_demolished"]["id"], 81, "the demolished partition");
+    assert_eq!(get(&mut s, 247)["type"]["id"], 58, "the distribution board");
+    let views = run(&mut s, "views_list", json!({}));
+    let view = |id: u64| views.as_array().unwrap().iter().find(|v| v["id"] == id).map(|v| v["name"].clone());
+    assert_eq!(view(333), Some(json!("Board diagram")));
+    assert_eq!(view(341), Some(json!("3D North-east")));
+    let loads = run(&mut s, "circuit_loads", json!({"panel": 247}));
+    assert!(loads.to_string().contains("Kitchen and bath outlets"));
+    for filter in [340, 342] {
+        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 339}))["count"].as_u64().unwrap() > 0);
+    }
+}
+
 #[test]
 fn text_notes_with_leaders() {
     let mut s = Session::default();
