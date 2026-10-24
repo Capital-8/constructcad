@@ -35,6 +35,7 @@ log.workspace = true
 sys-locale.workspace = true
 env_logger.workspace = true
 resvg.workspace = true
+ureq.workspace = true
 
 [lints]
 workspace = true

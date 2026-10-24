@@ -93,6 +93,15 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
 
+## Update notice
+
+ConstructCAD tells you when a newer version is published; it never downloads or installs anything by itself.
+
+- **When**: at startup, at most once a day, in the background (the window never waits for it). *File → Check for Updates* (also in the *About* dialog) checks at once and reports "up to date", the new version, or that it could not check.
+- **What is contacted**: one HTTPS request to the GitHub API, `https://api.github.com/repos/francisreboucas/constructcad/releases/latest`, which returns the latest published release. The request sends the usual connection data (your IP address) and a `ConstructCAD/<version>` user agent; no project data, identifier or usage information. GitHub's privacy statement applies to it.
+- **What you see**: when the release is newer than the running version (pre-releases are ignored), a notice appears in the status bar and on the home screen: *Download* opens the release page in your browser, *Skip This Version* hides the notice until a later version comes out, and × hides it until the next check. Any failure (offline, timeout, proxy, rate limit) is silent.
+- **Turning it off**: clear *Check for updates automatically* in *File → About*. The environment variable `CONSTRUCTCAD_NO_UPDATE_CHECK=1` turns off every check, automatic or on request (useful for CI, kiosks and offline installations). ConstructCAD remembers the last check time, the skipped version and the setting with its other preferences.
+
 ## Accessibility
 
 The ribbon buttons, tab titles, scroll arrows, palette entries, browser rows, home screen cards, dialog close buttons, property sections and the view cube's home button are drawn by ConstructCAD itself. They report their role (button, selectable item, collapsible header), their name and their state (enabled, selected, expanded) to the operating system's accessibility interface, so screen readers can announce them.

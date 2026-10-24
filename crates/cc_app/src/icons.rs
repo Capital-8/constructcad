@@ -17,6 +17,7 @@ pub enum Icon {
     SaveAs,
     Export,
     About,
+    Update,
     Wall,
     Door,
     Window,
@@ -116,13 +117,14 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 101] = [
+    pub const ALL: [Icon; 102] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
         Icon::SaveAs,
         Icon::Export,
         Icon::About,
+        Icon::Update,
         Icon::Wall,
         Icon::Door,
         Icon::Window,
@@ -229,6 +231,7 @@ impl Icon {
             Icon::SaveAs => include_str!("../../../assets/icons/ui/save-as.svg"),
             Icon::Export => include_str!("../../../assets/icons/ui/export.svg"),
             Icon::About => include_str!("../../../assets/icons/ui/about.svg"),
+            Icon::Update => include_str!("../../../assets/icons/ui/update.svg"),
             Icon::Wall => include_str!("../../../assets/icons/ui/wall.svg"),
             Icon::Door => include_str!("../../../assets/icons/ui/door.svg"),
             Icon::Window => include_str!("../../../assets/icons/ui/window.svg"),

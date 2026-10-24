@@ -33,6 +33,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     confirm(ctx, state);
     error(ctx, state);
     about(ctx, state);
+    update_report(ctx, state);
 }
 
 /// Footer of a data dialog: OK keeps the edits, Cancel (or Esc / close) undoes them.
@@ -260,6 +261,8 @@ fn about(ctx: &Context, state: &mut AppState) {
     }
     let repository = env!("CARGO_PKG_REPOSITORY");
     let mut open_repo = 0;
+    let mut check = 0;
+    let auto = &mut state.updates.auto;
     let response = Dialog::new("about", t!("dlg-about")).width(440.0).show(
         ctx,
         |ui| {
@@ -294,6 +297,8 @@ fn about(ctx: &Context, state: &mut AppState) {
                 ui.hyperlink_to(repository.trim_start_matches("https://"), repository);
                 ui.end_row();
             });
+            ui.add_space(4.0);
+            ui.checkbox(auto, t!("update-auto")).on_hover_text(t!("update-auto-hint"));
             ui.add_space(8.0);
             ui.label(theme::title(t!("about-credits")));
             for line in [t!("about-built-with"), t!("about-font-credit"), t!("about-icon-credit")] {
@@ -304,13 +309,84 @@ fn about(ctx: &Context, state: &mut AppState) {
         },
         |f| {
             open_repo = f.extra(t!("about-open-repository"));
+            check = f.extra(t!("action-check-updates"));
             f.primary(t!("action-close"));
         },
     );
     match response.clicked {
         Some(i) if i == open_repo => ctx.open_url(egui::OpenUrl::new_tab(repository)),
+        Some(i) if i == check => {
+            // The report replaces the About dialog.
+            state.dialogs.about = false;
+            state.updates.start(ctx, true);
+        }
         Some(_) => state.dialogs.about = false,
         None if response.dismissed => state.dialogs.about = false,
+        None => {}
+    }
+}
+
+/// The result of a check for updates the user asked for (and the wait for it).
+fn update_report(ctx: &Context, state: &mut AppState) {
+    use crate::update::Outcome;
+    let updates = &mut state.updates;
+    if !updates.checking() && updates.report.is_none() {
+        return;
+    }
+    let report = updates.report.clone();
+    let current = env!("CARGO_PKG_VERSION");
+    let (mut download, mut skip) = (usize::MAX, usize::MAX);
+    let mut dialog = Dialog::new("update-check", t!("action-check-updates")).width(420.0);
+    if matches!(report, Some(Outcome::Failed | Outcome::Disabled)) {
+        dialog = dialog.kind(Kind::Warning);
+    }
+    let response = dialog.show(
+        ctx,
+        |ui| match &report {
+            None => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(t!("update-checking"));
+                });
+            }
+            Some(Outcome::UpToDate) => {
+                ui.label(t!("update-up-to-date", "version" => current));
+            }
+            Some(Outcome::Available(release)) => {
+                ui.label(t!("update-available", "version" => release.version.to_string()));
+                ui.label(theme::muted(t!("update-current", "version" => current)));
+            }
+            Some(Outcome::Failed) => {
+                ui.label(t!("update-failed"));
+            }
+            Some(Outcome::Disabled) => {
+                ui.label(t!("update-disabled", "variable" => crate::update::NO_CHECK_ENV));
+            }
+        },
+        |f| {
+            if matches!(report, Some(Outcome::Available(_))) {
+                download = f.primary(t!("update-download"));
+                skip = f.extra(t!("update-skip"));
+                f.secondary(t!("action-close"));
+            } else {
+                f.primary(t!("action-close"));
+            }
+        },
+    );
+    match response.clicked {
+        Some(i) if i == download => {
+            if let Some(Outcome::Available(release)) = &report {
+                ctx.open_url(egui::OpenUrl::new_tab(&release.url));
+            }
+            updates.dismiss();
+            updates.cancel_report();
+        }
+        Some(i) if i == skip => {
+            updates.skip();
+            updates.cancel_report();
+        }
+        Some(_) => updates.cancel_report(),
+        None if response.dismissed => updates.cancel_report(),
         None => {}
     }
 }

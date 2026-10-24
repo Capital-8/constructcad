@@ -39,6 +39,10 @@ cargo run --release -p cc_app -- --lang en                       # interface em 
 cargo run -p cc_core --example casa_simples                      # regenerar o exemplo
 ```
 
+### Aviso de atualização
+
+Ao iniciar (no máximo uma vez por dia) o aplicativo consulta a API do GitHub pela última versão e, se ela for mais nova, mostra um aviso com o link da sua página; ele nunca baixa nada. Desligue em *Arquivo → Sobre* ou com `CONSTRUCTCAD_NO_UPDATE_CHECK=1`; veja [o guia da interface](docs/interface.pt-BR.md#aviso-de-atualização) sobre o que é contatado. `ccad --version` mostra a versão.
+
 ## Idiomas
 
 A interface está disponível em **português (Brasil)**, **inglês**, **espanhol**, **francês**, **alemão**, **italiano**, **polonês** e **ucraniano**, com troca em *Arquivo → Idioma*. A escolha fica salva entre sessões. Na primeira execução vale o idioma do sistema, e `--lang en|pt-BR|es|fr|de|it|pl|uk-UA` força um idioma.

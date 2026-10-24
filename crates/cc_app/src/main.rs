@@ -36,6 +36,7 @@ mod type_dialog;
 #[cfg(test)]
 mod ui_tests;
 mod units_dialog;
+mod update;
 mod view3d;
 mod view_cube;
 

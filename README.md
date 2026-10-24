@@ -43,6 +43,10 @@ cargo run -p cc_core --example casa_simples                      # regenerate th
 
 The bundled example project was authored in Portuguese, so its view names are in Portuguese.
 
+### Update notice
+
+At startup (at most once a day) the app asks the GitHub API for the latest release and, if it is newer, shows a notice with a link to its page; it never downloads anything. Turn it off in *File → About* or with `CONSTRUCTCAD_NO_UPDATE_CHECK=1`; see [the interface guide](docs/interface.md#update-notice) for what is contacted. `ccad --version` prints the version.
+
 ## Languages
 
 The interface is available in **English**, **Portuguese (Brazil)**, **Spanish**, **French**, **German**, **Italian**, **Polish** and **Ukrainian**, switchable under *File → Language*. The choice is saved between sessions. On first run the system language is used, and `--lang en|pt-BR|es|fr|de|it|pl|uk-UA` forces a language.
