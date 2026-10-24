@@ -64,16 +64,18 @@ impl ConstructApp {
                 state.show_home = true;
             }
         }
-        let dock = initial_dock(state.project());
-        let dock_generation = state.generation;
+        let mut named = Vec::new();
         for name in views {
             let by_title = state.project().views.keys().copied().find(|id| state.view_title(*id) == name);
             let found = by_title.or_else(|| state.project().views.values().find(|v| v.name == name).map(|v| v.id));
             match found {
-                Some(id) => state.open_view(id),
+                Some(id) if !named.contains(&id) => named.push(id),
+                Some(_) => {}
                 None => log::warn!("view not found: {name}"),
             }
         }
+        let dock = if named.is_empty() { initial_dock(state.project()) } else { named_dock(&named) };
+        let dock_generation = state.generation;
         Self { state, dock, dock_generation }
     }
 }
@@ -88,6 +90,21 @@ fn initial_dock(project: &Project) -> DockState<ViewId> {
     }
     // Focus the plan so the properties palette shows it from the start.
     if let Some(path) = plan.and_then(|p| dock.find_tab(&p)) {
+        dock.set_focused_node_and_surface(path.node_path());
+    }
+    dock
+}
+
+/// Views named on the command line: the first on the left, the second on
+/// the right, any others as tabs next to the first.
+fn named_dock(views: &[ViewId]) -> DockState<ViewId> {
+    let left = views.iter().enumerate().filter(|(i, _)| *i != 1).map(|(_, v)| *v).collect();
+    let mut dock = DockState::new(left);
+    if let Some(&second) = views.get(1) {
+        dock.main_surface_mut().split_right(NodeIndex::root(), 0.5, vec![second]);
+    }
+    if let Some(path) = views.first().and_then(|v| dock.find_tab(v)) {
+        let _ = dock.set_active_tab(path);
         dock.set_focused_node_and_surface(path.node_path());
     }
     dock

@@ -65,6 +65,9 @@ fn app_icon() -> egui::IconData {
 }
 
 /// `constructcad [project.ccad] [--view NAME]... [--lang en|pt-BR|es|fr|de|it|pl|uk-UA]`
+///
+/// Named views replace the default layout (the first floor plan beside the
+/// 3D view): the first on the left, the second on the right, others as tabs.
 fn parse_args(args: impl Iterator<Item = String>) -> app::Args {
     let mut out = app::Args::default();
     let mut args = args.peekable();

@@ -17,6 +17,9 @@ pub struct View3DState {
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
     fit_requested: bool,
+    /// The camera of the last fit and the aspect it fitted: while the camera
+    /// is left as fitted, a resized view fits it again.
+    auto_fit: Option<(CameraState, f32)>,
     /// Camera transition started by the navigation cube.
     anim: Option<Transition>,
     /// Earlier and undone cameras for "previous" / "next" pan/zoom.
@@ -56,6 +59,7 @@ impl View3DState {
             mesh_key: None,
             camera_dirty: false,
             fit_requested: false,
+            auto_fit: None,
             anim: None,
             back: Vec::new(),
             forward: Vec::new(),
@@ -249,13 +253,21 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let mut v = View3DState::new(camera);
         if geom.bounds().is_some() && camera == CameraState::default() {
             fit_camera(&mut v.camera, geom, aspect);
+            v.auto_fit = Some((v.camera, aspect));
         }
         v
     });
     if v3.fit_requested {
         fit_camera(&mut v3.camera, geom, aspect);
+        v3.auto_fit = Some((v3.camera, aspect));
         v3.fit_requested = false;
         v3.camera_dirty = true;
+    } else if let Some((camera, fitted)) = v3.auto_fit
+        && camera == v3.camera
+        && (fitted - aspect).abs() > 1e-3
+    {
+        fit_camera(&mut v3.camera, geom, aspect);
+        v3.auto_fit = Some((v3.camera, aspect));
     }
 
     // Navigation: left-drag or Shift+middle orbits, middle/right-drag pans, wheel zooms.

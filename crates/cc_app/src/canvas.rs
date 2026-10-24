@@ -78,6 +78,9 @@ pub struct View2DState {
     pub ppm: f64,
     /// Whether the view has been zoomed to fit at least once (or after "zoom extents").
     pub fitted: bool,
+    /// The pan/zoom of the last fit and the canvas size it fitted: while the
+    /// view is left as fitted, a resized canvas fits it again.
+    auto_fit: Option<(DVec2, f64, egui::Vec2)>,
     /// Earlier and undone (center, ppm) states for "previous" / "next".
     back: Vec<(DVec2, f64)>,
     forward: Vec<(DVec2, f64)>,
@@ -94,6 +97,7 @@ impl Default for View2DState {
             center: DVec2::ZERO,
             ppm: 40.0,
             fitted: false,
+            auto_fit: None,
             back: Vec::new(),
             forward: Vec::new(),
             last_wheel: f64::NEG_INFINITY,
@@ -171,6 +175,14 @@ impl View2DState {
         self.ppm = self.ppm.clamp(1e-3, 1e6);
         self.center = (lo + hi) * 0.5;
         self.fitted = true;
+        self.auto_fit = Some((self.center, self.ppm, rect.size()));
+    }
+
+    /// Whether to zoom to fit now: the view was never fitted, or it was left
+    /// as fitted and its canvas changed size.
+    pub fn needs_fit(&self, rect: Rect) -> bool {
+        !self.fitted
+            || self.auto_fit.is_some_and(|(c, ppm, size)| c == self.center && ppm == self.ppm && size != rect.size())
     }
 
     /// Scroll-wheel zoom around the cursor and middle-button pan.
@@ -270,7 +282,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     painter.rect_filled(rect, 0.0, PALETTE.canvas);
 
     let st = state.view2d.entry(view_id).or_default();
-    if !st.fitted {
+    if st.needs_fit(rect) {
         match drawing.bounds() {
             Some(b) if b.1.distance(b.0) > 0.5 => st.fit(b, rect),
             _ => {
@@ -426,6 +438,19 @@ mod tests {
         // A new zoom drops the steps ahead.
         st.apply(ZoomCommand::SheetSize, 10.0);
         assert!(!st.nav().forward);
+    }
+
+    #[test]
+    fn a_view_left_as_fitted_fits_again_when_resized() {
+        let (mut st, rect) = fitted();
+        assert!(!st.needs_fit(rect));
+        let wider = Rect::from_min_size(rect.min, egui::vec2(1200.0, 600.0));
+        assert!(st.needs_fit(wider));
+        st.fit((DVec2::ZERO, DVec2::new(20.0, 10.0)), wider);
+        assert!(!st.needs_fit(wider));
+        // Once zoomed by hand, resizing keeps the zoom.
+        st.apply(ZoomCommand::OutTwo, 10.0);
+        assert!(!st.needs_fit(rect));
     }
 
     #[test]
