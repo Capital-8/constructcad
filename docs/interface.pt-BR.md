@@ -93,6 +93,16 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
 
+## Gráficos das vistas
+
+*Vista → Gráficos* reúne **Visibilidade/gráficos** (VG), **Filtros** e **Modelos de vista** (também em *Gerenciar*).
+
+- **Visibilidade/gráficos** edita a vista ativa (ou, a partir do gerenciador de modelos, um modelo). As abas *Categorias de modelo* e *Categorias de anotação* listam cada categoria com uma caixa de visibilidade e células para linhas em projeção, preenchimento de superfície, linhas de corte, preenchimento de corte, meio-tom e transparência; a célula mostra a sobreposição (— quando não há) e abre um editor de cor, espessura (mm de papel) e padrão. A aba *Filtros* lista os filtros aplicados à vista em ordem de prioridade (↑ ↓), com caixas de ativo e visível e as mesmas células; *Adicionar filtro…* aplica outro e *Editar filtros…* abre o editor de filtros. Quando o modelo da vista controla categorias ou filtros, a aba avisa e fica só para leitura. OK mantém as mudanças; Cancelar as desfaz.
+- **Filtros** edita os filtros do projeto: nome, categorias (nenhuma: todas) e regras — parâmetro, operador e valor — combinadas com E ou OU, com o número de elementos que correspondem.
+- **Modelos de vista** lista os modelos; *Criar a partir da vista* cria um da vista ativa. Cada propriedade tem a caixa *Incluir*; *Aplicar propriedades* copia o modelo para a vista ativa uma vez, *Atribuir à vista* faz a vista segui-lo. As propriedades da vista mostram seu modelo (*Nenhum* a libera) e um botão *Visibilidade/gráficos*; as propriedades controladas pelo modelo ficam só para leitura.
+- Com elementos selecionados, **Sobrepor gráficos** muda seus gráficos só na vista ativa e **Ocultar na vista** (EH) os oculta nela (reexibidos em Visibilidade/gráficos).
+- **Ocultar/isolar** (temporário): HH oculta a seleção, HI a isola, HC e IC ocultam ou isolam suas categorias, HR redefine. Enquanto ativo, a vista ganha uma borda colorida e um aviso com *Redefinir* e *Tornar permanente*. A ocultação temporária não é salva, não entra no desfazer e não é impressa.
+
 ## Aviso de atualização
 
 O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa nem instala nada por conta própria.

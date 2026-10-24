@@ -62,6 +62,14 @@ pub struct Dialogs {
     pub systems: bool,
     /// Sizing of the pipes and circuits.
     pub sizing: bool,
+    /// Visibility/Graphics of a view or view template.
+    pub graphics: Option<crate::graphics_dialog::GraphicsDialog>,
+    /// Graphic overrides of the selected elements in a view.
+    pub element_override: Option<crate::graphics_dialog::OverrideDialog>,
+    /// The view filter editor.
+    pub filters: Option<crate::graphics_dialog::FilterEditor>,
+    /// The view template manager.
+    pub templates: Option<crate::graphics_dialog::TemplateManager>,
 }
 
 pub struct AppState {

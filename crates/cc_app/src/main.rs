@@ -14,6 +14,7 @@ mod dialog;
 mod dialogs;
 mod dim_edit;
 mod engine_edit;
+mod graphics_dialog;
 mod home;
 mod i18n;
 mod icons;

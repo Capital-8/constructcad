@@ -1317,14 +1317,22 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
     let graphical = !matches!(view.kind, ViewKind::Schedule { .. } | ViewKind::Sheet { .. });
     if graphical {
         section(ui, "graphics", t!("section-graphics"), |ui| {
+            crate::graphics_dialog::view_rows(ui, state, id);
             let mut scale = view.scale;
-            row(ui, &t!("prop-scale"), |ui| {
-                egui::ComboBox::from_id_salt(("scale", id.0)).selected_text(format!("1:{scale}")).show_ui(ui, |ui| {
-                    for s in SCALES {
-                        ui.selectable_value(&mut scale, s, format!("1:{s}"));
-                    }
+            if crate::graphics_dialog::controlled(state, id, "scale") {
+                readonly_row(ui, &t!("prop-scale"), format!("1:{scale}"));
+            } else {
+                row(ui, &t!("prop-scale"), |ui| {
+                    egui::ComboBox::from_id_salt(("scale", id.0)).selected_text(format!("1:{scale}")).show_ui(
+                        ui,
+                        |ui| {
+                            for s in SCALES {
+                                ui.selectable_value(&mut scale, s, format!("1:{s}"));
+                            }
+                        },
+                    );
                 });
-            });
+            }
             if scale != view.scale {
                 crate::engine_edit::view(state, id, None, |v| v.scale = scale);
             }
@@ -1348,10 +1356,17 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
     match &view.kind {
         ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height } => {
             if let ViewKind::FloorPlan { structural, structure_tags, .. } = view.kind {
+                let locked = crate::graphics_dialog::controlled(state, id, "structural");
                 section(ui, "structure-display", t!("section-structural"), |ui| {
                     let (mut s, mut tags) = (structural, structure_tags);
-                    let a = row(ui, &t!("prop-structural-plan"), |ui| ui.checkbox(&mut s, "")).changed();
-                    let b = row(ui, &t!("prop-structure-tags"), |ui| ui.checkbox(&mut tags, "")).changed();
+                    let a = row(ui, &t!("prop-structural-plan"), |ui| {
+                        ui.add_enabled(!locked, egui::Checkbox::without_text(&mut s))
+                    })
+                    .changed();
+                    let b = row(ui, &t!("prop-structure-tags"), |ui| {
+                        ui.add_enabled(!locked, egui::Checkbox::without_text(&mut tags))
+                    })
+                    .changed();
                     if a || b {
                         crate::engine_edit::view(state, id, None, |x| {
                             if let ViewKind::FloorPlan { structural, structure_tags, .. } = &mut x.kind {
@@ -1364,8 +1379,9 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             section(ui, "extents", t!("section-extents"), |ui| {
                 readonly_row(ui, &t!("prop-level"), state.project().level_name(*level).to_string());
                 let mut h = *cut_height;
+                let locked = crate::graphics_dialog::controlled(state, id, "cut_height");
                 let r = row(ui, &t!("prop-cut-height"), |ui| {
-                    ui.add(crate::properties::length_drag(&mut h).speed(0.01).range(0.0..=20.0))
+                    ui.add_enabled(!locked, crate::properties::length_drag(&mut h).speed(0.01).range(0.0..=20.0))
                 });
                 if r.changed() {
                     crate::engine_edit::view(state, id, Some(key((id, "cut"))), |x| {

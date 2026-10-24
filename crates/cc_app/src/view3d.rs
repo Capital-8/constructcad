@@ -407,7 +407,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         v3.camera_dirty = true;
     }
 
-    if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, view_id, None, v3.nav()) {
+    let nav = v3.nav();
+    crate::canvas::temporary_frame(ui, state, rect, view_id);
+    if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, view_id, None, nav) {
         crate::canvas::zoom(state, view_id, cmd, 1.0);
         ui.ctx().request_repaint();
     }

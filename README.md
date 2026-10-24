@@ -92,6 +92,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Elevations and sections**: hidden line removal, cut hatching and annotated levels.
 - **Schedules** for every model category and rooms: choose and order the fields (instance, type and computed values such as length, area and volume), sort, filter, show totals and export to CSV.
 - **Sheets** A0–A4: title block with project data and draggable, scaled viewports; export to vector PDF and SVG (*File → Export PDF/SVG…*), identical to the screen.
+- **View graphics**: per-view visibility and overrides of categories and elements (projection and cut lines, surface and cut fills, halftone, transparency), rule-based view filters, view templates that views copy or follow, and temporary hide/isolate (*View → Graphics*, VG); they show on screen, on sheets and in PDF/SVG export.
 - **Manage**: project information, levels (each new level creates its plans) and materials.
 - **`.ccad` files**: versioned, human-readable RON; saving is atomic.
 - **IFC4 export** (*File → Export IFC…*): storeys, walls with openings, doors, windows, floors, ceilings, roofs, structure and components as swept solids (imported objects as polygonal face sets in their original class), with types, material layers, colors and base quantities. Written by ConstructCAD's own STEP writer, with no third-party IFC library.
@@ -128,6 +129,9 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | TT | Text | Ctrl+Shift+P | Command palette |
 | Ctrl+F1 | Collapse / expand the ribbon | SA | Select all instances in the view |
 | GP / UG | Group / Ungroup | ME | Measure between two references |
+| VG | Visibility/Graphics | EH | Hide in view |
+| HH / HI | Temporarily hide / isolate elements | HC / IC | Temporarily hide / isolate categories |
+| HR | Reset temporary hide/isolate | | |
 
 2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
 

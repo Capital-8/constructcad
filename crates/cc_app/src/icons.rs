@@ -113,11 +113,18 @@ pub enum Icon {
     Systems,
     Connect,
     Sizing,
+    Visibility,
+    Filter,
+    ViewTemplate,
+    Hide,
+    Isolate,
+    OverrideGraphics,
+    ResetTemporary,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 102] = [
+    pub const ALL: [Icon; 109] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -220,6 +227,13 @@ impl Icon {
         Icon::Systems,
         Icon::Connect,
         Icon::Sizing,
+        Icon::Visibility,
+        Icon::Filter,
+        Icon::ViewTemplate,
+        Icon::Hide,
+        Icon::Isolate,
+        Icon::OverrideGraphics,
+        Icon::ResetTemporary,
     ];
 
     /// The icon's SVG source.
@@ -327,6 +341,13 @@ impl Icon {
             Icon::Systems => include_str!("../../../assets/icons/ui/systems.svg"),
             Icon::Connect => include_str!("../../../assets/icons/ui/mep-connect.svg"),
             Icon::Sizing => include_str!("../../../assets/icons/ui/mep-sizing.svg"),
+            Icon::Visibility => include_str!("../../../assets/icons/ui/visibility.svg"),
+            Icon::Filter => include_str!("../../../assets/icons/ui/filter.svg"),
+            Icon::ViewTemplate => include_str!("../../../assets/icons/ui/view-template.svg"),
+            Icon::Hide => include_str!("../../../assets/icons/ui/hide.svg"),
+            Icon::Isolate => include_str!("../../../assets/icons/ui/isolate.svg"),
+            Icon::OverrideGraphics => include_str!("../../../assets/icons/ui/override-graphics.svg"),
+            Icon::ResetTemporary => include_str!("../../../assets/icons/ui/reset-temporary.svg"),
         }
     }
 }

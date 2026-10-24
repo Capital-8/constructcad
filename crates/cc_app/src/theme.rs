@@ -37,6 +37,8 @@ pub struct Palette {
     pub warning: Color32,
     /// Positive actions: badges of commands that create something.
     pub success: Color32,
+    /// Border of a view with temporary hide/isolate.
+    pub temporary: Color32,
     /// Plain interface icons (strokes).
     pub icon_ink: Color32,
     /// Second tone of two-tone icons (their soft fills).
@@ -64,6 +66,7 @@ pub const PALETTE: Palette = Palette {
     danger: Color32::from_rgb(0xC9, 0x2A, 0x2A),
     warning: Color32::from_rgb(0xB2, 0x6B, 0x00),
     success: Color32::from_rgb(0x1E, 0x8A, 0x4C),
+    temporary: Color32::from_rgb(0x0E, 0x8C, 0x8F),
     icon_ink: Color32::from_rgb(0x1F, 0x23, 0x28),
     icon_tint: Color32::from_rgb(0x1F, 0x6F, 0xEB),
     dark: false,
@@ -89,6 +92,7 @@ pub const DARK: Palette = Palette {
     danger: Color32::from_rgb(0xF0, 0x6A, 0x6A),
     warning: Color32::from_rgb(0xE0, 0xA4, 0x3A),
     success: Color32::from_rgb(0x4C, 0xC3, 0x8A),
+    temporary: Color32::from_rgb(0x3C, 0xC4, 0xC6),
     icon_ink: Color32::from_rgb(0xE6, 0xE8, 0xEB),
     icon_tint: Color32::from_rgb(0x6A, 0xA2, 0xFA),
     dark: true,

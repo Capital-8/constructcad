@@ -348,3 +348,87 @@ fn roof_openings_are_added_inside_the_roof() {
     state.sync();
     assert!(state.session.geom().roof_ridges.contains_key(&roof));
 }
+
+/// Visibility/Graphics of the ground plan, with a filter applied.
+fn graphics_state() -> (AppState, cc_core::ViewId) {
+    let mut state = sample_state();
+    let plan = state.project().views_of(cc_core::ViewCategory::FloorPlan).next().unwrap().id;
+    state.active_view = Some(plan);
+    let rules = vec![cc_engine::commands::graphics::RuleArg {
+        param: "length".into(),
+        op: "greater".into(),
+        value: Some(serde_json::json!(5.0)),
+    }];
+    let filter = cc_engine::commands::graphics::FilterCreate {
+        name: "Long walls".into(),
+        categories: vec!["wall".into()],
+        rules,
+        any: false,
+    };
+    state.session.run(filter).unwrap();
+    let add = cc_engine::commands::graphics::ViewFilterAdd {
+        view: Some(cc_engine::Ref::Id(plan.0)),
+        filter: cc_engine::Ref::Name("Long walls".into()),
+        overrides: Some(serde_json::json!({"cut_lines": {"color": [200, 0, 0], "weight": 0.7}})),
+        ..Default::default()
+    };
+    state.session.run(add).unwrap();
+    (state, plan)
+}
+
+#[test]
+fn graphics_dialog_hides_categories_and_cancel_undoes() {
+    let (mut state, plan) = graphics_state();
+    let depth = state.session.doc.undo_depth();
+    crate::graphics_dialog::open(&mut state, crate::graphics_dialog::Target::View(plan));
+    let mut harness = themed_harness(state, egui::vec2(980.0, 680.0), egui::Theme::Light, |ui, state| {
+        crate::graphics_dialog::show(ui.ctx(), state)
+    });
+    let walls = format!("{}: {}", t!("vg-visible"), crate::actions::t_category(cc_core::Category::Wall));
+    harness.get_by_label(&walls).click_accesskit();
+    harness.run();
+    let hidden = |s: &AppState| !s.project().view(plan).unwrap().graphics.category(cc_core::Category::Wall).visible;
+    assert!(hidden(harness.state()));
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(!hidden(harness.state()));
+    assert_eq!(harness.state().session.doc.undo_depth(), depth);
+    assert!(harness.state().dialogs.graphics.is_none());
+}
+
+#[test]
+fn graphics_dialog_snapshots() {
+    if !snapshots_requested() {
+        return;
+    }
+    let mut results = egui_kittest::SnapshotResults::new();
+    let (mut state, plan) = graphics_state();
+    crate::graphics_dialog::open(&mut state, crate::graphics_dialog::Target::View(plan));
+    let mut harness = themed_harness(state, egui::vec2(980.0, 680.0), egui::Theme::Light, |ui, state| {
+        crate::graphics_dialog::show(ui.ctx(), state)
+    });
+    results.add(harness.try_snapshot("visibility_graphics"));
+    harness.get_by_label(&t!("vg-filters")).click_accesskit();
+    for _ in 0..4 {
+        harness.run();
+    }
+    results.add(harness.try_snapshot("visibility_graphics_filters"));
+    let (mut state, _) = graphics_state();
+    crate::graphics_dialog::open_filters(&mut state);
+    let mut harness = themed_harness(state, egui::vec2(980.0, 760.0), egui::Theme::Light, |ui, state| {
+        crate::graphics_dialog::show(ui.ctx(), state)
+    });
+    results.add(harness.try_snapshot("filters"));
+    let (mut state, plan) = graphics_state();
+    let create = cc_engine::commands::graphics::TemplateCreate {
+        name: "Working plan".into(),
+        view: Some(cc_engine::Ref::Id(plan.0)),
+    };
+    state.session.run(create).unwrap();
+    crate::graphics_dialog::open_templates(&mut state);
+    let mut harness = themed_harness(state, egui::vec2(980.0, 680.0), egui::Theme::Light, |ui, state| {
+        crate::graphics_dialog::show(ui.ctx(), state)
+    });
+    results.add(harness.try_snapshot("view_templates"));
+    results.unwrap();
+}

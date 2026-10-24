@@ -93,6 +93,16 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
 
+## View graphics
+
+*View → Graphics* holds **Visibility/Graphics** (VG), **Filters** and **View Templates** (also under *Manage*).
+
+- **Visibility/Graphics** edits the active view (or, from the template manager, a template). The *Model Categories* and *Annotation Categories* tabs list each category with a visibility box and cells for projection lines, surface fill, cut lines, cut fill, halftone and transparency; a cell shows the override (— when none) and opens an editor with color, weight (paper mm) and pattern. The *Filters* tab lists the filters applied to the view, in priority order (↑ ↓), with enabled and visible boxes and the same cells; *Add Filter…* applies another one and *Edit Filters…* opens the filter editor. When the view's template controls categories or filters, the tab says so and is read-only. OK keeps the changes, Cancel undoes them.
+- **Filters** edits the project's filters: name, categories (none: all) and rules — a parameter, an operator and a value — combined with AND or OR, with the number of elements matching.
+- **View Templates** lists the templates; *Create from View* makes one from the active view. Each property has an *Include* box; *Apply Properties* copies the template into the active view once, *Assign to View* makes the view follow it. The view's properties show its template (choose *None* to free it) and a *Visibility/Graphics* button; properties the template controls are read-only.
+- With elements selected, **Override Graphics** changes their graphics in the active view only and **Hide in View** (EH) hides them there (shown again from Visibility/Graphics).
+- **Hide/Isolate** (temporary): HH hides the selection, HI isolates it, HC and IC hide or isolate its categories, HR resets. While active, the view has a colored border and a chip with *Reset* and *Make Permanent*. Temporary hiding is not saved, not undone and not printed.
+
 ## Update notice
 
 ConstructCAD tells you when a newer version is published; it never downloads or installs anything by itself.

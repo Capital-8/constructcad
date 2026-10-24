@@ -97,6 +97,17 @@ pub enum UiCommand {
     Schedule,
     Sheet,
     ZoomFit,
+    VisibilityGraphics,
+    ViewFilters,
+    ViewTemplates,
+    OverrideGraphics,
+    HideInView,
+    TempHide,
+    TempIsolate,
+    TempHideCategory,
+    TempIsolateCategory,
+    TempReset,
+    TempPermanent,
     ProjectInfo,
     Units,
     Levels,
@@ -193,6 +204,17 @@ impl UiCommand {
             Schedule,
             Sheet,
             ZoomFit,
+            VisibilityGraphics,
+            ViewFilters,
+            ViewTemplates,
+            OverrideGraphics,
+            HideInView,
+            TempHide,
+            TempIsolate,
+            TempHideCategory,
+            TempIsolateCategory,
+            TempReset,
+            TempPermanent,
             ProjectInfo,
             Units,
             Levels,
@@ -289,6 +311,13 @@ impl UiCommand {
             Legend => Icon::Legend,
             Schedule => Icon::Schedule,
             ZoomFit => Icon::ZoomFit,
+            VisibilityGraphics => Icon::Visibility,
+            ViewFilters => Icon::Filter,
+            ViewTemplates => Icon::ViewTemplate,
+            OverrideGraphics => Icon::OverrideGraphics,
+            HideInView | TempHide | TempHideCategory | TempPermanent => Icon::Hide,
+            TempIsolate | TempIsolateCategory => Icon::Isolate,
+            TempReset => Icon::ResetTemporary,
             ProjectInfo => Icon::ProjectInfo,
             Units => Icon::Dimension,
             Levels => Icon::Levels,
@@ -402,6 +431,17 @@ impl UiCommand {
             Schedule => t!("view-new-schedule"),
             Sheet => t!("view-new-sheet"),
             ZoomFit => t!("action-zoom-fit"),
+            VisibilityGraphics => t!("action-visibility-graphics"),
+            ViewFilters => t!("action-view-filters"),
+            ViewTemplates => t!("action-view-templates"),
+            OverrideGraphics => t!("action-override-graphics"),
+            HideInView => t!("action-hide-in-view"),
+            TempHide => t!("action-temp-hide"),
+            TempIsolate => t!("action-temp-isolate"),
+            TempHideCategory => t!("action-temp-hide-category"),
+            TempIsolateCategory => t!("action-temp-isolate-category"),
+            TempReset => t!("action-temp-reset"),
+            TempPermanent => t!("action-temp-permanent"),
             ProjectInfo => t!("dlg-project-info"),
             Units => t!("dlg-units"),
             Levels => t!("dlg-levels"),
@@ -520,6 +560,17 @@ impl UiCommand {
             Schedule => t!("cmd-desc-schedule"),
             Sheet => t!("cmd-desc-sheet"),
             ZoomFit => t!("cmd-desc-zoom-fit"),
+            VisibilityGraphics => t!("cmd-desc-visibility-graphics"),
+            ViewFilters => t!("cmd-desc-view-filters"),
+            ViewTemplates => t!("cmd-desc-view-templates"),
+            OverrideGraphics => t!("cmd-desc-override-graphics"),
+            HideInView => t!("cmd-desc-hide-in-view"),
+            TempHide => t!("cmd-desc-temp-hide"),
+            TempIsolate => t!("cmd-desc-temp-isolate"),
+            TempHideCategory => t!("cmd-desc-temp-hide-category"),
+            TempIsolateCategory => t!("cmd-desc-temp-isolate-category"),
+            TempReset => t!("cmd-desc-temp-reset"),
+            TempPermanent => t!("cmd-desc-temp-permanent"),
             ProjectInfo => t!("cmd-desc-project-info"),
             Units => t!("cmd-desc-units"),
             Levels => t!("cmd-desc-levels"),
@@ -585,6 +636,13 @@ impl UiCommand {
             MatchType => "MA",
             Section => "CT",
             ZoomFit => "ZE",
+            VisibilityGraphics => "VG",
+            HideInView => "EH",
+            TempHide => "HH",
+            TempIsolate => "HI",
+            TempHideCategory => "HC",
+            TempIsolateCategory => "IC",
+            TempReset => "HR",
             ToggleRibbon => "Ctrl+F1",
             CommandPalette => "Ctrl+Shift+P",
             _ => return None,
@@ -668,6 +726,13 @@ impl UiCommand {
             MatchType => "elements_set_type",
             FloorPlan | CeilingPlan | New3D | Section | Legend | Schedule | Sheet => "view_create",
             ProjectInfo => "project_info_set",
+            VisibilityGraphics => "view_graphics_set",
+            ViewFilters => "filter_set",
+            ViewTemplates => "template_set",
+            OverrideGraphics => "element_override_set",
+            HideInView => "element_hide_in_view",
+            TempHide | TempIsolate | TempHideCategory | TempIsolateCategory | TempReset => "view_temporary",
+            TempPermanent => "view_temporary_apply",
             Units => "units_set",
             Levels => "level_set",
             Materials => "material_set",
@@ -737,6 +802,20 @@ impl UiCommand {
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             Elevations if project.views_of(ViewCategory::Elevation).next().is_none() => Some(t!("why-no-elevations")),
             ZoomFit | Measure if state.active_view.is_none() => Some(t!("why-no-view")),
+            VisibilityGraphics | OverrideGraphics | HideInView | TempHide | TempIsolate | TempHideCategory
+            | TempIsolateCategory | TempReset | TempPermanent
+                if graphics_view(state).is_none() =>
+            {
+                Some(t!("why-no-graphics-view"))
+            }
+            OverrideGraphics | HideInView | TempHide | TempIsolate | TempHideCategory | TempIsolateCategory
+                if !has_sel =>
+            {
+                Some(t!("msg-select-first"))
+            }
+            TempReset | TempPermanent if graphics_view(state).and_then(|v| state.session.temporary(v)).is_none() => {
+                Some(t!("msg-nothing-temporary"))
+            }
             MacroRun if state.session.is_recording() => Some(t!("why-recording")),
             _ => None,
         }
@@ -783,6 +862,11 @@ impl UiCommand {
             _ => false,
         }
     }
+}
+
+/// The active view when it has visibility/graphics (plans, elevations, sections, 3D).
+pub fn graphics_view(state: &AppState) -> Option<cc_core::ViewId> {
+    state.active_view.filter(|v| state.project().view(*v).is_some_and(|v| cc_core::ViewTemplate::applies_to(&v.kind)))
 }
 
 /// Whether a component type is an electrical device (`Some(true)`), a plumbing fixture or neither.
@@ -1014,6 +1098,21 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             actions::new_sheet(state);
         }
         ZoomFit => crate::app::zoom_fit(state),
+        VisibilityGraphics => {
+            if let Some(view) = graphics_view(state) {
+                crate::graphics_dialog::open(state, crate::graphics_dialog::Target::View(view));
+            }
+        }
+        ViewFilters => crate::graphics_dialog::open_filters(state),
+        ViewTemplates => crate::graphics_dialog::open_templates(state),
+        OverrideGraphics => crate::graphics_dialog::open_overrides(state),
+        HideInView => actions::hide_in_view(state),
+        TempHide => actions::temporary(state, "hide"),
+        TempIsolate => actions::temporary(state, "isolate"),
+        TempHideCategory => actions::temporary(state, "hide_category"),
+        TempIsolateCategory => actions::temporary(state, "isolate_category"),
+        TempReset => actions::temporary(state, "reset"),
+        TempPermanent => actions::temporary_permanent(state),
         ProjectInfo => state.dialogs.project_info = true,
         Units => state.dialogs.units = true,
         Levels => state.dialogs.levels = true,
@@ -1089,6 +1188,33 @@ mod tests {
             state.project().elements.values().filter(|e| e.type_id == ty && e.level == level).map(|e| e.id).collect();
         assert!(expected.len() > 1);
         assert_eq!(state.selection, expected);
+    }
+
+    #[test]
+    fn view_graphics_commands_follow_the_active_view() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let ctx = egui::Context::default();
+        assert_eq!(UiCommand::VisibilityGraphics.unavailable(&state), Some(t!("why-no-graphics-view")));
+        let plan = state.project().views_of(ViewCategory::FloorPlan).next().unwrap().id;
+        state.active_view = Some(plan);
+        assert_eq!(UiCommand::TempHide.unavailable(&state), Some(t!("msg-select-first")));
+        assert_eq!(UiCommand::TempReset.unavailable(&state), Some(t!("msg-nothing-temporary")));
+        let wall = state.project().walls().next().map(|(e, _)| e.id).unwrap();
+        state.selection = [wall].into_iter().collect();
+        invoke(&mut state, &ctx, UiCommand::TempHide);
+        assert!(state.session.temporary(plan).is_some_and(|t| t.elements.contains(&wall)));
+        assert!(state.selection.is_empty());
+        assert!(!state.session.doc.can_undo(), "temporary hiding is not an edit");
+        invoke(&mut state, &ctx, UiCommand::TempPermanent);
+        assert!(state.session.temporary(plan).is_none());
+        assert!(state.project().view(plan).unwrap().graphics.hidden.contains(&wall));
+        // Visibility/Graphics opens on the view and Cancel undoes its edits.
+        invoke(&mut state, &ctx, UiCommand::VisibilityGraphics);
+        assert!(
+            state.dialogs.graphics.as_ref().is_some_and(|d| d.target == crate::graphics_dialog::Target::View(plan))
+        );
     }
 
     #[test]

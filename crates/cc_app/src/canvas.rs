@@ -298,9 +298,42 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     }
     crate::dim_edit::show(ui, state, view_id);
     crate::text_tool::show(ui, state, view_id);
+    temporary_frame(ui, state, rect, view_id);
     let nav = state.view2d.get(&view_id).map(View2DState::nav).unwrap_or_default();
     if let Some(cmd) = view_toolbar(ui, state.zoom_default, rect, view_id, Some(view.scale), nav) {
         zoom(state, view_id, cmd, 1000.0 / view.scale.max(1) as f64);
+    }
+}
+
+/// While something is temporarily hidden or isolated in the view: a colored
+/// border and a chip naming the state, with Reset and Make Permanent.
+pub fn temporary_frame(ui: &mut Ui, state: &mut AppState, rect: Rect, view_id: ViewId) {
+    if state.session.temporary(view_id).is_none() {
+        return;
+    }
+    let color = theme::palette(ui.ctx()).temporary;
+    let painter = ui.painter_at(rect);
+    painter.rect_stroke(rect.shrink(1.5), 0.0, egui::Stroke::new(3.0, color), egui::StrokeKind::Inside);
+    let chip = Rect::from_min_size(rect.left_top() + egui::vec2(10.0, 10.0), egui::vec2(380.0, 28.0));
+    painter.rect_filled(chip, 6.0, color);
+    let font = egui::FontId::new(12.0, theme::semibold());
+    painter.text(
+        egui::pos2(chip.left() + 10.0, chip.center().y),
+        egui::Align2::LEFT_CENTER,
+        crate::t!("temporary-active"),
+        font,
+        egui::Color32::WHITE,
+    );
+    let button = |x: f32, w: f32| Rect::from_min_size(egui::pos2(x, chip.top() + 3.0), egui::vec2(w, 22.0));
+    let permanent = ui.put(button(chip.right() - 112.0, 106.0), egui::Button::new(crate::t!("temporary-permanent")));
+    let reset = ui.put(button(chip.right() - 186.0, 70.0), egui::Button::new(crate::t!("temporary-reset")));
+    if reset.clicked() {
+        state.active_view = Some(view_id);
+        crate::actions::temporary(state, "reset");
+    }
+    if permanent.clicked() {
+        state.active_view = Some(view_id);
+        crate::actions::temporary_permanent(state);
     }
 }
 

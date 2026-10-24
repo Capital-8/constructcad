@@ -369,7 +369,7 @@ pub(crate) fn param(name: &str) -> Result<FilterParam> {
         .map_err(|_| EngineError::invalid(format!("unknown filter parameter '{name}'")))
 }
 
-pub(crate) fn param_name(p: FilterParam) -> String {
+pub fn param_name(p: FilterParam) -> String {
     match p {
         FilterParam::Elevation => "elevation".into(),
         FilterParam::Field(f) => snake(&format!("{f:?}")),

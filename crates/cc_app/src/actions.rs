@@ -789,6 +789,37 @@ pub fn beams_between_columns(state: &mut AppState) {
     placed(state, out, Placed::Beams);
 }
 
+/// Hide the selection in the active view (permanently; Visibility/Graphics shows it again).
+pub fn hide_in_view(state: &mut AppState) {
+    let Some(view) = crate::commands::graphics_view(state) else { return };
+    let ids = state.selection.iter().map(|e| e.0).collect();
+    let command = cc_engine::commands::graphics::ElementHideInView { view: Ref::Id(view.0), ids, hidden: true };
+    if run(state, command).is_some() {
+        state.selection.clear();
+    }
+}
+
+/// Temporarily hide or isolate the selection (or its categories) in the active view, or reset.
+pub fn temporary(state: &mut AppState, action: &str) {
+    let Some(view) = crate::commands::graphics_view(state) else { return };
+    let ids = if action == "reset" { Vec::new() } else { state.selection.iter().map(|e| e.0).collect() };
+    let command = cc_engine::commands::graphics::ViewTemporary {
+        view: Ref::Id(view.0),
+        action: action.to_string(),
+        ids,
+        categories: Vec::new(),
+    };
+    if run(state, command).is_some() && action.starts_with("hide") {
+        state.selection.clear();
+    }
+}
+
+/// Make the active view's temporary hide/isolate permanent.
+pub fn temporary_permanent(state: &mut AppState) {
+    let Some(view) = crate::commands::graphics_view(state) else { return };
+    run(state, cc_engine::commands::graphics::ViewTemporaryApply { view: Ref::Id(view.0) });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

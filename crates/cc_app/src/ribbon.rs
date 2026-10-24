@@ -729,12 +729,28 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         });
         command_button(ui, state, UiCommand::Sheet);
     });
+    group(ui, t!("group-graphics"), |ui| {
+        command_buttons(ui, state, &[UiCommand::VisibilityGraphics, UiCommand::ViewFilters, UiCommand::ViewTemplates]);
+    });
+    group(ui, t!("group-temporary"), |ui| {
+        use UiCommand::*;
+        stacks(
+            ui,
+            state,
+            &[
+                &[TempHide, TempIsolate, TempReset],
+                &[TempHideCategory, TempIsolateCategory, TempPermanent],
+                &[HideInView, OverrideGraphics],
+            ],
+        );
+    });
     group(ui, t!("group-navigate"), |ui| command_button(ui, state, UiCommand::ZoomFit));
 }
 
 fn manage_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
     group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[ProjectInfo, Units, Levels, Materials]));
+    group(ui, t!("group-graphics"), |ui| command_buttons(ui, state, &[ViewTemplates, ViewFilters]));
     group(ui, t!("group-macros"), |ui| command_buttons(ui, state, &[MacroRecord, MacroRun]));
 }
 
