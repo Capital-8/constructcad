@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Update notice: at startup, at most once a day and in the background, the app asks the GitHub API for the latest release and, when it is newer than the running version (pre-releases ignored), shows a notice in the status bar and on the home screen with *Download* (opens the release page in the browser), *Skip This Version* and dismiss. Nothing is downloaded or installed. *File → Check for Updates* (also in *About*) checks on request and reports the result. Automatic checks can be turned off in *About*, and `CONSTRUCTCAD_NO_UPDATE_CHECK=1` turns every check off; failures are silent. See *Update notice* in the interface guide for what is contacted.
 - `ccad --version` (`-V`) prints the version.
+- Installers in every release, built by the release workflow from `packaging/`: a Windows MSI (WiX; per-machine under Program Files, Start menu shortcut, `.ccad` file association, optional `ccad` on the PATH, in-place upgrades), a Linux `.deb` and AppImage (desktop entry, icon, `.ccad` MIME type) and a macOS `.dmg` per architecture with an ad-hoc signed `ConstructCAD.app` (icon, `.ccad` document type). All are listed in `SHA256SUMS.txt`, next to the existing archives.
+
+### Changed
+
+- On Linux the window reports the app id `constructcad`, matching the desktop entry, so desktops show its icon and name.
 
 ## [0.3.0] - 2026-10-21
 

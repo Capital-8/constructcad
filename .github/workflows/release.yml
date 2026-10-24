@@ -9,6 +9,12 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Installer tools, pinned (packaging/ holds the files they build from).
+  WIX_VERSION: "5.0.2"
+  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+  APPIMAGE_RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+  APPIMAGE_RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
 
 jobs:
   build:
@@ -53,10 +59,78 @@ jobs:
             cp "target/${{ matrix.target }}/release/constructcad" "target/${{ matrix.target }}/release/ccad" "dist/$name/"
             tar -C dist -czf "dist/$name.tar.gz" "$name"
           fi
+          rm -rf "dist/$name"
+
+      # Windows: MSI (WiX v5), per-machine, with an optional PATH entry for ccad.
+      - name: Install WiX
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          dotnet tool install --global wix --version "$WIX_VERSION"
+          echo "$USERPROFILE\\.dotnet\\tools" >> "$GITHUB_PATH"
+          "$USERPROFILE/.dotnet/tools/wix" extension add --global "WixToolset.UI.wixext/$WIX_VERSION"
+      - name: MSI installer
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          wix --version
+          version="${GITHUB_REF_NAME#v}"
+          python packaging/windows/license_rtf.py LICENSE "$RUNNER_TEMP/License.rtf"
+          wix build packaging/windows/constructcad.wxs -arch x64 -ext WixToolset.UI.wixext \
+            -d "Version=${version%%[-+]*}" \
+            -d "BinDir=target/${{ matrix.target }}/release" \
+            -d "LicenseRtf=$RUNNER_TEMP/License.rtf" \
+            -o "dist/constructcad-${GITHUB_REF_NAME}-x86_64.msi"
+
+      # Linux: .deb (dpkg-deb) and AppImage (appimagetool).
+      - name: Linux packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dpkg-dev desktop-file-utils
+          desktop-file-validate packaging/linux/constructcad.desktop
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL"
+          curl -fsSL -o "$RUNNER_TEMP/runtime-x86_64" "$APPIMAGE_RUNTIME_URL"
+          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+          echo "$APPIMAGE_RUNTIME_SHA256  $RUNNER_TEMP/runtime-x86_64" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/appimagetool"
+      - name: Debian package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          packaging/linux/build-deb.sh "$version" "target/${{ matrix.target }}/release" \
+            "dist/constructcad_${version//-/\~}_amd64.deb"
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+      - name: AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          packaging/linux/build-appimage.sh "target/${{ matrix.target }}/release" \
+            "dist/constructcad-${GITHUB_REF_NAME}-x86_64.AppImage" \
+            "$RUNNER_TEMP/appimagetool" "$RUNNER_TEMP/runtime-x86_64"
+
+      # macOS: ConstructCAD.app in a .dmg, one per architecture (ccad stays in the archive).
+      - name: DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          packaging/macos/build-dmg.sh "${GITHUB_REF_NAME#v}" "target/${{ matrix.target }}/release/constructcad" \
+            "dist/constructcad-${GITHUB_REF_NAME}-${{ matrix.target }}.dmg"
+
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
-          path: dist/*.${{ matrix.archive }}
+          if-no-files-found: error
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.msi
+            dist/*.deb
+            dist/*.AppImage
+            dist/*.dmg
 
   release:
     name: Publish release
