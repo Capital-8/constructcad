@@ -41,8 +41,9 @@ fn create(
     Ok(created(s, id))
 }
 
-/// Create a straight wall from `start` to `end` on a level. Its top is
-/// `height` above its base, or attached to `top_level` (plus `top_offset`).
+/// Create a wall from `start` to `end` on a level: straight, or an arc
+/// through `mid` (or with a `bulge`). Its top is `height` above its base,
+/// or attached to `top_level` (plus `top_offset`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct WallCreate {
@@ -50,6 +51,13 @@ pub struct WallCreate {
     pub start: Point,
     /// End point of the wall line.
     pub end: Point,
+    /// A point on the arc between the ends: makes an arc wall through the three points.
+    #[serde(default)]
+    pub mid: Option<Point>,
+    /// Arc walls: tan(sweep / 4), positive when the arc turns counter-clockwise from `start`
+    /// to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given.
+    #[serde(default)]
+    pub bulge: Option<f64>,
     /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
@@ -89,17 +97,43 @@ impl Command for WallCreate {
                 .map_err(|_| EngineError::invalid(format!("unknown location line '{name}'")))?,
             None => LocationLine::default(),
         };
+        let bulge = match (self.mid, self.bulge) {
+            (Some(m), _) => cc_core::arc::Arc::bulge_through(start, point(m)?, end)
+                .ok_or_else(|| EngineError::invalid("the three points of the arc are on a line"))?,
+            (None, Some(b)) => {
+                let b = finite(b, "bulge")?;
+                if b.abs() > cc_core::arc::MAX_BULGE {
+                    return Err(EngineError::invalid("the bulge must be between -10 and 10"));
+                }
+                b
+            }
+            (None, None) => 0.0,
+        };
         let wall = Wall {
             start,
             end,
+            bulge,
             base_offset: finite(self.base_offset.unwrap_or(0.0), "base_offset")?,
             height: positive(self.height.unwrap_or(3.0), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or(WallTop::Unconnected),
             location_line,
             ..Default::default()
         };
+        let type_id = refs::type_of(p, Category::Wall, self.type_ref.as_ref())?;
+        check_arc(p, type_id, &wall)?;
         create(s, t!("tx-create-wall"), level, Category::Wall, self.type_ref.as_ref(), ElementKind::Wall(wall))
     }
+}
+
+/// An arc wall must leave room inside its curve for its thickness.
+pub(crate) fn check_arc(p: &Project, type_id: cc_core::ElementTypeId, wall: &Wall) -> Result<()> {
+    let Some(arc) = wall.arc() else { return Ok(()) };
+    let thickness = p.element_type(type_id).map_or(0.0, |t| t.thickness());
+    // The tightest face may be the location line moved by up to the whole thickness.
+    if arc.radius <= thickness + 1e-3 {
+        return Err(EngineError::rejected("the arc is too tight for the thickness of the wall"));
+    }
+    Ok(())
 }
 
 /// Parameters shared by doors and windows.
@@ -144,15 +178,13 @@ fn place_hosted(s: &mut Session, a: HostedArgs, category: Category) -> Result<Va
         TypeData::Window { default_sill, .. } => default_sill,
         _ => 0.0,
     };
+    // Openings are placed along the body centerline (an arc for arc walls).
     let (start, end) = p.wall_axis(host_el, wall);
-    let length = start.distance(end);
-    let dir = (end - start).try_normalize().unwrap_or(DVec2::X);
+    let axis = Wall { start, end, ..wall.clone() };
+    let length = axis.length();
     let (u, side) = match (a.offset, a.point) {
         (Some(o), _) => (finite(o, "offset")?, 1.0),
-        (None, Some(q)) => {
-            let q = point(q)? - start;
-            (q.dot(dir), q.dot(dir.perp()))
-        }
+        (None, Some(q)) => axis.project(point(q)?),
         (None, None) => (length / 2.0, 1.0),
     };
     let margin = 0.01;
@@ -181,7 +213,15 @@ fn nearest_wall(p: &Project, q: DVec2) -> Result<cc_core::ElementId> {
     p.walls()
         .map(|(e, w)| {
             let (a, b) = p.wall_axis(e, w);
-            (e.id, polygon::closest_on_segment(a, b, q).0.distance(q), p.thickness_of(e))
+            let distance = match w.arc() {
+                Some(_) => {
+                    let axis = Wall { start: a, end: b, ..w.clone() };
+                    let (u, v) = axis.project(q);
+                    if (0.0..=axis.length()).contains(&u) { v.abs() } else { f64::INFINITY }
+                }
+                None => polygon::closest_on_segment(a, b, q).0.distance(q),
+            };
+            (e.id, distance, p.thickness_of(e))
         })
         .filter(|(_, d, t)| *d <= t / 2.0 + 0.5)
         .min_by(|a, b| a.1.total_cmp(&b.1))

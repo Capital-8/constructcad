@@ -76,6 +76,7 @@ Os argumentos de `run` podem ser um objeto JSON, `@arquivo.json`, `-` (entrada p
 
 ```sh
 ccad -p casa.ccad --save run wall_create start=[0,0] end=[5,0] height=2.8
+ccad -p casa.ccad --save run wall_create start=[5,0] end=[5,4] mid=[6,2]    # parede em arco passando por mid
 ccad -p casa.ccad run elements_list category=door
 ccad -p casa.ccad --save run view_set '{"view": "Corte 1", "scale": 100}'
 ccad -p modelo.ifc --save-as modelo.ccad run project_info          # importa um IFC

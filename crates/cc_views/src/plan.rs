@@ -336,7 +336,8 @@ fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spa
                     (c.right.0 + (c.left.0 - c.right.0) * s, c.right.1 + (c.left.1 - c.right.1) * s)
                 };
                 let ((a0, a1), (b0, b1)) = (at(*v0), at(*v1));
-                let strip = vec![g.world(a0, *v0), g.world(a1, *v0), g.world(b1, *v1), g.world(b0, *v1)];
+                let mut strip = g.path(a0, a1, *v0);
+                strip.extend(g.path(b1, b0, *v1));
                 crate::cut::cut_fill(d, project, material, strip, spacing, id);
             }
             // Interior layer boundaries; the outer faces are drawn below.
@@ -344,14 +345,14 @@ fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spa
                 let s = (v + h) / (2.0 * h);
                 let u0 = c.right.0 + (c.left.0 - c.right.0) * s;
                 let u1 = c.right.1 + (c.left.1 - c.right.1) * s;
-                d.line(g.world(u0, v), g.world(u1, v), LineStyle::Thin, id);
+                d.polyline(&g.path(u0, u1, v), false, LineStyle::Thin, id);
             }
         }
         if let Some(style) = style_of(state) {
             // Faces, opened where other walls meet them in a T.
             for (side, (u0, u1)) in [(-1.0, c.right), (1.0, c.left)] {
                 for (a, b) in g.face_segments(side, u0, u1) {
-                    d.line(g.world(a, side * h), g.world(b, side * h), style, id);
+                    d.polyline(&g.path(a, b, side * h), false, style, id);
                 }
             }
         }
@@ -387,10 +388,12 @@ fn draw_openings(d: &mut Drawing2D, project: &Project, g: &WallGeom, ceiling: bo
                 let side = if host.flip_facing { -1.0 } else { 1.0 };
                 let (hinge_u, toward) = if host.flip_hand { (o.u1, -1.0) } else { (o.u0, 1.0) };
                 let hinge = g.world(hinge_u, side * g.half);
-                let leaf_dir = g.normal * side;
+                // Square to the wall at the opening's center (an arc wall's chord).
+                let (_, dir, normal) = g.frame_at((o.u0 + o.u1) * 0.5);
+                let leaf_dir = normal * side;
                 d.line(hinge, hinge + leaf_dir * width, LineStyle::Projection, id);
                 let a0 = leaf_dir.to_angle();
-                let mut a1 = (g.dir * toward).to_angle();
+                let mut a1 = (dir * toward).to_angle();
                 if a1 - a0 > PI {
                     a1 -= TAU;
                 } else if a0 - a1 > PI {
@@ -400,7 +403,7 @@ fn draw_openings(d: &mut Drawing2D, project: &Project, g: &WallGeom, ceiling: bo
             }
             ElementKind::Window(_) => {
                 for v in [-0.01, 0.01] {
-                    d.line(g.world(o.u0, v), g.world(o.u1, v), LineStyle::Thin, id);
+                    d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Thin, id);
                 }
             }
             _ => {}
@@ -503,6 +506,63 @@ mod tests {
         assert_eq!(d.hit_test(DVec2::new(1.0, 0.0), 0.01), Some(wall_id));
         // On the open leaf, drawn from the hinge at u = 2.1 on the left face.
         assert_eq!(d.hit_test(DVec2::new(2.12, 0.5), 0.05), Some(door_id));
+    }
+
+    /// A half-circle wall: plans draw its faces as arcs (pickable as arcs),
+    /// elevations draw no seams between the facets of its curved faces.
+    #[test]
+    fn arc_walls_draw_arcs_without_seams() {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let wall_id = doc.edit("t", |e| {
+            let wall_t = e.project().default_type(Category::Wall).unwrap();
+            let w = ElementId(e.alloc_id());
+            let wall =
+                Wall { start: DVec2::new(4.0, 0.0), end: DVec2::new(-4.0, 0.0), bulge: 1.0, ..Default::default() };
+            e.add_element(Element {
+                id: w,
+                level,
+                type_id: wall_t,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind: ElementKind::Wall(wall),
+            });
+            w
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let half = geom.walls[&wall_id].half;
+        let d = plan(&doc.project, &geom, level, 1.2, false, 50);
+        let cut: Vec<(DVec2, DVec2)> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Line { a, b, style: LineStyle::Cut, element: Some(e) } if *e == wall_id => Some((*a, *b)),
+                _ => None,
+            })
+            .collect();
+        // Many short chords, each on the inner or outer circle (the end caps join the two).
+        let on_circle = |p: DVec2| (p.length() - (4.0 - half)).abs() < 1e-9 || (p.length() - (4.0 + half)).abs() < 1e-9;
+        assert!(cut.len() > 40, "{}", cut.len());
+        assert!(cut.iter().all(|(a, b)| on_circle(*a) && on_circle(*b) && a.distance(*b) < 0.25));
+        assert_eq!(d.hit_test(DVec2::new(0.0, 4.0 + half), 0.01), Some(wall_id));
+        // Seen from the north, the outer face shows only its outline.
+        let view = doc
+            .project
+            .views
+            .values()
+            .find(|v| matches!(v.kind, cc_core::ViewKind::Elevation { direction: cc_core::Direction::North }))
+            .unwrap();
+        let d = crate::generate(&doc.project, &geom, view).unwrap();
+        let vertical = d
+            .prims
+            .iter()
+            .filter(|p| match p {
+                Prim::Line { a, b, element: Some(e), .. } if *e == wall_id => (a.x - b.x).abs() < 1e-9,
+                _ => false,
+            })
+            .count();
+        assert!(vertical <= 4, "{vertical} vertical lines");
     }
 
     /// A mesh piece (as imported from IFC) is cut at the plan's cut plane.

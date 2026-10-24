@@ -76,6 +76,7 @@ Arguments of `run` can be a JSON object, `@file.json`, `-` (standard input) or `
 
 ```sh
 ccad -p house.ccad --save run wall_create start=[0,0] end=[5,0] height=2.8
+ccad -p house.ccad --save run wall_create start=[5,0] end=[5,4] mid=[6,2]   # an arc wall through mid
 ccad -p house.ccad run elements_list category=door
 ccad -p house.ccad --save run view_set '{"view": "Section 1", "scale": 100}'
 ccad -p model.ifc --save-as model.ccad run project_info              # import an IFC file

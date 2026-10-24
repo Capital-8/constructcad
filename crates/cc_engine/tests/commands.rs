@@ -1299,3 +1299,84 @@ fn panel_diagrams_follow_their_board() {
     run(&mut s, "undo", json!({}));
     assert_eq!(run(&mut s, "view_get", json!({"view": id(&diagram)}))["params"]["panel"], json!(panel));
 }
+
+/// Arc walls: three points or a bulge; quantities along the arc; doors on
+/// the arc; a room and floor from walls that include an arc; edits.
+#[test]
+fn arc_walls_through_commands() {
+    use std::f64::consts::PI;
+    let mut s = Session::default();
+    // A half circle through (0, 4) closed by a straight wall: a "D".
+    let arc = run(&mut s, "wall_create", json!({"start": [4.0, 0.0], "end": [-4.0, 0.0], "mid": [0.0, 4.0]}));
+    let thickness = arc["derived"]["thickness"].as_f64().unwrap();
+    assert!((arc["params"]["bulge"].as_f64().unwrap() - 1.0).abs() < 1e-9, "{arc}");
+    assert!((arc["derived"]["radius"].as_f64().unwrap() - 4.0).abs() < 1e-9);
+    assert!((arc["derived"]["sweep"].as_f64().unwrap() - 180.0).abs() < 1e-9);
+    assert!((arc["derived"]["length"].as_f64().unwrap() - 4.0 * PI).abs() < 1e-9);
+    let height = arc["derived"]["height"].as_f64().unwrap();
+    let volume = arc["derived"]["volume"].as_f64().unwrap();
+    assert!((volume - 4.0 * PI * thickness * height).abs() < 1e-9, "a free arc: length x thickness x height");
+    let chord = run(&mut s, "wall_create", json!({"start": [-4.0, 0.0], "end": [4.0, 0.0]}));
+
+    // A door by a point near the top of the arc lands there, centered on the arc.
+    let door = run(&mut s, "door_create", json!({"point": [0.3, 4.5]}));
+    let offset = door["params"]["offset"].as_f64().unwrap();
+    let expected = (PI / 2.0 - (0.3f64 / 4.5).atan()) * 4.0;
+    assert!((offset - expected).abs() < 1e-6, "{offset} vs {expected}");
+    assert_eq!(door["params"]["host"], arc["id"]);
+    assert_eq!(door["params"]["flip_facing"], true, "outside the arc is its right side");
+
+    // The room inside follows the inner face of the arc.
+    let room = run(&mut s, "room_create", json!({"point": [0.0, 1.0]}));
+    let (r, d) = (4.0 - thickness / 2.0, thickness / 2.0);
+    let segment = r * r * (d / r).acos() - d * (r * r - d * d).sqrt();
+    let area = room["derived"]["area"].as_f64().unwrap();
+    assert!((area - segment).abs() < 1e-3 * segment, "{area} vs {segment}");
+    // A floor from the walls follows the arc too (its exterior faces).
+    let floor = run(&mut s, "floor_create", json!({"from_walls": true}));
+    let outer = PI * (4.0 + d) * (4.0 + d) / 2.0;
+    let floor_el = run(&mut s, "element_get", json!({"id": id(&floor)}));
+    let boundary = floor_el["params"]["boundary"].as_array().unwrap();
+    assert!(boundary.len() > 30, "the arc is followed by many points");
+    let pts: Vec<(f64, f64)> = boundary.iter().map(|p| (p[0].as_f64().unwrap(), p[1].as_f64().unwrap())).collect();
+    let n = pts.len();
+    let shoelace: f64 =
+        (0..n).map(|i| pts[i].0 * pts[(i + 1) % n].1 - pts[(i + 1) % n].0 * pts[i].1).sum::<f64>() / 2.0;
+    let expected_floor = outer + 2.0 * (4.0 + d) * d;
+    assert!((shoelace.abs() - expected_floor).abs() < 5e-3 * expected_floor, "{} vs {expected_floor}", shoelace.abs());
+
+    // Bulge directly, and a clockwise arc; set back to straight with element_set.
+    let cw = run(&mut s, "wall_create", json!({"start": [10.0, 0.0], "end": [14.0, 0.0], "bulge": -1.0}));
+    assert!((cw["derived"]["sweep"].as_f64().unwrap() + 180.0).abs() < 1e-9);
+    let straight = run(&mut s, "element_set", json!({"id": id(&cw), "params": {"bulge": 0.0}}));
+    assert!((straight["derived"]["length"].as_f64().unwrap() - 4.0).abs() < 1e-9, "{straight}");
+    assert!(straight["derived"]["radius"].is_null());
+
+    // Bad arcs are refused: collinear points, a bulge out of range, an arc too tight for the wall.
+    let bad = json!({"start": [0.0, 10.0], "end": [4.0, 10.0], "mid": [2.0, 10.0]});
+    assert_eq!(fails(&mut s, "wall_create", bad), ErrorCode::InvalidArguments);
+    let bad = json!({"start": [0.0, 10.0], "end": [4.0, 10.0], "bulge": 50.0});
+    assert_eq!(fails(&mut s, "wall_create", bad), ErrorCode::InvalidArguments);
+    let tight = json!({"start": [0.0, 10.0], "end": [0.1, 10.0], "bulge": 1.0});
+    assert_eq!(fails(&mut s, "wall_create", tight), ErrorCode::Rejected);
+
+    // Split on the arc: two quarter circles; trimming an arc is refused.
+    let split = run(&mut s, "element_split", json!({"id": id(&arc), "point": [0.0, 3.0]}));
+    let parts = [split["original"].as_u64().unwrap(), split["created"].as_u64().unwrap()];
+    for part in parts {
+        let w = run(&mut s, "element_get", json!({"id": part}));
+        assert!((w["derived"]["sweep"].as_f64().unwrap() - 90.0).abs() < 1e-9, "{w}");
+    }
+    let trim = json!({"id": parts[0], "pick": [4.0, 0.0], "reference": id(&chord)});
+    assert_eq!(fails(&mut s, "trim_extend", trim), ErrorCode::Rejected);
+    // Rotating and mirroring keep the arc and its door.
+    run(&mut s, "elements_rotate", json!({"ids": parts, "center": [0.0, 0.0], "angle": 90.0}));
+    run(&mut s, "elements_mirror", json!({"ids": parts, "axis": [[0.0, 0.0], [0.0, 1.0]]}));
+    for part in parts {
+        let w = run(&mut s, "element_get", json!({"id": part}));
+        assert!((w["derived"]["radius"].as_f64().unwrap() - 4.0).abs() < 1e-9, "{w}");
+    }
+    let door = run(&mut s, "element_get", json!({"id": id(&door)}));
+    let host = run(&mut s, "element_get", json!({"id": door["params"]["host"]}));
+    assert!(host["derived"]["radius"].is_number());
+}

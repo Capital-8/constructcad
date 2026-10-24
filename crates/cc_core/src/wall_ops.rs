@@ -72,10 +72,20 @@ pub enum EditError {
     Parallel,
     /// The result would have no length.
     Degenerate,
+    /// The edit needs a straight line and the wall is an arc.
+    Curved,
 }
 
 fn line(project: &Project, id: ElementId) -> Result<(DVec2, DVec2), EditError> {
     project.element(id).and_then(line_of).ok_or(EditError::NotLinear)
+}
+
+/// The line of a straight element: arc walls are refused.
+fn straight_line(project: &Project, id: ElementId) -> Result<(DVec2, DVec2), EditError> {
+    if project.element(id).and_then(|e| e.as_wall()).is_some_and(|w| w.arc().is_some()) {
+        return Err(EditError::Curved);
+    }
+    line(project, id)
 }
 
 /// Hosted openings beyond the new length move inward; offsets follow a moved start.
@@ -95,16 +105,17 @@ impl EditCtx<'_> {
         if let Some(el) = self.element_mut(id) {
             set_line(el, s, e);
         }
+        let new_length = self.project().element(id).and_then(|e| e.as_wall()).map(|w| w.length());
         if let Some((old_s, _)) = old {
             let dir = (e - s).normalize_or_zero();
-            keep_openings(self, id, old_s, s, dir, s.distance(e));
+            keep_openings(self, id, old_s, s, dir, new_length.unwrap_or(s.distance(e)));
         }
     }
 
     /// Trim or extend two elements so they meet at a corner, keeping the
     /// picked parts.
     pub fn trim_corner(&mut self, a: ElementId, pick_a: DVec2, b: ElementId, pick_b: DVec2) -> Result<(), EditError> {
-        let (la, lb) = (line(self.project(), a)?, line(self.project(), b)?);
+        let (la, lb) = (straight_line(self.project(), a)?, straight_line(self.project(), b)?);
         crossing(la.0, la.1, lb.0, lb.1).ok_or(EditError::Parallel)?;
         let na = trimmed(la.0, la.1, pick_a, lb.0, lb.1).ok_or(EditError::Degenerate)?;
         let nb = trimmed(lb.0, lb.1, pick_b, la.0, la.1).ok_or(EditError::Degenerate)?;
@@ -115,7 +126,7 @@ impl EditCtx<'_> {
 
     /// Trim or extend `id` to the reference line `r0`-`r1`, keeping the picked part.
     pub fn trim_to(&mut self, id: ElementId, pick: DVec2, r0: DVec2, r1: DVec2) -> Result<(), EditError> {
-        let l = line(self.project(), id)?;
+        let l = straight_line(self.project(), id)?;
         crossing(l.0, l.1, r0, r1).ok_or(EditError::Parallel)?;
         let n = trimmed(l.0, l.1, pick, r0, r1).ok_or(EditError::Degenerate)?;
         self.apply_line(id, n);
@@ -128,12 +139,14 @@ impl EditCtx<'_> {
     pub fn split(&mut self, id: ElementId, at: DVec2) -> Result<ElementId, EditError> {
         let (a, b) = line(self.project(), id)?;
         let dir = (b - a).normalize_or_zero();
-        let len = a.distance(b);
-        let t = (at - a).dot(dir);
+        let arc = self.project().element(id).and_then(|e| e.as_wall()).and_then(|w| w.arc());
+        let len = arc.map_or(a.distance(b), |c| c.length());
+        // Arc walls split on the arc, each part keeping its share of the sweep.
+        let t = arc.map_or((at - a).dot(dir), |c| c.locate(at).0);
         if t < 1e-3 || t > len - 1e-3 {
             return Err(EditError::Degenerate);
         }
-        let p = a + dir * t;
+        let p = arc.map_or(a + dir * t, |c| c.point(t));
         let Some(original) = self.project().element(id).cloned() else { return Err(EditError::NotLinear) };
         let mut second = original.clone();
         second.id = ElementId(self.alloc_id());
@@ -142,6 +155,9 @@ impl EditCtx<'_> {
             g.name = format!("{}'", g.name);
         }
         set_line(&mut second, p, b);
+        if let (Some(c), ElementKind::Wall(w)) = (arc, &mut second.kind) {
+            w.bulge = c.bulge_between(t, len);
+        }
         // A sloped beam keeps its slope: the split point's elevation joins the parts.
         let split_z = match &original.kind {
             ElementKind::Beam(x) if x.end_offset.is_some() => Some(x.top_offset + x.rise() * t / len),
@@ -152,6 +168,9 @@ impl EditCtx<'_> {
         }
         if let Some(el) = self.element_mut(id) {
             set_line(el, a, p);
+            if let (Some(c), ElementKind::Wall(w)) = (arc, &mut el.kind) {
+                w.bulge = c.bulge_between(0.0, t);
+            }
             if let (Some(z), ElementKind::Beam(x)) = (split_z, &mut el.kind) {
                 x.end_offset = Some(z);
             }
@@ -203,14 +222,24 @@ impl EditCtx<'_> {
         let Some(mut copy) = self.project().element(id).cloned() else { return Err(EditError::NotLinear) };
         copy.id = ElementId(self.alloc_id());
         copy.uid = Default::default();
-        copy.translate(n * distance);
+        match &mut copy.kind {
+            // An arc wall's copy is concentric (with the same sweep).
+            ElementKind::Wall(w) if w.arc().is_some() => {
+                let arc = w.arc().ok_or(EditError::NotLinear)?;
+                if arc.radius_at(distance) < 1e-3 {
+                    return Err(EditError::Degenerate);
+                }
+                (w.start, w.end) = w.offset_line(distance);
+            }
+            _ => copy.translate(n * distance),
+        }
         Ok(self.add_element(copy))
     }
 
     /// Move `id` (with its openings) so its line lies on the parallel
     /// reference line `r0`-`r1`.
     pub fn align_to(&mut self, id: ElementId, r0: DVec2, r1: DVec2) -> Result<(), EditError> {
-        let (a, b) = line(self.project(), id)?;
+        let (a, b) = straight_line(self.project(), id)?;
         let (u, v) = ((b - a).normalize_or_zero(), (r1 - r0).normalize_or_zero());
         if u.perp_dot(v).abs() > 0.02 {
             return Err(EditError::Parallel);
@@ -317,6 +346,28 @@ mod tests {
         assert_eq!(wall(&doc, copy), (v(0.0, 2.0), v(4.0, 2.0)));
         // Not parallel enough.
         assert_eq!(doc.edit("align", |e| e.align_to(ids[1], v(0.0, 0.0), v(0.0, 5.0))), Err(EditError::Parallel));
+    }
+
+    #[test]
+    fn arc_walls_split_on_the_arc_and_offset_concentric() {
+        let (mut doc, ids) = doc_with_walls(&[(v(4.0, 0.0), v(-4.0, 0.0))]);
+        doc.edit("arc", |e| {
+            if let Some(ElementKind::Wall(w)) = e.element_mut(ids[0]).map(|x| &mut x.kind) {
+                w.bulge = 1.0; // a half circle of radius 4 through (0, 4)
+            }
+        });
+        let length = |doc: &Document, id| doc.project.element(id).and_then(|e| e.as_wall()).unwrap().length();
+        let second = doc.edit("split", |e| e.split(ids[0], v(0.0, 5.0))).unwrap();
+        assert!(wall(&doc, ids[0]).1.distance(v(0.0, 4.0)) < 1e-9);
+        assert!((length(&doc, ids[0]) - length(&doc, second)).abs() < 1e-9);
+        assert!((length(&doc, ids[0]) - std::f64::consts::PI * 2.0).abs() < 1e-9);
+        let copy = doc.edit("offset", |e| e.offset_copy(second, 1.0)).unwrap();
+        // The copy runs on the circle of radius 3, from (0, 3) to (-3, 0).
+        let (s, t) = wall(&doc, copy);
+        assert!(s.distance(v(0.0, 3.0)) < 1e-9 && t.distance(v(-3.0, 0.0)) < 1e-9, "{s} {t}");
+        let trimmed = doc.edit("trim", |e| e.trim_to(copy, v(0.0, 3.0), v(-1.0, -1.0), v(-1.0, 1.0)));
+        assert_eq!(trimmed, Err(EditError::Curved));
+        assert_eq!(doc.edit("offset", |e| e.offset_copy(copy, 5.0)), Err(EditError::Degenerate));
     }
 
     #[test]

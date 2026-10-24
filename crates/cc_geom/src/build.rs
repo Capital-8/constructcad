@@ -521,7 +521,7 @@ impl ModelGeometry {
             .walls()
             .filter(|(e, w)| e.level == level && w.room_bounding)
             .filter_map(|(e, _)| self.walls.get(&e.id))
-            .map(|g| g.footprint().to_vec())
+            .map(|g| g.footprint())
             .collect()
     }
 
@@ -561,6 +561,7 @@ impl ModelGeometry {
                         half: project.thickness_of(e) * 0.5,
                         join_start: w.join_start,
                         join_end: w.join_end,
+                        bulge: w.bulge,
                     }
                 })
                 .collect();
@@ -612,8 +613,8 @@ impl ModelGeometry {
             }
             for (host, pts) in gaps {
                 let Some(g) = ids.get(host).and_then(|id| self.walls.get_mut(id)) else { continue };
-                let us: Vec<f64> = pts.iter().map(|p| (*p - g.origin).dot(g.dir)).collect();
-                let side = if (pts[0] - g.origin).dot(g.normal) >= 0.0 { 1.0 } else { -1.0 };
+                let us: Vec<f64> = pts.iter().map(|p| g.local(*p).0).collect();
+                let side = if g.local(pts[0]).1 >= 0.0 { 1.0 } else { -1.0 };
                 g.face_gaps.push((side, us[0].min(us[1]), us[0].max(us[1])));
             }
         }
@@ -627,20 +628,12 @@ impl ModelGeometry {
                 let parts = hosted_parts(&ty.data, o.u1 - o.u0, o.z1 - o.z0, wall.half);
                 let mut frame = Solid::new(e.id, e.category(), FRAME_COLOR);
                 let mut panel = Solid::of_material(e.id, e.category(), project, ty.main_material());
+                // In an arc wall the boxes are square to the wall at the opening's center.
+                let (origin, dir, normal) = wall.frame_at((o.u0 + o.u1) * 0.5);
                 for p in &parts {
                     let s = if p.panel { &mut panel } else { &mut frame };
                     let (lo, hi) = (p.min, p.max);
-                    s.add_box(
-                        wall.origin,
-                        wall.dir,
-                        wall.normal,
-                        o.u0 + lo.x,
-                        o.u0 + hi.x,
-                        lo.y,
-                        hi.y,
-                        o.z0 + lo.z,
-                        o.z0 + hi.z,
-                    );
+                    s.add_box(origin, dir, normal, o.u0 + lo.x, o.u0 + hi.x, lo.y, hi.y, o.z0 + lo.z, o.z0 + hi.z);
                 }
                 for s in [frame, panel] {
                     if !s.faces.is_empty() {
@@ -880,6 +873,75 @@ mod tests {
         assert!((wall_volume - expected).abs() < 1e-6, "{wall_volume} vs {expected}");
         let (lo, hi) = g.bounds().unwrap();
         assert!(lo.z < 0.0 && (hi.z - 3.0).abs() < 1e-9);
+    }
+
+    /// A "D": a half circle of radius 4 (centerline) closed by a straight wall,
+    /// with a door in the middle of the arc and a room inside.
+    fn d_shaped_room() -> (Document, ElementId, ElementId, ElementId) {
+        let mut doc = Document::new(Project::from_template());
+        let ids = doc.edit("d", |e| {
+            let level = e.project().levels[0].id;
+            let wall_t = e.project().default_type(Category::Wall).unwrap();
+            let door_t = e.project().default_type(Category::Door).unwrap();
+            let room_t = e.project().default_type(Category::Room).unwrap();
+            let add = |e: &mut cc_core::EditCtx, type_id, kind| {
+                let id = ElementId(e.alloc_id());
+                e.add_element(Element {
+                    id,
+                    level,
+                    type_id,
+                    mark: String::new(),
+                    comments: String::new(),
+                    uid: Default::default(),
+                    kind,
+                })
+            };
+            let arc =
+                Wall { start: DVec2::new(4.0, 0.0), end: DVec2::new(-4.0, 0.0), bulge: 1.0, ..Default::default() };
+            let arc = add(e, wall_t, ElementKind::Wall(arc));
+            let chord = Wall { start: DVec2::new(-4.0, 0.0), end: DVec2::new(4.0, 0.0), ..Default::default() };
+            add(e, wall_t, ElementKind::Wall(chord));
+            let hosted = Hosted {
+                host: arc,
+                offset: 2.0 * std::f64::consts::PI,
+                sill_height: 0.0,
+                flip_facing: false,
+                flip_hand: false,
+            };
+            let door = add(e, door_t, ElementKind::Door(hosted));
+            let room =
+                cc_core::Room { position: DVec2::new(0.0, 1.0), number: "1".into(), name: "D".into(), height: 3.0 };
+            let room = add(e, room_t, ElementKind::Room(room));
+            (arc, door, room)
+        });
+        (doc, ids.0, ids.1, ids.2)
+    }
+
+    #[test]
+    fn arc_walls_bound_rooms_and_host_doors() {
+        let (doc, arc, door, room) = d_shaped_room();
+        let g = ModelGeometry::build(&doc.project);
+        let wall = &g.walls[&arc];
+        assert!(wall.arc.is_some() && wall.start_joined && wall.end_joined);
+        let h = wall.half;
+        // The room: the inner circle's segment above the straight wall's inner face.
+        let boundary = g.rooms.get(&room).expect("the D encloses the room");
+        let (r, d) = (4.0 - h, h);
+        let segment = r * r * (d / r).acos() - d * (r * r - d * d).sqrt();
+        let area = polygon::area(boundary);
+        assert!((area - segment).abs() < 1e-3 * segment, "{area} vs {segment}");
+        // The door sits at the top of the arc, square to it.
+        let o = &wall.openings[0];
+        assert!(((o.u0 + o.u1) * 0.5 - 2.0 * std::f64::consts::PI).abs() < 1e-9);
+        let (lo, hi) = g.solids_of(door).filter_map(Solid::bounds).reduce(|a, b| (a.0.min(b.0), a.1.max(b.1))).unwrap();
+        assert!((lo.y + hi.y) * 0.5 > 3.8 && ((lo.x + hi.x) * 0.5).abs() < 1e-6, "{lo} {hi}");
+        // Its volume: the analytic arc body less the opening (an annular sector).
+        let ty = doc.project.element_type(doc.project.element(door).unwrap().type_id).unwrap();
+        let (width, height) = ty.opening_size().unwrap();
+        let thickness = 2.0 * h;
+        let body = wall.volume() + width * height * thickness;
+        let whole = wall.outline_area((wall.start_ext.0, wall.end_ext.0), (wall.start_ext.1, wall.end_ext.1)) * 3.0;
+        assert!((body - whole).abs() < 1e-9, "{body} vs {whole}");
     }
 
     #[test]

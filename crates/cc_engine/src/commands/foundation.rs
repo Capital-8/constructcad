@@ -262,6 +262,11 @@ impl Command for StripFootingsUnderWalls {
             let ElementKind::Wall(w) = &e.kind else {
                 return Err(EngineError::invalid(format!("element {} is not a wall", id.0)));
             };
+            // Strips are straight: arc walls get none.
+            if w.arc().is_some() {
+                skipped += 1;
+                continue;
+            }
             let line = p.wall_axis(e, w);
             let existing = foundations_on(p, e.level).into_iter().any(|f| match f {
                 FoundationShape::Strip { start, end } => same((*start, *end), line),

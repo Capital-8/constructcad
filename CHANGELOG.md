@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Arc walls: a wall's location line can be a circular arc. The wall tool gains *Line*/*Arc* modes in the options bar; in *Arc* mode click the start, the end and then a point on the arc (with a live preview, radius and length), and the chain goes on from the arc's end. Layers, faces and cut patterns follow concentric arcs; arc walls join straight and arc walls at corners, tees and junctions (faces meet where their lines and circles cross; walls continuing along a common tangent butt square), host doors and windows along the arc (offsets measured along the centerline, frames square to the wall at the opening), bound rooms and give floors and roofs drawn from walls their curve. Length, side area and volume are exact (along the centerline arc). Plans draw the arcs (radial and diameter dimensions pick them), and elevations, sections and 3D draw curved faces without seams between facets. Splitting keeps each part on the arc, offsetting makes a concentric copy, end handles and move, rotate, mirror and copy keep the arc; trimming, extending and aligning need straight walls. The properties show the arc angle (editable) and radius.
+- `wall_create` takes `mid` (a point on the arc) or `bulge` (tan of a quarter of the sweep); `element_get` shows `bulge` among a wall's `params` (editable with `element_set`) and the arc's `center`, `radius` and `sweep` among the derived values. Arcs too tight for the wall's thickness, and three points in line, are refused.
+- IFC export writes an arc wall's axis as an `IfcTrimmedCurve` on an `IfcCircle` and its body as an extruded profile of arcs and lines (`IfcIndexedPolyCurve`), with its openings as sectors through the wall; import brings such walls back as arc walls with their doors and windows. CI validates an arc wall fixture.
+
+### Changed
+
+- `.ccad` format version 9 (arc walls); older files open with straight walls.
+
 ## [0.3.0] - 2026-10-21
 
 ### Added

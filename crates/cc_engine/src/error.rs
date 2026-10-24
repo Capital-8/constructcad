@@ -113,6 +113,7 @@ impl From<cc_core::wall_ops::EditError> for EngineError {
             E::NotLinear => crate::t!("msg-pick-linear"),
             E::Parallel => crate::t!("msg-parallel"),
             E::Degenerate => crate::t!("msg-degenerate"),
+            E::Curved => crate::t!("msg-curved-wall"),
         })
     }
 }

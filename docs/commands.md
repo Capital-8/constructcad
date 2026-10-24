@@ -251,16 +251,18 @@ No parameters.
 
 ### `wall_create`
 
-*edit* — Create a straight wall from `start` to `end` on a level. Its top is `height` above its base, or attached to `top_level` (plus `top_offset`).
+*edit* — Create a wall from `start` to `end` on a level: straight, or an arc through `mid` (or with a `bulge`). Its top is `height` above its base, or attached to `top_level` (plus `top_offset`).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `end` | [x, y] | required | End point of the wall line. |
 | `start` | [x, y] | required | Start point of the wall line. |
 | `base_offset` | number | optional | Base offset from the level, meters. |
+| `bulge` | number | optional | Arc walls: tan(sweep / 4), positive when the arc turns counter-clockwise from `start` to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given. |
 | `height` | number | optional | Unconnected height in meters (default 3). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `location_line` | string | optional | Which line of the wall `start`-`end` is: `Centerline` (default), `CoreCenter`, `FinishExterior`, `FinishInterior`, `CoreExterior` or `CoreInterior`. |
+| `mid` | [x, y] | optional | A point on the arc between the ends: makes an arc wall through the three points. |
 | `top_level` | id or name | optional | Level the top is attached to, instead of a height. |
 | `top_offset` | number | optional | Offset of the top from `top_level`, meters. |
 | `type` | id or name | optional | Wall type id or name (default: the default wall type). |

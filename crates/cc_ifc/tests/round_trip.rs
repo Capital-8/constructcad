@@ -77,6 +77,7 @@ fn check(original: &Project) {
                 close(original.wall_height(e, a), imported.wall_height(i, b), TOL, "wall height");
                 close(original.wall_base_z(e, a), imported.wall_base_z(i, b), TOL, "wall base");
                 close(original.thickness_of(e), imported.thickness_of(i), TOL, "wall thickness");
+                close(a.bulge, b.bulge, TOL, "wall bulge");
                 assert_eq!(a.structural, b.structural);
             }
             (ElementKind::Door(a), ElementKind::Door(b)) | (ElementKind::Window(a), ElementKind::Window(b)) => {
@@ -212,6 +213,68 @@ fn sample_house_round_trips() {
 #[test]
 fn feature_fixture_round_trips() {
     check(&load(include_str!("fixtures/features.ccad")));
+}
+
+#[test]
+fn arc_walls_round_trip() {
+    use cc_core::{Document, Hosted, Wall};
+    // A half circle (with a window) closed by a straight wall, and a free
+    // clockwise quarter circle drawn on its exterior face.
+    let mut doc = Document::new(Project::from_template());
+    doc.edit("arcs", |e| {
+        let level = e.project().levels[0].id;
+        let add = |e: &mut cc_core::EditCtx, category, kind| {
+            let type_id = e.project().default_type(category).unwrap();
+            let id = cc_core::ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: "A".into(),
+                comments: String::new(),
+                kind,
+                uid: Uid::default(),
+            })
+        };
+        let arc = Wall { start: DVec2::new(4.0, 0.0), end: DVec2::new(-4.0, 0.0), bulge: 1.0, ..Default::default() };
+        let arc = add(e, Category::Wall, ElementKind::Wall(arc));
+        let chord = Wall { start: DVec2::new(-4.0, 0.0), end: DVec2::new(4.0, 0.0), ..Default::default() };
+        add(e, Category::Wall, ElementKind::Wall(chord));
+        let window = Hosted { host: arc, offset: 3.0, sill_height: 1.0, flip_facing: false, flip_hand: false };
+        add(e, Category::Window, ElementKind::Window(window));
+        let free = Wall {
+            start: DVec2::new(10.0, 0.0),
+            end: DVec2::new(13.0, -3.0),
+            bulge: -(std::f64::consts::PI / 8.0).tan(),
+            location_line: cc_core::LocationLine::FinishExterior,
+            ..Default::default()
+        };
+        add(e, Category::Wall, ElementKind::Wall(free));
+    });
+    let original = doc.project;
+    check(&original);
+    // The export carries arc axes and arc profiles.
+    let text =
+        export(&original, &ExportOptions { time_stamp: Some("2026-01-01T00:00:00".into()), file_name: "t.ifc".into() });
+    assert_eq!(text.matches("IFCTRIMMEDCURVE").count(), 2);
+    assert!(text.contains("IFCARCINDEX"));
+    // Imported walls have the same volumes (the window cut out of its arc).
+    let (imported, _) = round_trip(&original);
+    let (a, b) = (cc_geom::ModelGeometry::build(&original), cc_geom::ModelGeometry::build(&imported));
+    let volumes = |g: &cc_geom::ModelGeometry, p: &Project| {
+        let mut v: Vec<(Uid, f64)> = p.walls().map(|(e, _)| (e.uid, g.volume(e.id))).collect();
+        v.sort_by_key(|(uid, _)| *uid);
+        v
+    };
+    for ((ua, va), (ub, vb)) in volumes(&a, &original).iter().zip(&volumes(&b, &imported)) {
+        assert_eq!(ua, ub);
+        close(*va, *vb, 1e-6, "arc wall volume");
+    }
+}
+
+#[test]
+fn arc_fixture_round_trips() {
+    check(&load(include_str!("fixtures/arcs.ccad")));
 }
 
 #[test]

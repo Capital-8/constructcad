@@ -134,7 +134,7 @@ fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall) -> f64 {
         .filter_map(|h| project.element_type(h.type_id)?.opening_size())
         .map(|(w, h)| w * h)
         .sum();
-    (w.length() * project.wall_height(e, w) - openings).max(0.0)
+    (project.wall_length(e, w) * project.wall_height(e, w) - openings).max(0.0)
 }
 
 /// A section as text: its size, with the profile's letter (I, U, L), a box
@@ -197,7 +197,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::FireRating => info.map_or(Value::Missing, |i| text(&i.fire_rating)),
         F::Cost => info.and_then(|i| i.cost).map_or(Value::Missing, Value::Money),
         F::Length => match &e.kind {
-            ElementKind::Wall(w) => Value::Length(w.length()),
+            ElementKind::Wall(w) => Value::Length(project.wall_length(e, w)),
             ElementKind::Beam(b) => Value::Length(b.true_length()),
             ElementKind::Rebar(_) => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.total_length())),
             ElementKind::Foundation(f) => match &f.shape {

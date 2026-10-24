@@ -104,6 +104,8 @@ pub struct AppState {
     pub wall_height: f64,
     /// Location line for new walls.
     pub wall_location_line: cc_core::LocationLine,
+    /// The wall tool draws arcs (start, end, then a point on the arc).
+    pub wall_arc: bool,
     /// Level new walls rise to (`None`: unconnected, `wall_height` tall).
     pub wall_top_level: Option<LevelId>,
     /// Allow the window to close after the user confirmed.
@@ -165,6 +167,7 @@ impl AppState {
             typed: Default::default(),
             wall_height: 3.0,
             wall_location_line: Default::default(),
+            wall_arc: false,
             wall_top_level: None,
             quit_confirmed: false,
             textures_to_free: Vec::new(),

@@ -122,6 +122,13 @@ impl Project {
     pub fn dim_ref_at(&self, id: ElementId, p: DVec2) -> Option<DimRef> {
         let e = self.element(id)?;
         let anchor = match &e.kind {
+            // Arc walls measure along the arc and across it.
+            ElementKind::Wall(w) if w.arc().is_some() => {
+                let (along, across) = w.project(p);
+                let length = w.length();
+                let from_end = p.distance(w.end) < p.distance(w.start);
+                RefAnchor::Line { from_end, along: if from_end { length - along } else { along }, across }
+            }
             ElementKind::Wall(_) | ElementKind::Beam(_) | ElementKind::Grid(_) => {
                 let (a, b) = crate::wall_ops::line_of(e)?;
                 let (u, n) = frame(a, b)?;
@@ -132,10 +139,8 @@ impl Project {
             ElementKind::Column(c) => local(c.position, c.rotation_deg, p),
             ElementKind::Component(c) => local(c.position, c.rotation_deg, p),
             ElementKind::Door(h) | ElementKind::Window(h) => {
-                let w = self.element(h.host)?.as_wall()?;
-                let (u, n) = frame(w.start, w.end)?;
-                let center = w.start + u * h.offset;
-                RefAnchor::Hosted { along: (p - center).dot(u), across: (p - center).dot(n) }
+                let (center, u) = self.opening_frame(h)?;
+                RefAnchor::Hosted { along: (p - center).dot(u), across: (p - center).dot(u.perp()) }
             }
             _ => return None,
         };
@@ -174,6 +179,9 @@ impl Project {
     pub fn resolve_dim_ref(&self, r: &DimRef) -> Option<DVec2> {
         let e = self.element(r.element()?)?;
         let p = match (r.anchor, &e.kind) {
+            (RefAnchor::Line { from_end, along, across }, ElementKind::Wall(w)) if w.arc().is_some() => {
+                w.at(if from_end { w.length() - along } else { along }, across)
+            }
             (RefAnchor::Line { from_end, along, across }, _) => {
                 let (a, b) = crate::wall_ops::line_of(e)?;
                 let (u, n) = frame(a, b)?;
@@ -183,9 +191,8 @@ impl Project {
             (RefAnchor::Local { x, y }, ElementKind::Column(c)) => from_local(c.position, c.rotation_deg, x, y),
             (RefAnchor::Local { x, y }, ElementKind::Component(c)) => from_local(c.position, c.rotation_deg, x, y),
             (RefAnchor::Hosted { along, across }, ElementKind::Door(h) | ElementKind::Window(h)) => {
-                let w = self.element(h.host)?.as_wall()?;
-                let (u, n) = frame(w.start, w.end)?;
-                w.start + u * (h.offset + along) + n * across
+                let (center, u) = self.opening_frame(h)?;
+                center + u * along + u.perp() * across
             }
             _ => return None,
         };
@@ -213,17 +220,31 @@ impl Project {
     /// position or its opening's center).
     fn base_point(&self, e: &Element) -> Option<DVec2> {
         match &e.kind {
+            ElementKind::Wall(w) if w.arc().is_some() => Some(w.point_at(w.length() / 2.0)),
             ElementKind::Wall(_) | ElementKind::Beam(_) | ElementKind::Grid(_) => {
                 crate::wall_ops::line_of(e).map(|(a, b)| (a + b) / 2.0)
             }
             ElementKind::Column(c) => Some(c.position),
             ElementKind::Component(c) => Some(c.position),
-            ElementKind::Door(h) | ElementKind::Window(h) => {
-                let w = self.element(h.host)?.as_wall()?;
-                Some(w.start + (w.end - w.start).normalize_or_zero() * h.offset)
-            }
+            ElementKind::Door(h) | ElementKind::Window(h) => self.opening_frame(h).map(|(center, _)| center),
             _ => None,
         }
+    }
+
+    /// Center of an opening on its wall's location line and the wall's
+    /// direction there (straight walls keep their location-line frame).
+    fn opening_frame(&self, h: &crate::Hosted) -> Option<(DVec2, DVec2)> {
+        let host = self.element(h.host)?;
+        let w = host.as_wall()?;
+        if w.arc().is_some() {
+            // Openings are placed along the body centerline; map back onto the location line.
+            let (start, end) = self.wall_axis(host, w);
+            let axis = crate::Wall { start, end, ..w.clone() };
+            let (along, _) = w.project(axis.point_at(h.offset));
+            return Some((w.point_at(along), w.tangent_at(along)));
+        }
+        let (u, _) = frame(w.start, w.end)?;
+        Some((w.start + u * h.offset, u))
     }
 
     /// Height of an element's base, the reference for heights in views.

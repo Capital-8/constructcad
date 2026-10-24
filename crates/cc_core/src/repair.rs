@@ -284,6 +284,20 @@ impl Project {
                 repairs += crate::properties::repair_sets(&mut c.properties);
             }
         }
+        // Arc walls: a bulge that is not a number makes the wall straight, one
+        // past a nearly full circle is clamped, a negligible one is dropped.
+        for e in self.elements.values_mut() {
+            let ElementKind::Wall(w) = &mut e.kind else { continue };
+            let fixed = if !w.bulge.is_finite() || w.bulge.abs() < 1e-6 {
+                0.0
+            } else {
+                w.bulge.clamp(-crate::arc::MAX_BULGE, crate::arc::MAX_BULGE)
+            };
+            if fixed.to_bits() != w.bulge.to_bits() {
+                w.bulge = fixed;
+                repairs += 1;
+            }
+        }
         // Systems: circuits fed by a missing board lose it, voltages are positive;
         // elements drop references to missing systems (a pipe keeps one system).
         for system in self.systems.values_mut() {
@@ -412,6 +426,36 @@ mod tests {
             assert!(p.element(id).is_none());
         }
         assert_eq!(p.repair(), 0, "repair is idempotent");
+    }
+
+    /// Crafted arc walls: a NaN, an infinite, a huge and a negligible bulge.
+    #[test]
+    fn degenerate_arc_walls_are_repaired() {
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let wall_t = p.default_type(Category::Wall).unwrap();
+        let mut ids = Vec::new();
+        for bulge in [f64::NAN, f64::INFINITY, -1e6, 1e-9, 0.5] {
+            let id = ElementId(p.alloc_id());
+            let wall = Wall { end: DVec2::new(4.0, 0.0), bulge, ..Default::default() };
+            let e = Element {
+                id,
+                level,
+                type_id: wall_t,
+                mark: String::new(),
+                comments: String::new(),
+                kind: ElementKind::Wall(wall),
+                uid: Default::default(),
+            };
+            p.elements.insert(id, e);
+            ids.push(id);
+        }
+        assert_eq!(p.repair(), 4);
+        let bulges: Vec<f64> = ids.iter().map(|id| p.element(*id).unwrap().as_wall().unwrap().bulge).collect();
+        assert_eq!(bulges, vec![0.0, 0.0, -crate::arc::MAX_BULGE, 0.0, 0.5]);
+        assert_eq!(p.repair(), 0);
+        // Collinear three points give no arc.
+        assert!(crate::arc::Arc::bulge_through(DVec2::ZERO, DVec2::X, DVec2::new(2.0, 0.0)).is_none());
     }
 
     /// Crafted building-services data: references to missing systems and

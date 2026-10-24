@@ -244,6 +244,11 @@ pub struct Wall {
     pub join_start: bool,
     #[serde(default = "yes")]
     pub join_end: bool,
+    /// An arc wall: `tan(sweep / 4)` of its location line, positive when it
+    /// turns counter-clockwise from `start` to `end` (see [`crate::arc`]);
+    /// 0 for a straight wall.
+    #[serde(default)]
+    pub bulge: f64,
 }
 
 impl Default for Wall {
@@ -259,34 +264,74 @@ impl Default for Wall {
             structural: false,
             join_start: true,
             join_end: true,
+            bulge: 0.0,
         }
     }
 }
 
 impl Wall {
-    pub fn length(&self) -> f64 {
-        self.start.distance(self.end)
+    /// The arc of the location line (`None` for a straight wall).
+    pub fn arc(&self) -> Option<crate::arc::Arc> {
+        crate::arc::Arc::from_bulge(self.start, self.end, self.bulge)
     }
 
-    /// Unit direction from start to end (X axis if degenerate).
+    /// Length of the location line (along the arc for arc walls).
+    pub fn length(&self) -> f64 {
+        match self.arc() {
+            Some(a) => a.length(),
+            None => self.start.distance(self.end),
+        }
+    }
+
+    /// Unit direction from start to end (X axis if degenerate): the chord of an arc wall.
     pub fn direction(&self) -> DVec2 {
         (self.end - self.start).try_normalize().unwrap_or(DVec2::X)
     }
 
-    /// Left-hand normal of the location line.
+    /// Left-hand normal of the chord.
     pub fn normal(&self) -> DVec2 {
         self.direction().perp()
     }
 
+    /// Direction of the location line `distance` along it.
+    pub fn tangent_at(&self, distance: f64) -> DVec2 {
+        match self.arc() {
+            Some(a) => a.tangent(distance),
+            None => self.direction(),
+        }
+    }
+
+    /// Left-hand normal of the location line `distance` along it.
+    pub fn normal_at(&self, distance: f64) -> DVec2 {
+        self.tangent_at(distance).perp()
+    }
+
     pub fn point_at(&self, distance: f64) -> DVec2 {
-        self.start + self.direction() * distance
+        self.at(distance, 0.0)
+    }
+
+    /// The point `along` the location line and `across` to its left.
+    pub fn at(&self, along: f64, across: f64) -> DVec2 {
+        match self.arc() {
+            Some(a) => a.at(along, across),
+            None => self.start + self.direction() * along + self.normal() * across,
+        }
     }
 
     /// Distance along the wall of the projection of `p`, and the signed
     /// perpendicular distance (positive on the left).
     pub fn project(&self, p: DVec2) -> (f64, f64) {
+        if let Some(a) = self.arc() {
+            return a.locate(p);
+        }
         let d = p - self.start;
         (d.dot(self.direction()), d.dot(self.normal()))
+    }
+
+    /// The location line moved `distance` to its left (concentric for arc
+    /// walls, which keep their bulge).
+    pub fn offset_line(&self, distance: f64) -> (DVec2, DVec2) {
+        (self.at(0.0, distance), self.at(self.length(), distance))
     }
 }
 

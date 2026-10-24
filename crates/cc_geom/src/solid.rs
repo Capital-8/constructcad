@@ -7,11 +7,17 @@ use glam::{DVec2, DVec3};
 pub struct Face {
     pub verts: Vec<DVec3>,
     pub normal: DVec3,
+    /// A facet of a curved surface: edges shared with neighboring smooth
+    /// facets are not outlines (only silhouettes, see [`Solid::smooth_edges`]).
+    pub smooth: bool,
 }
+
+/// Smooth facets meeting at less than this angle (cosine) read as one surface.
+const SMOOTH_COS: f64 = 0.85;
 
 impl Face {
     pub fn new(verts: Vec<DVec3>, normal: DVec3) -> Self {
-        Self { verts, normal: normal.normalize_or_zero() }
+        Self { verts, normal: normal.normalize_or_zero(), smooth: false }
     }
 
     /// Orthonormal in-plane basis `(u, v)`.
@@ -104,7 +110,9 @@ impl Solid {
                 }
                 let mut covered: Vec<(f64, f64)> = Vec::new();
                 for (fj, other) in self.faces.iter().enumerate() {
-                    if fj == fi || other.normal.dot(face.normal) < 0.9999 {
+                    let cos = other.normal.dot(face.normal);
+                    let smooth = face.smooth && other.smooth && cos > SMOOTH_COS;
+                    if fj == fi || (cos < 0.9999 && !smooth) {
                         continue;
                     }
                     for &(c, d) in &all[fj] {
@@ -132,6 +140,35 @@ impl Solid {
                 }
             }
             out.push(face_out);
+        }
+        out
+    }
+
+    /// Edges between smooth facets (hidden by [`Self::feature_edges`]), per
+    /// face, with the neighbor's normal: a view draws one as a silhouette
+    /// where the face is seen and its neighbor is not.
+    pub fn smooth_edges(&self) -> Vec<Vec<(DVec3, DVec3, DVec3)>> {
+        let mut out = vec![Vec::new(); self.faces.len()];
+        for (fi, face) in self.faces.iter().enumerate().filter(|(_, f)| f.smooth) {
+            let n = face.verts.len();
+            for i in 0..n {
+                let (a, b) = (face.verts[i], face.verts[(i + 1) % n]);
+                let shared = self.faces.iter().enumerate().find_map(|(fj, other)| {
+                    if fj == fi || !other.smooth || other.normal.dot(face.normal) <= SMOOTH_COS {
+                        return None;
+                    }
+                    let m = other.verts.len();
+                    (0..m)
+                        .any(|k| {
+                            let (c, d) = (other.verts[k], other.verts[(k + 1) % m]);
+                            c.distance(b) < 1e-9 && d.distance(a) < 1e-9
+                        })
+                        .then_some(other.normal)
+                });
+                if let (Some(normal), Some(list)) = (shared, out.get_mut(fi)) {
+                    list.push((a, b, normal));
+                }
+            }
         }
         out
     }

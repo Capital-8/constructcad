@@ -297,3 +297,21 @@ fn ribbon_buttons_are_accessible() {
         assert!(found.contains(&command.label(&state)), "{command:?} is not in the ribbon");
     }
 }
+
+/// The wall tool switches between straight and arc walls in the options bar.
+#[test]
+fn wall_tool_has_an_arc_mode() {
+    let mut state = sample_state();
+    let wall_type = state.project().default_type(cc_core::Category::Wall).unwrap();
+    state.tool = crate::tools::Tool::Wall { type_id: wall_type };
+    let mut harness = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::options_bar(ui, state)
+    });
+    assert!(!harness.state().wall_arc);
+    harness.get_by_label(&t!("wall-mode-arc")).click();
+    harness.run();
+    assert!(harness.state().wall_arc);
+    harness.get_by_label(&t!("wall-mode-line")).click();
+    harness.run();
+    assert!(!harness.state().wall_arc);
+}

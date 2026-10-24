@@ -823,6 +823,15 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("hint-select")));
             }
             Tool::Wall { .. } => {
+                // Straight walls, or arcs through a third point.
+                let mut arc = state.wall_arc;
+                ui.selectable_value(&mut arc, false, t!("wall-mode-line")).on_hover_text(t!("hint-wall"));
+                ui.selectable_value(&mut arc, true, t!("wall-mode-arc")).on_hover_text(t!("hint-wall-arc"));
+                if arc != state.wall_arc {
+                    state.wall_arc = arc;
+                    state.interaction.points.clear();
+                }
+                ui.separator();
                 ui.label(t!("prop-top-constraint"));
                 let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
                 let current = match state.wall_top_level.and_then(|id| levels.iter().find(|l| l.0 == id)) {
@@ -850,7 +859,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                         }
                     });
                 ui.separator();
-                ui.label(theme::muted(t!("hint-wall")));
+                ui.label(theme::muted(if state.wall_arc { t!("hint-wall-arc") } else { t!("hint-wall") }));
             }
             Tool::Hosted { .. } => {
                 ui.checkbox(&mut state.interaction.flip_hand, t!("prop-flip-hand"));

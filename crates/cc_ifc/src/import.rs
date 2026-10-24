@@ -97,6 +97,8 @@ pub fn import(text: &str, base: Project) -> Result<(Project, ImportReport), Impo
 struct Body {
     solids: Vec<Solid>,
     axis: Option<(DVec2, DVec2)>,
+    /// The axis curve in plan, as points (arcs tessellated).
+    axis_points: Vec<DVec2>,
 }
 
 impl Body {
@@ -124,6 +126,29 @@ impl Body {
             _ => None,
         }
     }
+}
+
+/// An arc wall: an axis on a circular arc and a footprint whose points all
+/// lie on two circles concentric with it, at equal distances from the axis.
+/// Returns its ends, bulge and thickness.
+fn arc_wall(axis: &[DVec2], footprint: &[DVec2]) -> Option<(DVec2, DVec2, f64, f64)> {
+    if axis.len() < 3 || footprint.len() < 4 {
+        return None;
+    }
+    let (start, end) = (*axis.first()?, *axis.last()?);
+    let mid = *axis.get(axis.len() / 2)?;
+    let bulge = cc_core::arc::Arc::bulge_through(start, mid, end)?;
+    let arc = cc_core::arc::Arc::from_bulge(start, end, bulge)?;
+    let tol = 1e-3;
+    if axis.iter().any(|p| (p.distance(arc.center) - arc.radius).abs() > tol) {
+        return None;
+    }
+    let radii: Vec<f64> = footprint.iter().map(|p| p.distance(arc.center)).collect();
+    let (lo, hi) = radii.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), r| (lo.min(*r), hi.max(*r)));
+    let thickness = hi - lo;
+    let on_faces = radii.iter().all(|r| (r - lo).abs() < tol || (r - hi).abs() < tol);
+    let centered = ((lo + hi) * 0.5 - arc.radius).abs() < tol;
+    (on_faces && centered && thickness >= 0.005 && arc.length() >= 0.01).then_some((start, end, bulge, thickness))
 }
 
 /// Entities that are not physical objects: spatial structure, zones,
@@ -795,6 +820,7 @@ impl<'a> Importer<'a> {
                 {
                     body.axis = Some((*a, *b));
                 }
+                body.axis_points = pts;
                 continue;
             }
             let usable = if has_body {
@@ -832,6 +858,9 @@ impl<'a> Importer<'a> {
         let Some(ex) = body.extrusion(true) else { return false };
         let Some((z0, z1)) = body.z_range() else { return false };
         let footprint = ex.footprint();
+        if let Some((start, end, bulge, thickness)) = arc_wall(&body.axis_points, &footprint) {
+            return self.add_wall(id, e, (z0, z1), thickness, Wall { start, end, bulge, ..Default::default() });
+        }
         // Wall direction: the axis representation, else the placement's X axis
         // (or Y when the footprint is longer that way).
         let mut dir = world.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X);
@@ -874,6 +903,11 @@ impl<'a> Importer<'a> {
         if !(start.is_finite() && end.is_finite()) || start.distance(end) < 0.01 || thickness < 0.005 {
             return false;
         }
+        self.add_wall(id, e, (z0, z1), thickness, Wall { start, end, ..Default::default() })
+    }
+
+    /// Add a wall of `thickness` spanning `z` with the type and properties of `e`.
+    fn add_wall(&mut self, id: u32, e: &Entity, (z0, z1): (f64, f64), thickness: f64, wall: Wall) -> bool {
         let (level, elevation) = self.level_for(id, z0);
         let name = self.type_name(id, e);
         let fallback = format!("{:.0} cm", thickness * 100.0);
@@ -890,14 +924,8 @@ impl<'a> Importer<'a> {
             |d| matches!(d, TypeData::Wall { layers, .. } if (layers.iter().map(|l| l.thickness).sum::<f64>() - thickness).abs() < TYPE_TOL),
             || TypeData::Wall { layers, function },
         );
-        let wall = Wall {
-            start,
-            end,
-            base_offset: z0 - elevation,
-            height: z1 - z0,
-            structural: structural.unwrap_or(false),
-            ..Default::default()
-        };
+        let wall =
+            Wall { base_offset: z0 - elevation, height: z1 - z0, structural: structural.unwrap_or(false), ..wall };
         self.add_element(e, level, type_id, Self::tag(e), ElementKind::Wall(wall));
         if let Some(element) = self.p.elements.keys().next_back().copied() {
             self.walls.insert(id, element);
@@ -929,8 +957,15 @@ impl<'a> Importer<'a> {
             self.p
                 .walls()
                 .map(|(w, wall)| {
-                    let p = polygon::closest_on_segment(wall.start, wall.end, center.truncate()).0;
-                    (w.id, p.distance(center.truncate()), self.p.thickness_of(w))
+                    let c = center.truncate();
+                    let distance = match wall.arc() {
+                        Some(_) => {
+                            let (u, v) = wall.project(c);
+                            if (0.0..=wall.length()).contains(&u) { v.abs() } else { f64::INFINITY }
+                        }
+                        None => polygon::closest_on_segment(wall.start, wall.end, c).0.distance(c),
+                    };
+                    (w.id, distance, self.p.thickness_of(w))
                 })
                 .filter(|(_, d, t)| *d <= t / 2.0 + 0.1)
                 .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -940,17 +975,16 @@ impl<'a> Importer<'a> {
         let Some(host_element) = self.p.element(host).cloned() else { return false };
         let Some(wall) = host_element.as_wall().cloned() else { return false };
         let base_z = self.p.wall_base_z(&host_element, &wall);
-        let dir = wall.direction();
         let (mut t0, mut t1, mut z0, mut z1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
         for p in &points {
-            let t = (p.truncate() - wall.start).dot(dir);
+            let t = wall.project(p.truncate()).0;
             t0 = t0.min(t);
             t1 = t1.max(t);
             z0 = z0.min(p.z);
             z1 = z1.max(p.z);
         }
         if points.is_empty() {
-            let t = (center.truncate() - wall.start).dot(dir);
+            let t = wall.project(center.truncate()).0;
             (t0, t1, z0, z1) = (t, t, center.z, center.z);
         }
         let attr = |i: usize| e.arg(i).as_f64().map(|v| v * self.scale).filter(|v| v.is_finite() && *v > 0.0);

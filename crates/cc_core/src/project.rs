@@ -641,24 +641,35 @@ impl Project {
 
     /// Start and end of a wall's body centerline: the location line shifted
     /// across the wall according to `location_line` and the type's layers
-    /// (listed from the exterior face, on the left of the line).
+    /// (listed from the exterior face, on the left of the line). An arc
+    /// wall's centerline is concentric with its location line and has the
+    /// same bulge.
     pub fn wall_axis(&self, element: &Element, wall: &crate::Wall) -> (DVec2, DVec2) {
+        wall.offset_line(-self.wall_line_offset(element, wall))
+    }
+
+    /// Length of a wall's body centerline (the location line's length for
+    /// straight walls; arc walls measure along the centerline arc).
+    pub fn wall_length(&self, element: &Element, wall: &crate::Wall) -> f64 {
+        let (start, end) = self.wall_axis(element, wall);
+        crate::Wall { start, end, ..wall.clone() }.length()
+    }
+
+    /// Position of a wall's location line across the wall, measured from the
+    /// centerline towards the exterior (left) face.
+    fn wall_line_offset(&self, element: &Element, wall: &crate::Wall) -> f64 {
         use crate::LocationLine as L;
-        let Some(ty) = self.element_type(element.type_id) else { return (wall.start, wall.end) };
+        let Some(ty) = self.element_type(element.type_id) else { return 0.0 };
         let half = ty.thickness() * 0.5;
         let (core_ext, core_int) = ty.core_range();
-        // Position of the location line across the wall, measured from the
-        // centerline towards the exterior face.
-        let line = match wall.location_line {
+        match wall.location_line {
             L::Centerline => 0.0,
             L::FinishExterior => half,
             L::FinishInterior => -half,
             L::CoreExterior => half - core_ext,
             L::CoreInterior => half - core_int,
             L::CoreCenter => half - (core_ext + core_int) * 0.5,
-        };
-        let shift = wall.normal() * -line;
-        (wall.start + shift, wall.end + shift)
+        }
     }
 
     /// The beam's body centerline: its location line moved across by the

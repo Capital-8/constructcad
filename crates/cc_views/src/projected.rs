@@ -103,10 +103,13 @@ pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>) -> Dra
     let mut faces = Vec::new();
     for solid in &geom.solids {
         let edges = solid.feature_edges();
-        for (face, face_edges) in solid.faces.iter().zip(edges) {
+        let seams = solid.smooth_edges();
+        for ((face, mut face_edges), seams) in solid.faces.iter().zip(edges).zip(seams) {
             if face.normal.dot(frame.forward) > -1e-6 {
                 continue;
             }
+            // Where a curved surface turns away, the edge to the hidden facet is its silhouette.
+            face_edges.extend(seams.into_iter().filter(|s| s.2.dot(frame.forward) > -1e-6).map(|(a, b, _)| (a, b)));
             let mut verts = face.verts.clone();
             for &(p, n) in &planes {
                 verts = clip_polygon(&verts, p, n);

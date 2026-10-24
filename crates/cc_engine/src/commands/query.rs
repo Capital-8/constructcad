@@ -196,7 +196,13 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     let mut derived = serde_json::Map::new();
     match &e.kind {
         ElementKind::Wall(w) => {
-            derived.insert("length".into(), json!(w.length()));
+            derived.insert("length".into(), json!(p.wall_length(&e, w)));
+            if let Some(arc) = w.arc() {
+                // The location line's circle and the turn from start to end.
+                derived.insert("center".into(), json!(arc.center.to_array()));
+                derived.insert("radius".into(), json!(arc.radius));
+                derived.insert("sweep".into(), json!(arc.sweep.to_degrees()));
+            }
             derived.insert("height".into(), json!(p.wall_height(&e, w)));
             derived.insert("thickness".into(), json!(p.thickness_of(&e)));
         }

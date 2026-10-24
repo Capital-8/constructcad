@@ -51,6 +51,12 @@ impl Command for ElementSet {
         if kind.as_ref().is_some_and(|k| std::mem::discriminant(k) != std::mem::discriminant(&element.kind)) {
             return Err(EngineError::invalid("params cannot change the element's category"));
         }
+        if let Some(cc_core::ElementKind::Wall(w)) = kind.as_ref() {
+            if w.bulge.abs() > cc_core::arc::MAX_BULGE || !w.bulge.is_finite() {
+                return Err(EngineError::invalid("the bulge must be between -10 and 10"));
+            }
+            super::create::check_arc(p, type_id.unwrap_or(element.type_id), w)?;
+        }
         let hosted: Vec<_> = p.hosted_by(id).map(|h| h.id).collect();
         edit(s, t!("tx-modify"), |e| {
             if let Some(level) = level {

@@ -281,6 +281,8 @@ pub fn apply_rotation(state: &mut AppState, targets: &BTreeSet<ElementId>, cente
 fn axis_of(state: &AppState, id: ElementId) -> Option<(DVec2, DVec2)> {
     let e = state.project().element(id)?;
     match &e.kind {
+        // An arc wall has no straight line to mirror across.
+        ElementKind::Wall(w) if w.arc().is_some() => None,
         ElementKind::Wall(w) => Some(state.project().wall_axis(e, w)),
         ElementKind::Grid(g) => Some((g.start, g.end)),
         ElementKind::Beam(b) => Some((b.start, b.end)),

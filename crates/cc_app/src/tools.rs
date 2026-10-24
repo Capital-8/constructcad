@@ -419,11 +419,15 @@ fn snap(
     let mut ends: Vec<DVec2> = extra.to_vec();
     let mut mids = Vec::new();
     let mut lines = Vec::new();
+    let mut arcs: Vec<cc_core::arc::Arc> = Vec::new();
     for e in project.elements.values().filter(|e| Some(e.level) == level) {
         if let Some(w) = e.as_wall() {
             ends.extend([w.start, w.end]);
-            mids.push((w.start + w.end) * 0.5);
-            lines.push((w.start, w.end));
+            mids.push(w.point_at(w.length() * 0.5));
+            match w.arc() {
+                Some(a) => arcs.push(a),
+                None => lines.push((w.start, w.end)),
+            }
         } else if let Some(s) = e.as_segment() {
             // Pipe and conduit ends, and runs to branch from.
             ends.extend([s.start, s.end]);
@@ -510,6 +514,14 @@ fn snap(
         let p = a + dir * len;
         // Prefer landing exactly on a wall line when close (T-junctions).
         if let Some(q) = on_lines(&lines, raw, r) {
+            return Snap::at(q, SnapKind::Nearest);
+        }
+        // Or on an arc wall's line.
+        let on_arc = arcs.iter().find_map(|arc| {
+            let (u, v) = arc.locate(raw);
+            (v.abs() <= r && (0.0..=arc.length()).contains(&u)).then(|| arc.point(u))
+        });
+        if let Some(q) = on_arc {
             return Snap::at(q, SnapKind::Nearest);
         }
         // The current direction meeting a guide from another point.
@@ -1811,16 +1823,44 @@ fn wall_tool(
     let mut p = s.point;
     draw_snap(painter, xf, s);
 
+    let half = state.project().element_type(type_id).map_or(0.075, |t| t.thickness() * 0.5);
+    // Arc mode: after the start and the end, the third point is on the arc.
+    let arc_end = state.interaction.points.first().copied().filter(|_| state.wall_arc);
+    if let (Some(a), Some(b)) = (anchor, arc_end) {
+        let bulge = cc_core::arc::Arc::bulge_through(a, p, b);
+        match bulge {
+            Some(bulge) => arc_preview(painter, xf, a, b, bulge, half),
+            None => paint_wall_preview(painter, xf, a, b, half),
+        }
+        if let Some(arc) = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge)) {
+            let text = format!("R {}  {}", format::length(arc.radius), format::length(arc.length()));
+            label(painter, xf.to_screen(p), text);
+        }
+        if resp.clicked() {
+            match bulge {
+                Some(bulge) => {
+                    create_wall(state, level, type_id, a, b, bulge);
+                    state.interaction.anchor = Some(b);
+                    state.interaction.points.clear();
+                    // The next wall starts along the arc's tangent at its end.
+                    if let Some(arc) = cc_core::arc::Arc::from_bulge(a, b, bulge) {
+                        state.interaction.prev_dir = Some(-arc.tangent(arc.length()));
+                    }
+                }
+                None => state.message = t!("msg-arc-collinear"),
+            }
+        }
+        return;
+    }
     if let Some(a) = anchor {
         if !state.typed.is_empty() {
             p = state.typed.apply(a, p, state.interaction.prev_dir);
         }
-        let half = state.project().element_type(type_id).map_or(0.075, |t| t.thickness() * 0.5);
-        let n = (p - a).normalize_or_zero().perp() * half;
-        let stroke = Stroke::new(1.5, PREVIEW);
-        painter.line_segment([xf.to_screen(a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
-        painter.line_segment([xf.to_screen(a + n), xf.to_screen(p + n)], stroke);
-        painter.line_segment([xf.to_screen(a - n), xf.to_screen(p - n)], stroke);
+        if state.wall_arc {
+            painter.line_segment([xf.to_screen(a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
+        } else {
+            paint_wall_preview(painter, xf, a, p, half);
+        }
         temp_dimension(painter, xf, a, p, state.interaction.prev_dir, Some(&state.typed), half);
     }
 
@@ -1828,20 +1868,14 @@ fn wall_tool(
     if resp.clicked() || enter {
         match anchor {
             None => state.interaction.anchor = Some(p),
+            Some(a) if a.distance(p) > 0.01 && state.wall_arc => {
+                // The end of the arc; the next click places a point on it.
+                state.interaction.points = vec![p];
+                state.message = t!("hint-wall-arc-point");
+                state.typed.clear();
+            }
             Some(a) if a.distance(p) > 0.01 => {
-                let location_line =
-                    serde_json::to_value(state.wall_location_line).ok().and_then(|v| v.as_str().map(str::to_string));
-                let command = create::WallCreate {
-                    start: a.to_array(),
-                    end: p.to_array(),
-                    level: Some(Ref::Id(level.0)),
-                    type_ref: Some(Ref::Id(type_id.0)),
-                    height: Some(state.wall_height),
-                    top_level: state.wall_top_level.map(|l| Ref::Id(l.0)),
-                    location_line,
-                    ..Default::default()
-                };
-                run_create(state, command);
+                create_wall(state, level, type_id, a, p, 0.0);
                 state.interaction.anchor = Some(p);
                 // The next wall's angle is measured from this one (as an interior angle).
                 state.interaction.prev_dir = Some(a - p);
@@ -1849,6 +1883,49 @@ fn wall_tool(
             }
             _ => {}
         }
+    }
+}
+
+/// Create a wall from `a` to `b` (an arc when `bulge` is not 0) with the tool options.
+fn create_wall(state: &mut AppState, level: LevelId, type_id: ElementTypeId, a: DVec2, b: DVec2, bulge: f64) {
+    let location_line =
+        serde_json::to_value(state.wall_location_line).ok().and_then(|v| v.as_str().map(str::to_string));
+    let command = create::WallCreate {
+        start: a.to_array(),
+        end: b.to_array(),
+        bulge: (bulge != 0.0).then_some(bulge),
+        level: Some(Ref::Id(level.0)),
+        type_ref: Some(Ref::Id(type_id.0)),
+        height: Some(state.wall_height),
+        top_level: state.wall_top_level.map(|l| Ref::Id(l.0)),
+        location_line,
+        ..Default::default()
+    };
+    run_create(state, command);
+}
+
+/// Preview of a straight wall from `a` to `b`: its line and faces.
+fn paint_wall_preview(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2, half: f64) {
+    let n = (b - a).normalize_or_zero().perp() * half;
+    let stroke = Stroke::new(1.5, PREVIEW);
+    painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(1.0, PREVIEW));
+    painter.line_segment([xf.to_screen(a + n), xf.to_screen(b + n)], stroke);
+    painter.line_segment([xf.to_screen(a - n), xf.to_screen(b - n)], stroke);
+}
+
+/// Preview of an arc wall from `a` to `b` with `bulge`: its line and faces.
+pub(crate) fn arc_preview(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2, bulge: f64, half: f64) {
+    let Some(arc) = cc_core::arc::Arc::from_bulge(a, b, bulge) else {
+        paint_wall_preview(painter, xf, a, b, half);
+        return;
+    };
+    for (v, width) in [(0.0, 1.0), (half, 1.5), (-half, 1.5)] {
+        if arc.radius_at(v) <= 0.0 {
+            continue;
+        }
+        let pts: Vec<Pos2> =
+            arc.points(0.0, arc.length(), v, cc_core::arc::ARC_STEP).into_iter().map(|q| xf.to_screen(q)).collect();
+        painter.add(egui::Shape::line(pts, Stroke::new(width, PREVIEW)));
     }
 }
 
@@ -1864,8 +1941,7 @@ fn wall_under(
         .values()
         .filter(|g| project.element(g.element).is_some_and(|e| e.level == level))
         .filter_map(|g| {
-            let rel = raw - g.origin;
-            let (u, v) = (rel.dot(g.dir), rel.dot(g.normal));
+            let (u, v) = g.local(raw);
             (u >= 0.0 && u <= g.length && v.abs() <= g.half + slack).then_some((g.element, u, v, v.abs()))
         })
         .min_by(|a, b| a.3.total_cmp(&b.3))
@@ -1907,15 +1983,16 @@ fn hosted_tool(
     let offset = u.clamp(width * 0.5 + margin, g.length - width * 0.5 - margin);
     let flip_facing = v < 0.0;
     let (u0, u1) = (offset - width * 0.5, offset + width * 0.5);
-    let rect = [g.world(u0, -g.half), g.world(u1, -g.half), g.world(u1, g.half), g.world(u0, g.half)];
+    let rect = g.outline((u0, u1), (u0, u1));
     let pts: Vec<Pos2> = rect.iter().map(|p| xf.to_screen(*p)).collect();
     painter.add(egui::Shape::closed_line(pts, Stroke::new(2.0, PREVIEW)));
     if category == Category::Door {
         let side = if flip_facing { -1.0 } else { 1.0 };
         let hinge_u = if state.interaction.flip_hand { u1 } else { u0 };
         let hinge = g.world(hinge_u, side * g.half);
+        let normal = g.normal_at(offset);
         painter.line_segment(
-            [xf.to_screen(hinge), xf.to_screen(hinge + g.normal * side * width)],
+            [xf.to_screen(hinge), xf.to_screen(hinge + normal * side * width)],
             Stroke::new(1.5, PREVIEW),
         );
     }
@@ -2152,7 +2229,14 @@ fn select(
         let level = state.project().element(id).map(|e| e.level);
         let s = snap_at(state, level, raw, Some(fixed), &[], xf.scale, shift);
         draw_snap(painter, xf, s);
-        painter.line_segment([xf.to_screen(fixed), xf.to_screen(s.point)], Stroke::new(2.0, PREVIEW));
+        // An arc wall keeps its bulge: the arc stretches with the end.
+        let bulge = state.project().element(id).and_then(|e| e.as_wall()).map_or(0.0, |w| w.bulge);
+        if bulge != 0.0 {
+            let (a, b) = if at_start { (s.point, fixed) } else { (fixed, s.point) };
+            arc_preview(painter, xf, a, b, bulge, 0.0);
+        } else {
+            painter.line_segment([xf.to_screen(fixed), xf.to_screen(s.point)], Stroke::new(2.0, PREVIEW));
+        }
         temp_dimension(painter, xf, fixed, s.point, None, None, 0.0);
         if resp.drag_stopped() {
             state.interaction.drag = None;

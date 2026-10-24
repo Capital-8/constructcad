@@ -69,6 +69,13 @@ impl Frame {
     }
 }
 
+/// A plan point in the placement coordinates of a wall (X along the wall
+/// at its start, Y to its left).
+fn wall_local(g: &WallGeom, p: DVec2) -> DVec2 {
+    let d = p - g.origin;
+    DVec2::new(d.dot(g.dir), d.dot(g.normal))
+}
+
 struct Exporter<'a> {
     w: StepWriter,
     project: &'a Project,
@@ -1412,20 +1419,38 @@ impl<'a> Exporter<'a> {
         );
 
         let h = g.half;
-        let profile = [
-            DVec2::new(g.start_ext.1, -h),
-            DVec2::new(g.end_ext.1, -h),
-            DVec2::new(g.end_ext.0, h),
-            DVec2::new(g.start_ext.0, h),
-        ];
-        let body = self.extrude_polygon(&profile, self.identity, self.dir_z, g.top_z - g.base_z);
+        let (body, axis) = if let Some(arc) = g.arc {
+            // An arc wall: its outline of arcs and lines extruded, its axis a trimmed circle.
+            let left = (g.start_ext.0, g.end_ext.0);
+            let right = (g.start_ext.1, g.end_ext.1);
+            let profile = self.wall_outline_profile(g, left, right, (h, -h));
+            let depth = g.top_z - g.base_z;
+            let body = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, self.identity, self.dir_z, depth]);
+            let center = self.point2(wall_local(g, arc.center));
+            let position = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
+            let circle = self.w.add("IFCCIRCLE", args![position, arc.radius]);
+            let end = self.point2(wall_local(g, g.world(g.length, 0.0)));
+            let sense = arc.sweep >= 0.0;
+            let axis = self
+                .w
+                .add("IFCTRIMMEDCURVE", args![circle, vec![self.origin2], vec![end], sense, Value::Enum("CARTESIAN")]);
+            (body, axis)
+        } else {
+            let profile = [
+                DVec2::new(g.start_ext.1, -h),
+                DVec2::new(g.end_ext.1, -h),
+                DVec2::new(g.end_ext.0, h),
+                DVec2::new(g.start_ext.0, h),
+            ];
+            let body = self.extrude_polygon(&profile, self.identity, self.dir_z, g.top_z - g.base_z);
+            let axis_start = self.origin2;
+            let axis_end = self.point2(DVec2::new(g.length, 0.0));
+            (body, self.w.add("IFCPOLYLINE", args![vec![axis_start, axis_end]]))
+        };
         if let Some(ty) = project.element_type(e.type_id) {
             let style = self.material_style(ty.main_material());
             self.styled(body, style);
         }
-        let axis_start = self.origin2;
-        let axis_end = self.point2(DVec2::new(g.length, 0.0));
-        let axis = self.w.add("IFCPOLYLINE", args![vec![axis_start, axis_end]]);
         let shape = self.shape(vec![body], Some(axis));
         let mut attrs = self.element_args(e, placement, shape);
         attrs.push(Value::Enum("STANDARD"));
@@ -1452,15 +1477,16 @@ impl<'a> Exporter<'a> {
         let opening_area: f64 = g.openings.iter().map(|o| (o.u1 - o.u0) * (o.z1 - o.z0)).sum();
         let thickness = 2.0 * h;
         let height = project.wall_height(e, wall);
+        let length = project.wall_length(e, wall);
         self.quantities(
             e,
             "Qto_WallBaseQuantities",
             &[
-                ("Length", Quantity::Length(wall.length())),
+                ("Length", Quantity::Length(length)),
                 ("Height", Quantity::Length(height)),
                 ("Width", Quantity::Length(thickness)),
-                ("GrossSideArea", Quantity::Area(wall.length() * height)),
-                ("NetSideArea", Quantity::Area((wall.length() * height - opening_area).max(0.0))),
+                ("GrossSideArea", Quantity::Area(length * height)),
+                ("NetSideArea", Quantity::Area((length * height - opening_area).max(0.0))),
                 ("NetVolume", Quantity::Volume(self.geom.volume(e.id))),
             ],
         );
@@ -1477,8 +1503,30 @@ impl<'a> Exporter<'a> {
         let (width, height) = (o.u1 - o.u0, o.z1 - o.z0);
         let reach = g.half + OPENING_CLEARANCE;
 
-        let placement = self.local_placement(Some(wall_placement), Frame::at(DVec3::new(o.u0, 0.0, o.z0 - g.base_z)));
-        let body = self.extrude_box(DVec3::new(0.0, -reach, 0.0), DVec3::new(width, reach, height));
+        let (placement, body, fill_frame) = match g.arc {
+            // In an arc wall the opening is a sector through the wall (between
+            // concentric arcs and the radial jambs); the filling is square to
+            // the wall at the opening's center.
+            Some(arc) => {
+                let at = Frame::at(DVec3::new(0.0, 0.0, o.z0 - g.base_z));
+                let placement = self.local_placement(Some(wall_placement), at);
+                // Towards the center the opening stops short of it.
+                let inward = reach.min(arc.radius - 1e-3);
+                let vs = if arc.sweep >= 0.0 { (inward, -reach) } else { (reach, -inward) };
+                let profile = self.wall_outline_profile(g, (o.u0, o.u1), (o.u0, o.u1), vs);
+                let body = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, self.identity, self.dir_z, height]);
+                let (origin, dir, _) = g.frame_at((o.u0 + o.u1) * 0.5);
+                let jamb = wall_local(g, origin + dir * o.u0);
+                let x = DVec2::new(dir.dot(g.dir), dir.dot(g.normal));
+                (placement, body, Frame::horizontal(DVec3::new(jamb.x, jamb.y, 0.0), x))
+            }
+            None => {
+                let at = Frame::at(DVec3::new(o.u0, 0.0, o.z0 - g.base_z));
+                let placement = self.local_placement(Some(wall_placement), at);
+                let body = self.extrude_box(DVec3::new(0.0, -reach, 0.0), DVec3::new(width, reach, height));
+                (placement, body, Frame::at(DVec3::ZERO))
+            }
+        };
         let shape = self.shape(vec![body], None);
         let gid = self.guid(&format!("opening-{}", e.id));
         let n = Value::Null;
@@ -1490,7 +1538,7 @@ impl<'a> Exporter<'a> {
         self.w.add("IFCRELVOIDSELEMENT", args![gid, Value::Null, Value::Null, Value::Null, wall, opening]);
 
         // The filling shares the opening's frame.
-        let fill_placement = self.local_placement(Some(placement), Frame::at(DVec3::ZERO));
+        let fill_placement = self.local_placement(Some(placement), fill_frame);
         let frame_style = self.style("Frame", FRAME_COLOR, 0.0);
         let panel_style = self.material_style(ty.main_material());
         let parts: Vec<HostedPart> = hosted_parts(&ty.data, width, height, g.half);
@@ -1531,6 +1579,40 @@ impl<'a> Exporter<'a> {
                 ("Area", Quantity::Area(type_w * type_h)),
             ],
         );
+    }
+
+    /// Profile of the part of an arc wall whose left side spans `left` and
+    /// right side `right` (along the centerline), between the concentric
+    /// arcs `v.0` (left) and `v.1` (right) of the centerline, in the wall
+    /// placement coordinates: an `IfcIndexedPolyCurve` of two arcs and two lines.
+    fn wall_outline_profile(&mut self, g: &WallGeom, left: (f64, f64), right: (f64, f64), v: (f64, f64)) -> Id {
+        let pts = [
+            g.world(right.0, v.1),
+            g.world((right.0 + right.1) * 0.5, v.1),
+            g.world(right.1, v.1),
+            g.world(left.1, v.0),
+            g.world((left.0 + left.1) * 0.5, v.0),
+            g.world(left.0, v.0),
+        ];
+        let coords: Vec<Value> = pts
+            .iter()
+            .map(|p| {
+                let q = wall_local(g, *p);
+                reals(&[q.x, q.y])
+            })
+            .collect();
+        let list = self.w.add("IFCCARTESIANPOINTLIST2D", args![coords]);
+        let index = |kind: &'static str, ids: &[i64]| {
+            Value::Typed(kind, Box::new(Value::List(ids.iter().map(|&i| Value::Int(i)).collect())))
+        };
+        let segments = vec![
+            index("IFCARCINDEX", &[1, 2, 3]),
+            index("IFCLINEINDEX", &[3, 4]),
+            index("IFCARCINDEX", &[4, 5, 6]),
+            index("IFCLINEINDEX", &[6, 1]),
+        ];
+        let curve = self.w.add("IFCINDEXEDPOLYCURVE", args![list, segments, false]);
+        self.w.add("IFCARBITRARYCLOSEDPROFILEDEF", args![Value::Enum("AREA"), Value::Null, curve])
     }
 
     /// Floors, ceilings and roofs: extruded sketches.

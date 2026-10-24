@@ -71,7 +71,8 @@ pub fn walls_loop(project: &Project, level: LevelId, outward: f64) -> Option<Vec
         let mut used = vec![false; walls.len()];
         used[start] = true;
         let (first, w0) = (walls[start].1.start, walls[start].1.end);
-        let mut pts = vec![first, w0];
+        let mut pts = vec![first];
+        pts.extend(along(walls[start].1, true));
         let mut cur = w0;
         let mut half = project.thickness_of(walls[start].0) * 0.5;
         loop {
@@ -85,10 +86,25 @@ pub fn walls_loop(project: &Project, level: LevelId, outward: f64) -> Option<Vec
             let Some(i) = next else { break };
             used[i] = true;
             let w = walls[i].1;
-            cur = if w.start.distance(cur) < TOL { w.end } else { w.start };
+            let forward = w.start.distance(cur) < TOL;
+            cur = if forward { w.end } else { w.start };
             half = half.max(project.thickness_of(walls[i].0) * 0.5);
-            pts.push(cur);
+            pts.extend(along(w, forward));
         }
     }
     None
+}
+
+/// Points of a wall's location line after its first end (`forward`: from
+/// start to end): its other end, preceded by points along an arc.
+fn along(w: &Wall, forward: bool) -> Vec<DVec2> {
+    let mut pts = match w.arc() {
+        Some(a) => a.points(0.0, a.length(), 0.0, cc_core::arc::ARC_STEP),
+        None => vec![w.start, w.end],
+    };
+    if !forward {
+        pts.reverse();
+    }
+    pts.remove(0);
+    pts
 }

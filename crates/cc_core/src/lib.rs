@@ -4,6 +4,7 @@
 //! sheet is a *query* over it; all geometry is derived. Edits go through
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
+pub mod arc;
 pub mod component;
 pub mod component_file;
 pub mod dim_refs;
