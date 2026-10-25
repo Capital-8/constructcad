@@ -306,7 +306,7 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `boundary` | [[x, y], …] | optional | Closed outline (at least 3 points); omit with `from_walls`. |
-| `from_walls` | boolean | optional | Follow the loop of walls of the level (exterior faces; interior faces for ceilings). |
+| `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
@@ -318,7 +318,7 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `boundary` | [[x, y], …] | optional | Closed outline (at least 3 points); omit with `from_walls`. |
-| `from_walls` | boolean | optional | Follow the loop of walls of the level (exterior faces; interior faces for ceilings). |
+| `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
@@ -330,7 +330,7 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `boundary` | [[x, y], …] | optional | Closed outline (at least 3 points); omit with `from_walls`. |
-| `from_walls` | boolean | optional | Follow the loop of walls of the level (exterior faces; interior faces for ceilings). |
+| `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `holes` | [[[x, y], …], …] | optional | Openings through the roof (courtyards): closed outlines inside the boundary, apart from each other. Pitched roofs slope down to their eaves too. |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
@@ -549,7 +549,7 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `boundary` | [[x, y], …] | optional | Closed outline (at least 3 points); omit with `from_walls`. |
-| `from_walls` | boolean | optional | Follow the loop of walls of the level (exterior faces; interior faces for ceilings). |
+| `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |

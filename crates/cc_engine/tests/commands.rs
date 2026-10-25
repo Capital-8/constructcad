@@ -415,6 +415,67 @@ fn the_example_macro_builds_a_house() {
     assert!(run(&mut s, "element_get", json!({"id": room}))["derived"]["area"].as_f64().unwrap() > 20.0);
 }
 
+/// Floors, roofs and ceilings from walls follow the outer boundary of the
+/// walls: here the showcase house, an L with an arc wall, whose interior walls
+/// meet the outer corners (once picked as the old 9 x 5 rectangle).
+#[test]
+fn outlines_from_walls_follow_the_outer_boundary() {
+    let mut s = Session::default();
+    let walls = [
+        json!({"start": [0, 0], "end": [9, 0], "type": 3}),
+        json!({"start": [9, 0], "end": [9, 5], "type": 3}),
+        json!({"start": [9, 5], "end": [0, 5], "type": 3}),
+        json!({"start": [0, 5], "end": [0, 0], "type": 3}),
+        json!({"start": [5.5, 0], "end": [5.5, 5], "type": 5}),
+        json!({"start": [3, 0], "end": [3, 5], "type": 5}),
+        json!({"start": [9, 0], "end": [12, 0], "type": 3}),
+        json!({"start": [12, 0], "end": [12, 10], "type": 3}),
+        json!({"start": [12, 10], "end": [7, 10], "mid": [9.5, 11.6], "type": 3}),
+        json!({"start": [7, 10], "end": [7, 5], "type": 3}),
+        json!({"start": [9, 5], "end": [12, 5], "type": 3}),
+        json!({"start": [9.5, 5], "end": [9.5, 7.5], "type": 5}),
+        json!({"start": [9.5, 7.5], "end": [12, 7.5], "type": 5}),
+    ];
+    for wall in walls {
+        run(&mut s, "wall_create", wall);
+    }
+    // Type 3 is 15 cm thick.
+    let half = 0.075;
+    // The L on the wall lines: 12 x 5 plus 5 x 5 beside the arc, plus the arc's segment.
+    let arc = run(&mut s, "elements_list", json!({"category": "wall"}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| run(&mut s, "element_get", json!({"id": w["id"]})))
+        .find(|w| w["params"]["bulge"].as_f64().unwrap_or(0.0) != 0.0)
+        .unwrap();
+    let (r, sweep) =
+        (arc["derived"]["radius"].as_f64().unwrap(), arc["derived"]["sweep"].as_f64().unwrap().to_radians());
+    let segment = r * r * 0.5 * (sweep.abs() - sweep.abs().sin());
+    let on_lines = 12.0 * 5.0 + 5.0 * 5.0 + segment;
+    let area = |v: &Value| {
+        let outline = if v["params"]["boundary"].is_array() { "boundary" } else { "footprint" };
+        let pts: Vec<(f64, f64)> = v["params"][outline]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_f64().unwrap(), p[1].as_f64().unwrap()))
+            .collect();
+        let n = pts.len();
+        (0..n).map(|i| pts[i].0 * pts[(i + 1) % n].1 - pts[(i + 1) % n].0 * pts[i].1).sum::<f64>().abs() / 2.0
+    };
+    // Exterior faces: grown by half a wall all around (perimeter 44 m on the lines, about).
+    let floor = run(&mut s, "floor_create", json!({"from_walls": true}));
+    let grown = area(&floor);
+    assert!(grown > on_lines + 40.0 * half && grown < on_lines + 50.0 * half, "{grown} vs {on_lines}");
+    let roof = run(&mut s, "roof_create", json!({"from_walls": true}));
+    assert!((area(&roof) - grown).abs() < 1e-6);
+    // Interior faces for ceilings.
+    let ceiling = run(&mut s, "ceiling_create", json!({"from_walls": true}));
+    let shrunk = area(&ceiling);
+    assert!(shrunk < on_lines - 40.0 * half && shrunk > on_lines - 50.0 * half, "{shrunk} vs {on_lines}");
+}
+
 /// The showcase macro (the project of the README screenshots) keeps working,
 /// and the ids its later steps name still point at what they expect.
 #[test]

@@ -282,7 +282,8 @@ pub struct SketchArgs {
     /// Closed outline (at least 3 points); omit with `from_walls`.
     #[serde(default)]
     pub boundary: Option<Vec<Point>>,
-    /// Follow the loop of walls of the level (exterior faces; interior faces for ceilings).
+    /// Follow the outer boundary of the walls of the level, leaving interior walls out
+    /// (exterior faces; interior faces for ceilings).
     #[serde(default)]
     pub from_walls: bool,
     /// Level id or name (default: the lowest level).

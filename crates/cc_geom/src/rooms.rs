@@ -50,11 +50,15 @@ fn split_params(a: DVec2, b: DVec2, c: DVec2, d: DVec2, out: &mut Vec<f64>) {
 
 /// Undirected edges of the arrangement of `polygons`' edges, keyed by vertex.
 fn arrangement(polygons: &[Vec<DVec2>]) -> (BTreeMap<Key, DVec2>, BTreeSet<(Key, Key)>) {
-    let segs: Vec<(DVec2, DVec2)> = polygons
-        .iter()
-        .flat_map(|p| (0..p.len()).map(move |i| (p[i], p[(i + 1) % p.len()])))
-        .filter(|(a, b)| a.distance(*b) > MERGE)
-        .collect();
+    let segs: Vec<(DVec2, DVec2)> =
+        polygons.iter().flat_map(|p| (0..p.len()).map(move |i| (p[i], p[(i + 1) % p.len()]))).collect();
+    arrangement_of(segs)
+}
+
+/// Undirected edges of the arrangement of `segs`, split where they meet, keyed by vertex.
+fn arrangement_of(segs: Vec<(DVec2, DVec2)>) -> (BTreeMap<Key, DVec2>, BTreeSet<(Key, Key)>) {
+    let segs: Vec<(DVec2, DVec2)> =
+        segs.into_iter().filter(|(a, b)| a.is_finite() && b.is_finite() && a.distance(*b) > MERGE).collect();
     let mut points = BTreeMap::new();
     let mut edges = BTreeSet::new();
     for (i, &(a, b)) in segs.iter().enumerate() {
@@ -164,9 +168,121 @@ pub fn room_boundary(walls: &[Vec<DVec2>], point: DVec2) -> Option<Vec<DVec2>> {
     None
 }
 
+/// Most edges an outline is traced from (the arrangement grows with the
+/// square of the segments; a level's walls stay far below this).
+const MAX_SEGMENTS: usize = 20_000;
+
+/// The outer boundary (counter-clockwise) of the arrangement of `lines`
+/// (open polylines, such as wall location lines): the loop around the
+/// largest enclosed area, with lines inside it and lines hanging off it left
+/// out. `None` when the lines enclose nothing.
+pub fn outer_boundary(lines: &[Vec<DVec2>]) -> Option<Vec<DVec2>> {
+    let segs: Vec<(DVec2, DVec2)> = lines.iter().flat_map(|l| l.windows(2).map(|w| (w[0], w[1]))).collect();
+    if segs.len() > MAX_SEGMENTS {
+        return None;
+    }
+    let (points, edges) = arrangement_of(segs);
+    let mut neighbors: BTreeMap<Key, Vec<Key>> = BTreeMap::new();
+    for &(a, b) in &edges {
+        neighbors.entry(a).or_default().push(b);
+        neighbors.entry(b).or_default().push(a);
+    }
+    // Every face, each traced once from one of its directed edges; the outer
+    // face of each connected part runs clockwise.
+    let mut seen: BTreeSet<(Key, Key)> = BTreeSet::new();
+    let mut best: Option<(f64, Vec<DVec2>)> = None;
+    for &(a, b) in &edges {
+        for start in [(a, b), (b, a)] {
+            if seen.contains(&start) {
+                continue;
+            }
+            let Some(face) = trace_face(&points, &neighbors, start) else { continue };
+            // Mark the face's directed edges as traced.
+            let keys: Vec<Key> = face.iter().map(|p| key(*p)).collect();
+            for i in 0..keys.len() {
+                seen.insert((keys[i], keys[(i + 1) % keys.len()]));
+            }
+            let mut outline = without_spurs(face);
+            outline.reverse();
+            let area = polygon::signed_area(&outline);
+            if area > 1e-4 && best.as_ref().is_none_or(|(a, _)| area > *a) {
+                best = Some((area, outline));
+            }
+        }
+    }
+    best.map(|(_, outline)| simplify(outline))
+}
+
+/// A face without the spurs that dangling lines leave in it (out to a free
+/// end and back the same way).
+fn without_spurs(mut poly: Vec<DVec2>) -> Vec<DVec2> {
+    let same = |a: DVec2, b: DVec2| key(a) == key(b);
+    let mut changed = true;
+    while changed && poly.len() >= 3 {
+        changed = false;
+        let n = poly.len();
+        for i in 0..n {
+            let (prev, next) = (poly[(i + n - 1) % n], poly[(i + 1) % n]);
+            if same(prev, next) {
+                // Drop the tip and one copy of the point it was reached from.
+                let (hi, lo) = if (i + 1) % n > i { ((i + 1) % n, i) } else { (i, (i + 1) % n) };
+                poly.remove(hi);
+                poly.remove(lo);
+                changed = true;
+                break;
+            }
+        }
+    }
+    poly
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn outline_area(lines: &[Vec<DVec2>]) -> f64 {
+        polygon::area(&outer_boundary(lines).unwrap())
+    }
+
+    fn line(pts: &[(f64, f64)]) -> Vec<DVec2> {
+        pts.iter().map(|&(x, y)| DVec2::new(x, y)).collect()
+    }
+
+    /// An L of outer walls with interior walls meeting its corners and sides,
+    /// a wall hanging out of it and one standing free inside: the outline is the L.
+    #[test]
+    fn outer_boundary_ignores_interior_and_hanging_walls() {
+        let l = line(&[(0.0, 0.0), (9.0, 0.0), (9.0, 5.0), (4.0, 5.0), (4.0, 9.0), (0.0, 9.0), (0.0, 0.0)]);
+        let mut lines: Vec<Vec<DVec2>> = l.windows(2).map(|w| w.to_vec()).collect();
+        // Interior walls: the old 9 x 5 rectangle's top side, a partition, and a free wall.
+        lines.push(line(&[(0.0, 5.0), (4.0, 5.0)]));
+        lines.push(line(&[(4.0, 0.0), (4.0, 5.0)]));
+        lines.push(line(&[(1.0, 7.0), (3.0, 7.0)]));
+        // A garden wall hanging out of a corner, and one out of a side.
+        lines.push(line(&[(9.0, 0.0), (12.0, 0.0)]));
+        lines.push(line(&[(0.0, 2.0), (-2.0, 2.0), (-2.0, 3.0)]));
+        let outline = outer_boundary(&lines).unwrap();
+        assert!((polygon::area(&outline) - (9.0 * 5.0 + 4.0 * 4.0)).abs() < 1e-9, "{outline:?}");
+        assert_eq!(outline.len(), 6, "{outline:?}");
+        assert!(polygon::signed_area(&outline) > 0.0);
+        // Walls entered in any order and direction give the same outline.
+        lines.reverse();
+        for l in &mut lines {
+            l.reverse();
+        }
+        assert!((outline_area(&lines) - 61.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn outer_boundary_needs_a_closed_loop() {
+        let open = vec![line(&[(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)])];
+        assert!(outer_boundary(&open).is_none());
+        assert!(outer_boundary(&[]).is_none());
+        // Two buildings: the larger one.
+        let a = line(&[(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0), (0.0, 0.0)]);
+        let b = line(&[(10.0, 0.0), (12.0, 0.0), (12.0, 2.0), (10.0, 2.0), (10.0, 0.0)]);
+        assert!((outline_area(&[b, a]) - 12.0).abs() < 1e-9);
+    }
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<DVec2> {
         vec![DVec2::new(x0, y0), DVec2::new(x1, y0), DVec2::new(x1, y1), DVec2::new(x0, y1)]

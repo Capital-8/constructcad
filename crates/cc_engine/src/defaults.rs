@@ -62,37 +62,64 @@ pub fn next_number<'a>(existing: impl Iterator<Item = &'a str>) -> String {
     (existing.filter_map(|s| s.trim().parse::<u32>().ok()).max().unwrap_or(0) + 1).to_string()
 }
 
-/// Closed loop following the walls of `level`, offset to the exterior faces
-/// (`outward > 0`) or interior faces (`outward < 0`).
+/// Closed loop around the walls of `level`, offset to the exterior faces
+/// (`outward > 0`) or interior faces (`outward < 0`): the outer boundary of
+/// their location lines, so interior walls (even those meeting its corners)
+/// and walls hanging off it are left out; with several separate loops, the
+/// largest. The offset is half the thickest wall on the boundary.
 pub fn walls_loop(project: &Project, level: LevelId, outward: f64) -> Option<Vec<DVec2>> {
     let walls: Vec<(&Element, &Wall)> = project.walls().filter(|(e, _)| e.level == level).collect();
+    // Ends closer than this meet (drawn without snapping).
     const TOL: f64 = 0.01;
-    for start in 0..walls.len() {
-        let mut used = vec![false; walls.len()];
-        used[start] = true;
-        let (first, w0) = (walls[start].1.start, walls[start].1.end);
-        let mut pts = vec![first];
-        pts.extend(along(walls[start].1, true));
-        let mut cur = w0;
-        let mut half = project.thickness_of(walls[start].0) * 0.5;
-        loop {
-            if cur.distance(first) < TOL && pts.len() > 3 {
-                pts.pop();
-                let pts = polygon::ccw(&pts);
-                return Some(polygon::offset(&pts, half * outward));
-            }
-            let next = (0..walls.len())
-                .find(|&i| !used[i] && (walls[i].1.start.distance(cur) < TOL || walls[i].1.end.distance(cur) < TOL));
-            let Some(i) = next else { break };
-            used[i] = true;
-            let w = walls[i].1;
-            let forward = w.start.distance(cur) < TOL;
-            cur = if forward { w.end } else { w.start };
-            half = half.max(project.thickness_of(walls[i].0) * 0.5);
-            pts.extend(along(w, forward));
+    let mut ends: Vec<DVec2> = Vec::new();
+    let mut snap = |p: DVec2| match ends.iter().find(|q| q.distance(p) < TOL) {
+        Some(q) => *q,
+        None => {
+            ends.push(p);
+            p
         }
+    };
+    let lines: Vec<Vec<DVec2>> = walls
+        .iter()
+        .map(|(_, w)| {
+            let (a, b) = (snap(w.start), snap(w.end));
+            let mut pts = vec![a];
+            pts.extend(along(w, true));
+            if let Some(last) = pts.last_mut() {
+                *last = b;
+            }
+            pts
+        })
+        .collect();
+    let outline = cc_geom::outer_boundary(&lines)?;
+    // The walls whose middle lies on the outline set the offset.
+    let on_outline = |p: DVec2| {
+        (0..outline.len()).any(|i| {
+            let (q, _) = polygon::closest_on_segment(outline[i], outline[(i + 1) % outline.len()], p);
+            q.distance(p) < TOL
+        })
+    };
+    let half = walls
+        .iter()
+        .zip(&lines)
+        .filter(|(_, line)| line.len() >= 2 && on_outline(mid_point(line)))
+        .map(|((e, _), _)| project.thickness_of(e) * 0.5)
+        .fold(0.0, f64::max);
+    Some(polygon::offset(&outline, half * outward))
+}
+
+/// The point halfway along a polyline.
+fn mid_point(line: &[DVec2]) -> DVec2 {
+    let total: f64 = line.windows(2).map(|w| w[0].distance(w[1])).sum();
+    let mut left = total * 0.5;
+    for w in line.windows(2) {
+        let len = w[0].distance(w[1]);
+        if len >= left && len > 0.0 {
+            return w[0].lerp(w[1], left / len);
+        }
+        left -= len;
     }
-    None
+    line.first().copied().unwrap_or_default()
 }
 
 /// Points of a wall's location line after its first end (`forward`: from

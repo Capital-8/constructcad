@@ -32,7 +32,7 @@ pub use component::resolve_component;
 pub use cut::{clip_polygon, face_plane_segments};
 pub use mep::{SegmentGeom, segment_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};
-pub use rooms::room_boundary;
+pub use rooms::{outer_boundary, room_boundary};
 pub use solid::{Face, Ray, Solid};
 pub use wall::{Column, Opening, WallGeom};
 
