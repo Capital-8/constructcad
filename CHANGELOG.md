@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-25
+
 ### Added
 
 - Linux on arm64 (aarch64): releases include a `.deb` (`arm64`), an AppImage and a `.tar.gz` for 64-bit Arm, built natively on Ubuntu 22.04.
@@ -207,7 +209,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/francisreboucas/constructcad/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/francisreboucas/constructcad/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/francisreboucas/constructcad/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...v0.3.0
