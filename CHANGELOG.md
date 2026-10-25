@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-24
+
+### Changed
+
+- A 2D view, sheet or 3D view left zoomed to fit fits again when its pane changes size (a maximized window restored, a split moved), until it is panned or zoomed by hand. Views named with `--view` replace the default layout: the first on the left, the second on the right.
+
 ### Fixed
 
 - Linux: the AppImage starts on systems without the X11 keyboard and cursor libraries (it bundles libxkbcommon, libxkbcommon-x11, libXcursor, libXi and the libraries they need), and the Linux builds run on older distributions (built on Ubuntu 22.04, glibc 2.35, instead of 24.04).
@@ -197,7 +203,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/francisreboucas/constructcad/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/francisreboucas/constructcad/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/francisreboucas/constructcad/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/francisreboucas/constructcad/compare/v0.2.0...v0.2.1
