@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- View filters: a rule on a field that none of the filter's categories has (`width` on walls) matched nothing without a word. `filter_create` and `filter_set` now refuse it, naming the categories the field applies to, and the filter editor only offers the fields of the checked categories. Door schedules can show the sill height.
 - *Download* in the update notice and the repository link in *About* did nothing: the app was built without opening links in the browser.
 
 ## [0.4.2] - 2026-10-25

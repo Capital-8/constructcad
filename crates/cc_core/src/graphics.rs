@@ -452,7 +452,27 @@ pub struct ViewFilter {
     pub any: bool,
 }
 
+impl FilterParam {
+    /// Whether elements of `category` can have a value for this parameter.
+    pub fn applies_to(self, category: Category) -> bool {
+        match self {
+            FilterParam::Field(f) => f.applies_to(category),
+            FilterParam::Elevation => true,
+        }
+    }
+}
+
 impl ViewFilter {
+    /// The first rule parameter that applies to none of the filter's
+    /// categories, so the rule never passes; `None` when every rule can pass
+    /// or the filter covers all categories.
+    pub fn inapplicable_param(&self) -> Option<FilterParam> {
+        if self.categories.is_empty() {
+            return None;
+        }
+        self.rules.iter().map(|r| r.param).find(|p| !self.categories.iter().any(|c| p.applies_to(*c)))
+    }
+
     /// Whether the filter matches an element of `category`; `rule` tests
     /// one rule against the element.
     pub fn matches(&self, category: Category, rule: &mut dyn FnMut(&FilterRule) -> bool) -> bool {

@@ -908,7 +908,10 @@ fn filter_form(ui: &mut Ui, state: &mut AppState, mut f: cc_core::ViewFilter) {
                     .width(150.0)
                     .selected_text(param_label(rule.param))
                     .show_ui(ui, |ui| {
-                        for p in params() {
+                        // Only parameters the chosen categories have.
+                        let applies =
+                            |p: &FilterParam| f.categories.is_empty() || f.categories.iter().any(|c| p.applies_to(*c));
+                        for p in params().into_iter().filter(applies) {
                             changed |= ui.selectable_value(&mut rule.param, p, param_label(p)).changed();
                         }
                     });

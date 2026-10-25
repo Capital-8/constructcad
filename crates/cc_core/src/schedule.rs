@@ -122,7 +122,7 @@ impl ScheduleField {
         let phases = [F::PhaseCreated, F::PhaseDemolished];
         let specific: &[F] = match category {
             Category::Wall => &[F::Length, F::Height, F::Thickness, F::Area, F::Volume, F::Function, F::Structural],
-            Category::Door => &[F::Width, F::Height, F::Host],
+            Category::Door => &[F::Width, F::Height, F::Sill, F::Host],
             Category::Window => &[F::Width, F::Height, F::Sill, F::Host],
             Category::Floor | Category::Ceiling => &[F::Thickness, F::Area, F::Perimeter, F::Volume],
             Category::Roof => &[F::Thickness, F::Area, F::Perimeter, F::Volume],
@@ -162,6 +162,15 @@ impl ScheduleField {
             Category::Grid | Category::Dimension | Category::Text => return Vec::new(),
         };
         common.iter().chain(specific).chain(&type_info).chain(&phases).copied().collect()
+    }
+
+    /// Whether elements of `category` can have a value for this field: the
+    /// fields [`available`](Self::available) to its schedules, plus the type,
+    /// level, main material and volume, which most elements have. A filter
+    /// rule on a field that applies to none of its categories never matches.
+    pub fn applies_to(self, category: Category) -> bool {
+        use ScheduleField as F;
+        matches!(self, F::Type | F::Level | F::Material | F::Volume) || Self::available(category).contains(&self)
     }
 
     /// Fields shown by a new schedule of `category`.

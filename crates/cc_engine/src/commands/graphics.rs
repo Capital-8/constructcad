@@ -402,6 +402,19 @@ fn rules(rs: &[RuleArg]) -> Result<Vec<FilterRule>> {
     rs.iter().map(rule).collect()
 }
 
+/// Refuse a rule that could never pass: its parameter applies to none of the
+/// filter's categories (`width` on walls).
+fn check_rules(f: &ViewFilter) -> Result<()> {
+    let Some(p) = f.inapplicable_param() else { return Ok(()) };
+    let names = |cats: &mut dyn Iterator<Item = Category>| cats.map(refs::category_name).collect::<Vec<_>>().join(", ");
+    let chosen = names(&mut f.categories.iter().copied());
+    let applies = names(&mut Category::ALL.into_iter().filter(|c| p.applies_to(*c)));
+    Err(EngineError::invalid(format!(
+        "the parameter '{}' does not apply to {chosen} (it applies to {applies})",
+        param_name(p)
+    )))
+}
+
 fn categories(names: &[String]) -> Result<BTreeSet<Category>> {
     names.iter().map(|n| refs::category(n)).collect()
 }
@@ -479,6 +492,7 @@ impl Command for FilterCreate {
             rules: rules(&self.rules)?,
             any: self.any,
         };
+        check_rules(&filter)?;
         let id = edit(s, t!("tx-filter-create"), |e| {
             let id = FilterId(e.alloc_id());
             e.filters_mut().insert(id, ViewFilter { id, ..filter });
@@ -529,6 +543,7 @@ impl Command for FilterSet {
         if let Some(a) = self.any {
             f.any = a;
         }
+        check_rules(&f)?;
         edit(s, t!("tx-filter-modify"), |e| {
             e.filters_mut().insert(id, f);
             Ok(())

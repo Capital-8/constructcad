@@ -275,6 +275,23 @@ fn filters_match_by_rules() {
         ErrorCode::InvalidArguments
     );
     assert_eq!(fails(&mut s, "filter_create", json!({"name": "long"})), ErrorCode::Rejected);
+    // A rule that can never pass for the chosen categories (walls have no width) is
+    // refused, also when the categories change under it; a material rule on walls is fine.
+    let width =
+        json!({"name": "X", "categories": ["wall"], "rules": [{"param": "width", "op": "greater", "value": 0.1}]});
+    let error = s.execute("filter_create", width).unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArguments);
+    assert!(error.message.contains("'width'") && error.message.contains("door"), "{}", error.message);
+    let mixed = json!({"name": "X", "categories": ["wall", "door"], "rules": [{"param": "width", "op": "has_value"}]});
+    run(&mut s, "filter_set", json!({"filter": wide, "categories": ["door"]}));
+    assert_eq!(
+        fails(&mut s, "filter_set", json!({"filter": wide, "categories": ["wall"]})),
+        ErrorCode::InvalidArguments
+    );
+    let x = id(&run(&mut s, "filter_create", mixed));
+    assert_eq!(ids(&mut s, x), BTreeSet::from([door]));
+    let material = json!({"name": "M", "categories": ["wall"], "rules": [{"param": "material", "op": "has_value"}]});
+    run(&mut s, "filter_create", material);
     // Editing rules changes what matches.
     run(&mut s, "filter_set", json!({"filter": "Long", "rules": [{"param": "length", "op": "greater", "value": 7}]}));
     assert_eq!(ids(&mut s, long), BTreeSet::from([walls[2]]));

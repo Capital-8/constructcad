@@ -506,6 +506,36 @@ mod tests {
         (project, geom)
     }
 
+    /// Filters refuse rules on fields that apply to none of their categories,
+    /// so every value an element has must be on a field that applies to it.
+    #[test]
+    fn fields_with_values_apply_to_the_category() {
+        let mut fields: std::collections::BTreeSet<ScheduleField> =
+            Category::ALL.into_iter().flat_map(ScheduleField::available).collect();
+        fields.extend([ScheduleField::Type, ScheduleField::Level, ScheduleField::Material, ScheduleField::Volume]);
+        let files = [
+            include_str!("../../../examples/casa_simples.ccad"),
+            include_str!("../../../examples/showcase.ccad"),
+            include_str!("../../cc_ifc/tests/fixtures/features.ccad"),
+            include_str!("../../cc_ifc/tests/fixtures/structure.ccad"),
+            include_str!("../../cc_ifc/tests/fixtures/mep.ccad"),
+            include_str!("../../cc_ifc/tests/fixtures/arcs.ccad"),
+            include_str!("../../cc_ifc/tests/fixtures/roofs.ccad"),
+            include_str!("../../cc_ifc/tests/fixtures/phases.ccad"),
+        ];
+        for file in files {
+            let project = cc_core::from_ron(file).unwrap();
+            let geom = ModelGeometry::build(&project);
+            for e in project.elements.values() {
+                for &field in &fields {
+                    if value(&project, &geom, e, field) != Value::Missing {
+                        assert!(field.applies_to(e.category()), "{field:?} has a value on {:?}", e.category());
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn sorting_filtering_and_totals() {
         let (project, geom) = sample();
