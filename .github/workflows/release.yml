@@ -11,10 +11,13 @@ env:
   CARGO_TERM_COLOR: always
   # Installer tools, pinned (packaging/ holds the files they build from).
   WIX_VERSION: "5.0.2"
-  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-  APPIMAGE_RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
-  APPIMAGE_RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+  # The AppImage tools are downloaded per architecture (`-<arch>` appended to the URLs).
+  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool
+  APPIMAGETOOL_SHA256_x86_64: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+  APPIMAGETOOL_SHA256_aarch64: f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
+  APPIMAGE_RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime
+  APPIMAGE_RUNTIME_SHA256_x86_64: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+  APPIMAGE_RUNTIME_SHA256_aarch64: 00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444
 
 jobs:
   build:
@@ -31,6 +34,13 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
+            arch: x86_64
+            deb_arch: amd64
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            arch: aarch64
+            deb_arch: arm64
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
@@ -84,7 +94,7 @@ jobs:
             -d "LicenseRtf=$RUNNER_TEMP/License.rtf" \
             -o "dist/constructcad-${GITHUB_REF_NAME}-x86_64.msi"
 
-      # Linux: .deb (dpkg-deb) and AppImage (appimagetool).
+      # Linux: .deb (dpkg-deb) and AppImage (appimagetool), built natively on each architecture.
       - name: Linux packaging tools
         if: runner.os == 'Linux'
         shell: bash
@@ -93,27 +103,30 @@ jobs:
           sudo apt-get install -y --no-install-recommends dpkg-dev desktop-file-utils \
             patchelf libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 libxcursor1 libxi6
           desktop-file-validate packaging/linux/constructcad.desktop
-          curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL"
-          curl -fsSL -o "$RUNNER_TEMP/runtime-x86_64" "$APPIMAGE_RUNTIME_URL"
-          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
-          echo "$APPIMAGE_RUNTIME_SHA256  $RUNNER_TEMP/runtime-x86_64" | sha256sum -c -
+          arch=${{ matrix.arch }}
+          tool_sha="APPIMAGETOOL_SHA256_$arch"
+          runtime_sha="APPIMAGE_RUNTIME_SHA256_$arch"
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL-$arch.AppImage"
+          curl -fsSL -o "$RUNNER_TEMP/runtime-$arch" "$APPIMAGE_RUNTIME_URL-$arch"
+          echo "${!tool_sha}  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+          echo "${!runtime_sha}  $RUNNER_TEMP/runtime-$arch" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/appimagetool"
       - name: Debian package
         if: runner.os == 'Linux'
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          packaging/linux/build-deb.sh "$version" "target/${{ matrix.target }}/release" \
-            "dist/constructcad_${version//-/\~}_amd64.deb"
+          packaging/linux/build-deb.sh "$version" "target/${{ matrix.target }}/release" ${{ matrix.deb_arch }} \
+            "dist/constructcad_${version//-/\~}_${{ matrix.deb_arch }}.deb"
           dpkg-deb --info dist/*.deb
           dpkg-deb --contents dist/*.deb
       - name: AppImage
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          packaging/linux/build-appimage.sh "target/${{ matrix.target }}/release" \
-            "dist/constructcad-${GITHUB_REF_NAME}-x86_64.AppImage" \
-            "$RUNNER_TEMP/appimagetool" "$RUNNER_TEMP/runtime-x86_64"
+          packaging/linux/build-appimage.sh "target/${{ matrix.target }}/release" ${{ matrix.arch }} \
+            "dist/constructcad-${GITHUB_REF_NAME}-${{ matrix.arch }}.AppImage" \
+            "$RUNNER_TEMP/appimagetool" "$RUNNER_TEMP/runtime-${{ matrix.arch }}"
 
       # macOS: ConstructCAD.app in a .dmg, one per architecture (ccad stays in the archive).
       - name: DMG

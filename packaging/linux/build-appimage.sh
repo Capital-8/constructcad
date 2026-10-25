@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# Build the AppImage (x86_64) from the release binaries with appimagetool.
+# Build the AppImage from the release binaries with appimagetool.
 #
-# Usage: packaging/linux/build-appimage.sh <dir with the release binaries> <output .AppImage>
-#                                          <appimagetool> <type2 runtime>
+# Usage: packaging/linux/build-appimage.sh <dir with the release binaries> <x86_64|aarch64>
+#                                          <output .AppImage> <appimagetool> <type2 runtime>
 # Run from the repository root, on the oldest supported Ubuntu LTS (the binaries
 # use the glibc of the build machine), with patchelf and the libraries below
-# installed. The release workflow downloads pinned, checksum-verified copies of
-# appimagetool and of the runtime.
+# installed, on the architecture being packaged. The release workflow downloads
+# pinned, checksum-verified copies of appimagetool and of the runtime.
 set -euo pipefail
 
 bin_dir=$1
-out=$2
-appimagetool=$3
-runtime=$4
+arch=$2
+out=$3
+appimagetool=$4
+runtime=$5
+
+# How ldconfig names the architecture of a library.
+case $arch in
+    x86_64) ld_arch=x86-64 ;;
+    aarch64) ld_arch=AArch64 ;;
+    *)
+        echo "error: unsupported architecture $arch" >&2
+        exit 1
+        ;;
+esac
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -28,7 +39,7 @@ bundled_libs="libxkbcommon.so.0 libxkbcommon-x11.so.0 libxcb-xkb.so.1
     libXcursor.so.1 libXrender.so.1 libXfixes.so.3 libXi.so.6 libXext.so.6"
 mkdir -p "$appdir/usr/lib"
 for lib in $bundled_libs; do
-    path=$(ldconfig -p | awk -v l="$lib" '$1 == l && /x86-64/ { print $NF; exit }')
+    path=$(ldconfig -p | awk -v l="$lib" -v a="$ld_arch" '$1 == l && index($0, "," a ")") { print $NF; exit }')
     if [ -z "$path" ]; then
         echo "error: $lib not found on the build machine" >&2
         exit 1
@@ -57,4 +68,4 @@ chmod 755 "$appdir/AppRun"
 mkdir -p "$(dirname "$out")"
 # The runtime option goes first; it unpacks appimagetool instead of mounting
 # it, so the build machine needs no FUSE.
-ARCH=x86_64 "$appimagetool" --appimage-extract-and-run --no-appstream --runtime-file "$runtime" "$appdir" "$out"
+ARCH=$arch "$appimagetool" --appimage-extract-and-run --no-appstream --runtime-file "$runtime" "$appdir" "$out"

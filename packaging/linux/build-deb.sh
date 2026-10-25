@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Build the Debian package (amd64) from the release binaries with dpkg-deb.
+# Build the Debian package from the release binaries with dpkg-deb.
 #
-# Usage: packaging/linux/build-deb.sh <version> <dir with the release binaries> <output .deb>
+# Usage: packaging/linux/build-deb.sh <version> <dir with the release binaries> <amd64|arm64> <output .deb>
 # Run from the repository root. <version> is the release version without the
 # leading "v" (a pre-release "1.2.0-rc.1" becomes "1.2.0~rc.1", which sorts first).
 set -euo pipefail
 
 version=${1//-/\~}
 bin_dir=$2
-out=$3
+arch=$3
+out=$4
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -45,7 +46,7 @@ Package: constructcad
 Version: $version
 Section: graphics
 Priority: optional
-Architecture: amd64
+Architecture: $arch
 Maintainer: Francis Rebouças <francisreboucas@gmail.com>
 Installed-Size: $installed_size
 Depends: $shlibs, libxkbcommon0, libvulkan1 | libegl1

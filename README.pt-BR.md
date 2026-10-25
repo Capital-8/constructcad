@@ -45,10 +45,10 @@ Cada [versão publicada](https://github.com/francisreboucas/constructcad/release
 | Sistema | Instalador | Arquivo compactado |
 |---|---|---|
 | Windows (x64) | `constructcad-vX.Y.Z-x86_64.msi`: instala em Arquivos de Programas com atalho no menu Iniciar, abre arquivos `.ccad` e, opcionalmente, põe o `ccad` no PATH. Versões novas atualizam a instalação existente. | `…-x86_64-pc-windows-msvc.zip` |
-| Linux (x86_64) | `constructcad_X.Y.Z_amd64.deb` (Debian, Ubuntu: `sudo apt install ./constructcad_X.Y.Z_amd64.deb`) ou `constructcad-vX.Y.Z-x86_64.AppImage` (dê `chmod +x` e execute). Ambos trazem o atalho e o ícone; o `.deb` também registra o tipo de arquivo `.ccad` e instala o `ccad` em `/usr/bin`. | `…-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (x86_64, arm64) | `constructcad_X.Y.Z_amd64.deb` ou `…_arm64.deb` (Debian, Ubuntu: `sudo apt install ./constructcad_X.Y.Z_amd64.deb`) ou `constructcad-vX.Y.Z-x86_64.AppImage` ou `…-aarch64.AppImage` (dê `chmod +x` e execute). Ambos trazem o atalho e o ícone; o `.deb` também registra o tipo de arquivo `.ccad` e instala o `ccad` em `/usr/bin`. | `…-x86_64-unknown-linux-gnu.tar.gz`, `…-aarch64-unknown-linux-gnu.tar.gz` |
 | macOS | `constructcad-vX.Y.Z-aarch64-apple-darwin.dmg` (Apple silicon) ou `…-x86_64-apple-darwin.dmg` (Intel): arraste o *ConstructCAD* para *Aplicativos*. | `…-apple-darwin.tar.gz` (com o `ccad`) |
 
-As compilações ainda não são assinadas. No Windows, o SmartScreen pode avisar sobre editor desconhecido: escolha *Mais informações → Executar assim mesmo*. No macOS, o Gatekeeper bloqueia a primeira abertura: clique com o botão direito (Control-clique) no aplicativo e escolha *Abrir* ou, no macOS 15 e posteriores, tente abrir uma vez e clique em *Abrir Mesmo Assim* em *Ajustes do Sistema → Privacidade e Segurança*. As versões para Linux pedem uma distribuição recente (glibc 2.39, como no Ubuntu 24.04) e driver Vulkan ou OpenGL.
+As compilações ainda não são assinadas. No Windows, o SmartScreen pode avisar sobre editor desconhecido: escolha *Mais informações → Executar assim mesmo*. No macOS, o Gatekeeper bloqueia a primeira abertura: clique com o botão direito (Control-clique) no aplicativo e escolha *Abrir* ou, no macOS 15 e posteriores, tente abrir uma vez e clique em *Abrir Mesmo Assim* em *Ajustes do Sistema → Privacidade e Segurança*. As versões para Linux pedem glibc 2.35 ou posterior (Ubuntu 22.04, Debian 12 e mais novos) e driver Vulkan ou OpenGL.
 
 ## Executar
 

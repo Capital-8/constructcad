@@ -45,10 +45,10 @@ Each [release](https://github.com/francisreboucas/constructcad/releases) has ins
 | System | Installer | Archive |
 |---|---|---|
 | Windows (x64) | `constructcad-vX.Y.Z-x86_64.msi`: installs under Program Files with a Start menu shortcut, opens `.ccad` files, and optionally adds `ccad` to the PATH. Newer versions upgrade it in place. | `…-x86_64-pc-windows-msvc.zip` |
-| Linux (x86_64) | `constructcad_X.Y.Z_amd64.deb` (Debian, Ubuntu: `sudo apt install ./constructcad_X.Y.Z_amd64.deb`) or `constructcad-vX.Y.Z-x86_64.AppImage` (`chmod +x` it and run it). Both register the desktop entry and icon; the `.deb` also the `.ccad` file type and `ccad` in `/usr/bin`. | `…-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (x86_64, arm64) | `constructcad_X.Y.Z_amd64.deb` or `…_arm64.deb` (Debian, Ubuntu: `sudo apt install ./constructcad_X.Y.Z_amd64.deb`) or `constructcad-vX.Y.Z-x86_64.AppImage` or `…-aarch64.AppImage` (`chmod +x` it and run it). Both register the desktop entry and icon; the `.deb` also the `.ccad` file type and `ccad` in `/usr/bin`. | `…-x86_64-unknown-linux-gnu.tar.gz`, `…-aarch64-unknown-linux-gnu.tar.gz` |
 | macOS | `constructcad-vX.Y.Z-aarch64-apple-darwin.dmg` (Apple silicon) or `…-x86_64-apple-darwin.dmg` (Intel): drag *ConstructCAD* to *Applications*. | `…-apple-darwin.tar.gz` (also has `ccad`) |
 
-The builds are not code-signed yet. On Windows, SmartScreen may warn about an unknown publisher: choose *More info → Run anyway*. On macOS, Gatekeeper blocks the first launch: right-click (Control-click) the app and choose *Open*, or, on macOS 15 and later, open it once and then click *Open Anyway* in *System Settings → Privacy & Security*. The Linux builds need a recent distribution (glibc 2.39, as in Ubuntu 24.04) and a Vulkan or OpenGL driver.
+The builds are not code-signed yet. On Windows, SmartScreen may warn about an unknown publisher: choose *More info → Run anyway*. On macOS, Gatekeeper blocks the first launch: right-click (Control-click) the app and choose *Open*, or, on macOS 15 and later, open it once and then click *Open Anyway* in *System Settings → Privacy & Security*. The Linux builds need glibc 2.35 or later (Ubuntu 22.04, Debian 12 and newer) and a Vulkan or OpenGL driver.
 
 ## Running
 

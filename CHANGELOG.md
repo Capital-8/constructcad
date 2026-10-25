@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Linux on arm64 (aarch64): releases include a `.deb` (`arm64`), an AppImage and a `.tar.gz` for 64-bit Arm, built natively on Ubuntu 22.04.
+
 ## [0.4.1] - 2026-10-24
 
 ### Changed
