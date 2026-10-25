@@ -17,7 +17,7 @@ cc_render = { path = "crates/cc_render" }
 cc_ifc = { path = "crates/cc_ifc" }
 cc_engine = { path = "crates/cc_engine" }
 
-eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "default_fonts", "persistence", "accesskit", "x11", "wayland"] }
+eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "default_fonts", "persistence", "accesskit", "links", "x11", "wayland"] }
 egui = "0.36.2"
 egui-wgpu = "0.36.2"
 egui_dock = "0.21.1"

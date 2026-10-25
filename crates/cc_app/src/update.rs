@@ -307,6 +307,15 @@ pub fn notice(ui: &mut egui::Ui, updates: &mut Updates) {
 mod tests {
     use super::*;
 
+    /// `Context::open_url` (Download, the repository link) only reaches the
+    /// browser with eframe's `links` feature; without it the click is ignored.
+    #[test]
+    fn eframe_opens_links() {
+        let manifest = include_str!("../../../Cargo.toml");
+        let eframe = manifest.lines().find(|line| line.starts_with("eframe =")).unwrap_or_default();
+        assert!(eframe.contains("\"links\""), "eframe needs the \"links\" feature: {eframe}");
+    }
+
     fn v(major: u64, minor: u64, patch: u64) -> Version {
         Version { major, minor, patch }
     }

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- *Download* in the update notice and the repository link in *About* did nothing: the app was built without opening links in the browser.
+
 ## [0.4.2] - 2026-10-25
 
 ### Added
