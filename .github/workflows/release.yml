@@ -26,7 +26,9 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
-          - os: ubuntu-24.04
+          # The oldest Ubuntu LTS still in standard support: Linux binaries need
+          # at least the glibc they were built with.
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
           - os: macos-latest
@@ -88,7 +90,8 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends dpkg-dev desktop-file-utils
+          sudo apt-get install -y --no-install-recommends dpkg-dev desktop-file-utils \
+            patchelf libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 libxcursor1 libxi6
           desktop-file-validate packaging/linux/constructcad.desktop
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL"
           curl -fsSL -o "$RUNNER_TEMP/runtime-x86_64" "$APPIMAGE_RUNTIME_URL"

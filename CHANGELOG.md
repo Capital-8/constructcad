@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Linux: the AppImage starts on systems without the X11 keyboard and cursor libraries (it bundles libxkbcommon, libxkbcommon-x11, libXcursor, libXi and the libraries they need), and the Linux builds run on older distributions (built on Ubuntu 22.04, glibc 2.35, instead of 24.04).
+
 ## [0.4.0] - 2026-10-24
 
 ### Added
