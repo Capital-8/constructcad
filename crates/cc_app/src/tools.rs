@@ -311,6 +311,12 @@ pub enum Drag {
         at_start: bool,
         fixed: DVec2,
     },
+    /// The curvature handle of an arc wall from `a` to `b`: the arc passes through the cursor.
+    Bend {
+        id: ElementId,
+        a: DVec2,
+        b: DVec2,
+    },
     Move {
         start: DVec2,
         ids: Vec<ElementId>,
@@ -1839,29 +1845,46 @@ fn wall_tool(
     draw_snap(painter, xf, s);
 
     let half = state.project().element_type(type_id).map_or(0.075, |t| t.thickness() * 0.5);
-    // Arc mode: after the start and the end, the third point is on the arc.
+    // Arc mode: after the start and the end, the third point is on the arc,
+    // or a typed radius gives the arc on the cursor's side.
     let arc_end = state.interaction.points.first().copied().filter(|_| state.wall_arc);
     if let (Some(a), Some(b)) = (anchor, arc_end) {
-        let bulge = cc_core::arc::Arc::bulge_through(a, p, b);
+        let radius = state.typed.length_value();
+        let bulge = match radius {
+            Some(r) => bulge_with_radius(a, b, p, r),
+            None => cc_core::arc::Arc::bulge_through(a, p, b),
+        };
         match bulge {
             Some(bulge) => arc_preview(painter, xf, a, b, bulge, half),
             None => paint_wall_preview(painter, xf, a, b, half),
         }
-        if let Some(arc) = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge)) {
-            let text = format!("R {}  {}", format::length(arc.radius), format::length(arc.length()));
+        let unit = format::current().0.length.unit.symbol();
+        let arc = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge));
+        let text = match (radius, arc) {
+            (Some(_), Some(arc)) => {
+                format!("R {} {unit} \u{23ce}  {}", state.typed.length, format::length(arc.length()))
+            }
+            (Some(_), None) => format!("R {} {unit}  {}", state.typed.length, t!("msg-arc-radius-short")),
+            (None, Some(arc)) => format!("R {}  {}", format::length(arc.radius), format::length(arc.length())),
+            (None, None) => String::new(),
+        };
+        if !text.is_empty() {
             label(painter, xf.to_screen(p), text);
         }
-        if resp.clicked() {
+        let enter = ui.input(|i| i.key_pressed(Key::Enter)) && radius.is_some();
+        if resp.clicked() || enter {
             match bulge {
                 Some(bulge) => {
                     create_wall(state, level, type_id, a, b, bulge);
                     state.interaction.anchor = Some(b);
                     state.interaction.points.clear();
+                    state.typed.clear();
                     // The next wall starts along the arc's tangent at its end.
                     if let Some(arc) = cc_core::arc::Arc::from_bulge(a, b, bulge) {
                         state.interaction.prev_dir = Some(-arc.tangent(arc.length()));
                     }
                 }
+                None if radius.is_some() => state.message = t!("msg-arc-radius-short"),
                 None => state.message = t!("msg-arc-collinear"),
             }
         }
@@ -1899,6 +1922,21 @@ fn wall_tool(
             _ => {}
         }
     }
+}
+
+/// The arc of `radius` from `a` to `b` on the side of `p`: of the shorter and
+/// the longer arc, the one whose middle is nearer `p`.
+fn bulge_with_radius(a: DVec2, b: DVec2, p: DVec2, radius: f64) -> Option<f64> {
+    use cc_core::arc::Arc;
+    // A counter-clockwise arc bulges to the right of a → b.
+    let ccw = (b - a).perp_dot(p - a) < 0.0;
+    let gap = |bulge: &f64| {
+        Arc::from_bulge(a, b, *bulge).map_or(f64::INFINITY, |arc| arc.point(arc.length() * 0.5).distance(p))
+    };
+    [false, true]
+        .into_iter()
+        .filter_map(|major| Arc::bulge_radius(a, b, radius, ccw, major))
+        .min_by(|x, y| gap(x).total_cmp(&gap(y)))
 }
 
 /// Create a wall from `a` to `b` (an arc when `bulge` is not 0) with the tool options.
@@ -2234,14 +2272,40 @@ fn select(
     } else {
         Vec::new()
     };
+    // Curvature handles of selected arc walls, at the middle of the arc.
+    let bends: Vec<(ElementId, DVec2, DVec2, cc_core::arc::Arc)> = if movable && state.interaction.drag.is_none() {
+        state
+            .selection
+            .iter()
+            .take(50)
+            .filter(|id| !state.project().is_pinned(**id))
+            .filter_map(|id| {
+                let w = state.project().element(*id)?.as_wall()?;
+                Some((*id, w.start, w.end, w.arc()?))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let grip_at = |p: Pos2| grips.iter().find(|g| xf.to_screen(g.2).distance(p) <= 7.0).copied();
+    let bend_at = |p: Pos2| {
+        bends.iter().find(|(.., arc)| xf.to_screen(arc.point(arc.length() * 0.5)).distance(p) <= 7.0).copied()
+    };
     for (_, _, at, _) in &grips {
         let r = egui::Rect::from_center_size(xf.to_screen(*at), egui::vec2(9.0, 9.0));
         painter.rect_filled(r, 1.5, Color32::WHITE);
         painter.rect_stroke(r, 1.5, Stroke::new(1.5, HIGHLIGHT), egui::StrokeKind::Middle);
     }
+    for (.., arc) in &bends {
+        let c = xf.to_screen(arc.point(arc.length() * 0.5));
+        painter.circle(c, 4.5, Color32::WHITE, Stroke::new(1.5, HIGHLIGHT));
+    }
     if let Some((_, _, at, other)) = resp.hover_pos().and_then(grip_at) {
         ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(other) - xf.to_screen(at)));
+    } else if let Some((.., arc)) = resp.hover_pos().and_then(bend_at) {
+        // The handle moves the arc's middle toward or away from its center.
+        let mid = arc.point(arc.length() * 0.5);
+        ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(mid) - xf.to_screen(arc.center)));
     }
 
     if resp.drag_started_by(egui::PointerButton::Primary) {
@@ -2249,6 +2313,10 @@ fn select(
         let w = xf.to_world(origin);
         if let Some((id, at_start, _, fixed)) = grip_at(origin) {
             state.interaction.drag = Some(Drag::Grip { id, at_start, fixed });
+            return;
+        }
+        if let Some((id, a, b, _)) = bend_at(origin) {
+            state.interaction.drag = Some(Drag::Bend { id, a, b });
             return;
         }
         match drawing.hit_test(w, tol) {
@@ -2296,6 +2364,36 @@ fn select(
         return;
     }
 
+    // Dragging an arc wall's curvature handle: the arc passes through the cursor
+    // and its ends stay.
+    if let (Some(Drag::Bend { id, a, b }), Some(raw)) = (state.interaction.drag.clone(), raw) {
+        let bulge = cc_core::arc::Arc::bulge_through(a, raw, b);
+        if let Some((bulge, arc)) = bulge.and_then(|bulge| Some((bulge, cc_core::arc::Arc::from_bulge(a, b, bulge)?))) {
+            let mid = arc.point(arc.length() * 0.5);
+            ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(mid) - xf.to_screen(arc.center)));
+            arc_preview(painter, xf, a, b, bulge, 0.0);
+            label(
+                painter,
+                xf.to_screen(raw),
+                format!("R {}  {}", format::length(arc.radius), format::length(arc.length())),
+            );
+        }
+        if resp.drag_stopped() {
+            state.interaction.drag = None;
+            match bulge {
+                Some(bulge) => {
+                    crate::engine_edit::element(state, id, None, |e| {
+                        if let ElementKind::Wall(w) = &mut e.kind {
+                            w.bulge = bulge;
+                        }
+                    });
+                }
+                None => state.message = t!("msg-arc-collinear"),
+            }
+        }
+        return;
+    }
+
     match (&state.interaction.drag, raw) {
         (Some(Drag::Move { start, ids, copy }), Some(raw)) => {
             let delta = delta_of(*start, raw);
@@ -2339,7 +2437,7 @@ fn select(
                 }
             }
             // Handled above while the pointer is over the view.
-            Some(Drag::Grip { .. }) => {}
+            Some(Drag::Grip { .. } | Drag::Bend { .. }) => {}
             Some(Drag::Box { start }) => {
                 let end = resp.interact_pointer_pos().or(resp.hover_pos()).unwrap_or(start);
                 let (a, b) = (xf.to_world(start), xf.to_world(end));
@@ -2468,6 +2566,27 @@ mod tests {
 
     /// 100 px per meter: the snap radius is 0.1 m.
     const SCALE: f64 = 100.0;
+
+    #[test]
+    fn typed_radius_takes_the_cursor_side() {
+        use cc_core::arc::Arc;
+        let (a, b) = (DVec2::ZERO, DVec2::new(4.0, 0.0));
+        let mid = |p: DVec2| {
+            let arc = Arc::from_bulge(a, b, bulge_with_radius(a, b, p, 4.0).unwrap()).unwrap();
+            assert!((arc.radius - 4.0).abs() < 1e-9);
+            (arc.point(arc.length() * 0.5), arc.sweep.abs().to_degrees())
+        };
+        // Near the chord: the shorter arc on the cursor's side (above, then below).
+        let (m, sweep) = mid(DVec2::new(2.0, 0.5));
+        assert!(m.y > 0.0 && (sweep - 60.0).abs() < 1e-9, "{m} {sweep}");
+        let (m, sweep) = mid(DVec2::new(2.0, -0.5));
+        assert!(m.y < 0.0 && (sweep - 60.0).abs() < 1e-9, "{m} {sweep}");
+        // Far out on that side: the longer arc.
+        let (m, sweep) = mid(DVec2::new(2.0, 7.0));
+        assert!(m.y > 7.0 && (sweep - 300.0).abs() < 1e-9, "{m} {sweep}");
+        // Too short a radius.
+        assert_eq!(bulge_with_radius(a, b, DVec2::new(2.0, 1.0), 1.0), None);
+    }
 
     #[test]
     fn typed_length_and_angle_place_the_segment_end() {

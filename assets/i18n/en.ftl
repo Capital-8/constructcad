@@ -270,7 +270,7 @@ hint-wall = Click the start and next points · type a length + Enter · Shift = 
 wall-mode-line = Line
 wall-mode-arc = Arc
 hint-wall-arc = Click the start and end of the arc, then a point on it · Esc ends
-hint-wall-arc-point = Click a point on the arc
+hint-wall-arc-point = Click a point on the arc, or type the radius and press Enter
 hint-hosted = Hover over a wall and click · Space flips the opening
 hint-sketch = Click the vertices · click the first point or press Enter to finish · Backspace removes the last one
 hint-roof-opening = Click the vertices of the opening (courtyard) inside the roof · click the first point or press Enter to finish
@@ -880,6 +880,7 @@ hint-offset = Hover a wall, beam or grid and click the side for the copy
 msg-degenerate = The result would have no length
 msg-curved-wall = Not possible with arc walls
 msg-arc-collinear = The three points are in line: pick a point off the line
+msg-arc-radius-short = The radius must be at least half the distance between the ends
 msg-parallel = The elements are parallel
 msg-pick-linear = Pick a wall, beam or grid
 opt-distance = Distance

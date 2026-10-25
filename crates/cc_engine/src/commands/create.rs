@@ -42,7 +42,7 @@ fn create(
 }
 
 /// Create a wall from `start` to `end` on a level: straight, or an arc
-/// through `mid` (or with a `bulge`). Its top is `height` above its base,
+/// through `mid` (or with a `bulge` or a `radius`). Its top is `height` above its base,
 /// or attached to `top_level` (plus `top_offset`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
@@ -58,6 +58,14 @@ pub struct WallCreate {
     /// to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given.
     #[serde(default)]
     pub bulge: Option<f64>,
+    /// Arc walls: the radius in meters, positive when the arc turns counter-clockwise from
+    /// `start` to `end`, negative clockwise; at least half the distance between the ends.
+    /// Ignored when `mid` or `bulge` is given.
+    #[serde(default)]
+    pub radius: Option<f64>,
+    /// With `radius`: take the longer of the two arcs (default: the shorter).
+    #[serde(default)]
+    pub major_arc: Option<bool>,
     /// Level id or name (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
@@ -107,7 +115,16 @@ impl Command for WallCreate {
                 }
                 b
             }
-            (None, None) => 0.0,
+            (None, None) => match self.radius {
+                Some(r) => {
+                    let r = finite(r, "radius")?;
+                    let major = self.major_arc.unwrap_or(false);
+                    cc_core::arc::Arc::bulge_radius(start, end, r.abs(), r > 0.0, major).ok_or_else(|| {
+                        EngineError::invalid("the radius must be at least half the distance between the ends")
+                    })?
+                }
+                None => 0.0,
+            },
         };
         let wall = Wall {
             start,

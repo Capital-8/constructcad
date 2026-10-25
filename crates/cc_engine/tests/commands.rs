@@ -1379,6 +1379,18 @@ fn arc_walls_through_commands() {
     assert!((straight["derived"]["length"].as_f64().unwrap() - 4.0).abs() < 1e-9, "{straight}");
     assert!(straight["derived"]["radius"].is_null());
 
+    // A radius: the shorter arc (or the longer), its sign the turn.
+    let r = run(&mut s, "wall_create", json!({"start": [20.0, 0.0], "end": [24.0, 0.0], "radius": -2.0}));
+    assert!((r["derived"]["sweep"].as_f64().unwrap() + 180.0).abs() < 1e-9, "{r}");
+    let r = run(&mut s, "wall_create", json!({"start": [20.0, 5.0], "end": [24.0, 5.0], "radius": 4.0}));
+    assert!((r["derived"]["sweep"].as_f64().unwrap() - 60.0).abs() < 1e-9, "{r}");
+    assert!((r["derived"]["radius"].as_f64().unwrap() - 4.0).abs() < 1e-9, "{r}");
+    let major = json!({"start": [20.0, 10.0], "end": [24.0, 10.0], "radius": 4.0, "major_arc": true});
+    let r = run(&mut s, "wall_create", major);
+    assert!((r["derived"]["sweep"].as_f64().unwrap() - 300.0).abs() < 1e-9, "{r}");
+    let short = json!({"start": [20.0, 15.0], "end": [24.0, 15.0], "radius": 1.5});
+    assert_eq!(fails(&mut s, "wall_create", short), ErrorCode::InvalidArguments);
+
     // Bad arcs are refused: collinear points, a bulge out of range, an arc too tight for the wall.
     let bad = json!({"start": [0.0, 10.0], "end": [4.0, 10.0], "mid": [2.0, 10.0]});
     assert_eq!(fails(&mut s, "wall_create", bad), ErrorCode::InvalidArguments);

@@ -84,6 +84,24 @@ impl Arc {
         (bulge.is_finite() && bulge.abs() >= MIN_BULGE && bulge.abs() <= MAX_BULGE).then_some(bulge)
     }
 
+    /// The arc of `radius` from `a` to `b`, as a bulge: the shorter arc, or the
+    /// longer one when `major`, turning counter-clockwise when `ccw`. `None` when
+    /// the radius is less than half the distance between the ends.
+    pub fn bulge_radius(a: DVec2, b: DVec2, radius: f64, ccw: bool, major: bool) -> Option<f64> {
+        let chord = a.distance(b);
+        if !(chord.is_finite() && radius.is_finite()) || chord < 1e-9 || radius <= 0.0 {
+            return None;
+        }
+        let ratio = chord / (2.0 * radius);
+        if ratio > 1.0 + 1e-9 {
+            return None;
+        }
+        let minor = 2.0 * ratio.min(1.0).asin();
+        let sweep = if major { TAU - minor } else { minor };
+        let bulge = (sweep / 4.0).tan() * if ccw { 1.0 } else { -1.0 };
+        (bulge.is_finite() && bulge.abs() >= MIN_BULGE && bulge.abs() <= MAX_BULGE).then_some(bulge)
+    }
+
     /// Turning direction: 1 counter-clockwise, -1 clockwise.
     pub fn sign(&self) -> f64 {
         if self.sweep >= 0.0 { 1.0 } else { -1.0 }
@@ -196,6 +214,28 @@ mod tests {
         assert!(Arc::bulge_through(p, DVec2::new(2.0, 0.0), q).is_none());
         // A point below the chord makes the arc turn left (counter-clockwise).
         assert!(Arc::bulge_through(p, DVec2::new(2.0, -1.0), q).unwrap() > 0.0);
+    }
+
+    #[test]
+    fn arc_from_radius() {
+        let (a, b) = (DVec2::ZERO, DVec2::new(2.0, 0.0));
+        // Radius 1 over a chord of 2: a half circle, counter-clockwise below the chord.
+        let half = Arc::bulge_radius(a, b, 1.0, true, false).unwrap();
+        assert!((half - 1.0).abs() < 1e-9);
+        let arc = Arc::from_bulge(a, b, half).unwrap();
+        assert!(close(arc.point(arc.length() * 0.5), DVec2::new(1.0, -1.0)));
+        // The shorter and the longer arc of radius 2 share the circle; clockwise flips the sign.
+        let minor = Arc::bulge_radius(a, b, 2.0, false, false).unwrap();
+        let major = Arc::bulge_radius(a, b, 2.0, false, true).unwrap();
+        for bulge in [minor, major] {
+            let arc = Arc::from_bulge(a, b, bulge).unwrap();
+            assert!((arc.radius - 2.0).abs() < 1e-9, "{arc:?}");
+            assert!(arc.sweep < 0.0);
+        }
+        assert!(minor.abs() < 1.0 && major.abs() > 1.0);
+        // Too short a radius.
+        assert_eq!(Arc::bulge_radius(a, b, 0.9, true, false), None);
+        assert_eq!(Arc::bulge_radius(a, b, f64::NAN, true, false), None);
     }
 
     #[test]

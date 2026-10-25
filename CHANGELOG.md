@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Arc walls: a selected arc wall shows a round handle at the middle of its arc; drag it to change the curvature (the arc passes through the cursor, its ends stay). While drawing an arc wall, after the start and the end, type a radius and press Enter: the arc takes the cursor's side, the shorter or the longer one, whichever middle is nearer the cursor. `wall_create` takes `radius` (signed by the turn) and `major_arc`.
+
 ### Fixed
 
 - *Download* in the update notice and the repository link in *About* did nothing: the app was built without opening links in the browser.
