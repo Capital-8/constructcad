@@ -283,7 +283,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
 
     let st = state.view2d.entry(view_id).or_default();
     if st.needs_fit(rect) {
-        match drawing.bounds() {
+        match drawing.fit_bounds() {
             Some(b) if b.1.distance(b.0) > 0.5 => st.fit(b, rect),
             _ => {
                 st.center = DVec2::new(5.0, 4.0);

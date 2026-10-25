@@ -147,6 +147,9 @@ impl Prim {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Drawing2D {
     pub prims: Vec<Prim>,
+    /// Fit the view to the geometry of elements only (plans: the markers of
+    /// elevations and sections stand outside the model).
+    pub fit_elements: bool,
 }
 
 impl Drawing2D {
@@ -220,6 +223,23 @@ impl Drawing2D {
         });
         let first = it.next()?;
         Some(it.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p))))
+    }
+
+    /// The extents to fit the view to: [`bounds`](Self::bounds), or only the
+    /// elements' geometry with `fit_elements` (all of it when there is none).
+    pub fn fit_bounds(&self) -> Option<(DVec2, DVec2)> {
+        if !self.fit_elements {
+            return self.bounds();
+        }
+        let mut it = self.prims.iter().filter(|p| p.element().is_some()).flat_map(|p| match p {
+            Prim::Line { a, b, .. } => vec![*a, *b],
+            Prim::Fill { pts, .. } => pts.clone(),
+            Prim::Text { pos, .. } => vec![*pos],
+        });
+        match it.next() {
+            Some(first) => Some(it.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p)))),
+            None => self.bounds(),
+        }
     }
 
     /// Topmost element under `p` within `tol` (view units).

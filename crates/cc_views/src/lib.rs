@@ -172,6 +172,25 @@ mod tests {
         assert_eq!(table.rows[0].cells[3], Cell::Text(format::area(area)));
     }
 
+    /// Zoom to fit a plan frames the model, not the elevation markers around it
+    /// nor a section's far clip line.
+    #[test]
+    fn plans_fit_to_the_model() {
+        let (project, geom) = sample();
+        let plan = project.views.values().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap();
+        let d = generate(&project, &geom, plan).unwrap();
+        let (lo, hi) = d.bounds().unwrap();
+        let (flo, fhi) = d.fit_bounds().unwrap();
+        let (mlo, mhi) = geom.bounds().unwrap();
+        // The markers stand outside on every side; the fitted box holds the model.
+        assert!((flo - lo).min_element() > 0.5 && (hi - fhi).min_element() > 0.5, "{lo} {hi} / {flo} {fhi}");
+        assert!(flo.x <= mlo.x && flo.y <= mlo.y && fhi.x >= mhi.x && fhi.y >= mhi.y);
+        // Other views fit to everything drawn.
+        let elevation = project.views.values().find(|v| matches!(v.kind, ViewKind::Elevation { .. })).unwrap();
+        let d = generate(&project, &geom, elevation).unwrap();
+        assert_eq!(d.fit_bounds(), d.bounds());
+    }
+
     #[test]
     fn sheet_places_views_at_scale_and_exports() {
         let (project, geom) = sample();

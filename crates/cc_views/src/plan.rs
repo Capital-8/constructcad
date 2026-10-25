@@ -68,7 +68,8 @@ pub fn plan_of(
 ) -> Drawing2D {
     let shown = |e: &cc_core::Element| !structural || is_structural(e);
     let spacing = crate::cut::spacing(scale);
-    let mut d = Drawing2D::default();
+    // Zoom to fit leaves the elevation and section markers out.
+    let mut d = Drawing2D { fit_elements: true, ..Default::default() };
     let level_z = project.level_elevation(level);
     let cut_z = level_z + cut_height;
 
