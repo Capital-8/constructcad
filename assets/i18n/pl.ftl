@@ -236,7 +236,9 @@ action-export-ifc = Eksportuj IFC…
 action-import-ifc = Importuj IFC…
 action-export-pdf = Eksportuj PDF…
 action-export-svg = Eksportuj SVG…
+action-export-image = Eksportuj obraz…
 hint-export-sheet = Otwórz arkusz, aby go wyeksportować
+hint-export-image = Otwórz widok z rysunkiem, aby wyeksportować go jako obraz
 action-undo = Cofnij
 action-redo = Ponów
 action-copy = Kopiuj
@@ -535,6 +537,7 @@ file-filter = Projekt ConstructCAD
 file-filter-ifc = Plik IFC
 file-filter-pdf = Dokument PDF
 file-filter-svg = Obraz SVG
+file-filter-png = Obraz PNG
 
 # Nazwy domyślne
 default-section-name = Przekrój { $n }
@@ -943,6 +946,7 @@ cmd-desc-import-ifc = Otwórz plik IFC (IFC2X3 lub IFC4) jako nowy projekt.
 cmd-desc-export-ifc = Eksportuj model jako IFC4 dla innych aplikacji BIM.
 cmd-desc-export-pdf = Eksportuj otwarty arkusz jako wektorowy PDF.
 cmd-desc-export-svg = Eksportuj otwarty arkusz jako SVG.
+cmd-desc-export-image = Eksportuje otwarty widok (rzut, przekrój, 3D, arkusz…) jako obraz PNG.
 cmd-desc-about = Wersja, licencja i podziękowania.
 cmd-desc-check-updates = Sprawdza w GitHub, czy istnieje nowsza wersja ConstructCAD (tylko powiadomienie; nic nie jest pobierane).
 cmd-desc-undo = Cofnij ostatnią zmianę.

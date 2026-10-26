@@ -33,7 +33,7 @@ Os ícones têm dois tons: os traços na cor do texto e os preenchimentos suaves
 |---|---|---|
 | **+** verde | cria algo novo | nova planta de piso ou de forro, vista 3D, legenda, tabela, folha, novo componente |
 | seta azul para baixo | traz dados de um arquivo | Importar IFC, Carregar componente |
-| seta azul para cima | grava dados num arquivo | Exportar PDF, Exportar SVG |
+| seta azul para cima | grava dados num arquivo | Exportar PDF, Exportar SVG, Exportar imagem |
 | **−** vermelho | remove algo | Excluir |
 
 A ferramenta selecionada aparece realçada na cor de destaque. Comandos indisponíveis ficam acinzentados, inclusive o selo.
@@ -76,7 +76,7 @@ Escolher um comando do motor abre um formulário com sua descrição e seus argu
 
 **Executar** (ou Ctrl+Enter) roda o comando no projeto aberto e mostra o resultado ou a mensagem de erro. Uma alteração é um passo de desfazer e é gravada enquanto uma macro está gravando, como qualquer outra. **Voltar** (ou Esc) retorna à busca. Os argumentos são os mesmos dos scripts e da [referência de comandos](commands.md). Comprimentos estão em metros, ângulos em graus, pontos são `[x, y]`, e níveis, tipos, vistas e materiais podem ser indicados pelo id ou pelo nome.
 
-Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `ifc_export`, `sheet_export`…) não aparecem aqui. Os comandos da interface correspondentes, na aba *Arquivo* e na paleta, cuidam dos arquivos pelos diálogos de sempre.
+Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `ifc_export`, `sheet_export`, `view_export`…) não aparecem aqui. Os comandos da interface correspondentes, na aba *Arquivo* e na paleta, cuidam dos arquivos pelos diálogos de sempre.
 
 ## Teclado
 

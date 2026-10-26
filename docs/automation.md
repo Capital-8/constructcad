@@ -107,6 +107,7 @@ ccad -p house.ccad run elements_list category=door
 ccad -p house.ccad --save run view_set '{"view": "Section 1", "scale": 100}'
 ccad -p model.ifc --save-as model.ccad run project_info              # import an IFC file
 ccad -p house.ccad run sheet_export sheet=A101 path=a101.pdf
+ccad -p house.ccad run view_export view="Section 1" path=section.png dpi=300   # any view as PNG, SVG or PDF
 ```
 
 Results are printed as JSON on standard output. Errors go to standard error as JSON with exit code 1; usage errors exit with 2. Without `--save` or `--save-as` the project file is not changed.

@@ -105,6 +105,7 @@ registry![
         io::IfcImport,
         io::IfcExport,
         io::SheetExport,
+        io::ViewExport,
         io::ScheduleExportCsv,
         io::ComponentLoad,
         io::ComponentSave,

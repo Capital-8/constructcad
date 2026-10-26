@@ -219,6 +219,52 @@ fn a_house_through_commands() {
     let csv = scratch("walls.csv");
     run(&mut s, "schedule_export_csv", json!({"view": schedule["id"], "path": csv}));
     assert!(std::fs::read_to_string(&csv).unwrap().lines().count() >= 6);
+
+    // Any view as an image: a plan, the section, a 3D view, the sheet.
+    let png_size = |bytes: &[u8]| {
+        assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+        let be = |i: usize| u32::from_be_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
+        (be(16), be(20))
+    };
+    let views = run(&mut s, "views_list", json!({}));
+    let id_of = |kind: &str| views.as_array().unwrap().iter().find(|v| v["category"] == kind).unwrap()["id"].clone();
+    for (view, file) in
+        [(id_of("floor_plan"), "plan.png"), (section["id"].clone(), "section.png"), (id_of("three_d"), "3d.png")]
+    {
+        let out = scratch(file);
+        let r = run(&mut s, "view_export", json!({"view": view, "path": out, "dpi": 96}));
+        let (w, h) = png_size(&std::fs::read(&out).unwrap());
+        let paper = (r["paper_mm"][0].as_f64().unwrap(), r["paper_mm"][1].as_f64().unwrap());
+        assert_eq!((w as f64, h as f64), ((paper.0 / 25.4 * 96.0).round(), (paper.1 / 25.4 * 96.0).round()), "{file}");
+        assert!(w > 50 && h > 50, "{file}: {w} x {h}");
+    }
+    // A sheet keeps its paper: A-size sheets at 50 dpi.
+    let out = scratch("sheet.png");
+    let r = run(&mut s, "view_export", json!({"view": sheet["id"], "path": out, "dpi": 50}));
+    let (w, _) = png_size(&std::fs::read(&out).unwrap());
+    assert_eq!(w as f64, (r["paper_mm"][0].as_f64().unwrap() / 25.4 * 50.0).round());
+    // The same view as SVG; doubling the resolution doubles the pixels.
+    let svg = scratch("plan.svg");
+    run(&mut s, "view_export", json!({"view": id_of("floor_plan"), "path": svg}));
+    assert!(std::fs::read_to_string(&svg).unwrap().contains("<svg"));
+    let (a, b) = (scratch("lo.png"), scratch("hi.png"));
+    run(&mut s, "view_export", json!({"view": id_of("floor_plan"), "path": a, "dpi": 40}));
+    run(&mut s, "view_export", json!({"view": id_of("floor_plan"), "path": b, "dpi": 80}));
+    let (wa, wb) = (png_size(&std::fs::read(&a).unwrap()).0, png_size(&std::fs::read(&b).unwrap()).0);
+    assert!((wb as i64 - 2 * wa as i64).abs() <= 1, "{wa} {wb}");
+    // Schedules have no drawing; absurd resolutions and unknown formats are refused.
+    let bad = |file: &str, extra: Value| {
+        let mut args = json!({"view": id_of("floor_plan"), "path": scratch(file)});
+        args.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        args
+    };
+    assert_eq!(
+        fails(&mut s, "view_export", json!({"view": schedule["id"], "path": scratch("x.png")})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(fails(&mut s, "view_export", bad("x.png", json!({"dpi": 1e6}))), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "view_export", bad("x.png", json!({"dpi": 0}))), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "view_export", bad("x.bmp", json!({}))), ErrorCode::InvalidArguments);
 }
 
 #[test]

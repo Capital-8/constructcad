@@ -11,6 +11,10 @@ repository.workspace = true
 cc_core.workspace = true
 cc_geom.workspace = true
 glam.workspace = true
+# Raster export: the SVG with its text as Inter outlines (embedded), encoded as PNG.
+png.workspace = true
+resvg.workspace = true
+skrifa.workspace = true
 
 [lints]
 workspace = true

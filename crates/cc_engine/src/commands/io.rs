@@ -1,4 +1,4 @@
-//! Files: IFC import/export, sheet PDF/SVG, schedule CSV, component files.
+//! Files: IFC import/export, sheet PDF/SVG, view PNG/SVG/PDF, schedule CSV, component files.
 
 use super::edit;
 use crate::error::{EngineError, Result};
@@ -91,6 +91,77 @@ impl Command for SheetExport {
         };
         write(&self.path, &bytes)?;
         Ok(json!({ "path": self.path, "format": format }))
+    }
+}
+
+/// Export any view with a drawing (plan, elevation, section, 3D view as a
+/// hidden-line axonometric, legend, drafting view, diagram or sheet) as a
+/// PNG image, or as vector SVG or PDF (by `format`, else by the file
+/// extension). The view is drawn at its scale as printed, without temporary
+/// hiding, on a page that fits it; sheets keep their paper size.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewExport {
+    /// View id or name.
+    pub view: Ref,
+    /// Path of the file to write (.png, .svg or .pdf).
+    pub path: PathBuf,
+    /// `png`, `svg` or `pdf`.
+    #[serde(default)]
+    pub format: Option<String>,
+    /// Resolution of a PNG, in dots per inch (default 150).
+    #[serde(default)]
+    pub dpi: Option<f64>,
+}
+
+/// Margin around a view's drawing on its page, millimeters.
+const VIEW_MARGIN: f64 = 5.0;
+
+impl ViewExport {
+    /// The view drawn on paper (millimeters) and the paper size.
+    pub fn page(s: &mut Session, view: Ref) -> Result<(cc_views::Drawing2D, glam::DVec2)> {
+        let id = refs::view(s.project(), &view)?;
+        let kind = s.project().view(id).map(|v| (v.kind.clone(), v.scale));
+        match kind {
+            Some((ViewKind::Sheet { .. }, _)) => {
+                let sheet = s.sheet(id).ok_or_else(|| EngineError::invalid("the sheet cannot be composed"))?;
+                Ok((sheet.drawing.clone(), sheet.paper))
+            }
+            Some((_, scale)) => {
+                let drawing =
+                    s.printed_drawing(id).ok_or_else(|| EngineError::invalid("the view has no drawing to export"))?;
+                Ok(cc_views::export::view_on_paper(&drawing, scale, VIEW_MARGIN))
+            }
+            None => Err(EngineError::not_found("view")),
+        }
+    }
+}
+
+impl Command for ViewExport {
+    const NAME: &'static str = "view_export";
+    const KIND: CommandKind = CommandKind::File;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let ext = self.path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+        let format = self.format.map(|f| f.to_ascii_lowercase()).unwrap_or(ext);
+        let dpi = refs::finite(self.dpi.unwrap_or(150.0), "dpi")?;
+        let (drawing, paper) = Self::page(s, self.view)?;
+        let mut out = json!({ "path": self.path, "format": format, "paper_mm": [paper.x, paper.y] });
+        let bytes = match format.as_str() {
+            "png" => {
+                if dpi <= 0.0 {
+                    return Err(EngineError::invalid("dpi must be positive"));
+                }
+                let png = guard(|| cc_views::export::to_png(&drawing, paper, dpi))?.map_err(EngineError::invalid)?;
+                let px = (paper / 25.4 * dpi).round();
+                out["pixels"] = json!([px.x, px.y]);
+                png
+            }
+            "pdf" => guard(|| cc_views::export::to_pdf(&drawing, paper))?,
+            "svg" => guard(|| cc_views::export::to_svg(&drawing, paper))?.into_bytes(),
+            other => return Err(EngineError::invalid(format!("unknown format '{other}': use png, svg or pdf"))),
+        };
+        write(&self.path, &bytes)?;
+        Ok(out)
     }
 }
 

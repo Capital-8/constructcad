@@ -37,6 +37,8 @@ log = "0.4"
 sys-locale = "0.3.2"
 env_logger = "0.11"
 resvg = { version = "0.45.1", default-features = false }
+# Glyph outlines for raster export (cc_views), the version egui already uses.
+skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 # Update notice (cc_app): HTTPS with rustls, no other TLS stack.
 ureq = { version = "3.5.0", default-features = false, features = ["rustls"] }
 

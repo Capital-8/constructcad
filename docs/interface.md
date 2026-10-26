@@ -33,7 +33,7 @@ Icons are drawn in two tones: the strokes in the text color and the soft fills i
 |---|---|---|
 | green **+** | creates something new | new floor or ceiling plan, 3D view, legend, schedule, sheet, new component |
 | blue arrow down | brings data in from a file | Import IFC, Load component |
-| blue arrow up | writes data out to a file | Export PDF, Export SVG |
+| blue arrow up | writes data out to a file | Export PDF, Export SVG, Export Image |
 | red **−** | removes something | Delete |
 
 The selected tool is highlighted in the accent color. Unavailable commands are greyed out, badges included.
@@ -76,7 +76,7 @@ Choosing an engine command opens a form with its description and its arguments i
 
 **Run** (or Ctrl+Enter) executes the command in the open project and shows its result or error message. An edit is one undo step and is recorded while a macro is recording, like any other change. **Back** (or Esc) returns to the search. The arguments are the same as in scripts and in the [command reference](commands.md). Lengths are in meters, angles in degrees, points are `[x, y]`, and levels, types, views and materials can be named by id or by name.
 
-The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_export`, `sheet_export`…) are not offered here. Their interface commands in the *File* tab and the palette handle files through the usual dialogs.
+The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_export`, `sheet_export`, `view_export`…) are not offered here. Their interface commands in the *File* tab and the palette handle files through the usual dialogs.
 
 ## Keyboard
 

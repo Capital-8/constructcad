@@ -107,6 +107,7 @@ ccad -p casa.ccad run elements_list category=door
 ccad -p casa.ccad --save run view_set '{"view": "Corte 1", "scale": 100}'
 ccad -p modelo.ifc --save-as modelo.ccad run project_info          # importa um IFC
 ccad -p casa.ccad run sheet_export sheet=A101 path=a101.pdf
+ccad -p casa.ccad run view_export view="Corte 1" path=corte.png dpi=300     # qualquer vista em PNG, SVG ou PDF
 ```
 
 Os resultados saem como JSON na saída padrão. Erros vão para a saída de erro como JSON, com código de saída 1; erros de uso saem com 2. Sem `--save` ou `--save-as`, o arquivo do projeto não muda.

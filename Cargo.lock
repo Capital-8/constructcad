@@ -741,6 +741,9 @@ dependencies = [
  "cc_core",
  "cc_geom",
  "glam",
+ "png 0.18.1",
+ "resvg",
+ "skrifa",
 ]
 
 [[package]]

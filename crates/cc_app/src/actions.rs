@@ -351,6 +351,38 @@ pub fn export_sheet(state: &mut AppState, format: SheetFormat) {
     }
 }
 
+/// Resolution of exported images, dots per inch.
+pub const IMAGE_DPI: f64 = 150.0;
+
+/// The active view when it has a drawing to export as an image (any view
+/// but a schedule).
+pub fn image_view(state: &AppState) -> Option<ViewId> {
+    let id = state.active_view?;
+    let kind = &state.project().view(id)?.kind;
+    (!matches!(kind, ViewKind::Schedule { .. })).then_some(id)
+}
+
+/// Export the active view as a PNG image, as printed (no temporary hiding).
+pub fn export_image(state: &mut AppState) {
+    let Some(id) = image_view(state) else { return };
+    let Some(view) = state.project().view(id) else { return };
+    let name = match &view.kind {
+        ViewKind::Sheet { number, .. } => format!("{number} - {}.png", view.name),
+        _ => format!("{}.png", view.name),
+    };
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-png"), &["png"]).set_file_name(name);
+    let Some(mut path) = dialog.save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension("png");
+    }
+    let command =
+        io::ViewExport { view: Ref::Id(id.0), path: path.clone(), format: Some("png".into()), dpi: Some(IMAGE_DPI) };
+    match state.session.run(command) {
+        Ok(_) => state.message = t!("msg-exported", "path" => path.display()),
+        Err(e) => state.dialogs.error = Some(t!("msg-export-failed", "error" => e.message)),
+    }
+}
+
 // --- Macros ---
 
 fn macro_dialog() -> rfd::FileDialog {

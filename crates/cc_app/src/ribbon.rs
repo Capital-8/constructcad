@@ -553,10 +553,10 @@ fn command_buttons(ui: &mut Ui, state: &mut AppState, list: &[UiCommand]) {
 }
 
 fn file_tab(ui: &mut Ui, state: &mut AppState) {
-    use UiCommand::{CloseProject, ExportIfc, ExportPdf, ExportSvg, ImportIfc, New, Open, Save, SaveAs};
+    use UiCommand::{CloseProject, ExportIfc, ExportImage, ExportPdf, ExportSvg, ImportIfc, New, Open, Save, SaveAs};
     group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[New, Open, Save, SaveAs, CloseProject]));
     group(ui, t!("group-import"), |ui| command_button(ui, state, ImportIfc));
-    group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportPdf, ExportSvg]));
+    group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportPdf, ExportSvg, ExportImage]));
     group(ui, t!("group-settings"), |ui| {
         ui.allocate_ui_with_layout(vec2(170.0, BUTTON_HEIGHT), Layout::top_down(Align::Min), |ui| {
             ui.add_space(6.0);

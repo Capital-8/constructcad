@@ -42,6 +42,11 @@ fn xml_escape(s: &str) -> String {
 
 /// SVG document of `drawing` on a sheet of `paper` millimeters.
 pub fn to_svg(drawing: &Drawing2D, paper: DVec2) -> String {
+    svg(drawing, paper, None)
+}
+
+/// The SVG; with `font`, texts become filled outlines of its glyphs.
+fn svg(drawing: &Drawing2D, paper: DVec2, font: Option<&skrifa::FontRef>) -> String {
     let (w, h) = (paper.x, paper.y);
     let y = |v: f64| num(h - v);
     let mut s = String::new();
@@ -92,6 +97,13 @@ pub fn to_svg(drawing: &Drawing2D, paper: DVec2) -> String {
             }
             Prim::Text { pos, text, size, anchor, angle, .. } => {
                 if text.trim().is_empty() {
+                    continue;
+                }
+                if let Some(font) = font {
+                    let d = glyph_path(font, text, *pos, *size, *anchor, *angle, h);
+                    if !d.is_empty() {
+                        let _ = writeln!(s, r#"<path d="{d}" fill="rgb({g},{g},{g})" stroke="none"/>"#, g = TEXT_GRAY);
+                    }
                     continue;
                 }
                 let (base, frac) = anchor_offsets(*anchor);
@@ -309,6 +321,184 @@ impl std::fmt::Write for Utf8<'_> {
     }
 }
 
+/// The largest raster export, in pixels (about 20000 x 5000, or an A0
+/// sheet at 300 dpi).
+pub const MAX_PIXELS: u64 = 160_000_000;
+
+const INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+
+/// Writes glyph outlines as SVG path data, through `at` (glyph to page).
+struct GlyphPen<'a> {
+    d: &'a mut String,
+    at: &'a dyn Fn(f32, f32) -> DVec2,
+}
+
+impl GlyphPen<'_> {
+    fn point(&mut self, x: f32, y: f32) {
+        let p = (self.at)(x, y);
+        let _ = write!(self.d, "{} {} ", num(p.x), num(p.y));
+    }
+}
+
+impl skrifa::outline::OutlinePen for GlyphPen<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.d.push('M');
+        self.point(x, y);
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.d.push('L');
+        self.point(x, y);
+    }
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.d.push('Q');
+        self.point(cx0, cy0);
+        self.point(x, y);
+    }
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.d.push('C');
+        self.point(cx0, cy0);
+        self.point(cx1, cy1);
+        self.point(x, y);
+    }
+    fn close(&mut self) {
+        self.d.push('Z');
+    }
+}
+
+/// SVG path data of `text` set in `font` (no kerning), placed like the
+/// SVG writer's text: `size` millimeters high, anchored and rotated, on a
+/// page `page_h` high (SVG's y runs down).
+fn glyph_path(
+    font: &skrifa::FontRef,
+    text: &str,
+    pos: DVec2,
+    size: f64,
+    anchor: Anchor,
+    angle: f64,
+    page_h: f64,
+) -> String {
+    use skrifa::MetadataProvider;
+    use skrifa::instance::{LocationRef, Size};
+    use skrifa::outline::DrawSettings;
+    let em = Size::new(size as f32);
+    let location = LocationRef::default();
+    let charmap = font.charmap();
+    let metrics = font.glyph_metrics(em, location);
+    let outlines = font.outline_glyphs();
+    let glyphs: Vec<skrifa::GlyphId> =
+        text.chars().map(|c| charmap.map(c).unwrap_or(skrifa::GlyphId::NOTDEF)).collect();
+    let advance = |g: skrifa::GlyphId| metrics.advance_width(g).unwrap_or(0.0) as f64;
+    let width: f64 = glyphs.iter().map(|g| advance(*g)).sum();
+    let (base, frac) = anchor_offsets(anchor);
+    let along = DVec2::new(angle.cos(), angle.sin());
+    let up = along.perp();
+    let origin = pos - up * (base * size) - along * (frac * width);
+    let mut d = String::new();
+    let mut x = 0.0;
+    for g in glyphs {
+        if let Some(glyph) = outlines.get(g) {
+            let at = |gx: f32, gy: f32| {
+                let p = origin + along * (x + gx as f64) + up * gy as f64;
+                DVec2::new(p.x, page_h - p.y)
+            };
+            let mut pen = GlyphPen { d: &mut d, at: &at };
+            // A glyph that fails to draw is left out.
+            let _ = glyph.draw(DrawSettings::unhinted(em, location), &mut pen);
+        }
+        x += advance(g);
+    }
+    d
+}
+
+/// A view's drawing (meters, drawn at 1:`scale`; text sizes in paper
+/// millimeters) laid out on paper: the drawing in millimeters with `margin`
+/// around it, and the paper size.
+pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D, DVec2) {
+    let k = 1000.0 / scale.max(1) as f64;
+    let mut lo = DVec2::splat(f64::INFINITY);
+    let mut hi = DVec2::splat(f64::NEG_INFINITY);
+    let mut grow = |p: DVec2, r: DVec2| {
+        if p.is_finite() && r.is_finite() {
+            lo = lo.min(p - r);
+            hi = hi.max(p + r);
+        }
+    };
+    for prim in &drawing.prims {
+        match prim {
+            Prim::Line { a, b, .. } => {
+                grow(*a * k, DVec2::ZERO);
+                grow(*b * k, DVec2::ZERO);
+            }
+            Prim::Fill { pts, .. } => pts.iter().for_each(|p| grow(*p * k, DVec2::ZERO)),
+            // Text runs off its anchor: a generous box (any rotation).
+            Prim::Text { pos, text, size, .. } => {
+                let width = text.chars().count() as f64 * size * 0.6;
+                grow(*pos * k, DVec2::splat(width.max(*size)));
+            }
+        }
+    }
+    if !(lo.is_finite() && hi.is_finite()) {
+        (lo, hi) = (DVec2::ZERO, DVec2::splat(10.0));
+    }
+    let origin = lo - DVec2::splat(margin);
+    let map = |p: DVec2| p * k - origin;
+    let prims = drawing
+        .prims
+        .iter()
+        .map(|prim| match prim {
+            Prim::Line { a, b, style, element, pen } => {
+                Prim::Line { a: map(*a), b: map(*b), style: *style, element: *element, pen: *pen }
+            }
+            Prim::Fill { pts, color, element, cut } => {
+                Prim::Fill { pts: pts.iter().map(|p| map(*p)).collect(), color: *color, element: *element, cut: *cut }
+            }
+            Prim::Text { pos, text, size, anchor, angle, element } => Prim::Text {
+                pos: map(*pos),
+                text: text.clone(),
+                size: *size,
+                anchor: *anchor,
+                angle: *angle,
+                element: *element,
+            },
+        })
+        .collect();
+    (Drawing2D { prims, fit_elements: drawing.fit_elements }, hi - lo + DVec2::splat(2.0 * margin))
+}
+
+/// PNG image of `drawing` on a sheet of `paper` millimeters at `dpi` dots
+/// per inch, on white; text is drawn as outlines of Inter (embedded), so
+/// no system font is needed.
+pub fn to_png(drawing: &Drawing2D, paper: DVec2, dpi: f64) -> Result<Vec<u8>, String> {
+    use resvg::{tiny_skia, usvg};
+    if !(dpi.is_finite() && dpi > 0.0) {
+        return Err("the resolution must be positive".into());
+    }
+    let px = (paper / 25.4 * dpi).round();
+    if !(px.is_finite() && px.x >= 1.0 && px.y >= 1.0) || px.x * px.y > MAX_PIXELS as f64 {
+        return Err(format!("the image would be {} x {} pixels: lower the resolution", px.x, px.y));
+    }
+    let (w, h) = (px.x as u32, px.y as u32);
+    let font = skrifa::FontRef::new(INTER).map_err(|e| e.to_string())?;
+    let source = svg(drawing, paper, Some(&font));
+    let tree = usvg::Tree::from_str(&source, &usvg::Options::default()).map_err(|e| e.to_string())?;
+    let mut pixmap = tiny_skia::Pixmap::new(w, h).ok_or("the image is too large")?;
+    pixmap.fill(tiny_skia::Color::WHITE);
+    let size = tree.size();
+    let transform = tiny_skia::Transform::from_scale(w as f32 / size.width(), h as f32 / size.height());
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, w, h);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let per_meter = (dpi / 0.0254).round() as u32;
+    encoder.set_pixel_dims(Some(png::PixelDimensions { xppu: per_meter, yppu: per_meter, unit: png::Unit::Meter }));
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    // Opaque pixels: premultiplied and straight alpha are the same.
+    writer.write_image_data(pixmap.data()).map_err(|e| e.to_string())?;
+    writer.finish().map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,5 +563,25 @@ endstream",
         // Parentheses are escaped; the em dash is WinAnsi 0x97.
         assert!(pdf.windows(2).any(|w| w == b"\\("));
         assert!(pdf.contains(&0x97));
+    }
+
+    #[test]
+    fn png_draws_text_as_glyph_outlines() {
+        let mut d = Drawing2D::default();
+        d.text(DVec2::new(4.0, 4.0), "Sala 1", 5.0);
+        let font = skrifa::FontRef::new(INTER).unwrap();
+        let svg = svg(&d, DVec2::new(40.0, 12.0), Some(&font));
+        assert!(svg.contains("<path d=\"M") && !svg.contains("<text"), "{svg}");
+        // 40 x 12 mm at 254 dpi: 400 x 120 pixels.
+        let png = to_png(&d, DVec2::new(40.0, 12.0), 254.0).unwrap();
+        assert!(png.starts_with(b"\x89PNG"));
+        let be = |i: usize| u32::from_be_bytes([png[i], png[i + 1], png[i + 2], png[i + 3]]);
+        assert_eq!((be(16), be(20)), (400, 120));
+        assert!(to_png(&d, DVec2::new(40.0, 12.0), 1e6).is_err(), "too many pixels");
+        // A view at 1:100 lands on paper in millimeters, with the margin.
+        let mut v = Drawing2D::default();
+        v.line(DVec2::ZERO, DVec2::new(10.0, 5.0), crate::LineStyle::Cut, None);
+        let (_, paper) = view_on_paper(&v, 100, 5.0);
+        assert!((paper - DVec2::new(110.0, 60.0)).length() < 1e-9, "{paper}");
     }
 }
