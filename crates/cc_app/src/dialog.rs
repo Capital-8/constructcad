@@ -221,6 +221,31 @@ impl Dialog {
     }
 }
 
+/// Two top-down columns side by side (a list and its details), with a divider
+/// as tall as the taller column; `column` draws column 0 (left) and 1 (right).
+/// `ui.separator()` in a row takes the available height instead, and in a
+/// modal that grows with the modal every frame until the dialog runs off the
+/// window.
+pub fn two_columns(ui: &mut Ui, widths: [f32; 2], mut column: impl FnMut(&mut Ui, usize)) {
+    let layout = egui::Layout::top_down(egui::Align::Min);
+    let height = ui.ctx().content_rect().height();
+    ui.horizontal_top(|ui| {
+        let mut side = |ui: &mut Ui, i: usize| {
+            ui.allocate_ui_with_layout(vec2(widths[i], height), layout, |ui| {
+                ui.set_width(widths[i]);
+                column(ui, i);
+            })
+            .response
+            .rect
+        };
+        let l = side(ui, 0);
+        let (divider, _) = ui.allocate_exact_size(vec2(9.0, 0.0), egui::Sense::hover());
+        let r = side(ui, 1);
+        let y = l.top().min(r.top())..=l.bottom().max(r.bottom());
+        ui.painter().vline(divider.center().x, y, Stroke::new(1.0, PALETTE.border));
+    });
+}
+
 /// Round colored badge with the alert glyph.
 fn alert_icon(ui: &mut Ui, kind: Kind) {
     let (rect, _) = ui.allocate_exact_size(vec2(32.0, 32.0), egui::Sense::hover());

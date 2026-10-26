@@ -788,9 +788,8 @@ fn filters_dialog(ctx: &Context, state: &mut AppState) {
     let response = Dialog::new("filters", t!("dlg-filters")).width(820.0).show(
         ctx,
         |ui| {
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(200.0);
+            crate::dialog::two_columns(ui, [200.0, 580.0], |ui, column| {
+                if column == 0 {
                     egui::ScrollArea::vertical().id_salt("filter-list").max_height(420.0).show(ui, |ui| {
                         let list: Vec<(FilterId, String)> =
                             state.project().filters.values().map(|f| (f.id, f.name.clone())).collect();
@@ -803,17 +802,14 @@ fn filters_dialog(ctx: &Context, state: &mut AppState) {
                             }
                         }
                     });
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    ui.set_width(580.0);
-                    match select.and_then(|id| state.project().filter(id).cloned()) {
-                        Some(f) => filter_form(ui, state, f),
-                        None => {
-                            ui.label(RichText::new(t!("vg-select-filter")).color(PALETTE.text_faint));
-                        }
+                    return;
+                }
+                match select.and_then(|id| state.project().filter(id).cloned()) {
+                    Some(f) => filter_form(ui, state, f),
+                    None => {
+                        ui.label(RichText::new(t!("vg-select-filter")).color(PALETTE.text_faint));
                     }
-                });
+                }
             });
         },
         |f| {
@@ -974,9 +970,8 @@ fn templates_dialog(ctx: &Context, state: &mut AppState) {
     let response = Dialog::new("view-templates", t!("dlg-view-templates")).width(800.0).show(
         ctx,
         |ui| {
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(200.0);
+            crate::dialog::two_columns(ui, [200.0, 520.0], |ui, column| {
+                if column == 0 {
                     let list: Vec<(TemplateId, String)> =
                         state.project().templates.values().map(|t| (t.id, t.name.clone())).collect();
                     if list.is_empty() {
@@ -987,18 +982,13 @@ fn templates_dialog(ctx: &Context, state: &mut AppState) {
                             select = Some(id);
                         }
                     }
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    ui.set_width(520.0);
-                    if let Some(t) = select.and_then(|id| state.project().template(id).cloned()) {
-                        if template_form(ui, state, t, active) {
-                            edit_graphics = select;
-                        }
-                    } else {
-                        ui.label(RichText::new(t!("vg-select-template")).color(PALETTE.text_faint));
+                } else if let Some(t) = select.and_then(|id| state.project().template(id).cloned()) {
+                    if template_form(ui, state, t, active) {
+                        edit_graphics = select;
                     }
-                });
+                } else {
+                    ui.label(RichText::new(t!("vg-select-template")).color(PALETTE.text_faint));
+                }
             });
         },
         |f| {

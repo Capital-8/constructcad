@@ -396,6 +396,54 @@ fn graphics_dialog_hides_categories_and_cancel_undoes() {
     assert!(harness.state().dialogs.graphics.is_none());
 }
 
+/// The filters and view templates dialogs fit a tall window: their header
+/// and buttons stay on screen (a divider once stretched them past it).
+#[test]
+fn list_dialogs_fit_a_tall_window() {
+    let size = egui::vec2(1600.0, 1400.0);
+    let (mut state, _) = graphics_state();
+    crate::graphics_dialog::open_filters(&mut state);
+    let mut filters =
+        themed_harness(state, size, egui::Theme::Light, |ui, state| crate::graphics_dialog::show(ui.ctx(), state));
+    let (mut state, plan) = graphics_state();
+    let create = cc_engine::commands::graphics::TemplateCreate {
+        name: "Working plan".into(),
+        view: Some(cc_engine::Ref::Id(plan.0)),
+    };
+    state.session.run(create).unwrap();
+    crate::graphics_dialog::open_templates(&mut state);
+    let mut templates =
+        themed_harness(state, size, egui::Theme::Light, |ui, state| crate::graphics_dialog::show(ui.ctx(), state));
+    // Empty lists: nothing selected.
+    let mut state = sample_state();
+    crate::graphics_dialog::open_filters(&mut state);
+    let mut no_filters =
+        themed_harness(state, size, egui::Theme::Light, |ui, state| crate::graphics_dialog::show(ui.ctx(), state));
+    let mut state = sample_state();
+    crate::graphics_dialog::open_templates(&mut state);
+    let mut no_templates =
+        themed_harness(state, size, egui::Theme::Light, |ui, state| crate::graphics_dialog::show(ui.ctx(), state));
+    // The other dialogs with lists and tabs.
+    let (mut state, plan) = graphics_state();
+    crate::graphics_dialog::open(&mut state, crate::graphics_dialog::Target::View(plan));
+    let mut graphics =
+        themed_harness(state, size, egui::Theme::Light, |ui, state| crate::graphics_dialog::show(ui.ctx(), state));
+    let mut state = sample_state();
+    crate::phases_dialog::open(&mut state);
+    let mut phases =
+        themed_harness(state, size, egui::Theme::Light, |ui, state| crate::phases_dialog::show(ui.ctx(), state));
+    for harness in [&mut filters, &mut templates, &mut no_filters, &mut no_templates, &mut graphics, &mut phases] {
+        // The dialog once grew a little every frame, until it left the screen.
+        for _ in 0..40 {
+            harness.step();
+        }
+        let ok = harness.get_by_label(&t!("action-ok")).rect();
+        let close = harness.get_by_label(&t!("action-close")).rect();
+        assert!(close.top() > 0.0 && ok.bottom() < size.y, "{close:?} {ok:?}");
+        assert!(ok.bottom() - close.top() < 900.0, "the dialog grew to {}", ok.bottom() - close.top());
+    }
+}
+
 #[test]
 fn graphics_dialog_snapshots() {
     if !snapshots_requested() {

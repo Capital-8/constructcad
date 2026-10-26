@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The *Filters* and *View Templates* dialogs grew a little every frame until their header, list and buttons left the window, leaving a blank panel: the divider between the list and the details took the dialog's whole height. It now ends with the taller column.
 - Floors, roofs and ceilings created from walls follow the outer boundary of the level's walls: interior walls meeting the outer corners no longer lead them around an inner loop (an L-shaped house got its old rectangle), and walls hanging off the outline (garden walls) are left out. With separate buildings on a level, the largest is taken.
 - Zoom to fit in plans frames the model and its annotation, leaving out the elevation markers around it and the far clip lines of sections, so the building no longer looks small.
 - View filters: a rule on a field that none of the filter's categories has (`width` on walls) matched nothing without a word. `filter_create` and `filter_set` now refuse it, naming the categories the field applies to, and the filter editor only offers the fields of the checked categories. Door schedules can show the sill height.
