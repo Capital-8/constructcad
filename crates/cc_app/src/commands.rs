@@ -889,6 +889,7 @@ pub fn phase_view(state: &AppState) -> Option<cc_core::ViewId> {
                     | cc_core::ViewKind::CeilingPlan { .. }
                     | cc_core::ViewKind::Elevation { .. }
                     | cc_core::ViewKind::Section { .. }
+                    | cc_core::ViewKind::ThreeD { .. }
             )
         })
     })
@@ -1144,10 +1145,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         TempReset => actions::temporary(state, "reset"),
         TempPermanent => actions::temporary_permanent(state),
         Phases => crate::phases_dialog::open(state),
-        Demolish => {
-            state.set_tool(Tool::Demolish);
-            state.message = t!("hint-demolish");
-        }
+        Demolish => crate::phases_dialog::start_demolish(state),
         ProjectInfo => state.dialogs.project_info = true,
         Units => state.dialogs.units = true,
         Levels => state.dialogs.levels = true,

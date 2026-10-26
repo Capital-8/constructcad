@@ -433,7 +433,55 @@ pub fn element_rows(ui: &mut Ui, state: &mut AppState, el: &Element) {
 
 // ---------------------------------------------------------------- Demolish tool
 
-/// Click elements to demolish them in the active view's phase.
+/// The elements of `ids` standing in the view's phase (existing or new
+/// there), which the view can demolish.
+pub fn demolishable(state: &AppState, view: ViewId, ids: impl IntoIterator<Item = ElementId>) -> Vec<ElementId> {
+    let p = state.project();
+    let Some(phase) = p.view(view).and_then(|v| p.view_phase(v)) else { return Vec::new() };
+    ids.into_iter()
+        .filter(|id| {
+            p.element(*id).is_some_and(|e| {
+                matches!(p.phase_state(e, phase), cc_core::PhaseState::Status(PhaseStatus::Existing | PhaseStatus::New))
+            })
+        })
+        .collect()
+}
+
+/// Demolish `ids` in the view's phase; returns whether it was done.
+pub fn demolish(state: &mut AppState, view: ViewId, ids: &[ElementId]) -> bool {
+    if ids.is_empty() {
+        state.message = t!("hint-demolish");
+        return false;
+    }
+    let command =
+        cmd::ElementsDemolish { ids: ids.iter().map(|i| i.0).collect(), phase: None, view: Some(Ref::Id(view.0)) };
+    if crate::actions::run_command(state, command).is_none() {
+        return false;
+    }
+    let p = state.project();
+    let phase = p.view(view).and_then(|v| p.view_phase(v)).map(|ph| p.phase_name(ph)).unwrap_or_default();
+    state.message = t!("msg-demolished", "phase" => phase);
+    true
+}
+
+/// Starting the Demolish command: a selection standing in the active view's
+/// phase is demolished at once; otherwise the tool waits for clicks or a window.
+pub fn start_demolish(state: &mut AppState) {
+    if let Some(view) = crate::commands::phase_view(state) {
+        let ids = demolishable(state, view, state.selection.iter().copied());
+        if !ids.is_empty() {
+            if demolish(state, view, &ids) {
+                state.selection.clear();
+            }
+            return;
+        }
+    }
+    state.set_tool(crate::tools::Tool::Demolish);
+    state.message = t!("hint-demolish");
+}
+
+/// Click elements, or drag a window around them (left to right: inside it;
+/// right to left: touching it), to demolish them in the active view's phase.
 pub fn demolish_tool(
     resp: &egui::Response,
     painter: &egui::Painter,
@@ -442,22 +490,39 @@ pub fn demolish_tool(
     xf: &crate::paint::Xf,
     drawing: &cc_views::Drawing2D,
 ) {
-    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
-    let hovered: Option<ElementId> = drawing
-        .hit_test(raw, 6.0 / xf.scale)
-        .filter(|id| state.project().element(*id).is_some_and(|e| e.category().is_phased()));
-    let lit: std::collections::BTreeSet<ElementId> = hovered.into_iter().collect();
-    crate::modify::paint_ghost(painter, xf, drawing, &lit, &cc_core::PlanTransform::IDENTITY);
-    if !resp.clicked() {
+    use crate::tools::Drag;
+    if resp.drag_started_by(egui::PointerButton::Primary)
+        && let Some(start) = resp.interact_pointer_pos()
+    {
+        state.interaction.drag = Some(Drag::Box { start });
+    }
+    if let Some(Drag::Box { start }) = state.interaction.drag {
+        let end = resp.interact_pointer_pos().or(resp.hover_pos()).unwrap_or(start);
+        let (a, b) = (xf.to_world(start), xf.to_world(end));
+        let inside = end.x >= start.x;
+        let ids = demolishable(state, view.id, drawing.elements_in(a.min(b), a.max(b), inside));
+        let lit: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
+        crate::modify::paint_ghost(painter, xf, drawing, &lit, &cc_core::PlanTransform::IDENTITY);
+        let rect = egui::Rect::from_two_pos(start, end);
+        let color = PALETTE.danger;
+        painter.rect_filled(rect, 0.0, color.gamma_multiply(0.08));
+        if inside {
+            painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, color), egui::StrokeKind::Middle);
+        } else {
+            let c = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom(), rect.left_top()];
+            painter.extend(egui::Shape::dashed_line(&c, egui::Stroke::new(1.0, color), 5.0, 3.0));
+        }
+        if resp.drag_stopped() {
+            state.interaction.drag = None;
+            demolish(state, view.id, &ids);
+        }
         return;
     }
-    let Some(id) = hovered else {
-        state.message = t!("hint-demolish");
-        return;
-    };
-    let command = cmd::ElementsDemolish { ids: vec![id.0], phase: None, view: Some(Ref::Id(view.id.0)) };
-    if crate::actions::run_command(state, command).is_some() {
-        let phase = state.project().view_phase(view).map(|ph| state.project().phase_name(ph)).unwrap_or_default();
-        state.message = t!("msg-demolished", "phase" => phase);
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let hovered = drawing.hit_test(raw, 6.0 / xf.scale).and_then(|id| demolishable(state, view.id, [id]).pop());
+    let lit: std::collections::BTreeSet<ElementId> = hovered.into_iter().collect();
+    crate::modify::paint_ghost(painter, xf, drawing, &lit, &cc_core::PlanTransform::IDENTITY);
+    if resp.clicked() {
+        demolish(state, view.id, &lit.into_iter().collect::<Vec<_>>());
     }
 }

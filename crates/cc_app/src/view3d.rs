@@ -318,7 +318,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         v3.camera_dirty = true;
     }
 
-    // Picking.
+    // Picking (the Demolish tool takes the clicked element instead, once the view state is released).
+    let mut demolish_pick = None;
     if resp.clicked()
         && !zooming
         && let Some(pos) = resp.interact_pointer_pos()
@@ -335,7 +336,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
             }
             None => geom.pick(ray, &[]),
         };
+        let demolishing = state.tool == crate::tools::Tool::Demolish;
         match picked {
+            _ if demolishing => demolish_pick = Some(picked.map(|(id, _)| id)),
             Some((id, _)) if ctrl => {
                 if !state.selection.remove(&id) {
                     state.selection.insert(id);
@@ -422,6 +425,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
 
     let nav = v3.nav();
+    if let Some(picked) = demolish_pick {
+        let ids = crate::phases_dialog::demolishable(state, view_id, picked);
+        crate::phases_dialog::demolish(state, view_id, &ids);
+    }
     crate::canvas::temporary_frame(ui, state, rect, view_id);
     if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, view_id, None, nav) {
         crate::canvas::zoom(state, view_id, cmd, 1.0);

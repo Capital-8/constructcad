@@ -504,6 +504,38 @@ fn phases_dialog_adds_a_phase_and_cancel_undoes() {
     assert!(harness.state().dialogs.phases.is_none());
 }
 
+/// Demolish acts on a selection at once, also from a 3D view; with nothing
+/// demolishable selected it starts the tool.
+#[test]
+fn demolish_takes_the_selection_in_3d() {
+    let mut state = sample_state();
+    let view = state
+        .project()
+        .views
+        .values()
+        .find(|v| matches!(v.kind, cc_core::ViewKind::ThreeD { .. }))
+        .map(|v| v.id)
+        .unwrap();
+    state.active_view = Some(view);
+    assert!(crate::commands::phase_view(&state).is_some());
+    let walls: Vec<_> =
+        state.project().elements.values().filter(|e| e.category() == cc_core::Category::Wall).map(|e| e.id).collect();
+    assert!(!walls.is_empty());
+    let depth = state.session.doc.undo_depth();
+    state.selection = walls.iter().copied().collect();
+    crate::phases_dialog::start_demolish(&mut state);
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    assert!(walls.iter().all(|w| state.project().element(*w).unwrap().phase_demolished.is_some()));
+    assert!(state.selection.is_empty());
+    assert_eq!(state.tool, crate::tools::Tool::Select);
+    // Demolished walls are not demolishable again: the tool starts instead.
+    state.selection = walls.iter().copied().collect();
+    assert!(crate::phases_dialog::demolishable(&state, view, walls.iter().copied()).is_empty());
+    crate::phases_dialog::start_demolish(&mut state);
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    assert_eq!(state.tool, crate::tools::Tool::Demolish);
+}
+
 #[test]
 fn phases_dialog_ok_keeps_one_undo_step() {
     let mut state = sample_state();
