@@ -1530,3 +1530,59 @@ fn roofs_over_any_footprint() {
     let overlapping = json!({"boundary": outer, "holes": [[[2, 22], [5, 22], [5, 25], [2, 25]], [[4, 24], [7, 24], [7, 27], [4, 27]]]});
     assert_eq!(fails(&mut s, "roof_create", overlapping), ErrorCode::InvalidArguments);
 }
+
+/// A slope per edge: a hip roof with a gable end, a steeper eave; one
+/// opening removed at a time.
+#[test]
+fn roof_edge_slopes_and_openings() {
+    let mut s = Session::default();
+    let rect = json!([[0, 0], [10, 0], [10, 6], [0, 6]]);
+    let holes = json!([[[1, 1], [3, 1], [3, 3], [1, 3]], [[6, 2], [8, 2], [8, 4], [6, 4]]]);
+    let roof = run(&mut s, "roof_create", json!({"boundary": rect, "holes": holes, "offset": 3.0, "overhang": 0.0}));
+    let roof_id = id(&roof);
+    // Flat roofs have no edge slopes.
+    let edge = json!({"id": roof_id, "edge": 1, "slope": 0.0});
+    assert_eq!(fails(&mut s, "roof_edge_set", edge.clone()), ErrorCode::InvalidArguments);
+
+    // One opening goes, the other stays.
+    let roof = run(&mut s, "roof_opening_remove", json!({"id": roof_id, "index": 0}));
+    let left = roof["params"]["holes"].as_array().unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0][0], json!([6.0, 2.0]));
+    assert_eq!(fails(&mut s, "roof_opening_remove", json!({"id": roof_id, "index": 1})), ErrorCode::InvalidArguments);
+    run(&mut s, "roof_opening_remove", json!({"id": roof_id, "index": 0}));
+
+    // A hip roof at 50 %, then a gable at its east end: the peak stays at 1.5 m.
+    run(&mut s, "element_set", json!({"id": roof_id, "params": {"shape": {"Hip": {"slope": 0.5}}}}));
+    let roof = run(&mut s, "roof_edge_set", edge);
+    assert_eq!(roof["params"]["edge_slopes"], json!([null, 0.0]));
+    let top = |s: &mut Session| {
+        let b = run(s, "element_get", json!({"id": roof_id}));
+        b["derived"]["ridges"].as_array().unwrap().iter().flat_map(|r| r.as_array().unwrap().clone()).count()
+    };
+    assert!(top(&mut s) >= 3, "a ridge and two hips");
+    // A steeper south eave on a gable roof along X: the planes meet 2 m from it, 2 m up.
+    run(&mut s, "roof_edge_set", json!({"id": roof_id, "edge": 1, "slope": null}));
+    run(
+        &mut s,
+        "element_set",
+        json!({"id": roof_id, "params": {"shape": {"Gable": {"slope": 0.5, "ridge_deg": 0.0}}}}),
+    );
+    let roof = run(&mut s, "roof_edge_set", json!({"id": roof_id, "edge": 0, "slope": 1.0}));
+    assert_eq!(roof["params"]["edge_slopes"], json!([1.0]));
+    let ridges = roof["derived"]["ridges"].as_array().unwrap();
+    assert!(
+        ridges
+            .iter()
+            .any(|r| (r[0][1].as_f64().unwrap() - 2.0).abs() < 1e-9 && (r[1][1].as_f64().unwrap() - 2.0).abs() < 1e-9),
+        "{ridges:?}"
+    );
+    assert_eq!(
+        fails(&mut s, "roof_edge_set", json!({"id": roof_id, "edge": 4, "slope": 1.0})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(&mut s, "roof_edge_set", json!({"id": roof_id, "edge": 0, "slope": -1.0})),
+        ErrorCode::InvalidArguments
+    );
+}

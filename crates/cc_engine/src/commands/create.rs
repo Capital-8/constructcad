@@ -427,6 +427,82 @@ impl Command for RoofCreate {
     }
 }
 
+/// Set the slope of one edge of a gable or hip roof's outline (edge `i` runs
+/// from outline point `i` to the next): `0` makes it a gable end, a positive
+/// slope an eave rising at that slope, `null` returns it to the shape's own.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoofEdgeSet {
+    /// Roof id.
+    pub id: u64,
+    /// Edge index, from 0.
+    pub edge: usize,
+    /// Slope as rise over run (0.5 = 50 %), `0` for a gable end, or `null` for the roof's slope.
+    #[serde(default)]
+    pub slope: Option<f64>,
+}
+
+impl Command for RoofEdgeSet {
+    const NAME: &'static str = "roof_edge_set";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = refs::element(s.project(), self.id)?;
+        let slope = self.slope.map(|v| finite(v, "slope")).transpose()?;
+        if slope.is_some_and(|v| v < 0.0) {
+            return Err(EngineError::invalid("the slope cannot be negative"));
+        }
+        edit(s, t!("tx-modify"), |e| {
+            let Some(ElementKind::Roof(r)) = e.element_mut(id).map(|x| &mut x.kind) else {
+                return Err(EngineError::invalid("not a roof"));
+            };
+            if !matches!(r.shape, RoofShape::Gable { .. } | RoofShape::Hip { .. }) {
+                return Err(EngineError::invalid("only gable and hip roofs have edge slopes"));
+            }
+            if self.edge >= r.footprint.len() {
+                return Err(EngineError::invalid(format!("the roof has {} edges", r.footprint.len())));
+            }
+            if r.edge_slopes.len() <= self.edge {
+                r.edge_slopes.resize(self.edge + 1, None);
+            }
+            r.edge_slopes[self.edge] = slope;
+            while r.edge_slopes.last().is_some_and(Option::is_none) {
+                r.edge_slopes.pop();
+            }
+            Ok(())
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// Remove one opening of a roof (by its index in the roof's `holes`).
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoofOpeningRemove {
+    /// Roof id.
+    pub id: u64,
+    /// Opening index, from 0.
+    pub index: usize,
+}
+
+impl Command for RoofOpeningRemove {
+    const NAME: &'static str = "roof_opening_remove";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = refs::element(s.project(), self.id)?;
+        edit(s, t!("tx-modify"), |e| {
+            let Some(ElementKind::Roof(r)) = e.element_mut(id).map(|x| &mut x.kind) else {
+                return Err(EngineError::invalid("not a roof"));
+            };
+            if self.index >= r.holes.len() {
+                return Err(EngineError::invalid(format!("the roof has {} openings", r.holes.len())));
+            }
+            r.holes.remove(self.index);
+            Ok(())
+        })?;
+        Ok(created(s, id))
+    }
+}
+
 /// Create a room at a point enclosed by room-bounding walls (its boundary follows the walls).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]

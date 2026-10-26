@@ -478,6 +478,12 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             });
             section(ui, "construction", t!("section-construction"), |ui| roof_rows(ui, state, id, r));
+            if matches!(r.shape, RoofShape::Gable { .. } | RoofShape::Hip { .. }) {
+                section(ui, "roof-edges", t!("section-roof-edges"), |ui| roof_edge_rows(ui, state, id, r));
+            }
+            if !r.holes.is_empty() {
+                section(ui, "roof-openings", t!("prop-roof-openings"), |ui| roof_opening_rows(ui, state, id, r));
+            }
         }
     }
 
@@ -1289,6 +1295,84 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
             });
         }
         finish(state, &rs);
+    }
+}
+
+/// One row per opening, each with its area and a button that removes it.
+fn roof_opening_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof) {
+    let mut remove = None;
+    for (i, h) in r.holes.iter().enumerate() {
+        row(ui, &t!("prop-roof-opening", "n" => i + 1), |ui| {
+            ui.label(format::area(cc_geom::polygon::area(h)));
+            if ui.button(t!("action-remove")).clicked() {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(index) = remove {
+        crate::actions::run_command(state, cc_engine::commands::create::RoofOpeningRemove { id: id.0, index });
+    }
+}
+
+/// The slope of each outline edge of a gable or hip roof: the roof's own,
+/// a gable end, or a slope of its own.
+fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof) {
+    let (slope, ridge) = match r.shape {
+        RoofShape::Gable { slope, ridge_deg } => (slope, Some(glam::DVec2::from_angle(ridge_deg.to_radians()))),
+        RoofShape::Hip { slope } => (slope, None),
+        _ => return,
+    };
+    let effective = cc_geom::roofs::edge_slopes(&r.footprint, slope, ridge, &r.edge_slopes);
+    let n = r.footprint.len();
+    // 0: the roof's slope, 1: a gable end, 2: a slope of its own.
+    let labels = [t!("roof-edge-default"), t!("roof-edge-gable"), t!("roof-edge-custom")];
+    for i in 0..n {
+        let (a, b) = (r.footprint[i], r.footprint[(i + 1) % n]);
+        let own = r.edge_slope(i);
+        let current = match own {
+            None => 0,
+            Some(v) if v <= 0.0 => 1,
+            Some(_) => 2,
+        };
+        let mut choice = current;
+        let mut pct = effective.get(i).copied().unwrap_or(slope) * 100.0;
+        let label = t!("prop-roof-edge", "n" => i + 1, "length" => format::length(a.distance(b)));
+        let mut drag = None;
+        row(ui, &label, |ui| {
+            egui::ComboBox::from_id_salt(("roof-edge", id.0, i)).selected_text(labels[current].clone()).show_ui(
+                ui,
+                |ui| {
+                    for (k, l) in labels.iter().enumerate() {
+                        ui.selectable_value(&mut choice, k, l);
+                    }
+                },
+            );
+            if current == 2 {
+                drag = Some(ui.add(DragValue::new(&mut pct).speed(0.5).range(0.1..=200.0).suffix(" %")));
+            }
+        });
+        if choice != current {
+            let slope = match choice {
+                0 => None,
+                1 => Some(0.0),
+                _ => Some(if slope > 0.0 { slope } else { 0.4 }),
+            };
+            crate::actions::run_command(state, cc_engine::commands::create::RoofEdgeSet { id: id.0, edge: i, slope });
+        } else if let Some(d) = drag {
+            if d.changed() {
+                modify(state, id, &format!("edge-{i}"), |e| {
+                    if let ElementKind::Roof(r) = &mut e.kind {
+                        if r.edge_slopes.len() <= i {
+                            r.edge_slopes.resize(i + 1, None);
+                        }
+                        if let Some(s) = r.edge_slopes.get_mut(i) {
+                            *s = Some((pct / 100.0).max(0.001));
+                        }
+                    }
+                });
+            }
+            finish(state, &d);
+        }
     }
 }
 

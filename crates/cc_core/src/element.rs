@@ -405,12 +405,23 @@ pub struct Roof {
     /// footprint; pitched roofs slope down to their eaves too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holes: Vec<Vec<DVec2>>,
+    /// Slope of each footprint edge (edge `i` from point `i` to `i + 1`) that
+    /// differs from the shape's, for gable and hip roofs: `Some(0.0)` makes
+    /// the edge a gable end, `Some(s)` an eave rising at `s`; missing or
+    /// `None` entries follow the shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edge_slopes: Vec<Option<f64>>,
 }
 
 impl Roof {
     /// A roof over `footprint` with no openings.
     pub fn new(footprint: Vec<DVec2>, base_offset: f64, overhang: f64, shape: RoofShape) -> Self {
-        Self { footprint, base_offset, overhang, shape, holes: Vec::new() }
+        Self { footprint, base_offset, overhang, shape, holes: Vec::new(), edge_slopes: Vec::new() }
+    }
+
+    /// The slope set on footprint edge `i`, if any.
+    pub fn edge_slope(&self, i: usize) -> Option<f64> {
+        self.edge_slopes.get(i).copied().flatten()
     }
 
     /// Plan area: the footprint less its openings.

@@ -731,7 +731,8 @@ impl ModelGeometry {
                             let vertical_thk = thk * (1.0 + slope * slope).sqrt();
                             let mut loops = vec![fp.clone()];
                             loops.extend(holes.iter().cloned());
-                            let weights = crate::roofs::eave_weights(&loops, slope, ridge);
+                            let own = crate::roofs::ccw_edge_slopes(r);
+                            let weights = crate::roofs::eave_weights(&loops, slope, ridge, &own);
                             let sloped = weights.iter().flatten().any(|w| *w > 0.0);
                             match crate::skeleton::skeleton(&loops, &weights) {
                                 Ok(sk) if sloped => {
@@ -740,8 +741,9 @@ impl ModelGeometry {
                                 }
                                 // Should the skeleton fail, the lowest planes of the outline.
                                 Err(_) if sloped && holes.is_empty() => {
-                                    let eaves = crate::roofs::sloped_eaves(&fp, ridge);
-                                    crate::roofs::add_pitched_roof(&mut s, &fp, &eaves, slope, base, vertical_thk);
+                                    let slopes = crate::roofs::edge_slopes(&fp, slope, ridge, &own);
+                                    let eaves = crate::roofs::sloped_eaves(&fp, &slopes);
+                                    crate::roofs::add_pitched_roof(&mut s, &fp, &eaves, base, vertical_thk);
                                     let regions = crate::roofs::roof_regions(&fp, &eaves);
                                     self.roof_ridges.insert(e.id, crate::roofs::ridge_lines(&fp, &regions));
                                 }
