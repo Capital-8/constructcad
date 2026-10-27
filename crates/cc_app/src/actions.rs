@@ -142,9 +142,19 @@ pub fn open_default_3d(state: &mut AppState) {
 pub fn activate_category_tool(state: &mut AppState, category: Category) {
     match Tool::for_category(state.project(), category) {
         Some(tool) => {
+            // Doors and windows also go on walls clicked in a 3D view.
+            let in_3d = matches!(tool, Tool::Hosted { .. })
+                && state
+                    .active_view
+                    .and_then(|v| state.project().view(v))
+                    .is_some_and(|v| matches!(v.kind, cc_core::ViewKind::ThreeD { .. }));
             state.set_tool(tool);
             let in_plan = state.active_level().is_some();
-            state.message = if in_plan { String::new() } else { t!("msg-open-plan") };
+            state.message = match () {
+                _ if in_plan => String::new(),
+                _ if in_3d => t!("hint-hosted"),
+                _ => t!("msg-open-plan"),
+            };
         }
         None => state.message = t!("msg-no-type"),
     }

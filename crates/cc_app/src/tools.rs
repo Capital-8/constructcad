@@ -5,7 +5,8 @@ use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
 use cc_core::{
-    Category, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId, ViewKind,
+    Category, ColumnSection, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId,
+    ViewKind,
 };
 use cc_engine::Ref;
 use cc_engine::commands::{create, modify as modify_cmd, views};
@@ -399,7 +400,8 @@ pub(crate) fn snap_at(
     scale: f64,
     ortho: bool,
 ) -> Snap {
-    let s = snap(&state.session.doc.project, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho);
+    let (project, geom) = (&state.session.doc.project, state.session.geom());
+    let s = snap(project, geom, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho);
     if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint) {
         let tracked = &mut state.interaction.tracked;
         tracked.retain(|p| p.distance(s.point) > 1e-9);
@@ -424,6 +426,7 @@ fn round_step(scale: f64) -> f64 {
 #[allow(clippy::too_many_arguments)]
 fn snap(
     project: &Project,
+    geom: &ModelGeometry,
     level: Option<LevelId>,
     raw: DVec2,
     anchor: Option<DVec2>,
@@ -459,8 +462,37 @@ fn snap(
             ends.push(c.position);
         } else if let Some(s) = e.sketch() {
             ends.extend_from_slice(s);
+            lines.extend(closed_edges(s));
+        } else if let ElementKind::Railing(r) = &e.kind {
+            ends.extend_from_slice(&r.path);
+            lines.extend(r.path.windows(2).map(|w| (w[0], w[1])));
+        }
+        // Outlines as the plan draws them: corners are endpoints, edges lines.
+        let outlines: Vec<Vec<DVec2>> = match (&e.kind, project.element_type(e.type_id).map(|t| &t.data)) {
+            (ElementKind::Wall(_), _) => geom.walls.get(&e.id).filter(|w| w.arc.is_none()).map(|w| vec![w.footprint()]),
+            (
+                ElementKind::Column(c),
+                Some(cc_core::TypeData::Column {
+                    section: section @ (ColumnSection::Rectangular { .. } | ColumnSection::Profile { .. }),
+                    ..
+                }),
+            ) => Some(cc_geom::section::column_loops(*section, c.position, c.rotation_deg)),
+            (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| vec![g.outline().to_vec()]),
+            _ => None,
+        }
+        .unwrap_or_default();
+        for o in outlines {
+            ends.extend_from_slice(&o);
+            lines.extend(closed_edges(&o));
         }
     }
+    // Grid lines show on every level; their crossings are endpoints.
+    let grids = project.elements.values().filter_map(|e| match &e.kind {
+        ElementKind::Grid(g) if g.start.distance(g.end) > 1e-9 => Some((g.start, g.end)),
+        _ => None,
+    });
+    lines.extend(grids);
+    ends.extend(grid_crossings(project));
     // Risers of other floors passing through the level.
     if let Some(level) = level {
         let risers = project.segments_at(level).filter(|(e, _)| e.level != level);
@@ -574,6 +606,11 @@ fn on_lines(lines: &[(DVec2, DVec2)], raw: DVec2, r: f64) -> Option<DVec2> {
         .map(|(q, _)| q)
 }
 
+/// Edges of a closed outline.
+fn closed_edges(pts: &[DVec2]) -> impl Iterator<Item = (DVec2, DVec2)> + '_ {
+    let n = pts.len();
+    (0..if n > 2 { n } else { n.saturating_sub(1) }).filter_map(move |i| Some((*pts.get(i)?, *pts.get((i + 1) % n)?)))
+}
 pub(crate) fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
     let c = xf.to_screen(s.point);
     let stroke = Stroke::new(1.5, PREVIEW);
@@ -2031,12 +2068,10 @@ fn hosted_tool(
         return;
     };
     let g = &state.session.geom().walls[&host];
-    let margin = 0.01;
-    if g.length < width + 2.0 * margin {
+    let Some(offset) = opening_offset(g, width, u) else {
         label(painter, xf.to_screen(raw), t!("msg-wall-too-short"));
         return;
-    }
-    let offset = u.clamp(width * 0.5 + margin, g.length - width * 0.5 - margin);
+    };
     let flip_facing = v < 0.0;
     let (u0, u1) = (offset - width * 0.5, offset + width * 0.5);
     let rect = g.outline((u0, u1), (u0, u1));
@@ -2055,21 +2090,66 @@ fn hosted_tool(
     label(painter, xf.to_screen(raw), format!("{} {}", t!("label-offset"), format::meters(offset)));
 
     if resp.clicked() {
-        let args = create::HostedArgs {
-            wall: Some(host.0),
-            offset: Some(offset),
-            sill: Some(sill),
-            type_ref: Some(Ref::Id(type_id.0)),
-            flip_facing: Some(flip_facing),
-            flip_hand: Some(state.interaction.flip_hand),
-            point: None,
-        };
-        if category == Category::Door {
-            run_create(state, create::DoorCreate { args });
-        } else {
-            run_create(state, create::WindowCreate { args });
-        }
+        let flip_hand = state.interaction.flip_hand;
+        create_opening(state, category, type_id, host, offset, sill, flip_facing, flip_hand);
     }
+}
+
+/// Center of an opening `width` wide near `u` along wall `g`, kept inside
+/// the wall (`None` when the wall is too short).
+fn opening_offset(g: &cc_geom::WallGeom, width: f64, u: f64) -> Option<f64> {
+    let margin = 0.01;
+    (g.length >= width + 2.0 * margin).then(|| u.clamp(width * 0.5 + margin, g.length - width * 0.5 - margin))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_opening(
+    state: &mut AppState,
+    category: Category,
+    type_id: ElementTypeId,
+    host: ElementId,
+    offset: f64,
+    sill: f64,
+    flip_facing: bool,
+    flip_hand: bool,
+) {
+    let args = create::HostedArgs {
+        wall: Some(host.0),
+        offset: Some(offset),
+        sill: Some(sill),
+        type_ref: Some(Ref::Id(type_id.0)),
+        flip_facing: Some(flip_facing),
+        flip_hand: Some(flip_hand),
+        point: None,
+    };
+    if category == Category::Door {
+        run_create(state, create::DoorCreate { args });
+    } else {
+        run_create(state, create::WindowCreate { args });
+    }
+}
+
+/// A door or window tool clicked on `point` of wall `host` in a 3D view: the
+/// opening is centered there (at the type's sill), facing the side clicked.
+pub(crate) fn place_opening_3d(state: &mut AppState, tool: &Tool, host: ElementId, point: DVec2) {
+    let Tool::Hosted { category, type_id } = *tool else { return };
+    let project = &state.session.doc.project;
+    let (Some(ty), Some(g)) = (project.element_type(type_id), state.session.geom().walls.get(&host)) else {
+        state.message = t!("hint-hosted");
+        return;
+    };
+    let Some((width, _)) = ty.opening_size() else { return };
+    let sill = match ty.data {
+        cc_core::TypeData::Window { default_sill, .. } => default_sill,
+        _ => 0.0,
+    };
+    let (u, v) = g.local(point);
+    let Some(offset) = opening_offset(g, width, u) else {
+        state.message = t!("msg-wall-too-short");
+        return;
+    };
+    let flip_hand = state.interaction.flip_hand;
+    create_opening(state, category, type_id, host, offset, sill, v < 0.0, flip_hand);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2662,7 +2742,8 @@ mod tests {
         let (p, level) = empty();
         // Acquired points (0, 0) and (5, 3): their vertical and horizontal guides cross at (5, 0) and (0, 3).
         let tracked = [DVec2::new(0.0, 0.0), DVec2::new(5.0, 3.0)];
-        let s = snap(&p, Some(level), DVec2::new(5.04, 0.03), None, &[], &tracked, SCALE, false);
+        let s =
+            snap(&p, &ModelGeometry::default(), Some(level), DVec2::new(5.04, 0.03), None, &[], &tracked, SCALE, false);
         assert_eq!(s.kind, SnapKind::Intersection);
         assert!(s.point.distance(DVec2::new(5.0, 0.0)) < 1e-12, "{}", s.point);
         assert!(s.guides.iter().all(Option::is_some));
@@ -2676,7 +2757,17 @@ mod tests {
         let dir = DVec2::from_angle(30f64.to_radians());
         let target = anchor + dir * (4.0 / dir.x);
         let raw = target + dir.perp() * 0.02 + DVec2::new(0.03, 0.0);
-        let s = snap(&p, Some(level), raw, Some(anchor), &[], &[DVec2::new(4.0, 9.0)], SCALE, false);
+        let s = snap(
+            &p,
+            &ModelGeometry::default(),
+            Some(level),
+            raw,
+            Some(anchor),
+            &[],
+            &[DVec2::new(4.0, 9.0)],
+            SCALE,
+            false,
+        );
         assert_eq!(s.kind, SnapKind::Alignment);
         assert!(s.point.distance(target) < 1e-9, "{} vs {target}", s.point);
     }
@@ -2722,12 +2813,69 @@ mod tests {
     #[test]
     fn far_from_guides_the_pointer_is_free() {
         let (p, level) = empty();
-        let s = snap(&p, Some(level), DVec2::new(2.33, 1.71), None, &[], &[DVec2::new(5.0, 5.0)], SCALE, false);
+        let s = snap(
+            &p,
+            &ModelGeometry::default(),
+            Some(level),
+            DVec2::new(2.33, 1.71),
+            None,
+            &[],
+            &[DVec2::new(5.0, 5.0)],
+            SCALE,
+            false,
+        );
         assert_eq!(s.kind, SnapKind::Free);
         assert!(s.guides.iter().all(Option::is_none));
         // Endpoints still win over alignments.
-        let s =
-            snap(&p, Some(level), DVec2::new(5.01, 5.0), None, &[DVec2::new(5.0, 5.0)], &[DVec2::ZERO], SCALE, false);
+        let s = snap(
+            &p,
+            &ModelGeometry::default(),
+            Some(level),
+            DVec2::new(5.01, 5.0),
+            None,
+            &[DVec2::new(5.0, 5.0)],
+            &[DVec2::ZERO],
+            SCALE,
+            false,
+        );
         assert_eq!(s.kind, SnapKind::Endpoint);
+    }
+
+    /// Wall corners and faces are snap points, not only the wall's axis:
+    /// sketching a ceiling inside a room lands on the inner face.
+    #[test]
+    fn wall_faces_and_corners_snap() {
+        let p = crate::home::sample_project("casa_simples").unwrap();
+        let geom = ModelGeometry::build(&p);
+        let (id, w) = geom.walls.iter().find(|(_, w)| w.arc.is_none() && w.half > 0.05).unwrap();
+        let level = p.element(*id).unwrap().level;
+        let corner = w.footprint()[0];
+        let s = snap(&p, &geom, Some(level), corner + DVec2::splat(0.004), None, &[], &[], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Endpoint);
+        assert!(s.point.distance(corner) < 1e-9, "{} vs {corner}", s.point);
+        // Along the right face, just outside it.
+        let (u0, u1) = w.inner_range();
+        let face = w.world(u0 + (u1 - u0) * 0.3, -w.half);
+        let s = snap(&p, &geom, Some(level), face - w.normal * 0.01, None, &[], &[], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Nearest);
+        assert!(s.point.distance(face) < 1e-6, "{} vs {face}", s.point);
+    }
+
+    /// A window tool clicked on a wall in a 3D view places the window there.
+    #[test]
+    fn windows_are_placed_on_walls_picked_in_3d() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.session.geometry();
+        let window = state.project().default_type(Category::Window).unwrap();
+        let (wall, g) = state.session.geom().walls.iter().max_by(|a, b| a.1.length.total_cmp(&b.1.length)).unwrap();
+        let (wall, point) = (*wall, g.world(g.length * 0.5, -g.half));
+        let before = state.project().elements.len();
+        let tool = Tool::Hosted { category: Category::Window, type_id: window };
+        place_opening_3d(&mut state, &tool, wall, point);
+        assert_eq!(state.project().elements.len(), before + 1);
+        let new = state.selection.iter().next().copied().unwrap();
+        let e = state.project().element(new).unwrap();
+        assert_eq!(e.as_hosted().map(|h| h.host), Some(wall));
+        assert!(matches!(&e.kind, ElementKind::Window(h) if h.flip_facing));
     }
 }

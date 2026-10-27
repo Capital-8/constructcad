@@ -385,6 +385,28 @@ fn export_and_paste_elements() {
     assert_eq!(fails(&mut s, "elements_paste", json!({"elements": [{"bogus": true}]})), ErrorCode::InvalidArguments);
 }
 
+/// A window copied without its wall and pasted on another level goes into
+/// the wall there (it used to stay on the wall it was copied from).
+#[test]
+fn a_lone_window_pasted_on_another_level_takes_the_wall_there() {
+    let mut s = Session::default();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));
+    let upper = run(&mut s, "level_create", json!({"name": "Superior", "elevation": 3.0}));
+    let set = run(&mut s, "elements_export", json!({"ids": [wall["id"]]}));
+    let copy = run(&mut s, "elements_paste", json!({"elements": set["elements"], "level": upper["id"]}));
+    let upper_wall = copy["created"][0].clone();
+    let window = run(&mut s, "window_create", json!({"wall": wall["id"], "point": [2.0, 0.0]}));
+    let set = run(&mut s, "elements_export", json!({"ids": [window["id"]]}));
+    let pasted = run(&mut s, "elements_paste", json!({"elements": set["elements"], "level": upper["id"]}));
+    let new = &pasted["created"][0];
+    let got = run(&mut s, "element_get", json!({"id": new}));
+    assert_eq!(got["params"]["host"], upper_wall, "{got}");
+    assert_eq!(got["level"]["id"], upper["id"], "{got}");
+    // With no wall where it lands, nothing is pasted.
+    let empty = run(&mut s, "level_create", json!({"name": "Vazio", "elevation": 6.0}));
+    let none = run(&mut s, "elements_paste", json!({"elements": set["elements"], "level": empty["id"]}));
+    assert_eq!(none["created"], json!([]));
+}
 #[test]
 fn merged_edits_are_one_undo_step() {
     use cc_engine::commands::edit::ElementSet;

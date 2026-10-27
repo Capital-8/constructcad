@@ -253,6 +253,26 @@ impl crate::Project {
         out
     }
 
+    /// The wall on `level` whose body contains plan point `p`, with the
+    /// distance of `p` along it; `prefer` wins when it contains `p`.
+    pub fn wall_at(&self, level: crate::LevelId, p: DVec2, prefer: ElementId) -> Option<(ElementId, f64)> {
+        let walls = self.elements.values().filter(|e| e.level == level).filter_map(|e| e.as_wall().map(|w| (e, w)));
+        let mut best: Option<(ElementId, f64, f64)> = None;
+        for (e, w) in walls {
+            let (along, across) = w.project(p);
+            // The location line may sit on a face: allow a full thickness.
+            let reach = self.thickness_of(e).max(0.05) + 1e-6;
+            if !(0.0..=w.length()).contains(&along) || across.abs() > reach {
+                continue;
+            }
+            let score = if e.id == prefer { -1.0 } else { across.abs() };
+            if best.is_none_or(|b| score < b.2) {
+                best = Some((e.id, along, score));
+            }
+        }
+        best.map(|(id, along, _)| (id, along))
+    }
+
     /// Whether a copied element still fits this project: its type, level,
     /// view (dimensions) and wall (hosted elements, when not copied along)
     /// may have been deleted since it was copied.
@@ -349,10 +369,26 @@ impl crate::EditCtx<'_> {
                             }
                         }
                     }
-                    // The wall must still be there to host a lone copy.
-                    (None, Some((_, dir))) if self.project().element(h.host).is_some() => {
-                        if let Some(ch) = c.as_hosted_mut() {
-                            ch.offset += t.translation.dot(dir);
+                    // A lone copy goes into the wall where it lands on the
+                    // target level; on its own level it may also slide along its wall.
+                    (None, Some((_, dir))) => {
+                        let from = set.iter().find(|w| w.id == h.host).or_else(|| self.project().element(h.host));
+                        let landing = from.and_then(|w| w.as_wall()).map(|w| t.apply(w.point_at(h.offset)));
+                        let target = level.unwrap_or(el.level);
+                        let found = landing.and_then(|p| self.project().wall_at(target, p, h.host));
+                        match found {
+                            Some((wall, offset)) => {
+                                c.level = target;
+                                if let Some(ch) = c.as_hosted_mut() {
+                                    (ch.host, ch.offset) = (wall, offset);
+                                }
+                            }
+                            None if target == el.level && self.project().element(h.host).is_some() => {
+                                if let Some(ch) = c.as_hosted_mut() {
+                                    ch.offset += t.translation.dot(dir);
+                                }
+                            }
+                            None => continue,
                         }
                     }
                     _ => continue,

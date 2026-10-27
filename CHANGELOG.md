@@ -10,8 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Arc walls: a selected arc wall shows a round handle at the middle of its arc; drag it to change the curvature (the arc passes through the cursor, its ends stay). While drawing an arc wall, after the start and the end, type a radius and press Enter: the arc takes the cursor's side, the shorter or the longer one, whichever middle is nearer the cursor. `wall_create` takes `radius` (signed by the turn) and `major_arc`.
 
+- Doors and windows can be placed in a 3D view: with the Door or Window tool active, click a wall. The opening is centered where you clicked, at the type's sill, facing that side.
+
 ### Fixed
 
+- *Duplicate* in the Type Properties dialog kept the default "(copy)" name unless Enter was pressed: clicking *OK* or another field dropped the typed name. The name is now kept either way.
+- Snapping only knew wall axes, so clicks at the corner of a wall, as drawn, missed it (sketching a ceiling inside a room, moving an element). Wall faces and corners, column and stair outlines, sketch edges, railings, and grid lines and their crossings are now snap points in every tool.
+- A door or window copied without its wall and pasted on another level stayed on the wall it was copied from. It now goes into the wall where it lands on the target level, and is skipped when there is no wall there.
+- Elevations and sections of a project with nothing modelled yet showed no level lines. They now span the grids, or a few meters from the origin.
 - The *Filters* and *View Templates* dialogs grew a little every frame until their header, list and buttons left the window, leaving a blank panel: the divider between the list and the details took the dialog's whole height. It now ends with the taller column.
 - Floors, roofs and ceilings created from walls follow the outer boundary of the level's walls: interior walls meeting the outer corners no longer lead them around an inner loop (an L-shaped house got its old rectangle), and walls hanging off the outline (garden walls) are left out. With separate buildings on a level, the largest is taken.
 - Zoom to fit in plans frames the model and its annotation, leaving out the elevation markers around it and the far clip lines of sections, so the building no longer looks small.
