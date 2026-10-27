@@ -9,7 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Arc walls: a selected arc wall shows a round handle at the middle of its arc; drag it to change the curvature (the arc passes through the cursor, its ends stay). While drawing an arc wall, after the start and the end, type a radius and press Enter: the arc takes the cursor's side, the shorter or the longer one, whichever middle is nearer the cursor. `wall_create` takes `radius` (signed by the turn) and `major_arc`.
-
+- Traditional Chinese interface (繁體中文, `zh-TW`), contributed by @yoyomaimai. It is picked from the system language for `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant`.
+- Chinese, Japanese and Korean text shows in the interface and in PNG export through the system's CJK fonts (Microsoft JhengHei, PingFang, Noto Sans CJK…). They used to show as boxes. No font is bundled. PDF export still writes such text as `?`.
 - Doors and windows can be placed in a 3D view: with the Door or Window tool active, click a wall. The opening is centered where you clicked, at the type's sill, facing that side.
 
 ### Fixed

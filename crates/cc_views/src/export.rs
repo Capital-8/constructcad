@@ -42,11 +42,11 @@ fn xml_escape(s: &str) -> String {
 
 /// SVG document of `drawing` on a sheet of `paper` millimeters.
 pub fn to_svg(drawing: &Drawing2D, paper: DVec2) -> String {
-    svg(drawing, paper, None)
+    svg(drawing, paper, &[])
 }
 
-/// The SVG; with `font`, texts become filled outlines of its glyphs.
-fn svg(drawing: &Drawing2D, paper: DVec2, font: Option<&skrifa::FontRef>) -> String {
+/// The SVG; with `fonts`, texts become filled outlines of their glyphs.
+fn svg(drawing: &Drawing2D, paper: DVec2, fonts: &[skrifa::FontRef]) -> String {
     let (w, h) = (paper.x, paper.y);
     let y = |v: f64| num(h - v);
     let mut s = String::new();
@@ -99,8 +99,8 @@ fn svg(drawing: &Drawing2D, paper: DVec2, font: Option<&skrifa::FontRef>) -> Str
                 if text.trim().is_empty() {
                     continue;
                 }
-                if let Some(font) = font {
-                    let d = glyph_path(font, text, *pos, *size, *anchor, *angle, h);
+                if !fonts.is_empty() {
+                    let d = glyph_path(fonts, text, *pos, *size, *anchor, *angle, h);
                     if !d.is_empty() {
                         let _ = writeln!(s, r#"<path d="{d}" fill="rgb({g},{g},{g})" stroke="none"/>"#, g = TEXT_GRAY);
                     }
@@ -365,11 +365,12 @@ impl skrifa::outline::OutlinePen for GlyphPen<'_> {
     }
 }
 
-/// SVG path data of `text` set in `font` (no kerning), placed like the
-/// SVG writer's text: `size` millimeters high, anchored and rotated, on a
-/// page `page_h` high (SVG's y runs down).
+/// SVG path data of `text` set in `fonts` (each character from the first
+/// font that has it; no kerning), placed like the SVG writer's text: `size`
+/// millimeters high, anchored and rotated, on a page `page_h` high (SVG's
+/// y runs down).
 fn glyph_path(
-    font: &skrifa::FontRef,
+    fonts: &[skrifa::FontRef],
     text: &str,
     pos: DVec2,
     size: f64,
@@ -382,12 +383,12 @@ fn glyph_path(
     use skrifa::outline::DrawSettings;
     let em = Size::new(size as f32);
     let location = LocationRef::default();
-    let charmap = font.charmap();
-    let metrics = font.glyph_metrics(em, location);
-    let outlines = font.outline_glyphs();
-    let glyphs: Vec<skrifa::GlyphId> =
-        text.chars().map(|c| charmap.map(c).unwrap_or(skrifa::GlyphId::NOTDEF)).collect();
-    let advance = |g: skrifa::GlyphId| metrics.advance_width(g).unwrap_or(0.0) as f64;
+    let charmaps: Vec<_> = fonts.iter().map(|f| f.charmap()).collect();
+    let metrics: Vec<_> = fonts.iter().map(|f| f.glyph_metrics(em, location)).collect();
+    let outlines: Vec<_> = fonts.iter().map(|f| f.outline_glyphs()).collect();
+    let glyphs: Vec<(usize, skrifa::GlyphId)> = text.chars().map(|c| pick_glyph(&charmaps, c)).collect();
+    let advance =
+        |(f, g): (usize, skrifa::GlyphId)| metrics.get(f).and_then(|m| m.advance_width(g)).unwrap_or(0.0) as f64;
     let width: f64 = glyphs.iter().map(|g| advance(*g)).sum();
     let (base, frac) = anchor_offsets(anchor);
     let along = DVec2::new(angle.cos(), angle.sin());
@@ -395,8 +396,8 @@ fn glyph_path(
     let origin = pos - up * (base * size) - along * (frac * width);
     let mut d = String::new();
     let mut x = 0.0;
-    for g in glyphs {
-        if let Some(glyph) = outlines.get(g) {
+    for (f, g) in glyphs {
+        if let Some(glyph) = outlines.get(f).and_then(|o| o.get(g)) {
             let at = |gx: f32, gy: f32| {
                 let p = origin + along * (x + gx as f64) + up * gy as f64;
                 DVec2::new(p.x, page_h - p.y)
@@ -405,9 +406,15 @@ fn glyph_path(
             // A glyph that fails to draw is left out.
             let _ = glyph.draw(DrawSettings::unhinted(em, location), &mut pen);
         }
-        x += advance(g);
+        x += advance((f, g));
     }
     d
+}
+
+/// The font (index in `charmaps`) and glyph of `c`: the first font that
+/// has it, else the first font's missing-glyph box.
+fn pick_glyph(charmaps: &[skrifa::charmap::Charmap], c: char) -> (usize, skrifa::GlyphId) {
+    charmaps.iter().enumerate().find_map(|(i, m)| m.map(c).map(|g| (i, g))).unwrap_or((0, skrifa::GlyphId::NOTDEF))
 }
 
 /// A view's drawing (meters, drawn at 1:`scale`; text sizes in paper
@@ -432,7 +439,9 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
             Prim::Fill { pts, .. } => pts.iter().for_each(|p| grow(*p * k, DVec2::ZERO)),
             // Text runs off its anchor: a generous box (any rotation).
             Prim::Text { pos, text, size, .. } => {
-                let width = text.chars().count() as f64 * size * 0.6;
+                // Ideographs and other wide characters take a full em.
+                let ems: f64 = text.chars().map(|c| if c >= '\u{1100}' { 1.0 } else { 0.6 }).sum();
+                let width = ems * size;
                 grow(*pos * k, DVec2::splat(width.max(*size)));
             }
         }
@@ -466,8 +475,8 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
 }
 
 /// PNG image of `drawing` on a sheet of `paper` millimeters at `dpi` dots
-/// per inch, on white; text is drawn as outlines of Inter (embedded), so
-/// no system font is needed.
+/// per inch, on white; text is drawn as outlines of Inter (embedded), with
+/// the system's CJK fonts (`fonts::cjk`) for the characters Inter lacks.
 pub fn to_png(drawing: &Drawing2D, paper: DVec2, dpi: f64) -> Result<Vec<u8>, String> {
     use resvg::{tiny_skia, usvg};
     if !(dpi.is_finite() && dpi > 0.0) {
@@ -478,8 +487,9 @@ pub fn to_png(drawing: &Drawing2D, paper: DVec2, dpi: f64) -> Result<Vec<u8>, St
         return Err(format!("the image would be {} x {} pixels: lower the resolution", px.x, px.y));
     }
     let (w, h) = (px.x as u32, px.y as u32);
-    let font = skrifa::FontRef::new(INTER).map_err(|e| e.to_string())?;
-    let source = svg(drawing, paper, Some(&font));
+    let mut fonts = vec![skrifa::FontRef::new(INTER).map_err(|e| e.to_string())?];
+    fonts.extend(crate::fonts::cjk().iter().filter_map(|f| f.font_ref()));
+    let source = svg(drawing, paper, &fonts);
     let tree = usvg::Tree::from_str(&source, &usvg::Options::default()).map_err(|e| e.to_string())?;
     let mut pixmap = tiny_skia::Pixmap::new(w, h).ok_or("the image is too large")?;
     pixmap.fill(tiny_skia::Color::WHITE);
@@ -566,11 +576,29 @@ endstream",
     }
 
     #[test]
+    fn glyphs_come_from_the_first_font_that_has_them() {
+        use skrifa::MetadataProvider;
+        let inter = skrifa::FontRef::new(INTER).unwrap();
+        let maps = [inter.charmap()];
+        assert_eq!(pick_glyph(&maps, 'A').0, 0);
+        // A character no font has: the first font's box.
+        assert_eq!(pick_glyph(&maps, '\u{4E2D}'), (0, skrifa::GlyphId::NOTDEF));
+        // With the system's CJK font (when there is one), ideographs come from it.
+        if let Some(cjk) = crate::fonts::cjk().first().and_then(|f| f.font_ref()) {
+            let maps = [inter.charmap(), cjk.charmap()];
+            assert_eq!(pick_glyph(&maps, 'A').0, 0);
+            let (font, glyph) = pick_glyph(&maps, '\u{4E2D}');
+            assert_eq!(font, 1);
+            assert_ne!(glyph, skrifa::GlyphId::NOTDEF);
+        }
+    }
+
+    #[test]
     fn png_draws_text_as_glyph_outlines() {
         let mut d = Drawing2D::default();
         d.text(DVec2::new(4.0, 4.0), "Sala 1", 5.0);
         let font = skrifa::FontRef::new(INTER).unwrap();
-        let svg = svg(&d, DVec2::new(40.0, 12.0), Some(&font));
+        let svg = svg(&d, DVec2::new(40.0, 12.0), &[font]);
         assert!(svg.contains("<path d=\"M") && !svg.contains("<text"), "{svg}");
         // 40 x 12 mm at 254 dpi: 400 x 120 pixels.
         let png = to_png(&d, DVec2::new(40.0, 12.0), 254.0).unwrap();
