@@ -153,6 +153,48 @@ pub fn load(path: &Path) -> Result<ComponentFile, ComponentFileError> {
     from_ron(&std::fs::read_to_string(path)?)
 }
 
+/// Most component files a library scan reads.
+pub const MAX_LIBRARY_FILES: usize = 5000;
+/// Deepest subfolder a library scan enters.
+const MAX_LIBRARY_DEPTH: usize = 8;
+
+/// The component files (`.ccomp`) in `folders` and their subfolders, sorted
+/// by path: the ones that load, and the paths of those that do not, with
+/// why. Bounded in depth and number of files; links to folders are not followed.
+#[allow(clippy::type_complexity)]
+pub fn scan(
+    folders: &[std::path::PathBuf],
+) -> (Vec<(std::path::PathBuf, ComponentFile)>, Vec<(std::path::PathBuf, String)>) {
+    let mut paths = Vec::new();
+    let mut pending: Vec<(std::path::PathBuf, usize)> = folders.iter().map(|f| (f.clone(), 0)).collect();
+    while let Some((dir, depth)) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = entry.path();
+            if kind.is_dir() && depth < MAX_LIBRARY_DEPTH {
+                pending.push((path, depth + 1));
+            } else if kind.is_file()
+                && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ccomp"))
+                && paths.len() < MAX_LIBRARY_FILES
+            {
+                paths.push(path);
+            }
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    let mut loaded = Vec::new();
+    let mut failed = Vec::new();
+    for path in paths {
+        match load(&path) {
+            Ok(file) => loaded.push((path, file)),
+            Err(e) => failed.push((path, e.to_string())),
+        }
+    }
+    (loaded, failed)
+}
+
 /// Types to add to `project` for `file`: the component and type names are
 /// made unique and missing materials are listed. Ids are allocated from
 /// `alloc`, so callers can add them inside a transaction.

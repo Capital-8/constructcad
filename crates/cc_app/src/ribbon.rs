@@ -597,7 +597,11 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-circulation"), |ui| command_buttons(ui, state, &buttons(&[Stair, Railing])));
     group(ui, t!("group-room"), |ui| command_button(ui, state, place(Room)));
     group(ui, t!("group-model"), |ui| {
-        command_buttons(ui, state, &[place(Component), UiCommand::NewComponent, UiCommand::LoadComponent]);
+        command_buttons(
+            ui,
+            state,
+            &[place(Component), UiCommand::NewComponent, UiCommand::LoadComponent, UiCommand::ComponentLibrary],
+        );
     });
     group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Grid)));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));

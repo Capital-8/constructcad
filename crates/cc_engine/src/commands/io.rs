@@ -216,6 +216,52 @@ impl Command for ComponentLoad {
     }
 }
 
+/// List the component library: the component files (.ccomp) in `folders`
+/// and their subfolders, each with its component, kind, category (doors
+/// and windows have their own), types, parameters and connectors; `search`
+/// keeps those whose component, type names or descriptions contain it.
+/// Files that do not load are listed with the reason.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentLibraryList {
+    /// Folders to look in.
+    pub folders: Vec<PathBuf>,
+    /// Text to look for (any case).
+    #[serde(default)]
+    pub search: Option<String>,
+}
+
+impl Command for ComponentLibraryList {
+    const NAME: &'static str = "component_library_list";
+    const KIND: CommandKind = CommandKind::File;
+    fn run(self, _s: &mut Session) -> Result<Value> {
+        let (files, failed) = guard(|| cc_core::component_file::scan(&self.folders))?;
+        let search = self.search.as_deref().map(str::trim).filter(|q| !q.is_empty()).map(str::to_lowercase);
+        let components: Vec<Value> = files
+            .iter()
+            .filter(|(_, f)| {
+                search.as_ref().is_none_or(|q| {
+                    let has = |text: &str| text.to_lowercase().contains(q.as_str());
+                    has(&f.component) || f.types.iter().any(|t| has(&t.name) || has(&t.info.description))
+                })
+            })
+            .map(|(path, f)| {
+                json!({
+                    "path": path,
+                    "component": f.component,
+                    "kind": format!("{:?}", f.def.kind),
+                    "category": crate::commands::query::snake(&format!("{:?}", f.def.category())),
+                    "types": f.types.iter().map(|t| json!({"name": t.name, "description": t.info.description})).collect::<Vec<_>>(),
+                    "parameters": f.def.params.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+                    "connectors": f.def.connectors.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        let errors: Vec<Value> = failed.iter().map(|(path, e)| json!({"path": path, "error": e})).collect();
+        Ok(json!({ "components": components, "errors": errors }))
+    }
+}
+
 /// Save a component (all its types and the materials they use) to a .ccomp file.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

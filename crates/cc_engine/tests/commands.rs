@@ -1796,3 +1796,34 @@ fn doors_and_windows_are_components() {
     let doors = run(&mut other, "types_list", json!({"category": "door"}));
     assert!(doors.as_array().unwrap().iter().any(|t| t["name"] == "Porta dupla"), "{doors}");
 }
+
+/// The component library: component files in a folder and its subfolders,
+/// searched by name; broken files are reported, not fatal.
+#[test]
+fn component_library_lists_folders() {
+    let mut s = Session::default();
+    let dir = scratch("library");
+    let sub = dir.join("portas");
+    std::fs::create_dir_all(&sub).unwrap();
+    let names = |s: &mut Session, ids: &str| -> Vec<String> {
+        run(s, "types_list", json!({"category": ids}))
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| run(s, "type_get", json!({"type": t["id"]}))["params"]["component"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let furniture = names(&mut s, "component")[0].clone();
+    let door = names(&mut s, "door")[0].clone();
+    run(&mut s, "component_save", json!({"component": furniture, "path": dir.join("movel.ccomp")}));
+    run(&mut s, "component_save", json!({"component": door, "path": sub.join("porta.ccomp")}));
+    std::fs::write(dir.join("quebrado.ccomp"), "not a component").unwrap();
+
+    let all = run(&mut s, "component_library_list", json!({"folders": [dir]}));
+    let listed = all["components"].as_array().unwrap();
+    assert_eq!(listed.len(), 2, "{all}");
+    assert!(listed.iter().any(|c| c["component"] == door.as_str() && c["category"] == "door"), "{all}");
+    assert_eq!(all["errors"].as_array().unwrap().len(), 1);
+    let found = run(&mut s, "component_library_list", json!({"folders": [dir], "search": door.to_uppercase()}));
+    assert_eq!(found["components"].as_array().unwrap().len(), 1, "{found}");
+}

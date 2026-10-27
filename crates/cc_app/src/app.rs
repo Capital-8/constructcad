@@ -23,6 +23,8 @@ pub struct Args {
 const LANGUAGE_KEY: &str = "language";
 /// eframe storage key of the recent projects (one path per line).
 const RECENT_KEY: &str = "recent_files";
+/// eframe storage key of the component library folders (one path per line).
+const LIBRARY_KEY: &str = "component_library_folders";
 /// eframe storage key of the interface theme ("system", "light" or "dark").
 const THEME_KEY: &str = "theme";
 /// eframe storage key of the collapsed ribbon preference ("1" when collapsed).
@@ -52,6 +54,9 @@ impl ConstructApp {
         let mut state = AppState::new(Document::new(actions::new_project()));
         if let Some(recent) = cc.storage.and_then(|s| s.get_string(RECENT_KEY)) {
             state.recent = recent.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
+        }
+        if let Some(folders) = cc.storage.and_then(|s| s.get_string(LIBRARY_KEY)) {
+            state.library_folders = folders.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
         }
         state.ribbon_collapsed = cc.storage.and_then(|s| s.get_string(RIBBON_KEY)).is_some_and(|v| v == "1");
         let stored = |key| cc.storage.and_then(|s| s.get_string(key));
@@ -347,6 +352,9 @@ impl eframe::App for ConstructApp {
         storage.set_string(LANGUAGE_KEY, crate::i18n::language().code().to_string());
         let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         storage.set_string(RECENT_KEY, recent.join("\n"));
+        let folders: Vec<String> =
+            self.state.library_folders.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        storage.set_string(LIBRARY_KEY, folders.join("\n"));
         storage.set_string(RIBBON_KEY, if self.state.ribbon_collapsed { "1" } else { "0" }.to_string());
         storage.set_string(THEME_KEY, self.state.theme.code().to_string());
         let updates = &self.state.updates;

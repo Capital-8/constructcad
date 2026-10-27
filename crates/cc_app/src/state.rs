@@ -74,6 +74,8 @@ pub struct Dialogs {
     pub templates: Option<crate::graphics_dialog::TemplateManager>,
     /// Phases, phase filters and phase graphics.
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
+    /// The component library window.
+    pub library: Option<crate::library::Library>,
 }
 
 pub struct AppState {
@@ -135,6 +137,8 @@ pub struct AppState {
     pub project_open: bool,
     /// Recently opened or saved projects, most recent first.
     pub recent: Vec<std::path::PathBuf>,
+    /// Folders of the component library (saved with the preferences).
+    pub library_folders: Vec<std::path::PathBuf>,
     /// Update checks and the notice of a newer release.
     pub updates: crate::update::Updates,
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
@@ -192,6 +196,7 @@ impl AppState {
             show_home: false,
             project_open: true,
             recent: Vec::new(),
+            library_folders: Vec::new(),
             updates: Default::default(),
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),

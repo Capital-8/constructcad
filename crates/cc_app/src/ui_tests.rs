@@ -627,3 +627,37 @@ fn type_name_is_kept_when_another_field_is_clicked() {
     assert_eq!(harness.state().project().element_type(window).unwrap().name, "Janela alta");
     assert!(harness.state().dialogs.type_rename.is_none());
 }
+
+/// The component library lists a folder's component files and loads the
+/// one picked into the project.
+#[test]
+fn component_library_loads_a_component() {
+    let mut state = sample_state();
+    let dir = std::env::temp_dir().join(format!("ccad-library-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let door = state
+        .project()
+        .component_types()
+        .find(|t| t.category() == cc_core::Category::Door)
+        .and_then(|t| match &t.data {
+            cc_core::TypeData::Component { component, .. } => Some(component.clone()),
+            _ => None,
+        })
+        .unwrap();
+    let path = dir.join("porta.ccomp");
+    state.session.run(cc_engine::commands::io::ComponentSave { component: door.clone(), path: path.clone() }).unwrap();
+    state.library_folders = vec![dir];
+    crate::library::open(&mut state);
+    assert_eq!(state.dialogs.library.as_ref().unwrap().entries.len(), 1);
+    let before = state.project().types.len();
+    let mut harness = themed_harness(state, egui::vec2(1000.0, 760.0), egui::Theme::Light, |ui, state| {
+        crate::library::show(ui.ctx(), state)
+    });
+    harness.get_by_label_contains(&door).click();
+    harness.run();
+    harness.get_by_label(&t!("lib-load")).click();
+    harness.run();
+    assert!(harness.state().dialogs.library.is_none());
+    assert!(harness.state().project().types.len() > before, "the door's types joined the project");
+    assert!(matches!(harness.state().tool, crate::tools::Tool::Hosted { .. }), "doors are placed in walls");
+}

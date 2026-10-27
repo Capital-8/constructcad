@@ -18,6 +18,7 @@ mod graphics_dialog;
 mod home;
 mod i18n;
 mod icons;
+mod library;
 mod material_browser;
 mod modify;
 mod paint;

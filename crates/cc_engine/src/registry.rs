@@ -108,6 +108,7 @@ registry![
         io::ViewExport,
         io::ScheduleExportCsv,
         io::ComponentLoad,
+        io::ComponentLibraryList,
         io::ComponentSave,
     ],
     "Queries" => [

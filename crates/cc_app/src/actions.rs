@@ -281,7 +281,14 @@ pub fn load_component_path(state: &mut AppState, path: std::path::PathBuf) {
     match state.session.run(io::ComponentLoad { path }) {
         Ok(out) => {
             if let Some(first) = out["types"].get(0).and_then(serde_json::Value::as_u64) {
-                state.set_tool(crate::tools::Tool::Component { type_id: cc_core::ElementTypeId(first) });
+                // Doors and windows are placed in walls.
+                let type_id = cc_core::ElementTypeId(first);
+                state.set_tool(match state.project().element_type(type_id).map(|t| t.category()) {
+                    Some(category @ (cc_core::Category::Door | cc_core::Category::Window)) => {
+                        crate::tools::Tool::Hosted { category, type_id }
+                    }
+                    _ => crate::tools::Tool::Component { type_id },
+                });
             }
             let name = out["component"].as_str().unwrap_or_default().to_string();
             state.message = t!("msg-component-loaded", "name" => name);

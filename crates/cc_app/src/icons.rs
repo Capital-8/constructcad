@@ -123,11 +123,12 @@ pub enum Icon {
     Phases,
     Demolish,
     Image,
+    Library,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 112] = [
+    pub const ALL: [Icon; 113] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -240,6 +241,7 @@ impl Icon {
         Icon::Phases,
         Icon::Demolish,
         Icon::Image,
+        Icon::Library,
     ];
 
     /// The icon's SVG source.
@@ -357,6 +359,7 @@ impl Icon {
             Icon::Phases => include_str!("../../../assets/icons/ui/phases.svg"),
             Icon::Demolish => include_str!("../../../assets/icons/ui/demolish.svg"),
             Icon::Image => include_str!("../../../assets/icons/ui/image.svg"),
+            Icon::Library => include_str!("../../../assets/icons/ui/library.svg"),
         }
     }
 }

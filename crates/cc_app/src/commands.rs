@@ -33,6 +33,7 @@ pub enum UiCommand {
     Place(Category),
     NewComponent,
     LoadComponent,
+    ComponentLibrary,
     Select,
     SelectInstances,
     ColumnsAtGrids,
@@ -164,7 +165,7 @@ impl UiCommand {
             Default3D,
         ];
         all.extend(PLACED.map(Place));
-        all.extend([NewComponent, LoadComponent, Select, SelectInstances]);
+        all.extend([NewComponent, LoadComponent, ComponentLibrary, Select, SelectInstances]);
         all.extend([ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
@@ -257,6 +258,7 @@ impl UiCommand {
             Default3D | New3D => Icon::View3D,
             Place(category) => category_icon(category),
             NewComponent | LoadComponent => Icon::Component,
+            ComponentLibrary => Icon::Library,
             Select => Icon::Select,
             SelectInstances => Icon::SelectInstances,
             ColumnsAtGrids => Icon::ColumnsAtGrids,
@@ -376,6 +378,7 @@ impl UiCommand {
             Place(category) => place_label(category),
             NewComponent => t!("action-new-component"),
             LoadComponent => t!("action-load-component"),
+            ComponentLibrary => t!("action-component-library"),
             Select => t!("tool-select"),
             SelectInstances => t!("action-select-instances"),
             ColumnsAtGrids => t!("action-columns-at-grids"),
@@ -504,6 +507,7 @@ impl UiCommand {
             Place(category) => place_description(category),
             NewComponent => t!("cmd-desc-new-component"),
             LoadComponent => t!("cmd-desc-load-component"),
+            ComponentLibrary => t!("cmd-desc-component-library"),
             Select => t!("cmd-desc-select"),
             SelectInstances => t!("cmd-desc-select-instances"),
             ColumnsAtGrids => t!("cmd-desc-columns-at-grids"),
@@ -718,6 +722,7 @@ impl UiCommand {
             Place(_) => "component_place",
             NewComponent => "component_create",
             LoadComponent => "component_load",
+            ComponentLibrary => "component_library_list",
             Dimension(_) => "dimension_create",
             Text => "text_create",
             AddLeader => "text_add_leader",
@@ -1007,6 +1012,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
         }
         LoadComponent => actions::load_component(state),
+        ComponentLibrary => crate::library::open(state),
         Select => state.set_tool(Tool::Select),
         SelectInstances => crate::actions::select_instances(state),
         Group => crate::actions::group_selection(state),

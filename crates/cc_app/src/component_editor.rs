@@ -280,7 +280,7 @@ fn connectors(ui: &mut Ui, ed: &mut Editor) {
                 },
             );
             ui.add(egui::TextEdit::singleline(&mut c.diameter).desired_width(60.0).hint_text("Ø"));
-            if ui.small_button("✕").on_hover_text(t!("action-remove")).clicked() {
+            if ui.small_button("×").on_hover_text(t!("action-remove")).clicked() {
                 remove = Some(i);
             }
             ui.end_row();
