@@ -320,6 +320,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
 
     // Picking (the Demolish tool takes the clicked element instead, once the view state is released).
     let mut demolish_pick = None;
+    let mut opening_pick = None;
     if resp.clicked()
         && !zooming
         && let Some(pos) = resp.interact_pointer_pos()
@@ -337,8 +338,14 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
             None => geom.pick(ray, &[]),
         };
         let demolishing = state.tool == crate::tools::Tool::Demolish;
+        let placing = matches!(state.tool, crate::tools::Tool::Hosted { .. });
         match picked {
             _ if demolishing => demolish_pick = Some(picked.map(|(id, _)| id)),
+            Some((id, t)) if placing && project.element(id).is_some_and(|e| e.as_wall().is_some()) => {
+                let hit = ray.origin + ray.dir * t;
+                opening_pick = Some((id, glam::DVec2::new(hit.x, hit.y)));
+            }
+            _ if placing => state.message = crate::t!("hint-hosted"),
             Some((id, _)) if ctrl => {
                 if !state.selection.remove(&id) {
                     state.selection.insert(id);
@@ -425,6 +432,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
 
     let nav = v3.nav();
+    if let Some((wall, point)) = opening_pick {
+        let tool = state.tool.clone();
+        crate::tools::place_opening_3d(state, &tool, wall, point);
+    }
     if let Some(picked) = demolish_pick {
         let ids = crate::phases_dialog::demolishable(state, view_id, picked);
         crate::phases_dialog::demolish(state, view_id, &ids);

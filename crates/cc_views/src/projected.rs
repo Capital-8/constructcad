@@ -315,11 +315,27 @@ fn chain_loops(segs: &[(DVec2, DVec2)]) -> Vec<Vec<DVec2>> {
     loops
 }
 
+/// Level lines across the drawing; before anything is modelled they span
+/// the grids, or a few meters from the origin.
 fn level_lines(d: &mut Drawing2D, project: &Project, frame: &Frame) {
-    let Some((lo, hi)) = d.bounds() else { return };
+    let grid_xs: Vec<f64> = project
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            cc_core::ElementKind::Grid(g) => Some([g.start, g.end]),
+            _ => None,
+        })
+        .flatten()
+        .map(|p| frame.project(DVec3::new(p.x, p.y, 0.0)).x)
+        .collect();
+    let span = match d.bounds() {
+        Some((lo, hi)) => (lo.x, hi.x),
+        None if !grid_xs.is_empty() => grid_xs.iter().fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(*x), b.max(*x))),
+        None => (0.0, 10.0),
+    };
+    let (x0, x1) = (span.0 - 1.5, span.1 + 1.5);
     for level in &project.levels {
         let y = frame.project(DVec3::new(0.0, 0.0, level.elevation)).y;
-        let (x0, x1) = (lo.x - 1.5, hi.x + 1.5);
         d.line(DVec2::new(x0, y), DVec2::new(x1, y), LineStyle::Annotation, None);
         // Elevation target symbol: a small triangle on the line.
         d.line(DVec2::new(x1, y), DVec2::new(x1 + 0.15, y + 0.2), LineStyle::Annotation, None);
@@ -430,6 +446,20 @@ mod tests {
         (doc, id)
     }
 
+    /// A new project shows its levels in elevations before anything is modelled.
+    #[test]
+    fn empty_elevation_shows_the_levels() {
+        let project = Project::from_template();
+        let geom = ModelGeometry::build(&project);
+        let d = elevation(&project, &geom, Direction::South);
+        for level in &project.levels {
+            assert!(
+                d.prims.iter().any(|p| matches!(p, Prim::Text { text, .. } if *text == level.name)),
+                "{}",
+                level.name
+            );
+        }
+    }
     #[test]
     fn south_elevation_shows_wall_face() {
         let (doc, id) = one_wall();

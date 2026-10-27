@@ -59,6 +59,12 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     // While renaming, Esc only cancels the rename.
     let renaming = state.dialogs.type_rename.is_some();
     let response = crate::dialog::DialogResponse { dismissed: response.dismissed && !renaming, ..response };
+    // OK keeps a name still being typed.
+    if response.clicked == Some(ok)
+        && let Some(name) = state.dialogs.type_rename.take()
+    {
+        rename(state, &ty, &name);
+    }
     if crate::dialogs::ok_cancel(state, &response, ok) {
         state.dialogs.type_editor = None;
         state.dialogs.type_rename = None;
@@ -81,16 +87,20 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         match state.dialogs.type_rename.take() {
             Some(mut name) => {
                 let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(field_w));
-                r.request_focus();
+                // Focus once: the user may then click another field, which
+                // confirms the name.
+                let starting = std::mem::take(&mut state.dialogs.type_rename_focus);
+                if starting {
+                    r.request_focus();
+                }
                 let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
-                if (r.lost_focus() || enter) && !escape {
-                    let name = name.trim().to_string();
-                    if !name.is_empty() && name != ty.name {
-                        crate::engine_edit::element_type(state, tid, None, |t| t.name = name);
+                if !escape {
+                    if enter || (!starting && !r.has_focus()) {
+                        rename(state, ty, &name);
+                    } else {
+                        state.dialogs.type_rename = Some(name);
                     }
-                } else if !escape {
-                    state.dialogs.type_rename = Some(name);
                 }
             }
             None => {
@@ -115,6 +125,7 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
             }
             if ui.add_sized([button_w, 24.0], egui::Button::new(t!("type-rename"))).clicked() {
                 state.dialogs.type_rename = Some(ty.name.clone());
+                state.dialogs.type_rename_focus = true;
             }
         });
         ui.end_row();
@@ -133,6 +144,15 @@ fn duplicate(state: &mut AppState, ty: &ElementType) {
     let Some(new_id) = crate::actions::run_command(state, command).and_then(|o| o["id"].as_u64()) else { return };
     state.dialogs.type_editor = Some(ElementTypeId(new_id));
     state.dialogs.type_rename = Some(name);
+    state.dialogs.type_rename_focus = true;
+}
+
+/// Give type `ty` the name typed in the rename field.
+fn rename(state: &mut AppState, ty: &ElementType, name: &str) {
+    let name = name.trim().to_string();
+    if !name.is_empty() && name != ty.name {
+        crate::engine_edit::element_type(state, ty.id, None, |t| t.name = name);
+    }
 }
 
 fn length_row(

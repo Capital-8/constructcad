@@ -582,3 +582,48 @@ fn phases_dialog_snapshots() {
     }
     results.unwrap();
 }
+
+fn type_dialog_harness(state: AppState) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(900.0, 900.0), egui::Theme::Light, |ui, state| {
+        crate::type_dialog::show(ui.ctx(), state)
+    })
+}
+
+/// Duplicate a window type, type a name and press OK: the copy keeps the
+/// typed name (before, OK dropped a rename that Enter had not confirmed).
+#[test]
+fn duplicated_type_keeps_the_typed_name() {
+    let mut state = sample_state();
+    let window = state.project().default_type(cc_core::Category::Window).unwrap();
+    state.dialogs.type_editor = Some(window);
+    let mut harness = type_dialog_harness(state);
+    harness.get_by_label(&t!("type-duplicate")).click();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text("Janela 2.5 x 1.8");
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let names: Vec<_> = harness.state().project().types_of(cc_core::Category::Window).map(|t| t.name.clone()).collect();
+    assert!(names.iter().any(|n| n == "Janela 2.5 x 1.8"), "{names:?}");
+    assert!(harness.state().dialogs.type_editor.is_none());
+}
+
+/// Typing a name and moving on to another field confirms the name.
+#[test]
+fn type_name_is_kept_when_another_field_is_clicked() {
+    let mut state = sample_state();
+    let window = state.project().default_type(cc_core::Category::Window).unwrap();
+    state.dialogs.type_editor = Some(window);
+    let mut harness = type_dialog_harness(state);
+    harness.get_by_label(&t!("type-rename")).click();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text("Janela alta");
+    harness.run();
+    harness.query_all_by_role(Role::TextInput).find(|n| !n.is_focused()).unwrap().click();
+    harness.run();
+    harness.run();
+    assert_eq!(harness.state().project().element_type(window).unwrap().name, "Janela alta");
+    assert!(harness.state().dialogs.type_rename.is_none());
+}

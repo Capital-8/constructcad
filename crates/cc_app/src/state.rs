@@ -47,6 +47,8 @@ pub struct Dialogs {
     pub component_editor: Option<crate::component_editor::Editor>,
     /// Type name being edited by "Rename" in the type dialog.
     pub type_rename: Option<String>,
+    /// The rename field takes the focus on its next frame.
+    pub type_rename_focus: bool,
     /// The layer editor is expanded in the type dialog.
     pub type_layers_open: bool,
     /// Undo depth when the open data dialog started editing (see `dialog::session`).
