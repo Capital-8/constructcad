@@ -500,7 +500,7 @@ pub struct ElementType {
 
 impl ElementType {
     pub fn category(&self) -> Category {
-        match self.data {
+        match &self.data {
             TypeData::Wall { .. } => Category::Wall,
             TypeData::Door { .. } => Category::Door,
             TypeData::Window { .. } => Category::Window,
@@ -519,7 +519,7 @@ impl ElementType {
             TypeData::Conduit { .. } => Category::Conduit,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Railing { .. } => Category::Railing,
-            TypeData::Component { .. } => Category::Component,
+            TypeData::Component { def, .. } => def.category(),
         }
     }
 
@@ -575,9 +575,19 @@ impl ElementType {
 
     /// Width/height of an opening type (doors, windows).
     pub fn opening_size(&self) -> Option<(f64, f64)> {
-        match self.data {
-            TypeData::Door { width, height, .. } | TypeData::Window { width, height, .. } => Some((width, height)),
+        match &self.data {
+            TypeData::Door { width, height, .. } | TypeData::Window { width, height, .. } => Some((*width, *height)),
+            TypeData::Component { def, .. } => def.opening_size(),
             _ => None,
+        }
+    }
+
+    /// Sill height of new elements of a door or window type.
+    pub fn default_sill(&self) -> f64 {
+        match &self.data {
+            TypeData::Window { default_sill, .. } => *default_sill,
+            TypeData::Component { def, .. } => def.default_sill(),
+            _ => 0.0,
         }
     }
 

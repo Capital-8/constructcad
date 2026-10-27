@@ -21,6 +21,70 @@ pub struct HostedPart {
     pub panel: bool,
 }
 
+/// The pieces of the door or window `element` (of `width` x `height`, in a
+/// wall of half thickness `half`) in opening-local coordinates like
+/// [`HostedPart`]s: `x` along the wall from the start jamb, `y` across it
+/// (positive on its left), `z` up from the sill. A door or window component
+/// is resolved with the wall's thickness, centered in the opening and
+/// mirrored by the element's flips; other types give their boxes, frames
+/// with no material and panels of the type's material.
+pub fn opening_parts(
+    project: &Project,
+    element: &cc_core::Element,
+    width: f64,
+    height: f64,
+    half: f64,
+) -> Vec<cc_core::component::ComponentPart> {
+    let Some(ty) = project.element_type(element.type_id) else { return Vec::new() };
+    let TypeData::Component { def, .. } = &ty.data else {
+        return hosted_parts(&ty.data, width, height, half)
+            .into_iter()
+            .map(|p| cc_core::component::ComponentPart {
+                item: 0,
+                footprint: vec![
+                    DVec2::new(p.min.x, p.min.y),
+                    DVec2::new(p.max.x, p.min.y),
+                    DVec2::new(p.max.x, p.max.y),
+                    DVec2::new(p.min.x, p.max.y),
+                ],
+                z0: p.min.z,
+                z1: p.max.z,
+                material: if p.panel { ty.main_material().to_string() } else { String::new() },
+                in_plan: false,
+                void: false,
+                faces: Vec::new(),
+            })
+            .collect();
+    };
+    let thickness = [(cc_core::component::WALL_THICKNESS, 2.0 * half)];
+    let parts = crate::resolve_component_in(def, &Default::default(), &thickness);
+    let (fx, fy) = match element.as_hosted() {
+        Some(h) => (if h.flip_hand { -1.0 } else { 1.0 }, if h.flip_facing { -1.0 } else { 1.0 }),
+        None => (1.0, 1.0),
+    };
+    let map = |p: DVec2| DVec2::new(p.x * fx + width * 0.5, p.y * fy);
+    // One mirror turns faces inside out: reverse them.
+    let mirrored = fx * fy < 0.0;
+    parts
+        .into_iter()
+        .map(|mut p| {
+            p.footprint = p.footprint.iter().map(|q| map(*q)).collect();
+            for face in &mut p.faces {
+                for v in face.iter_mut() {
+                    *v = map(v.truncate()).extend(v.z);
+                }
+                if mirrored {
+                    face.reverse();
+                }
+            }
+            if mirrored {
+                p.footprint.reverse();
+            }
+            p
+        })
+        .collect()
+}
+
 /// The boxes making up a door or window of `width` x `height` in a wall of
 /// half thickness `half`. Empty for non-hosted types.
 pub fn hosted_parts(data: &TypeData, width: f64, height: f64, half: f64) -> Vec<HostedPart> {
@@ -77,6 +141,8 @@ pub struct ModelGeometry {
     pub join_deductions: BTreeMap<ElementId, f64>,
     /// Solid pieces of each placed component in the world, voids cut out.
     pub components: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
+    /// Pieces of each door and window in the world (see [`opening_parts`]).
+    pub opening_fills: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
 }
 
 /// A foundation's body: a vertical prism.
@@ -661,27 +727,44 @@ impl ModelGeometry {
     }
 
     fn build_hosted(&mut self, project: &Project) {
+        let mut fills = BTreeMap::new();
         for wall in self.walls.values() {
             for o in &wall.openings {
                 let Some(e) = project.element(o.element) else { continue };
-                let Some(ty) = project.element_type(e.type_id) else { continue };
-                let parts = hosted_parts(&ty.data, o.u1 - o.u0, o.z1 - o.z0, wall.half);
-                let mut frame = Solid::new(e.id, e.category(), FRAME_COLOR);
-                let mut panel = Solid::of_material(e.id, e.category(), project, ty.main_material());
-                // In an arc wall the boxes are square to the wall at the opening's center.
+                let parts = opening_parts(project, e, o.u1 - o.u0, o.z1 - o.z0, wall.half);
+                // In an arc wall the pieces are square to the wall at the opening's center.
                 let (origin, dir, normal) = wall.frame_at((o.u0 + o.u1) * 0.5);
-                for p in &parts {
-                    let s = if p.panel { &mut panel } else { &mut frame };
-                    let (lo, hi) = (p.min, p.max);
-                    s.add_box(origin, dir, normal, o.u0 + lo.x, o.u0 + hi.x, lo.y, hi.y, o.z0 + lo.z, o.z0 + hi.z);
-                }
-                for s in [frame, panel] {
+                let world = |p: DVec2| origin + dir * (o.u0 + p.x) + normal * p.y;
+                let mut placed = Vec::with_capacity(parts.len());
+                for mut p in parts {
+                    p.footprint = p.footprint.iter().map(|q| world(*q)).collect();
+                    p.z0 += o.z0;
+                    p.z1 += o.z0;
+                    for face in &mut p.faces {
+                        for v in face.iter_mut() {
+                            *v = world(v.truncate()).extend(v.z + o.z0);
+                        }
+                    }
+                    // Frames without a material keep the frame color.
+                    let mut s = if p.material.is_empty() {
+                        Solid::new(e.id, e.category(), FRAME_COLOR)
+                    } else {
+                        Solid::of_material(e.id, e.category(), project, &p.material)
+                    };
+                    if p.faces.is_empty() {
+                        s.add_prism(&p.footprint, |_| p.z0, |_| p.z1);
+                    } else {
+                        s.add_polygons(p.faces.clone());
+                    }
                     if !s.faces.is_empty() {
                         self.solids.push(s);
                     }
+                    placed.push(p);
                 }
+                fills.insert(e.id, placed);
             }
         }
+        self.opening_fills = fills;
     }
 
     fn build_slabs(&mut self, project: &Project) {

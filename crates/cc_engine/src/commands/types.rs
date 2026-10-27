@@ -24,7 +24,12 @@ fn validate(def: &ComponentDef) -> Result<()> {
     if def.items.is_empty() {
         return Err(EngineError::invalid("the component has no pieces"));
     }
-    let (_, errors) = def.resolve(&Default::default());
+    // Doors and windows are checked in a wall 15 cm thick, and need their opening.
+    if matches!(def.kind, cc_core::ComponentKind::Door | cc_core::ComponentKind::Window) && def.opening_size().is_none()
+    {
+        return Err(EngineError::invalid("a door or window needs an opening with a positive width and height"));
+    }
+    let (_, errors) = def.resolve_in(&Default::default(), &[(cc_core::component::WALL_THICKNESS, 0.15)]);
     if let Some((i, e)) = errors.first() {
         let piece = def.items.get(*i).map_or(String::new(), |it| it.name.clone());
         return Err(EngineError::invalid(format!("piece '{piece}': {e}")));
@@ -233,7 +238,12 @@ impl Command for TypeDelete {
 /// arc, positive bulging outwards) or a `Revolution` {plane, points, offset, axis, angle}
 /// (the profile turned about the line u = axis of its plane). Every field
 /// is an expression over the parameters (meters, degrees). A piece with
-/// `void: true` is cut out of the solid pieces it overlaps.
+/// `void: true` is cut out of the solid pieces it overlaps. A `kind` of
+/// `Door` or `Window` with an `opening` {width, height, sill, own_symbol}
+/// (expressions) makes a door or window type, placed with `door_create` or
+/// `window_create`: it cuts that opening in its wall; its frame has x along
+/// the wall from the opening's center, y across it (towards the side a door
+/// opens to), z up from the sill, and `WallThickness` is the wall's thickness.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentCreate {

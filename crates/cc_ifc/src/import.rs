@@ -323,6 +323,16 @@ struct Importer<'a> {
     products: Vec<(ElementId, u32)>,
 }
 
+/// The opening size of a door or window type of `category` (of either kind).
+fn is_opening_type(d: &TypeData, category: Category) -> Option<(f64, f64)> {
+    match d {
+        TypeData::Door { width, height, .. } if category == Category::Door => Some((*width, *height)),
+        TypeData::Window { width, height, .. } if category == Category::Window => Some((*width, *height)),
+        TypeData::Component { def, .. } if def.category() == category => def.opening_size(),
+        _ => None,
+    }
+}
+
 fn clean_polygon(pts: Vec<DVec2>) -> Vec<DVec2> {
     clean_loop(pts, |a, b| a.distance(*b) < 1e-9)
 }
@@ -1283,8 +1293,12 @@ impl<'a> Importer<'a> {
                 name,
                 fallback,
                 uid,
-                |d| matches!(d, TypeData::Door { width, height, .. } if same(*width, *height)),
-                || TypeData::Door { width, height, material },
+                |d| is_opening_type(d, Category::Door).is_some_and(|(w, h)| same(w, h)),
+                || {
+                    let names = cc_core::openings::OpeningNames::default();
+                    let def = cc_core::openings::door_def(&names, width, height, &material);
+                    TypeData::Component { component: names.door, def }
+                },
             );
             (Category::Door, type_id)
         } else {
@@ -1293,8 +1307,12 @@ impl<'a> Importer<'a> {
                 name,
                 fallback,
                 uid,
-                |d| matches!(d, TypeData::Window { width, height, .. } if same(*width, *height)),
-                || TypeData::Window { width, height, default_sill: sill, material },
+                |d| is_opening_type(d, Category::Window).is_some_and(|(w, h)| same(w, h)),
+                || {
+                    let names = cc_core::openings::OpeningNames::default();
+                    let def = cc_core::openings::window_def(&names, width, height, sill, &material);
+                    TypeData::Component { component: names.window, def }
+                },
             );
             (Category::Window, type_id)
         };
@@ -1914,7 +1932,7 @@ impl<'a> Importer<'a> {
         }
         let ifc = Some(self.ifc_class(id, e));
         let properties = self.property_sets(id);
-        let def = ComponentDef { kind, params: Vec::new(), items, ifc, mep: None };
+        let def = ComponentDef { kind, params: Vec::new(), items, ifc, mep: None, opening: None };
         let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
         // Instance parameter values written by ConstructCAD.
         let overrides: std::collections::BTreeMap<String, f64> = self

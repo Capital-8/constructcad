@@ -117,7 +117,7 @@ pub fn plan_of(
         if let Some(g) = geom.walls.get(&e.id) {
             draw_wall(&mut d, project, g, cut_z, spacing);
             if !structural {
-                draw_openings(&mut d, project, g, ceiling);
+                draw_openings(&mut d, project, geom, g, ceiling);
             }
         }
     }
@@ -390,11 +390,24 @@ fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spa
     }
 }
 
-fn draw_openings(d: &mut Drawing2D, project: &Project, g: &WallGeom, ceiling: bool) {
+fn draw_openings(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, g: &WallGeom, ceiling: bool) {
     for o in &g.openings {
         let Some(e) = project.element(o.element) else { continue };
         let Some(host) = e.as_hosted() else { continue };
         let id = Some(e.id);
+        // A door or window component may draw its own symbol: its pieces marked for plans.
+        let own_symbol = match project.element_type(e.type_id).map(|t| &t.data) {
+            Some(cc_core::TypeData::Component { def, .. }) => def.opening.as_ref().is_some_and(|o| o.own_symbol),
+            _ => false,
+        };
+        if own_symbol {
+            if !ceiling {
+                for p in geom.opening_fills.get(&e.id).into_iter().flatten().filter(|p| p.in_plan && !p.void) {
+                    d.polyline(&p.footprint, true, LineStyle::Projection, id);
+                }
+            }
+            continue;
+        }
         match e.kind {
             ElementKind::Door(_) if !ceiling => {
                 let width = o.u1 - o.u0;

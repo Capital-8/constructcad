@@ -222,7 +222,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 Value::Length(top - base)
             }
             (ElementKind::Room(r), _) => Value::Length(r.height),
-            (_, Some(TypeData::Door { height, .. } | TypeData::Window { height, .. })) => Value::Length(*height),
+            (ElementKind::Door(_) | ElementKind::Window(_), _) => {
+                ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(_, h)| Value::Length(h))
+            }
             (_, Some(TypeData::Railing { height, .. })) => Value::Length(*height),
             (ElementKind::Component(_), _) => {
                 component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.2))
@@ -230,9 +232,10 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ => Value::Missing,
         },
         F::Width => match ty.map(|t| &t.data) {
-            Some(TypeData::Door { width, .. } | TypeData::Window { width, .. } | TypeData::Stair { width, .. }) => {
-                Value::Length(*width)
+            _ if matches!(e.kind, ElementKind::Door(_) | ElementKind::Window(_)) => {
+                ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(w, _)| Value::Length(w))
             }
+            Some(TypeData::Stair { width, .. }) => Value::Length(*width),
             _ => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.0)),
         },
         F::Depth => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.1)),
@@ -240,8 +243,11 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             Some(TypeData::Component { component, .. }) => text(component),
             _ => Value::Missing,
         },
+        // Doors and windows have their category instead.
         F::ComponentKind => match ty.map(|t| &t.data) {
-            Some(TypeData::Component { def, .. }) => Value::Key(def.kind.key()),
+            Some(TypeData::Component { def, .. }) if e.category() == cc_core::Category::Component => {
+                Value::Key(def.kind.key())
+            }
             _ => Value::Missing,
         },
         F::Thickness => match ty {

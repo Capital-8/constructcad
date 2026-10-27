@@ -2059,10 +2059,7 @@ fn hosted_tool(
     let project = &state.session.doc.project;
     let Some(ty) = project.element_type(type_id) else { return };
     let Some((width, _)) = ty.opening_size() else { return };
-    let sill = match ty.data {
-        cc_core::TypeData::Window { default_sill, .. } => default_sill,
-        _ => 0.0,
-    };
+    let sill = ty.default_sill();
     let Some((host, u, v)) = wall_under(project, state.session.geom(), level, raw, 12.0 / xf.scale) else {
         painter.circle_stroke(xf.to_screen(raw), 4.0, Stroke::new(1.0, Color32::GRAY));
         return;
@@ -2139,10 +2136,7 @@ pub(crate) fn place_opening_3d(state: &mut AppState, tool: &Tool, host: ElementI
         return;
     };
     let Some((width, _)) = ty.opening_size() else { return };
-    let sill = match ty.data {
-        cc_core::TypeData::Window { default_sill, .. } => default_sill,
-        _ => 0.0,
-    };
+    let sill = ty.default_sill();
     let (u, v) = g.local(point);
     let Some(offset) = opening_offset(g, width, u) else {
         state.message = t!("msg-wall-too-short");

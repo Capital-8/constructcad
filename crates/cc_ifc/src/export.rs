@@ -5,7 +5,7 @@ use crate::guid::{encode, guid};
 use crate::schema::{ElementClass, TypeLayout, element_class};
 use crate::step::{Header, Id, StepWriter, Value, opt_str, reals};
 use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData, Uid};
-use cc_geom::{FRAME_COLOR, HostedPart, ModelGeometry, WallGeom, hosted_parts, polygon};
+use cc_geom::{FRAME_COLOR, ModelGeometry, WallGeom, opening_parts, polygon};
 use glam::{DVec2, DVec3};
 use std::collections::{BTreeMap, HashMap};
 
@@ -1626,23 +1626,39 @@ impl<'a> Exporter<'a> {
         // The filling shares the opening's frame.
         let fill_placement = self.local_placement(Some(placement), fill_frame);
         let frame_style = self.style("Frame", FRAME_COLOR, 0.0);
-        let panel_style = self.material_style(ty.main_material());
-        let parts: Vec<HostedPart> = hosted_parts(&ty.data, width, height, g.half);
+        let parts = opening_parts(project, e, width, height, g.half);
+        // Shapes mix no representation types: with any faceted piece, all pieces are face sets.
+        let tessellated = parts.iter().any(|p| !p.faces.is_empty());
         let mut items = Vec::new();
-        for p in parts {
-            if (p.max - p.min).min_element() < 1e-6 {
-                continue;
-            }
-            let item = self.extrude_box(p.min, p.max);
-            self.styled(item, if p.panel { panel_style } else { frame_style });
+        for part in parts {
+            let item = if tessellated {
+                let faces = if part.faces.is_empty() {
+                    let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
+                    s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
+                    s.faces.into_iter().map(|f| f.verts).collect()
+                } else {
+                    part.faces
+                };
+                let Some(item) = self.face_set(&faces) else { continue };
+                item
+            } else {
+                let profile = polygon::ccw(&part.footprint);
+                if profile.len() < 3 || part.z1 - part.z0 < 1e-6 {
+                    continue;
+                }
+                let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, part.z0)));
+                self.extrude_polygon(&profile, position, self.dir_z, part.z1 - part.z0)
+            };
+            let style = if part.material.is_empty() { frame_style } else { self.material_style(&part.material) };
+            self.styled(item, style);
             items.push(item);
         }
-        let shape = self.shape(items, None);
+        let shape = if tessellated { self.shape_of_type(items, None, "Tessellation") } else { self.shape(items, None) };
         let (type_w, type_h) = ty.opening_size().unwrap_or((width, height));
         let mut attrs = self.element_args(e, fill_placement, shape);
         attrs.extend(args![type_h, type_w]);
-        let (entity, set_name) = match ty.data {
-            TypeData::Door { .. } => {
+        let (entity, set_name) = match e.kind {
+            ElementKind::Door(_) => {
                 attrs.extend(args![Value::Enum("DOOR"), Value::Enum("NOTDEFINED"), Value::Null]);
                 ("IFCDOOR", "Qto_DoorBaseQuantities")
             }
@@ -2116,6 +2132,8 @@ fn component_entity(def: &cc_core::ComponentDef) -> (&'static str, &'static str)
         cc_core::ComponentKind::Lighting => ("IFCLIGHTFIXTURE", "NOTDEFINED"),
         cc_core::ComponentKind::Electrical => ("IFCBUILDINGELEMENTPROXY", "NOTDEFINED"),
         cc_core::ComponentKind::Generic => ("IFCBUILDINGELEMENTPROXY", "NOTDEFINED"),
+        cc_core::ComponentKind::Door => ("IFCDOOR", "DOOR"),
+        cc_core::ComponentKind::Window => ("IFCWINDOW", "WINDOW"),
     }
 }
 

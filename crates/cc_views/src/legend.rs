@@ -1,5 +1,5 @@
 use crate::{Drawing2D, LineStyle, cut::POCHE};
-use cc_core::{ElementTypeId, Project, TypeData};
+use cc_core::{Category, ElementTypeId, Project, TypeData};
 use glam::DVec2;
 
 /// Legend: one row per type with a 2D symbol and its name.
@@ -17,9 +17,13 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             TypeData::Component { def, .. } => def.mep.and_then(|m| m.device().map(|d| (d, m.power()))),
             _ => None,
         };
+        // Doors and windows (of any kind of type) show their category's symbol.
+        let opening =
+            t.opening_size().map(|(w, _)| w).filter(|_| matches!(t.category(), Category::Door | Category::Window));
+        let width = &opening.unwrap_or(0.0);
         let plan: Vec<Vec<DVec2>> = match &t.data {
             // Devices are shown by their plan symbol.
-            TypeData::Component { .. } if device.is_some() => Vec::new(),
+            TypeData::Component { .. } if device.is_some() || opening.is_some() => Vec::new(),
             TypeData::Component { def, .. } => def
                 .resolve(&Default::default())
                 .0
@@ -33,8 +37,8 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
         });
         // Door swings and tall component outlines extend above the row; leave room for them.
-        let above = match t.data {
-            TypeData::Door { width, .. } => width + 0.075,
+        let above = match opening {
+            Some(width) if t.category() == Category::Door => width + 0.075,
             _ => plan_bounds.map_or(0.0, |(lo, hi)| (hi.y - lo.y) / 2.0),
         };
         y -= above;
@@ -59,7 +63,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 d.line(o + DVec2::new(0.0, h), o + DVec2::new(sample, h), LineStyle::Cut, None);
                 d.line(o + DVec2::new(0.0, -h), o + DVec2::new(sample, -h), LineStyle::Cut, None);
             }
-            TypeData::Door { width, .. } => {
+            _ if opening.is_some() && t.category() == Category::Door => {
                 let h = 0.075;
                 let jamb = |d: &mut Drawing2D, x0: f64, x1: f64| {
                     let r =
@@ -73,7 +77,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 d.line(hinge, hinge + DVec2::Y * *width, LineStyle::Projection, None);
                 d.arc(hinge, *width, std::f64::consts::FRAC_PI_2, 0.0, LineStyle::Thin, None);
             }
-            TypeData::Window { width, .. } => {
+            _ if opening.is_some() => {
                 let h = 0.075;
                 for x in [0.0, 0.2 + width] {
                     let r = [
@@ -180,6 +184,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 }
             }
             // Filtered out above: annotation types have no legend symbol.
+            TypeData::Door { .. } | TypeData::Window { .. } => {}
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {}
         }
         let width = plan_bounds.map_or(0.0, |(lo, hi)| hi.x - lo.x);

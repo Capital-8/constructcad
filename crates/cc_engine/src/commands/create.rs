@@ -9,7 +9,7 @@ use crate::session::Session;
 use crate::t;
 use cc_core::{
     Beam, BeamLateral, BeamVertical, Category, Ceiling, Column, Component, ElementKind, Floor, Grid, Hosted, LevelId,
-    LocationLine, Project, Railing, Roof, RoofShape, Room, Stair, TypeData, Wall, WallTop,
+    LocationLine, Project, Railing, Roof, RoofShape, Room, Stair, Wall, WallTop,
 };
 use cc_geom::polygon;
 use glam::DVec2;
@@ -191,10 +191,7 @@ fn place_hosted(s: &mut Session, a: HostedArgs, category: Category) -> Result<Va
     let wall = host_el.as_wall().ok_or_else(|| EngineError::invalid(format!("element {} is not a wall", host.0)))?;
     let ty = p.element_type(type_id).ok_or_else(|| EngineError::not_found("type"))?;
     let (width, _) = ty.opening_size().ok_or_else(|| EngineError::invalid("not a door or window type"))?;
-    let default_sill = match ty.data {
-        TypeData::Window { default_sill, .. } => default_sill,
-        _ => 0.0,
-    };
+    let default_sill = ty.default_sill();
     // Openings are placed along the body centerline (an arc for arc walls).
     let (start, end) = p.wall_axis(host_el, wall);
     let axis = Wall { start, end, ..wall.clone() };

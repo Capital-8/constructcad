@@ -34,16 +34,22 @@ pub enum ComponentKind {
     Electrical,
     #[default]
     Generic,
+    /// Doors: with a [`HostOpening`], their types are of the door category.
+    Door,
+    /// Windows: with a [`HostOpening`], their types are of the window category.
+    Window,
 }
 
 impl ComponentKind {
-    pub const ALL: [ComponentKind; 6] = [
+    pub const ALL: [ComponentKind; 8] = [
         ComponentKind::Furniture,
         ComponentKind::Casework,
         ComponentKind::Plumbing,
         ComponentKind::Lighting,
         ComponentKind::Electrical,
         ComponentKind::Generic,
+        ComponentKind::Door,
+        ComponentKind::Window,
     ];
 
     pub fn key(self) -> &'static str {
@@ -54,6 +60,8 @@ impl ComponentKind {
             ComponentKind::Lighting => "comp-kind-lighting",
             ComponentKind::Electrical => "comp-kind-electrical",
             ComponentKind::Generic => "comp-kind-generic",
+            ComponentKind::Door => "comp-kind-door",
+            ComponentKind::Window => "comp-kind-window",
         }
     }
 }
@@ -224,6 +232,33 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+/// Name of the host wall's thickness in the expressions of door and window
+/// components (see [`crate::openings`]).
+pub const WALL_THICKNESS: &str = "WallThickness";
+
+/// The opening a door or window component cuts in its host wall: `width`
+/// wide, centered on the component, `height` tall from the sill.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HostOpening {
+    /// Expression of the parameters.
+    pub width: String,
+    /// Expression of the parameters.
+    pub height: String,
+    /// Sill height of new elements (windows), an expression; empty for 0.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sill: String,
+    /// Plans draw the pieces marked `in_plan` instead of the category's
+    /// symbol (a door's swing, a window's sash lines).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub own_symbol: bool,
+}
+
+impl HostOpening {
+    pub fn expressions_mut(&mut self) -> [&mut String; 3] {
+        [&mut self.width, &mut self.height, &mut self.sill]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct ComponentDef {
     #[serde(default)]
@@ -238,6 +273,9 @@ pub struct ComponentDef {
     /// Plumbing fixture or electrical device data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mep: Option<crate::MepData>,
+    /// The opening a door or window cuts in its wall.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opening: Option<Box<HostOpening>>,
 }
 
 /// An IFC entity class with its predefined and object types.
@@ -314,10 +352,48 @@ impl ComponentDef {
             .collect()
     }
 
+    /// Width and height of the opening a door or window cuts (`None` for
+    /// other components, or when they do not evaluate to positive sizes).
+    pub fn opening_size(&self) -> Option<(f64, f64)> {
+        let o = self.opening.as_ref()?;
+        let values = self.values(&BTreeMap::new());
+        let lookup = |name: &str| values.get(name).copied();
+        let (w, h) = (expr::eval(&o.width, &lookup).ok()?, expr::eval(&o.height, &lookup).ok()?);
+        (w > 0.0 && h > 0.0).then_some((w, h))
+    }
+
+    /// Sill height of new doors and windows of this definition (0 when unset or invalid).
+    pub fn default_sill(&self) -> f64 {
+        let Some(o) = self.opening.as_ref().filter(|o| !o.sill.trim().is_empty()) else { return 0.0 };
+        let values = self.values(&BTreeMap::new());
+        expr::eval(&o.sill, &|name: &str| values.get(name).copied()).map_or(0.0, |v| v.max(0.0))
+    }
+
+    /// The category of the types of this definition: doors and windows
+    /// (with an opening) have their own.
+    pub fn category(&self) -> crate::Category {
+        match (self.kind, &self.opening) {
+            (ComponentKind::Door, Some(_)) => crate::Category::Door,
+            (ComponentKind::Window, Some(_)) => crate::Category::Window,
+            _ => crate::Category::Component,
+        }
+    }
+
     /// Resolve every piece; pieces that fail are reported with their index.
     pub fn resolve(&self, overrides: &BTreeMap<String, f64>) -> (Vec<ComponentPart>, Vec<(usize, PartError)>) {
+        self.resolve_in(overrides, &[])
+    }
+
+    /// Resolve every piece with `extra` names defined too (a door's
+    /// [`WALL_THICKNESS`]); parameters of the same name win.
+    pub fn resolve_in(
+        &self,
+        overrides: &BTreeMap<String, f64>,
+        extra: &[(&str, f64)],
+    ) -> (Vec<ComponentPart>, Vec<(usize, PartError)>) {
         let values = self.values(overrides);
-        let lookup = |name: &str| values.get(name).copied();
+        let lookup =
+            |name: &str| values.get(name).copied().or_else(|| extra.iter().find(|(n, _)| *n == name).map(|(_, v)| *v));
         let mut parts = Vec::new();
         let mut errors = Vec::new();
         for (i, item) in self.items.iter().enumerate() {
@@ -359,6 +435,11 @@ impl ComponentDef {
         }
         for item in &mut self.items {
             for e in item.shape.expressions_mut() {
+                *e = replace_name(e, old, new);
+            }
+        }
+        if let Some(o) = &mut self.opening {
+            for e in o.expressions_mut() {
                 *e = replace_name(e, old, new);
             }
         }
@@ -589,6 +670,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     items.extend(legs("0.05", format!("{h} - 0.03"), &wood));
     let table = ComponentDef {
         kind: ComponentKind::Furniture,
+        opening: None,
         ifc: None,
         mep: None,
         params: vec![length(&w, 1.2), length(&d, 0.8), length(&h, 0.75)],
@@ -623,6 +705,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     ));
     let chair = ComponentDef {
         kind: ComponentKind::Furniture,
+        opening: None,
         ifc: None,
         mep: None,
         params: vec![length(&w, 0.45), length(&d, 0.5), length(&h, 0.9), length(&seat, 0.45)],
@@ -633,6 +716,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Bed: mattress base and headboard at the back.
     let bed = ComponentDef {
         kind: ComponentKind::Furniture,
+        opening: None,
         ifc: None,
         mep: None,
         params: vec![length(&w, 1.4), length(&d, 1.9), length(&h, 0.5)],
@@ -667,6 +751,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let arm = "0.15";
     let sofa = ComponentDef {
         kind: ComponentKind::Furniture,
+        opening: None,
         ifc: None,
         mep: None,
         params: vec![length(&w, 2.0), length(&d, 0.9), length(&h, 0.8), length(&seat, 0.42)],
@@ -722,6 +807,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Toilet: bowl in front of the tank, against the wall at the back.
     let toilet = ComponentDef {
         kind: ComponentKind::Plumbing,
+        opening: None,
         ifc: None,
         // Toilet with a close-coupled tank.
         mep: Some(MepData::Fixture { drain_units: 6.0, supply_weight: 0.3, hot_water: false }),
@@ -758,6 +844,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Washbasin: basin slab on a pedestal.
     let basin = ComponentDef {
         kind: ComponentKind::Plumbing,
+        opening: None,
         ifc: None,
         mep: Some(MepData::Fixture { drain_units: 1.0, supply_weight: 0.3, hot_water: true }),
         params: vec![length(&w, 0.55), length(&d, 0.45), length(&h, 0.85)],
@@ -793,6 +880,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     // Wardrobe: one box.
     let wardrobe = ComponentDef {
         kind: ComponentKind::Casework,
+        opening: None,
         ifc: None,
         mep: None,
         params: vec![length(&w, 1.6), length(&d, 0.6), length(&h, 2.2)],
@@ -847,7 +935,7 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
         height: h.clone(),
     };
     let def = |kind: ComponentKind, params: Vec<ComponentParam>, items: Vec<ComponentItem>, mep: MepData| {
-        ComponentDef { kind, params, items, ifc: None, mep: Some(mep) }
+        ComponentDef { kind, params, items, ifc: None, mep: Some(mep), opening: None }
     };
     let device = |device: D, power: f64| MepData::Device { device, power };
     let body = n("tpl-part-body");

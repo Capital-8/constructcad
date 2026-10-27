@@ -15,6 +15,7 @@ pub mod graphics;
 mod ids;
 pub mod material;
 pub mod mep;
+pub mod openings;
 mod persist;
 pub mod phase;
 pub mod profile;

@@ -2,7 +2,7 @@
 //! the materials it uses, to share components between projects.
 
 use crate::component::ComponentDef;
-use crate::{Category, ElementType, ElementTypeId, Material, Project, TypeData, TypeInfo, expr};
+use crate::{ElementType, ElementTypeId, Material, Project, TypeData, TypeInfo, expr};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -59,7 +59,7 @@ pub enum ComponentFileError {
 /// Collect the component named `component` from `project`.
 pub fn extract(project: &Project, component: &str) -> Result<ComponentFile, ComponentFileError> {
     let types: Vec<(&ElementType, &ComponentDef)> = project
-        .types_of(Category::Component)
+        .component_types()
         .filter_map(|t| match &t.data {
             TypeData::Component { component: c, def } if c == component => Some((t, def)),
             _ => None,
@@ -162,7 +162,7 @@ pub fn types_for(
     mut alloc: impl FnMut() -> u64,
 ) -> (Vec<ElementType>, Vec<Material>) {
     let components: Vec<&str> = project
-        .types_of(Category::Component)
+        .component_types()
         .filter_map(|t| match &t.data {
             TypeData::Component { component, .. } => Some(component.as_str()),
             _ => None,
@@ -178,7 +178,7 @@ pub fn types_for(
         name
     };
     let component = unique(&file.component, &|n| components.contains(&n));
-    let mut names: Vec<String> = project.types_of(Category::Component).map(|t| t.name.clone()).collect();
+    let mut names: Vec<String> = project.component_types().map(|t| t.name.clone()).collect();
     let mut types = Vec::new();
     for t in &file.types {
         let name = unique(&t.name, &|n| names.iter().any(|x| x == n));
@@ -206,6 +206,7 @@ pub fn types_for(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Category;
 
     fn table_component(p: &Project) -> String {
         p.types_of(Category::Component)

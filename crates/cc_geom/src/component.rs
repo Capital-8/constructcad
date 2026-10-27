@@ -12,7 +12,16 @@ use std::collections::BTreeMap;
 /// voids cut out. A piece a void reaches becomes faces; past the boolean
 /// budget it stays whole. Pieces whose expressions fail are left out.
 pub fn resolve_component(def: &ComponentDef, overrides: &BTreeMap<String, f64>) -> Vec<ComponentPart> {
-    let (parts, _) = def.resolve(overrides);
+    resolve_component_in(def, overrides, &[])
+}
+
+/// [`resolve_component`] with `extra` names defined (a door's wall thickness).
+pub fn resolve_component_in(
+    def: &ComponentDef,
+    overrides: &BTreeMap<String, f64>,
+    extra: &[(&str, f64)],
+) -> Vec<ComponentPart> {
+    let (parts, _) = def.resolve_in(overrides, extra);
     let (voids, mut solids): (Vec<ComponentPart>, Vec<ComponentPart>) = parts.into_iter().partition(|p| p.void);
     if voids.is_empty() {
         return solids;

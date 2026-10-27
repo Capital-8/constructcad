@@ -152,6 +152,15 @@ impl Project {
 
         let layer = |m: &str, t: f64| Layer { material: m.into(), thickness: t, function: LayerFunction::Structure };
         let finish = |m: &str, t: f64| Layer { material: m.into(), thickness: t, function: LayerFunction::Finish };
+        let names = crate::openings::OpeningNames::new(&n);
+        let door = |w: f64, h: f64, m: &str| TypeData::Component {
+            component: names.door.clone(),
+            def: crate::openings::door_def(&names, w, h, m),
+        };
+        let window = |w: f64, h: f64, sill: f64, m: &str| TypeData::Component {
+            component: names.window.clone(),
+            def: crate::openings::window_def(&names, w, h, sill, m),
+        };
         let types = [
             (
                 &n("tpl-type-masonry-15"),
@@ -179,16 +188,10 @@ impl Project {
                 &n("tpl-type-drywall-10"),
                 TypeData::Wall { layers: vec![layer(&n("tpl-mat-gypsum"), 0.10)], function: WallFunction::Interior },
             ),
-            (&n("tpl-type-door-80"), TypeData::Door { width: 0.8, height: 2.1, material: n("tpl-mat-wood") }),
-            (&n("tpl-type-door-90"), TypeData::Door { width: 0.9, height: 2.1, material: n("tpl-mat-wood") }),
-            (
-                &n("tpl-type-window-120"),
-                TypeData::Window { width: 1.2, height: 1.2, default_sill: 1.0, material: n("tpl-mat-glass") },
-            ),
-            (
-                &n("tpl-type-window-150"),
-                TypeData::Window { width: 1.5, height: 1.0, default_sill: 1.1, material: n("tpl-mat-glass") },
-            ),
+            (&n("tpl-type-door-80"), door(0.8, 2.1, &n("tpl-mat-wood"))),
+            (&n("tpl-type-door-90"), door(0.9, 2.1, &n("tpl-mat-wood"))),
+            (&n("tpl-type-window-120"), window(1.2, 1.2, 1.0, &n("tpl-mat-glass"))),
+            (&n("tpl-type-window-150"), window(1.5, 1.0, 1.1, &n("tpl-mat-glass"))),
             (
                 &n("tpl-type-slab-12"),
                 TypeData::Floor {
@@ -894,6 +897,14 @@ pub(crate) fn template_default(key: &str) -> &'static str {
         "tpl-type-door-90" => "Porta 90x210",
         "tpl-type-window-120" => "Janela 120x120",
         "tpl-type-window-150" => "Janela 150x100",
+        "tpl-comp-door" => "Porta de giro",
+        "tpl-comp-window" => "Janela",
+        "tpl-param-sill" => "Peitoril",
+        "tpl-piece-frame" => "Batente",
+        "tpl-piece-leaf" => "Folha",
+        "tpl-piece-sash" => "Caixilho",
+        "tpl-piece-glass" => "Vidro",
+        "tpl-piece-sill-board" => "Pingadeira",
         "tpl-type-slab-12" => "Laje 12 cm",
         "tpl-type-ceiling-gypsum" => "Forro de gesso",
         "tpl-type-roof-tile" => "Telhado cerâmico",

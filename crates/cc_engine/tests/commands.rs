@@ -1702,3 +1702,79 @@ fn roof_edge_slopes_and_openings() {
         ErrorCode::InvalidArguments
     );
 }
+
+/// Doors and windows are components: the template's types are, a new door
+/// component (a double leaf drawing its own plan symbol) cuts its opening in
+/// the wall, mirrors with the door's flips, and saves to and loads from a
+/// component file as a door type.
+#[test]
+fn doors_and_windows_are_components() {
+    let mut s = Session::default();
+    let doors = run(&mut s, "types_list", json!({"category": "door"}));
+    let template_door = &doors.as_array().unwrap()[0];
+    let t = run(&mut s, "type_get", json!({"type": template_door["id"]}));
+    assert_eq!(t["params"]["def"]["kind"], "Door", "{t}");
+
+    let def = json!({
+        "kind": "Door",
+        "params": [
+            {"name": "L", "value": 1.6, "kind": "Length"},
+            {"name": "A", "value": 2.1, "kind": "Length"}
+        ],
+        "items": [
+            {"name": "Folha 1", "material": "", "in_plan": true,
+             "shape": {"Box": {"x": "-L / 2", "y": "0", "z": "0", "width": "L / 2", "depth": "0.04", "height": "A"}}},
+            {"name": "Folha 2", "material": "", "in_plan": true,
+             "shape": {"Box": {"x": "0", "y": "0", "z": "0", "width": "L / 2", "depth": "0.04", "height": "A"}}},
+            {"name": "Batente", "material": "", "in_plan": false,
+             "shape": {"Box": {"x": "-L / 2", "y": "-WallThickness / 2", "z": "A", "width": "L", "depth": "WallThickness", "height": "0.05"}}}
+        ],
+        "opening": {"width": "L", "height": "A", "own_symbol": true}
+    });
+    let double = run(&mut s, "component_create", json!({"name": "Porta dupla", "def": def}));
+    assert_eq!(double["category"], "door", "{double}");
+    // Without an opening it would not be a door.
+    let mut bad = def.clone();
+    bad["opening"]["width"] = json!("0");
+    assert_eq!(fails(&mut s, "component_create", json!({"name": "X", "def": bad})), ErrorCode::InvalidArguments);
+
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));
+    let thickness = wall["derived"]["thickness"].as_f64().unwrap();
+    let full = wall["derived"]["volume"].as_f64().unwrap();
+    let door = run(&mut s, "door_create", json!({"wall": id(&wall), "offset": 3.0, "type": id(&double)}));
+    let wall = run(&mut s, "element_get", json!({"id": id(&wall)}));
+    let cut = full - wall["derived"]["volume"].as_f64().unwrap();
+    assert!((cut - 1.6 * 2.1 * thickness).abs() < 1e-6, "the opening is cut: {cut}");
+
+    // The leaves stand on the side the door opens to; flipping moves them across.
+    let side = |s: &mut Session| {
+        let fills = &s.geometry().opening_fills[&cc_core::ElementId(id(&door))];
+        assert_eq!(fills.len(), 3);
+        let ys: Vec<f64> = fills.iter().filter(|p| p.in_plan).flat_map(|p| p.footprint.iter().map(|q| q.y)).collect();
+        ys.iter().sum::<f64>() / ys.len() as f64
+    };
+    assert!(side(&mut s) > 0.0);
+    run(&mut s, "element_flip", json!({"id": id(&door), "facing": true}));
+    assert!(side(&mut s) < 0.0);
+
+    // Plans draw the two leaves (its own symbol): two rectangles, no swing arc.
+    let plan = cc_core::ViewId(run(&mut s, "views_list", json!({}))[0]["id"].as_u64().unwrap());
+    let drawing = s.drawing(plan).unwrap();
+    let lines = drawing
+        .prims
+        .iter()
+        .filter(|p| {
+            matches!(p, cc_views::Prim::Line { element: Some(e), style: cc_views::LineStyle::Projection, .. }
+                if e.0 == id(&door))
+        })
+        .count();
+    assert_eq!(lines, 8, "the leaves' outlines (the tag draws annotation lines)");
+
+    // A component file carries the door type.
+    let path = scratch("porta-dupla.ccomp");
+    run(&mut s, "component_save", json!({"component": "Porta dupla", "path": path}));
+    let mut other = Session::default();
+    run(&mut other, "component_load", json!({"path": path}));
+    let doors = run(&mut other, "types_list", json!({"category": "door"}));
+    assert!(doors.as_array().unwrap().iter().any(|t| t["name"] == "Porta dupla"), "{doors}");
+}

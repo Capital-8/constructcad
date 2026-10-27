@@ -65,6 +65,7 @@ impl Editor {
             kind: ComponentKind::Generic,
             ifc: None,
             mep: None,
+            opening: None,
             params: vec![param(&w, 1.0), param(&d, 0.6), param(&h, 0.9)],
             items: vec![ComponentItem {
                 name: t!("tpl-part-body"),
@@ -136,13 +137,19 @@ fn validate(ed: &Editor) -> Result<(), String> {
     if ed.def.items.is_empty() {
         return Err(t!("comp-err-no-pieces"));
     }
-    let (_, errors) = ed.def.resolve(&Default::default());
+    if matches!(ed.def.kind, ComponentKind::Door | ComponentKind::Window) && ed.def.opening_size().is_none() {
+        return Err(t!("comp-err-opening"));
+    }
+    let (_, errors) = ed.def.resolve_in(&Default::default(), PREVIEW_WALL);
     if let Some((i, e)) = errors.first() {
         let piece = ed.def.items.get(*i).map_or(String::new(), |it| it.name.clone());
         return Err(t!("comp-err-piece", "piece" => piece, "error" => part_error(e)));
     }
     Ok(())
 }
+
+/// The wall a door or window component is previewed and checked in: 15 cm thick.
+const PREVIEW_WALL: &[(&str, f64)] = &[(cc_core::component::WALL_THICKNESS, 0.15)];
 
 fn part_error(e: &PartError) -> String {
     match e {
@@ -159,7 +166,15 @@ fn apply(state: &mut AppState, ed: Editor) {
     let Some(tid) = ed.type_id else {
         let command = cc_engine::commands::types::ComponentCreate { name: name.clone(), def };
         let Some(id) = crate::actions::run_command(state, command).and_then(|o| o["id"].as_u64()) else { return };
-        state.set_tool(crate::tools::Tool::Component { type_id: ElementTypeId(id) });
+        let type_id = ElementTypeId(id);
+        // Doors and windows are placed in walls.
+        let category = state.project().element_type(type_id).map(|t| t.category());
+        state.set_tool(match category {
+            Some(category @ (cc_core::Category::Door | cc_core::Category::Window)) => {
+                crate::tools::Tool::Hosted { category, type_id }
+            }
+            _ => crate::tools::Tool::Component { type_id },
+        });
         state.message = t!("msg-component-created", "name" => name);
         return;
     };
@@ -171,6 +186,33 @@ fn apply(state: &mut AppState, ed: Editor) {
         renames: ed.renames.into_iter().map(|(a, b)| [a, b]).collect(),
     };
     crate::actions::run_command(state, command);
+}
+
+/// The opening a door or window cuts in its wall: width, height and default
+/// sill as expressions of the parameters, and whether plans draw its pieces.
+fn opening(ui: &mut Ui, ed: &mut Editor) {
+    if !matches!(ed.def.kind, ComponentKind::Door | ComponentKind::Window) {
+        ed.def.opening = None;
+        return;
+    }
+    let first = |i: usize| ed.def.params.get(i).map_or_else(|| "1".to_string(), |p| p.name.clone());
+    let (w, h) = (first(0), first(1));
+    let o = ed.def.opening.get_or_insert_with(|| {
+        Box::new(cc_core::component::HostOpening { width: w, height: h, sill: String::new(), own_symbol: false })
+    });
+    ui.add_space(4.0);
+    egui::Grid::new("component-opening").num_columns(8).spacing([8.0, 6.0]).show(ui, |ui| {
+        ui.label(theme::muted(t!("comp-opening")));
+        for (label, text) in
+            [(t!("col-width"), &mut o.width), (t!("col-height"), &mut o.height), (t!("prop-sill"), &mut o.sill)]
+        {
+            ui.label(theme::muted(label));
+            ui.add(egui::TextEdit::singleline(text).desired_width(90.0));
+        }
+        ui.checkbox(&mut o.own_symbol, t!("comp-own-symbol")).on_hover_text(t!("comp-own-symbol-tip"));
+        ui.end_row();
+    });
+    ui.label(theme::muted(t!("comp-opening-hint", "name" => cc_core::component::WALL_THICKNESS)).size(11.5));
 }
 
 fn body(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
@@ -185,6 +227,7 @@ fn body(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
         });
         ui.end_row();
     });
+    opening(ui, ed);
     ui.add_space(6.0);
     ui.columns(2, |cols| {
         let left = &mut cols[0];
@@ -277,7 +320,7 @@ fn rename_in_items(def: &mut ComponentDef, old: &str, new: &str) {
 
 fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
     ui.label(theme::muted(t!("comp-pieces")).size(12.0));
-    let (_, errors) = ed.def.resolve(&Default::default());
+    let (_, errors) = ed.def.resolve_in(&Default::default(), PREVIEW_WALL);
     ui.horizontal_wrapped(|ui| {
         for (i, item) in ed.def.items.iter().enumerate() {
             let label = if errors.iter().any(|(e, _)| *e == i) {
@@ -564,8 +607,8 @@ type PieceEdges = (usize, bool, Vec<(DVec2, DVec2)>);
 /// (and drawn in the warning color); the selected piece is highlighted.
 fn preview(ui: &mut Ui, ed: &Editor) {
     ui.label(theme::muted(t!("comp-preview")).size(12.0));
-    let solids = cc_geom::resolve_component(&ed.def, &Default::default());
-    let (all, _) = ed.def.resolve(&Default::default());
+    let solids = cc_geom::resolve_component_in(&ed.def, &Default::default(), PREVIEW_WALL);
+    let (all, _) = ed.def.resolve_in(&Default::default(), PREVIEW_WALL);
     let pieces: Vec<(usize, bool, Vec<Vec<DVec3>>)> = solids
         .iter()
         .map(|p| (p.item, false, cc_geom::component::faces_of(p)))
