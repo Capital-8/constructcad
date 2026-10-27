@@ -1727,7 +1727,12 @@ fn doors_and_windows_are_components() {
             {"name": "Folha 2", "material": "", "in_plan": true,
              "shape": {"Box": {"x": "0", "y": "0", "z": "0", "width": "L / 2", "depth": "0.04", "height": "A"}}},
             {"name": "Batente", "material": "", "in_plan": false,
-             "shape": {"Box": {"x": "-L / 2", "y": "-WallThickness / 2", "z": "A", "width": "L", "depth": "WallThickness", "height": "0.05"}}}
+             "shape": {"Box": {"x": "-L / 2", "y": "-WallThickness / 2", "z": "A", "width": "L", "depth": "WallThickness", "height": "0.05"}}},
+            {"name": "Giro", "plan_only": true,
+             "shape": {"Profile": {"plane": "Plan", "offset": "0", "depth": "0.001", "points": [
+                 {"u": "-L / 2", "v": "0", "radius": ""},
+                 {"u": "-L / 2", "v": "L / 2", "radius": "L / 2"},
+                 {"u": "0", "v": "0", "radius": ""}]}}}
         ],
         "opening": {"width": "L", "height": "A", "own_symbol": true}
     });
@@ -1749,8 +1754,9 @@ fn doors_and_windows_are_components() {
     // The leaves stand on the side the door opens to; flipping moves them across.
     let side = |s: &mut Session| {
         let fills = &s.geometry().opening_fills[&cc_core::ElementId(id(&door))];
-        assert_eq!(fills.len(), 3);
-        let ys: Vec<f64> = fills.iter().filter(|p| p.in_plan).flat_map(|p| p.footprint.iter().map(|q| q.y)).collect();
+        assert_eq!(fills.len(), 4);
+        let leaves = fills.iter().filter(|p| p.in_plan && !p.plan_only);
+        let ys: Vec<f64> = leaves.flat_map(|p| p.footprint.iter().map(|q| q.y)).collect();
         ys.iter().sum::<f64>() / ys.len() as f64
     };
     assert!(side(&mut s) > 0.0);
@@ -1768,7 +1774,9 @@ fn doors_and_windows_are_components() {
                 if e.0 == id(&door))
         })
         .count();
-    assert_eq!(lines, 8, "the leaves' outlines (the tag draws annotation lines)");
+    assert!(lines > 8, "the leaves' outlines and the swing symbol (the tag draws annotation lines): {lines}");
+    // The swing is a plan symbol only: three solids (two leaves and the head).
+    assert_eq!(s.geometry().solids_of(cc_core::ElementId(id(&door))).count(), 3);
 
     // A component file carries the door type.
     let path = scratch("porta-dupla.ccomp");

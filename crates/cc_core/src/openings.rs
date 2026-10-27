@@ -77,6 +77,7 @@ fn piece(name: &str, material: &str, [x, y, z, width, depth, height]: [String; 6
         material: material.to_string(),
         in_plan: false,
         void: false,
+        plan_only: false,
     }
 }
 

@@ -614,7 +614,14 @@ mod tests {
             vec![2, 0, 4, 6],
         ];
         let shape = ComponentShape::Mesh { vertices: (0..8).map(v).collect(), faces };
-        let item = ComponentItem { name: "m".into(), shape, material: String::new(), in_plan: true, void: false };
+        let item = ComponentItem {
+            name: "m".into(),
+            shape,
+            material: String::new(),
+            in_plan: true,
+            void: false,
+            plan_only: false,
+        };
         let id = doc.edit("t", |e| {
             let type_id = ElementTypeId(e.alloc_id());
             let def = ComponentDef { items: vec![item], ..Default::default() };

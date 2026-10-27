@@ -52,6 +52,7 @@ pub fn opening_parts(
                 material: if p.panel { ty.main_material().to_string() } else { String::new() },
                 in_plan: false,
                 void: false,
+                plan_only: false,
                 faces: Vec::new(),
             })
             .collect();
@@ -444,7 +445,7 @@ impl ModelGeometry {
             let key = (e.type_id, c.overrides.iter().map(|(k, v)| (k.clone(), v.to_bits())).collect());
             let local = resolved.entry(key).or_insert_with(|| crate::resolve_component(def, &c.overrides)).clone();
             let parts = place_parts(project, e, c, local);
-            for part in &parts {
+            for part in parts.iter().filter(|p| !p.plan_only) {
                 let mut s = Solid::of_material(e.id, e.category(), project, &part.material);
                 if part.faces.is_empty() {
                     s.add_prism(&part.footprint, |_| part.z0, |_| part.z1);
@@ -744,6 +745,10 @@ impl ModelGeometry {
                         for v in face.iter_mut() {
                             *v = world(v.truncate()).extend(v.z + o.z0);
                         }
+                    }
+                    if p.plan_only {
+                        placed.push(p);
+                        continue;
                     }
                     // Frames without a material keep the frame color.
                     let mut s = if p.material.is_empty() {

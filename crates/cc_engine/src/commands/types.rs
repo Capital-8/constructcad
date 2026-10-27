@@ -238,7 +238,9 @@ impl Command for TypeDelete {
 /// arc, positive bulging outwards) or a `Revolution` {plane, points, offset, axis, angle}
 /// (the profile turned about the line u = axis of its plane). Every field
 /// is an expression over the parameters (meters, degrees). A piece with
-/// `void: true` is cut out of the solid pieces it overlaps. A `kind` of
+/// `void: true` is cut out of the solid pieces it overlaps; one with
+/// `plan_only: true` is a plan symbol (a door's swing), drawn in plans and
+/// not a solid. A `kind` of
 /// `Door` or `Window` with an `opening` {width, height, sill, own_symbol}
 /// (expressions) makes a door or window type, placed with `door_create` or
 /// `window_create`: it cuts that opening in its wall; its frame has x along

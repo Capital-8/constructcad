@@ -80,6 +80,7 @@ impl Editor {
                 material: String::new(),
                 in_plan: true,
                 void: false,
+                plan_only: false,
             }],
         };
         Editor {
@@ -384,6 +385,7 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
                     material: String::new(),
                     in_plan: true,
                     void: false,
+                    plan_only: false,
                 });
                 ed.selected = ed.def.items.len() - 1;
             }
@@ -422,6 +424,7 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
         ui.end_row();
         ui.label("");
         ui.checkbox(&mut item.in_plan, t!("comp-piece-in-plan"));
+        ui.checkbox(&mut item.plan_only, t!("comp-piece-plan-only")).on_hover_text(t!("comp-piece-plan-only-tip"));
         ui.end_row();
         ui.label("");
         ui.checkbox(&mut item.void, t!("comp-piece-void")).on_hover_text(t!("comp-piece-void-tip"));
@@ -607,7 +610,8 @@ type PieceEdges = (usize, bool, Vec<(DVec2, DVec2)>);
 /// (and drawn in the warning color); the selected piece is highlighted.
 fn preview(ui: &mut Ui, ed: &Editor) {
     ui.label(theme::muted(t!("comp-preview")).size(12.0));
-    let solids = cc_geom::resolve_component_in(&ed.def, &Default::default(), PREVIEW_WALL);
+    let mut solids = cc_geom::resolve_component_in(&ed.def, &Default::default(), PREVIEW_WALL);
+    solids.retain(|p| !p.plan_only);
     let (all, _) = ed.def.resolve_in(&Default::default(), PREVIEW_WALL);
     let pieces: Vec<(usize, bool, Vec<Vec<DVec3>>)> = solids
         .iter()

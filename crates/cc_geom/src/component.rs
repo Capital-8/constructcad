@@ -22,8 +22,11 @@ pub fn resolve_component_in(
     extra: &[(&str, f64)],
 ) -> Vec<ComponentPart> {
     let (parts, _) = def.resolve_in(overrides, extra);
+    // Plan symbols take no part in the solids.
+    let (symbols, parts): (Vec<ComponentPart>, Vec<ComponentPart>) = parts.into_iter().partition(|p| p.plan_only);
     let (voids, mut solids): (Vec<ComponentPart>, Vec<ComponentPart>) = parts.into_iter().partition(|p| p.void);
     if voids.is_empty() {
+        solids.extend(symbols);
         return solids;
     }
     let cutters: Vec<Vec<Vec<DVec3>>> = voids.iter().map(|v| triangulated(&faces_of(v))).collect();
@@ -56,6 +59,7 @@ pub fn resolve_component_in(
         part.faces = body;
     }
     solids.retain(|p| p.footprint.len() >= 3);
+    solids.extend(symbols);
     solids
 }
 
@@ -127,7 +131,7 @@ mod tests {
     use cc_core::{ComponentItem, ComponentShape, ProfilePoint, SketchPlane};
 
     fn item(name: &str, shape: ComponentShape, void: bool) -> ComponentItem {
-        ComponentItem { name: name.into(), shape, material: String::new(), in_plan: true, void }
+        ComponentItem { name: name.into(), shape, material: String::new(), in_plan: true, void, plan_only: false }
     }
 
     fn volume(faces: &[Vec<DVec3>]) -> f64 {

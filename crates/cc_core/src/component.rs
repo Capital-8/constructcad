@@ -222,6 +222,9 @@ pub struct ComponentItem {
     /// The piece is cut out of the solid pieces it overlaps instead of adding to them.
     #[serde(default, skip_serializing_if = "is_false")]
     pub void: bool,
+    /// A plan symbol only (a door's swing): drawn in plans, not a solid.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub plan_only: bool,
 }
 
 fn yes() -> bool {
@@ -308,6 +311,8 @@ pub struct ComponentPart {
     pub in_plan: bool,
     /// Cut out of the other pieces (see `cc_geom::resolve_component`).
     pub void: bool,
+    /// Drawn in plans only (see [`ComponentItem::plan_only`]).
+    pub plan_only: bool,
     /// Faces of a piece that is not a vertical prism (empty for prisms).
     pub faces: Vec<Vec<DVec3>>,
 }
@@ -411,8 +416,9 @@ impl ComponentDef {
                     z0,
                     z1,
                     material: item.material.clone(),
-                    in_plan: item.in_plan,
-                    void: item.void,
+                    in_plan: item.in_plan || item.plan_only,
+                    void: item.void && !item.plan_only,
+                    plan_only: item.plan_only,
                     faces,
                 }),
                 Err(e) => errors.push((i, e)),
@@ -637,6 +643,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
             material: material.to_string(),
             in_plan: plan,
             void: false,
+            plan_only: false,
         }
     };
     let s = |v: &str| v.to_string();
@@ -825,6 +832,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 material: porcelain.clone(),
                 in_plan: true,
                 void: false,
+                plan_only: false,
             },
             bx(
                 &n("tpl-part-tank"),
@@ -872,6 +880,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 material: porcelain.clone(),
                 in_plan: false,
                 void: false,
+                plan_only: false,
             },
         ],
     };
@@ -924,6 +933,7 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
         material: material.to_string(),
         in_plan: true,
         void: false,
+        plan_only: false,
     };
     // A box W x D x H with its back on the X axis, standing out towards -Y.
     let wall_box = |z: &str| ComponentShape::Box {
@@ -1134,6 +1144,7 @@ mod tests {
             material: String::new(),
             in_plan: true,
             void: false,
+            plan_only: false,
         };
         let def = ComponentDef { items: vec![item.clone()], ..Default::default() };
         let (parts, errors) = def.resolve(&BTreeMap::new());

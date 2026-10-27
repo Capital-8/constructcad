@@ -1038,7 +1038,8 @@ impl<'a> Exporter<'a> {
                 Some(storey),
                 Frame::horizontal(DVec3::new(c.position.x, c.position.y, c.base_offset), rot),
             );
-            let parts = cc_geom::resolve_component(def, &c.overrides);
+            let mut parts = cc_geom::resolve_component(def, &c.overrides);
+            parts.retain(|p| !p.plan_only);
             // Shapes mix no representation types: with any mesh piece, all pieces are face sets.
             let tessellated = parts.iter().any(|p| !p.faces.is_empty());
             let mut items = Vec::new();
@@ -1626,7 +1627,8 @@ impl<'a> Exporter<'a> {
         // The filling shares the opening's frame.
         let fill_placement = self.local_placement(Some(placement), fill_frame);
         let frame_style = self.style("Frame", FRAME_COLOR, 0.0);
-        let parts = opening_parts(project, e, width, height, g.half);
+        let mut parts = opening_parts(project, e, width, height, g.half);
+        parts.retain(|p| !p.plan_only);
         // Shapes mix no representation types: with any faceted piece, all pieces are face sets.
         let tessellated = parts.iter().any(|p| !p.faces.is_empty());
         let mut items = Vec::new();
