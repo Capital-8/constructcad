@@ -33,7 +33,7 @@ Options:
   --save                 save the project afterwards (to its file)
   --save-as <file>       save the project afterwards to <file>
   --lang <code>          language of default names (default: the system's):
-                         en, pt-BR, es, fr, de, it, pl, uk-UA or zh-TW
+                         en, pt-BR, es, fr, de, it, lo, pl, uk-UA or zh-TW
   -V, --version          the version
   -h, --help             this help
 

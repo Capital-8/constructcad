@@ -95,7 +95,7 @@ ccad [opções] mcp                  serve os comandos por MCP (stdio)
 --save                    salva o projeto no fim (no próprio arquivo)
 --save-as <arquivo>       salva o projeto no fim em <arquivo>
 --lang <código>           idioma dos nomes padrão e mensagens (também CCAD_LANG):
-                          en, pt-BR, es, fr, de, it, pl, uk-UA ou zh-TW
+                          en, pt-BR, es, fr, de, it, lo, pl, uk-UA ou zh-TW
 ```
 
 Os argumentos de `run` podem ser um objeto JSON, `@arquivo.json`, `-` (entrada padrão) ou pares `chave=valor`, cujos valores são lidos como JSON quando possível e como texto caso contrário:
