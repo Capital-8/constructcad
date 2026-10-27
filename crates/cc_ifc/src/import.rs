@@ -135,6 +135,18 @@ impl Body {
             _ => None,
         }
     }
+
+    /// A slab's extrusion and the extrusions its body subtracts from it
+    /// (shafts some tools cut out of the body as well as with openings);
+    /// `None` when anything else changed it.
+    fn slab_extrusion(&self) -> Option<(&Extrusion, &[Extrusion])> {
+        match self.solids.as_slice() {
+            [s] if !s.other_cut && (!s.clipped || !s.cuts.is_empty()) => {
+                s.extrusion.as_ref().filter(|e| e.profile.closed).map(|e| (e, s.cuts.as_slice()))
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Outline loops (the outer one first, counter-clockwise; then openings)
@@ -318,6 +330,12 @@ fn clean_polygon(pts: Vec<DVec2>) -> Vec<DVec2> {
 /// How far an opening may stop short of a slab's faces and still pass through it (m).
 const SLAB_TOL: f64 = 1e-3;
 
+/// Whether two outlines have the same corners (within a millimeter), in any order.
+fn same_outline(a: &[DVec2], b: &[DVec2]) -> bool {
+    let covers = |a: &[DVec2], b: &[DVec2]| a.iter().all(|p| b.iter().any(|q| p.distance(*q) < 1e-3));
+    a.len() == b.len() && covers(a, b) && covers(b, a)
+}
+
 /// Whether `opening` is an outline with an area strictly inside `outline`.
 fn openings_fit(outline: &[DVec2], opening: &[DVec2]) -> bool {
     opening.len() >= 3
@@ -343,8 +361,8 @@ fn edges_meet(a: &[DVec2], b: &[DVec2]) -> bool {
     (0..n).any(|i| (0..m).any(|j| crosses(a[i], a[(i + 1) % n], b[j], b[(j + 1) % m])))
 }
 
-/// Whether an outline `thickness` thick is shaped like a slab: thinner than
-/// it is wide (the narrower side of its oriented bounding box).
+/// Whether an outline `thickness` thick is shaped like a slab: at least
+/// [`SLAB_ASPECT`] times as wide as thick (pile caps are blocks, not rafts).
 fn slab_like(outline: &[DVec2], thickness: f64) -> bool {
     let n = outline.len();
     // The narrowest extent over the outline's edge directions (exact for convex outlines).
@@ -356,8 +374,11 @@ fn slab_like(outline: &[DVec2], thickness: f64) -> bool {
                 - across.iter().copied().fold(f64::INFINITY, f64::min)
         })
         .fold(f64::INFINITY, f64::min);
-    width.is_finite() && thickness < width
+    width.is_finite() && thickness * SLAB_ASPECT <= width
 }
+
+/// How many times wider than thick a base slab is to be a raft.
+const SLAB_ASPECT: f64 = 3.0;
 
 /// Type names from other tools often end in an instance number ("Wall:Generic 200mm:123456").
 fn clean_name(name: &str) -> String {
@@ -1309,23 +1330,33 @@ impl<'a> Importer<'a> {
     /// outline and apart from the others (natives could not show it).
     #[allow(clippy::type_complexity)]
     fn slab_sketch(&self, id: u32, body: &Body) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64)> {
-        let (z0, z1) = body.z_range()?;
-        let ex = body.sole_extrusion_with_voids().filter(|e| e.is_vertical())?;
+        let (ex, cuts) = body.slab_extrusion().filter(|(e, _)| e.is_vertical())?;
+        let (z0, z1) = ex.z_range();
         let outline = clean_polygon(ex.footprint());
         if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
             return None;
         }
         let mut openings: Vec<Vec<DVec2>> = ex.void_footprints().into_iter().map(clean_polygon).collect();
+        // An opening passes through the whole slab (a recess would leave part of it).
+        let through = |(c0, c1): (f64, f64)| c0 <= z0 + SLAB_TOL && c1 >= z1 - SLAB_TOL;
+        for cut in cuts {
+            if !(cut.is_vertical() && cut.profile.holes.is_empty() && through(cut.z_range())) {
+                return None;
+            }
+            openings.push(clean_polygon(cut.footprint()));
+        }
         let f = self.f;
         for o in self.openings_of.get(&id).into_iter().flatten() {
             let (_, cutter) = self.product(f.get(*o)?);
             let cut = cutter.sole_extrusion().filter(|e| e.is_vertical())?;
-            let (c0, c1) = cutter.z_range()?;
-            // Through the whole slab (a recess would leave part of it).
-            if c0 > z0 + SLAB_TOL || c1 < z1 - SLAB_TOL {
+            if !through(cutter.z_range()?) {
                 return None;
             }
-            openings.push(clean_polygon(cut.footprint()));
+            // The same shaft may be cut out of the body and voided by an opening.
+            let footprint = clean_polygon(cut.footprint());
+            if !openings.iter().any(|o| same_outline(o, &footprint)) {
+                openings.push(footprint);
+            }
         }
         openings.iter().all(|o| openings_fit(&outline, o)).then_some(())?;
         for (i, a) in openings.iter().enumerate() {
@@ -2211,8 +2242,9 @@ END-ISO-10303-21;
     }
 
     /// Slabs as other tools write them (millimeters): a floor voided by a
-    /// shaft through it, one with a recess, one whose profile has a void, a
-    /// raft, and a pile and a pile cap written as base slabs.
+    /// shaft through it, one with a recess, one whose profile has a void, one
+    /// with the shaft cut out of its body and voided by an opening too, a
+    /// raft, and a pile and two pile caps written as base slabs.
     #[test]
     fn slabs_with_openings_and_base_slabs() {
         let text = "ISO-10303-21;
@@ -2274,6 +2306,11 @@ DATA;
 #313=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#314));
 #314=IFCEXTRUDEDAREASOLID(#315,$,#14,1200.);
 #315=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,1800.,800.);
+#320=IFCSLAB('GXvctVUKr0kugbFTf53O9L',$,'Pile Cap:2000 x 2000:8',$,$,#201,#322,'8',.BASESLAB.);
+#322=IFCPRODUCTDEFINITIONSHAPE($,$,(#323));
+#323=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#324));
+#324=IFCEXTRUDEDAREASOLID(#325,$,#14,900.);
+#325=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,2000.,2000.);
 #400=IFCSLAB('BXvctVUKr0kugbFTf53O9L',$,'Floor:Voided:6',$,$,#401,#402,'6',.FLOOR.);
 #401=IFCLOCALPLACEMENT(#11,#403);
 #403=IFCAXIS2PLACEMENT3D(#404,$,$);
@@ -2292,7 +2329,17 @@ DATA;
 #415=IFCCARTESIANPOINT((3000.,5000.));
 #416=IFCCARTESIANPOINT((5000.,5000.));
 #417=IFCCARTESIANPOINT((5000.,3000.));
-#500=IFCRELCONTAINEDINSPATIALSTRUCTURE('CXvctVUKr0kugbFTf53O9L',$,$,$,(#100,#140,#200,#300,#310,#400),#10);
+#600=IFCSLAB('DXvctVUKr0kugbFTf53O9L',$,'Floor:Cut:7',$,$,#601,#602,'7',.FLOOR.);
+#601=IFCLOCALPLACEMENT(#11,#603);
+#603=IFCAXIS2PLACEMENT3D(#604,$,$);
+#604=IFCCARTESIANPOINT((60000.,0.,0.));
+#602=IFCPRODUCTDEFINITIONSHAPE($,$,(#605));
+#605=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#606));
+#606=IFCBOOLEANRESULT(.DIFFERENCE.,#104,#114);
+#610=IFCOPENINGELEMENT('EXvctVUKr0kugbFTf53O9L',$,'Shaft',$,$,#611,#112,$,.OPENING.);
+#611=IFCLOCALPLACEMENT(#601,#12);
+#612=IFCRELVOIDSELEMENT('FXvctVUKr0kugbFTf53O9L',$,$,$,#600,#610);
+#500=IFCRELCONTAINEDINSPATIALSTRUCTURE('CXvctVUKr0kugbFTf53O9L',$,$,$,(#100,#140,#200,#300,#310,#320,#400,#600),#10);
 ENDSEC;
 END-ISO-10303-21;
 ";
@@ -2305,8 +2352,11 @@ END-ISO-10303-21;
                 _ => None,
             })
             .collect();
-        // The shafted floor and the voided one are native, with their openings.
-        assert_eq!(floors.len(), 2, "{report:?}");
+        // The shafted floors and the voided one are native, with their openings.
+        assert_eq!(floors.len(), 3, "{report:?}");
+        let cut = floors.iter().find(|f| f.boundary.iter().all(|q| q.x >= 60.0 - 1e-9)).unwrap();
+        assert_eq!(cut.openings.len(), 1, "the shaft counts once");
+        assert!((cut.area() - 56.0).abs() < 1e-9, "{}", cut.area());
         let shafted = floors.iter().find(|f| f.boundary.iter().all(|q| q.x < 15.0)).unwrap();
         assert_eq!(shafted.openings.len(), 1);
         assert!((shafted.area() - (60.0 - 4.0)).abs() < 1e-9, "{}", shafted.area());
@@ -2326,8 +2376,8 @@ END-ISO-10303-21;
         assert_eq!(rafts.len(), 1);
         assert!(matches!(rafts[0].shape, cc_core::FoundationShape::Slab { .. }));
         assert!((rafts[0].top_offset + 0.6).abs() < 1e-9, "{}", rafts[0].top_offset);
-        // The recessed floor, the pile and the pile cap keep their class as components.
-        assert_eq!(report.generic.values().sum::<usize>(), 3, "{:?}", report.generic);
+        // The recessed floor, the pile and the pile caps keep their class as components.
+        assert_eq!(report.generic.values().sum::<usize>(), 4, "{:?}", report.generic);
         let slab_components = p
             .types
             .values()

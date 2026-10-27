@@ -126,6 +126,13 @@ impl Extrusion {
         self.profile.pts.iter().map(|p| self.xf.transform_point3(p.extend(0.0)).truncate()).collect()
     }
 
+    /// Lowest and highest z of the extruded profile.
+    pub fn z_range(&self) -> (f64, f64) {
+        let zs = self.profile.pts.iter().map(|p| self.plane_point(*p).z);
+        zs.flat_map(|z| [z, z + self.vector.z])
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), z| (lo.min(z), hi.max(z)))
+    }
+
     /// World XY of the profile's voids, like [`Extrusion::footprint`].
     pub fn void_footprints(&self) -> Vec<Vec<DVec2>> {
         let xy = |p: &DVec2| self.xf.transform_point3(p.extend(0.0)).truncate();
@@ -154,12 +161,18 @@ pub struct Solid {
     pub item: u32,
     /// A half space or boolean cut the item (its extrusion is the uncut one).
     pub clipped: bool,
+    /// The plain extrusions a boolean difference subtracted from it (a slab
+    /// with its shafts cut out of its body).
+    pub cuts: Vec<Extrusion>,
+    /// Something other than those extrusions changed it (half spaces,
+    /// intersections, cutters of other shapes).
+    pub other_cut: bool,
 }
 
 impl Solid {
     fn new(item: u32, mesh: Vec<Polygon>, extrusion: Option<Extrusion>) -> Self {
         let points = mesh.iter().flatten().copied().collect();
-        Self { extrusion, mesh, points, item, clipped: false }
+        Self { extrusion, mesh, points, item, clipped: false, cuts: Vec::new(), other_cut: false }
     }
 
     /// Replace the faces by a cut version of them; a changed solid is
@@ -1089,6 +1102,7 @@ impl<'a> Geometry<'a> {
                             for s in &mut first {
                                 let mesh = clip_mesh(&s.mesh, point, keep);
                                 s.replace_mesh(mesh);
+                                s.other_cut |= s.clipped;
                             }
                         } else {
                             let mut second = Vec::new();
@@ -1097,6 +1111,10 @@ impl<'a> Geometry<'a> {
                                 for cutter in &second {
                                     if let Some(mesh) = subtract(&s.mesh, &cutter.mesh) {
                                         s.replace_mesh(mesh);
+                                        match &cutter.extrusion {
+                                            Some(ex) if !cutter.clipped => s.cuts.push(ex.clone()),
+                                            _ => s.other_cut = true,
+                                        }
                                     }
                                 }
                             }
@@ -1111,6 +1129,7 @@ impl<'a> Geometry<'a> {
                         for s in &mut first {
                             if let Some(mesh) = cc_geom::csg::intersect(&s.mesh, &other) {
                                 s.replace_mesh(mesh);
+                                s.other_cut = true;
                             }
                         }
                         first.retain(|s| !s.mesh.is_empty());
