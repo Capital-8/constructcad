@@ -1,10 +1,141 @@
 //! Geometry edits of linear elements (walls, beams, grids): trim or extend
-//! to a corner or to a reference line, split, offset and align.
+//! to a corner or to a reference line, split, offset and align. Arc walls
+//! take part on their circle: they trim and extend along it, and meet lines
+//! and other arcs where the circles cross.
 //!
 //! Picks are plan points on the element: the picked part is the part kept.
 
+use crate::arc::{Arc, MAX_BULGE};
 use crate::{EditCtx, Element, ElementId, ElementKind, Project};
 use glam::DVec2;
+
+/// Where a linear element runs: a straight line, or an arc (arc walls).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Path {
+    Line(DVec2, DVec2),
+    Arc(Arc),
+}
+
+/// The path of a linear element, if it has one.
+pub fn path_of(e: &Element) -> Option<Path> {
+    let (a, b) = line_of(e)?;
+    match e.as_wall().and_then(|w| w.arc()) {
+        Some(arc) => Some(Path::Arc(arc)),
+        None => Some(Path::Line(a, b)),
+    }
+}
+
+impl Path {
+    fn length(&self) -> f64 {
+        match self {
+            Path::Line(a, b) => a.distance(*b),
+            Path::Arc(c) => c.length(),
+        }
+    }
+
+    /// Distance along the path from its start to (the projection of) `p`;
+    /// negative before the start, past the length after the end.
+    fn param(&self, p: DVec2) -> f64 {
+        match self {
+            Path::Line(a, b) => (p - *a).dot((*b - *a).normalize_or_zero()),
+            Path::Arc(c) => c.locate(p).0,
+        }
+    }
+
+    /// Whether `p` (a point on its line or circle) lies on the path itself.
+    fn holds(&self, p: DVec2) -> bool {
+        (-1e-6..=self.length() + 1e-6).contains(&self.param(p))
+    }
+
+    /// Points where the infinite line or full circle of `self` meets that of `other`.
+    fn crossings(&self, other: &Path) -> Vec<DVec2> {
+        match (self, other) {
+            (Path::Line(a, b), Path::Line(c, d)) => {
+                crossing(*a, *b, *c, *d).map(|t| *a + (*b - *a) * t).into_iter().collect()
+            }
+            (Path::Line(a, b), Path::Arc(c)) | (Path::Arc(c), Path::Line(a, b)) => {
+                line_circle(*a, *b, c.center, c.radius)
+            }
+            (Path::Arc(c), Path::Arc(d)) => circle_circle(c.center, c.radius, d.center, d.radius),
+        }
+    }
+
+    /// The part of the path between `t0` and `t1` along it (beyond the ends
+    /// it continues on its line or circle): ends and bulge.
+    fn part(&self, t0: f64, t1: f64) -> Option<(DVec2, DVec2, f64)> {
+        if t1 - t0 < 1e-4 {
+            return None;
+        }
+        match self {
+            Path::Line(a, b) => {
+                let dir = (*b - *a).normalize_or_zero();
+                Some((*a + dir * t0, *a + dir * t1, 0.0))
+            }
+            Path::Arc(c) => {
+                let bulge = c.bulge_between(t0, t1);
+                (bulge.is_finite() && bulge.abs() <= MAX_BULGE).then(|| (c.point(t0), c.point(t1), bulge))
+            }
+        }
+    }
+
+    /// The path cut or extended to `x` (a point on its line or circle),
+    /// keeping the side of `pick`: the new part and the distance its start
+    /// moved along the path.
+    fn trimmed(&self, pick: DVec2, x: DVec2) -> Option<Trimmed> {
+        let (t, tp, len) = (self.param(x), self.param(pick), self.length());
+        let (t0, t1) = if tp < t { (0.0, t) } else { (t, len) };
+        let (start, end, bulge) = self.part(t0, t1)?;
+        Some(Trimmed { start, end, bulge, shift: t0, change: ((t1 - t0) - len).abs() })
+    }
+}
+
+/// A trimmed or extended path.
+#[derive(Debug, Clone, Copy)]
+struct Trimmed {
+    start: DVec2,
+    end: DVec2,
+    bulge: f64,
+    /// How far the start moved along the path (openings move back by it).
+    shift: f64,
+    /// How much the length changed.
+    change: f64,
+}
+
+/// Preference among the crossings of two paths (an arc's circle crosses a
+/// line or another circle twice): fewest of the two paths missing it (a
+/// crossing on the elements themselves first), then the least change.
+fn rank(x: DVec2, p: &Path, q: &Path, change: f64) -> (u8, f64) {
+    (u8::from(!p.holds(x)) + u8::from(!q.holds(x)), change)
+}
+
+fn better(a: (u8, f64), b: (u8, f64)) -> std::cmp::Ordering {
+    a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
+}
+
+/// Points where the infinite line `a`-`b` meets the circle.
+fn line_circle(a: DVec2, b: DVec2, center: DVec2, radius: f64) -> Vec<DVec2> {
+    let Some(d) = (b - a).try_normalize() else { return Vec::new() };
+    let foot = a + d * (center - a).dot(d);
+    let h2 = radius * radius - foot.distance_squared(center);
+    if h2 < -1e-12 {
+        return Vec::new();
+    }
+    let h = h2.max(0.0).sqrt();
+    if h < 1e-9 { vec![foot] } else { vec![foot - d * h, foot + d * h] }
+}
+
+/// Points where two circles meet.
+fn circle_circle(c0: DVec2, r0: f64, c1: DVec2, r1: f64) -> Vec<DVec2> {
+    let dist = c0.distance(c1);
+    if dist < 1e-9 || dist > r0 + r1 + 1e-9 || dist < (r0 - r1).abs() - 1e-9 {
+        return Vec::new();
+    }
+    let u = (c1 - c0) / dist;
+    let along = (dist * dist + r0 * r0 - r1 * r1) / (2.0 * dist);
+    let h = (r0 * r0 - along * along).max(0.0).sqrt();
+    let foot = c0 + u * along;
+    if h < 1e-9 { vec![foot] } else { vec![foot + u.perp() * h, foot - u.perp() * h] }
+}
 
 /// Location line of a linear element, if it has one.
 pub fn line_of(e: &Element) -> Option<(DVec2, DVec2)> {
@@ -33,15 +164,6 @@ fn crossing(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> Option<f64> {
         return None;
     }
     Some((c - a).perp_dot(v) / den)
-}
-
-/// The line `a`-`b` cut or extended to the line `c`-`d`, keeping the side of `pick`.
-fn trimmed(a: DVec2, b: DVec2, pick: DVec2, c: DVec2, d: DVec2) -> Option<(DVec2, DVec2)> {
-    let t = crossing(a, b, c, d)?;
-    let x = a + (b - a) * t;
-    let tp = (pick - a).dot(b - a) / (b - a).length_squared().max(1e-12);
-    let (s, e) = if tp < t { (a, x) } else { (x, b) };
-    (s.distance(e) > 1e-4).then_some((s, e))
 }
 
 /// Ends of other walls on the same level that meet `point` (within 1 cm),
@@ -80,17 +202,13 @@ fn line(project: &Project, id: ElementId) -> Result<(DVec2, DVec2), EditError> {
     project.element(id).and_then(line_of).ok_or(EditError::NotLinear)
 }
 
-/// The line of a straight element: arc walls are refused.
-fn straight_line(project: &Project, id: ElementId) -> Result<(DVec2, DVec2), EditError> {
-    if project.element(id).and_then(|e| e.as_wall()).is_some_and(|w| w.arc().is_some()) {
-        return Err(EditError::Curved);
-    }
-    line(project, id)
+/// The path of an element (line or arc).
+pub fn path(project: &Project, id: ElementId) -> Result<Path, EditError> {
+    project.element(id).and_then(path_of).ok_or(EditError::NotLinear)
 }
 
-/// Hosted openings beyond the new length move inward; offsets follow a moved start.
-fn keep_openings(ctx: &mut EditCtx, wall: ElementId, old_start: DVec2, new_start: DVec2, dir: DVec2, length: f64) {
-    let shift = (new_start - old_start).dot(dir);
+/// Hosted openings move back by `shift` along the wall (a moved start) and stay within its new length.
+fn keep_openings(ctx: &mut EditCtx, wall: ElementId, shift: f64, length: f64) {
     let hosted: Vec<ElementId> = ctx.project().hosted_by(wall).map(|h| h.id).collect();
     for h in hosted {
         if let Some(x) = ctx.element_mut(h).and_then(|e| e.as_hosted_mut()) {
@@ -108,28 +226,60 @@ impl EditCtx<'_> {
         let new_length = self.project().element(id).and_then(|e| e.as_wall()).map(|w| w.length());
         if let Some((old_s, _)) = old {
             let dir = (e - s).normalize_or_zero();
-            keep_openings(self, id, old_s, s, dir, new_length.unwrap_or(s.distance(e)));
+            keep_openings(self, id, (s - old_s).dot(dir), new_length.unwrap_or(s.distance(e)));
         }
     }
 
+    /// Give `id` the trimmed path `t` (an arc wall keeps its circle).
+    fn apply_trimmed(&mut self, id: ElementId, t: Trimmed) {
+        if let Some(el) = self.element_mut(id) {
+            set_line(el, t.start, t.end);
+            if let ElementKind::Wall(w) = &mut el.kind {
+                w.bulge = t.bulge;
+            }
+        }
+        let length =
+            self.project().element(id).and_then(|e| e.as_wall()).map_or(t.start.distance(t.end), |w| w.length());
+        keep_openings(self, id, t.shift, length);
+    }
+
     /// Trim or extend two elements so they meet at a corner, keeping the
-    /// picked parts.
+    /// picked parts. Lines meet where they cross; an arc wall meets a line
+    /// or another arc where its circle crosses it (of two crossings, the one
+    /// on the elements themselves, else the one that changes them least).
     pub fn trim_corner(&mut self, a: ElementId, pick_a: DVec2, b: ElementId, pick_b: DVec2) -> Result<(), EditError> {
-        let (la, lb) = (straight_line(self.project(), a)?, straight_line(self.project(), b)?);
-        crossing(la.0, la.1, lb.0, lb.1).ok_or(EditError::Parallel)?;
-        let na = trimmed(la.0, la.1, pick_a, lb.0, lb.1).ok_or(EditError::Degenerate)?;
-        let nb = trimmed(lb.0, lb.1, pick_b, la.0, la.1).ok_or(EditError::Degenerate)?;
-        self.apply_line(a, na);
-        self.apply_line(b, nb);
+        let (pa, pb) = (path(self.project(), a)?, path(self.project(), b)?);
+        let crossings = pa.crossings(&pb);
+        if crossings.is_empty() {
+            return Err(EditError::Parallel);
+        }
+        let (_, na, nb) = crossings
+            .iter()
+            .filter_map(|x| {
+                let (a, b) = (pa.trimmed(pick_a, *x)?, pb.trimmed(pick_b, *x)?);
+                Some((rank(*x, &pa, &pb, a.change + b.change), a, b))
+            })
+            .min_by(|a, b| better(a.0, b.0))
+            .ok_or(EditError::Degenerate)?;
+        self.apply_trimmed(a, na);
+        self.apply_trimmed(b, nb);
         Ok(())
     }
 
-    /// Trim or extend `id` to the reference line `r0`-`r1`, keeping the picked part.
-    pub fn trim_to(&mut self, id: ElementId, pick: DVec2, r0: DVec2, r1: DVec2) -> Result<(), EditError> {
-        let l = straight_line(self.project(), id)?;
-        crossing(l.0, l.1, r0, r1).ok_or(EditError::Parallel)?;
-        let n = trimmed(l.0, l.1, pick, r0, r1).ok_or(EditError::Degenerate)?;
-        self.apply_line(id, n);
+    /// Trim or extend `id` to the `reference` path (a line, or an arc's
+    /// circle), keeping the picked part.
+    pub fn trim_to(&mut self, id: ElementId, pick: DVec2, reference: Path) -> Result<(), EditError> {
+        let p = path(self.project(), id)?;
+        let crossings = p.crossings(&reference);
+        if crossings.is_empty() {
+            return Err(EditError::Parallel);
+        }
+        let (_, n) = crossings
+            .iter()
+            .filter_map(|x| p.trimmed(pick, *x).map(|t| (rank(*x, &p, &reference, t.change), t)))
+            .min_by(|a, b| better(a.0, b.0))
+            .ok_or(EditError::Degenerate)?;
+        self.apply_trimmed(id, n);
         Ok(())
     }
 
@@ -236,18 +386,43 @@ impl EditCtx<'_> {
         Ok(self.add_element(copy))
     }
 
-    /// Move `id` (with its openings) so its line lies on the parallel
-    /// reference line `r0`-`r1`.
-    pub fn align_to(&mut self, id: ElementId, r0: DVec2, r1: DVec2) -> Result<(), EditError> {
-        let (a, b) = straight_line(self.project(), id)?;
-        let (u, v) = ((b - a).normalize_or_zero(), (r1 - r0).normalize_or_zero());
-        if u.perp_dot(v).abs() > 0.02 {
-            return Err(EditError::Parallel);
+    /// Move `id` (with its openings) onto the `reference` path: a line onto
+    /// a parallel line, an arc wall onto the circle of a concentric arc (its
+    /// radius changes, its sweep stays; openings keep their angles).
+    pub fn align_to(&mut self, id: ElementId, reference: Path) -> Result<(), EditError> {
+        match (path(self.project(), id)?, reference) {
+            (Path::Line(a, b), Path::Line(r0, r1)) => {
+                let (u, v) = ((b - a).normalize_or_zero(), (r1 - r0).normalize_or_zero());
+                if u.perp_dot(v).abs() > 0.02 {
+                    return Err(EditError::Parallel);
+                }
+                let n = v.perp();
+                let shift = n * (r0 - a).dot(n);
+                self.transform_elements(&[id], &crate::PlanTransform::translate(shift));
+                Ok(())
+            }
+            (Path::Arc(c), Path::Arc(r)) => {
+                if c.center.distance(r.center) > 1e-3 {
+                    return Err(EditError::Parallel);
+                }
+                let (Some((a, b)), true) = (self.project().element(id).and_then(line_of), r.radius > 1e-3) else {
+                    return Err(EditError::Degenerate);
+                };
+                let onto = |p: DVec2| c.center + (p - c.center).normalize_or_zero() * r.radius;
+                if let Some(el) = self.element_mut(id) {
+                    set_line(el, onto(a), onto(b));
+                }
+                let scale = r.radius / c.radius.max(1e-12);
+                let hosted: Vec<ElementId> = self.project().hosted_by(id).map(|h| h.id).collect();
+                for h in hosted {
+                    if let Some(x) = self.element_mut(h).and_then(|e| e.as_hosted_mut()) {
+                        x.offset *= scale;
+                    }
+                }
+                Ok(())
+            }
+            _ => Err(EditError::Curved),
         }
-        let n = v.perp();
-        let shift = n * (r0 - a).dot(n);
-        self.transform_elements(&[id], &crate::PlanTransform::translate(shift));
-        Ok(())
     }
 }
 
@@ -333,7 +508,7 @@ mod tests {
         let h = doc.project.element(door).and_then(|e| e.as_hosted()).cloned().unwrap();
         assert_eq!((h.host, h.offset), (second, 2.0));
         // Trim the second wall's start back to x = 7 (keeping the end): the door stays put.
-        doc.edit("trim", |e| e.trim_to(second, v(9.0, 0.0), v(7.0, -1.0), v(7.0, 1.0))).unwrap();
+        doc.edit("trim", |e| e.trim_to(second, v(9.0, 0.0), Path::Line(v(7.0, -1.0), v(7.0, 1.0)))).unwrap();
         assert_eq!(wall(&doc, second), (v(7.0, 0.0), v(10.0, 0.0)));
         let h = doc.project.element(door).and_then(|e| e.as_hosted()).cloned().unwrap();
         assert!((h.offset - 1.0).abs() < 1e-12);
@@ -346,10 +521,11 @@ mod tests {
         let (mut doc, ids) = doc_with_walls(&[(v(0.0, 0.0), v(4.0, 0.0)), (v(0.0, 3.0), v(4.0, 3.2))]);
         let copy = doc.edit("offset", |e| e.offset_copy(ids[0], 1.5)).unwrap();
         assert_eq!(wall(&doc, copy), (v(0.0, 1.5), v(4.0, 1.5)));
-        doc.edit("align", |e| e.align_to(copy, v(-1.0, 2.0), v(9.0, 2.0))).unwrap();
+        doc.edit("align", |e| e.align_to(copy, Path::Line(v(-1.0, 2.0), v(9.0, 2.0)))).unwrap();
         assert_eq!(wall(&doc, copy), (v(0.0, 2.0), v(4.0, 2.0)));
         // Not parallel enough.
-        assert_eq!(doc.edit("align", |e| e.align_to(ids[1], v(0.0, 0.0), v(0.0, 5.0))), Err(EditError::Parallel));
+        let upright = Path::Line(v(0.0, 0.0), v(0.0, 5.0));
+        assert_eq!(doc.edit("align", |e| e.align_to(ids[1], upright)), Err(EditError::Parallel));
     }
 
     #[test]
@@ -369,9 +545,116 @@ mod tests {
         // The copy runs on the circle of radius 3, from (0, 3) to (-3, 0).
         let (s, t) = wall(&doc, copy);
         assert!(s.distance(v(0.0, 3.0)) < 1e-9 && t.distance(v(-3.0, 0.0)) < 1e-9, "{s} {t}");
-        let trimmed = doc.edit("trim", |e| e.trim_to(copy, v(0.0, 3.0), v(-1.0, -1.0), v(-1.0, 1.0)));
-        assert_eq!(trimmed, Err(EditError::Curved));
         assert_eq!(doc.edit("offset", |e| e.offset_copy(copy, 5.0)), Err(EditError::Degenerate));
+    }
+
+    fn arc_wall(doc: &mut Document, id: ElementId, bulge: f64) {
+        doc.edit("arc", |e| {
+            if let Some(ElementKind::Wall(w)) = e.element_mut(id).map(|x| &mut x.kind) {
+                w.bulge = bulge;
+            }
+        });
+    }
+
+    fn arc_of(doc: &Document, id: ElementId) -> Arc {
+        doc.project.element(id).and_then(|e| e.as_wall()).and_then(|w| w.arc()).unwrap()
+    }
+
+    /// Arc walls trim and extend on their circle, to lines and to other arcs.
+    #[test]
+    fn arc_walls_trim_and_extend_on_their_circle() {
+        // A quarter circle of radius 4 around the origin, from (4, 0) to (0, 4),
+        // and a vertical wall x = 2 crossing the circle at y = ±√12.
+        let (mut doc, ids) = doc_with_walls(&[(v(4.0, 0.0), v(0.0, 4.0)), (v(2.0, -1.0), v(2.0, 1.0))]);
+        let bulge = (std::f64::consts::FRAC_PI_2 / 4.0).tan();
+        arc_wall(&mut doc, ids[0], bulge);
+        let r12 = 12f64.sqrt();
+        // Trim the arc to the line, keeping its end near (0, 4): it starts at (2, √12).
+        let line = Path::Line(v(2.0, -1.0), v(2.0, 1.0));
+        doc.edit("trim", |e| e.trim_to(ids[0], v(0.0, 4.0), line)).unwrap();
+        let (s, t) = wall(&doc, ids[0]);
+        assert!(s.distance(v(2.0, r12)) < 1e-9 && t.distance(v(0.0, 4.0)) < 1e-9, "{s} {t}");
+        let c = arc_of(&doc, ids[0]);
+        assert!(c.center.length() < 1e-9 && (c.radius - 4.0).abs() < 1e-9, "the circle stays");
+        // Extend the line to the arc's circle: it reaches the nearer crossing, (2, √12).
+        let circle = path(&doc.project, ids[0]).unwrap();
+        doc.edit("extend", |e| e.trim_to(ids[1], v(2.0, 0.0), circle)).unwrap();
+        let (s, t) = wall(&doc, ids[1]);
+        assert!(s.distance(v(2.0, -1.0)) < 1e-9 && t.distance(v(2.0, r12)) < 1e-9, "{s} {t}");
+        // Extend the arc back past its start to a horizontal line y = 0: it reaches (4, 0).
+        let floor = Path::Line(v(-5.0, 0.0), v(5.0, 0.0));
+        doc.edit("extend", |e| e.trim_to(ids[0], v(0.0, 4.0), floor)).unwrap();
+        let (s, _) = wall(&doc, ids[0]);
+        assert!(s.distance(v(4.0, 0.0)) < 1e-9, "{s}");
+        // A line that misses the circle cannot be reached.
+        let far = Path::Line(v(9.0, 0.0), v(9.0, 1.0));
+        assert_eq!(doc.edit("x", |e| e.trim_to(ids[0], v(0.0, 4.0), far)), Err(EditError::Parallel));
+        assert_eq!(doc.project.repair(), 0);
+    }
+
+    /// A corner between an arc wall and a line, and between two arcs.
+    #[test]
+    fn arc_walls_make_corners() {
+        // Arc of radius 4 from (4, 0) to (0, 4); a horizontal wall y = 2 from x = 1 to 3.
+        let (mut doc, ids) = doc_with_walls(&[(v(4.0, 0.0), v(0.0, 4.0)), (v(1.0, 2.0), v(3.0, 2.0))]);
+        arc_wall(&mut doc, ids[0], (std::f64::consts::FRAC_PI_2 / 4.0).tan());
+        let x = 12f64.sqrt();
+        // Keep the arc's top and the line: the line reaches the circle at (√12, 2).
+        doc.edit("corner", |e| e.trim_corner(ids[0], v(0.0, 4.0), ids[1], v(2.0, 2.0))).unwrap();
+        let (s, t) = wall(&doc, ids[0]);
+        assert!(s.distance(v(x, 2.0)) < 1e-9 && t.distance(v(0.0, 4.0)) < 1e-9, "{s} {t}");
+        let (s, t) = wall(&doc, ids[1]);
+        assert!(s.distance(v(1.0, 2.0)) < 1e-9 && t.distance(v(x, 2.0)) < 1e-9, "{s} {t}");
+
+        // Two arcs of radius 2 centered at (0, 0) and (2, 0) meet at (1, ±√3).
+        let (mut doc, ids) = doc_with_walls(&[(v(2.0, 0.0), v(-2.0, 0.0)), (v(0.0, 0.0), v(4.0, 0.0))]);
+        arc_wall(&mut doc, ids[0], 1.0); // upper half of the first circle
+        arc_wall(&mut doc, ids[1], 1.0); // lower half of the second, turning counter-clockwise
+        doc.edit("corner", |e| e.trim_corner(ids[0], v(-2.0, 0.0), ids[1], v(4.0, 0.0))).unwrap();
+        let r3 = 3f64.sqrt();
+        // Both keep their picked ends and start at the same crossing.
+        let (s0, t0) = wall(&doc, ids[0]);
+        let (s1, t1) = wall(&doc, ids[1]);
+        assert!(t0.distance(v(-2.0, 0.0)) < 1e-9 && t1.distance(v(4.0, 0.0)) < 1e-9, "{t0} {t1}");
+        assert!(s0.distance(s1) < 1e-9, "{s0} {s1}");
+        assert!((s0.x - 1.0).abs() < 1e-9 && (s0.y.abs() - r3).abs() < 1e-9, "{s0}");
+        assert_eq!(doc.project.repair(), 0);
+    }
+
+    /// An arc wall aligns onto a concentric arc, its openings keeping their angles.
+    #[test]
+    fn arc_walls_align_onto_concentric_arcs() {
+        let (mut doc, ids) = doc_with_walls(&[(v(4.0, 0.0), v(-4.0, 0.0)), (v(6.0, 0.0), v(0.0, 6.0))]);
+        arc_wall(&mut doc, ids[0], 1.0);
+        arc_wall(&mut doc, ids[1], (std::f64::consts::FRAC_PI_2 / 4.0).tan());
+        let level = doc.project.levels[0].id;
+        let door_t = doc.project.default_type(Category::Door).unwrap();
+        let door = doc.edit("door", |e| {
+            let id = ElementId(e.alloc_id());
+            let hosted = Hosted { host: ids[0], offset: 2.0, sill_height: 0.0, flip_facing: false, flip_hand: false };
+            e.add_element(Element {
+                id,
+                level,
+                type_id: door_t,
+                mark: "1".into(),
+                comments: String::new(),
+                kind: ElementKind::Door(hosted),
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+            })
+        });
+        let outer = path(&doc.project, ids[1]).unwrap();
+        doc.edit("align", |e| e.align_to(ids[0], outer)).unwrap();
+        let (s, t) = wall(&doc, ids[0]);
+        assert!(s.distance(v(6.0, 0.0)) < 1e-9 && t.distance(v(-6.0, 0.0)) < 1e-9, "{s} {t}");
+        let h = doc.project.element(door).and_then(|e| e.as_hosted()).cloned().unwrap();
+        assert!((h.offset - 3.0).abs() < 1e-9, "same angle on the larger circle: {}", h.offset);
+        // Not concentric, or a line onto an arc: refused.
+        let elsewhere = Path::Arc(Arc::from_bulge(v(10.0, 0.0), v(12.0, 0.0), 1.0).unwrap());
+        assert_eq!(doc.edit("x", |e| e.align_to(ids[0], elsewhere)), Err(EditError::Parallel));
+        let line = Path::Line(v(0.0, 0.0), v(1.0, 0.0));
+        assert_eq!(doc.edit("x", |e| e.align_to(ids[0], line)), Err(EditError::Curved));
     }
 
     #[test]

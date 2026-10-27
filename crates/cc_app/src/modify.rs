@@ -281,8 +281,11 @@ pub fn apply_rotation(state: &mut AppState, targets: &BTreeSet<ElementId>, cente
 fn axis_of(state: &AppState, id: ElementId) -> Option<(DVec2, DVec2)> {
     let e = state.project().element(id)?;
     match &e.kind {
-        // An arc wall has no straight line to mirror across.
-        ElementKind::Wall(w) if w.arc().is_some() => None,
+        // An arc wall mirrors across its axis of symmetry (through its center and middle).
+        ElementKind::Wall(w) if w.arc().is_some() => {
+            let arc = w.arc()?;
+            Some((arc.center, arc.point(arc.length() / 2.0)))
+        }
         ElementKind::Wall(w) => Some(state.project().wall_axis(e, w)),
         ElementKind::Grid(g) => Some((g.start, g.end)),
         ElementKind::Beam(b) => Some((b.start, b.end)),
@@ -527,6 +530,25 @@ mod tests {
         start(&mut state, Tool::Rotate);
         assert_eq!(state.tool, Tool::Rotate);
         assert_eq!(state.interaction.targets, vec![wall]);
+    }
+
+    /// An arc wall is a mirror axis through its center and middle (its axis of symmetry).
+    #[test]
+    fn arc_walls_mirror_across_their_axis_of_symmetry() {
+        let mut state = sample();
+        let created = state
+            .session
+            .run(cc_engine::commands::create::WallCreate {
+                start: [24.0, 0.0],
+                end: [16.0, 0.0],
+                bulge: Some(1.0),
+                ..Default::default()
+            })
+            .unwrap();
+        let id = ElementId(created["id"].as_u64().unwrap());
+        let (a, b) = axis_of(&state, id).unwrap();
+        assert!(a.distance(DVec2::new(20.0, 0.0)) < 1e-9, "{a}");
+        assert!(b.distance(DVec2::new(20.0, 4.0)) < 1e-9, "{b}");
     }
 
     #[test]

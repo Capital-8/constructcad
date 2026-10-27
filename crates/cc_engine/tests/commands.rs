@@ -1472,7 +1472,7 @@ fn arc_walls_through_commands() {
     let height = arc["derived"]["height"].as_f64().unwrap();
     let volume = arc["derived"]["volume"].as_f64().unwrap();
     assert!((volume - 4.0 * PI * thickness * height).abs() < 1e-9, "a free arc: length x thickness x height");
-    let chord = run(&mut s, "wall_create", json!({"start": [-4.0, 0.0], "end": [4.0, 0.0]}));
+    run(&mut s, "wall_create", json!({"start": [-4.0, 0.0], "end": [4.0, 0.0]}));
 
     // A door by a point near the top of the arc lands there, centered on the arc.
     let door = run(&mut s, "door_create", json!({"point": [0.3, 4.5]}));
@@ -1528,15 +1528,35 @@ fn arc_walls_through_commands() {
     let tight = json!({"start": [0.0, 10.0], "end": [0.1, 10.0], "bulge": 1.0});
     assert_eq!(fails(&mut s, "wall_create", tight), ErrorCode::Rejected);
 
-    // Split on the arc: two quarter circles; trimming an arc is refused.
+    // Split on the arc: two quarter circles.
     let split = run(&mut s, "element_split", json!({"id": id(&arc), "point": [0.0, 3.0]}));
     let parts = [split["original"].as_u64().unwrap(), split["created"].as_u64().unwrap()];
     for part in parts {
         let w = run(&mut s, "element_get", json!({"id": part}));
         assert!((w["derived"]["sweep"].as_f64().unwrap() - 90.0).abs() < 1e-9, "{w}");
     }
-    let trim = json!({"id": parts[0], "pick": [4.0, 0.0], "reference": id(&chord)});
-    assert_eq!(fails(&mut s, "trim_extend", trim), ErrorCode::Rejected);
+
+    // Away from the "D": an arc wall trims to a line along its circle, a line
+    // extends to an arc's circle, and an arc aligns onto a concentric one.
+    let quarter =
+        run(&mut s, "wall_create", json!({"start": [24.0, 0.0], "end": [20.0, 4.0], "bulge": (PI / 8.0).tan()}));
+    let post = run(&mut s, "wall_create", json!({"start": [22.0, -3.0], "end": [22.0, -1.0]}));
+    let point = |w: &Value, end: &str| (w["params"][end][0].as_f64().unwrap(), w["params"][end][1].as_f64().unwrap());
+    let near = |(x, y): (f64, f64), (u, v): (f64, f64)| (x - u).abs() < 1e-9 && (y - v).abs() < 1e-9;
+    let r12 = 12f64.sqrt();
+    let trim = json!({"id": id(&quarter), "pick": [20.0, 4.0], "reference": id(&post)});
+    let trimmed = run(&mut s, "trim_extend", trim);
+    assert!(near(point(&trimmed, "start"), (22.0, r12)) && near(point(&trimmed, "end"), (20.0, 4.0)), "{trimmed}");
+    assert!((trimmed["derived"]["radius"].as_f64().unwrap() - 4.0).abs() < 1e-9);
+    let extend = json!({"id": id(&post), "pick": [22.0, -2.0], "reference": id(&quarter)});
+    let extended = run(&mut s, "trim_extend", extend);
+    assert!(near(point(&extended, "end"), (22.0, r12)), "{extended}");
+    let outer = run(&mut s, "wall_create", json!({"start": [26.0, 0.0], "end": [14.0, 0.0], "mid": [20.0, 6.0]}));
+    let aligned = run(&mut s, "element_align", json!({"id": id(&quarter), "reference": id(&outer)}));
+    assert!((aligned["derived"]["radius"].as_f64().unwrap() - 6.0).abs() < 1e-9, "{aligned}");
+    let far = run(&mut s, "wall_create", json!({"start": [30.0, -1.0], "end": [30.0, 1.0]}));
+    let corner = json!({"a": id(&far), "pick_a": [30.0, 0.0], "b": id(&outer), "pick_b": [20.0, 6.0]});
+    assert_eq!(fails(&mut s, "trim_corner", corner), ErrorCode::Rejected, "x = 30 misses the circle of radius 6");
     // Rotating and mirroring keep the arc and its door.
     run(&mut s, "elements_rotate", json!({"ids": parts, "center": [0.0, 0.0], "angle": 90.0}));
     run(&mut s, "elements_mirror", json!({"ids": parts, "axis": [[0.0, 0.0], [0.0, 1.0]]}));

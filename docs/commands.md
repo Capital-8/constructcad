@@ -919,7 +919,7 @@ No parameters.
 
 ### `trim_corner`
 
-*edit* — Trim or extend two linear elements (walls, beams, grids) to meet at a corner; each pick point marks the part of its element to keep.
+*edit* — Trim or extend two linear elements (walls, beams, grids) to meet at a corner; each pick point marks the part of its element to keep. Arc walls meet lines and other arcs where their circles cross them.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -930,7 +930,7 @@ No parameters.
 
 ### `trim_extend`
 
-*edit* — Trim or extend a linear element to the line of a reference element; the pick point marks the part to keep.
+*edit* — Trim or extend a linear element to the line of a reference element (the circle of an arc wall); the pick point marks the part to keep. Arc walls trim and extend along their circle.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -958,7 +958,7 @@ No parameters.
 
 ### `element_align`
 
-*edit* — Move a linear element parallel onto the line of a reference element.
+*edit* — Move a linear element parallel onto the line of a reference element, or an arc wall onto the circle of a concentric arc wall (its radius changes).
 
 | Parameter | Type | | Description |
 |---|---|---|---|

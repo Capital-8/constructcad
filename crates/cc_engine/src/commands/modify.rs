@@ -458,7 +458,8 @@ impl Command for GroupUngroup {
 }
 
 /// Trim or extend two linear elements (walls, beams, grids) to meet at a
-/// corner; each pick point marks the part of its element to keep.
+/// corner; each pick point marks the part of its element to keep. Arc walls
+/// meet lines and other arcs where their circles cross them.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimCorner {
@@ -485,8 +486,9 @@ impl Command for TrimCorner {
     }
 }
 
-/// Trim or extend a linear element to the line of a reference element; the
-/// pick point marks the part to keep.
+/// Trim or extend a linear element to the line of a reference element (the
+/// circle of an arc wall); the pick point marks the part to keep. Arc walls
+/// trim and extend along their circle.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimExtend {
@@ -498,10 +500,10 @@ pub struct TrimExtend {
     pub reference: u64,
 }
 
-fn line(s: &Session, id: u64) -> Result<(DVec2, DVec2)> {
+fn path(s: &Session, id: u64) -> Result<cc_core::wall_ops::Path> {
     let p = s.project();
     let e = p.element(refs::element(p, id)?).ok_or_else(|| EngineError::not_found("element"))?;
-    cc_core::wall_ops::line_of(e).ok_or_else(|| EngineError::invalid(format!("element {id} has no line")))
+    cc_core::wall_ops::path_of(e).ok_or_else(|| EngineError::invalid(format!("element {id} has no line")))
 }
 
 impl Command for TrimExtend {
@@ -510,9 +512,9 @@ impl Command for TrimExtend {
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
         not_pinned(s.project(), id)?;
-        let (r0, r1) = line(s, self.reference)?;
+        let reference = path(s, self.reference)?;
         let pick = point(self.pick)?;
-        edit(s, t!("tx-trim"), |e| Ok(e.trim_to(id, pick, r0, r1)?))?;
+        edit(s, t!("tx-trim"), |e| Ok(e.trim_to(id, pick, reference)?))?;
         Ok(super::created(s, id))
     }
 }
@@ -560,7 +562,8 @@ impl Command for ElementOffset {
     }
 }
 
-/// Move a linear element parallel onto the line of a reference element.
+/// Move a linear element parallel onto the line of a reference element, or
+/// an arc wall onto the circle of a concentric arc wall (its radius changes).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementAlign {
@@ -576,8 +579,8 @@ impl Command for ElementAlign {
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
         not_pinned(s.project(), id)?;
-        let (r0, r1) = line(s, self.reference)?;
-        edit(s, t!("tx-align"), |e| Ok(e.align_to(id, r0, r1)?))?;
+        let reference = path(s, self.reference)?;
+        edit(s, t!("tx-align"), |e| Ok(e.align_to(id, reference)?))?;
         Ok(super::created(s, id))
     }
 }
