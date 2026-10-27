@@ -9,6 +9,7 @@ mod cut;
 mod diagram;
 mod drawing;
 pub mod export;
+pub mod fonts;
 pub mod format;
 pub mod graphics;
 pub mod hatch;

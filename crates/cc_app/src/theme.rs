@@ -8,6 +8,7 @@
 
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, RichText, Shadow, Stroke};
 use egui::{TextStyle, Visuals};
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::sync::Arc;
 
@@ -286,6 +287,15 @@ fn fonts() -> FontDefinitions {
     let mut semibold_family = vec!["inter-semibold".to_string()];
     semibold_family.extend(fallbacks);
     fonts.families.insert(semibold(), semibold_family);
+    // Chinese, Japanese and Korean text from the system's fonts, last.
+    for (i, cjk) in cc_views::fonts::cjk().iter().enumerate() {
+        let name = format!("cjk-{i}");
+        let data = FontData { font: Cow::Borrowed(&cjk.data), index: cjk.index, tweak: Default::default() };
+        fonts.font_data.insert(name.clone(), Arc::new(data));
+        for family in fonts.families.values_mut() {
+            family.push(name.clone());
+        }
+    }
     fonts
 }
 
