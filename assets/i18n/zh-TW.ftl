@@ -212,7 +212,7 @@ group-horizontal = 樓板與屋頂
 group-selection = 選取
 group-history = 歷程記錄
 group-create-views = 建立
-group-documentation = Documentación
+group-documentation = 文件
 group-navigate = 導覽
 
 # 工具
