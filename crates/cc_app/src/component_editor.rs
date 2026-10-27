@@ -66,6 +66,7 @@ impl Editor {
             ifc: None,
             mep: None,
             opening: None,
+            connectors: Vec::new(),
             params: vec![param(&w, 1.0), param(&d, 0.6), param(&h, 0.9)],
             items: vec![ComponentItem {
                 name: t!("tpl-part-body"),
@@ -140,6 +141,10 @@ fn validate(ed: &Editor) -> Result<(), String> {
     }
     if matches!(ed.def.kind, ComponentKind::Door | ComponentKind::Window) && ed.def.opening_size().is_none() {
         return Err(t!("comp-err-opening"));
+    }
+    let resolved = ed.def.resolve_connectors(&Default::default());
+    if let Some((_, c)) = ed.def.connectors.iter().enumerate().find(|(i, _)| !resolved.iter().any(|k| k.index == *i)) {
+        return Err(t!("comp-err-connector", "name" => c.name));
     }
     let (_, errors) = ed.def.resolve_in(&Default::default(), PREVIEW_WALL);
     if let Some((i, e)) = errors.first() {
@@ -235,11 +240,66 @@ fn body(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
         params_table(left, ed);
         left.add_space(8.0);
         pieces(left, ed, materials);
+        left.add_space(8.0);
+        connectors(left, ed);
         preview(&mut cols[1], ed);
     });
     if let Some(e) = &ed.error {
         ui.add_space(4.0);
         ui.label(RichText::new(e).color(PALETTE.danger));
+    }
+}
+
+/// Where pipes and conduits connect: name, system kind, position and
+/// direction in the component's frame, diameter (expressions).
+fn connectors(ui: &mut Ui, ed: &mut Editor) {
+    use cc_core::component::{ComponentConnector, ConnectorDirection};
+    ui.label(theme::title(t!("comp-connectors")));
+    ui.label(theme::muted(t!("comp-connectors-hint")).size(11.5));
+    let mut remove = None;
+    egui::Grid::new("component-connectors").num_columns(8).spacing([6.0, 4.0]).show(ui, |ui| {
+        for (i, c) in ed.def.connectors.iter_mut().enumerate() {
+            ui.add(egui::TextEdit::singleline(&mut c.name).desired_width(90.0));
+            egui::ComboBox::from_id_salt(("conn-system", i)).selected_text(tr(c.system.key())).width(110.0).show_ui(
+                ui,
+                |ui| {
+                    for k in cc_core::SystemKind::ALL {
+                        ui.selectable_value(&mut c.system, k, tr(k.key()));
+                    }
+                },
+            );
+            for (axis, text) in [("x", &mut c.x), ("y", &mut c.y), ("z", &mut c.z)] {
+                ui.add(egui::TextEdit::singleline(text).desired_width(70.0).hint_text(axis));
+            }
+            egui::ComboBox::from_id_salt(("conn-dir", i)).selected_text(tr(c.direction.key())).width(90.0).show_ui(
+                ui,
+                |ui| {
+                    for d in ConnectorDirection::ALL {
+                        ui.selectable_value(&mut c.direction, d, tr(d.key()));
+                    }
+                },
+            );
+            ui.add(egui::TextEdit::singleline(&mut c.diameter).desired_width(60.0).hint_text("Ø"));
+            if ui.small_button("✕").on_hover_text(t!("action-remove")).clicked() {
+                remove = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = remove {
+        ed.def.connectors.remove(i);
+    }
+    if ui.button(t!("comp-add-connector")).clicked() {
+        let n = ed.def.connectors.len() + 1;
+        ed.def.connectors.push(ComponentConnector {
+            name: format!("{} {n}", t!("comp-connector")),
+            system: cc_core::SystemKind::ColdWater,
+            x: "0".into(),
+            y: "0".into(),
+            z: "0".into(),
+            direction: ConnectorDirection::Down,
+            diameter: String::new(),
+        });
     }
 }
 
@@ -678,6 +738,12 @@ fn preview(ui: &mut Ui, ed: &Editor) {
             for (a, b) in lines {
                 painter.line_segment([to(*a), to(*b)], stroke);
             }
+        }
+        // Connectors: a dot in the color of their system.
+        for k in ed.def.resolve_connectors(&Default::default()) {
+            let [r, g, b] = k.system.default_color();
+            let at = to(look(k.point).truncate());
+            painter.circle(at, 4.0, Color32::from_rgb(r, g, b), Stroke::new(1.0, Color32::WHITE));
         }
         if view < 2 {
             let dims = format!("{} × {}", cc_views::format::length(extent.x), cc_views::format::length(extent.y));

@@ -319,6 +319,47 @@ pub fn component_parts(
     place_parts(project, element, component, crate::resolve_component(def, &component.overrides))
 }
 
+/// A component's connector in the world: where a run joins it (`point`, its
+/// z the absolute elevation) and the way the run leaves (`direction`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldConnector {
+    pub index: usize,
+    pub name: String,
+    pub system: cc_core::SystemKind,
+    pub point: DVec3,
+    pub direction: DVec3,
+    /// Whether the run leaves vertically (down or up).
+    pub vertical: bool,
+    pub diameter: Option<f64>,
+}
+
+/// The connectors of a placed component, in the world.
+pub fn component_connectors(project: &Project, element: &cc_core::Element) -> Vec<WorldConnector> {
+    let ElementKind::Component(c) = &element.kind else { return Vec::new() };
+    let Some(TypeData::Component { def, .. }) = project.element_type(element.type_id).map(|t| &t.data) else {
+        return Vec::new();
+    };
+    let rot = DVec2::from_angle(c.rotation_deg.to_radians());
+    let z = project.level_elevation(element.level) + c.base_offset;
+    def.resolve_connectors(&c.overrides)
+        .into_iter()
+        .map(|k| {
+            let d = k.direction.vector();
+            let plan = c.position + rot.rotate(k.point.truncate());
+            WorldConnector {
+                index: k.index,
+                name: k.name,
+                system: k.system,
+                point: plan.extend(z + k.point.z),
+                direction: rot.rotate(d.truncate()).extend(d.z),
+                vertical: k.direction.is_vertical(),
+                diameter: k.diameter,
+            }
+        })
+        .filter(|k| k.point.is_finite())
+        .collect()
+}
+
 /// Pieces in a component's frame moved to where `component` stands.
 fn place_parts(
     project: &Project,

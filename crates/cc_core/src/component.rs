@@ -235,6 +235,96 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+/// Which way a run leaves a connector, in the component's frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum ConnectorDirection {
+    #[default]
+    Down,
+    Up,
+    /// Towards -Y.
+    Front,
+    /// Towards +Y (usually the wall).
+    Back,
+    /// Towards -X.
+    Left,
+    /// Towards +X.
+    Right,
+}
+
+impl ConnectorDirection {
+    pub const ALL: [ConnectorDirection; 6] = [
+        ConnectorDirection::Down,
+        ConnectorDirection::Up,
+        ConnectorDirection::Front,
+        ConnectorDirection::Back,
+        ConnectorDirection::Left,
+        ConnectorDirection::Right,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            ConnectorDirection::Down => "conn-dir-down",
+            ConnectorDirection::Up => "conn-dir-up",
+            ConnectorDirection::Front => "conn-dir-front",
+            ConnectorDirection::Back => "conn-dir-back",
+            ConnectorDirection::Left => "conn-dir-left",
+            ConnectorDirection::Right => "conn-dir-right",
+        }
+    }
+
+    /// Unit vector in the component's frame.
+    pub fn vector(self) -> DVec3 {
+        match self {
+            ConnectorDirection::Down => -DVec3::Z,
+            ConnectorDirection::Up => DVec3::Z,
+            ConnectorDirection::Front => -DVec3::Y,
+            ConnectorDirection::Back => DVec3::Y,
+            ConnectorDirection::Left => -DVec3::X,
+            ConnectorDirection::Right => DVec3::X,
+        }
+    }
+
+    /// Whether runs leave it vertically.
+    pub fn is_vertical(self) -> bool {
+        matches!(self, ConnectorDirection::Down | ConnectorDirection::Up)
+    }
+}
+
+/// A point where a pipe or conduit connects to the component: a toilet has
+/// a water inlet and a sewer outlet, an outlet its electrical connection.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ComponentConnector {
+    pub name: String,
+    /// The kind of system it connects to.
+    pub system: crate::SystemKind,
+    /// Position in the component's frame (expressions).
+    pub x: String,
+    pub y: String,
+    pub z: String,
+    #[serde(default)]
+    pub direction: ConnectorDirection,
+    /// Outside diameter of the run it takes, meters (an expression); empty for unset.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub diameter: String,
+}
+
+impl ComponentConnector {
+    pub fn expressions_mut(&mut self) -> [&mut String; 4] {
+        [&mut self.x, &mut self.y, &mut self.z, &mut self.diameter]
+    }
+}
+
+/// A connector resolved in the component's frame.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedConnector {
+    pub index: usize,
+    pub name: String,
+    pub system: crate::SystemKind,
+    pub point: DVec3,
+    pub direction: ConnectorDirection,
+    pub diameter: Option<f64>,
+}
+
 /// Name of the host wall's thickness in the expressions of door and window
 /// components (see [`crate::openings`]).
 pub const WALL_THICKNESS: &str = "WallThickness";
@@ -279,6 +369,9 @@ pub struct ComponentDef {
     /// The opening a door or window cuts in its wall.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opening: Option<Box<HostOpening>>,
+    /// Where pipes and conduits connect to it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connectors: Vec<ComponentConnector>,
 }
 
 /// An IFC entity class with its predefined and object types.
@@ -367,6 +460,29 @@ impl ComponentDef {
         (w > 0.0 && h > 0.0).then_some((w, h))
     }
 
+    /// The connectors whose expressions evaluate, in the component's frame.
+    pub fn resolve_connectors(&self, overrides: &BTreeMap<String, f64>) -> Vec<ResolvedConnector> {
+        let values = self.values(overrides);
+        let lookup = |name: &str| values.get(name).copied();
+        self.connectors
+            .iter()
+            .enumerate()
+            .filter_map(|(index, c)| {
+                let v = |text: &str| expr::eval(text, &lookup).ok();
+                let point = DVec3::new(v(&c.x)?, v(&c.y)?, v(&c.z)?);
+                let diameter = if c.diameter.trim().is_empty() { None } else { v(&c.diameter).filter(|d| *d > 0.0) };
+                Some(ResolvedConnector {
+                    index,
+                    name: c.name.clone(),
+                    system: c.system,
+                    point,
+                    direction: c.direction,
+                    diameter,
+                })
+            })
+            .collect()
+    }
+
     /// Sill height of new doors and windows of this definition (0 when unset or invalid).
     pub fn default_sill(&self) -> f64 {
         let Some(o) = self.opening.as_ref().filter(|o| !o.sill.trim().is_empty()) else { return 0.0 };
@@ -446,6 +562,11 @@ impl ComponentDef {
         }
         if let Some(o) = &mut self.opening {
             for e in o.expressions_mut() {
+                *e = replace_name(e, old, new);
+            }
+        }
+        for c in &mut self.connectors {
+            for e in c.expressions_mut() {
                 *e = replace_name(e, old, new);
             }
         }
@@ -678,6 +799,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let table = ComponentDef {
         kind: ComponentKind::Furniture,
         opening: None,
+        connectors: Vec::new(),
         ifc: None,
         mep: None,
         params: vec![length(&w, 1.2), length(&d, 0.8), length(&h, 0.75)],
@@ -713,6 +835,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let chair = ComponentDef {
         kind: ComponentKind::Furniture,
         opening: None,
+        connectors: Vec::new(),
         ifc: None,
         mep: None,
         params: vec![length(&w, 0.45), length(&d, 0.5), length(&h, 0.9), length(&seat, 0.45)],
@@ -724,6 +847,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let bed = ComponentDef {
         kind: ComponentKind::Furniture,
         opening: None,
+        connectors: Vec::new(),
         ifc: None,
         mep: None,
         params: vec![length(&w, 1.4), length(&d, 1.9), length(&h, 0.5)],
@@ -759,6 +883,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let sofa = ComponentDef {
         kind: ComponentKind::Furniture,
         opening: None,
+        connectors: Vec::new(),
         ifc: None,
         mep: None,
         params: vec![length(&w, 2.0), length(&d, 0.9), length(&h, 0.8), length(&seat, 0.42)],
@@ -812,9 +937,32 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     out.push((n("tpl-comp-sofa"), n("tpl-type-sofa"), sofa));
 
     // Toilet: bowl in front of the tank, against the wall at the back.
+    let connector =
+        |name: String, system: crate::SystemKind, at: [String; 3], direction, diameter: &str| ComponentConnector {
+            name,
+            system,
+            x: at[0].clone(),
+            y: at[1].clone(),
+            z: at[2].clone(),
+            direction,
+            diameter: diameter.to_string(),
+        };
+    use crate::SystemKind as K;
+    use ConnectorDirection as D;
     let toilet = ComponentDef {
         kind: ComponentKind::Plumbing,
         opening: None,
+        // The outlet 30 cm from the wall under the bowl; the inlet at the back, beside the tank.
+        connectors: vec![
+            connector(n("tpl-conn-sewer"), K::Sanitary, [s("0"), format!("{d} / 2 - 0.3"), s("0")], D::Down, "0.1"),
+            connector(
+                n("tpl-conn-cold-water"),
+                K::ColdWater,
+                [s("-0.15"), format!("{d} / 2"), s("0.2")],
+                D::Back,
+                "0.02",
+            ),
+        ],
         ifc: None,
         // Toilet with a close-coupled tank.
         mep: Some(MepData::Fixture { drain_units: 6.0, supply_weight: 0.3, hot_water: false }),
@@ -853,6 +1001,18 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let basin = ComponentDef {
         kind: ComponentKind::Plumbing,
         opening: None,
+        // Waste behind the pedestal, cold and hot water at the wall above it.
+        connectors: vec![
+            connector(n("tpl-conn-sewer"), K::Sanitary, [s("0"), format!("{d} / 2 - 0.05"), s("0.5")], D::Down, "0.04"),
+            connector(
+                n("tpl-conn-cold-water"),
+                K::ColdWater,
+                [s("-0.1"), format!("{d} / 2"), s("0.6")],
+                D::Back,
+                "0.02",
+            ),
+            connector(n("tpl-conn-hot-water"), K::HotWater, [s("0.1"), format!("{d} / 2"), s("0.6")], D::Back, "0.02"),
+        ],
         ifc: None,
         mep: Some(MepData::Fixture { drain_units: 1.0, supply_weight: 0.3, hot_water: true }),
         params: vec![length(&w, 0.55), length(&d, 0.45), length(&h, 0.85)],
@@ -890,6 +1050,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
     let wardrobe = ComponentDef {
         kind: ComponentKind::Casework,
         opening: None,
+        connectors: Vec::new(),
         ifc: None,
         mep: None,
         params: vec![length(&w, 1.6), length(&d, 0.6), length(&h, 2.2)],
@@ -945,7 +1106,7 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
         height: h.clone(),
     };
     let def = |kind: ComponentKind, params: Vec<ComponentParam>, items: Vec<ComponentItem>, mep: MepData| {
-        ComponentDef { kind, params, items, ifc: None, mep: Some(mep), opening: None }
+        ComponentDef { kind, params, items, ifc: None, mep: Some(mep), opening: None, connectors: Vec::new() }
     };
     let device = |device: D, power: f64| MepData::Device { device, power };
     let body = n("tpl-part-body");

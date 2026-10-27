@@ -151,29 +151,29 @@
 {"command": "view_create", "args": {"kind": "section", "start": [10.3, 12.5], "end": [10.3, -4.5], "depth": 11, "name": "Section A"}}
 {"command": "view_duplicate", "args": {"view": 65}}
 {"command": "view_duplicate", "args": {"view": 65}}
-{"command": "view_set", "args": {"view": 331, "phase_filter": 83}}
 {"command": "view_set", "args": {"view": 332, "phase_filter": 83}}
-{"command": "view_set", "args": {"view": 334, "phase_filter": 83}}
-{"command": "view_graphics_set", "args": {"view": 331, "category": "foundation", "visible": false}}
+{"command": "view_set", "args": {"view": 333, "phase_filter": 83}}
+{"command": "view_set", "args": {"view": 335, "phase_filter": 83}}
 {"command": "view_graphics_set", "args": {"view": 332, "category": "foundation", "visible": false}}
+{"command": "view_graphics_set", "args": {"view": 333, "category": "foundation", "visible": false}}
 // The ground floor plan and the 3D view show the finished house; a copy shows the renovation.
 {"command": "view_set", "args": {"view": 65, "phase_filter": 83, "scale": 100}}
 {"command": "view_set", "args": {"view": 69, "phase_filter": 83}}
-{"command": "view_set", "args": {"view": 338, "name": "Renovation", "phase_filter": 82, "scale": 100}}
-// A view filter (340) colors the partitions in another copy.
+{"command": "view_set", "args": {"view": 339, "name": "Renovation", "phase_filter": 82, "scale": 100}}
+// A view filter (341) colors the partitions in another copy.
 {"command": "filter_create", "args": {"name": "Partitions", "categories": ["wall"], "rules": [{"param": "thickness", "op": "less", "value": 0.12}]}}
-{"command": "view_set", "args": {"view": 339, "name": "Wall types", "phase_filter": 83, "scale": 100}}
-{"command": "view_filter_add", "args": {"view": 339, "filter": 340, "overrides": {"cut_lines": {"color": [200, 90, 20], "weight": 0.5}, "cut_fill": {"pattern": "Solid", "color": [245, 160, 80]}}}}
+{"command": "view_set", "args": {"view": 340, "name": "Wall types", "phase_filter": 83, "scale": 100}}
+{"command": "view_filter_add", "args": {"view": 340, "filter": 341, "overrides": {"cut_lines": {"color": [200, 90, 20], "weight": 0.5}, "cut_fill": {"pattern": "Solid", "color": [245, 160, 80]}}}}
 // Sheet A101: the plan, the section and the 3D view.
-{"command": "view_set", "args": {"view": 337, "phase_filter": 83, "scale": 100}}
+{"command": "view_set", "args": {"view": 338, "phase_filter": 83, "scale": 100}}
 {"command": "view_set", "args": {"view": 79, "params": {"viewports": [{"view": 65, "center": [115, 160]}, {"view": 69, "center": [310, 128]}]}}}
-{"command": "sheet_place_view", "args": {"sheet": 79, "view": 337, "center": [305, 240]}}
-// A 3D view (341) from the north-east shows the roof over the arc wall.
+{"command": "sheet_place_view", "args": {"sheet": 79, "view": 338, "center": [305, 240]}}
+// A 3D view (342) from the north-east shows the roof over the arc wall.
 {"command": "view_create", "args": {"kind": "three_d", "name": "3D North-east"}}
-{"command": "view_set", "args": {"view": 341, "phase_filter": 83, "params": {"camera": {"target": [6.5, 5.0, 1.0], "yaw_deg": 215, "pitch_deg": 25, "distance": 24}}}}
-{"command": "view_graphics_set", "args": {"view": 341, "category": "foundation", "visible": false}}
-{"command": "view_graphics_set", "args": {"view": 341, "category": "pipe", "visible": false}}
-{"command": "view_graphics_set", "args": {"view": 341, "category": "conduit", "visible": false}}
-// A second filter (342) fills the exterior walls in the same view.
+{"command": "view_set", "args": {"view": 342, "phase_filter": 83, "params": {"camera": {"target": [6.5, 5.0, 1.0], "yaw_deg": 215, "pitch_deg": 25, "distance": 24}}}}
+{"command": "view_graphics_set", "args": {"view": 342, "category": "foundation", "visible": false}}
+{"command": "view_graphics_set", "args": {"view": 342, "category": "pipe", "visible": false}}
+{"command": "view_graphics_set", "args": {"view": 342, "category": "conduit", "visible": false}}
+// A second filter (343) fills the exterior walls in the same view.
 {"command": "filter_create", "args": {"name": "Exterior walls", "categories": ["wall"], "rules": [{"param": "thickness", "op": "greater", "value": 0.12}]}}
-{"command": "view_filter_add", "args": {"view": 339, "filter": 342, "overrides": {"cut_fill": {"pattern": "Solid", "color": [150, 185, 225]}}}}
+{"command": "view_filter_add", "args": {"view": 340, "filter": 343, "overrides": {"cut_fill": {"pattern": "Solid", "color": [150, 185, 225]}}}}

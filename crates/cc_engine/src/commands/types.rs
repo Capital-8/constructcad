@@ -29,6 +29,10 @@ fn validate(def: &ComponentDef) -> Result<()> {
     {
         return Err(EngineError::invalid("a door or window needs an opening with a positive width and height"));
     }
+    let resolved = def.resolve_connectors(&Default::default());
+    if let Some(c) = def.connectors.iter().enumerate().find(|(i, _)| !resolved.iter().any(|k| k.index == *i)) {
+        return Err(EngineError::invalid(format!("connector '{}': invalid position or diameter", c.1.name)));
+    }
     let (_, errors) = def.resolve_in(&Default::default(), &[(cc_core::component::WALL_THICKNESS, 0.15)]);
     if let Some((i, e)) = errors.first() {
         let piece = def.items.get(*i).map_or(String::new(), |it| it.name.clone());
@@ -246,6 +250,10 @@ impl Command for TypeDelete {
 /// `window_create`: it cuts that opening in its wall; its frame has x along
 /// the wall from the opening's center, y across it (towards the side a door
 /// opens to), z up from the sill, and `WallThickness` is the wall's thickness.
+/// `connectors` [{name, system: `ColdWater`, `HotWater`, `Sanitary`, `Vent`,
+/// `Rainwater`, `Power` or `Lighting`, x, y, z, direction: `Down`, `Up`,
+/// `Front` (-y), `Back` (+y), `Left` (-x) or `Right` (+x), diameter}] are
+/// where `mep_connect` joins pipes and conduits (a toilet's inlet and outlet).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentCreate {

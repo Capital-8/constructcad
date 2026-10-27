@@ -562,12 +562,12 @@ fn the_showcase_macro_builds_its_project() {
     assert_eq!(get(&mut s, 247)["type"]["id"], 58, "the distribution board");
     let views = run(&mut s, "views_list", json!({}));
     let view = |id: u64| views.as_array().unwrap().iter().find(|v| v["id"] == id).map(|v| v["name"].clone());
-    assert_eq!(view(333), Some(json!("Board diagram")));
-    assert_eq!(view(341), Some(json!("3D North-east")));
+    assert_eq!(view(334), Some(json!("Board diagram")));
+    assert_eq!(view(342), Some(json!("3D North-east")));
     let loads = run(&mut s, "circuit_loads", json!({"panel": 247}));
     assert!(loads.to_string().contains("Kitchen and bath outlets"));
-    for filter in [340, 342] {
-        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 339}))["count"].as_u64().unwrap() > 0);
+    for filter in [341, 343] {
+        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 340}))["count"].as_u64().unwrap() > 0);
     }
 }
 
@@ -1252,8 +1252,18 @@ fn fixtures_and_devices_connect_to_the_networks() {
     let toilet = mep_type(&mut s, "Fixture");
     let wc = id(&run(&mut s, "component_place", json!({"position": [3, 1.5], "type": toilet})));
     let out = run(&mut s, "mep_connect", json!({"elements": [wc]}));
-    // Drain: a drop from the floor and a branch falling to the main; supply: one branch.
-    assert_eq!(out["created"].as_array().unwrap().len(), 3, "{out}");
+    // The toilet's connectors: the sewer outlet 30 cm from the wall on the
+    // floor (a drop and a branch falling to the main), and the cold water
+    // inlet beside the tank, 20 cm up (across at that height, then down onto
+    // the pipe).
+    let created = out["created"].as_array().unwrap();
+    assert_eq!(created.len(), 4, "{out}");
+    let runs: Vec<Value> = created.iter().map(|r| run(&mut s, "element_get", json!({"id": r}))).collect();
+    let start = |r: &Value| (r["params"]["start"][0].as_f64().unwrap(), r["params"]["start"][1].as_f64().unwrap());
+    let near = |(x, y): (f64, f64), (u, v): (f64, f64)| (x - u).abs() < 1e-9 && (y - v).abs() < 1e-9;
+    assert!(near(start(&runs[0]), (3.0, 1.525)) && runs[0]["params"]["start_offset"] == json!(0.0), "{}", runs[0]);
+    assert!(near(start(&runs[2]), (2.85, 1.825)) && runs[2]["params"]["start_offset"] == json!(0.2), "{}", runs[2]);
+    assert_eq!(runs[2]["params"]["end_offset"], json!(0.2), "across at the inlet's height");
     let fittings = run(&mut s, "mep_fittings", json!({}));
     let kinds: Vec<&str> =
         fittings["fittings"].as_array().unwrap().iter().map(|f| f["kind"].as_str().unwrap()).collect();

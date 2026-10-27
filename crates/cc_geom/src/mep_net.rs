@@ -252,10 +252,32 @@ impl MepNetwork {
                 branches: b.iter().map(|x| (x.1, x.2)).collect(),
             });
         }
-        // Fixtures on pipe nodes, devices on conduit nodes: the nearest in
-        // plan, then in height.
+        // Fixtures on pipe nodes, devices on conduit nodes: each connector on
+        // the nearest node of a system of its kind (in plan, then in height);
+        // components without connectors by their insertion point, the
+        // nearest in plan, then in height.
+        let kind_of = |n: &NetNode| n.system.and_then(|s| project.system(s)).map(|s| s.kind);
         for e in project.elements.values() {
             let ElementKind::Component(c) = &e.kind else { continue };
+            let connectors = crate::component_connectors(project, e);
+            if !connectors.is_empty() {
+                for k in connectors {
+                    let category = if k.system.is_electrical() { Category::Conduit } else { Category::Pipe };
+                    let near = net
+                        .nodes
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, n)| n.category == category && kind_of(n).is_none_or(|kind| kind == k.system))
+                        .filter(|(_, n)| DVec2::new(n.point.x, n.point.y).distance(k.point.truncate()) <= ATTACH)
+                        .min_by(|a, b| (a.1.point.z - k.point.z).abs().total_cmp(&(b.1.point.z - k.point.z).abs()));
+                    if let Some((n, _)) = near
+                        && !net.attached.contains(&(e.id, n))
+                    {
+                        net.attached.push((e.id, n));
+                    }
+                }
+                continue;
+            }
             let category = match project.mep_data(e) {
                 Some(MepData::Fixture { .. }) => Category::Pipe,
                 Some(MepData::Device { .. }) => Category::Conduit,

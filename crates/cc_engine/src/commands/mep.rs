@@ -624,8 +624,11 @@ impl Command for MepFittings {
 /// drain (falling towards it, with a drop from the floor), and to the
 /// nearest cold (and, when it takes it, hot) water pipe; a device gets a
 /// conduit to the nearest conduit, with a drop from its mounting height,
-/// carrying its circuit. Branches end on the runs, which forms tees.
-/// `system` connects only to that system or circuit.
+/// carrying its circuit. A component with connectors gets a branch from
+/// each connector to the nearest run of a system of the connector's kind,
+/// from the connector's position and of its diameter (leaving vertically or
+/// horizontally as the connector points). Branches end on the runs, which
+/// forms tees. `system` connects only to that system or circuit.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct MepConnect {
@@ -693,8 +696,77 @@ impl Command for MepConnect {
         let mut skipped = 0;
         for id in refs::elements(p, &self.elements)? {
             let Some(e) = p.element(id) else { continue };
-            let (ElementKind::Component(c), Some(mep)) = (&e.kind, p.mep_data(e)) else {
+            let connectors = cc_geom::component_connectors(p, e);
+            let (ElementKind::Component(c), mep) = (&e.kind, p.mep_data(e)) else {
                 return Err(EngineError::invalid(t!("msg-not-fixture", "id" => id.0)));
+            };
+            let Some(mep) = mep.filter(|_| connectors.is_empty()) else {
+                if connectors.is_empty() {
+                    return Err(EngineError::invalid(t!("msg-not-fixture", "id" => id.0)));
+                }
+                let mut connected = false;
+                let level_z = p.level_elevation(e.level);
+                for k in &connectors {
+                    let conduit = k.system.is_electrical();
+                    let runs = runs_on(p, e.level, conduit);
+                    let fits = |seg: &MepSegment| match only {
+                        Some(o) => seg.systems.contains(&o),
+                        None if conduit => c.system.is_none_or(|x| seg.systems.contains(&x)),
+                        None => seg.system().and_then(|x| p.system(x)).is_some_and(|x| x.kind == k.system),
+                    };
+                    let (at, zc) = (k.point.truncate(), k.point.z - level_z);
+                    let candidates = runs.iter().filter(|(_, seg)| fits(seg)).map(|(r, seg)| (*r, seg));
+                    let Some((run_el, seg, q, zq)) = nearest_run(candidates, at, zc) else { continue };
+                    let type_id = if conduit {
+                        run_el.type_id
+                    } else {
+                        let need = k.diameter.unwrap_or(if k.system.is_drainage() { 0.04 } else { 0.02 });
+                        pipe_type_for(p, need).unwrap_or(run_el.type_id)
+                    };
+                    let systems = match (conduit, c.system.or(only)) {
+                        (true, Some(circuit)) => vec![circuit],
+                        _ => seg.systems.clone(),
+                    };
+                    let dist = q.distance(at);
+                    let piece = |a: glam::DVec2, b: glam::DVec2, z0: f64, z1: f64| {
+                        let mut run = MepSegment::new(a, b, z0);
+                        run.end_offset = z1;
+                        run.systems = systems.clone();
+                        Branch { level: e.level, type_id, conduit, run }
+                    };
+                    if k.system.is_drainage() {
+                        // Down from the outlet, then falling towards the drain.
+                        let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
+                        let zp = zq + crate::defaults::drain_slope(diameter) * dist;
+                        if zc - zp > 0.01 {
+                            branches.push(piece(at, at, zc, zp));
+                        }
+                        if dist > 0.01 {
+                            branches.push(piece(at, q, zp, zq));
+                        }
+                    } else if k.vertical {
+                        // Straight up or down to the run's height, then across to it.
+                        if (zc - zq).abs() > 0.01 {
+                            branches.push(piece(at, at, zc, zq));
+                        }
+                        if dist > 0.01 {
+                            branches.push(piece(at, q, zq, zq));
+                        }
+                    } else {
+                        // Across at the connector's height, then up or down onto the run.
+                        if dist > 0.01 {
+                            branches.push(piece(at, q, zc, zc));
+                        }
+                        if (zc - zq).abs() > 0.01 {
+                            branches.push(piece(q, q, zc, zq));
+                        }
+                    }
+                    connected = true;
+                }
+                if !connected {
+                    skipped += 1;
+                }
+                continue;
             };
             let base = c.base_offset;
             let mut connected = false;

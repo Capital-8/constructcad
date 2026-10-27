@@ -25,8 +25,8 @@ mod wall;
 
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{
-    BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, StairGeom, column_outline, component_parts,
-    hosted_parts, opening_parts, railing_parts, stair_geom,
+    BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, StairGeom, WorldConnector, column_outline,
+    component_connectors, component_parts, hosted_parts, opening_parts, railing_parts, stair_geom,
 };
 pub use component::{resolve_component, resolve_component_in};
 pub use cut::{clip_polygon, face_plane_segments};
