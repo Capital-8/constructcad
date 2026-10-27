@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-27
+
 ### Added
 
 - Arc walls: a selected arc wall shows a round handle at the middle of its arc; drag it to change the curvature (the arc passes through the cursor, its ends stay). While drawing an arc wall, after the start and the end, type a radius and press Enter: the arc takes the cursor's side, the shorter or the longer one, whichever middle is nearer the cursor. `wall_create` takes `radius` (signed by the turn) and `major_arc`.
@@ -228,7 +230,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/francisreboucas/constructcad/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/francisreboucas/constructcad/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/francisreboucas/constructcad/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/francisreboucas/constructcad/compare/v0.3.0...v0.4.0
