@@ -16,10 +16,11 @@ pub enum Language {
     It,
     Pl,
     Uk,
+    ZhTw,
 }
 
 impl Language {
-    pub const ALL: [Language; 8] = [
+    pub const ALL: [Language; 9] = [
         Language::PtBr,
         Language::En,
         Language::Es,
@@ -28,6 +29,7 @@ impl Language {
         Language::It,
         Language::Pl,
         Language::Uk,
+        Language::ZhTw,
     ];
 
     /// BCP 47 code, used for persistence.
@@ -41,6 +43,7 @@ impl Language {
             Language::It => "it",
             Language::Pl => "pl",
             Language::Uk => "uk-UA",
+            Language::ZhTw => "zh-TW",
         }
     }
 
@@ -55,11 +58,16 @@ impl Language {
             Language::It => "Italiano",
             Language::Pl => "Polski",
             Language::Uk => "Українська",
+            Language::ZhTw => "繁體中文",
         }
     }
 
     pub fn from_code(code: &str) -> Option<Language> {
         let code = code.to_ascii_lowercase();
+        // Chinese only in its traditional forms (zh-TW, zh-HK, zh-Hant…).
+        let traditional = code
+            .get(2..)
+            .is_some_and(|rest| rest.split(['-', '_']).any(|part| matches!(part, "tw" | "hk" | "mo" | "hant")));
         let lang = match code.get(..2)? {
             "pt" => Language::PtBr,
             "en" => Language::En,
@@ -69,6 +77,7 @@ impl Language {
             "it" => Language::It,
             "pl" => Language::Pl,
             "uk" => Language::Uk,
+            "zh" if traditional => Language::ZhTw,
             _ => return None,
         };
         Some(lang)
@@ -90,6 +99,7 @@ impl Language {
             Language::It => include_str!("../../../assets/i18n/it.ftl"),
             Language::Pl => include_str!("../../../assets/i18n/pl.ftl"),
             Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
+            Language::ZhTw => include_str!("../../../assets/i18n/zh-TW.ftl"),
         }
     }
 
@@ -99,7 +109,7 @@ impl Language {
 
     /// Whether numbers use a decimal comma.
     pub fn decimal_comma(self) -> bool {
-        !matches!(self, Language::En)
+        !matches!(self, Language::En | Language::ZhTw)
     }
 }
 
@@ -184,6 +194,12 @@ mod tests {
         assert_eq!(Language::from_code("it-IT"), Some(Language::It));
         assert_eq!(Language::from_code("pl-PL"), Some(Language::Pl));
         assert_eq!(Language::from_code("uk-UA"), Some(Language::Uk));
+        assert_eq!(Language::from_code("zh-TW"), Some(Language::ZhTw));
+        assert_eq!(Language::from_code("zh_HK"), Some(Language::ZhTw));
+        assert_eq!(Language::from_code("zh-Hant-TW"), Some(Language::ZhTw));
+        assert_eq!(Language::from_code("zh-CN"), None);
+        assert_eq!(Language::from_code("zh-Hans"), None);
+        assert_eq!(Language::from_code("zh"), None);
         assert_eq!(Language::from_code("ja-JP"), None);
         assert_eq!(Language::from_code("p"), None);
         for l in Language::ALL {

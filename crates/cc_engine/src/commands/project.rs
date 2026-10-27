@@ -220,11 +220,11 @@ impl Command for UnitsSet {
     }
 }
 
-/// Language of default names, messages and sheet labels (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `pl` or `uk-UA`).
+/// Language of default names, messages and sheet labels (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `pl`, `uk-UA` or `zh-TW`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LanguageSet {
-    /// Language code: `en`, `pt-BR`, `es`, `fr`, `de`, `it`, `pl` or `uk-UA`.
+    /// Language code: `en`, `pt-BR`, `es`, `fr`, `de`, `it`, `pl`, `uk-UA` or `zh-TW`.
     pub language: String,
 }
 
