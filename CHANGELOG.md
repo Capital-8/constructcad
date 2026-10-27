@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-27
+
+### Added
+
+- Doors and windows are components that open walls. A component of kind *Door* or *Window* with a wall opening (width, height and default sill as expressions of its parameters) makes door or window types: they cut that opening in their wall and their pieces, resolved with `WallThickness` (the wall's thickness) and centered on the opening, mirror with the door's flips. Plans draw the category's swing or sash lines, or the component's own symbol (*Own plan symbol*). Tags, schedules, legends, dimensions, phases and IFC (`IfcDoor`/`IfcWindow` with the pieces as body) work as before. The template's door and window types, and those imported from IFC, are built-in components; the component editor edits the opening; component files carry door and window components. `component_create` takes `kind: "Door"`/`"Window"` and `opening`.
+- Plan-only component pieces: 2D symbols such as a door's swing (a plan profile with an arc), drawn in plans and legends with no solid in 3D, in the component's cuts or in IFC. The component editor marks them (*Plan only*).
+- Component connectors: a component lists where pipes and conduits connect, each with a name, a system kind (cold or hot water, sanitary, vent, rainwater, power, lighting), a position and direction (expressions) and a diameter. The networks attach each connector to a run of its kind, and `mep_connect` starts each branch at its connector, of its diameter, leaving vertically or across as it points. The template toilet has a sewer outlet and a cold water inlet, the washbasin waste, cold and hot water. The component editor lists the connectors and marks them in its previews.
+- Component library window (*Architecture → Component Library…*): browse the component files (`.ccomp`) of the folders you add (kept with the preferences), such as a copy of [ConstructCAD Components](https://github.com/francisreboucas/constructcad-components); search by name, type or description, filter by kind, see a component's types, parameters, connectors and plan, load it into the project (doors and windows start the wall tool) and save a project component into a library folder. The engine command `component_library_list` lists the folders for the command line and MCP.
+- Arc walls trim, extend and align: *Trim/Extend to Corner* and *to a reference* work along an arc wall's circle and to it (lines and circles meet where they cross; of two crossings, the one on the elements, else the one that changes them least), and an arc wall aligns onto a concentric one (its radius changes, its openings keep their angles). An arc wall picked as a mirror axis mirrors across its axis of symmetry.
+
+### Changed
+
+- `.ccad` format version 12: door and window types are components. Older files open with their door and window types turned into the built-in door and window components of the same sizes. Files saved by 0.6.0 do not open in 0.5.0.
+
 ## [0.5.0] - 2026-10-27
 
 ### Added
@@ -14,6 +28,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Traditional Chinese interface (繁體中文, `zh-TW`), contributed by @yoyomaimai. It is picked from the system language for `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant`.
 - Chinese, Japanese and Korean text shows in the interface and in PNG export through the system's CJK fonts (Microsoft JhengHei, PingFang, Noto Sans CJK…). They used to show as boxes. No font is bundled. PDF export still writes such text as `?`.
 - Doors and windows can be placed in a 3D view: with the Door or Window tool active, click a wall. The opening is centered where you clicked, at the type's sill, facing that side.
+- Roofs: a slope per outline edge for gable and hip roofs (`Roof::edge_slopes`): an edge follows the roof's slope, becomes a gable end, or takes its own slope (*Edge Slopes* in the roof properties, `roof_edge_set`). Roof openings are listed in the properties and removed one at a time (`roof_opening_remove`).
+- *Demolish* acts on the selection at once, takes a window (left to right: inside it; right to left: touching it) and works in 3D views.
+- Any view as a PNG image: *File → Export Image…* and `view_export` (PNG, SVG or PDF of plans, elevations, sections, 3D views, legends, diagrams and sheets, at a chosen resolution); text is drawn with the embedded Inter font.
+- Light, dark or system theme in *File → Preferences*; 2D drawings keep a white paper in both.
+- Floor openings (shafts, stairwells): `floor_create` takes `openings`, `floor_opening_add` and `floor_opening_remove` edit them, and the floor properties list them; plans draw them, areas and volumes leave them out, and IFC export writes them as voids of the slab's profile.
+- IFC import understands `IfcSlab` better: slabs with openings that pass through them (profile voids, opening elements, or shafts cut out of their body) become floors with openings, and base slabs shaped like slabs become foundation slabs; piles and pile caps written as base slabs stay generic objects keeping their class.
 
 ### Fixed
 
@@ -230,7 +250,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/francisreboucas/constructcad/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/francisreboucas/constructcad/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/francisreboucas/constructcad/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/francisreboucas/constructcad/compare/v0.4.0...v0.4.1
