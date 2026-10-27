@@ -584,6 +584,10 @@ tx-project-info = Інформація про проєкт
 
 # Мова
 settings-language = Мова
+settings-theme = Тема
+theme-system = Системна
+theme-light = Світла
+theme-dark = Темна
 msg-language-changed = Мову змінено. Нові проєкти використовуватимуть назви цією мовою.
 
 # Помилки файлів

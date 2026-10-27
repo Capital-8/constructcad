@@ -569,6 +569,17 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
             });
             actions::set_language(state, lang);
         });
+        ui.allocate_ui_with_layout(vec2(130.0, BUTTON_HEIGHT), Layout::top_down(Align::Min), |ui| {
+            ui.add_space(6.0);
+            ui.label(theme::muted(t!("settings-theme")).size(12.0));
+            let mut choice = state.theme;
+            egui::ComboBox::from_id_salt("theme").width(110.0).selected_text(choice.label()).show_ui(ui, |ui| {
+                for t in theme::ThemeChoice::ALL {
+                    ui.selectable_value(&mut choice, t, t.label());
+                }
+            });
+            actions::set_theme(ui.ctx(), state, choice);
+        });
     });
     group(ui, t!("group-help"), |ui| command_buttons(ui, state, &[UiCommand::About, UiCommand::CheckUpdates]));
 }

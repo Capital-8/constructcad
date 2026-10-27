@@ -35,6 +35,7 @@ fn themed_harness(
                 themed = true;
                 return;
             }
+            crate::theme::sync(ui.ctx());
             draw(ui, state)
         },
         state,

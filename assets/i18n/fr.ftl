@@ -584,6 +584,10 @@ tx-project-info = Informations sur le projet
 
 # Langue
 settings-language = Langue
+settings-theme = Thème
+theme-system = Système
+theme-light = Clair
+theme-dark = Sombre
 msg-language-changed = Langue modifiée. Les nouveaux projets utiliseront des noms dans cette langue.
 
 # Erreurs de fichier

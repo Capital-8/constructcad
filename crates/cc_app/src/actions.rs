@@ -165,6 +165,15 @@ pub fn set_language(state: &mut AppState, lang: crate::i18n::Language) {
     state.message = t!("msg-language-changed");
 }
 
+/// Show the interface in `theme` (saved with the other preferences).
+pub fn set_theme(ctx: &egui::Context, state: &mut AppState, theme: crate::theme::ThemeChoice) {
+    if state.theme == theme {
+        return;
+    }
+    state.theme = theme;
+    crate::theme::set_theme(ctx, theme);
+}
+
 // --- Files ---
 
 fn file_dialog() -> rfd::FileDialog {

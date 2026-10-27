@@ -96,6 +96,8 @@ pub struct AppState {
     /// The ribbon shows only its tabs; clicking one shows its panel over the views (`ribbon_peek`).
     pub ribbon_collapsed: bool,
     pub ribbon_peek: bool,
+    /// The interface theme the user chose (light, dark or the system's).
+    pub theme: crate::theme::ThemeChoice,
     /// The open command palette.
     pub palette: Option<crate::palette::Palette>,
     /// Browser inline rename in progress.
@@ -169,6 +171,7 @@ impl AppState {
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
             ribbon_collapsed: false,
+            theme: Default::default(),
             ribbon_peek: false,
             palette: None,
             rename: None,

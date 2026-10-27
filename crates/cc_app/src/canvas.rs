@@ -279,7 +279,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     let drawing = state.drawing(view_id).unwrap_or_default();
     let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
     let rect = resp.rect;
-    painter.rect_filled(rect, 0.0, PALETTE.canvas);
+    painter.rect_filled(rect, 0.0, PALETTE.paper);
 
     let st = state.view2d.entry(view_id).or_default();
     if st.needs_fit(rect) {

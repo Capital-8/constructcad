@@ -6,7 +6,8 @@ use egui::{Color32, Painter, Pos2, Shape, Stroke};
 use glam::DVec2;
 use std::collections::BTreeSet;
 
-pub const HIGHLIGHT: Color32 = crate::theme::PALETTE.accent;
+/// Highlight on the drawing paper, white in both themes.
+pub const HIGHLIGHT: Color32 = crate::theme::LIGHT.accent;
 pub const PREVIEW: Color32 = Color32::from_rgb(230, 110, 20);
 
 /// Maps drawing coordinates to the screen.

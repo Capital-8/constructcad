@@ -2,12 +2,13 @@
 //!
 //! Colors are defined once in [`Palette`] and every panel reads them from
 //! [`PALETTE`] instead of hard-coding values, so the look stays consistent.
-//! [`DARK`] holds the same tokens for a dark theme; code that paints with
-//! [`palette`] already follows the egui theme, so switching is a matter of
-//! moving the remaining `PALETTE` reads onto it.
+//! [`LIGHT`] and [`DARK`] hold the tokens of the two themes; `PALETTE` reads
+//! the one the interface shows ([`sync`] follows the egui theme each frame),
+//! and [`ThemeChoice`] is the user's preference: light, dark or the system's.
 
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, RichText, Shadow, Stroke};
 use egui::{TextStyle, Visuals};
+use std::cell::Cell;
 use std::sync::Arc;
 
 /// Color tokens of a theme.
@@ -19,8 +20,11 @@ pub struct Palette {
     pub panel: Color32,
     /// Section headers and subtle fills inside panels.
     pub surface: Color32,
-    /// Drawing canvas (paper).
+    /// Background of view tabs and the home screen.
     pub canvas: Color32,
+    /// Paper under 2D drawings: white in both themes, since drawings are
+    /// dark lines and text.
+    pub paper: Color32,
     /// Area around a sheet.
     pub sheet_bg: Color32,
     pub border: Color32,
@@ -47,11 +51,13 @@ pub struct Palette {
     pub dark: bool,
 }
 
-pub const PALETTE: Palette = Palette {
+/// Color tokens of the light theme.
+pub const LIGHT: Palette = Palette {
     app_bg: Color32::from_rgb(0xE9, 0xEB, 0xEF),
     panel: Color32::from_rgb(0xF7, 0xF8, 0xFA),
     surface: Color32::from_rgb(0xEF, 0xF1, 0xF4),
     canvas: Color32::WHITE,
+    paper: Color32::WHITE,
     sheet_bg: Color32::from_rgb(0xC9, 0xCD, 0xD3),
     border: Color32::from_rgb(0xD9, 0xDC, 0xE1),
     border_strong: Color32::from_rgb(0xB8, 0xBE, 0xC6),
@@ -78,6 +84,7 @@ pub const DARK: Palette = Palette {
     panel: Color32::from_rgb(0x21, 0x24, 0x29),
     surface: Color32::from_rgb(0x2A, 0x2E, 0x34),
     canvas: Color32::from_rgb(0x1C, 0x1F, 0x23),
+    paper: Color32::WHITE,
     sheet_bg: Color32::from_rgb(0x36, 0x3B, 0x42),
     border: Color32::from_rgb(0x38, 0x3D, 0x44),
     border_strong: Color32::from_rgb(0x4C, 0x53, 0x5C),
@@ -100,7 +107,81 @@ pub const DARK: Palette = Palette {
 
 /// The palette of the theme `ctx` shows.
 pub fn palette(ctx: &egui::Context) -> &'static Palette {
-    if ctx.theme() == egui::Theme::Dark { &DARK } else { &PALETTE }
+    if ctx.theme() == egui::Theme::Dark { &DARK } else { &LIGHT }
+}
+
+thread_local! {
+    /// Whether the interface painted on this thread shows the dark theme.
+    static DARK_SHOWN: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The palette of the theme shown: read like a constant (`PALETTE.text`).
+#[derive(Debug, Clone, Copy)]
+pub struct ShownPalette;
+
+impl std::ops::Deref for ShownPalette {
+    type Target = Palette;
+    fn deref(&self) -> &Palette {
+        if DARK_SHOWN.with(Cell::get) { &DARK } else { &LIGHT }
+    }
+}
+
+/// The colors of the theme the interface shows (see [`sync`]).
+pub static PALETTE: ShownPalette = ShownPalette;
+
+/// Make [`PALETTE`] follow the theme `ctx` shows; call it at the start of
+/// every frame (the system theme may change at any time).
+pub fn sync(ctx: &egui::Context) {
+    DARK_SHOWN.with(|d| d.set(ctx.theme() == egui::Theme::Dark));
+}
+
+/// The user's theme preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThemeChoice {
+    /// Follow the operating system.
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl ThemeChoice {
+    pub const ALL: [ThemeChoice; 3] = [ThemeChoice::System, ThemeChoice::Light, ThemeChoice::Dark];
+
+    /// Stored form of the preference.
+    pub fn code(self) -> &'static str {
+        match self {
+            ThemeChoice::System => "system",
+            ThemeChoice::Light => "light",
+            ThemeChoice::Dark => "dark",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.code() == code)
+    }
+
+    pub fn label(self) -> String {
+        match self {
+            ThemeChoice::System => crate::t!("theme-system"),
+            ThemeChoice::Light => crate::t!("theme-light"),
+            ThemeChoice::Dark => crate::t!("theme-dark"),
+        }
+    }
+
+    fn preference(self) -> egui::ThemePreference {
+        match self {
+            ThemeChoice::System => egui::ThemePreference::System,
+            ThemeChoice::Light => egui::ThemePreference::Light,
+            ThemeChoice::Dark => egui::ThemePreference::Dark,
+        }
+    }
+}
+
+/// Show the theme `choice` asks for.
+pub fn set_theme(ctx: &egui::Context, choice: ThemeChoice) {
+    ctx.set_theme(choice.preference());
+    sync(ctx);
 }
 
 /// The application icon (256 px PNG).
@@ -162,8 +243,8 @@ pub fn muted(text: impl Into<String>) -> RichText {
 pub fn apply(ctx: &egui::Context) {
     ctx.set_fonts(fonts());
     load_logo(ctx);
-    ctx.set_theme(egui::ThemePreference::Light);
-    for (theme, palette) in [(egui::Theme::Light, &PALETTE), (egui::Theme::Dark, &DARK)] {
+    set_theme(ctx, ThemeChoice::Light);
+    for (theme, palette) in [(egui::Theme::Light, &LIGHT), (egui::Theme::Dark, &DARK)] {
         ctx.style_mut_of(theme, |style| style_of(style, palette));
     }
 }
@@ -329,7 +410,7 @@ mod tests {
     /// Text and icons stay readable on panels in both themes.
     #[test]
     fn palettes_have_readable_contrast() {
-        for p in [&PALETTE, &DARK] {
+        for p in [&LIGHT, &DARK] {
             for bg in [p.panel, p.surface, p.hover] {
                 assert!(contrast(p.text, bg) >= 7.0, "text on {bg:?}");
                 assert!(contrast(p.icon_ink, bg) >= 7.0, "icons on {bg:?}");
@@ -340,5 +421,23 @@ mod tests {
                 assert!(contrast(c, p.panel) >= 3.0, "{c:?} on the panel");
             }
         }
+    }
+
+    /// `PALETTE` reads the colors of the theme shown, and the preference
+    /// is stored by its code.
+    #[test]
+    fn shown_palette_follows_the_chosen_theme() {
+        let ctx = egui::Context::default();
+        set_theme(&ctx, ThemeChoice::Dark);
+        assert!(PALETTE.dark);
+        assert_eq!(PALETTE.panel, DARK.panel);
+        set_theme(&ctx, ThemeChoice::Light);
+        assert!(!PALETTE.dark);
+        // Drawings keep their white paper in both themes.
+        assert_eq!(LIGHT.paper, DARK.paper);
+        for t in ThemeChoice::ALL {
+            assert_eq!(ThemeChoice::from_code(t.code()), Some(t));
+        }
+        assert_eq!(ThemeChoice::from_code("sepia"), None);
     }
 }

@@ -23,6 +23,8 @@ pub struct Args {
 const LANGUAGE_KEY: &str = "language";
 /// eframe storage key of the recent projects (one path per line).
 const RECENT_KEY: &str = "recent_files";
+/// eframe storage key of the interface theme ("system", "light" or "dark").
+const THEME_KEY: &str = "theme";
 /// eframe storage key of the collapsed ribbon preference ("1" when collapsed).
 const RIBBON_KEY: &str = "ribbon_collapsed";
 /// eframe storage key of the automatic update check preference ("0" when off).
@@ -53,6 +55,8 @@ impl ConstructApp {
         }
         state.ribbon_collapsed = cc.storage.and_then(|s| s.get_string(RIBBON_KEY)).is_some_and(|v| v == "1");
         let stored = |key| cc.storage.and_then(|s| s.get_string(key));
+        state.theme = stored(THEME_KEY).and_then(|v| crate::theme::ThemeChoice::from_code(&v)).unwrap_or_default();
+        crate::theme::set_theme(&cc.egui_ctx, state.theme);
         state.updates.auto = stored(UPDATE_AUTO_KEY).is_none_or(|v| v != "0");
         state.updates.last_check = stored(UPDATE_LAST_KEY).and_then(|v| v.parse().ok());
         state.updates.skipped = stored(UPDATE_SKIPPED_KEY).and_then(|v| crate::update::Version::parse(&v));
@@ -344,6 +348,7 @@ impl eframe::App for ConstructApp {
         let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         storage.set_string(RECENT_KEY, recent.join("\n"));
         storage.set_string(RIBBON_KEY, if self.state.ribbon_collapsed { "1" } else { "0" }.to_string());
+        storage.set_string(THEME_KEY, self.state.theme.code().to_string());
         let updates = &self.state.updates;
         storage.set_string(UPDATE_AUTO_KEY, if updates.auto { "1" } else { "0" }.to_string());
         storage.set_string(UPDATE_LAST_KEY, updates.last_check.map(|t| t.to_string()).unwrap_or_default());
@@ -352,6 +357,7 @@ impl eframe::App for ConstructApp {
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        crate::theme::sync(&ctx);
         self.state.sync();
         self.state.updates.poll();
         self.state.follow_selection();
