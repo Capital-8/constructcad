@@ -1577,6 +1577,34 @@ fn roofs_over_any_footprint() {
     assert_eq!(fails(&mut s, "roof_create", overlapping), ErrorCode::InvalidArguments);
 }
 
+/// Floors with openings (shafts, stairwells): created with them, added and
+/// removed one at a time; the area and volume leave them out.
+#[test]
+fn floor_openings() {
+    let mut s = Session::default();
+    let shaft = json!([[1, 1], [3, 1], [3, 3], [1, 3]]);
+    let floor =
+        run(&mut s, "floor_create", json!({"boundary": [[0, 0], [10, 0], [10, 6], [0, 6]], "openings": [shaft]}));
+    let floor_id = id(&floor);
+    let volume = |v: &Value| v["derived"]["volume"].as_f64().unwrap();
+    let full = volume(&run(&mut s, "floor_create", json!({"boundary": [[20, 0], [30, 0], [30, 6], [20, 6]]})));
+    assert!((volume(&floor) - full * 56.0 / 60.0).abs() < 1e-9, "{} vs {full}", volume(&floor));
+    // A stairwell beside it; one overlapping or outside is refused.
+    let stair = json!({"id": floor_id, "outline": [[5, 1], [9, 1], [9, 3], [5, 3]]});
+    let floor = run(&mut s, "floor_opening_add", stair);
+    assert_eq!(floor["params"]["openings"].as_array().unwrap().len(), 2);
+    let overlapping = json!({"id": floor_id, "outline": [[2, 2], [6, 2], [6, 4], [2, 4]]});
+    assert_eq!(fails(&mut s, "floor_opening_add", overlapping), ErrorCode::InvalidArguments);
+    let outside = json!({"id": floor_id, "outline": [[9, 4], [12, 4], [12, 5], [9, 5]]});
+    assert_eq!(fails(&mut s, "floor_opening_add", outside), ErrorCode::InvalidArguments);
+    let floor = run(&mut s, "floor_opening_remove", json!({"id": floor_id, "index": 0}));
+    assert_eq!(floor["params"]["openings"], json!([[[5.0, 1.0], [9.0, 1.0], [9.0, 3.0], [5.0, 3.0]]]));
+    assert_eq!(fails(&mut s, "floor_opening_remove", json!({"id": floor_id, "index": 1})), ErrorCode::InvalidArguments);
+    // An opening across the edge through element_set is refused too.
+    let across = json!({"id": floor_id, "params": {"openings": [[[-1, 1], [1, 1], [1, 2], [-1, 2]]]}});
+    assert_eq!(fails(&mut s, "element_set", across), ErrorCode::InvalidArguments);
+}
+
 /// A slope per edge: a hip roof with a gable end, a steeper eave; one
 /// opening removed at a time.
 #[test]

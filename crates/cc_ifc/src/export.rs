@@ -503,8 +503,25 @@ impl<'a> Exporter<'a> {
 
     /// Extrusion of a closed polygon along `dir` (in `position` coordinates).
     fn extrude_polygon(&mut self, pts: &[DVec2], position: Id, dir: Id, depth: f64) -> Id {
+        self.extrude_polygon_with_voids(pts, &[], position, dir, depth)
+    }
+
+    /// A polygon with `voids` (openings) extruded by `depth` along `dir`.
+    fn extrude_polygon_with_voids(
+        &mut self,
+        pts: &[DVec2],
+        voids: &[Vec<DVec2>],
+        position: Id,
+        dir: Id,
+        depth: f64,
+    ) -> Id {
         let curve = self.polyline(pts);
-        let profile = self.w.add("IFCARBITRARYCLOSEDPROFILEDEF", args![Value::Enum("AREA"), Value::Null, curve]);
+        let profile = if voids.is_empty() {
+            self.w.add("IFCARBITRARYCLOSEDPROFILEDEF", args![Value::Enum("AREA"), Value::Null, curve])
+        } else {
+            let inner: Vec<Id> = voids.iter().map(|v| self.polyline(v)).collect();
+            self.w.add("IFCARBITRARYPROFILEDEFWITHVOIDS", args![Value::Enum("AREA"), Value::Null, curve, inner])
+        };
         self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, dir, depth])
     }
 
@@ -1764,7 +1781,21 @@ impl<'a> Exporter<'a> {
         } else {
             let placement = self.local_placement(Some(storey), frame);
             let dir = self.direction(dir);
-            let body = self.extrude_polygon(&profile, self.identity, dir, depth);
+            // Floor openings: voids of the profile, clockwise.
+            let voids: Vec<Vec<DVec2>> = match &e.kind {
+                ElementKind::Floor(f) => f
+                    .openings
+                    .iter()
+                    .map(|o| {
+                        let mut o = polygon::ccw(o);
+                        o.reverse();
+                        o
+                    })
+                    .filter(|o| o.len() >= 3)
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let body = self.extrude_polygon_with_voids(&profile, &voids, self.identity, dir, depth);
             let style = self.material_style(ty.main_material());
             self.styled(body, style);
             (placement, self.shape(vec![body], None))
@@ -1780,7 +1811,7 @@ impl<'a> Exporter<'a> {
             ElementKind::Floor(f) => {
                 // Layers are listed top first: start at the top face and go down.
                 self.layer_usage(e.type_id, product, "AXIS3", thickness);
-                let area = polygon::area(&f.boundary);
+                let area = f.area();
                 self.quantities(
                     e,
                     "Qto_SlabBaseQuantities",

@@ -135,7 +135,9 @@ impl Element {
                 w.start += delta;
                 w.end += delta;
             }
-            ElementKind::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
+            ElementKind::Floor(f) => {
+                f.boundary.iter_mut().chain(f.openings.iter_mut().flatten()).for_each(|p| *p += delta)
+            }
             ElementKind::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
             ElementKind::Roof(r) => {
                 r.footprint.iter_mut().chain(r.holes.iter_mut().flatten()).for_each(|p| *p += delta)
@@ -365,6 +367,28 @@ pub struct Floor {
     pub boundary: Vec<DVec2>,
     /// Offset of the top face from the level elevation.
     pub height_offset: f64,
+    /// Openings through the slab (shafts, stairwells): closed outlines
+    /// inside the boundary, apart from each other.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openings: Vec<Vec<DVec2>>,
+}
+
+impl Floor {
+    /// A floor over `boundary` with no openings.
+    pub fn new(boundary: Vec<DVec2>, height_offset: f64) -> Self {
+        Self { boundary, height_offset, openings: Vec::new() }
+    }
+
+    /// Plan area: the boundary less its openings.
+    pub fn area(&self) -> f64 {
+        (polygon_area(&self.boundary) - self.openings.iter().map(|o| polygon_area(o)).sum::<f64>()).max(0.0)
+    }
+}
+
+/// Area of a simple polygon of either winding.
+fn polygon_area(p: &[DVec2]) -> f64 {
+    let n = p.len();
+    (0..n).map(|i| p[i].perp_dot(p[(i + 1) % n])).sum::<f64>().abs() * 0.5
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -426,11 +450,7 @@ impl Roof {
 
     /// Plan area: the footprint less its openings.
     pub fn area(&self) -> f64 {
-        let area = |p: &[DVec2]| {
-            let n = p.len();
-            (0..n).map(|i| p[i].perp_dot(p[(i + 1) % n])).sum::<f64>().abs() * 0.5
-        };
-        (area(&self.footprint) - self.holes.iter().map(|h| area(h)).sum::<f64>()).max(0.0)
+        (polygon_area(&self.footprint) - self.holes.iter().map(|h| polygon_area(h)).sum::<f64>()).max(0.0)
     }
 }
 

@@ -130,6 +130,8 @@ registry![
         create::DoorCreate,
         create::WindowCreate,
         create::FloorCreate,
+        create::FloorOpeningAdd,
+        create::FloorOpeningRemove,
         create::CeilingCreate,
         create::RoofCreate,
         create::RoofEdgeSet,

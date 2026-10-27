@@ -224,6 +224,7 @@ tool-floor = Floor
 tool-ceiling = Ceiling
 tool-roof = Roof
 tool-roof-opening = Roof Opening
+tool-floor-opening = Floor Opening
 tool-section = Section
 
 # Actions
@@ -276,6 +277,7 @@ hint-wall-arc-point = Click a point on the arc, or type the radius and press Ent
 hint-hosted = Hover over a wall and click · Space flips the opening
 hint-sketch = Click the vertices · click the first point or press Enter to finish · Backspace removes the last one
 hint-roof-opening = Click the vertices of the opening (courtyard) inside the roof · click the first point or press Enter to finish
+hint-floor-opening = Click the vertices of the opening (shaft, stairwell) inside the floor · click the first point or press Enter to finish
 hint-from-walls = Creates the boundary from the closed walls on this level
 
 # Options bar

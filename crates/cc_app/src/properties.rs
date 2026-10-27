@@ -450,9 +450,21 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                let area = cc_geom::polygon::area(&f.boundary);
-                readonly_row(ui, &t!("col-area"), format::area(area));
+                readonly_row(ui, &t!("col-area"), format::area(f.area()));
+                // Openings (shafts, stairwells): sketch one more.
+                row(ui, &t!("prop-roof-openings"), |ui| {
+                    ui.label(f.openings.len().to_string());
+                    if ui.button(t!("action-roof-add-opening")).clicked() {
+                        state.set_tool(crate::tools::Tool::Opening { host: id, floor: true });
+                        state.message = t!("hint-floor-opening");
+                    }
+                });
             });
+            if !f.openings.is_empty() {
+                section(ui, "floor-openings", t!("prop-roof-openings"), |ui| {
+                    opening_rows(ui, state, id, &f.openings, true)
+                });
+            }
         }
         ElementKind::Ceiling(c) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -482,7 +494,9 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 section(ui, "roof-edges", t!("section-roof-edges"), |ui| roof_edge_rows(ui, state, id, r));
             }
             if !r.holes.is_empty() {
-                section(ui, "roof-openings", t!("prop-roof-openings"), |ui| roof_opening_rows(ui, state, id, r));
+                section(ui, "roof-openings", t!("prop-roof-openings"), |ui| {
+                    opening_rows(ui, state, id, &r.holes, false)
+                });
             }
         }
     }
@@ -1206,7 +1220,7 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
     row(ui, &t!("prop-roof-openings"), |ui| {
         ui.label(holes.to_string());
         if ui.button(t!("action-roof-add-opening")).clicked() {
-            state.set_tool(crate::tools::Tool::RoofOpening { roof: id });
+            state.set_tool(crate::tools::Tool::Opening { host: id, floor: false });
             state.message = t!("hint-roof-opening");
         }
         if holes > 0 && ui.button(t!("action-roof-remove-openings")).clicked() {
@@ -1298,10 +1312,11 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
     }
 }
 
-/// One row per opening, each with its area and a button that removes it.
-fn roof_opening_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof) {
+/// One row per opening of a roof or floor, each with its area and a button that removes it.
+fn opening_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, openings: &[Vec<glam::DVec2>], floor: bool) {
+    use cc_engine::commands::create::{FloorOpeningRemove, RoofOpeningRemove};
     let mut remove = None;
-    for (i, h) in r.holes.iter().enumerate() {
+    for (i, h) in openings.iter().enumerate() {
         row(ui, &t!("prop-roof-opening", "n" => i + 1), |ui| {
             ui.label(format::area(cc_geom::polygon::area(h)));
             if ui.button(t!("action-remove")).clicked() {
@@ -1309,8 +1324,14 @@ fn roof_opening_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_co
             }
         });
     }
-    if let Some(index) = remove {
-        crate::actions::run_command(state, cc_engine::commands::create::RoofOpeningRemove { id: id.0, index });
+    match remove {
+        Some(index) if floor => {
+            crate::actions::run_command(state, FloorOpeningRemove { id: id.0, index });
+        }
+        Some(index) => {
+            crate::actions::run_command(state, RoofOpeningRemove { id: id.0, index });
+        }
+        None => {}
     }
 }
 

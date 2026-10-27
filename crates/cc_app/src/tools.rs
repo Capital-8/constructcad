@@ -106,9 +106,11 @@ pub enum Tool {
     AddLeader {
         id: ElementId,
     },
-    /// Sketch an opening (a courtyard) in the roof `roof`.
-    RoofOpening {
-        roof: ElementId,
+    /// Sketch an opening in `host`: a courtyard in a roof, or a shaft or
+    /// stairwell in a floor (`floor`).
+    Opening {
+        host: ElementId,
+        floor: bool,
     },
     /// Click elements to demolish them in the view's phase.
     Demolish,
@@ -159,7 +161,8 @@ impl Tool {
             Tool::Demolish => "tool-demolish",
             Tool::Text { .. } => "tool-text",
             Tool::AddLeader { .. } => "tool-add-leader",
-            Tool::RoofOpening { .. } => "tool-roof-opening",
+            Tool::Opening { floor: false, .. } => "tool-roof-opening",
+            Tool::Opening { floor: true, .. } => "tool-floor-opening",
         }
     }
 
@@ -828,9 +831,9 @@ pub fn handle(
             sketch_tool(ui, resp, painter, state, level, *category, *type_id, xf)
         }
         (Tool::Section, level) => section_tool(ui, resp, painter, state, level, xf),
-        (Tool::RoofOpening { roof }, Some(level)) => {
+        (Tool::Opening { host, .. }, Some(level)) => {
             if let Some(pts) = sketch_input(ui, resp, painter, state, level, xf) {
-                add_roof_opening(state, *roof, pts);
+                add_opening(state, *host, pts);
             }
         }
         (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
@@ -2087,20 +2090,27 @@ fn sketch_tool(
 
 /// Add the sketched outline `pts` as an opening of `roof` (refused, with a
 /// message, when it is not inside the roof or overlaps another opening).
-pub fn add_roof_opening(state: &mut AppState, roof: ElementId, pts: Vec<DVec2>) {
+/// Add the sketched opening `pts` to the roof or floor `host`.
+pub fn add_opening(state: &mut AppState, host: ElementId, pts: Vec<DVec2>) {
     if pts.len() < 3 || polygon::area(&pts) < 1e-4 {
         state.message = t!("msg-sketch-invalid");
         return;
     }
-    let added = crate::engine_edit::element(state, roof, None, |e| {
-        if let ElementKind::Roof(r) = &mut e.kind {
-            r.holes.push(pts);
-        }
-    });
+    let floor = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Floor(_)));
+    let added = if floor {
+        let outline = pts.iter().map(|p| [p.x, p.y]).collect();
+        crate::actions::run_command(state, create::FloorOpeningAdd { id: host.0, outline }).is_some()
+    } else {
+        crate::engine_edit::element(state, host, None, |e| {
+            if let ElementKind::Roof(r) = &mut e.kind {
+                r.holes.push(pts);
+            }
+        })
+    };
     state.interaction.points.clear();
     if added {
         state.set_tool(Tool::Select);
-        state.selection = BTreeSet::from([roof]);
+        state.selection = BTreeSet::from([host]);
     }
 }
 
@@ -2176,7 +2186,7 @@ pub fn finish_sketch(
         ..Default::default()
     };
     match category {
-        Category::Floor => run_create(state, create::FloorCreate { sketch }),
+        Category::Floor => run_create(state, create::FloorCreate { sketch, openings: Vec::new() }),
         Category::Ceiling => run_create(state, create::CeilingCreate { sketch }),
         Category::Foundation => run_create(state, cc_engine::commands::foundation::FoundationSlabCreate { sketch }),
         _ => run_create(state, create::RoofCreate { sketch, overhang: None, holes: Vec::new() }),

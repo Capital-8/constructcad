@@ -126,6 +126,12 @@ impl Extrusion {
         self.profile.pts.iter().map(|p| self.xf.transform_point3(p.extend(0.0)).truncate()).collect()
     }
 
+    /// World XY of the profile's voids, like [`Extrusion::footprint`].
+    pub fn void_footprints(&self) -> Vec<Vec<DVec2>> {
+        let xy = |p: &DVec2| self.xf.transform_point3(p.extend(0.0)).truncate();
+        self.profile.holes.iter().map(|h| h.iter().map(xy).collect()).collect()
+    }
+
     pub fn plane_point(&self, p: DVec2) -> DVec3 {
         self.xf.transform_point3(p.extend(0.0))
     }

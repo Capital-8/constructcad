@@ -40,7 +40,17 @@ fn check_volumes(p: &Project) {
     use std::f64::consts::PI;
     near(volume_of(p, &g, "IFCPIPESEGMENT"), PI * 0.05 * 0.05 * 7.0, 0.05, "swept disk");
     near(volume_of(p, &g, "IFCSTAIRFLIGHT"), 2.25, 1e-9, "faceted B-rep");
-    near(volume_of(p, &g, "IFCSLAB"), 3.0, 1e-9, "profile with a void");
+    // The slab with a void in its profile is a native floor with an opening.
+    let (slab, floor) = p
+        .elements
+        .values()
+        .find_map(|e| match &e.kind {
+            ElementKind::Floor(f) if f.boundary.iter().all(|q| q.y >= 20.0 - 1e-9) => Some((e.id, f)),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(floor.openings.len(), 1);
+    near(g.volume(slab), 3.0, 1e-9, "profile with a void");
     near(volume_of(p, &g, "IFCFLOWTERMINAL"), PI * 0.09 * 0.5, 0.02, "revolution in degrees");
     near(volume_of(p, &g, "IFCCOVERING"), 0.04, 1e-9, "covering");
     near(volume_of(p, &g, "IFCDOOR"), 0.9 * 0.05 * 2.1, 1e-9, "hostless door");
@@ -135,7 +145,6 @@ fn every_class_is_imported() {
             ("IfcFoobarelement", 1),
             ("IfcMember", 1),
             ("IfcPipeSegment", 1),
-            ("IfcSlab", 1),
             ("IfcStairFlight", 1),
             ("IfcWall", 1),
         ]

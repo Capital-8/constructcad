@@ -4,7 +4,7 @@
 // Test helpers outside #[test] functions may fail loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use cc_core::{Category, ColumnSection, Element, ElementKind, Project, RoofShape, TypeData, Uid};
+use cc_core::{Category, ColumnSection, Element, ElementKind, FoundationShape, Project, RoofShape, TypeData, Uid};
 use cc_ifc::{ExportOptions, export, import};
 use glam::DVec2;
 use std::collections::HashMap;
@@ -57,7 +57,7 @@ fn check(original: &Project) {
                 | Category::Column
                 | Category::Beam
                 | Category::Component
-        );
+        ) || matches!(&e.kind, ElementKind::Foundation(f) if matches!(f.shape, FoundationShape::Slab { .. }));
         if !importable {
             continue;
         }
@@ -88,7 +88,18 @@ fn check(original: &Project) {
             }
             (ElementKind::Floor(a), ElementKind::Floor(b)) => {
                 close(cc_geom::polygon::area(&a.boundary), cc_geom::polygon::area(&b.boundary), TOL, "floor area");
+                assert_eq!(a.openings.len(), b.openings.len(), "floor openings");
+                close(a.area(), b.area(), TOL, "floor net area");
                 close(a.height_offset, b.height_offset, TOL, "floor offset");
+            }
+            (ElementKind::Foundation(a), ElementKind::Foundation(b)) => {
+                let area = |s: &FoundationShape| match s {
+                    FoundationShape::Slab { boundary } => cc_geom::polygon::area(boundary),
+                    other => panic!("foundation came back as {other:?}"),
+                };
+                close(area(&a.shape), area(&b.shape), TOL, "foundation slab area");
+                close(a.top_offset, b.top_offset, TOL, "foundation slab top");
+                close(original.thickness_of(e), imported.thickness_of(i), TOL, "foundation slab thickness");
             }
             (ElementKind::Ceiling(a), ElementKind::Ceiling(b)) => {
                 close(cc_geom::polygon::area(&a.boundary), cc_geom::polygon::area(&b.boundary), TOL, "ceiling area");
@@ -356,6 +367,46 @@ fn framed_beams_round_trip() {
             close2(*p, *q, 1e-6, "framed beam corner");
         }
     }
+}
+
+/// A floor with a shaft and a stairwell, and a foundation slab, come back
+/// as native elements; the floor's openings are voids of its profile.
+#[test]
+fn floor_openings_and_foundation_slabs_round_trip() {
+    let mut project = Project::from_template();
+    let level = project.levels[0].id;
+    let floor_t = project.default_type(Category::Floor).unwrap();
+    let slab_t = project
+        .types_of(Category::Foundation)
+        .find(|t| matches!(t.data, TypeData::Foundation { kind: cc_core::FoundationKind::Slab, .. }))
+        .map(|t| t.id)
+        .unwrap();
+    let square = |x: f64, y: f64, s: f64| {
+        vec![DVec2::new(x, y), DVec2::new(x + s, y), DVec2::new(x + s, y + s), DVec2::new(x, y + s)]
+    };
+    let mut floor = cc_core::Floor::new(square(0.0, 0.0, 10.0), 3.0);
+    floor.openings = vec![square(1.0, 1.0, 2.0), square(5.0, 5.0, 3.0)];
+    let raft =
+        cc_core::Foundation { shape: FoundationShape::Slab { boundary: square(0.0, 0.0, 12.0) }, top_offset: -0.1 };
+    for (type_id, kind) in [(floor_t, ElementKind::Floor(floor)), (slab_t, ElementKind::Foundation(raft))] {
+        let id = cc_core::ElementId(project.alloc_id());
+        let e = Element {
+            id,
+            level,
+            type_id,
+            mark: String::new(),
+            comments: String::new(),
+            kind,
+            uid: Uid::generate(),
+            phase_created: Default::default(),
+            phase_demolished: None,
+        };
+        project.elements.insert(id, e);
+    }
+    let text = export(&project, &ExportOptions::default());
+    assert!(text.contains("IFCARBITRARYPROFILEDEFWITHVOIDS"));
+    assert!(text.contains(".BASESLAB."));
+    check(&project);
 }
 
 #[test]

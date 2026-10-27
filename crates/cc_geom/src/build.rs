@@ -693,7 +693,22 @@ impl ModelGeometry {
             match &e.kind {
                 ElementKind::Floor(f) => {
                     let top = level_z + f.height_offset;
-                    s.add_prism(&f.boundary, |_| top - thk, |_| top);
+                    // Openings clockwise inside the counter-clockwise boundary.
+                    let holes: Vec<Vec<DVec2>> = f
+                        .openings
+                        .iter()
+                        .map(|o| {
+                            let mut o = polygon::ccw(o);
+                            o.reverse();
+                            o
+                        })
+                        .filter(|o| o.len() >= 3)
+                        .collect();
+                    if holes.is_empty() {
+                        s.add_prism(&f.boundary, |_| top - thk, |_| top);
+                    } else {
+                        s.add_prism_with_holes(&polygon::ccw(&f.boundary), &holes, |_| top - thk, |_| top);
+                    }
                 }
                 ElementKind::Ceiling(c) => {
                     let bottom = level_z + c.height_offset;
@@ -855,7 +870,7 @@ mod tests {
                 mark: String::new(),
                 comments: String::new(),
                 uid: Default::default(),
-                kind: ElementKind::Floor(Floor { boundary: pts.to_vec(), height_offset: 0.0 }),
+                kind: ElementKind::Floor(Floor::new(pts.to_vec(), 0.0)),
                 phase_created: Default::default(),
                 phase_demolished: None,
             });

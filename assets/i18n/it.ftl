@@ -224,6 +224,7 @@ tool-floor = Solaio
 tool-ceiling = Controsoffitto
 tool-roof = Copertura
 tool-roof-opening = Apertura in copertura
+tool-floor-opening = Apertura nel solaio
 tool-section = Sezione
 
 # Azioni
@@ -276,6 +277,7 @@ hint-wall-arc-point = Fai clic su un punto dell'arco, oppure digita il raggio e 
 hint-hosted = Passa sopra un muro e fai clic · Spazio inverte l'apertura
 hint-sketch = Fai clic sui vertici · fai clic sul primo punto o premi Enter per finire · Backspace rimuove l'ultimo
 hint-roof-opening = Fai clic sui vertici dell'apertura (cortile) dentro la copertura · fai clic sul primo punto o premi Enter per finire
+hint-floor-opening = Fare clic sui vertici dell’apertura (cavedio, vano scala) nel solaio · fare clic sul primo punto o premere Invio per terminare
 hint-from-walls = Crea il contorno dai muri chiusi di questo livello
 
 # Barra delle opzioni

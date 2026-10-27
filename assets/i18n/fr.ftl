@@ -224,6 +224,7 @@ tool-floor = Sol
 tool-ceiling = Plafond
 tool-roof = Toit
 tool-roof-opening = Ouverture de toit
+tool-floor-opening = Trémie de plancher
 tool-section = Coupe
 
 # Actions
@@ -276,6 +277,7 @@ hint-wall-arc-point = Cliquez un point de l'arc, ou tapez le rayon et appuyez su
 hint-hosted = Survolez un mur et cliquez · Espace retourne l'ouverture
 hint-sketch = Cliquez les sommets · cliquez le premier point ou appuyez sur Entrée pour terminer · Retour arrière supprime le dernier
 hint-roof-opening = Cliquez les sommets de l'ouverture (patio) dans le toit · cliquez le premier point ou appuyez sur Entrée pour terminer
+hint-floor-opening = Cliquez sur les sommets de la trémie (gaine, escalier) dans le plancher · cliquez sur le premier point ou appuyez sur Entrée pour terminer
 hint-from-walls = Crée le contour à partir des murs fermés de ce niveau
 
 # Barre d'options

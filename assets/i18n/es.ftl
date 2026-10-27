@@ -224,6 +224,7 @@ tool-floor = Losa
 tool-ceiling = Cielorraso
 tool-roof = Cubierta
 tool-roof-opening = Abertura en la cubierta
+tool-floor-opening = Abertura en suelo
 tool-section = Sección
 
 # Acciones
@@ -276,6 +277,7 @@ hint-wall-arc-point = Haga clic en un punto del arco o escriba el radio y pulse 
 hint-hosted = Pase el cursor sobre un muro y haga clic · Espacio invierte la abertura
 hint-sketch = Haga clic en los vértices · haga clic en el primer punto o pulse Enter para terminar · Retroceso quita el último
 hint-roof-opening = Haga clic en los vértices de la abertura (patio) dentro de la cubierta · haga clic en el primer punto o pulse Enter para terminar
+hint-floor-opening = Haga clic en los vértices de la abertura (patinillo, escalera) dentro del suelo · haga clic en el primer punto o pulse Intro para terminar
 hint-from-walls = Crea el contorno a partir de los muros cerrados de este nivel
 
 # Barra de opciones

@@ -188,7 +188,7 @@ mod tests {
                 id
             };
             let boundary = vec![DVec2::new(0.0, 0.0), DVec2::new(8.0, 0.0), DVec2::new(8.0, 6.0), DVec2::new(0.0, 6.0)];
-            floor = element(e, floor_t, ElementKind::Floor(cc_core::Floor { boundary, height_offset: 0.0 }));
+            floor = element(e, floor_t, ElementKind::Floor(cc_core::Floor::new(boundary, 0.0)));
             let kind = ElementKind::Beam(cc_core::Beam::new(DVec2::new(0.0, 3.0), DVec2::new(8.0, 3.0), 0.0));
             beam = element(e, beam_t, kind);
             if joined {

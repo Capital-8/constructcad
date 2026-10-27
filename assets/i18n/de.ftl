@@ -224,6 +224,7 @@ tool-floor = Geschossdecke
 tool-ceiling = Unterdecke
 tool-roof = Dach
 tool-roof-opening = Dachöffnung
+tool-floor-opening = Deckenöffnung
 tool-section = Schnitt
 
 # Aktionen
@@ -276,6 +277,7 @@ hint-wall-arc-point = Einen Punkt auf dem Bogen klicken oder den Radius eingeben
 hint-hosted = Über eine Wand fahren und klicken · Leertaste spiegelt die Öffnung
 hint-sketch = Die Eckpunkte klicken · zum Abschließen den ersten Punkt klicken oder Enter drücken · Rücktaste entfernt den letzten
 hint-roof-opening = Die Eckpunkte der Öffnung (Innenhof) im Dach klicken · zum Abschließen den ersten Punkt klicken oder Enter drücken
+hint-floor-opening = Eckpunkte der Öffnung (Schacht, Treppenloch) in der Decke anklicken · ersten Punkt anklicken oder Eingabe drücken, um abzuschließen
 hint-from-walls = Erstellt die Begrenzung aus den geschlossenen Wänden dieser Ebene
 
 # Optionsleiste

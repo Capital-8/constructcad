@@ -20,6 +20,7 @@ use cc_core::{
     LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, TypeData, Uid, View, ViewId,
     ViewKind, Wall, WallFunction, WallTop,
 };
+use cc_core::{Foundation, FoundationKind, FoundationShape};
 use cc_geom::polygon;
 use glam::{DAffine3, DVec2, DVec3};
 use std::collections::{BTreeMap, HashMap};
@@ -123,8 +124,14 @@ impl Body {
     /// The extrusion of a body that is nothing but one uncut extrusion of a
     /// solid profile (what slabs, columns and beams can hold exactly).
     fn sole_extrusion(&self) -> Option<&Extrusion> {
+        self.sole_extrusion_with_voids().filter(|e| e.profile.holes.is_empty())
+    }
+
+    /// Like [`Body::sole_extrusion`], the profile possibly with voids (slabs
+    /// hold them as openings).
+    fn sole_extrusion_with_voids(&self) -> Option<&Extrusion> {
         match self.solids.as_slice() {
-            [s] if !s.clipped => s.extrusion.as_ref().filter(|e| e.profile.closed && e.profile.holes.is_empty()),
+            [s] if !s.clipped => s.extrusion.as_ref().filter(|e| e.profile.closed),
             _ => None,
         }
     }
@@ -306,6 +313,50 @@ struct Importer<'a> {
 
 fn clean_polygon(pts: Vec<DVec2>) -> Vec<DVec2> {
     clean_loop(pts, |a, b| a.distance(*b) < 1e-9)
+}
+
+/// How far an opening may stop short of a slab's faces and still pass through it (m).
+const SLAB_TOL: f64 = 1e-3;
+
+/// Whether `opening` is an outline with an area strictly inside `outline`.
+fn openings_fit(outline: &[DVec2], opening: &[DVec2]) -> bool {
+    opening.len() >= 3
+        && polygon::area(opening) > 1e-4
+        && opening.iter().all(|p| polygon::contains(outline, *p))
+        && !edges_meet(outline, opening)
+}
+
+/// Whether two outlines cross, touch or one lies in the other.
+fn outlines_meet(a: &[DVec2], b: &[DVec2]) -> bool {
+    edges_meet(a, b) || b.iter().any(|p| polygon::contains(a, *p)) || a.iter().any(|p| polygon::contains(b, *p))
+}
+
+/// Whether the edges of two outlines cross or touch.
+fn edges_meet(a: &[DVec2], b: &[DVec2]) -> bool {
+    let near = |p: DVec2, q: DVec2, r: DVec2| polygon::closest_on_segment(p, q, r).0.distance(r) < 1e-6;
+    let crosses = |p: DVec2, q: DVec2, r: DVec2, s: DVec2| {
+        let side = |a: DVec2, b: DVec2, c: DVec2| (b - a).perp_dot(c - a);
+        let (d1, d2, d3, d4) = (side(r, s, p), side(r, s, q), side(p, q, r), side(p, q, s));
+        (d1 * d2 < 0.0 && d3 * d4 < 0.0) || near(r, s, p) || near(r, s, q) || near(p, q, r) || near(p, q, s)
+    };
+    let (n, m) = (a.len(), b.len());
+    (0..n).any(|i| (0..m).any(|j| crosses(a[i], a[(i + 1) % n], b[j], b[(j + 1) % m])))
+}
+
+/// Whether an outline `thickness` thick is shaped like a slab: thinner than
+/// it is wide (the narrower side of its oriented bounding box).
+fn slab_like(outline: &[DVec2], thickness: f64) -> bool {
+    let n = outline.len();
+    // The narrowest extent over the outline's edge directions (exact for convex outlines).
+    let width = (0..n)
+        .filter_map(|i| (outline[(i + 1) % n] - outline[i]).try_normalize())
+        .map(|d| {
+            let across: Vec<f64> = outline.iter().map(|p| p.dot(d.perp())).collect();
+            across.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+                - across.iter().copied().fold(f64::INFINITY, f64::min)
+        })
+        .fold(f64::INFINITY, f64::min);
+    width.is_finite() && thickness < width
 }
 
 /// Type names from other tools often end in an instance number ("Wall:Generic 200mm:123456").
@@ -1251,15 +1302,56 @@ impl<'a> Importer<'a> {
         self.openings_of.get(&id).is_some_and(|o| !o.is_empty())
     }
 
-    fn import_slab(&mut self, id: u32, e: &Entity) -> bool {
-        if self.has_openings(id) {
-            return false;
+    /// The outline, openings, z range and thickness of a slab that is one
+    /// vertical extrusion: the openings are the voids of its profile and the
+    /// openings voiding it that pass through it vertically. `None` when the
+    /// slab or an opening is anything else, or an opening is not inside the
+    /// outline and apart from the others (natives could not show it).
+    #[allow(clippy::type_complexity)]
+    fn slab_sketch(&self, id: u32, body: &Body) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64)> {
+        let (z0, z1) = body.z_range()?;
+        let ex = body.sole_extrusion_with_voids().filter(|e| e.is_vertical())?;
+        let outline = clean_polygon(ex.footprint());
+        if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
+            return None;
         }
+        let mut openings: Vec<Vec<DVec2>> = ex.void_footprints().into_iter().map(clean_polygon).collect();
+        let f = self.f;
+        for o in self.openings_of.get(&id).into_iter().flatten() {
+            let (_, cutter) = self.product(f.get(*o)?);
+            let cut = cutter.sole_extrusion().filter(|e| e.is_vertical())?;
+            let (c0, c1) = cutter.z_range()?;
+            // Through the whole slab (a recess would leave part of it).
+            if c0 > z0 + SLAB_TOL || c1 < z1 - SLAB_TOL {
+                return None;
+            }
+            openings.push(clean_polygon(cut.footprint()));
+        }
+        openings.iter().all(|o| openings_fit(&outline, o)).then_some(())?;
+        for (i, a) in openings.iter().enumerate() {
+            for b in openings.iter().skip(i + 1) {
+                if outlines_meet(a, b) {
+                    return None;
+                }
+            }
+        }
+        Some((outline, openings, z0, z1, ex.vector.z.abs()))
+    }
+
+    fn import_slab(&mut self, id: u32, e: &Entity) -> bool {
         let kind = e.arg(8).as_enum().unwrap_or("NOTDEFINED");
         let (_, body) = self.product(e);
-        let Some((boundary, z0, z1, thickness)) = Self::sketch(&body, false) else { return false };
-        if kind == "ROOF" {
-            return self.add_roof(id, e, boundary, z0, thickness, RoofShape::Flat);
+        let Some((boundary, openings, z0, z1, thickness)) = self.slab_sketch(id, &body) else { return false };
+        match kind {
+            "ROOF" => return self.add_roof_with_holes(id, e, boundary, openings, z0, thickness, RoofShape::Flat),
+            // A foundation slab, if it is shaped like one: piles and pile
+            // caps written as base slabs stay generic, keeping their class.
+            "BASESLAB" => {
+                return openings.is_empty()
+                    && slab_like(&boundary, thickness)
+                    && self.add_foundation_slab(id, e, boundary, z1, thickness);
+            }
+            _ => {}
         }
         let (level, elevation) = self.level_for(id, z1);
         let name = self.type_name(id, e);
@@ -1273,8 +1365,34 @@ impl<'a> Importer<'a> {
             |d| matches!(d, TypeData::Floor { layers } if (layers.iter().map(|l| l.thickness).sum::<f64>() - thickness).abs() < TYPE_TOL),
             || TypeData::Floor { layers },
         );
-        let floor = Floor { boundary, height_offset: z1 - elevation };
+        let mut floor = Floor::new(boundary, z1 - elevation);
+        floor.openings = openings;
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Floor(floor));
+        true
+    }
+
+    /// A foundation slab with its top at `z1`.
+    fn add_foundation_slab(&mut self, id: u32, e: &Entity, boundary: Vec<DVec2>, z1: f64, thickness: f64) -> bool {
+        if thickness < 1e-3 {
+            return false;
+        }
+        let (level, elevation) = self.level_for(id, z1);
+        let name = self.type_name(id, e);
+        let material = self.main_material(id, e);
+        let uid = self.type_uid(id);
+        let type_id = self.find_or_add_type(
+            Category::Foundation,
+            name,
+            format!("{:.0} cm", thickness * 100.0),
+            uid,
+            |d| {
+                matches!(d, TypeData::Foundation { kind: FoundationKind::Slab, thickness: t, .. }
+                    if (t - thickness).abs() < TYPE_TOL)
+            },
+            || TypeData::Foundation { kind: FoundationKind::Slab, width: 1.0, length: 1.0, thickness, material },
+        );
+        let foundation = Foundation { shape: FoundationShape::Slab { boundary }, top_offset: z1 - elevation };
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Foundation(foundation));
         true
     }
 
@@ -2090,6 +2208,135 @@ END-ISO-10303-21;
         assert_eq!(report.imported.get(&Category::Component), Some(&1));
         assert!(report.skipped.is_empty(), "{:?}", report.skipped);
         assert!(p.views_of(cc_core::ViewCategory::FloorPlan).count() == 1);
+    }
+
+    /// Slabs as other tools write them (millimeters): a floor voided by a
+    /// shaft through it, one with a recess, one whose profile has a void, a
+    /// raft, and a pile and a pile cap written as base slabs.
+    #[test]
+    fn slabs_with_openings_and_base_slabs() {
+        let text = "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Slabs',$,$,$,$,$,#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#14=IFCDIRECTION((0.,0.,1.));
+#15=IFCAXIS2PLACEMENT3D(#16,$,$);
+#16=IFCCARTESIANPOINT((0.,0.,-300.));
+#100=IFCSLAB('2XvctVUKr0kugbFTf53O9L',$,'Floor:Generic 300mm:1',$,$,#101,#102,'1',.FLOOR.);
+#101=IFCLOCALPLACEMENT(#11,#12);
+#102=IFCPRODUCTDEFINITIONSHAPE($,$,(#103));
+#103=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#104));
+#104=IFCEXTRUDEDAREASOLID(#105,#15,#14,300.);
+#105=IFCRECTANGLEPROFILEDEF(.AREA.,$,#106,10000.,6000.);
+#106=IFCAXIS2PLACEMENT2D(#107,$);
+#107=IFCCARTESIANPOINT((5000.,3000.));
+#110=IFCOPENINGELEMENT('3XvctVUKr0kugbFTf53O9L',$,'Shaft',$,$,#111,#112,$,.OPENING.);
+#111=IFCLOCALPLACEMENT(#101,#12);
+#112=IFCPRODUCTDEFINITIONSHAPE($,$,(#113));
+#113=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#114));
+#114=IFCEXTRUDEDAREASOLID(#115,#15,#14,300.);
+#115=IFCRECTANGLEPROFILEDEF(.AREA.,$,#116,2000.,2000.);
+#116=IFCAXIS2PLACEMENT2D(#117,$);
+#117=IFCCARTESIANPOINT((2000.,2000.));
+#118=IFCRELVOIDSELEMENT('4XvctVUKr0kugbFTf53O9L',$,$,$,#100,#110);
+#140=IFCSLAB('5XvctVUKr0kugbFTf53O9L',$,'Floor:Generic 300mm:2',$,$,#141,#102,'2',.FLOOR.);
+#141=IFCLOCALPLACEMENT(#11,#142);
+#142=IFCAXIS2PLACEMENT3D(#143,$,$);
+#143=IFCCARTESIANPOINT((20000.,0.,0.));
+#150=IFCOPENINGELEMENT('6XvctVUKr0kugbFTf53O9L',$,'Recess',$,$,#141,#151,$,.RECESS.);
+#151=IFCPRODUCTDEFINITIONSHAPE($,$,(#152));
+#152=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#153));
+#153=IFCEXTRUDEDAREASOLID(#115,#15,#14,100.);
+#154=IFCRELVOIDSELEMENT('7XvctVUKr0kugbFTf53O9L',$,$,$,#140,#150);
+#200=IFCSLAB('8XvctVUKr0kugbFTf53O9L',$,'Raft:400mm:3',$,$,#201,#202,'3',.BASESLAB.);
+#201=IFCLOCALPLACEMENT(#11,#203);
+#203=IFCAXIS2PLACEMENT3D(#204,$,$);
+#204=IFCCARTESIANPOINT((0.,20000.,-1000.));
+#202=IFCPRODUCTDEFINITIONSHAPE($,$,(#205));
+#205=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#206));
+#206=IFCEXTRUDEDAREASOLID(#207,$,#14,400.);
+#207=IFCRECTANGLEPROFILEDEF(.AREA.,$,#106,12000.,12000.);
+#300=IFCSLAB('9XvctVUKr0kugbFTf53O9L',$,'Pile:500mm Diameter:4',$,$,#201,#302,'4',.BASESLAB.);
+#302=IFCPRODUCTDEFINITIONSHAPE($,$,(#303));
+#303=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#304));
+#304=IFCEXTRUDEDAREASOLID(#305,$,#14,6000.);
+#305=IFCCIRCLEPROFILEDEF(.AREA.,$,$,250.);
+#310=IFCSLAB('AXvctVUKr0kugbFTf53O9L',$,'Pile Cap:800 x 1800:5',$,$,#201,#312,'5',.BASESLAB.);
+#312=IFCPRODUCTDEFINITIONSHAPE($,$,(#313));
+#313=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#314));
+#314=IFCEXTRUDEDAREASOLID(#315,$,#14,1200.);
+#315=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,1800.,800.);
+#400=IFCSLAB('BXvctVUKr0kugbFTf53O9L',$,'Floor:Voided:6',$,$,#401,#402,'6',.FLOOR.);
+#401=IFCLOCALPLACEMENT(#11,#403);
+#403=IFCAXIS2PLACEMENT3D(#404,$,$);
+#404=IFCCARTESIANPOINT((40000.,0.,0.));
+#402=IFCPRODUCTDEFINITIONSHAPE($,$,(#405));
+#405=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#406));
+#406=IFCEXTRUDEDAREASOLID(#407,#15,#14,300.);
+#407=IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,#408,(#409));
+#408=IFCPOLYLINE((#410,#411,#412,#413,#410));
+#409=IFCPOLYLINE((#414,#415,#416,#417,#414));
+#410=IFCCARTESIANPOINT((0.,0.));
+#411=IFCCARTESIANPOINT((8000.,0.));
+#412=IFCCARTESIANPOINT((8000.,8000.));
+#413=IFCCARTESIANPOINT((0.,8000.));
+#414=IFCCARTESIANPOINT((3000.,3000.));
+#415=IFCCARTESIANPOINT((3000.,5000.));
+#416=IFCCARTESIANPOINT((5000.,5000.));
+#417=IFCCARTESIANPOINT((5000.,3000.));
+#500=IFCRELCONTAINEDINSPATIALSTRUCTURE('CXvctVUKr0kugbFTf53O9L',$,$,$,(#100,#140,#200,#300,#310,#400),#10);
+ENDSEC;
+END-ISO-10303-21;
+";
+        let (p, report) = import(text, Project::from_template()).unwrap();
+        let floors: Vec<&cc_core::Floor> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Floor(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+        // The shafted floor and the voided one are native, with their openings.
+        assert_eq!(floors.len(), 2, "{report:?}");
+        let shafted = floors.iter().find(|f| f.boundary.iter().all(|q| q.x < 15.0)).unwrap();
+        assert_eq!(shafted.openings.len(), 1);
+        assert!((shafted.area() - (60.0 - 4.0)).abs() < 1e-9, "{}", shafted.area());
+        assert!(shafted.height_offset.abs() < 1e-9);
+        let voided = floors.iter().find(|f| f.boundary.iter().all(|q| q.x >= 40.0 - 1e-9)).unwrap();
+        assert_eq!(voided.openings.len(), 1);
+        assert!((voided.area() - 60.0).abs() < 1e-9, "{}", voided.area());
+        // The raft is a foundation slab, its top 0.6 m below the level.
+        let rafts: Vec<&cc_core::Foundation> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Foundation(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rafts.len(), 1);
+        assert!(matches!(rafts[0].shape, cc_core::FoundationShape::Slab { .. }));
+        assert!((rafts[0].top_offset + 0.6).abs() < 1e-9, "{}", rafts[0].top_offset);
+        // The recessed floor, the pile and the pile cap keep their class as components.
+        assert_eq!(report.generic.values().sum::<usize>(), 3, "{:?}", report.generic);
+        let slab_components = p
+            .types
+            .values()
+            .filter(|t| match &t.data {
+                TypeData::Component { def, .. } => def.ifc.as_ref().is_some_and(|c| c.entity == "IFCSLAB"),
+                _ => false,
+            })
+            .count();
+        assert!(slab_components >= 1);
     }
 
     /// Geometry a hostile file can throw at the importer: cyclic booleans and

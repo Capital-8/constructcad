@@ -320,6 +320,10 @@ pub(crate) fn sketch(s: &Session, a: &SketchArgs, category: Category) -> Result<
 pub struct FloorCreate {
     #[serde(flatten)]
     pub sketch: SketchArgs,
+    /// Openings through the slab (shafts, stairwells): closed outlines inside
+    /// the boundary, apart from each other.
+    #[serde(default)]
+    pub openings: Vec<Vec<Point>>,
 }
 
 impl Command for FloorCreate {
@@ -327,7 +331,9 @@ impl Command for FloorCreate {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let (level, boundary) = sketch(s, &self.sketch, Category::Floor)?;
-        let floor = Floor { boundary, height_offset: finite(self.sketch.offset.unwrap_or(0.0), "offset")? };
+        let mut floor = Floor::new(boundary, finite(self.sketch.offset.unwrap_or(0.0), "offset")?);
+        floor.openings = self.openings.iter().map(|o| points(o)).collect::<Result<_>>()?;
+        check_openings(&floor.boundary, &floor.openings)?;
         create(
             s,
             t!("tx-create-floor"),
@@ -375,8 +381,14 @@ pub struct RoofCreate {
 /// A roof's openings must be outlines with an area, inside its footprint
 /// (clear of its edges) and apart from each other.
 pub(crate) fn check_roof_holes(roof: &Roof) -> Result<()> {
+    check_openings(&roof.footprint, &roof.holes)
+}
+
+/// Openings of a floor or roof must be outlines with an area, inside the
+/// `boundary` (clear of its edges) and apart from each other.
+pub(crate) fn check_openings(boundary: &[DVec2], openings: &[Vec<DVec2>]) -> Result<()> {
     let bad = |m: &str| Err(EngineError::invalid(m.to_string()));
-    for (i, h) in roof.holes.iter().enumerate() {
+    for (i, h) in openings.iter().enumerate() {
         if h.len() < 3 || polygon::area(h) < 1e-4 {
             return bad("an opening needs at least 3 points and an area");
         }
@@ -384,10 +396,10 @@ pub(crate) fn check_roof_holes(roof: &Roof) -> Result<()> {
             (0..a.len())
                 .any(|i| (0..b.len()).any(|j| segments_cross(a[i], a[(i + 1) % a.len()], b[j], b[(j + 1) % b.len()])))
         };
-        if !h.iter().all(|p| polygon::contains(&roof.footprint, *p)) || crosses(h, &roof.footprint) {
-            return bad("an opening must lie inside the roof's outline");
+        if !h.iter().all(|p| polygon::contains(boundary, *p)) || crosses(h, boundary) {
+            return bad("an opening must lie inside the outline");
         }
-        for other in roof.holes.iter().skip(i + 1) {
+        for other in openings.iter().skip(i + 1) {
             if crosses(h, other)
                 || other.iter().any(|p| polygon::contains(h, *p))
                 || h.iter().any(|p| polygon::contains(other, *p))
@@ -468,6 +480,63 @@ impl Command for RoofEdgeSet {
             while r.edge_slopes.last().is_some_and(Option::is_none) {
                 r.edge_slopes.pop();
             }
+            Ok(())
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// Add an opening (a shaft, a stairwell) to a floor: a closed outline inside
+/// its boundary, apart from its other openings.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FloorOpeningAdd {
+    /// Floor id.
+    pub id: u64,
+    /// Outline of the opening, at least 3 points.
+    pub outline: Vec<Point>,
+}
+
+impl Command for FloorOpeningAdd {
+    const NAME: &'static str = "floor_opening_add";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = refs::element(s.project(), self.id)?;
+        let outline = points(&self.outline)?;
+        edit(s, t!("tx-modify"), |e| {
+            let Some(ElementKind::Floor(f)) = e.element_mut(id).map(|x| &mut x.kind) else {
+                return Err(EngineError::invalid("not a floor"));
+            };
+            f.openings.push(outline);
+            check_openings(&f.boundary, &f.openings)
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// Remove one opening of a floor (by its index in the floor's `openings`).
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FloorOpeningRemove {
+    /// Floor id.
+    pub id: u64,
+    /// Opening index, from 0.
+    pub index: usize,
+}
+
+impl Command for FloorOpeningRemove {
+    const NAME: &'static str = "floor_opening_remove";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = refs::element(s.project(), self.id)?;
+        edit(s, t!("tx-modify"), |e| {
+            let Some(ElementKind::Floor(f)) = e.element_mut(id).map(|x| &mut x.kind) else {
+                return Err(EngineError::invalid("not a floor"));
+            };
+            if self.index >= f.openings.len() {
+                return Err(EngineError::invalid(format!("the floor has {} openings", f.openings.len())));
+            }
+            f.openings.remove(self.index);
             Ok(())
         })?;
         Ok(created(s, id))

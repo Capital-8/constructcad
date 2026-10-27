@@ -66,7 +66,8 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::MatchType => Icon::MatchType,
         Tool::Demolish => Icon::Demolish,
         Tool::AddLeader { .. } => Icon::Leader,
-        Tool::RoofOpening { .. } => category_icon(Category::Roof),
+        Tool::Opening { floor: false, .. } => category_icon(Category::Roof),
+        Tool::Opening { floor: true, .. } => category_icon(Category::Floor),
         _ => tool.category().map_or(Icon::Select, category_icon),
     }
 }
@@ -924,16 +925,16 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Section => {
                 ui.label(theme::muted(t!("msg-section-hint")));
             }
-            Tool::RoofOpening { roof } => {
+            Tool::Opening { host, floor } => {
                 let n = state.interaction.points.len();
                 if ui.add_enabled(n >= 3, Button::new(t!("sketch-finish"))).clicked() {
                     let pts = state.interaction.points.clone();
-                    crate::tools::add_roof_opening(state, roof, pts);
+                    crate::tools::add_opening(state, host, pts);
                 }
                 if ui.button(t!("action-cancel")).clicked() {
                     state.set_tool(Tool::Select);
                 }
-                ui.label(theme::muted(t!("hint-roof-opening")));
+                ui.label(theme::muted(if floor { t!("hint-floor-opening") } else { t!("hint-roof-opening") }));
             }
             Tool::Room { .. } => {
                 ui.label(theme::muted(t!("hint-room")));

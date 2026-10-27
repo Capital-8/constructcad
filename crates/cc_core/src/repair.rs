@@ -284,6 +284,13 @@ impl Project {
                 repairs += crate::properties::repair_sets(&mut c.properties);
             }
         }
+        // Floor openings need three finite points.
+        for e in self.elements.values_mut() {
+            let ElementKind::Floor(f) = &mut e.kind else { continue };
+            let before = f.openings.len();
+            f.openings.retain(|o| o.len() >= 3 && finite_points(o));
+            repairs += before - f.openings.len();
+        }
         // Roof openings need three finite points.
         for e in self.elements.values_mut() {
             let ElementKind::Roof(r) = &mut e.kind else { continue };

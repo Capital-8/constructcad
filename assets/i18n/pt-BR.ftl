@@ -224,6 +224,7 @@ tool-floor = Piso
 tool-ceiling = Forro
 tool-roof = Telhado
 tool-roof-opening = Abertura no telhado
+tool-floor-opening = Abertura em piso
 tool-section = Corte
 
 # Ações
@@ -276,6 +277,7 @@ hint-wall-arc-point = Clique um ponto do arco ou digite o raio e tecle Enter
 hint-hosted = Passe o cursor sobre uma parede e clique · Espaço inverte a abertura
 hint-sketch = Clique os vértices · clique no primeiro ponto ou Enter para concluir · Backspace remove o último
 hint-roof-opening = Clique os vértices da abertura (pátio) dentro do telhado · clique no primeiro ponto ou Enter para concluir
+hint-floor-opening = Clique nos vértices da abertura (shaft, escada) dentro do piso · clique no primeiro ponto ou pressione Enter para concluir
 hint-from-walls = Cria o contorno a partir das paredes fechadas deste nível
 
 # Barra de opções

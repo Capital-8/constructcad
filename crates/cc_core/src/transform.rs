@@ -93,7 +93,7 @@ impl Element {
                     h.flip_hand = !h.flip_hand;
                 }
             }
-            ElementKind::Floor(f) => f.boundary.iter_mut().for_each(p),
+            ElementKind::Floor(f) => f.boundary.iter_mut().chain(f.openings.iter_mut().flatten()).for_each(p),
             ElementKind::Ceiling(c) => c.boundary.iter_mut().for_each(p),
             ElementKind::Roof(r) => {
                 r.footprint.iter_mut().chain(r.holes.iter_mut().flatten()).for_each(p);

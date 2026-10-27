@@ -76,7 +76,12 @@ pub fn plan_of(
     for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
         let id = Some(e.id);
         match &e.kind {
-            ElementKind::Floor(f) if !ceiling => d.polyline(&f.boundary, true, LineStyle::Projection, id),
+            ElementKind::Floor(f) if !ceiling => {
+                d.polyline(&f.boundary, true, LineStyle::Projection, id);
+                for o in &f.openings {
+                    d.polyline(o, true, LineStyle::Projection, id);
+                }
+            }
             ElementKind::Ceiling(c) if ceiling => {
                 d.polyline(&c.boundary, true, LineStyle::Projection, id);
                 ceiling_grid(&mut d, &c.boundary, e.id);

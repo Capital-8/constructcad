@@ -224,6 +224,7 @@ tool-floor = Strop
 tool-ceiling = Sufit
 tool-roof = Dach
 tool-roof-opening = Otwór w dachu
+tool-floor-opening = Otwór w stropie
 tool-section = Przekrój
 
 # Akcje
@@ -276,6 +277,7 @@ hint-wall-arc-point = Kliknij punkt na łuku albo wpisz promień i naciśnij Ent
 hint-hosted = Najedź na ścianę i kliknij · Spacja odwraca otwór
 hint-sketch = Kliknij wierzchołki · kliknij pierwszy punkt lub naciśnij Enter, aby zakończyć · Backspace usuwa ostatni
 hint-roof-opening = Kliknij wierzchołki otworu (dziedzińca) wewnątrz dachu · kliknij pierwszy punkt lub naciśnij Enter, aby zakończyć
+hint-floor-opening = Kliknij wierzchołki otworu (szacht, klatka schodowa) w stropie · kliknij pierwszy punkt lub naciśnij Enter, aby zakończyć
 hint-from-walls = Tworzy obrys z zamkniętych ścian na tym poziomie
 
 # Pasek opcji

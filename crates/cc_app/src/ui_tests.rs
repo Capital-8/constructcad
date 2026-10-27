@@ -340,10 +340,10 @@ fn roof_openings_are_added_inside_the_roof() {
         cc_core::ElementKind::Roof(r) => r.holes.len(),
         _ => 0,
     };
-    state.set_tool(crate::tools::Tool::RoofOpening { roof });
-    crate::tools::add_roof_opening(&mut state, roof, square(hi + glam::DVec2::splat(5.0)));
+    state.set_tool(crate::tools::Tool::Opening { host: roof, floor: false });
+    crate::tools::add_opening(&mut state, roof, square(hi + glam::DVec2::splat(5.0)));
     assert_eq!(holes(&state), 0, "outside the roof");
-    crate::tools::add_roof_opening(&mut state, roof, square(c));
+    crate::tools::add_opening(&mut state, roof, square(c));
     assert_eq!(holes(&state), 1);
     assert_eq!(state.tool, crate::tools::Tool::Select);
     state.sync();

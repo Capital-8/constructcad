@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             DVec2::new(9.075, 6.075),
             DVec2::new(-0.075, 6.075),
         ];
-        add(e, floor_t, "", ElementKind::Floor(Floor { boundary: slab.clone(), height_offset: 0.0 }));
+        add(e, floor_t, "", ElementKind::Floor(Floor::new(slab.clone(), 0.0)));
         let roof = Roof::new(slab, 3.0, 0.5, RoofShape::Hip { slope: 0.35 });
         add(e, roof_t, "", ElementKind::Roof(roof));
 

@@ -60,6 +60,9 @@ impl Command for ElementSet {
         if let Some(cc_core::ElementKind::Roof(r)) = kind.as_ref() {
             super::create::check_roof_holes(r)?;
         }
+        if let Some(cc_core::ElementKind::Floor(f)) = kind.as_ref() {
+            super::create::check_openings(&f.boundary, &f.openings)?;
+        }
         let hosted: Vec<_> = p.hosted_by(id).map(|h| h.id).collect();
         edit(s, t!("tx-modify"), |e| {
             if let Some(level) = level {
