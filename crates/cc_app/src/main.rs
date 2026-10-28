@@ -21,6 +21,7 @@ mod icons;
 mod library;
 mod material_browser;
 mod modify;
+mod modify3d;
 mod paint;
 mod palette;
 mod phases_dialog;
