@@ -361,12 +361,26 @@ pub struct Interaction {
     pub rotation: f64,
     /// Height of the working plane of a tool in the 3D view (the first point picked).
     pub plane_z: Option<f64>,
+    /// The dimension chain being continued (continuous dimensioning).
+    pub dim_chain: Option<DimChain>,
 }
 
 impl Interaction {
     pub fn is_idle(&self) -> bool {
-        self.anchor.is_none() && self.points.is_empty() && self.drag.is_none()
+        self.anchor.is_none() && self.points.is_empty() && self.drag.is_none() && self.dim_chain.is_none()
     }
+}
+
+/// A chain of dimensions being placed: the next one measures from `last`
+/// along `dir` and sits on the line through `line`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DimChain {
+    pub view: ViewId,
+    pub last: DVec2,
+    pub dir: DVec2,
+    pub line: DVec2,
+    /// Linear (horizontal or vertical) rather than aligned dimensions.
+    pub linear: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1714,6 +1728,36 @@ fn dimension_tool(
                 })
                 .flatten()
                 .collect();
+            let linear = mode == DimensionMode::Linear;
+            // A chain of another view or mode, or with Single chosen, ends.
+            if state.interaction.dim_chain.is_some_and(|c| c.view != view.id || c.linear != linear)
+                || !state.dim_continuous
+            {
+                state.interaction.dim_chain = None;
+            }
+            if let Some(chain) = state.interaction.dim_chain {
+                // Each click adds the next dimension of the chain, on its line.
+                if ui.input(|i| i.key_pressed(Key::Enter)) || resp.secondary_clicked() {
+                    state.interaction.dim_chain = None;
+                    return;
+                }
+                let s = snap_at(state, None, raw, Some(chain.last), &ends, xf.scale, shift);
+                draw_snap(painter, xf, s);
+                let offset = (chain.line - chain.last).dot(chain.dir.perp());
+                let next = cc_core::dim_line::chain(view.id, &[chain.last, s.point], chain.dir, offset, !linear)
+                    .and_then(|dims| dims.into_iter().next());
+                match next {
+                    Some(d) => {
+                        paint_dimension(painter, xf, &d, scale);
+                        if resp.clicked() && place_chain(state, type_id, &chain, s.point, offset) {
+                            state.interaction.dim_chain = Some(DimChain { last: s.point, ..chain });
+                        }
+                    }
+                    None if resp.clicked() => state.message = t!("msg-dimension-zero"),
+                    None => {}
+                }
+                return;
+            }
             let anchor = points.last().copied();
             let s = snap_at(state, None, raw, anchor, &ends, xf.scale, shift);
             match points.as_slice() {
@@ -1738,11 +1782,36 @@ fn dimension_tool(
                         DimensionKind::Aligned
                     };
                     let d = dim(*a, *b, 0.0, kind);
-                    let n = d.direction().unwrap_or(DVec2::X).perp();
-                    let d = cc_core::Dimension { offset: (raw - *a).dot(n), ..d };
+                    let dir = d.direction().unwrap_or(DVec2::X);
+                    let d = cc_core::Dimension { offset: (raw - *a).dot(dir.perp()), ..d };
+                    // The line lines up with the line of a parallel dimension nearby.
+                    let others: Vec<cc_core::Dimension> = state
+                        .project()
+                        .elements
+                        .values()
+                        .filter_map(|e| match &e.kind {
+                            ElementKind::Dimension(o) if o.view == view.id => Some((**o).clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    let d = match cc_core::dim_line::align(&d, &others, SNAP_PX / xf.scale) {
+                        Some(line) => {
+                            draw_line_guide(painter, xf, line.reference, line.point);
+                            cc_core::Dimension { offset: line.offset, ..d }
+                        }
+                        None => d,
+                    };
                     paint_dimension(painter, xf, &d, scale);
                     if resp.clicked() {
-                        if d.value() > 1e-6 {
+                        if d.value() > 1e-6 && state.dim_continuous {
+                            // The first dimension of a chain.
+                            let line = *a + dir.perp() * d.offset;
+                            let chain = DimChain { view: view.id, last: *a, dir, line, linear };
+                            if place_chain(state, type_id, &chain, *b, d.offset) {
+                                state.interaction.dim_chain = Some(DimChain { last: *b, ..chain });
+                            }
+                            state.interaction.points.clear();
+                        } else if d.value() > 1e-6 {
                             place(state, d);
                         } else {
                             state.message = t!("msg-dimension-zero");
@@ -1840,6 +1909,44 @@ pub(crate) fn linear_direction(a: DVec2, b: DVec2, cursor: DVec2) -> DVec2 {
     let (ox, oy) = (outside(cursor.x, lo.x, hi.x), outside(cursor.y, lo.y, hi.y));
     let horizontal = if ox == oy { (b - a).x.abs() >= (b - a).y.abs() } else { oy > ox };
     if horizontal { DVec2::X } else { DVec2::Y }
+}
+
+/// Place the next dimension of `chain`, from its last point to `to`, with
+/// its line at `offset` from the last point (`dimension_chain_create`);
+/// selects it. False (with the error shown) when it was refused.
+fn place_chain(state: &mut AppState, type_id: ElementTypeId, chain: &DimChain, to: DVec2, offset: f64) -> bool {
+    let dir = chain.dir;
+    let command = cc_engine::commands::annotate::DimensionChainCreate {
+        view: Ref::Id(chain.view.0),
+        points: vec![chain.last.to_array(), to.to_array()],
+        kind: Some(if chain.linear { "linear" } else { "aligned" }.to_string()),
+        offset: Some(offset),
+        direction: chain.linear.then(|| if dir.x.abs() >= dir.y.abs() { "horizontal" } else { "vertical" }.to_string()),
+        angle: (!chain.linear).then(|| dir.y.atan2(dir.x).to_degrees()),
+        type_ref: Some(Ref::Id(type_id.0)),
+    };
+    match state.session.run(command) {
+        Ok(out) => {
+            let ids = out["ids"].as_array().map(|ids| ids.iter().filter_map(|id| id.as_u64()).map(ElementId));
+            state.selection = ids.into_iter().flatten().collect();
+            true
+        }
+        Err(e) => {
+            state.message = e.message;
+            false
+        }
+    }
+}
+
+/// The dashed guide from the end of another dimension's line to the line
+/// being placed on it.
+fn draw_line_guide(painter: &Painter, xf: &Xf, reference: DVec2, point: DVec2) {
+    let (a, b) = (xf.to_screen(reference), xf.to_screen(point));
+    let stroke = Stroke::new(1.0, TEMP_DIM.gamma_multiply(0.7));
+    if a.distance(b) > 1.0 {
+        painter.extend(egui::Shape::dashed_line(&[a, b], stroke, 6.0, 4.0));
+    }
+    painter.circle_stroke(a, 3.0, Stroke::new(1.0, TEMP_DIM));
 }
 
 /// Paint a dimension being placed, as it will be drawn.
@@ -2809,6 +2916,44 @@ mod tests {
             Some(DVec2::new(2.0, 0.0))
         );
         assert_eq!(line_intersection(a, DVec2::X, DVec2::Y, DVec2::new(1.0, 1.0)), None);
+    }
+
+    #[test]
+    fn a_continued_chain_stays_on_its_line_and_selects_the_new_dimension() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        let plan = *state.project().views.iter().find(|(_, v)| v.is_plan()).unwrap().0;
+        let type_id = state.project().default_type(Category::Dimension).unwrap();
+        let dims = |state: &AppState| -> Vec<cc_core::Dimension> {
+            let mut ids: Vec<_> = state.selection.iter().copied().collect();
+            ids.sort();
+            ids.iter()
+                .filter_map(|id| match &state.project().element(*id)?.kind {
+                    ElementKind::Dimension(d) => Some((**d).clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        // An aligned chain along a slanted line, its line 1.5 m to the left.
+        let dir = DVec2::new(3.0, 4.0).normalize();
+        let first = DVec2::new(100.0, 100.0);
+        let line = first + dir.perp() * 1.5;
+        let mut chain = DimChain { view: plan, last: first, dir, line, linear: false };
+        for (to, aligned) in [(first + dir * 5.0, true), (first + DVec2::new(7.0, 6.0), false)] {
+            let offset = (chain.line - chain.last).dot(dir.perp());
+            assert!(place_chain(&mut state, type_id, &chain, to, offset));
+            let placed = dims(&state);
+            let [d] = placed.as_slice() else { panic!("one new dimension selected: {placed:?}") };
+            assert_eq!(matches!(d.kind, DimensionKind::Aligned), aligned, "{d:?}");
+            let (pa, pb) = cc_core::dim_line::extent(d).unwrap();
+            for p in [pa, pb] {
+                assert!((p - line).perp_dot(dir).abs() < 1e-9, "{p} on the chain line");
+            }
+            chain.last = to;
+        }
+        // A segment across the direction measures nothing and is refused.
+        let across = chain.last + dir.perp() * 2.0;
+        assert!(!place_chain(&mut state, type_id, &chain, across, 0.0));
+        assert!(!state.message.is_empty());
     }
 
     #[test]

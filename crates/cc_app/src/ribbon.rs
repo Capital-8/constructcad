@@ -948,7 +948,21 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("hint-grid")));
             }
             Tool::Dimension { mode, .. } => {
-                ui.label(theme::muted(crate::i18n::tr(mode.hint_key())));
+                if matches!(mode, DimensionMode::Aligned | DimensionMode::Linear) {
+                    let c = &mut state.dim_continuous;
+                    ui.selectable_value(c, false, t!("dim-single")).on_hover_text(t!("dim-single-tip"));
+                    ui.selectable_value(c, true, t!("dim-continuous")).on_hover_text(t!("dim-continuous-tip"));
+                    ui.separator();
+                }
+                let hint = if state.interaction.dim_chain.is_some() {
+                    t!("hint-dim-chain")
+                } else {
+                    crate::i18n::tr(mode.hint_key())
+                };
+                let r = ui.label(theme::muted(hint));
+                if matches!(mode, DimensionMode::Aligned | DimensionMode::Linear) {
+                    r.on_hover_text(t!("hint-dim-align"));
+                }
             }
             Tool::Text { .. } => crate::text_tool::options(ui, state, false),
             Tool::AddLeader { .. } => crate::text_tool::options(ui, state, true),

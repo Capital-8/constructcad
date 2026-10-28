@@ -317,6 +317,36 @@ fn wall_tool_has_an_arc_mode() {
     assert!(!harness.state().wall_arc);
 }
 
+/// Aligned and linear dimensions are placed singly or in a continuous chain.
+#[test]
+fn dimension_tool_has_a_continuous_mode() {
+    use crate::tools::{DimChain, DimensionMode, Tool};
+    let mut state = sample_state();
+    let type_id = state.project().default_type(cc_core::Category::Dimension).unwrap();
+    state.tool = Tool::Dimension { type_id, mode: DimensionMode::Linear };
+    let mut harness = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::options_bar(ui, state)
+    });
+    assert!(!harness.state().dim_continuous);
+    harness.get_by_label(&t!("dim-continuous")).click();
+    harness.run();
+    assert!(harness.state().dim_continuous);
+    // A chain in progress shows how to continue and end it.
+    let view = cc_core::ViewId(1);
+    let chain = DimChain { view, last: glam::DVec2::ZERO, dir: glam::DVec2::X, line: glam::DVec2::Y, linear: true };
+    harness.state_mut().interaction.dim_chain = Some(chain);
+    harness.run();
+    assert!(harness.query_by_label(&t!("hint-dim-chain")).is_some());
+    harness.get_by_label(&t!("dim-single")).click();
+    harness.run();
+    assert!(!harness.state().dim_continuous);
+    // Angular dimensions have no chain.
+    harness.state_mut().interaction.dim_chain = None;
+    harness.state_mut().tool = Tool::Dimension { type_id, mode: DimensionMode::Angular };
+    harness.run();
+    assert!(harness.query_by_label(&t!("dim-continuous")).is_none());
+}
+
 /// A roof gets an opening (a courtyard) sketched inside it; one outside is refused.
 #[test]
 fn roof_openings_are_added_inside_the_roof() {
