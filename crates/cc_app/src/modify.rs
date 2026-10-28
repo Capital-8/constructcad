@@ -51,7 +51,11 @@ pub fn start(state: &mut AppState, tool: Tool) {
 /// Start a pick tool (trim, split, offset, align): it acts on clicked elements.
 pub fn start_pick(state: &mut AppState, tool: Tool) {
     state.set_tool(tool.clone());
-    state.message = crate::i18n::tr(hint_key(&tool));
+    let key = match tool {
+        Tool::Align if crate::modify3d::active_3d(state) => "hint-align-3d",
+        _ => hint_key(&tool),
+    };
+    state.message = crate::i18n::tr(key);
 }
 
 fn hint_key(tool: &Tool) -> &'static str {
@@ -189,15 +193,22 @@ fn base_target(
     if !(resp.clicked() || enter) || a.distance(p) < 1e-6 {
         return;
     }
+    apply_base_target(state, tool, targets, p - a);
+}
+
+/// Move, copy or array the targets by `delta` (the target point less the
+/// base point), as plans and the 3D view pick them.
+pub(crate) fn apply_base_target(state: &mut AppState, tool: &Tool, targets: &BTreeSet<ElementId>, delta: DVec2) {
+    let count = state.modify.count.max(2);
     let ids: Vec<ElementId> = targets.iter().copied().collect();
     state.typed.clear();
     match tool {
         Tool::Move => {
-            crate::tools::move_elements(state, &ids, p - a);
+            crate::tools::move_elements(state, &ids, delta);
             finish(state, ids);
         }
         Tool::Copy => {
-            crate::tools::copy_elements(state, &ids, p - a, 1);
+            crate::tools::copy_elements(state, &ids, delta, 1);
             if state.modify.multiple {
                 // Keep copying the same selection from the same base point.
                 state.interaction.targets = ids;
@@ -208,7 +219,7 @@ fn base_target(
             }
         }
         _ => {
-            crate::tools::copy_elements(state, &ids, p - a, count - 1);
+            crate::tools::copy_elements(state, &ids, delta, count - 1);
             let mut all = ids;
             all.extend(state.selection.iter().copied());
             finish(state, all);
@@ -278,7 +289,7 @@ pub fn apply_rotation(state: &mut AppState, targets: &BTreeSet<ElementId>, cente
 }
 
 /// The line of a model element usable as a mirror axis (walls, grids, beams).
-fn axis_of(state: &AppState, id: ElementId) -> Option<(DVec2, DVec2)> {
+pub(crate) fn axis_of(state: &AppState, id: ElementId) -> Option<(DVec2, DVec2)> {
     let e = state.project().element(id)?;
     match &e.kind {
         // An arc wall mirrors across its axis of symmetry (through its center and middle).
@@ -338,11 +349,16 @@ fn mirror(
     let t = PlanTransform::mirror_across(a, b - a);
     paint_ghost(painter, xf, drawing, targets, &t);
     if resp.clicked() {
-        let ids: Vec<ElementId> = targets.iter().copied().collect();
-        let copy = state.modify.mirror_copy;
-        let result = crate::tools::mirror_elements(state, &ids, a, b, copy);
-        finish(state, if copy { result } else { ids });
+        apply_mirror(state, targets, a, b);
     }
+}
+
+/// Mirror (or copy mirrored) across the line through `a` and `b`, and finish.
+pub(crate) fn apply_mirror(state: &mut AppState, targets: &BTreeSet<ElementId>, a: DVec2, b: DVec2) {
+    let ids: Vec<ElementId> = targets.iter().copied().collect();
+    let copy = state.modify.mirror_copy;
+    let result = crate::tools::mirror_elements(state, &ids, a, b, copy);
+    finish(state, if copy { result } else { ids });
 }
 
 /// The linear element (wall, beam, grid) under the pointer, and its line.
@@ -350,6 +366,28 @@ fn linear_at(state: &AppState, drawing: &Drawing2D, raw: DVec2, tol: f64) -> Opt
     let id = drawing.hit_test(raw, tol)?;
     let line = state.project().element(id).and_then(cc_core::wall_ops::line_of)?;
     Some((id, line))
+}
+
+/// Whether an element can be aligned or aligned to: it has a location line
+/// (wall, beam, grid) or vertical faces to align by (column, component).
+pub(crate) fn alignable(state: &AppState, id: ElementId) -> bool {
+    let line = state.project().element(id).and_then(cc_core::wall_ops::line_of).is_some();
+    line || !state.session.geom().plan_edges(id).is_empty()
+}
+
+/// Align `id` (picked at `pick`) onto `reference` (picked at `reference_pick`), in plan.
+pub(crate) fn align_command(
+    id: ElementId,
+    pick: DVec2,
+    reference: ElementId,
+    reference_pick: DVec2,
+) -> cmd::ElementAlign {
+    cmd::ElementAlign {
+        id: id.0,
+        reference: reference.0,
+        pick: Some(pick.to_array()),
+        reference_pick: Some(reference_pick.to_array()),
+    }
 }
 
 /// Run a wall edit; a refusal goes to the status bar.
@@ -368,9 +406,15 @@ pub fn join_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &
     let mut lit: BTreeSet<ElementId> = first.into_iter().collect();
     lit.extend(hovered);
     paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
-    if !resp.clicked() {
-        return;
+    if resp.clicked() {
+        join_pick(state, hovered, unjoin);
     }
+}
+
+/// A click of the join tool on `hovered` (a joinable element or nothing):
+/// the first pick stays, each further one is joined with it (or unjoined).
+pub(crate) fn join_pick(state: &mut AppState, hovered: Option<ElementId>, unjoin: bool) {
+    let first = state.interaction.targets.first().copied();
     let Some(id) = hovered else {
         state.message = t!("hint-join-pick");
         return;
@@ -399,18 +443,23 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let tol = 6.0 / xf.scale;
     let hovered = linear_at(state, drawing, raw, tol);
+    // Align also takes columns and components, by the outline edge picked.
+    let hovered_id = match tool {
+        Tool::Align => drawing.hit_test(raw, tol).filter(|id| alignable(state, *id)),
+        _ => hovered.map(|h| h.0),
+    };
     let first = state.interaction.targets.first().copied();
     let first_pick = state.interaction.points.first().copied();
     // Highlight the first pick and the element under the pointer.
     let mut lit: BTreeSet<ElementId> = first.into_iter().collect();
-    lit.extend(hovered.map(|h| h.0));
+    lit.extend(hovered_id);
     paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
     let clicked = resp.clicked();
     // Pinned elements are not edited (offset only copies, so it may pick them).
     let pinned = |state: &AppState, id: ElementId| state.project().is_pinned(id);
     if clicked
         && *tool != Tool::Offset
-        && let Some((id, _)) = hovered
+        && let Some(id) = hovered_id
         && pinned(state, id)
         && !(matches!(tool, Tool::TrimExtend | Tool::Align) && first.is_none())
     {
@@ -419,7 +468,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
     }
     match tool {
         Tool::TrimCorner | Tool::Align | Tool::TrimExtend => {
-            let Some((id, _)) = hovered else { return };
+            let Some(id) = hovered_id else { return };
             if !clicked {
                 return;
             }
@@ -439,7 +488,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                             state,
                             cmd::TrimCorner { a: a.0, pick_a: pick_a.to_array(), b: id.0, pick_b: raw.to_array() },
                         ),
-                        Tool::Align => report(state, cmd::ElementAlign { id: id.0, reference: a.0 }),
+                        Tool::Align => report(state, align_command(id, raw, a, pick_a)),
                         _ => report(state, cmd::TrimExtend { id: id.0, pick: raw.to_array(), reference: a.0 }),
                     }
                     // Trim/extend keeps its reference for more elements.

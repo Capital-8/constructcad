@@ -806,6 +806,33 @@ impl ModelGeometry {
         self.solids.iter().filter_map(Solid::bounds).reduce(|(a, b), (c, d)| (a.min(c), b.max(d)))
     }
 
+    /// The vertical faces of an element seen from above: each one is a plan
+    /// segment (the sides of a column, the faces of a component).
+    pub fn plan_edges(&self, id: ElementId) -> Vec<(DVec2, DVec2)> {
+        let mut out = Vec::new();
+        for face in self.solids_of(id).flat_map(|s| s.faces.iter()) {
+            let n = DVec2::new(face.normal.x, face.normal.y);
+            if face.normal.z.abs() > 1e-6 || n.length_squared() < 0.5 {
+                continue;
+            }
+            let (n, d) = (n.normalize_or_zero(), n.normalize_or_zero().perp());
+            let Some(first) = face.verts.first() else { continue };
+            let offset = DVec2::new(first.x, first.y).dot(n);
+            let along = face.verts.iter().map(|v| DVec2::new(v.x, v.y).dot(d));
+            let (lo, hi) = along.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), t| (lo.min(t), hi.max(t)));
+            if hi - lo > 1e-6 && lo.is_finite() && hi.is_finite() {
+                out.push((n * offset + d * lo, n * offset + d * hi));
+            }
+        }
+        out
+    }
+
+    /// The plan segment of an element's vertical faces nearest to `p` (see [`Self::plan_edges`]).
+    pub fn nearest_plan_edge(&self, id: ElementId, p: DVec2) -> Option<(DVec2, DVec2)> {
+        let dist = |e: &(DVec2, DVec2)| polygon::closest_on_segment(e.0, e.1, p).0.distance(p);
+        self.plan_edges(id).into_iter().min_by(|x, y| dist(x).total_cmp(&dist(y)))
+    }
+
     /// Volume of an element's main body (frames/glass excluded for openings).
     pub fn volume(&self, id: ElementId) -> f64 {
         if let Some(wall) = self.walls.get(&id) {

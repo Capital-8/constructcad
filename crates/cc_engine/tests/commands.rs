@@ -1579,6 +1579,58 @@ fn arc_walls_through_commands() {
     assert!(host["derived"]["radius"].is_number());
 }
 
+/// Align works in plan, whatever the levels: a column of the upper floor
+/// moves onto the faces of the column below by the outline edges picked,
+/// onto a grid by its center, and a wall onto a column face.
+#[test]
+fn align_columns_across_levels() {
+    let mut s = Session::default();
+    let position = |s: &mut Session, id: u64| {
+        let e = run(s, "element_get", json!({"id": id}));
+        let p = &e["params"]["position"];
+        (p[0].as_f64().unwrap(), p[1].as_f64().unwrap(), e["level"]["id"].as_u64().unwrap())
+    };
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    // 20 x 20 cm columns: one on the ground floor, one above it, off by (13, 7) cm.
+    let below = id(&run(&mut s, "column_create", json!({"position": [0.0, 0.0]})));
+    let above = id(&run(&mut s, "column_create", json!({"position": [0.13, 0.07], "level": 2})));
+    let (_, _, level) = position(&mut s, above);
+    assert_eq!(level, 2);
+
+    // East face onto east face, then north face onto north face: centered over the column below.
+    let depth = s.doc.undo_depth();
+    let east = json!({"id": above, "reference": below, "pick": [0.3, 0.07], "reference_pick": [0.2, 0.0]});
+    run(&mut s, "element_align", east);
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    let (x, y, level) = position(&mut s, above);
+    assert!(near(x, 0.0) && near(y, 0.07) && level == 2, "({x}, {y}) on {level}");
+    let north = json!({"id": above, "reference": below, "pick": [0.0, 0.25], "reference_pick": [0.0, 0.2]});
+    run(&mut s, "element_align", north);
+    let (x, y, _) = position(&mut s, above);
+    assert!(near(x, 0.0) && near(y, 0.0), "({x}, {y})");
+
+    // A column reference needs the edge picked.
+    let bare = json!({"id": above, "reference": below});
+    assert_eq!(fails(&mut s, "element_align", bare), ErrorCode::InvalidArguments);
+    // Without a pick, the column's center goes onto a grid line.
+    let grid = id(&run(&mut s, "grid_create", json!({"start": [2.0, -5.0], "end": [2.0, 5.0]})));
+    run(&mut s, "element_align", json!({"id": above, "reference": grid}));
+    let (x, y, _) = position(&mut s, above);
+    assert!(near(x, 2.0) && near(y, 0.0), "({x}, {y})");
+
+    // A turned column has no edge parallel to the reference face.
+    run(&mut s, "element_set", json!({"id": above, "params": {"rotation_deg": 30.0}}));
+    let turned = json!({"id": above, "reference": below, "pick": [2.2, 0.0], "reference_pick": [0.2, 0.0]});
+    assert_eq!(fails(&mut s, "element_align", turned), ErrorCode::Rejected);
+
+    // A wall moves its line onto the column's west face.
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [-3.0, -1.0], "end": [-3.0, 1.0]})));
+    run(&mut s, "element_align", json!({"id": wall, "reference": below, "reference_pick": [-0.2, 0.0]}));
+    let w = run(&mut s, "element_get", json!({"id": wall}));
+    assert!(near(w["params"]["start"][0].as_f64().unwrap(), -0.1), "{w}");
+    assert!(near(w["params"]["end"][0].as_f64().unwrap(), -0.1), "{w}");
+}
+
 /// Pitched roofs over concave outlines and around courtyards: analytic
 /// heights, a valley, exact volumes; bad openings are refused.
 #[test]

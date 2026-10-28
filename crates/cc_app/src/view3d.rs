@@ -32,6 +32,8 @@ pub struct View3DState {
     /// "Zoom in region" waits for a window; the drag's start once it began.
     zoom_region: bool,
     region_start: Option<egui::Pos2>,
+    /// Snap points and previews of the modify tools.
+    pub(crate) picks: crate::modify3d::PickCache,
 }
 
 /// Cameras kept for "previous" and "next".
@@ -69,6 +71,7 @@ impl View3DState {
             last_wheel: f64::NEG_INFINITY,
             zoom_region: false,
             region_start: None,
+            picks: Default::default(),
         }
     }
 
@@ -324,8 +327,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     // Picking (the Demolish tool takes the clicked element instead, once the view state is released).
     let mut demolish_pick = None;
     let mut opening_pick = None;
+    // The modify tools that work in 3D take the clicks themselves (see `modify3d`).
+    let modifying = crate::modify3d::works_in_3d(&state.tool);
     if resp.clicked()
         && !zooming
+        && !modifying
         && let Some(pos) = resp.interact_pointer_pos()
     {
         let nx = (pos.x - rect.left()) / rect.width() * 2.0 - 1.0;
@@ -441,6 +447,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
 
     let nav = v3.nav();
+    let camera_now = v3.camera;
+    if modifying && !zooming {
+        crate::modify3d::handle(ui, &resp, &painter, state, view_id, crate::modify3d::Frame::new(rect, camera_now));
+    }
     if let Some((wall, point)) = opening_pick {
         let tool = state.tool.clone();
         crate::tools::place_opening_3d(state, &tool, wall, point);

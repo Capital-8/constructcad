@@ -359,6 +359,8 @@ pub struct Interaction {
     pub prev_dir: Option<DVec2>,
     /// Rotation of the next component, degrees.
     pub rotation: f64,
+    /// Height of the working plane of a tool in the 3D view (the first point picked).
+    pub plane_z: Option<f64>,
 }
 
 impl Interaction {
@@ -1251,7 +1253,7 @@ fn component_tool(
 }
 
 /// Intersections of grid lines, offered as snap points.
-fn grid_crossings(project: &Project) -> Vec<DVec2> {
+pub(crate) fn grid_crossings(project: &Project) -> Vec<DVec2> {
     let grids: Vec<(DVec2, DVec2)> = project
         .elements
         .values()
