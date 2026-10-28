@@ -211,7 +211,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 cc_core::FoundationShape::Strip { start, end } => Value::Length(start.distance(*end)),
                 _ => Value::Missing,
             },
-            ElementKind::Railing(r) => Value::Length(r.length()),
+            ElementKind::Railing(r) => Value::Length(cc_geom::railing_length(project, e, r)),
             ElementKind::Pipe(s) | ElementKind::Conduit(s) => Value::Length(s.length()),
             _ => Value::Missing,
         },

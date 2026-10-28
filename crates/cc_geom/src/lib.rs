@@ -21,12 +21,13 @@ pub mod section;
 pub mod sizing;
 pub mod skeleton;
 mod solid;
+pub mod stair;
 mod wall;
 
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{
-    BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, StairGeom, WorldConnector, column_outline,
-    component_connectors, component_parts, hosted_parts, opening_parts, railing_parts, stair_geom,
+    BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, WorldConnector, column_outline,
+    component_connectors, component_parts, hosted_parts, opening_parts,
 };
 pub use component::{resolve_component, resolve_component_in};
 pub use cut::{clip_polygon, face_plane_segments};
@@ -34,6 +35,10 @@ pub use mep::{SegmentGeom, segment_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};
 pub use rooms::{outer_boundary, room_boundary};
 pub use solid::{Face, Ray, Solid};
+pub use stair::{
+    Flight, Pieces, StairGeom, StairStep, StepKind, add_railing, railing_length, railing_path, railing_pieces,
+    stair_geom,
+};
 pub use wall::{Column, Opening, WallGeom};
 
 pub use glam::{DVec2, DVec3};

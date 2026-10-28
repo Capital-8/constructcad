@@ -477,7 +477,7 @@ fn snap(
                     ..
                 }),
             ) => Some(cc_geom::section::column_loops(*section, c.position, c.rotation_deg)),
-            (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| vec![g.outline().to_vec()]),
+            (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| g.parts),
             _ => None,
         }
         .unwrap_or_default();
@@ -1306,7 +1306,8 @@ fn beam_tool(
     }
 }
 
-/// Two clicks: the foot of the stair, then a point giving its direction.
+/// Two clicks: the foot of the stair, then a point giving the direction of
+/// its first flight; the shape comes from the options bar.
 fn stair_tool(
     ui: &Ui,
     resp: &Response,
@@ -1321,7 +1322,7 @@ fn stair_tool(
     let s = snap_at(state, Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     let project = state.project();
-    let Some(cc_core::TypeData::Stair { width, max_riser, tread, .. }) =
+    let Some(cc_core::TypeData::Stair { width, max_riser, tread, rules, .. }) =
         project.element_type(type_id).map(|t| t.data.clone())
     else {
         return;
@@ -1330,31 +1331,25 @@ fn stair_tool(
         cc_core::WallTop::Level { level: top, .. } => project.level_elevation(top) - project.level_elevation(level),
         cc_core::WallTop::Unconnected => 3.0,
     };
-    let (risers, _, run) = cc_core::stair_layout(height, max_riser, tread);
+    let layout = state.stair_layout;
     if let Some(a) = state.interaction.anchor {
         let u = (s.point - a).normalize_or(DVec2::X);
-        let v = u.perp() * (width / 2.0);
-        let end = a + u * run;
-        let pts = vec![xf.to_screen(a - v), xf.to_screen(end - v), xf.to_screen(end + v), xf.to_screen(a + v)];
-        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
-        for k in 1..risers.saturating_sub(1) {
-            let p = a + u * (k as f64 * tread);
-            painter.line_segment([xf.to_screen(p - v), xf.to_screen(p + v)], Stroke::new(1.0, PREVIEW));
+        let g = cc_geom::stair::layout_stair(a, u, width, 0.0, height, max_riser, tread, &rules, layout);
+        for step in &g.steps {
+            let pts: Vec<_> = step.outline.iter().map(|p| xf.to_screen(*p)).collect();
+            painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
         }
-        label(painter, xf.to_screen(end), t!("label-stair", "risers" => risers, "run" => format::meters(run)));
+        let end = g.walkline.last().map_or(a, |p| p.truncate());
+        let text = t!("label-stair", "risers" => g.risers, "run" => format::meters(g.run()));
+        label(painter, xf.to_screen(end), text);
     }
     if resp.clicked() {
         match state.interaction.anchor {
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.05 => {
                 let d = s.point - a;
-                let command = create::StairCreate {
-                    start: a.to_array(),
-                    direction: Some(d.y.atan2(d.x).to_degrees()),
-                    level: Some(Ref::Id(level.0)),
-                    type_ref: Some(Ref::Id(type_id.0)),
-                    ..Default::default()
-                };
+                let command =
+                    crate::stair_ui::create_command(layout, a.to_array(), d.y.atan2(d.x).to_degrees(), level, type_id);
                 run_create(state, command);
                 state.interaction.anchor = None;
             }

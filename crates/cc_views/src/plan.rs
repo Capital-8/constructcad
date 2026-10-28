@@ -289,46 +289,68 @@ fn draw_structure(
                 }
             }
             (ElementKind::Railing(r), Some(TypeData::Railing { .. })) => {
-                d.polyline(&r.path, false, LineStyle::Projection, id);
+                let path: Vec<DVec2> = cc_geom::railing_path(project, e, r).iter().map(|p| p.truncate()).collect();
+                d.polyline(&path, false, LineStyle::Projection, id);
             }
             _ => {}
         }
     }
 }
 
-/// Stair symbol: outline, treads (dashed beyond the cut), a break line where
-/// the run passes the cut plane and an arrow pointing up the run.
+/// Stair symbol: the treads and landings (dashed beyond the cut), a break
+/// line across the first step above the cut plane and an arrow along the
+/// walking line pointing up, to the cut (or the top).
 fn draw_stair(d: &mut Drawing2D, g: &cc_geom::StairGeom, cut_z: f64, element: cc_core::ElementId) {
     let id = Some(element);
-    let w = g.width / 2.0;
-    let p = |a: f64, b: f64| g.start + g.u * a + g.v * b;
-    // Distance along the run where the treads reach the cut plane.
-    let cut_u = if g.riser > 0.0 { ((cut_z - g.base) / g.riser).floor() * g.tread } else { g.run() };
-    let cut_u = cut_u.clamp(0.0, g.run());
-    let style_at = |u: f64| if u <= cut_u + 1e-9 { LineStyle::Projection } else { LineStyle::Hidden };
-    for side in [-w, w] {
-        d.line(p(0.0, side), p(cut_u, side), LineStyle::Projection, id);
-        d.line(p(cut_u, side), p(g.run(), side), LineStyle::Hidden, id);
+    let below = |z: f64| z <= cut_z + 1e-9;
+    for st in &g.steps {
+        let style = if below(st.z) { LineStyle::Projection } else { LineStyle::Hidden };
+        d.polyline(&st.outline, true, style, id);
     }
-    for k in 0..g.risers {
-        let u = k as f64 * g.tread;
-        d.line(p(u, -w), p(u, w), style_at(u), id);
-    }
-    if cut_u < g.run() {
-        // Break line: a diagonal with a small zigzag across the run.
-        let (a, b) = (p(cut_u - 0.15, -w), p(cut_u + 0.15, w));
+    if let Some(st) = g.steps.iter().find(|st| !below(st.z)) {
+        // Break line: a diagonal with a small zigzag across the step's front.
+        let [a, b] = st.front;
+        let n = st.outline.len().max(1) as f64;
+        let centroid = st.outline.iter().copied().sum::<DVec2>() / n;
+        let mut inward = (b - a).perp().normalize_or_zero();
+        if inward.dot(centroid - a) < 0.0 {
+            inward = -inward;
+        }
+        let (a, b) = (a - inward * 0.15, b + inward * 0.15);
         let m = (a + b) * 0.5;
-        let z = g.u * 0.08;
+        let z = inward * 0.08;
         d.polyline(&[a, m - z, m + z, b], false, LineStyle::Projection, id);
     }
-    // Arrow from the first riser up the run, to the cut (or the top).
-    let end = p(cut_u.max(g.tread).min(g.run()), 0.0);
-    d.line(p(0.0, 0.0), end, LineStyle::Annotation, id);
+    // Arrow along the walking line, to the cut plane or the top.
+    let min_z = g.base + g.riser * 1.5;
+    let mut arrow: Vec<DVec2> = Vec::new();
+    for w in g.walkline.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if arrow.is_empty() {
+            arrow.push(a.truncate());
+        }
+        let limit = cut_z.max(min_z);
+        if b.z <= limit + 1e-9 || (b.z - a.z).abs() < 1e-12 {
+            arrow.push(b.truncate());
+            continue;
+        }
+        if a.z < limit {
+            let t = (limit - a.z) / (b.z - a.z);
+            arrow.push(a.truncate().lerp(b.truncate(), t));
+        }
+        break;
+    }
+    arrow.dedup_by(|a, b| a.distance(*b) < 1e-6);
+    let (Some(&first), [.., before, end]) = (arrow.first(), arrow.as_slice()) else { return };
+    let end = *end;
+    d.polyline(&arrow, false, LineStyle::Annotation, id);
+    let dir = (end - *before).normalize_or(g.u);
     let head = 0.12;
-    d.line(end, end - g.u * head + g.v * head * 0.6, LineStyle::Annotation, id);
-    d.line(end, end - g.u * head - g.v * head * 0.6, LineStyle::Annotation, id);
-    let foot = g.v * 0.06;
-    d.line(p(0.0, 0.0) - foot, p(0.0, 0.0) + foot, LineStyle::Annotation, id);
+    d.line(end, end - dir * head + dir.perp() * head * 0.6, LineStyle::Annotation, id);
+    d.line(end, end - dir * head - dir.perp() * head * 0.6, LineStyle::Annotation, id);
+    let start_dir = arrow.get(1).map_or(g.u, |p| (*p - first).normalize_or(g.u));
+    let foot = start_dir.perp() * 0.06;
+    d.line(first - foot, first + foot, LineStyle::Annotation, id);
 }
 
 fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spacing: f64) {

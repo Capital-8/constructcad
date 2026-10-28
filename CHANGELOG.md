@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Stair shapes (#29): straight, straight with a landing, L-shaped (with a landing or 2 to 6 winders), U-shaped (with a gap between the flights) and spiral/helical (around an inner radius), turning left or right, with the risers of the first flight and the landing depth adjustable. The stair tool's options bar picks the shape; the properties palette edits it; `stair_create` takes `shape`, `turn`, `split`, `landing`, `gap`, `winders` and `inner_radius`. Plans draw every tread, landing and winder (dashed above the cut) with the break line and the arrow along the walking line; IFC export writes the matching `IfcStair` type (`TWO_STRAIGHT_RUN_STAIR`, `QUARTER_TURN_STAIR`, `QUARTER_WINDING_STAIR`, `HALF_TURN_STAIR`, `SPIRAL_STAIR`) with one closed B-rep per piece.
+- Stair construction on the type: solid (filled down to the floor, as before), cast in place (steps on an inclined waist slab of a given thickness, measured square to the pitch, and landing slabs; `WaistThickness` in IFC) or assembled (precast, steel or timber treads of a given thickness on side stringers or a central one, a central column on spirals, optional closed risers).
+- Step rules on the type and Blondel's formula: minimum riser and tread and the range of `2 × riser + tread` (defaults 16 cm, 28 cm and 63–65 cm); the tread can be fixed or follow Blondel's formula from the riser. The properties palette shows risers, riser height, tread, run and Blondel's step with the broken rules, and the new `stair_check` command returns them; `element_get` lists them under `derived.check`.
+- Railings that follow a stair (#29): *Add railings* in a stair's properties, or `stair_railings_add`, puts railings along its sides that climb at the pitch of the nosings, go round landings and winders and follow the stair when it changes, is copied, mirrored or deleted. Railing lengths are measured along their slope.
+
 ## [0.6.1] - 2026-10-28
 
 ### Added

@@ -389,26 +389,46 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
                 top_rows(ui, state, &el, st.top, st.height);
             });
+            section(ui, "stair-layout", t!("section-stair-layout"), |ui| {
+                let mut layout = st.layout;
+                let edited = crate::stair_ui::layout_controls(ui, id.0, &mut layout, true);
+                if edited.changed {
+                    modify(state, id, "layout", |e| {
+                        if let ElementKind::Stair(s) = &mut e.kind {
+                            s.layout = layout;
+                        }
+                    });
+                }
+                if edited.done {
+                    state.session.doc.break_merge();
+                }
+            });
             if let Some(g) = cc_geom::stair_geom(state.project(), &el, st) {
-                section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                    readonly_row(ui, &t!("col-risers"), g.risers.to_string());
-                    readonly_row(ui, &t!("col-riser-height"), format::length(g.riser));
-                    readonly_row(ui, &t!("col-tread"), format::length(g.tread));
-                    readonly_row(ui, &t!("col-run"), format::length(g.run()));
-                });
+                section(ui, "dimensions", t!("section-stair-check"), |ui| crate::stair_ui::check_rows(ui, &g));
+            }
+            let railings = state.project().railings_of(id).count();
+            if railings == 0 && ui.button(t!("action-stair-railings")).clicked() {
+                let command =
+                    cc_engine::commands::stair::StairRailingsAdd { id: id.0, side: None, type_ref: None, inset: None };
+                actions::run_command(state, command);
             }
         }
         ElementKind::Railing(r) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
-                length_row(ui, state, &t!("prop-base-offset"), id, "base", r.base_offset, |e, v| {
-                    if let ElementKind::Railing(r) = &mut e.kind {
-                        r.base_offset = v;
-                    }
-                });
+                if r.stair.is_none() {
+                    length_row(ui, state, &t!("prop-base-offset"), id, "base", r.base_offset, |e, v| {
+                        if let ElementKind::Railing(r) = &mut e.kind {
+                            r.base_offset = v;
+                        }
+                    });
+                } else {
+                    readonly_row(ui, &t!("prop-railing-host"), t!("prop-railing-on-stair"));
+                }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format::length(r.length()));
+                let length = cc_geom::railing_length(state.project(), &el, r);
+                readonly_row(ui, &t!("prop-length"), format::length(length));
             });
         }
         ElementKind::Grid(g) => {

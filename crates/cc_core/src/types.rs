@@ -295,12 +295,17 @@ pub enum TypeData {
         thickness: f64,
         material: String,
     },
-    /// Straight stair: risers at most `max_riser` high, treads `tread` deep.
+    /// Stair: risers at most `max_riser` high, treads `tread` deep (or from
+    /// Blondel's formula, see `rules`), built as `build` says.
     Stair {
         width: f64,
         max_riser: f64,
         tread: f64,
         material: String,
+        #[serde(default)]
+        build: crate::StairBuild,
+        #[serde(default)]
+        rules: crate::StairRules,
     },
     /// Railing with a top rail at `height` and posts every `post_spacing`.
     Railing {

@@ -502,7 +502,7 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 });
             });
         }
-        TypeData::Stair { width, max_riser, tread, .. } => {
+        TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
                 length_row(ui, state, &t!("col-width"), tid, "sw", width, |d, v| {
                     if let TypeData::Stair { width, .. } = d {
@@ -519,6 +519,34 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         *tread = v.clamp(0.1, 1.0);
                     }
                 });
+            });
+            crate::table::section(ui, "type-stair-build", t!("section-stair-build"), |ui| {
+                let mut b = build;
+                let edited = crate::stair_ui::build_rows(ui, tid.0, &mut b);
+                if edited.changed {
+                    update(state, tid, "sb", |t| {
+                        if let TypeData::Stair { build, .. } = &mut t.data {
+                            *build = b;
+                        }
+                    });
+                }
+                if edited.done {
+                    state.session.doc.break_merge();
+                }
+            });
+            crate::table::section(ui, "type-stair-rules", t!("section-stair-rules"), |ui| {
+                let mut r = rules;
+                let edited = crate::stair_ui::rules_rows(ui, tid.0, &mut r, max_riser, tread);
+                if edited.changed {
+                    update(state, tid, "sq", |t| {
+                        if let TypeData::Stair { rules, .. } = &mut t.data {
+                            *rules = r;
+                        }
+                    });
+                }
+                if edited.done {
+                    state.session.doc.break_merge();
+                }
             });
         }
         TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
