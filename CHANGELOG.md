@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Solid and cast-in-place stairs build each straight flight as one block from its side profile: the steps on top and, when cast in place, a continuous waist slab with a flat foot on the floor and a haunch under the landing it rises to, down to the landing's underside; the flight above starts from that underside. Sides show the steps and the soffit only, with no seams between treads.
+- Spiral stairs turn no faster than leaves 2.20 m between a tread and the one a turn below (the tread on the walking line grows when the type's would), and a solid spiral is built as a helical slab instead of treads filled down to the floor; its curved sides and soffit read as smooth surfaces.
+
 ### Added
 
 - Stair shapes (#29): straight, straight with a landing, L-shaped (with a landing or 2 to 6 winders), U-shaped (with a gap between the flights) and spiral/helical (around an inner radius), turning left or right, with the risers of the first flight and the landing depth adjustable. The stair tool's options bar picks the shape; the properties palette edits it; `stair_create` takes `shape`, `turn`, `split`, `landing`, `gap`, `winders` and `inner_radius`. Plans draw every tread, landing and winder (dashed above the cut) with the break line and the arrow along the walking line; IFC export writes the matching `IfcStair` type (`TWO_STRAIGHT_RUN_STAIR`, `QUARTER_TURN_STAIR`, `QUARTER_WINDING_STAIR`, `HALF_TURN_STAIR`, `SPIRAL_STAIR`) with one closed B-rep per piece.
