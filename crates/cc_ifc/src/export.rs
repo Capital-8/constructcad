@@ -962,7 +962,7 @@ impl<'a> Exporter<'a> {
                         (cc_core::RampShape::Spiral, _) => "SPIRAL_RAMP",
                         _ => "NOTDEFINED",
                     };
-                    StructureProduct::new("IFCRAMP", shape, items)
+                    StructureProduct::new("IFCRAMP", shape, items).brep()
                 }
                 (ElementKind::Railing(r), TypeData::Railing { .. }) => {
                     let items = self.pieces(e, cc_geom::railing_pieces(project, e, r), level_z);

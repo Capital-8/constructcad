@@ -2014,4 +2014,5 @@ fn ramps_shapes_rules_and_railings() {
     let ifc = std::fs::read_to_string(&path).unwrap();
     assert!(ifc.contains("IFCRAMP(") && ifc.contains(".SPIRAL_RAMP.") && ifc.contains(".QUARTER_TURN_RAMP."));
     assert!(ifc.contains("IFCRAMPTYPE("));
+    assert_representation_types(&ifc);
 }
