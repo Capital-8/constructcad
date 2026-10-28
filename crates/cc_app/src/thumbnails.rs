@@ -50,7 +50,10 @@ fn render(project: &Project, rs: &egui_wgpu::RenderState) -> Option<Vec<u8>> {
         .unwrap_or_default();
     crate::view3d::fit_camera(&mut camera, &geom, SIZE[0] as f32 / SIZE[1] as f32);
     let mut renderer = cc_render::Renderer3D::new(&rs.device);
-    renderer.upload(&rs.device, &cc_render::SceneMesh::build_plain(&geom, &Default::default()));
+    renderer.upload(
+        &rs.device,
+        &cc_render::SceneMesh::build_plain(&cc_render::Tessellation::new(&geom), &Default::default()),
+    );
     renderer.render_to_rgba(&rs.device, &rs.queue, SIZE, &camera)
 }
 
