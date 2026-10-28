@@ -25,10 +25,11 @@ pub enum Category {
     Pipe,
     /// Electrical conduits.
     Conduit,
+    Ramp,
 }
 
 impl Category {
-    pub const ALL: [Category; 19] = [
+    pub const ALL: [Category; 20] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -42,6 +43,7 @@ impl Category {
         Category::Pipe,
         Category::Conduit,
         Category::Stair,
+        Category::Ramp,
         Category::Railing,
         Category::Component,
         Category::Room,
@@ -51,7 +53,7 @@ impl Category {
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 15] = [
+    pub const MODEL: [Category; 16] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -65,12 +67,13 @@ impl Category {
         Category::Pipe,
         Category::Conduit,
         Category::Stair,
+        Category::Ramp,
         Category::Railing,
         Category::Component,
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 16] = [
+    pub const SCHEDULABLE: [Category; 17] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -84,6 +87,7 @@ impl Category {
         Category::Pipe,
         Category::Conduit,
         Category::Stair,
+        Category::Ramp,
         Category::Railing,
         Category::Component,
         Category::Room,
@@ -109,6 +113,7 @@ impl Category {
             Category::Column => "category-column",
             Category::Beam => "category-beam",
             Category::Stair => "category-stair",
+            Category::Ramp => "category-ramp",
             Category::Railing => "category-railing",
             Category::Component => "category-component",
             Category::Foundation => "category-foundation",
@@ -307,6 +312,14 @@ pub enum TypeData {
         #[serde(default)]
         rules: crate::StairRules,
     },
+    /// Ramp: a slab `thickness` thick, `width` wide, within `rules`.
+    Ramp {
+        width: f64,
+        thickness: f64,
+        material: String,
+        #[serde(default)]
+        rules: crate::RampRules,
+    },
     /// Railing with a top rail at `height` and posts every `post_spacing`.
     Railing {
         height: f64,
@@ -338,6 +351,7 @@ impl TypeData {
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
+            | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {
@@ -384,6 +398,7 @@ impl TypeData {
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
+            | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
             TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {}
@@ -523,6 +538,7 @@ impl ElementType {
             TypeData::Pipe { .. } => Category::Pipe,
             TypeData::Conduit { .. } => Category::Conduit,
             TypeData::Stair { .. } => Category::Stair,
+            TypeData::Ramp { .. } => Category::Ramp,
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { def, .. } => def.category(),
         }
@@ -614,6 +630,7 @@ impl ElementType {
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
+            | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. } => material,
             TypeData::Component { def, .. } => def.main_material(),
             TypeData::Floor { .. } => self

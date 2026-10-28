@@ -187,13 +187,13 @@ fn stair(p: &cc_core::Project, id: u64) -> Result<(&cc_core::Element, &Stair)> {
     }
 }
 
-/// Add railings along the sides of a stair: they follow its flights,
-/// landings and turns at the pitch of the nosings, and go with the stair
-/// when it changes, moves or is deleted.
+/// Add railings along the sides of a stair or a ramp: they follow its
+/// flights, landings and turns (at the pitch of the nosings on stairs), and
+/// go with it when it changes, moves or is deleted.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StairRailingsAdd {
-    /// Stair element id.
+    /// Stair or ramp element id.
     pub id: u64,
     /// `left`, `right` or `both` (default), walking up.
     #[serde(default)]
@@ -211,7 +211,9 @@ impl Command for StairRailingsAdd {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
-        let (el, st) = stair(p, self.id)?;
+        let Some(el) = p.element(ElementId(self.id)) else {
+            return Err(EngineError::not_found(format!("no element {}", self.id)));
+        };
         let sides = match self.side.as_deref() {
             None | Some("both") => vec![StairSide::Left, StairSide::Right],
             Some("left") => vec![StairSide::Left],
@@ -225,15 +227,26 @@ impl Command for StairRailingsAdd {
             return Err(EngineError::invalid("inset must be under 1 m"));
         }
         let type_id = refs::type_of(p, Category::Railing, self.type_ref.as_ref())?;
-        let g = cc_geom::stair_geom(p, el, st).ok_or_else(|| EngineError::invalid("the stair has no stair type"))?;
+        let no_type = || EngineError::invalid("the element has no type of its category");
+        let path = |side: StairSide| -> Result<Vec<glam::DVec3>> {
+            match &el.kind {
+                ElementKind::Stair(st) => {
+                    Ok(cc_geom::stair_geom(p, el, st).ok_or_else(no_type)?.railing_path(side, inset))
+                }
+                ElementKind::Ramp(r) => Ok(cc_geom::ramp_geom(p, el, r).ok_or_else(no_type)?.railing_path(side, inset)),
+                _ => Err(EngineError::invalid(format!("element {} is not a stair or a ramp", el.id.0))),
+            }
+        };
         let (host, level) = (el.id, el.level);
-        let railings: Vec<(StairSide, Vec<DVec2>)> = sides
-            .into_iter()
-            .map(|side| (side, g.railing_path(side, inset).iter().map(|q| q.truncate()).collect::<Vec<_>>()))
-            .filter(|(_, path)| path.len() >= 2)
-            .collect();
+        let mut railings: Vec<(StairSide, Vec<DVec2>)> = Vec::new();
+        for side in sides {
+            let plan: Vec<DVec2> = path(side)?.iter().map(|q| q.truncate()).collect();
+            if plan.len() >= 2 {
+                railings.push((side, plan));
+            }
+        }
         if railings.is_empty() {
-            return Err(EngineError::invalid("the stair has no side for a railing"));
+            return Err(EngineError::invalid("the element has no side for a railing"));
         }
         let ids = edit(s, t!("tx-create-railing"), |e| {
             Ok(railings

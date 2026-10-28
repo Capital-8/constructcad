@@ -168,6 +168,13 @@ impl Element {
                     s.layout.turn = s.layout.turn.flipped();
                 }
             }
+            ElementKind::Ramp(r) => {
+                p(&mut r.start);
+                r.direction_deg = t.apply_angle_deg(r.direction_deg);
+                if t.mirror {
+                    r.layout.turn = r.layout.turn.flipped();
+                }
+            }
             ElementKind::Railing(r) => {
                 r.path.iter_mut().for_each(p);
                 if t.mirror
@@ -427,13 +434,14 @@ impl crate::EditCtx<'_> {
         created
     }
 
-    /// A pasted wall, column or stair attached to a deleted level keeps its
+    /// A pasted wall, column, stair or ramp attached to a deleted level keeps its
     /// height, unconnected (as [`crate::Project::repair`] does on load).
     fn detach_missing_top(&self, e: &mut Element) {
         let top = match &mut e.kind {
             ElementKind::Wall(w) => &mut w.top,
             ElementKind::Column(c) => &mut c.top,
             ElementKind::Stair(s) => &mut s.top,
+            ElementKind::Ramp(r) => &mut r.top,
             _ => return,
         };
         if let crate::WallTop::Level { level, .. } = *top

@@ -1,5 +1,5 @@
-//! Stair controls: the plan layout (options bar and properties), the
-//! construction and step rules of stair types, and the step check.
+//! Stair and ramp controls: the plan layout (options bar and properties), the
+//! construction and step rules of stair types, the rules of ramp types, and their checks.
 
 use crate::i18n::tr;
 use crate::state::AppState;
@@ -224,4 +224,113 @@ pub fn tool_options(ui: &mut Ui, state: &mut AppState) {
     state.stair_layout = layout;
     ui.separator();
     ui.label(crate::theme::muted(t!("hint-stair")));
+}
+
+/// A slope as a percentage drag (stored as rise over run); `zero` names 0.
+fn percent(ui: &mut Ui, value: &mut f64, zero: Option<String>) -> Response {
+    let mut pct = *value * 100.0;
+    let r = ui.add(DragValue::new(&mut pct).speed(0.05).range(0.0..=100.0).custom_formatter(move |n, _| match &zero {
+        Some(z) if n < 1e-6 => z.clone(),
+        _ => format!("{n:.2} %"),
+    }));
+    if r.changed() {
+        *value = pct / 100.0;
+    }
+    r
+}
+
+/// Shape, turn, slope and the sizes a ramp's shape uses.
+pub fn ramp_layout_controls(ui: &mut Ui, salt: u64, layout: &mut cc_core::RampLayout, table: bool) -> Edited {
+    use cc_core::RampShape;
+    let mut e = Edited::default();
+    let shape = field(ui, table, &t!("prop-stair-shape"), |ui| {
+        combo(ui, ("ramp-shape", salt), &mut layout.shape, &RampShape::ALL, RampShape::key)
+    });
+    e.choice(shape);
+    if layout.shape.turns() {
+        let turn = field(ui, table, &t!("prop-stair-turn"), |ui| {
+            combo(ui, ("ramp-turn", salt), &mut layout.turn, &Turn::ALL, Turn::key)
+        });
+        e.choice(turn);
+    }
+    let r = field(ui, table, &t!("prop-ramp-slope"), |ui| percent(ui, &mut layout.slope, Some(t!("ramp-slope-max"))));
+    e.add(&r);
+    if matches!(layout.shape, RampShape::Straight | RampShape::UShaped) {
+        let r = field(ui, table, &t!("prop-stair-landing"), |ui| length(ui, &mut layout.landing, 100.0));
+        e.add(&r);
+    }
+    if layout.shape == RampShape::UShaped {
+        let r = field(ui, table, &t!("prop-stair-gap"), |ui| length(ui, &mut layout.gap, 100.0));
+        e.add(&r);
+    }
+    if layout.shape == RampShape::Spiral {
+        let r = field(ui, table, &t!("prop-stair-inner-radius"), |ui| length(ui, &mut layout.inner_radius, 100.0));
+        e.add(&r);
+    }
+    e
+}
+
+/// Accessibility rules of a ramp type.
+pub fn ramp_rules_rows(ui: &mut Ui, rules: &mut cc_core::RampRules) -> Edited {
+    let mut e = Edited::default();
+    let r = row(ui, &t!("prop-ramp-max-slope"), |ui| percent(ui, &mut rules.max_slope, None));
+    e.add(&r);
+    let r = row(ui, &t!("prop-ramp-max-flight-rise"), |ui| length(ui, &mut rules.max_flight_rise, 100.0));
+    e.add(&r);
+    let r = row(ui, &t!("prop-ramp-min-landing"), |ui| length(ui, &mut rules.min_landing, 100.0));
+    e.add(&r);
+    e
+}
+
+/// Slope, flights and the broken rules of a laid-out ramp.
+pub fn ramp_check_rows(ui: &mut Ui, g: &cc_geom::RampGeom) {
+    use cc_views::format;
+    readonly_row(ui, &t!("col-slope"), format::slope(g.check.slope));
+    readonly_row(ui, &t!("prop-ramp-flights"), g.check.flights.to_string());
+    readonly_row(ui, &t!("prop-ramp-flight-rise"), format::length(g.check.flight_rise));
+    readonly_row(ui, &t!("col-run"), format::length(g.run()));
+    if g.check.ok() {
+        ui.label(RichText::new(t!("stair-check-ok")).color(PALETTE.success));
+    }
+    for issue in &g.check.issues {
+        ui.label(RichText::new(cc_engine::commands::ramp::issue_text(issue)).color(PALETTE.warning));
+    }
+}
+
+/// The engine command creating a ramp with `layout`.
+pub fn ramp_command(
+    layout: cc_core::RampLayout,
+    start: [f64; 2],
+    direction: f64,
+    level: cc_core::LevelId,
+    type_id: cc_core::ElementTypeId,
+) -> cc_engine::commands::ramp::RampCreate {
+    use cc_engine::Ref;
+    let shape = cc_engine::commands::ramp::SHAPES.iter().find(|(_, s)| *s == layout.shape).map(|(n, _)| n.to_string());
+    let turn = match layout.turn {
+        Turn::Left => "left",
+        Turn::Right => "right",
+    };
+    cc_engine::commands::ramp::RampCreate {
+        start,
+        direction: Some(direction),
+        level: Some(Ref::Id(level.0)),
+        type_ref: Some(Ref::Id(type_id.0)),
+        shape,
+        turn: Some(turn.into()),
+        slope: (layout.slope > 1e-6).then_some(layout.slope * 100.0),
+        landing: (layout.landing > 1e-3).then_some(layout.landing),
+        gap: Some(layout.gap),
+        inner_radius: Some(layout.inner_radius),
+        ..Default::default()
+    }
+}
+
+/// Options bar of the ramp tool.
+pub fn ramp_tool_options(ui: &mut Ui, state: &mut AppState) {
+    let mut layout = state.ramp_layout;
+    ramp_layout_controls(ui, 0, &mut layout, false);
+    state.ramp_layout = layout;
+    ui.separator();
+    ui.label(crate::theme::muted(t!("hint-ramp")));
 }
