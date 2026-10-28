@@ -640,6 +640,19 @@ impl<'a> Exporter<'a> {
         geom.solids_of(id).filter(|s| !s.faces.is_empty()).map(|s| self.faceted_brep(&s.faces, z0)).collect()
     }
 
+    /// One faceted B-rep per closed piece of an element.
+    fn pieces(&mut self, e: &cc_core::Element, pieces: cc_geom::Pieces, z0: f64) -> Vec<Id> {
+        let mut items = Vec::new();
+        for piece in pieces {
+            let mut s = cc_geom::Solid::new(e.id, e.category(), [0, 0, 0]);
+            s.add_polygons(piece);
+            if !s.faces.is_empty() {
+                items.push(self.faceted_brep(&s.faces, z0));
+            }
+        }
+        items
+    }
+
     /// Closed shell of planar faces (points relative to `z0`).
     fn faceted_brep(&mut self, faces: &[cc_geom::Face], z0: f64) -> Id {
         let mut points: HashMap<(i64, i64, i64), Id> = HashMap::new();
@@ -776,7 +789,7 @@ impl<'a> Exporter<'a> {
         Some(self.w.add("IFCPOLYGONALFACESET", args![points, Value::Null, ifc_faces, Value::Null]))
     }
 
-    /// Columns, beams, stairs and railings.
+    /// Columns, beams, stairs, ramps and railings.
     fn write_structure(&mut self) {
         let project = self.project;
         for e in project.elements.values() {
@@ -909,27 +922,54 @@ impl<'a> Exporter<'a> {
                         }
                     }
                 }
-                (ElementKind::Stair(s), TypeData::Stair { .. }) => {
+                (ElementKind::Stair(s), TypeData::Stair { build, .. }) => {
                     let Some(g) = cc_geom::stair_geom(project, e, s) else { continue };
-                    let items: Vec<Id> = g.steps().iter().map(|p| self.oriented_box(p, level_z)).collect();
+                    let items = self.pieces(e, g.pieces(build), level_z);
                     let count = |k: usize| Value::Typed("IFCCOUNTMEASURE", Box::new(Value::Int(k as i64)));
                     let length = |x: f64| Value::Typed("IFCPOSITIVELENGTHMEASURE", Box::new(Value::Real(x)));
-                    let props = vec![
+                    let mut props = vec![
                         ("NumberOfRiser", count(g.risers)),
                         ("NumberOfTreads", count(g.risers.saturating_sub(1))),
                         ("RiserHeight", length(g.riser)),
                         ("TreadLength", length(g.tread)),
                     ];
+                    if build.construction == cc_core::StairConstruction::CastInPlace {
+                        props.push(("WaistThickness", length(build.waist)));
+                    }
+                    let winders = s.layout.winders >= 2;
+                    let shape = match s.layout.shape {
+                        cc_core::StairShape::Straight => "STRAIGHT_RUN_STAIR",
+                        cc_core::StairShape::StraightLanding => "TWO_STRAIGHT_RUN_STAIR",
+                        cc_core::StairShape::LShaped if winders => "QUARTER_WINDING_STAIR",
+                        cc_core::StairShape::LShaped => "QUARTER_TURN_STAIR",
+                        cc_core::StairShape::UShaped => "HALF_TURN_STAIR",
+                        cc_core::StairShape::Spiral => "SPIRAL_STAIR",
+                    };
                     StructureProduct {
                         props: Some(("Pset_StairCommon", props)),
-                        ..StructureProduct::new("IFCSTAIR", "STRAIGHT_RUN_STAIR", items)
+                        ..StructureProduct::new("IFCSTAIR", shape, items)
                     }
+                    .brep()
+                }
+                (ElementKind::Ramp(r), TypeData::Ramp { thickness, .. }) => {
+                    let Some(g) = cc_geom::ramp_geom(project, e, r) else { continue };
+                    let items = self.pieces(e, g.pieces(*thickness), level_z);
+                    let shape = match (r.layout.shape, g.check.flights) {
+                        (cc_core::RampShape::Straight, 1) => "STRAIGHT_RUN_RAMP",
+                        (cc_core::RampShape::Straight, 2) => "TWO_STRAIGHT_RUN_RAMP",
+                        (cc_core::RampShape::LShaped, _) => "QUARTER_TURN_RAMP",
+                        (cc_core::RampShape::UShaped, 2) => "HALF_TURN_RAMP",
+                        (cc_core::RampShape::Spiral, _) => "SPIRAL_RAMP",
+                        _ => "NOTDEFINED",
+                    };
+                    StructureProduct::new("IFCRAMP", shape, items).brep()
                 }
                 (ElementKind::Railing(r), TypeData::Railing { .. }) => {
-                    let items: Vec<Id> =
-                        cc_geom::railing_parts(project, e, r).iter().map(|p| self.oriented_box(p, level_z)).collect();
-                    let q = vec![("Length", Quantity::Length(r.length()))];
-                    StructureProduct::new("IFCRAILING", "GUARDRAIL", items).quantities("Qto_RailingBaseQuantities", q)
+                    let items = self.pieces(e, cc_geom::railing_pieces(project, e, r), level_z);
+                    let q = vec![("Length", Quantity::Length(cc_geom::railing_length(project, e, r)))];
+                    StructureProduct::new("IFCRAILING", "GUARDRAIL", items)
+                        .quantities("Qto_RailingBaseQuantities", q)
+                        .brep()
                 }
                 _ => continue,
             };
@@ -1397,6 +1437,7 @@ impl<'a> Exporter<'a> {
                 ("IFCSLABTYPE", args![Value::Enum("BASESLAB")])
             }
             TypeData::Stair { .. } => ("IFCSTAIRTYPE", args![Value::Enum("STRAIGHT_RUN_STAIR")]),
+            TypeData::Ramp { .. } => ("IFCRAMPTYPE", args![Value::Enum("NOTDEFINED")]),
             TypeData::Railing { .. } => ("IFCRAILINGTYPE", args![Value::Enum("GUARDRAIL")]),
             TypeData::Wall { .. } => ("IFCWALLTYPE", args![Value::Enum("STANDARD")]),
             TypeData::Floor { .. } => ("IFCSLABTYPE", args![Value::Enum("FLOOR")]),
@@ -2026,6 +2067,7 @@ fn common_pset(project: &Project, e: &Element) -> Option<&'static str> {
         ElementKind::Column(_) => "Pset_ColumnCommon",
         ElementKind::Beam(_) => "Pset_BeamCommon",
         ElementKind::Stair(_) => "Pset_StairCommon",
+        ElementKind::Ramp(_) => "Pset_RampCommon",
         ElementKind::Railing(_) => "Pset_RailingCommon",
         ElementKind::Foundation(_) => match project.element_type(e.type_id).map(|t| &t.data) {
             Some(TypeData::Foundation { kind: cc_core::FoundationKind::Slab, .. }) => "Pset_SlabCommon",

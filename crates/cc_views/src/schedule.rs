@@ -211,7 +211,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 cc_core::FoundationShape::Strip { start, end } => Value::Length(start.distance(*end)),
                 _ => Value::Missing,
             },
-            ElementKind::Railing(r) => Value::Length(r.length()),
+            ElementKind::Railing(r) => Value::Length(cc_geom::railing_length(project, e, r)),
             ElementKind::Pipe(s) | ElementKind::Conduit(s) => Value::Length(s.length()),
             _ => Value::Missing,
         },
@@ -235,7 +235,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ if matches!(e.kind, ElementKind::Door(_) | ElementKind::Window(_)) => {
                 ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(w, _)| Value::Length(w))
             }
-            Some(TypeData::Stair { width, .. }) => Value::Length(*width),
+            Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. }) => Value::Length(*width),
             _ => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.0)),
         },
         F::Depth => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.1)),
@@ -322,6 +322,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         }
         F::Slope => match &e.kind {
             ElementKind::Pipe(s) if !s.is_vertical() => Value::Text(format::slope(s.slope())),
+            ElementKind::Ramp(r) => {
+                cc_geom::ramp_geom(project, e, r).map_or(Value::Missing, |g| Value::Text(format::slope(g.check.slope)))
+            }
             _ => Value::Missing,
         },
         F::Power => match project.mep_data(e) {
@@ -350,6 +353,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 Some(g) => Value::Length(g.run()),
                 None => Value::Missing,
             },
+            ElementKind::Ramp(r) if field == F::Run => {
+                cc_geom::ramp_geom(project, e, r).map_or(Value::Missing, |g| Value::Length(g.run()))
+            }
             _ => Value::Missing,
         },
     }

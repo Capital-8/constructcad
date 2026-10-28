@@ -123,7 +123,7 @@ pub enum UiCommand {
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
-const PLACED: [Category; 16] = [
+const PLACED: [Category; 17] = [
     Category::Wall,
     Category::Door,
     Category::Window,
@@ -131,6 +131,7 @@ const PLACED: [Category; 16] = [
     Category::Ceiling,
     Category::Roof,
     Category::Stair,
+    Category::Ramp,
     Category::Railing,
     Category::Room,
     Category::Component,
@@ -619,6 +620,7 @@ impl UiCommand {
             Place(Category::Ceiling) => "FO",
             Place(Category::Roof) => "TE",
             Place(Category::Stair) => "ST",
+            Place(Category::Ramp) => "RP",
             Place(Category::Railing) => "RA",
             Place(Category::Room) => "RM",
             Place(Category::Component) => "CM",
@@ -693,6 +695,7 @@ impl UiCommand {
             Place(Category::Ceiling) => "ceiling_create",
             Place(Category::Roof) => "roof_create",
             Place(Category::Stair) => "stair_create",
+            Place(Category::Ramp) => "ramp_create",
             Place(Category::Railing) => "railing_create",
             Place(Category::Room) => "room_create",
             Place(Category::Grid) => "grid_create",
@@ -780,7 +783,10 @@ impl UiCommand {
             Redo if !state.session.doc.can_redo() => Some(t!("why-nothing-redo")),
             ExportPdf | ExportSvg if actions::active_sheet(state).is_none() => Some(t!("hint-export-sheet")),
             ExportImage if actions::image_view(state).is_none() => Some(t!("hint-export-image")),
-            Place(category) if Tool::for_category(project, category).is_none() => Some(t!("msg-no-type")),
+            // A project without a ramp type gets one when the tool starts.
+            Place(category) if category != Category::Ramp && Tool::for_category(project, category).is_none() => {
+                Some(t!("msg-no-type"))
+            }
             Dimension(_) if Tool::for_category(project, Category::Dimension).is_none() => Some(t!("msg-no-type")),
             Text if Tool::for_category(project, Category::Text).is_none() => Some(t!("msg-no-type")),
             AddLeader if crate::ribbon::selected_text(state).is_none() && !self.selected(state) => {
@@ -933,6 +939,7 @@ fn place_label(category: Category) -> String {
         Category::Ceiling => t!("tool-ceiling"),
         Category::Roof => t!("tool-roof"),
         Category::Stair => t!("tool-stair"),
+        Category::Ramp => t!("tool-ramp"),
         Category::Railing => t!("tool-railing"),
         Category::Room => t!("tool-room"),
         Category::Grid => t!("tool-grid"),
@@ -957,6 +964,7 @@ fn place_description(category: Category) -> String {
         Category::Ceiling => t!("cmd-desc-ceiling"),
         Category::Roof => t!("cmd-desc-roof"),
         Category::Stair => t!("cmd-desc-stair"),
+        Category::Ramp => t!("cmd-desc-ramp"),
         Category::Railing => t!("cmd-desc-railing"),
         Category::Room => t!("cmd-desc-room"),
         Category::Grid => t!("cmd-desc-grid"),
