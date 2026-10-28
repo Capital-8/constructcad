@@ -12,6 +12,18 @@ pub struct Face {
     pub smooth: bool,
 }
 
+/// Unit normal of a polygon's winding (Newell's method); zero when it has no area.
+fn newell(verts: &[DVec3]) -> DVec3 {
+    let n = verts.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (verts[i], verts[(i + 1) % n]);
+            DVec3::new((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))
+        })
+        .sum::<DVec3>()
+        .normalize_or_zero()
+}
+
 /// Smooth facets meeting at less than this angle (cosine) read as one surface.
 const SMOOTH_COS: f64 = 0.85;
 
@@ -22,7 +34,10 @@ impl Face {
 
     /// Orthonormal in-plane basis `(u, v)`.
     fn basis(&self) -> (DVec3, DVec3) {
-        let n = self.normal;
+        // A face built without a normal (its points on one line, or a normal
+        // that was zero) gets the normal of its points; with none, any plane.
+        let n = if self.normal.length_squared() > 0.5 { self.normal } else { newell(&self.verts) };
+        let n = if n.is_finite() && n != DVec3::ZERO { n } else { DVec3::Z };
         let helper = if n.z.abs() < 0.9 { DVec3::Z } else { DVec3::X };
         let u = n.cross(helper).normalize();
         (u, n.cross(u))
@@ -455,6 +470,28 @@ fn ray_triangle(ray: Ray, a: DVec3, b: DVec3, c: DVec3) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression (issue #51): a prism over a footprint with no area (its
+    /// points on one line) has caps without a normal; triangulating them for
+    /// the 3D view or a pick in it panicked inside earcutr.
+    #[test]
+    fn degenerate_faces_triangulate_without_panicking() {
+        let line: Vec<DVec2> = (0..5).map(|i| DVec2::new(f64::from(i), 0.0)).collect();
+        let mut s = Solid::new(ElementId(1), Category::Floor, [0; 3]);
+        s.add_prism(&line, |_| 0.0, |_| 1.0);
+        for f in &s.faces {
+            f.triangulate();
+        }
+        let ray = Ray { origin: DVec3::new(2.0, 0.0, 5.0), dir: -DVec3::Z };
+        s.raycast(ray);
+        // A face built with no normal triangulates in the plane of its points.
+        let pentagon: Vec<DVec3> = (0..5)
+            .map(|i| f64::from(i) * std::f64::consts::TAU / 5.0)
+            .map(|a| DVec3::new(a.cos(), a.sin(), 1.0))
+            .collect();
+        assert_eq!(Face::new(pentagon, DVec3::ZERO).triangulate().len(), 3);
+        assert!(Face::new(vec![DVec3::splat(f64::NAN); 6], DVec3::Z).triangulate().is_empty());
+    }
 
     #[test]
     fn box_volume_and_raycast() {

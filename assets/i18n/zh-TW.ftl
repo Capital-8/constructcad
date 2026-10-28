@@ -1639,3 +1639,15 @@ ph-delete-filter = 刪除篩選器
 ph-default-filter-name = 篩選器 { $n }
 ph-filter-none = 無
 ph-not-demolished = 沒有
+
+# 復原
+dlg-recovery = 復原未儲存的工作
+dlg-recovery-text = ConstructCAD 在未儲存這些變更的情況下關閉。請選擇要還原的專案；它會連同未儲存的變更一起開啟。
+recovery-never-saved = 從未儲存
+recovery-age-now = 剛剛
+recovery-age-minutes = { $count } 分鐘前
+recovery-age-hours = { $count } 小時前
+recovery-age-days = { $count } 天前
+action-restore = 還原
+msg-recovered = 已還原：{ $name }（請儲存以保留變更）
+msg-recovery-failed = 無法還原專案：{ $error }

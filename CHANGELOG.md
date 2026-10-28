@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Autosave and crash recovery (#51). A minute after a project gets unsaved changes (new, never-saved projects too), a copy of it is written in the background to the `recovery` folder of the app's data folder, only when the model changed since the last copy, through a temporary file and a rename. Saving, closing or quitting cleanly removes it. When ConstructCAD starts and finds copies left by a session that crashed or was killed, the *Recover Unsaved Work* dialog offers them: *Restore* opens the project with its unsaved changes (saving writes to its original file), *Discard* deletes the copy, *Cancel* keeps it for the next start.
+- A panic in the interface writes a last recovery copy before the app closes, and every panic is appended to `crash.log` in the app's data folder (message, place and backtrace), since release builds on Windows have no console.
+
+### Fixed
+
+- The 3D view and picking in it could crash on a degenerate face (a footprint with no area, or points that are not finite numbers): its triangulation panicked inside earcutr. Such faces now triangulate in the plane of their points or give no triangles.
+- A GPU error (a validation error or a failed allocation) no longer ends the app: it is logged. A 3D mesh larger than the GPU's buffer limit is not uploaded instead of failing validation.
+
 ## [0.6.1] - 2026-10-28
 
 ### Added

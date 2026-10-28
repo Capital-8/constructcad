@@ -21,6 +21,7 @@ pub mod phase;
 pub mod profile;
 mod project;
 pub mod properties;
+pub mod recovery;
 mod repair;
 mod schedule;
 pub mod transform;
