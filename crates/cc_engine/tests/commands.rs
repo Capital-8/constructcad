@@ -1956,6 +1956,35 @@ fn stairs_shapes_rules_and_railings() {
     assert_eq!(ids.len(), 2);
     let length = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["derived"]["length"].as_f64();
     let sloped = length(&mut s, ids[0]).unwrap();
+    // Every post stands on a tread, a landing or a floor, not on the pitch line above them.
+    {
+        let p = s.project();
+        let stair_el = p.element(cc_core::ElementId(sid)).unwrap();
+        let cc_core::ElementKind::Stair(st) = &stair_el.kind else { panic!("not a stair") };
+        let floors: Vec<f64> = cc_geom::stair_geom(p, stair_el, st)
+            .unwrap()
+            .steps
+            .iter()
+            .map(|step| step.z)
+            .chain([p.level_elevation(stair_el.level), p.stair_span(stair_el, st).1])
+            .collect();
+        for &rail in &ids {
+            let e = p.element(cc_core::ElementId(rail)).unwrap();
+            let cc_core::ElementKind::Railing(r) = &e.kind else { panic!("not a railing") };
+            let mut posts = 0;
+            for piece in cc_geom::railing_pieces(p, e, r) {
+                let pts: Vec<_> = piece.iter().flatten().collect();
+                let (lo, hi) =
+                    pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), q| (lo.min(q.z), hi.max(q.z)));
+                let flat = pts.iter().all(|q| q.truncate().distance(pts[0].truncate()) < 0.06);
+                if flat && hi - lo > 0.3 {
+                    posts += 1;
+                    assert!(floors.iter().any(|f| (f - lo).abs() < 1e-9), "a post starts at {lo}, off the steps");
+                }
+            }
+            assert!(posts >= 3, "{posts} posts");
+        }
+    }
     assert!(sloped > 2.88, "a railing climbs the whole height: {sloped}");
     let count = |s: &mut Session| run(s, "elements_list", json!({"category": "railing"})).as_array().unwrap().len();
     // A copy takes its railings along; a mirror turns the other way.
