@@ -14,6 +14,8 @@ pub struct View3DState {
     renderer: Option<Renderer3D>,
     pub texture: Option<egui::TextureId>,
     mesh_key: Option<(u64, u64, u64)>,
+    /// Triangles and edges of the geometry shown, with the revision they were made at.
+    tessellation: Option<(u64, cc_render::Tessellation)>,
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
     fit_requested: bool,
@@ -57,6 +59,7 @@ impl View3DState {
             renderer: None,
             texture: None,
             mesh_key: None,
+            tessellation: None,
             camera_dirty: false,
             fit_requested: false,
             auto_fit: None,
@@ -357,25 +360,31 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         }
     }
 
-    // Upload geometry when the model or selection changed.
-    let key = (state.session.doc.revision(), selection_hash(&state.selection), state.session.temporary_revision());
+    // Upload geometry when the model or selection changed; a new selection
+    // or temporary visibility only repaints the triangles and edges kept.
+    let revision = state.session.doc.revision();
+    let key = (revision, selection_hash(&state.selection), state.session.temporary_revision());
     let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
     if v3.mesh_key != Some(key) {
         let geom = state.session.geom_for(view_id);
+        if v3.tessellation.as_ref().is_none_or(|(r, _)| *r != revision) {
+            v3.tessellation = Some((revision, cc_render::Tessellation::new(geom)));
+        }
+        let Some((_, tess)) = &v3.tessellation else { return };
         let mesh = if analytical {
             let model = cc_geom::analytical::analytical_model(&state.session.doc.project, geom);
-            SceneMesh::build_analytical(geom, &model, &state.selection)
+            SceneMesh::build_analytical(tess, &model, &state.selection)
         } else if rebar {
-            SceneMesh::build_rebar(geom, &state.selection)
+            SceneMesh::build_rebar(geom, tess, &state.selection)
         } else {
             let project = &state.session.doc.project;
             match project.view(view_id) {
                 Some(view) => {
                     let temporary = state.session.temporary(view_id);
                     let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
-                    SceneMesh::build(geom, &state.selection, &mut |e| resolver.style(e).map(|g| solid_style(&g)))
+                    SceneMesh::build(tess, &state.selection, &mut |e| resolver.style(e).map(|g| solid_style(&g)))
                 }
-                None => SceneMesh::build_plain(geom, &state.selection),
+                None => SceneMesh::build_plain(tess, &state.selection),
             }
         };
         renderer.upload(&rs.device, &mesh);
@@ -456,11 +465,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if v3.camera_dirty && !interacting {
         v3.camera_dirty = false;
         let camera = v3.camera;
-        state.session.doc.set_untracked(|p| {
-            if let Some(ViewKind::ThreeD { camera: c, .. }) = p.views.get_mut(&view_id).map(|v| &mut v.kind) {
-                *c = camera;
-            }
-        });
+        state.session.set_view_camera(view_id, camera);
     }
 }
 

@@ -500,3 +500,34 @@ fn temporary_hide_and_isolate() {
     run(&mut s, "undo", json!({}));
     assert!(drawn(&mut s, plan).contains(&walls[1]));
 }
+
+#[test]
+fn a_3d_camera_redraws_only_what_shows_it() {
+    let (mut s, plan, _, _, _) = house();
+    let plan = ViewId(plan);
+    let view = ViewId(id(&run(&mut s, "view_create", json!({"kind": "three_d"}))));
+    let other = ViewId(id(&run(&mut s, "view_create", json!({"kind": "three_d"}))));
+    let sheet = id(&run(&mut s, "view_create", json!({"kind": "sheet"})));
+    run(&mut s, "sheet_place_view", json!({"sheet": sheet, "view": view.0}));
+    let sheet = ViewId(sheet);
+    s.doc.mark_saved();
+    let (rev, plan_drawing, drawing, other_drawing) =
+        (s.doc.revision(), s.drawing(plan).unwrap(), s.drawing(view).unwrap(), s.drawing(other).unwrap());
+    let composed = s.sheet(sheet).unwrap();
+    let camera = cc_core::CameraState { yaw_deg: 10.0, ..Default::default() };
+    s.set_view_camera(view, camera);
+    // Saved with the project but not a model change: the geometry and the
+    // other views' drawings stay; this view and its sheet are redrawn.
+    assert!(s.doc.is_dirty());
+    assert_eq!(s.doc.revision(), rev);
+    assert!(std::rc::Rc::ptr_eq(&plan_drawing, &s.drawing(plan).unwrap()));
+    assert!(std::rc::Rc::ptr_eq(&other_drawing, &s.drawing(other).unwrap()));
+    assert!(!std::rc::Rc::ptr_eq(&drawing, &s.drawing(view).unwrap()));
+    assert!(!std::rc::Rc::ptr_eq(&composed, &s.sheet(sheet).unwrap()));
+    let Some(cc_core::ViewKind::ThreeD { camera: kept, .. }) = s.project().view(view).map(|v| v.kind.clone()) else {
+        panic!("3D view")
+    };
+    assert_eq!(kept, camera);
+    s.doc.mark_saved();
+    assert!(!s.doc.is_dirty());
+}

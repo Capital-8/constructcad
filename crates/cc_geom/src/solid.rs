@@ -94,52 +94,70 @@ impl Solid {
     /// Visible outline edges grouped by face: the parts of each face boundary
     /// not shared with a coplanar neighbor face (so split faces read as one).
     pub fn feature_edges(&self) -> Vec<Vec<(DVec3, DVec3)>> {
-        let edges = |f: &Face| {
+        let mut all: Vec<(usize, DVec3, DVec3)> = Vec::new();
+        for (fi, f) in self.faces.iter().enumerate() {
             let n = f.verts.len();
-            (0..n).map(move |i| (f.verts[i], f.verts[(i + 1) % n])).collect::<Vec<_>>()
-        };
-        let all: Vec<Vec<(DVec3, DVec3)>> = self.faces.iter().map(edges).collect();
-        let mut out = Vec::with_capacity(all.len());
-        for (fi, face) in self.faces.iter().enumerate() {
-            let mut face_out = Vec::new();
-            for &(a, b) in &all[fi] {
-                let ab = b - a;
-                let len2 = ab.length_squared();
-                if len2 < 1e-12 {
-                    continue;
+            all.extend((0..n).map(|i| (fi, f.verts[i], f.verts[(i + 1) % n])));
+        }
+        // Small solids compare every pair of faces; larger ones only edges
+        // whose boxes touch (see `EdgeGrid`).
+        let grid = (all.len() > GRID_MIN_EDGES).then(|| EdgeGrid::new(&all));
+        let mut seen = vec![usize::MAX; all.len()];
+        let mut candidates = Vec::new();
+        let mut out = vec![Vec::new(); self.faces.len()];
+        for (ei, &(fi, a, b)) in all.iter().enumerate() {
+            let (Some(face), Some(face_out)) = (self.faces.get(fi), out.get_mut(fi)) else { continue };
+            let ab = b - a;
+            let len2 = ab.length_squared();
+            if len2 < 1e-12 {
+                continue;
+            }
+            // Edges of other faces with the same normal (or smooth neighbors) hide what they overlap.
+            let joins = |fj: usize, other: &Face| {
+                let cos = other.normal.dot(face.normal);
+                fj != fi && (cos >= 0.9999 || (face.smooth && other.smooth && cos > SMOOTH_COS))
+            };
+            let mut covered: Vec<(f64, f64)> = Vec::new();
+            let mut cover = |c: DVec3, d: DVec3| {
+                let off = |p: DVec3| (p - a).cross(ab).length_squared() / len2;
+                if off(c) > 1e-10 || off(d) > 1e-10 {
+                    return;
                 }
-                let mut covered: Vec<(f64, f64)> = Vec::new();
-                for (fj, other) in self.faces.iter().enumerate() {
-                    let cos = other.normal.dot(face.normal);
-                    let smooth = face.smooth && other.smooth && cos > SMOOTH_COS;
-                    if fj == fi || (cos < 0.9999 && !smooth) {
-                        continue;
-                    }
-                    for &(c, d) in &all[fj] {
-                        let off = |p: DVec3| (p - a).cross(ab).length_squared() / len2;
-                        if off(c) > 1e-10 || off(d) > 1e-10 {
-                            continue;
+                let (tc, td) = ((c - a).dot(ab) / len2, (d - a).dot(ab) / len2);
+                let (lo, hi) = (tc.min(td).max(0.0), tc.max(td).min(1.0));
+                if hi - lo > 1e-9 {
+                    covered.push((lo, hi));
+                }
+            };
+            match &grid {
+                Some(grid) => {
+                    grid.near(a, b, ei, &mut seen, &mut candidates);
+                    for &cj in &candidates {
+                        if let Some(&(fj, c, d)) = all.get(cj)
+                            && self.faces.get(fj).is_some_and(|other| joins(fj, other))
+                        {
+                            cover(c, d);
                         }
-                        let (tc, td) = ((c - a).dot(ab) / len2, (d - a).dot(ab) / len2);
-                        let (lo, hi) = (tc.min(td).max(0.0), tc.max(td).min(1.0));
-                        if hi - lo > 1e-9 {
-                            covered.push((lo, hi));
-                        }
                     }
                 }
-                covered.sort_by(|x, y| x.0.total_cmp(&y.0));
-                let mut t = 0.0;
-                for (lo, hi) in covered {
-                    if lo > t + 1e-9 {
-                        face_out.push((a + ab * t, a + ab * lo));
+                None => {
+                    for (_, other) in self.faces.iter().enumerate().filter(|(fj, other)| joins(*fj, other)) {
+                        let m = other.verts.len();
+                        (0..m).for_each(|k| cover(other.verts[k], other.verts[(k + 1) % m]));
                     }
-                    t = t.max(hi);
-                }
-                if t < 1.0 - 1e-9 {
-                    face_out.push((a + ab * t, b));
                 }
             }
-            out.push(face_out);
+            covered.sort_by(|x, y| x.0.total_cmp(&y.0));
+            let mut t = 0.0;
+            for (lo, hi) in covered {
+                if lo > t + 1e-9 {
+                    face_out.push((a + ab * t, a + ab * lo));
+                }
+                t = t.max(hi);
+            }
+            if t < 1.0 - 1e-9 {
+                face_out.push((a + ab * t, b));
+            }
         }
         out
     }
@@ -175,8 +193,20 @@ impl Solid {
 
     /// Nearest hit distance along `ray`, if any.
     pub fn raycast(&self, ray: Ray) -> Option<f64> {
+        self.raycast_within(ray, f64::INFINITY)
+    }
+
+    /// Like [`Self::raycast`], for a caller that already has a hit at
+    /// `limit`: faces whose boxes the ray meets beyond it are skipped (a
+    /// result beyond `limit` is not then the nearest).
+    pub fn raycast_within(&self, ray: Ray, limit: f64) -> Option<f64> {
         let mut best: Option<f64> = None;
         for face in &self.faces {
+            let Some(first) = face.verts.first() else { continue };
+            let (lo, hi) = face.verts.iter().fold((*first, *first), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+            if ray_box(ray, lo, hi).is_none_or(|t| t > best.map_or(limit, |b| b.min(limit))) {
+                continue;
+            }
             for [a, b, c] in face.triangulate() {
                 if let Some(t) = ray_triangle(ray, face.verts[a], face.verts[b], face.verts[c]) {
                     best = Some(best.map_or(t, |bt| bt.min(t)));
@@ -306,6 +336,98 @@ impl Solid {
     }
 }
 
+/// Edges of a solid binned in a uniform grid by their bounding boxes, grown
+/// by a margin above the collinearity tolerance of [`Solid::feature_edges`]:
+/// only edges sharing a cell can overlap, so dense meshes are not quadratic.
+struct EdgeGrid {
+    cell: f64,
+    cells: std::collections::HashMap<[i64; 3], Vec<usize>>,
+    /// Edges spanning too many cells, compared with every edge.
+    big: Vec<usize>,
+    count: usize,
+}
+
+const GRID_MARGIN: f64 = 1e-4;
+const GRID_MAX_CELLS: f64 = 64.0;
+/// Solids with up to this many edges compare every pair of faces (cheaper than binning).
+const GRID_MIN_EDGES: usize = 1500;
+
+impl EdgeGrid {
+    fn new(edges: &[(usize, DVec3, DVec3)]) -> Self {
+        let total: f64 = edges.iter().map(|(_, a, b)| a.distance(*b)).filter(|l| l.is_finite()).sum();
+        let cell = (total / edges.len().max(1) as f64).max(1e-3);
+        let mut grid = Self { cell, cells: Default::default(), big: Vec::new(), count: edges.len() };
+        for (i, &(_, a, b)) in edges.iter().enumerate() {
+            match grid.range(a, b) {
+                Some((lo, hi)) => {
+                    for key in cell_keys(lo, hi) {
+                        grid.cells.entry(key).or_default().push(i);
+                    }
+                }
+                None => grid.big.push(i),
+            }
+        }
+        grid
+    }
+
+    /// Cells covered by the grown box of `a`-`b`; `None` when it spans too
+    /// many (or its coordinates are not usable).
+    fn range(&self, a: DVec3, b: DVec3) -> Option<([i64; 3], [i64; 3])> {
+        let lo = ((a.min(b) - DVec3::splat(GRID_MARGIN)) / self.cell).floor();
+        let hi = ((a.max(b) + DVec3::splat(GRID_MARGIN)) / self.cell).floor();
+        let usable = |v: DVec3| v.is_finite() && v.abs().max_element() < 1e15;
+        let span = hi - lo + DVec3::ONE;
+        if !usable(lo) || !usable(hi) || span.x * span.y * span.z > GRID_MAX_CELLS {
+            return None;
+        }
+        Some(([lo.x as i64, lo.y as i64, lo.z as i64], [hi.x as i64, hi.y as i64, hi.z as i64]))
+    }
+
+    /// The edges that may overlap edge `query` (`a`-`b`), into `out`;
+    /// `seen` (one slot per edge) marks those already listed for it.
+    fn near(&self, a: DVec3, b: DVec3, query: usize, seen: &mut [usize], out: &mut Vec<usize>) {
+        out.clear();
+        let Some((lo, hi)) = self.range(a, b) else {
+            out.extend(0..self.count);
+            return;
+        };
+        let cells = cell_keys(lo, hi).filter_map(|key| self.cells.get(&key));
+        for &i in cells.flatten().chain(&self.big) {
+            if let Some(mark) = seen.get_mut(i)
+                && *mark != query
+            {
+                *mark = query;
+                out.push(i);
+            }
+        }
+    }
+}
+
+fn cell_keys(lo: [i64; 3], hi: [i64; 3]) -> impl Iterator<Item = [i64; 3]> {
+    (lo[0]..=hi[0]).flat_map(move |x| (lo[1]..=hi[1]).flat_map(move |y| (lo[2]..=hi[2]).map(move |z| [x, y, z])))
+}
+
+/// Distance along `ray` at which it enters the box `lo`-`hi` (grown by a
+/// small margin; 0 from inside), if it meets the box ahead.
+pub(crate) fn ray_box(ray: Ray, lo: DVec3, hi: DVec3) -> Option<f64> {
+    const MARGIN: f64 = 1e-6;
+    let (lo, hi) = (lo - DVec3::splat(MARGIN), hi + DVec3::splat(MARGIN));
+    let (mut near, mut far) = (0.0_f64, f64::INFINITY);
+    for axis in 0..3 {
+        let (o, d) = (ray.origin[axis], ray.dir[axis]);
+        if d == 0.0 {
+            if o < lo[axis] || o > hi[axis] {
+                return None;
+            }
+            continue;
+        }
+        let (a, b) = ((lo[axis] - o) / d, (hi[axis] - o) / d);
+        near = near.max(a.min(b));
+        far = far.min(a.max(b));
+    }
+    (near <= far).then_some(near)
+}
+
 /// Möller–Trumbore, two-sided.
 fn ray_triangle(ray: Ray, a: DVec3, b: DVec3, c: DVec3) -> Option<f64> {
     let e1 = b - a;
@@ -355,6 +477,84 @@ mod tests {
         let len: f64 = s.feature_edges().iter().flatten().map(|(a, b)| a.distance(*b)).sum();
         // Each visible edge is reported by both adjacent faces: 2 * (4*2 + 8*1).
         assert!((len - 2.0 * (8.0 + 8.0)).abs() < 1e-9, "{len}");
+    }
+
+    /// [`Solid::feature_edges`] comparing every pair of edges.
+    fn feature_edges_brute(s: &Solid) -> Vec<Vec<(DVec3, DVec3)>> {
+        let edges = |f: &Face| {
+            let n = f.verts.len();
+            (0..n).map(move |i| (f.verts[i], f.verts[(i + 1) % n])).collect::<Vec<_>>()
+        };
+        let all: Vec<Vec<(DVec3, DVec3)>> = s.faces.iter().map(edges).collect();
+        let mut out = Vec::new();
+        for (fi, face) in s.faces.iter().enumerate() {
+            let mut face_out = Vec::new();
+            for &(a, b) in &all[fi] {
+                let ab = b - a;
+                let len2 = ab.length_squared();
+                if len2 < 1e-12 {
+                    continue;
+                }
+                let mut covered: Vec<(f64, f64)> = Vec::new();
+                for (fj, other) in s.faces.iter().enumerate() {
+                    let cos = other.normal.dot(face.normal);
+                    let smooth = face.smooth && other.smooth && cos > SMOOTH_COS;
+                    if fj == fi || (cos < 0.9999 && !smooth) {
+                        continue;
+                    }
+                    for &(c, d) in &all[fj] {
+                        let off = |p: DVec3| (p - a).cross(ab).length_squared() / len2;
+                        if off(c) > 1e-10 || off(d) > 1e-10 {
+                            continue;
+                        }
+                        let (tc, td) = ((c - a).dot(ab) / len2, (d - a).dot(ab) / len2);
+                        let (lo, hi) = (tc.min(td).max(0.0), tc.max(td).min(1.0));
+                        if hi - lo > 1e-9 {
+                            covered.push((lo, hi));
+                        }
+                    }
+                }
+                covered.sort_by(|x, y| x.0.total_cmp(&y.0));
+                let mut t = 0.0;
+                for (lo, hi) in covered {
+                    if lo > t + 1e-9 {
+                        face_out.push((a + ab * t, a + ab * lo));
+                    }
+                    t = t.max(hi);
+                }
+                if t < 1.0 - 1e-9 {
+                    face_out.push((a + ab * t, b));
+                }
+            }
+            out.push(face_out);
+        }
+        out
+    }
+
+    #[test]
+    fn feature_edges_match_the_pairwise_comparison() {
+        // A faceted sphere (dense, small edges) on a long split slab (edges
+        // too long for the grid, and T-junctions along them).
+        let mut s = Solid::new(ElementId(1), Category::Wall, [0; 3]);
+        let n = 24;
+        let p = |i: usize, j: usize| {
+            let (th, ph) = (i as f64 / n as f64 * std::f64::consts::TAU, j as f64 / n as f64 * std::f64::consts::PI);
+            DVec3::new(ph.sin() * th.cos(), ph.sin() * th.sin(), 1.0 + ph.cos())
+        };
+        let mut polys = vec![];
+        for i in 0..n {
+            for j in 0..n {
+                polys.push(vec![p(i, j), p(i + 1, j), p(i + 1, j + 1)]);
+                polys.push(vec![p(i, j), p(i + 1, j + 1), p(i, j + 1)]);
+            }
+        }
+        s.add_polygons(polys);
+        s.add_box(DVec2::new(-40.0, -1.0), DVec2::X, DVec2::Y, 0.0, 30.0, 0.0, 2.0, -0.2, 0.0);
+        s.add_box(DVec2::new(-40.0, -1.0), DVec2::X, DVec2::Y, 30.0, 80.0, 0.0, 2.0, -0.2, 0.0);
+        for f in s.faces.iter_mut().skip(n * n) {
+            f.smooth = true;
+        }
+        assert_eq!(s.feature_edges(), feature_edges_brute(&s));
     }
 
     #[test]

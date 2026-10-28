@@ -210,6 +210,22 @@ impl Session {
         self.temporary_revision += 1;
     }
 
+    /// Keep the camera of 3D view `view` (not undoable). The model's geometry
+    /// stays: only the view's drawing and the sheets showing it are redrawn.
+    pub fn set_view_camera(&mut self, view: ViewId, camera: cc_core::CameraState) {
+        self.doc.set_view_state(|p| {
+            if let Some(ViewKind::ThreeD { camera: c, .. }) = p.views.get_mut(&view).map(|v| &mut v.kind) {
+                *c = camera;
+            }
+        });
+        self.drawings.remove(&view);
+        let project = &self.doc.project;
+        self.sheets.retain(|sheet, _| {
+            !matches!(project.view(*sheet).map(|v| &v.kind),
+                Some(ViewKind::Sheet { viewports, .. }) if viewports.iter().any(|vp| vp.view == view))
+        });
+    }
+
     /// Changes whenever any view's temporary visibility changes.
     pub fn temporary_revision(&self) -> u64 {
         self.temporary_revision

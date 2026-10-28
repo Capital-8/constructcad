@@ -568,6 +568,8 @@ pub struct Document {
     redo: Vec<Transaction>,
     revision: u64,
     saved_revision: u64,
+    /// A view state change (see [`Document::set_view_state`]) since saving.
+    view_state_changed: bool,
     /// Merge key of the last recorded transaction, for coalescing.
     last_merge_key: Option<u64>,
     /// The phase new elements are built in (the active view's; `None`:
@@ -585,15 +587,19 @@ impl Document {
             redo: Vec::new(),
             revision: 1,
             saved_revision: 1,
+            view_state_changed: false,
             last_merge_key: None,
             creation_phase: None,
         }
     }
 
-    /// Apply a change that is not undoable (e.g. saving a 3D camera position).
-    pub fn set_untracked(&mut self, f: impl FnOnce(&mut Project)) {
+    /// Apply a change that is saved but not undoable, and that no derived
+    /// geometry depends on (a 3D view's camera). The revision stays, so caches
+    /// keyed on it stay valid: callers drop what does depend on the change
+    /// (see `Session::set_view_camera`).
+    pub fn set_view_state(&mut self, f: impl FnOnce(&mut Project)) {
         f(&mut self.project);
-        self.revision += 1;
+        self.view_state_changed = true;
     }
 
     /// Monotonic counter bumped on every model change; use it to invalidate caches.
@@ -602,11 +608,12 @@ impl Document {
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.revision != self.saved_revision
+        self.revision != self.saved_revision || self.view_state_changed
     }
 
     pub fn mark_saved(&mut self) {
         self.saved_revision = self.revision;
+        self.view_state_changed = false;
     }
 
     /// Run `f` as one undoable transaction named `name`.

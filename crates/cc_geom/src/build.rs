@@ -921,20 +921,39 @@ impl ModelGeometry {
 
     /// The nearest solid along `ray` among the elements `shown` accepts.
     pub fn pick_where(&self, ray: Ray, shown: &mut dyn FnMut(ElementId) -> bool) -> Option<(ElementId, f64)> {
-        self.solids
-            .iter()
-            .filter_map(|s| s.raycast(ray).map(|t| (s.element, t)))
-            .filter(|(e, _)| shown(*e))
-            .min_by(|a, b| a.1.total_cmp(&b.1))
+        self.nearest(ray, &mut |s| shown(s.element))
     }
 
     /// Closest element hit by `ray`, skipping categories in `hidden`.
     pub fn pick(&self, ray: Ray, hidden: &[Category]) -> Option<(ElementId, f64)> {
-        self.solids
-            .iter()
-            .filter(|s| !hidden.contains(&s.category))
-            .filter_map(|s| s.raycast(ray).map(|t| (s.element, t)))
-            .min_by(|a, b| a.1.total_cmp(&b.1))
+        self.nearest(ray, &mut |s| !hidden.contains(&s.category))
+    }
+
+    /// The nearest hit among the solids `accept` takes (on a tie, the first
+    /// solid). Solids are tried in the order the ray meets their boxes, until
+    /// the next box lies beyond the nearest hit.
+    fn nearest(&self, ray: Ray, accept: &mut dyn FnMut(&Solid) -> bool) -> Option<(ElementId, f64)> {
+        let mut boxes: Vec<(f64, usize)> = (self.solids.iter().enumerate())
+            .filter_map(|(i, s)| {
+                let (lo, hi) = s.bounds()?;
+                Some((crate::solid::ray_box(ray, lo, hi)?, i))
+            })
+            .collect();
+        boxes.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut best: Option<(f64, usize)> = None;
+        for (entry, i) in boxes {
+            let limit = best.map_or(f64::INFINITY, |(t, _)| t);
+            if entry > limit {
+                break;
+            }
+            let Some(solid) = self.solids.get(i) else { continue };
+            let Some(t) = solid.raycast_within(ray, limit) else { continue };
+            let closer = best.is_none_or(|(bt, bi)| t < bt || (t == bt && i < bi));
+            if closer && accept(solid) {
+                best = Some((t, i));
+            }
+        }
+        best.and_then(|(t, i)| Some((self.solids.get(i)?.element, t)))
     }
 }
 
@@ -1323,5 +1342,43 @@ mod tests {
         let (id, t) = g.pick(ray, &[]).unwrap();
         assert_eq!(doc.project.element(id).unwrap().category(), Category::Wall);
         assert!((t - (10.0 - 0.075)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pick_matches_testing_every_solid() {
+        let doc = sample_house();
+        let g = ModelGeometry::build(&doc.project);
+        let walls: Vec<ElementId> =
+            doc.project.elements.values().filter(|e| e.category() == Category::Wall).map(|e| e.id).collect();
+        // The first solid hit (in order) among those shown, nearest first.
+        let brute = |ray: Ray, shown: &dyn Fn(ElementId) -> bool| {
+            g.solids
+                .iter()
+                .filter_map(|s| s.raycast(ray).map(|t| (s.element, t)))
+                .filter(|(e, _)| shown(*e))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+        };
+        let mut hits = 0;
+        for i in 0..15 {
+            for j in 0..15 {
+                // Rays from outside, from above and along the axes (zero direction components).
+                let (x, y) = (-2.0 + i as f64 * 0.8, -2.0 + j as f64 * 0.7);
+                for ray in [
+                    Ray { origin: DVec3::new(-20.0, y, x * 0.3), dir: DVec3::new(1.0, 0.07, 0.01) },
+                    Ray { origin: DVec3::new(x, y, 20.0), dir: DVec3::new(0.0, 0.0, -1.0) },
+                    Ray { origin: DVec3::new(x, -20.0, 1.2), dir: DVec3::Y },
+                ] {
+                    let all = brute(ray, &|_| true);
+                    hits += usize::from(all.is_some());
+                    assert_eq!(g.pick_where(ray, &mut |_| true), all);
+                    assert_eq!(g.pick(ray, &[]), all);
+                    // Walls hidden: the ray goes through to what lies behind.
+                    let no_walls = brute(ray, &|e| !walls.contains(&e));
+                    assert_eq!(g.pick_where(ray, &mut |e| !walls.contains(&e)), no_walls);
+                    assert_eq!(g.pick(ray, &[Category::Wall]), no_walls);
+                }
+            }
+        }
+        assert!(hits > 100, "{hits}");
     }
 }

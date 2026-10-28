@@ -20,6 +20,73 @@ pub struct SceneMesh {
     pub edges: Vec<Vertex>,
 }
 
+/// The triangles and outline edges of a model's solids, without colors:
+/// the costly part of a [`SceneMesh`], kept while the geometry stays, so a
+/// new selection or view graphics only repaint it.
+#[derive(Debug, Clone, Default)]
+pub struct Tessellation {
+    solids: Vec<SolidTess>,
+}
+
+#[derive(Debug, Clone)]
+struct SolidTess {
+    element: ElementId,
+    color: [u8; 3],
+    transparency: f64,
+    /// Position and normal of each vertex.
+    vertices: Vec<([f32; 3], [f32; 3])>,
+    /// Triangles, as indices into `vertices`.
+    triangles: Vec<u32>,
+    /// Outline segments (pairs of points) with their face's normal.
+    edges: Vec<([f32; 3], [f32; 3])>,
+}
+
+impl Tessellation {
+    pub fn new(geom: &ModelGeometry) -> Self {
+        let solids = geom
+            .solids
+            .iter()
+            .map(|solid| {
+                let mut s = SolidTess {
+                    element: solid.element,
+                    color: solid.color,
+                    transparency: solid.transparency,
+                    vertices: Vec::new(),
+                    triangles: Vec::new(),
+                    edges: Vec::new(),
+                };
+                for face in &solid.faces {
+                    let start = s.vertices.len() as u32;
+                    let normal = face.normal.as_vec3().to_array();
+                    s.vertices.extend(face.verts.iter().map(|p| (p.as_vec3().to_array(), normal)));
+                    for [a, b, c] in face.triangulate() {
+                        s.triangles.extend([start + a as u32, start + b as u32, start + c as u32]);
+                    }
+                }
+                for (face, edges) in solid.faces.iter().zip(solid.feature_edges()) {
+                    let normal = face.normal.as_vec3().to_array();
+                    for (a, b) in edges {
+                        s.edges.push((a.as_vec3().to_array(), normal));
+                        s.edges.push((b.as_vec3().to_array(), normal));
+                    }
+                }
+                s
+            })
+            .collect();
+        Self { solids }
+    }
+}
+
+impl SceneMesh {
+    /// Append `solid`'s triangles in `color`, to the blended pass when transparent.
+    fn add_faces(&mut self, solid: &SolidTess, color: [f32; 4]) {
+        let start = self.vertices.len() as u32;
+        self.vertices.extend(solid.vertices.iter().map(|&(pos, normal)| Vertex { pos, normal, color }));
+        let target = if color[3] < 0.999 { &mut self.transparent_indices } else { &mut self.indices };
+        target.extend(solid.triangles.iter().map(|i| start + i));
+    }
+}
+
 fn srgb_to_linear(c: u8) -> f32 {
     let c = c as f32 / 255.0;
     if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
@@ -43,13 +110,13 @@ impl SceneMesh {
     /// The model's solids; `style` gives each element's view graphics
     /// (`None` hides it).
     pub fn build(
-        geom: &ModelGeometry,
+        tess: &Tessellation,
         selected: &BTreeSet<ElementId>,
         style: &mut dyn FnMut(ElementId) -> Option<SolidStyle>,
     ) -> Self {
         let mut mesh = Self::default();
         let mut styles: std::collections::HashMap<ElementId, Option<SolidStyle>> = Default::default();
-        for solid in &geom.solids {
+        for solid in &tess.solids {
             let Some(st) = *styles.entry(solid.element).or_insert_with(|| style(solid.element)) else { continue };
             let sel = selected.contains(&solid.element);
             let mut base = st.color.unwrap_or(solid.color);
@@ -61,41 +128,27 @@ impl SceneMesh {
             // Selected solids stay opaque so they read clearly.
             let alpha = if sel { 1.0 } else { (1.0 - transparency).clamp(0.08, 1.0) };
             let color = [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), alpha];
-            let target = if alpha < 0.999 { &mut mesh.transparent_indices } else { &mut mesh.indices };
             let edge_color = match (sel, st.edges) {
                 (true, _) => [0.02, 0.15, 0.6, 1.0],
                 (false, Some(c)) => [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2]), 1.0],
                 (false, None) if st.halftone => [0.45, 0.45, 0.46, 1.0],
                 (false, None) => [0.02, 0.02, 0.025, 1.0],
             };
-            for face in &solid.faces {
-                let start = mesh.vertices.len() as u32;
-                let normal = face.normal.as_vec3().to_array();
-                mesh.vertices.extend(face.verts.iter().map(|p| Vertex { pos: p.as_vec3().to_array(), normal, color }));
-                for [a, b, c] in face.triangulate() {
-                    target.extend([start + a as u32, start + b as u32, start + c as u32]);
-                }
-            }
-            for (face, edges) in solid.faces.iter().zip(solid.feature_edges()) {
-                let normal = face.normal.as_vec3().to_array();
-                for (a, b) in edges {
-                    mesh.edges.push(Vertex { pos: a.as_vec3().to_array(), normal, color: edge_color });
-                    mesh.edges.push(Vertex { pos: b.as_vec3().to_array(), normal, color: edge_color });
-                }
-            }
+            mesh.add_faces(solid, color);
+            mesh.edges.extend(solid.edges.iter().map(|&(pos, normal)| Vertex { pos, normal, color: edge_color }));
         }
         mesh
     }
 
     /// Every solid as its material shows it.
-    pub fn build_plain(geom: &ModelGeometry, selected: &BTreeSet<ElementId>) -> Self {
-        Self::build(geom, selected, &mut |_| Some(SolidStyle::default()))
+    pub fn build_plain(tess: &Tessellation, selected: &BTreeSet<ElementId>) -> Self {
+        Self::build(tess, selected, &mut |_| Some(SolidStyle::default()))
     }
 
     /// The reinforcing bars (those of the selected hosts or sets highlighted)
     /// over the model's solids drawn faint.
-    pub fn build_rebar(geom: &ModelGeometry, selected: &BTreeSet<ElementId>) -> Self {
-        let mut mesh = Self::faint(geom);
+    pub fn build_rebar(geom: &ModelGeometry, tess: &Tessellation, selected: &BTreeSet<ElementId>) -> Self {
+        let mut mesh = Self::faint(tess);
         for set in geom.rebar.values() {
             let sel = selected.contains(&set.element) || selected.contains(&set.host);
             let color = if sel { [0.02, 0.15, 0.6, 1.0] } else { [0.55, 0.06, 0.04, 1.0] };
@@ -114,19 +167,11 @@ impl SceneMesh {
     }
 
     /// The model's solids drawn faint, with no edges.
-    fn faint(geom: &ModelGeometry) -> Self {
+    fn faint(tess: &Tessellation) -> Self {
         let mut mesh = Self::default();
-        for solid in &geom.solids {
+        for solid in &tess.solids {
             let base = solid.color;
-            let color = [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), 0.12];
-            for face in &solid.faces {
-                let start = mesh.vertices.len() as u32;
-                let normal = face.normal.as_vec3().to_array();
-                mesh.vertices.extend(face.verts.iter().map(|p| Vertex { pos: p.as_vec3().to_array(), normal, color }));
-                for [a, b, c] in face.triangulate() {
-                    mesh.transparent_indices.extend([start + a as u32, start + b as u32, start + c as u32]);
-                }
-            }
+            mesh.add_faces(solid, [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), 0.12]);
         }
         mesh
     }
@@ -135,11 +180,11 @@ impl SceneMesh {
     /// selection highlighted) and node crosses (supports green) over the
     /// model's solids drawn faint.
     pub fn build_analytical(
-        geom: &ModelGeometry,
+        tess: &Tessellation,
         model: &cc_geom::analytical::AnalyticalModel,
         selected: &BTreeSet<ElementId>,
     ) -> Self {
-        let mut mesh = Self::faint(geom);
+        let mut mesh = Self::faint(tess);
         let mut line = |a: glam::DVec3, b: glam::DVec3, color: [f32; 4]| {
             let normal = [0.0, 0.0, 1.0];
             mesh.edges.push(Vertex { pos: a.as_vec3().to_array(), normal, color });
@@ -174,8 +219,8 @@ mod tests {
     #[test]
     fn transparent_materials_go_to_the_blended_pass() {
         let project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
-        let geom = ModelGeometry::build(&project);
-        let mesh = SceneMesh::build_plain(&geom, &BTreeSet::new());
+        let tess = Tessellation::new(&ModelGeometry::build(&project));
+        let mesh = SceneMesh::build_plain(&tess, &BTreeSet::new());
         // Window glass (60 % transparent in the template) is blended; walls are not.
         assert!(!mesh.transparent_indices.is_empty());
         assert!(!mesh.indices.is_empty());
@@ -184,13 +229,13 @@ mod tests {
         assert!(glass.iter().all(|v| (v.color[3] - 0.4).abs() < 1e-6));
         // A selected window is drawn opaque.
         let window = project.elements.values().find(|e| matches!(e.kind, cc_core::ElementKind::Window(_))).unwrap().id;
-        let sel = SceneMesh::build_plain(&geom, &BTreeSet::from([window]));
+        let sel = SceneMesh::build_plain(&tess, &BTreeSet::from([window]));
         assert!(sel.transparent_indices.len() < mesh.transparent_indices.len());
         // View graphics: a hidden window leaves the mesh, an opaque override takes it out of the blended pass.
-        let hidden = SceneMesh::build(&geom, &BTreeSet::new(), &mut |e| (e != window).then(SolidStyle::default));
+        let hidden = SceneMesh::build(&tess, &BTreeSet::new(), &mut |e| (e != window).then(SolidStyle::default));
         assert!(hidden.vertices.len() < mesh.vertices.len());
         let opaque = SolidStyle { transparency: Some(0.0), color: Some([255, 0, 0]), ..Default::default() };
-        let solid = SceneMesh::build(&geom, &BTreeSet::new(), &mut |e| {
+        let solid = SceneMesh::build(&tess, &BTreeSet::new(), &mut |e| {
             Some(if e == window { opaque } else { SolidStyle::default() })
         });
         assert!(solid.transparent_indices.len() < mesh.transparent_indices.len());
