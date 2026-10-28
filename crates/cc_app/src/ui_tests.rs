@@ -661,3 +661,33 @@ fn component_library_loads_a_component() {
     assert!(harness.state().project().types.len() > before, "the door's types joined the project");
     assert!(matches!(harness.state().tool, crate::tools::Tool::Hosted { .. }), "doors are placed in walls");
 }
+
+/// The component editor on the sample house's window (a door or window: the
+/// opening row shows) and on a new component.
+#[test]
+fn component_editor_snapshots() {
+    if !snapshots_requested() {
+        return;
+    }
+    let mut results = egui_kittest::SnapshotResults::new();
+    let mut state = sample_state();
+    let window = state.project().component_types().find(|t| t.category() == cc_core::Category::Window).unwrap().id;
+    state.dialogs.component_editor = crate::component_editor::Editor::open(&state, window);
+    let mut harness = themed_harness(state, egui::vec2(1280.0, 900.0), egui::Theme::Light, |ui, state| {
+        crate::component_editor::show(ui.ctx(), state)
+    });
+    for _ in 0..4 {
+        harness.run();
+    }
+    results.add(harness.try_snapshot("component_editor"));
+    let mut state = sample_state();
+    state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
+    let mut harness = themed_harness(state, egui::vec2(1280.0, 900.0), egui::Theme::Light, |ui, state| {
+        crate::component_editor::show(ui.ctx(), state)
+    });
+    for _ in 0..4 {
+        harness.run();
+    }
+    results.add(harness.try_snapshot("component_editor_new"));
+    results.unwrap();
+}
