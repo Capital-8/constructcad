@@ -1892,6 +1892,11 @@ fn stairs_shapes_rules_and_railings() {
     assert_eq!(count(&mut s), 6);
     assert!(length(&mut s, ids[1]).is_some_and(|l| l > 2.88));
 
+    // Exported to IFC, stairs and railings are B-reps declared as such.
+    let ifc = scratch("stairs.ifc");
+    run(&mut s, "ifc_export", json!({"path": ifc.to_string_lossy()}));
+    assert_representation_types(&std::fs::read_to_string(&ifc).unwrap());
+
     // Saved and loaded, everything comes back.
     let path = scratch("stairs.ccad");
     run(&mut s, "project_save", json!({"path": path}));
@@ -1909,6 +1914,33 @@ fn shape_name(shape: &str) -> &'static str {
         "u_shaped" => "UShaped",
         "spiral" => "Spiral",
         _ => "Straight",
+    }
+}
+
+/// Every shape representation of an IFC file names the kind of its items
+/// (`SweptSolid` for extrusions, `Brep` for faceted B-reps), as the IFC
+/// schema's `IfcShapeRepresentationTypes` rule checks.
+fn assert_representation_types(ifc: &str) {
+    let mut entities = std::collections::HashMap::new();
+    for line in ifc.lines() {
+        if let Some((id, rest)) = line.strip_prefix('#').and_then(|l| l.split_once('=')) {
+            entities.insert(format!("#{}", id.trim()), rest.trim().to_string());
+        }
+    }
+    for body in entities.values().filter(|e| e.starts_with("IFCSHAPEREPRESENTATION(")) {
+        let kind = if body.contains("'SweptSolid'") {
+            "SweptSolid"
+        } else if body.contains("'Brep'") {
+            "Brep"
+        } else {
+            continue;
+        };
+        let items = body.rsplit_once('(').map_or("", |(_, i)| i);
+        for item in items.trim_end_matches([')', ';']).split(',').map(str::trim) {
+            let Some(entity) = entities.get(item) else { continue };
+            let brep = entity.starts_with("IFCFACETEDBREP(");
+            assert_eq!(brep, kind == "Brep", "{kind} representation with {entity}");
+        }
     }
 }
 
