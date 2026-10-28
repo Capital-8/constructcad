@@ -948,6 +948,13 @@ pub fn railing_path(project: &Project, element: &cc_core::Element, railing: &cc_
     railing.path.iter().map(|p| DVec3::new(p.x, p.y, base)).collect()
 }
 
+/// The layout of the stair a railing follows, if it follows one.
+fn hosted_stair(project: &Project, railing: &cc_core::Railing) -> Option<StairGeom> {
+    let host = project.element(railing.stair?.host)?;
+    let cc_core::ElementKind::Stair(st) = &host.kind else { return None };
+    stair_geom(project, host, st)
+}
+
 /// Length of a railing along its (sloped) path.
 pub fn railing_length(project: &Project, element: &cc_core::Element, railing: &cc_core::Railing) -> f64 {
     railing_path(project, element, railing).windows(2).map(|w| w[0].distance(w[1])).sum()
@@ -971,12 +978,23 @@ pub fn railing_pieces(project: &Project, element: &cc_core::Element, railing: &c
     let s = &mut pieces;
     let path = railing_path(project, element, railing);
     let (rail, post) = (0.05, 0.04);
+    // On a stair the path runs along the nosings, above the treads between
+    // them: posts stand on the tread or landing under them.
+    let steps: Vec<(Vec<DVec2>, f64)> = hosted_stair(project, railing)
+        .map(|g| g.steps.into_iter().map(|st| (st.outline, st.z)).collect())
+        .unwrap_or_default();
+    let ground = |q: DVec2, u: DVec2, z: f64| {
+        // A point on a riser line belongs to the step it rises to.
+        let under = |p: DVec2| steps.iter().filter(|(o, _)| polygon::contains(o, p)).map(|(_, z)| *z).reduce(f64::max);
+        under(q).or_else(|| under(q + u * 1e-4)).filter(|g| *g <= z + 1e-6).unwrap_or(z)
+    };
     let post_at = |s: &mut Pieces, p: DVec3, u: DVec2| {
         let v = u.perp();
         let q = p.truncate();
         let r = post / 2.0;
         let outline = [q - u * r - v * r, q + u * r - v * r, q + u * r + v * r, q - u * r + v * r];
-        add_wedge(s, &outline, &[p.z; 4], &[p.z + height - rail; 4]);
+        let base = ground(q, u, p.z);
+        add_wedge(s, &outline, &[base; 4], &[p.z + height - rail; 4]);
     };
     // Posts at the start, at corners (turns in plan or changes of pitch) and
     // at most `post_spacing` apart along the path between them.
