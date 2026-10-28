@@ -350,6 +350,91 @@ fn dimensions_follow_and_drive_what_they_measure() {
 }
 
 #[test]
+fn a_dimension_chain_shares_one_line_and_follows_its_elements() {
+    let mut s = Session::default();
+    let sample = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/casa_simples.ccad");
+    run(&mut s, "project_open", json!({"path": sample}));
+    let plan = run(&mut s, "views_list", json!({"category": "floor_plan"}))[0]["id"].clone();
+    // Three 20 cm columns far from the house; measure between their faces.
+    let cols: Vec<Value> =
+        [50.0, 54.0, 59.0].iter().map(|x| run(&mut s, "column_create", json!({"position": [x, 50.0]}))).collect();
+    let depth = s.doc.undo_depth();
+    let out = run(
+        &mut s,
+        "dimension_chain_create",
+        json!({"view": plan, "points": [[50.1, 50.0], [53.9, 50.0], [58.9, 50.05]], "kind": "linear", "offset": 2.0}),
+    );
+    assert_eq!(out["count"], 2);
+    assert_eq!(s.doc.undo_depth(), depth + 1, "one undo step");
+    let dims: Vec<Value> =
+        out["ids"].as_array().unwrap().iter().map(|id| run(&mut s, "element_get", json!({"id": id}))).collect();
+    let f = |v: &Value| v.as_f64().unwrap();
+    for (d, value) in dims.iter().zip([3.8, 5.0]) {
+        let p = &d["params"];
+        assert_eq!(p["kind"]["Linear"]["dir"], json!([1.0, 0.0]), "{p}");
+        // Both lines at y = 52.
+        assert!((f(&p["a"][1]) + f(&p["offset"]) - 52.0).abs() < 1e-9, "{p}");
+        assert!(((f(&p["b"][0]) - f(&p["a"][0])).abs() - value).abs() < 1e-9, "{p}");
+    }
+    // The shared end follows the middle column in both dimensions.
+    let middle = &cols[1]["id"];
+    assert_eq!(dims[0]["params"]["refs"][1]["target"]["Element"], *middle);
+    assert_eq!(dims[1]["params"]["refs"][0]["target"]["Element"], *middle);
+    run(&mut s, "elements_move", json!({"ids": [middle], "delta": [0.5, 0.0]}));
+    let x = |s: &mut Session, id: &Value, end: &str| f(&run(s, "element_get", json!({"id": id}))["params"][end][0]);
+    assert!((x(&mut s, &out["ids"][0], "b") - 54.4).abs() < 1e-9);
+    assert!((x(&mut s, &out["ids"][1], "a") - 54.4).abs() < 1e-9);
+    // Undo the move and the chain: both dimensions go at once.
+    run(&mut s, "undo", json!({}));
+    run(&mut s, "undo", json!({}));
+    assert_eq!(fails(&mut s, "element_get", json!({"id": out["ids"][0]})), ErrorCode::NotFound);
+    assert_eq!(fails(&mut s, "element_get", json!({"id": out["ids"][1]})), ErrorCode::NotFound);
+
+    // An aligned chain along a slanted line, at an angle: collinear segments stay aligned.
+    let out = run(
+        &mut s,
+        "dimension_chain_create",
+        json!({"view": plan, "points": [[100, 100], [103, 104], [106, 108], [110, 108]], "offset": -1.0}),
+    );
+    let kinds: Vec<Value> = out["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| run(&mut s, "element_get", json!({"id": id}))["params"]["kind"].clone())
+        .collect();
+    assert_eq!(kinds[0], json!("Aligned"));
+    assert_eq!(kinds[1], json!("Aligned"));
+    assert!(kinds[2]["Linear"].is_object(), "{}", kinds[2]);
+    // `angle` measures along a given direction: 90° is vertical.
+    let out = run(
+        &mut s,
+        "dimension_chain_create",
+        json!({"view": plan, "points": [[200, 0], [201, 2], [200, 5]], "kind": "linear", "angle": 90.0}),
+    );
+    let d = run(&mut s, "element_get", json!({"id": out["ids"][1]}));
+    assert_eq!(d["params"]["kind"]["Linear"]["dir"], json!([0.0, 1.0]));
+
+    // Bad chains are refused and change nothing.
+    let depth = s.doc.undo_depth();
+    for args in [
+        json!({"view": plan, "points": [[0, 0]]}),
+        json!({"view": plan, "points": [[0, 0], [2, 0], [2, 3]], "kind": "linear", "direction": "horizontal"}),
+        json!({"view": plan, "points": [[0, 0], [2, 0]], "kind": "radial"}),
+        json!({"view": plan, "points": [[0, 0], [2, 0]], "direction": "sideways"}),
+        json!({"view": plan, "points": [[0, 0], [0, 0]]}),
+    ] {
+        assert_eq!(fails(&mut s, "dimension_chain_create", args), ErrorCode::InvalidArguments);
+    }
+    let three_d = run(&mut s, "view_create", json!({"kind": "three_d"}));
+    let depth = depth + 1;
+    assert_eq!(
+        fails(&mut s, "dimension_chain_create", json!({"view": three_d["id"], "points": [[0, 0], [1, 0]]})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(s.doc.undo_depth(), depth);
+}
+
+#[test]
 fn turning_and_pinned_elements() {
     let mut s = Session::default();
     let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));

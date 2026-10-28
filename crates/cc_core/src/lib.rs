@@ -7,6 +7,7 @@
 pub mod arc;
 pub mod component;
 pub mod component_file;
+pub mod dim_line;
 pub mod dim_refs;
 mod document;
 mod element;

@@ -86,6 +86,8 @@ pub struct AppState {
     pub interaction: Interaction,
     /// Options of the transform tools.
     pub modify: crate::modify::ModifyOptions,
+    /// Continuous (chained) placement of aligned and linear dimensions.
+    pub dim_continuous: bool,
     /// Options of the truss tool.
     pub truss: crate::tools::TrussOptions,
     /// Options of the pipe, conduit and device tools.
@@ -172,6 +174,7 @@ impl AppState {
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),
+            dim_continuous: false,
             truss: Default::default(),
             mep: Default::default(),
             active_view: None,
