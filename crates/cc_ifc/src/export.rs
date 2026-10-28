@@ -949,11 +949,14 @@ impl<'a> Exporter<'a> {
                         props: Some(("Pset_StairCommon", props)),
                         ..StructureProduct::new("IFCSTAIR", shape, items)
                     }
+                    .brep()
                 }
                 (ElementKind::Railing(r), TypeData::Railing { .. }) => {
                     let items = self.pieces(e, cc_geom::railing_pieces(project, e, r), level_z);
                     let q = vec![("Length", Quantity::Length(cc_geom::railing_length(project, e, r)))];
-                    StructureProduct::new("IFCRAILING", "GUARDRAIL", items).quantities("Qto_RailingBaseQuantities", q)
+                    StructureProduct::new("IFCRAILING", "GUARDRAIL", items)
+                        .quantities("Qto_RailingBaseQuantities", q)
+                        .brep()
                 }
                 _ => continue,
             };
