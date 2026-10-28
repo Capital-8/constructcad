@@ -102,7 +102,7 @@ impl Language {
             Language::Fr => include_str!("../../../assets/i18n/fr.ftl"),
             Language::De => include_str!("../../../assets/i18n/de.ftl"),
             Language::It => include_str!("../../../assets/i18n/it.ftl"),
-            Language::Lo => include_str!("../../assets/i18n/lo.ftl"),
+            Language::Lo => include_str!("../../../assets/i18n/lo.ftl"),
             Language::Pl => include_str!("../../../assets/i18n/pl.ftl"),
             Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
             Language::ZhTw => include_str!("../../../assets/i18n/zh-TW.ftl"),

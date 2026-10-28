@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Lao interface (ພາສາລາວ, `lo`), contributed by @bounkirdni-2025. It is picked from the system language for `lo`; texts added in 0.6.0 are still in English.
 - Lao text shows in the interface and in PNG export through a system font that has Lao letters (Leelawadee UI on Windows 10 and later, Lao Sangam MN on macOS, Noto Sans Lao or Phetsarath on Linux), after the CJK ones. No font is bundled.
 
 ## [0.6.0] - 2026-10-27
