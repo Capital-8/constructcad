@@ -564,6 +564,10 @@ impl Command for ElementOffset {
 
 /// Move a linear element parallel onto the line of a reference element, or
 /// an arc wall onto the circle of a concentric arc wall (its radius changes).
+/// Elements without a location line (columns, components) align by an edge
+/// of their plan outline, the one nearest to a picked point. Alignment is in
+/// plan, so the elements may be on different levels (a column above onto
+/// the face of the column below).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementAlign {
@@ -571,18 +575,90 @@ pub struct ElementAlign {
     pub id: u64,
     /// Element whose line it moves onto.
     pub reference: u64,
+    /// Plan point `[x, y]` near the edge of `id` that moves onto the reference line, for an element
+    /// without a location line (the outline edge nearest to it, parallel to the reference line).
+    /// Without it such an element moves its insertion point onto the line.
+    #[serde(default)]
+    pub pick: Option<Point>,
+    /// Plan point `[x, y]` near the edge of `reference` to align to; needed when the reference has
+    /// no location line (a column or component: the outline edge nearest to it).
+    #[serde(default)]
+    pub reference_pick: Option<Point>,
 }
 
 impl Command for ElementAlign {
     const NAME: &'static str = "element_align";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
+        use cc_core::wall_ops::{EditError, Path, path_of};
         let id = refs::element(s.project(), self.id)?;
         not_pinned(s.project(), id)?;
-        let reference = path(s, self.reference)?;
-        edit(s, t!("tx-align"), |e| Ok(e.align_to(id, reference)?))?;
+        let reference_id = refs::element(s.project(), self.reference)?;
+        let pick = self.pick.map(point).transpose()?;
+        let reference_pick = self.reference_pick.map(point).transpose()?;
+        let reference = match s.project().element(reference_id).and_then(path_of) {
+            Some(path) => path,
+            None => {
+                let at = reference_pick.ok_or_else(|| {
+                    EngineError::invalid(format!(
+                        "element {} has no line: give reference_pick near the edge to align to",
+                        self.reference
+                    ))
+                })?;
+                let (a, b) = outline_edge(s, reference_id, at)?;
+                Path::Line(a, b)
+            }
+        };
+        if s.project().element(id).and_then(path_of).is_some() {
+            edit(s, t!("tx-align"), |e| Ok(e.align_to(id, reference)?))?;
+            return Ok(super::created(s, id));
+        }
+        let Path::Line(r0, r1) = reference else { return Err(EditError::Curved.into()) };
+        let v = (r1 - r0).normalize_or_zero();
+        if v == DVec2::ZERO {
+            return Err(EditError::Degenerate.into());
+        }
+        // The point of the element that lands on the reference line.
+        let on = match pick {
+            Some(at) => {
+                let (a, b) = outline_edge(s, id, at)?;
+                if (b - a).normalize_or_zero().perp_dot(v).abs() > 0.02 {
+                    return Err(EngineError::rejected(t!("msg-not-parallel")));
+                }
+                a
+            }
+            None => insertion_point(s, id)?,
+        };
+        let n = v.perp();
+        let shift = n * (r0 - on).dot(n);
+        edit(s, t!("tx-align"), |e| {
+            e.transform_elements(&[id], &PlanTransform::translate(shift));
+            Ok(())
+        })?;
         Ok(super::created(s, id))
     }
+}
+
+/// The plan edge of an element's outline nearest to `at`.
+fn outline_edge(s: &mut Session, id: ElementId, at: DVec2) -> Result<(DVec2, DVec2)> {
+    s.geometry()
+        .nearest_plan_edge(id, at)
+        .ok_or_else(|| EngineError::invalid(format!("element {} has no outline to align by", id.0)))
+}
+
+/// Where an element without a location line stands in plan: a column's or
+/// component's position, else the center of its outline.
+fn insertion_point(s: &mut Session, id: ElementId) -> Result<DVec2> {
+    match s.project().element(id).map(|e| &e.kind) {
+        Some(ElementKind::Column(c)) => return Ok(c.position),
+        Some(ElementKind::Component(c)) => return Ok(c.position),
+        _ => {}
+    }
+    let solids = s.geometry().solids_of(id).filter_map(|solid| solid.bounds());
+    let bounds = solids.reduce(|(a, b), (c, d)| (a.min(c), b.max(d)));
+    let (lo, hi) =
+        bounds.ok_or_else(|| EngineError::invalid(format!("element {} has no outline to align by", id.0)))?;
+    Ok(DVec2::new(lo.x + hi.x, lo.y + hi.y) * 0.5)
 }
 
 /// Move one end of a wall, beam or grid (joined wall ends follow).

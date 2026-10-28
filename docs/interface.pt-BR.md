@@ -93,6 +93,15 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
 
+## Modificar em vistas 3D
+
+**Mover**, **Copiar**, **Matriz**, **Girar**, **Espelhar** (escolher ou desenhar o eixo), **Alinhar** e **Unir geometria**/**Desunir geometria** também funcionam em vistas 3D; arrastar com o botão esquerdo continua orbitando, com o do meio ou o direito desloca a vista.
+
+- Os pontos são escolhidos num plano de trabalho horizontal no nível dos elementos alterados; depois do primeiro ponto, os seguintes ficam na altura dele. Um quadrado indica a atração a um ponto do modelo perto do cursor: um canto de elemento, o centro de um pilar ou componente na base ou no topo, a ponta de uma parede, o cruzamento de eixos. Uma cruz indica um ponto no plano. Shift mantém o eixo principal; digitar a distância e Enter funciona como nas plantas. A prévia mostra o contorno dos elementos onde eles vão ficar.
+- Toda alteração é uma transformação em planta: os elementos continuam no seu nível. Mover um pilar do pavimento 1 de um canto até o canto correspondente do pilar de baixo o coloca sobre esse pilar.
+- **Alinhar**: clique na face do elemento de referência e depois na face paralela do elemento a mover. Ele se move em planta, então os dois podem estar em níveis diferentes (um pilar de cima sobre a face do pilar de baixo). Pilares e componentes se alinham pela aresta do contorno mais próxima da face clicada; paredes, vigas e eixos pela linha de locação. Nas plantas, Alinhar também aceita pilares e componentes.
+- **Aparar/estender para canto**, **Aparar/estender até referência**, **Dividir elemento**, **Deslocamento paralelo** e **Permitir/impedir união** escolhem pontas e lados nas linhas da planta e ficam indisponíveis em vistas 3D, com esse motivo na dica.
+
 ## Gráficos das vistas
 
 *Vista → Gráficos* reúne **Visibilidade/gráficos** (VG), **Filtros** e **Modelos de vista** (também em *Gerenciar*).

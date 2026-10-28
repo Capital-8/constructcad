@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Modify tools in 3D views (#53): Move, Copy, Array, Rotate, Mirror (pick or draw the axis), Align and Join/Unjoin Geometry work in 3D views. Points are picked on a horizontal working plane at the elements' level (then at the height of the first point) or snap to model points near the pointer: element corners, column and component centers at their base and top, wall ends and grid crossings. The preview shows the elements' outline where they will go. Changes are plan transforms, so elements keep their levels. Trim/Extend, Split, Offset and Allow/Disallow Join need plan linework and say so in 3D views.
+- Align takes columns and components, by the edge of their outline nearest to the point picked, in plans and in 3D. Alignment is in plan, so a column of an upper floor aligns onto the face of the column below. `element_align` takes `pick` and `reference_pick` for them (without `pick`, a column or component moves its insertion point onto the reference line, such as a grid).
+
 ## [0.6.1] - 2026-10-28
 
 ### Added

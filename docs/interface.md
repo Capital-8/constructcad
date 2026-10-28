@@ -93,6 +93,15 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
 
+## Modifying in 3D views
+
+**Move**, **Copy**, **Array**, **Rotate**, **Mirror** (pick or draw the axis), **Align** and **Join Geometry**/**Unjoin Geometry** also work in 3D views; left-drag still orbits, middle or right drag pans.
+
+- Points are picked on a horizontal working plane at the level of the elements being changed; once the first point is picked, the next ones stay at its height. A square marks a snap to a model point near the pointer: a corner of an element, the center of a column or component at its base or top, a wall end, a grid crossing. A cross marks a point on the plane. Shift keeps the main axis; a typed distance and Enter work as in plans. The preview shows the elements' outline where they will go.
+- Every change is a plan transform: elements keep their level. Moving a level 2 column from one of its corners to the matching corner of the column below puts it over that column.
+- **Align**: click the face of the reference element, then the parallel face of the element to move. It moves in plan, so the two may be on different levels (a column above onto the face of the column below). Columns and components align by the outline edge nearest to the face clicked; walls, beams and grids by their location line. Align also takes columns and components in plans.
+- **Trim/Extend to Corner**, **Trim/Extend to Reference**, **Split Element**, **Offset** and **Allow/Disallow Join** pick ends and sides on plan linework and stay unavailable in 3D views, with that reason in their tooltip.
+
 ## View graphics
 
 *View → Graphics* holds **Visibility/Graphics** (VG), **Filters** and **View Templates** (also under *Manage*).

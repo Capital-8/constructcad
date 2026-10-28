@@ -842,6 +842,10 @@ impl UiCommand {
                 Some(t!("msg-nothing-temporary"))
             }
             Demolish if phase_view(state).is_none() => Some(t!("why-no-phase-view")),
+            // These pick ends and sides on plan linework; the other modify tools work in 3D too.
+            TrimCorner | TrimExtend | Split | Offset | ToggleJoin if crate::modify3d::active_3d(state) => {
+                Some(t!("msg-plan-only"))
+            }
             MacroRun if state.session.is_recording() => Some(t!("why-recording")),
             _ => None,
         }
@@ -1215,6 +1219,36 @@ mod tests {
         state.show_home = true;
         assert_eq!(UiCommand::Save.unavailable(&state), Some(t!("why-no-project")));
         assert_eq!(UiCommand::Open.unavailable(&state), None);
+    }
+
+    /// In a 3D view the transform tools, align and join stay available; the
+    /// tools that pick ends and sides on plan linework say they need a plan.
+    #[test]
+    fn modify_tools_in_3d() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let wall = state.project().walls().next().map(|(e, _)| e.id).unwrap();
+        state.selection = [wall].into_iter().collect();
+        assert_eq!(UiCommand::TrimExtend.unavailable(&state), None);
+        let view = state.project().views_of(ViewCategory::ThreeD).next().map(|v| v.id);
+        assert!(view.is_some(), "the sample has a 3D view");
+        state.active_view = view;
+        assert!(crate::modify3d::active_3d(&state));
+        for command in [UiCommand::Move, UiCommand::CopyElements, UiCommand::Rotate, UiCommand::MirrorPick] {
+            assert_eq!(command.unavailable(&state), None, "{command:?}");
+        }
+        assert_eq!(UiCommand::Align.unavailable(&state), None);
+        assert_eq!(UiCommand::JoinGeometry.unavailable(&state), None);
+        for command in [UiCommand::TrimCorner, UiCommand::TrimExtend, UiCommand::Split, UiCommand::Offset] {
+            assert_eq!(command.unavailable(&state), Some(t!("msg-plan-only")), "{command:?}");
+        }
+        // Align explains how it picks in 3D.
+        let ctx = egui::Context::default();
+        invoke(&mut state, &ctx, UiCommand::Align);
+        assert_eq!(state.tool, Tool::Align);
+        assert_eq!(state.message, t!("hint-align-3d"));
+        assert!(crate::modify3d::works_in_3d(&state.tool));
     }
 
     #[test]

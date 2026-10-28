@@ -967,12 +967,14 @@ No parameters.
 
 ### `element_align`
 
-*edit* — Move a linear element parallel onto the line of a reference element, or an arc wall onto the circle of a concentric arc wall (its radius changes).
+*edit* — Move a linear element parallel onto the line of a reference element, or an arc wall onto the circle of a concentric arc wall (its radius changes). Elements without a location line (columns, components) align by an edge of their plan outline, the one nearest to a picked point. Alignment is in plan, so the elements may be on different levels (a column above onto the face of the column below).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `id` | integer | required | Element to move. |
 | `reference` | integer | required | Element whose line it moves onto. |
+| `pick` | [x, y] | optional | Plan point `[x, y]` near the edge of `id` that moves onto the reference line, for an element without a location line (the outline edge nearest to it, parallel to the reference line). Without it such an element moves its insertion point onto the line. |
+| `reference_pick` | [x, y] | optional | Plan point `[x, y]` near the edge of `reference` to align to; needed when the reference has no location line (a column or component: the outline edge nearest to it). |
 
 ### `element_move_end`
 
