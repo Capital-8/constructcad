@@ -26,6 +26,7 @@ mod paint;
 mod palette;
 mod phases_dialog;
 mod properties;
+mod recovery;
 mod ribbon;
 mod schedule_ui;
 mod sheet;
@@ -47,6 +48,8 @@ mod view_cube;
 
 fn main() -> eframe::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    // Panics are logged to the crash log (release builds on Windows have no console).
+    recovery::install_panic_hook();
     let args = parse_args(std::env::args().skip(1));
     let viewport = egui::ViewportBuilder::default()
         .with_inner_size([1440.0, 900.0])

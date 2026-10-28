@@ -1643,6 +1643,18 @@ ph-default-filter-name = Фільтр { $n }
 ph-filter-none = Немає
 ph-not-demolished = Немає
 
+# Відновлення
+dlg-recovery = Відновити незбережену роботу
+dlg-recovery-text = ConstructCAD закрився, не зберігши ці зміни. Виберіть проєкт для відновлення; він відкриється з незбереженими змінами.
+recovery-never-saved = Ніколи не зберігався
+recovery-age-now = щойно
+recovery-age-minutes = { $count } хв тому
+recovery-age-hours = { $count } год тому
+recovery-age-days = { $count } дн. тому
+action-restore = Відновити
+msg-recovered = Відновлено: { $name } (збережіть, щоб зберегти зміни)
+msg-recovery-failed = Не вдалося відновити проєкт: { $error }
+
 ## Сходи
 stair-shape-straight = Прямі
 stair-shape-straight-landing = Прямі з майданчиком

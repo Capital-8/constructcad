@@ -1642,6 +1642,18 @@ ph-default-filter-name = Filter { $n }
 ph-filter-none = None
 ph-not-demolished = None
 
+# Recovery
+dlg-recovery = Recover Unsaved Work
+dlg-recovery-text = ConstructCAD closed without saving these changes. Choose a project to restore; it opens with its unsaved changes.
+recovery-never-saved = Never saved
+recovery-age-now = just now
+recovery-age-minutes = { $count } min ago
+recovery-age-hours = { $count } h ago
+recovery-age-days = { $count } days ago
+action-restore = Restore
+msg-recovered = Restored: { $name } (save to keep the changes)
+msg-recovery-failed = Could not restore the project: { $error }
+
 ## Stairs
 stair-shape-straight = Straight
 stair-shape-straight-landing = Straight with landing

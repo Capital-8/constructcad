@@ -127,6 +127,12 @@ ConstructCAD tells you when a newer version is published; it never downloads or 
 - **What you see**: when the release is newer than the running version (pre-releases are ignored), a notice appears in the status bar and on the home screen: *Download* opens the release page in your browser, *Skip This Version* hides the notice until a later version comes out, and × hides it until the next check. Any failure (offline, timeout, proxy, rate limit) is silent.
 - **Turning it off**: clear *Check for updates automatically* in *File → About*. The environment variable `CONSTRUCTCAD_NO_UPDATE_CHECK=1` turns off every check, automatic or on request (useful for CI, kiosks and offline installations). ConstructCAD remembers the last check time, the skipped version and the setting with its other preferences.
 
+## Autosave and recovery
+
+A minute after a project gets unsaved changes (a new project that was never saved too), ConstructCAD writes a copy of it, in the background, to the `recovery` folder of its data folder (`%APPDATA%\ConstructCAD\data` on Windows, `~/Library/Application Support/ConstructCAD` on macOS, `~/.local/share/constructcad` on Linux). It writes again only after the model changes, and never over your project file. Saving, closing the project or quitting removes the copy.
+
+If ConstructCAD crashes or is killed, the next start shows *Recover Unsaved Work* with the copies left behind: *Restore* opens the chosen project with its unsaved changes (saving it writes to its original file, or asks where for a project that was never saved), *Discard* deletes the copy, and *Cancel* keeps the copies for the next start. A crash in the interface also writes a last copy before the app closes, and every crash is appended to `crash.log` in the data folder; attach it when you report a crash.
+
 ## Accessibility
 
 The ribbon buttons, tab titles, scroll arrows, palette entries, browser rows, home screen cards, dialog close buttons, property sections and the view cube's home button are drawn by ConstructCAD itself. They report their role (button, selectable item, collapsible header), their name and their state (enabled, selected, expanded) to the operating system's accessibility interface, so screen readers can announce them.

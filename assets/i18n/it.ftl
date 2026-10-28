@@ -1642,6 +1642,18 @@ ph-default-filter-name = Filtro { $n }
 ph-filter-none = Nessuno
 ph-not-demolished = Nessuna
 
+# Ripristino
+dlg-recovery = Recupera il lavoro non salvato
+dlg-recovery-text = ConstructCAD si è chiuso senza salvare queste modifiche. Scegli un progetto da ripristinare; si apre con le modifiche non salvate.
+recovery-never-saved = Mai salvato
+recovery-age-now = poco fa
+recovery-age-minutes = { $count } min fa
+recovery-age-hours = { $count } h fa
+recovery-age-days = { $count } giorni fa
+action-restore = Ripristina
+msg-recovered = Ripristinato: { $name } (salva per conservare le modifiche)
+msg-recovery-failed = Impossibile ripristinare il progetto: { $error }
+
 ## Scale
 stair-shape-straight = Dritta
 stair-shape-straight-landing = Dritta con pianerottolo

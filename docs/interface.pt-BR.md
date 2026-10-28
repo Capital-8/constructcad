@@ -127,6 +127,12 @@ O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa 
 - **O que aparece**: quando a versão publicada é mais nova que a em uso (pré-lançamentos são ignorados), um aviso aparece na barra de status e na tela inicial: *Baixar* abre a página da versão no navegador, *Ignorar esta versão* esconde o aviso até sair uma versão posterior, e × o esconde até a próxima verificação. Qualquer falha (sem conexão, tempo esgotado, proxy, limite de requisições) é silenciosa.
 - **Como desligar**: desmarque *Verificar atualizações automaticamente* em *Arquivo → Sobre*. A variável de ambiente `CONSTRUCTCAD_NO_UPDATE_CHECK=1` desliga toda verificação, automática ou pedida (útil em CI, quiosques e instalações sem rede). O ConstructCAD guarda a hora da última verificação, a versão ignorada e a opção junto com as outras preferências.
 
+## Salvamento automático e recuperação
+
+Um minuto depois que um projeto passa a ter alterações não salvas (também um projeto novo, nunca salvo), o ConstructCAD grava uma cópia dele, em segundo plano, na pasta `recovery` da sua pasta de dados (`%APPDATA%\ConstructCAD\data` no Windows, `~/Library/Application Support/ConstructCAD` no macOS, `~/.local/share/constructcad` no Linux). Ele só grava de novo depois que o modelo muda, e nunca sobre o arquivo do projeto. Salvar, fechar o projeto ou sair remove a cópia.
+
+Se o ConstructCAD travar ou for encerrado à força, a próxima abertura mostra *Recuperar trabalho não salvo* com as cópias deixadas: *Restaurar* abre o projeto escolhido com as alterações não salvas (salvá-lo grava no arquivo original, ou pergunta onde, para um projeto nunca salvo), *Descartar* apaga a cópia e *Cancelar* guarda as cópias para a próxima abertura. Uma falha na interface também grava uma última cópia antes de o programa fechar, e toda falha é acrescentada a `crash.log` na pasta de dados; anexe-o ao relatar uma falha.
+
 ## Acessibilidade
 
 Os botões do ribbon, os títulos das abas, as setas de rolagem, os itens da paleta, as linhas do navegador, os cartões da tela inicial, os botões de fechar dos diálogos, as seções de propriedades e o botão de início do cubo de vista são desenhados pelo próprio ConstructCAD. Eles informam à interface de acessibilidade do sistema seu papel (botão, item selecionável, cabeçalho recolhível), seu nome e seu estado (habilitado, selecionado, expandido), para que leitores de tela possam anunciá-los.

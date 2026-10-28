@@ -51,6 +51,8 @@ pub struct Flight {
     /// Elevation of the first tread and of the floor under its riser.
     pub z0: f64,
     pub floor: f64,
+    /// Depth of the landing its last riser rises to (0: it ends on the floor above).
+    pub landing_ahead: f64,
 }
 
 /// A spiral stair's circle.
@@ -102,6 +104,9 @@ struct Plan {
 
 /// Closed solids, each a list of planar polygons wound outward.
 pub type Pieces = Vec<Vec<Vec<DVec3>>>;
+
+/// Least rise of a spiral stair in one full turn: headroom over the treads below.
+const SPIRAL_TURN_RISE: f64 = 2.2;
 
 /// Segments per radian on arcs.
 const ARC_STEPS: f64 = 8.0;
@@ -272,8 +277,20 @@ impl StairGeom {
 
     /// Add the stair's solids, built as `build` says.
     pub fn add_to(&self, build: &StairBuild, solid: &mut Solid) {
+        let first = solid.faces.len();
         for piece in self.pieces(build) {
             solid.add_polygons(piece);
+        }
+        // A spiral's curved sides and helical soffit read as smooth surfaces:
+        // no seams between their facets, only silhouettes.
+        if let Some(sp) = self.spiral {
+            for face in solid.faces.iter_mut().skip(first) {
+                let n = face.normal;
+                let radial = (face.centroid().truncate() - sp.center).normalize_or_zero();
+                let side = n.z.abs() < 1e-6 && n.truncate().dot(radial).abs() > 0.97;
+                let soffit = n.z < -1e-3 && n.z > -0.9999;
+                face.smooth |= side || soffit;
+            }
         }
     }
 
@@ -288,18 +305,31 @@ impl StairGeom {
         let h = self.riser;
         let k = if self.tread > 1e-6 { h / self.tread } else { 0.0 };
         let slope = (1.0 + k * k).sqrt();
-        match build.construction {
+        // A spiral filled down to the floor would be a column: it is cast.
+        let construction = match build.construction {
+            StairConstruction::Solid if self.spiral.is_some() => StairConstruction::CastInPlace,
+            c => c,
+        };
+        match construction {
             StairConstruction::Solid => {
-                for st in &self.steps {
+                // Each flight one block from its profile; landings and winders filled down.
+                for f in &self.flights {
+                    s.push(self.flight_solid(f, None));
+                }
+                for st in self.steps.iter().filter(|st| st.kind != StepKind::Tread) {
                     let n = st.outline.len();
                     add_wedge(s, &st.outline, &vec![self.base; n], &vec![st.z; n]);
                 }
             }
             StairConstruction::CastInPlace => {
                 // Treads on a waist slab measured square to the pitch from
-                // the inner corners of the steps; landings are slabs.
+                // the inner corners of the steps; landings are slabs. Each
+                // straight flight is one block from its profile.
                 let waist = build.waist * slope;
-                for st in &self.steps {
+                for f in &self.flights {
+                    s.push(self.flight_solid(f, Some(build.waist)));
+                }
+                for st in self.steps.iter().filter(|st| st.kind != StepKind::Tread) {
                     let bottom: Vec<f64> = match st.kind {
                         StepKind::Landing => vec![(st.z - build.waist).max(self.base); st.outline.len()],
                         _ => st.along.iter().map(|t| (st.z - h - waist + t * h).max(self.base)).collect(),
@@ -310,6 +340,100 @@ impl StairGeom {
             }
             StairConstruction::Assembled => self.add_assembled(build, slope, s),
         }
+    }
+
+    /// Side profile of a straight flight in `(s, z)`, `s` along it from its
+    /// first riser, counter-clockwise: the steps on top; below, the floor
+    /// (`waist: None`) or a waist slab `waist` thick square to the pitch,
+    /// flat at the foot where it meets the floor (or the bottom of the
+    /// landing it starts from) and with a haunch under the landing it rises
+    /// to, down to the landing's underside.
+    fn flight_profile(&self, f: &Flight, waist: Option<f64>) -> Vec<(f64, f64)> {
+        let (g, h) = (self.tread, self.riser);
+        let n = f.treads;
+        let len = n as f64 * g;
+        let last = f.z0 + (n.saturating_sub(1)) as f64 * h;
+        let mut top: Vec<(f64, f64)> = vec![(0.0, f.floor)];
+        for i in 0..n {
+            let z = f.z0 + i as f64 * h;
+            top.push((i as f64 * g, z));
+            top.push(((i + 1) as f64 * g, z));
+        }
+        let mut bottom: Vec<(f64, f64)> = Vec::new();
+        match waist {
+            None => {
+                bottom.push((len, self.base));
+                bottom.push((0.0, self.base));
+            }
+            Some(w) => {
+                let k = if g > 1e-6 { h / g } else { 0.0 };
+                let w_pitch = w * (1.0 + k * k).sqrt();
+                // The line through the inner corners of the steps, `w_pitch` lower.
+                let soffit = |s: f64| f.z0 - h + k * s - w_pitch;
+                let starts_on_landing = f.floor > self.base + 1e-9;
+                let low = if starts_on_landing { (f.floor - w).max(self.base) } else { self.base };
+                let mut end = len;
+                if f.landing_ahead > 1e-9 && k > 1e-9 {
+                    // Haunch: on along the soffit until it meets the landing's underside.
+                    let under = last + h - w;
+                    let reach = ((under - soffit(len)) / k).clamp(0.0, f.landing_ahead);
+                    if reach > 1e-6 {
+                        end = len + reach;
+                        top.push((len, under));
+                        top.push((end, under));
+                    }
+                }
+                let at = |s: f64| soffit(s).max(low);
+                bottom.push((end, at(end)));
+                if k > 1e-9 {
+                    let foot = (low - soffit(0.0)) / k;
+                    if foot > 1e-6 && foot < end - 1e-6 {
+                        bottom.push((foot, low));
+                    }
+                }
+                bottom.push((0.0, low));
+            }
+        }
+        let mut profile = top;
+        profile.extend(bottom);
+        profile.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9);
+        if profile.len() > 2
+            && let (Some(a), Some(b)) = (profile.first(), profile.last())
+            && (a.0 - b.0).abs() < 1e-9
+            && (a.1 - b.1).abs() < 1e-9
+        {
+            profile.pop();
+        }
+        profile
+    }
+
+    /// A straight flight as one closed solid: its profile across the width.
+    fn flight_solid(&self, f: &Flight, waist: Option<f64>) -> Vec<Vec<DVec3>> {
+        let profile = self.flight_profile(f, waist);
+        let hw = self.width / 2.0;
+        let at = |(s, z): (f64, f64), v: f64| {
+            let p = f.origin + f.dir * s + f.left * v;
+            DVec3::new(p.x, p.y, z)
+        };
+        let n = profile.len();
+        // Counter-clockwise in (s, z) seen from the left side (+v): that face
+        // takes the order, the right one its reverse, the sides each edge.
+        let area: f64 = (0..n)
+            .map(|i| {
+                let (a, b) = (profile[i], profile[(i + 1) % n]);
+                a.0 * b.1 - b.0 * a.1
+            })
+            .sum();
+        let pts: Vec<(f64, f64)> = if area >= 0.0 { profile } else { profile.into_iter().rev().collect() };
+        let mut faces: Vec<Vec<DVec3>> = Vec::with_capacity(n + 2);
+        let (left, right) = (hw, -hw);
+        faces.push(pts.iter().rev().map(|&p| at(p, left)).collect());
+        faces.push(pts.iter().map(|&p| at(p, right)).collect());
+        for i in 0..n {
+            let (a, b) = (pts[i], pts[(i + 1) % n]);
+            faces.push(vec![at(a, left), at(b, left), at(b, right), at(a, right)]);
+        }
+        faces
     }
 
     fn add_assembled(&self, build: &StairBuild, slope: f64, s: &mut Pieces) {
@@ -488,6 +612,15 @@ pub fn layout_stair(
 ) -> StairGeom {
     let width = if width.is_finite() { width.clamp(0.1, 20.0) } else { 1.0 };
     let (risers, riser, g) = cc_core::stair_steps(top - base, max_riser, tread, rules);
+    // A spiral turns no faster than leaves headroom over the turn below:
+    // its tread on the walking line grows when the type's would.
+    let g = match layout.shape {
+        StairShape::Spiral => {
+            let walk = (layout.inner_radius.max(0.0) + width / 2.0).max(1e-6);
+            (g / walk).max(TAU * riser / SPIRAL_TURN_RISE) * walk
+        }
+        _ => g,
+    };
     let slots = risers.saturating_sub(1);
     let hw = width / 2.0;
     let landing = if layout.landing > 1e-3 { layout.landing } else { width };
@@ -577,7 +710,19 @@ pub fn layout_stair(
             b.spiral(slots);
         }
     }
-    let (steps, flights, parts) = (b.steps, b.flights, b.parts);
+    let (steps, mut flights, parts) = (b.steps, b.flights, b.parts);
+    // The first flight of a stair with a landing rises to it.
+    let ahead = match layout.shape {
+        StairShape::StraightLanding | StairShape::UShaped => landing,
+        StairShape::LShaped => width,
+        StairShape::Straight | StairShape::Spiral => 0.0,
+    };
+    if corner == 1
+        && first > 0
+        && let Some(f) = flights.first_mut()
+    {
+        f.landing_ahead = ahead;
+    }
     // The walking line ends at the back of the last tread.
     let end = match layout.shape {
         StairShape::Straight => Some(DVec2::new(a0, 0.0)),
@@ -673,7 +818,15 @@ impl Builder<'_> {
                 origin + left * hw,
             ]);
             let z0 = self.z(slot);
-            self.flights.push(Flight { origin, dir, left, treads: count, z0, floor: z0 - self.geom.riser });
+            self.flights.push(Flight {
+                origin,
+                dir,
+                left,
+                treads: count,
+                z0,
+                floor: z0 - self.geom.riser,
+                landing_ahead: 0.0,
+            });
         }
     }
 
@@ -974,8 +1127,11 @@ mod tests {
         let g = geom(layout, 2.88);
         let sp = g.spiral.unwrap_or(Spiral { center: DVec2::ZERO, inner: 0.0, outer: 0.0 });
         assert!((sp.center - DVec2::new(0.0, 0.6)).length() < 1e-9);
-        // 15 treads of 28 cm on the walking line at r = 0.6.
-        assert!((g.run() - 15.0 * 0.28).abs() < 5e-3, "{}", g.run());
+        // 15 treads at r = 0.6: 28 cm would turn faster than headroom allows (2.20 m a turn),
+        // so each takes 2π × 0.18 / 2.20 rad.
+        let delta = TAU * 0.18 / 2.2;
+        assert!((g.run() - 15.0 * delta * 0.6).abs() < 5e-3, "{}", g.run());
+        assert!((g.tread - delta * 0.6).abs() < 1e-9);
         for st in &g.steps {
             for p in &st.outline {
                 let r = p.distance(sp.center);
@@ -995,6 +1151,42 @@ mod tests {
             assert!(volume(&g, &build) > 0.0);
         }
         assert!(!g.railing_path(StairSide::Right, 0.05).is_empty());
+    }
+
+    #[test]
+    fn cast_flights_are_one_block_each_with_a_foot_and_a_haunch() {
+        let layout = StairLayout { shape: StairShape::UShaped, gap: 0.0, ..Default::default() };
+        let g = geom(layout, 2.88);
+        let build = StairBuild { construction: StairConstruction::CastInPlace, waist: 0.12, ..Default::default() };
+        // Two flights and the landing: three closed pieces.
+        let pieces = g.pieces(&build);
+        assert_eq!(pieces.len(), 3);
+        for piece in &pieces {
+            let mut s = Solid::new(cc_core::ElementId(1), cc_core::Category::Stair, [0, 0, 0]);
+            s.add_polygons(piece.clone());
+            assert!(s.volume() > 0.0);
+        }
+        let first = g.flights[0];
+        let profile = g.flight_profile(&first, Some(0.12));
+        // A flat foot on the floor, then the soffit; the haunch reaches under the landing.
+        let len = first.treads as f64 * g.tread;
+        assert!(profile.iter().any(|&(s, z)| s > 1e-6 && s < len && z.abs() < 1e-12), "{profile:?}");
+        let landing_under = first.z0 + first.treads as f64 * g.riser - 0.12;
+        assert!(profile.iter().any(|&(s, z)| s > len + 1e-6 && (z - landing_under).abs() < 1e-9), "{profile:?}");
+        // The second flight starts from the landing's underside.
+        let second = g.flight_profile(&g.flights[1], Some(0.12));
+        assert!(second.iter().any(|&(_, z)| (z - (g.flights[1].floor - 0.12)).abs() < 1e-9));
+    }
+
+    #[test]
+    fn a_solid_spiral_is_not_a_column() {
+        let g = geom(StairLayout { shape: StairShape::Spiral, inner_radius: 0.1, ..Default::default() }, 2.88);
+        let solid = volume(&g, &StairBuild::default());
+        let cast = volume(&g, &StairBuild { construction: StairConstruction::CastInPlace, ..Default::default() });
+        assert!((solid - cast).abs() < 1e-9);
+        // Far less than the steps filled down to the floor.
+        let filled: f64 = g.steps.iter().map(|s| polygon::area(&s.outline) * s.z).sum();
+        assert!(solid < 0.3 * filled, "{solid} vs {filled}");
     }
 
     #[test]
