@@ -476,7 +476,8 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
 
 /// PNG image of `drawing` on a sheet of `paper` millimeters at `dpi` dots
 /// per inch, on white; text is drawn as outlines of Inter (embedded), with
-/// the system's CJK fonts (`fonts::cjk`) for the characters Inter lacks.
+/// the system's fallback fonts (`fonts::fallbacks`: CJK, Lao) for the
+/// characters Inter lacks.
 pub fn to_png(drawing: &Drawing2D, paper: DVec2, dpi: f64) -> Result<Vec<u8>, String> {
     use resvg::{tiny_skia, usvg};
     if !(dpi.is_finite() && dpi > 0.0) {
@@ -488,7 +489,7 @@ pub fn to_png(drawing: &Drawing2D, paper: DVec2, dpi: f64) -> Result<Vec<u8>, St
     }
     let (w, h) = (px.x as u32, px.y as u32);
     let mut fonts = vec![skrifa::FontRef::new(INTER).map_err(|e| e.to_string())?];
-    fonts.extend(crate::fonts::cjk().iter().filter_map(|f| f.font_ref()));
+    fonts.extend(crate::fonts::fallbacks().filter_map(|f| f.font_ref()));
     let source = svg(drawing, paper, &fonts);
     let tree = usvg::Tree::from_str(&source, &usvg::Options::default()).map_err(|e| e.to_string())?;
     let mut pixmap = tiny_skia::Pixmap::new(w, h).ok_or("the image is too large")?;

@@ -1,5 +1,5 @@
-//! Fallback fonts for the scripts Inter lacks (Chinese, Japanese, Korean),
-//! found among the fonts operating systems usually ship and read once.
+//! Fallback fonts for the scripts Inter lacks (Chinese, Japanese, Korean,
+//! Lao), found among the fonts operating systems usually ship and read once.
 //! Nothing is bundled, so a system without them shows missing glyphs as
 //! boxes, as before.
 
@@ -29,6 +29,20 @@ const PROBES: [char; 3] = ['\u{4E2D}', '\u{3042}', '\u{D55C}'];
 pub fn cjk() -> &'static [FontFile] {
     static CJK: OnceLock<Vec<FontFile>> = OnceLock::new();
     CJK.get_or_init(|| load_covering(&candidates(), &PROBES))
+}
+
+/// A Lao letter ("ກ"), to find a font that covers the script.
+const LAO_PROBE: char = '\u{0E81}';
+
+/// The system's Lao font (empty when there is none).
+pub fn lao() -> &'static [FontFile] {
+    static LAO: OnceLock<Vec<FontFile>> = OnceLock::new();
+    LAO.get_or_init(|| load_covering(&lao_candidates(), &[LAO_PROBE]))
+}
+
+/// Every fallback font, in order: CJK, then Lao.
+pub fn fallbacks() -> impl Iterator<Item = &'static FontFile> {
+    cjk().iter().chain(lao())
 }
 
 /// Readable faces among `candidates`, in order, each kept when it has one
@@ -105,6 +119,38 @@ fn candidates() -> Vec<(PathBuf, u32)> {
     out
 }
 
+/// Usual fonts with Lao letters.
+fn lao_candidates() -> Vec<(PathBuf, u32)> {
+    let names: Vec<PathBuf> = if cfg!(windows) {
+        let dir = std::env::var_os("WINDIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
+        // Leelawadee UI (Windows 10 and later), Lao UI (7 and 8), DokChampa (older).
+        ["LeelawUI.ttf", "LaoUI.ttf", "DokChamp.ttf"].iter().map(|n| dir.join("Fonts").join(n)).collect()
+    } else if cfg!(target_os = "macos") {
+        [
+            "/System/Library/Fonts/Supplemental/Lao Sangam MN.ttf",
+            "/System/Library/Fonts/Supplemental/Lao MN.ttc",
+            "/System/Library/Fonts/LaoSangamMN.ttf",
+            "/Library/Fonts/Lao Sangam MN.ttf",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    } else {
+        [
+            "/usr/share/fonts/truetype/noto/NotoSansLao-Regular.ttf",
+            "/usr/share/fonts/noto/NotoSansLao-Regular.ttf",
+            "/usr/share/fonts/google-noto/NotoSansLao-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansLaoUI-Regular.ttf",
+            "/usr/share/fonts/truetype/lao/Phetsarath_OT.ttf",
+            "/usr/share/fonts/truetype/fonts-lao/Phetsarath_OT.ttf",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    };
+    names.into_iter().map(|p| (p, 0)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,7 +172,19 @@ mod tests {
         let found = load_covering(&candidates, &['A', 'B']);
         assert_eq!(found.len(), 1);
         assert!(found[0].font_ref().is_some());
-        // Inter has no ideographs, kana or Hangul.
+        // Inter has no ideographs, kana or Hangul, nor Lao letters.
         assert!(load_covering(&candidates, &PROBES).is_empty());
+        assert!(load_covering(&candidates, &[LAO_PROBE]).is_empty());
+    }
+
+    /// A system with a Lao font (Windows 10 and later have Leelawadee UI)
+    /// gives the Lao letters from it.
+    #[test]
+    fn lao_letters_come_from_a_system_font() {
+        use skrifa::MetadataProvider;
+        if let Some(font) = lao().first().and_then(|f| f.font_ref()) {
+            assert!(font.charmap().map(LAO_PROBE).is_some());
+            assert_eq!(fallbacks().count(), cjk().len() + lao().len());
+        }
     }
 }

@@ -287,10 +287,10 @@ fn fonts() -> FontDefinitions {
     let mut semibold_family = vec!["inter-semibold".to_string()];
     semibold_family.extend(fallbacks);
     fonts.families.insert(semibold(), semibold_family);
-    // Chinese, Japanese and Korean text from the system's fonts, last.
-    for (i, cjk) in cc_views::fonts::cjk().iter().enumerate() {
-        let name = format!("cjk-{i}");
-        let data = FontData { font: Cow::Borrowed(&cjk.data), index: cjk.index, tweak: Default::default() };
+    // Chinese, Japanese, Korean and Lao text from the system's fonts, last.
+    for (i, fallback) in cc_views::fonts::fallbacks().enumerate() {
+        let name = format!("fallback-{i}");
+        let data = FontData { font: Cow::Borrowed(&fallback.data), index: fallback.index, tweak: Default::default() };
         fonts.font_data.insert(name.clone(), Arc::new(data));
         for family in fonts.families.values_mut() {
             family.push(name.clone());
