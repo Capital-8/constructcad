@@ -80,6 +80,7 @@ pub enum Icon {
     NumberMarks,
     StructureTags,
     Stair,
+    Ramp,
     Railing,
     Component,
     Move,
@@ -128,7 +129,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 113] = [
+    pub const ALL: [Icon; 114] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -198,6 +199,7 @@ impl Icon {
         Icon::NumberMarks,
         Icon::StructureTags,
         Icon::Stair,
+        Icon::Ramp,
         Icon::Railing,
         Icon::Component,
         Icon::Move,
@@ -316,6 +318,7 @@ impl Icon {
             Icon::NumberMarks => include_str!("../../../assets/icons/ui/number-marks.svg"),
             Icon::StructureTags => include_str!("../../../assets/icons/ui/structure-tags.svg"),
             Icon::Stair => include_str!("../../../assets/icons/ui/stair.svg"),
+            Icon::Ramp => include_str!("../../../assets/icons/ui/ramp.svg"),
             Icon::Railing => include_str!("../../../assets/icons/ui/railing.svg"),
             Icon::Component => include_str!("../../../assets/icons/ui/component.svg"),
             Icon::Move => include_str!("../../../assets/icons/ui/move.svg"),

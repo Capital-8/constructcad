@@ -181,112 +181,6 @@ impl BoxPart {
     }
 }
 
-/// Layout of a straight stair run.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct StairGeom {
-    pub start: DVec2,
-    /// Up direction of the run and the perpendicular across it.
-    pub u: DVec2,
-    pub v: DVec2,
-    pub width: f64,
-    pub risers: usize,
-    pub riser: f64,
-    pub tread: f64,
-    pub base: f64,
-    pub top: f64,
-}
-
-impl StairGeom {
-    pub fn run(&self) -> f64 {
-        self.tread * self.risers.saturating_sub(1) as f64
-    }
-
-    /// One box per tread, each from the base up to that tread's surface.
-    pub fn steps(&self) -> Vec<BoxPart> {
-        let w = self.width / 2.0;
-        (0..self.risers.saturating_sub(1))
-            .map(|k| BoxPart {
-                origin: self.start,
-                u: self.u,
-                v: self.v,
-                u_range: (k as f64 * self.tread, (k + 1) as f64 * self.tread),
-                v_range: (-w, w),
-                z_range: (self.base, self.base + (k + 1) as f64 * self.riser),
-            })
-            .collect()
-    }
-
-    /// Plan outline (counter-clockwise).
-    pub fn outline(&self) -> [DVec2; 4] {
-        let (w, l) = (self.width / 2.0, self.run());
-        let p = |a: f64, b: f64| self.start + self.u * a + self.v * b;
-        [p(0.0, -w), p(l, -w), p(l, w), p(0.0, w)]
-    }
-}
-
-/// Layout of a stair element from its type and constraints.
-pub fn stair_geom(project: &Project, element: &cc_core::Element, stair: &cc_core::Stair) -> Option<StairGeom> {
-    let TypeData::Stair { width, max_riser, tread, .. } = project.element_type(element.type_id)?.data else {
-        return None;
-    };
-    let (base, top) = project.stair_span(element, stair);
-    let (risers, riser, _) = cc_core::stair_layout(top - base, max_riser, tread);
-    let u = DVec2::from_angle(stair.direction_deg.to_radians());
-    Some(StairGeom { start: stair.start, u, v: u.perp(), width, risers, riser, tread, base, top })
-}
-
-/// Boxes of a railing: a top rail along each segment and posts at the path
-/// vertices and every `post_spacing` along it.
-pub fn railing_parts(project: &Project, element: &cc_core::Element, railing: &cc_core::Railing) -> Vec<BoxPart> {
-    let Some(TypeData::Railing { height, post_spacing, .. }) = project.element_type(element.type_id).map(|t| &t.data)
-    else {
-        return Vec::new();
-    };
-    let base = project.level_elevation(element.level) + railing.base_offset;
-    let (rail, post) = (0.05, 0.04);
-    let mut parts = Vec::new();
-    for seg in railing.path.windows(2) {
-        let (a, b) = (seg[0], seg[1]);
-        let len = a.distance(b);
-        let Some(u) = (b - a).try_normalize() else { continue };
-        let v = u.perp();
-        parts.push(BoxPart {
-            origin: a,
-            u,
-            v,
-            u_range: (0.0, len),
-            v_range: (-rail / 2.0, rail / 2.0),
-            z_range: (base + height - rail, base + height),
-        });
-        let count = (len / post_spacing.max(0.1)).ceil().max(1.0) as usize;
-        for k in 0..count.min(1000) {
-            let at = len * k as f64 / count as f64;
-            parts.push(BoxPart {
-                origin: a,
-                u,
-                v,
-                u_range: (at - post / 2.0, at + post / 2.0),
-                v_range: (-post / 2.0, post / 2.0),
-                z_range: (base, base + height - rail),
-            });
-        }
-    }
-    // Closing post at the end of the path.
-    if let [.., a, b] = railing.path.as_slice()
-        && let Some(u) = (*b - *a).try_normalize()
-    {
-        parts.push(BoxPart {
-            origin: *b,
-            u,
-            v: u.perp(),
-            u_range: (-post / 2.0, post / 2.0),
-            v_range: (-post / 2.0, post / 2.0),
-            z_range: (base, base + height - rail),
-        });
-    }
-    parts
-}
-
 /// Plan outline of a column section's bounding shape (counter-clockwise):
 /// its box, or its circle for round sections.
 pub fn column_outline(section: cc_core::ColumnSection, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
@@ -501,7 +395,7 @@ impl ModelGeometry {
         }
     }
 
-    /// Columns, beams, stairs and railings.
+    /// Columns, beams, stairs, ramps and railings.
     fn build_structure(&mut self, project: &Project) {
         for e in project.elements.values() {
             let Some(ty) = project.element_type(e.type_id) else { continue };
@@ -517,13 +411,15 @@ impl ModelGeometry {
                     let Some(g) = self.beams.get(&e.id) else { continue };
                     g.add_to(&mut s);
                 }
-                (ElementKind::Stair(st), TypeData::Stair { .. }) => {
-                    let Some(g) = stair_geom(project, e, st) else { continue };
-                    g.steps().iter().for_each(|p| p.add_to(&mut s));
+                (ElementKind::Stair(st), TypeData::Stair { build, .. }) => {
+                    let Some(g) = crate::stair_geom(project, e, st) else { continue };
+                    g.add_to(build, &mut s);
                 }
-                (ElementKind::Railing(r), TypeData::Railing { .. }) => {
-                    railing_parts(project, e, r).iter().for_each(|p| p.add_to(&mut s));
+                (ElementKind::Ramp(r), TypeData::Ramp { thickness, .. }) => {
+                    let Some(g) = crate::ramp_geom(project, e, r) else { continue };
+                    g.add_to(*thickness, &mut s);
                 }
+                (ElementKind::Railing(r), TypeData::Railing { .. }) => crate::add_railing(project, e, r, &mut s),
                 _ => continue,
             }
             if !s.faces.is_empty() {
@@ -1259,6 +1155,7 @@ mod tests {
                     base_offset: 0.0,
                     height: 3.0,
                     top,
+                    layout: Default::default(),
                 }),
             );
             let column = add(
@@ -1285,7 +1182,7 @@ mod tests {
         // 3.00 m at most 0.18 per riser: 17 risers of 3/17 and 16 treads of 0.28.
         let stair_el = doc.project.element(stair).unwrap();
         let ElementKind::Stair(st) = &stair_el.kind else { panic!("not a stair") };
-        let sg = stair_geom(&doc.project, stair_el, st).unwrap();
+        let sg = crate::stair_geom(&doc.project, stair_el, st).unwrap();
         assert_eq!(sg.risers, 17);
         assert!((sg.run() - 16.0 * 0.28).abs() < 1e-12);
         let expected = 0.28 * 1.0 * (3.0 / 17.0) * (1..=16).sum::<usize>() as f64;

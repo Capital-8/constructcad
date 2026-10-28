@@ -159,6 +159,15 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 }
                 d.polyline(&pts, false, LineStyle::Projection, None);
             }
+            TypeData::Ramp { thickness, rules, .. } => {
+                // The slab in profile, at its steepest slope.
+                let rise = sample * rules.max_slope.clamp(0.0, 1.0);
+                let up = DVec2::new(sample, rise);
+                let t = DVec2::new(0.0, *thickness);
+                let r = [o, o + up, o + up - t, o - t];
+                d.fill(r.to_vec(), POCHE, None);
+                d.polyline(&r, true, LineStyle::Cut, None);
+            }
             TypeData::Railing { height, .. } => {
                 d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Thin, None);
                 d.line(o + DVec2::new(0.0, *height), o + DVec2::new(sample, *height), LineStyle::Projection, None);

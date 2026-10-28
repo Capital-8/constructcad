@@ -1827,3 +1827,192 @@ fn component_library_lists_folders() {
     let found = run(&mut s, "component_library_list", json!({"folders": [dir], "search": door.to_uppercase()}));
     assert_eq!(found["components"].as_array().unwrap().len(), 1, "{found}");
 }
+
+/// Stairs in every shape and construction: their steps are checked against
+/// the type's rules (Blondel's formula), and railings added along them
+/// follow the stair when it is copied, mirrored or deleted.
+#[test]
+fn stairs_shapes_rules_and_railings() {
+    let mut s = Session::default();
+    let shapes = ["straight", "straight_landing", "l_shaped", "u_shaped", "spiral"];
+    for (k, shape) in shapes.iter().enumerate() {
+        let st = run(&mut s, "stair_create", json!({"start": [k as f64 * 5.0, 0.0], "shape": shape}));
+        assert_eq!(st["params"]["layout"]["shape"], json!(shape_name(shape)), "{st}");
+        let check = run(&mut s, "stair_check", json!({"id": id(&st)}));
+        assert_eq!(check["risers"], 17, "{shape}: {check}");
+        let volume = run(&mut s, "element_get", json!({"id": id(&st)}))["derived"]["volume"].as_f64();
+        assert!(volume.is_some_and(|v| v > 0.0), "{shape}");
+    }
+    assert_eq!(fails(&mut s, "stair_create", json!({"start": [0, 0], "shape": "zigzag"})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "stair_create", json!({"start": [0, 0], "winders": 1})), ErrorCode::InvalidArguments);
+
+    // The template's type up to the level above: 3.00 m in 17 risers on 28 cm treads, 2R + T = 63.3 cm.
+    let stair = run(&mut s, "stair_create", json!({"start": [0, 10], "shape": "l_shaped", "winders": 3}));
+    let sid = id(&stair);
+    let check = run(&mut s, "stair_check", json!({"id": sid}));
+    assert!(check["ok"].as_bool().unwrap(), "{check}");
+    assert!((check["blondel"].as_f64().unwrap() - (6.0 / 17.0 + 0.28)).abs() < 1e-9);
+    // Wider treads break Blondel's range; the Blondel rule brings them back.
+    let ty = stair["type"]["id"].clone();
+    let wide = run(&mut s, "type_duplicate", json!({"type": ty, "name": "Wide treads", "elements": [sid]}));
+    run(&mut s, "type_set", json!({"type": wide["id"], "params": {"tread": 0.34}}));
+    let check = run(&mut s, "stair_check", json!({"id": sid}));
+    assert_eq!(check["issues"][0]["detail"]["issue"], "blondel_out_of_range", "{check}");
+    assert!(check["issues"][0]["message"].as_str().is_some_and(|m| !m.is_empty()));
+    let rules = json!({"rules": {"tread_rule": "Blondel"}, "build": {"construction": "CastInPlace", "waist": 0.12}});
+    run(&mut s, "type_set", json!({"type": wide["id"], "params": rules}));
+    let check = run(&mut s, "stair_check", json!({"id": sid}));
+    let tread = check["tread"].as_f64().unwrap();
+    assert!(check["ok"].as_bool().unwrap() && (tread - (0.64 - 6.0 / 17.0)).abs() < 1e-9, "{check}");
+    let cast = run(&mut s, "element_get", json!({"id": sid}))["derived"]["volume"].as_f64().unwrap();
+    run(&mut s, "type_set", json!({"type": wide["id"], "params": {"build": {"construction": "Assembled"}}}));
+    let assembled = run(&mut s, "element_get", json!({"id": sid}))["derived"]["volume"].as_f64().unwrap();
+    assert!(assembled > 0.0 && assembled < cast, "{assembled} vs {cast}");
+
+    // Railings on both sides, rising with the stair.
+    let railings = run(&mut s, "stair_railings_add", json!({"id": sid}));
+    let ids: Vec<u64> = railings["ids"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+    assert_eq!(ids.len(), 2);
+    let length = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["derived"]["length"].as_f64();
+    let sloped = length(&mut s, ids[0]).unwrap();
+    assert!(sloped > 2.88, "a railing climbs the whole height: {sloped}");
+    let count = |s: &mut Session| run(s, "elements_list", json!({"category": "railing"})).as_array().unwrap().len();
+    // A copy takes its railings along; a mirror turns the other way.
+    run(&mut s, "elements_copy", json!({"ids": [sid], "delta": [0.0, 10.0]}));
+    assert_eq!(count(&mut s), 4);
+    let mirrored =
+        run(&mut s, "elements_mirror", json!({"ids": [sid], "axis": [[20.0, 0.0], [20.0, 1.0]], "copy": true}));
+    let copy = mirrored["created"][0].as_u64().unwrap();
+    assert_eq!(run(&mut s, "element_get", json!({"id": copy}))["params"]["layout"]["turn"], "Right");
+    assert_eq!(count(&mut s), 6);
+    // Deleting a stair deletes its railings; undo brings them back.
+    run(&mut s, "elements_delete", json!({"ids": [sid]}));
+    assert_eq!(count(&mut s), 4);
+    run(&mut s, "undo", json!({}));
+    assert_eq!(count(&mut s), 6);
+    assert!(length(&mut s, ids[1]).is_some_and(|l| l > 2.88));
+
+    // Exported to IFC, stairs and railings are B-reps declared as such.
+    let ifc = scratch("stairs.ifc");
+    run(&mut s, "ifc_export", json!({"path": ifc.to_string_lossy()}));
+    assert_representation_types(&std::fs::read_to_string(&ifc).unwrap());
+
+    // Saved and loaded, everything comes back.
+    let path = scratch("stairs.ccad");
+    run(&mut s, "project_save", json!({"path": path}));
+    let mut t = Session::default();
+    run(&mut t, "project_open", json!({"path": path}));
+    assert_eq!(count(&mut t), 6);
+    let back = run(&mut t, "stair_check", json!({"id": sid}));
+    assert_eq!(back["risers"], 17);
+}
+
+fn shape_name(shape: &str) -> &'static str {
+    match shape {
+        "straight_landing" => "StraightLanding",
+        "l_shaped" => "LShaped",
+        "u_shaped" => "UShaped",
+        "spiral" => "Spiral",
+        _ => "Straight",
+    }
+}
+
+/// Every shape representation of an IFC file names the kind of its items
+/// (`SweptSolid` for extrusions, `Brep` for faceted B-reps), as the IFC
+/// schema's `IfcShapeRepresentationTypes` rule checks.
+fn assert_representation_types(ifc: &str) {
+    let mut entities = std::collections::HashMap::new();
+    for line in ifc.lines() {
+        if let Some((id, rest)) = line.strip_prefix('#').and_then(|l| l.split_once('=')) {
+            entities.insert(format!("#{}", id.trim()), rest.trim().to_string());
+        }
+    }
+    for body in entities.values().filter(|e| e.starts_with("IFCSHAPEREPRESENTATION(")) {
+        let kind = if body.contains("'SweptSolid'") {
+            "SweptSolid"
+        } else if body.contains("'Brep'") {
+            "Brep"
+        } else {
+            continue;
+        };
+        let items = body.rsplit_once('(').map_or("", |(_, i)| i);
+        for item in items.trim_end_matches([')', ';']).split(',').map(str::trim) {
+            let Some(entity) = entities.get(item) else { continue };
+            let brep = entity.starts_with("IFCFACETEDBREP(");
+            assert_eq!(brep, kind == "Brep", "{kind} representation with {entity}");
+        }
+    }
+}
+
+/// Ramps in every shape: a project without a ramp type gets one, flights and
+/// landings follow the type's rules, broken rules are reported, railings
+/// follow the ramp, and IFC export writes `IfcRamp`.
+#[test]
+fn ramps_shapes_rules_and_railings() {
+    let mut s = Session::default();
+    let types = |s: &mut Session| run(s, "types_list", json!({"category": "ramp"})).as_array().unwrap().len();
+    assert_eq!(types(&mut s), 0);
+    // Up to the level above (3.00 m) at 8.33 %: 4 flights of 0.75 m.
+    let ramp = run(&mut s, "ramp_create", json!({"start": [0, 0]}));
+    assert_eq!(types(&mut s), 1, "the first ramp makes a ramp type");
+    let rid = id(&ramp);
+    let check = run(&mut s, "ramp_check", json!({"id": rid}));
+    assert_eq!(check["flights"], 4, "{check}");
+    assert!(check["ok"].as_bool().unwrap(), "{check}");
+    assert!((check["slope"].as_f64().unwrap() - 0.0833).abs() < 1e-9);
+    let run_of =
+        |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}))["derived"]["run"].as_f64().unwrap();
+    let flight = 0.75 / 0.0833;
+    assert!((run_of(&mut s, rid) - (4.0 * flight + 3.0 * 1.2)).abs() < 1e-6);
+    for (k, shape) in ["l_shaped", "u_shaped", "spiral"].iter().enumerate() {
+        let r =
+            run(&mut s, "ramp_create", json!({"start": [0.0, 10.0 * (k + 1) as f64], "shape": shape, "turn": "right"}));
+        let volume = run(&mut s, "element_get", json!({"id": id(&r)}))["derived"]["volume"].as_f64();
+        assert!(volume.is_some_and(|v| v > 0.0), "{shape}");
+    }
+    assert_eq!(types(&mut s), 1);
+    // An L-shaped ramp rising 3 m has flights too high; a steeper slope and a short landing break rules too.
+    let l = run(&mut s, "ramp_create", json!({"start": [50, 0], "shape": "l_shaped"}));
+    let check = run(&mut s, "ramp_check", json!({"id": id(&l)}));
+    assert_eq!(check["issues"][0]["detail"]["issue"], "flight_too_high", "{check}");
+    let steep = run(&mut s, "ramp_create", json!({"start": [60, 0], "slope": 12.5, "landing": 1.0}));
+    let check = run(&mut s, "ramp_check", json!({"id": id(&steep)}));
+    let issues: Vec<_> = check["issues"].as_array().unwrap().iter().map(|i| i["detail"]["issue"].clone()).collect();
+    assert_eq!(issues, [json!("too_steep"), json!("landing_too_short")]);
+    assert_eq!(fails(&mut s, "ramp_create", json!({"start": [0, 0], "shape": "zigzag"})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "ramp_create", json!({"start": [0, 0], "slope": -2})), ErrorCode::InvalidArguments);
+    // The type's rules decide: a gentler maximum makes longer flights.
+    let ty = ramp["type"]["id"].clone();
+    run(&mut s, "type_set", json!({"type": ty, "params": {"rules": {"max_slope": 0.05}}}));
+    assert!(run_of(&mut s, rid) > 4.0 * 0.75 / 0.05);
+    // A new type through its command.
+    let custom = run(
+        &mut s,
+        "ramp_type_create",
+        json!({"name": "Garage ramp", "width": 3.0, "max_slope": 20, "max_flight_rise": 4}),
+    );
+    let garage = run(&mut s, "ramp_create", json!({"start": [80, 0], "type": custom["id"], "shape": "spiral"}));
+    assert!(run(&mut s, "ramp_check", json!({"id": id(&garage)}))["ok"].as_bool().unwrap());
+
+    // Railings follow the ramp up, and go with it.
+    let railings = run(&mut s, "stair_railings_add", json!({"id": rid}));
+    let rail = railings["ids"][0].as_u64().unwrap();
+    let length = run(&mut s, "element_get", json!({"id": rail}))["derived"]["length"].as_f64().unwrap();
+    assert!(length > run_of(&mut s, rid), "{length}");
+    let count = |s: &mut Session| run(s, "elements_list", json!({"category": "railing"})).as_array().unwrap().len();
+    let mirrored =
+        run(&mut s, "elements_mirror", json!({"ids": [rid], "axis": [[-5.0, 0.0], [-5.0, 1.0]], "copy": true}));
+    let copy = mirrored["created"][0].as_u64().unwrap();
+    assert_eq!(run(&mut s, "element_get", json!({"id": copy}))["params"]["layout"]["turn"], "Right");
+    assert_eq!(count(&mut s), 4);
+    run(&mut s, "elements_delete", json!({"ids": [rid]}));
+    assert_eq!(count(&mut s), 2);
+
+    // IFC export writes the ramps.
+    let path = scratch("ramps.ifc");
+    run(&mut s, "ifc_export", json!({"path": path.to_string_lossy()}));
+    let ifc = std::fs::read_to_string(&path).unwrap();
+    assert!(ifc.contains("IFCRAMP(") && ifc.contains(".SPIRAL_RAMP.") && ifc.contains(".QUARTER_TURN_RAMP."));
+    assert!(ifc.contains("IFCRAMPTYPE("));
+    assert_representation_types(&ifc);
+}

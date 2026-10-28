@@ -77,6 +77,9 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Stair(s) => {
             finite(&[s.direction_deg, s.base_offset, s.height]) && s.start.is_finite() && top_ok(s.top)
         }
+        ElementKind::Ramp(r) => {
+            finite(&[r.direction_deg, r.base_offset, r.height]) && r.start.is_finite() && top_ok(r.top)
+        }
         ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
         ElementKind::Component(c) => finite(&[c.rotation_deg, c.base_offset]) && c.position.is_finite(),
         ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
@@ -171,10 +174,15 @@ impl Project {
                         + usize::from(fix_positive(length, 1.0))
                         + usize::from(fix_positive(thickness, 0.4));
                 }
-                TypeData::Stair { width, max_riser, tread, .. } => {
+                TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(max_riser, 0.18))
                         + usize::from(fix_positive(tread, 0.28));
+                    repairs += build.repair() + rules.repair();
+                }
+                TypeData::Ramp { width, thickness, rules, .. } => {
+                    repairs += usize::from(fix_positive(width, 1.2)) + usize::from(fix_positive(thickness, 0.15));
+                    repairs += rules.repair();
                 }
                 TypeData::Railing { height, post_spacing, .. } => {
                     repairs += usize::from(fix_positive(height, 1.1)) + usize::from(fix_positive(post_spacing, 1.2));
@@ -252,6 +260,32 @@ impl Project {
                     *r = None;
                     repairs += 1;
                 }
+            }
+        }
+        // Stair and ramp layouts get valid sizes; railings of missing ones keep their path.
+        let stairs: std::collections::BTreeSet<_> = self
+            .elements
+            .values()
+            .filter(|e| matches!(e.kind, ElementKind::Stair(_) | ElementKind::Ramp(_)))
+            .map(|e| e.id)
+            .collect();
+        for e in self.elements.values_mut() {
+            match &mut e.kind {
+                ElementKind::Stair(s) => repairs += s.layout.repair(),
+                ElementKind::Ramp(r) => repairs += r.layout.repair(),
+                ElementKind::Railing(r) => {
+                    if r.stair.is_some_and(|h| !stairs.contains(&h.host)) {
+                        r.stair = None;
+                        repairs += 1;
+                    }
+                    if let Some(h) = &mut r.stair
+                        && !(h.inset.is_finite() && h.inset.abs() < 1.0)
+                    {
+                        h.inset = 0.05;
+                        repairs += 1;
+                    }
+                }
+                _ => {}
             }
         }
         // Pins of missing elements go.
@@ -361,6 +395,7 @@ impl Project {
                 ElementKind::Wall(w) => &mut w.top,
                 ElementKind::Column(c) => &mut c.top,
                 ElementKind::Stair(s) => &mut s.top,
+                ElementKind::Ramp(r) => &mut r.top,
                 _ => continue,
             };
             if let WallTop::Level { level, .. } = *top
