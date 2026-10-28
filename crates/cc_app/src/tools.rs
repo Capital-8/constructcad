@@ -60,6 +60,9 @@ pub enum Tool {
     Stair {
         type_id: ElementTypeId,
     },
+    Ramp {
+        type_id: ElementTypeId,
+    },
     Railing {
         type_id: ElementTypeId,
     },
@@ -138,6 +141,7 @@ impl Tool {
             Tool::Footing { .. } => "tool-footing",
             Tool::Truss { .. } => "tool-truss",
             Tool::Stair { .. } => "tool-stair",
+            Tool::Ramp { .. } => "tool-ramp",
             Tool::Railing { .. } => "tool-railing",
             Tool::Component { .. } => "tool-component",
             Tool::Pipe { .. } => "tool-pipe",
@@ -180,6 +184,7 @@ impl Tool {
             | Tool::Footing { type_id }
             | Tool::Truss { type_id }
             | Tool::Stair { type_id }
+            | Tool::Ramp { type_id }
             | Tool::Railing { type_id }
             | Tool::Component { type_id }
             | Tool::Pipe { type_id }
@@ -201,6 +206,7 @@ impl Tool {
             Tool::Footing { .. } => Some(Category::Foundation),
             Tool::Truss { .. } => Some(Category::Beam),
             Tool::Stair { .. } => Some(Category::Stair),
+            Tool::Ramp { .. } => Some(Category::Ramp),
             Tool::Railing { .. } => Some(Category::Railing),
             Tool::Component { .. } => Some(Category::Component),
             Tool::Pipe { .. } => Some(Category::Pipe),
@@ -223,6 +229,7 @@ impl Tool {
             Tool::Footing { .. } => Tool::Footing { type_id: id },
             Tool::Truss { .. } => Tool::Truss { type_id: id },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
+            Tool::Ramp { .. } => Tool::Ramp { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
             Tool::Component { .. } => Tool::Component { type_id: id },
             Tool::Pipe { .. } => Tool::Pipe { type_id: id },
@@ -254,6 +261,7 @@ impl Tool {
             Category::Beam => Tool::Beam { type_id },
             Category::Foundation | Category::Rebar => Tool::Footing { type_id },
             Category::Stair => Tool::Stair { type_id },
+            Category::Ramp => Tool::Ramp { type_id },
             Category::Railing => Tool::Railing { type_id },
             Category::Component => Tool::Component { type_id },
             Category::Pipe => Tool::Pipe { type_id },
@@ -477,7 +485,10 @@ fn snap(
                     ..
                 }),
             ) => Some(cc_geom::section::column_loops(*section, c.position, c.rotation_deg)),
-            (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| vec![g.outline().to_vec()]),
+            (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| g.parts),
+            (ElementKind::Ramp(r), _) => {
+                cc_geom::ramp_geom(project, e, r).map(|g| g.pieces.into_iter().map(|p| p.outline).collect())
+            }
             _ => None,
         }
         .unwrap_or_default();
@@ -880,6 +891,7 @@ pub fn handle(
         (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Truss { type_id }, Some(level)) => truss_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Ramp { type_id }, Some(level)) => ramp_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, Some(level)) => railing_tool(ui, resp, painter, state, level, *type_id, xf),
         (
             Tool::Move
@@ -1337,7 +1349,8 @@ fn beam_tool(
     }
 }
 
-/// Two clicks: the foot of the stair, then a point giving its direction.
+/// Two clicks: the foot of the stair, then a point giving the direction of
+/// its first flight; the shape comes from the options bar.
 fn stair_tool(
     ui: &Ui,
     resp: &Response,
@@ -1352,7 +1365,7 @@ fn stair_tool(
     let s = snap_at(state, Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     let project = state.project();
-    let Some(cc_core::TypeData::Stair { width, max_riser, tread, .. }) =
+    let Some(cc_core::TypeData::Stair { width, max_riser, tread, rules, .. }) =
         project.element_type(type_id).map(|t| t.data.clone())
     else {
         return;
@@ -1361,31 +1374,76 @@ fn stair_tool(
         cc_core::WallTop::Level { level: top, .. } => project.level_elevation(top) - project.level_elevation(level),
         cc_core::WallTop::Unconnected => 3.0,
     };
-    let (risers, _, run) = cc_core::stair_layout(height, max_riser, tread);
+    let layout = state.stair_layout;
     if let Some(a) = state.interaction.anchor {
         let u = (s.point - a).normalize_or(DVec2::X);
-        let v = u.perp() * (width / 2.0);
-        let end = a + u * run;
-        let pts = vec![xf.to_screen(a - v), xf.to_screen(end - v), xf.to_screen(end + v), xf.to_screen(a + v)];
-        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
-        for k in 1..risers.saturating_sub(1) {
-            let p = a + u * (k as f64 * tread);
-            painter.line_segment([xf.to_screen(p - v), xf.to_screen(p + v)], Stroke::new(1.0, PREVIEW));
+        let g = cc_geom::stair::layout_stair(a, u, width, 0.0, height, max_riser, tread, &rules, layout);
+        for step in &g.steps {
+            let pts: Vec<_> = step.outline.iter().map(|p| xf.to_screen(*p)).collect();
+            painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
         }
-        label(painter, xf.to_screen(end), t!("label-stair", "risers" => risers, "run" => format::meters(run)));
+        let end = g.walkline.last().map_or(a, |p| p.truncate());
+        let text = t!("label-stair", "risers" => g.risers, "run" => format::meters(g.run()));
+        label(painter, xf.to_screen(end), text);
     }
     if resp.clicked() {
         match state.interaction.anchor {
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) > 0.05 => {
                 let d = s.point - a;
-                let command = create::StairCreate {
-                    start: a.to_array(),
-                    direction: Some(d.y.atan2(d.x).to_degrees()),
-                    level: Some(Ref::Id(level.0)),
-                    type_ref: Some(Ref::Id(type_id.0)),
-                    ..Default::default()
-                };
+                let command =
+                    crate::stair_ui::create_command(layout, a.to_array(), d.y.atan2(d.x).to_degrees(), level, type_id);
+                run_create(state, command);
+                state.interaction.anchor = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Two clicks: the foot of the ramp, then a point giving the direction of
+/// its first flight; the shape comes from the options bar.
+fn ramp_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let s = snap_at(state, Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
+    draw_snap(painter, xf, s);
+    let project = state.project();
+    let Some(cc_core::TypeData::Ramp { width, rules, .. }) = project.element_type(type_id).map(|t| t.data.clone())
+    else {
+        return;
+    };
+    let height = match default_top(project, level) {
+        cc_core::WallTop::Level { level: top, .. } => project.level_elevation(top) - project.level_elevation(level),
+        cc_core::WallTop::Unconnected => 3.0,
+    };
+    let layout = state.ramp_layout;
+    if let Some(a) = state.interaction.anchor {
+        let u = (s.point - a).normalize_or(DVec2::X);
+        let g = cc_geom::ramp::layout_ramp(a, u, width, 0.0, height, &rules, layout);
+        for piece in &g.pieces {
+            let pts: Vec<_> = piece.outline.iter().map(|p| xf.to_screen(*p)).collect();
+            painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
+        }
+        let end = g.walkline.last().map_or(a, |p| p.truncate());
+        let text = t!("label-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()));
+        label(painter, xf.to_screen(end), text);
+    }
+    if resp.clicked() {
+        match state.interaction.anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.05 => {
+                let d = s.point - a;
+                let command =
+                    crate::stair_ui::ramp_command(layout, a.to_array(), d.y.atan2(d.x).to_degrees(), level, type_id);
                 run_create(state, command);
                 state.interaction.anchor = None;
             }

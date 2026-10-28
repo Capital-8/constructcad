@@ -36,6 +36,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Column => Icon::Column,
         Category::Beam => Icon::Beam,
         Category::Stair => Icon::Stair,
+        Category::Ramp => Icon::Ramp,
         Category::Railing => Icon::Railing,
         Category::Component => Icon::Component,
         Category::Text => Icon::Text,
@@ -594,7 +595,7 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
     let buttons = |list: &[Category]| list.iter().map(|c| place(*c)).collect::<Vec<_>>();
     group(ui, t!("group-build"), |ui| command_buttons(ui, state, &buttons(&[Wall, Door, Window])));
     group(ui, t!("group-horizontal"), |ui| command_buttons(ui, state, &buttons(&[Floor, Ceiling, Roof])));
-    group(ui, t!("group-circulation"), |ui| command_buttons(ui, state, &buttons(&[Stair, Railing])));
+    group(ui, t!("group-circulation"), |ui| command_buttons(ui, state, &buttons(&[Stair, Ramp, Railing])));
     group(ui, t!("group-room"), |ui| command_button(ui, state, place(Room)));
     group(ui, t!("group-model"), |ui| {
         command_buttons(
@@ -982,9 +983,8 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.separator();
                 ui.label(theme::muted(t!("hint-truss")));
             }
-            Tool::Stair { .. } => {
-                ui.label(theme::muted(t!("hint-stair")));
-            }
+            Tool::Stair { .. } => crate::stair_ui::tool_options(ui, state),
+            Tool::Ramp { .. } => crate::stair_ui::ramp_tool_options(ui, state),
             Tool::Pipe { type_id } => segment_options(ui, state, type_id, true),
             Tool::Conduit { type_id } => segment_options(ui, state, type_id, false),
             Tool::Component { type_id } if crate::tools::device_type(state.project(), type_id).is_some() => {

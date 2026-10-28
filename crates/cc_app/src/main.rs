@@ -28,6 +28,7 @@ mod properties;
 mod ribbon;
 mod schedule_ui;
 mod sheet;
+mod stair_ui;
 mod state;
 mod systems_dialog;
 mod table;

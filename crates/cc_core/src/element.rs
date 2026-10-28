@@ -40,6 +40,7 @@ pub enum ElementKind {
     Column(Column),
     Beam(Beam),
     Stair(Stair),
+    Ramp(Ramp),
     Railing(Railing),
     Component(Component),
     Foundation(Foundation),
@@ -64,6 +65,7 @@ impl Element {
             ElementKind::Column(_) => Category::Column,
             ElementKind::Beam(_) => Category::Beam,
             ElementKind::Stair(_) => Category::Stair,
+            ElementKind::Ramp(_) => Category::Ramp,
             ElementKind::Railing(_) => Category::Railing,
             ElementKind::Component(_) => Category::Component,
             ElementKind::Foundation(_) => Category::Foundation,
@@ -169,6 +171,7 @@ impl Element {
                 b.end += delta;
             }
             ElementKind::Stair(s) => s.start += delta,
+            ElementKind::Ramp(r) => r.start += delta,
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Component(c) => c.position += delta,
             ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
@@ -839,8 +842,8 @@ pub struct Rebar {
     pub cover: f64,
 }
 
-/// A straight stair run starting at `start` (bottom of the first riser,
-/// center of the width) going up along `direction_deg`.
+/// A stair starting at `start` (bottom of the first riser, center of the
+/// width) going up along `direction_deg`; `layout` gives its plan shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stair {
     pub start: DVec2,
@@ -849,6 +852,22 @@ pub struct Stair {
     /// Height when `top` is unconnected.
     pub height: f64,
     pub top: WallTop,
+    #[serde(default)]
+    pub layout: crate::StairLayout,
+}
+
+/// A ramp starting at `start` (the middle of its foot) going up along
+/// `direction_deg`; `layout` gives its plan shape and slope.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Ramp {
+    pub start: DVec2,
+    pub direction_deg: f64,
+    pub base_offset: f64,
+    /// Height when `top` is unconnected.
+    pub height: f64,
+    pub top: WallTop,
+    #[serde(default)]
+    pub layout: crate::RampLayout,
 }
 
 /// A railing along an open path.
@@ -856,6 +875,10 @@ pub struct Stair {
 pub struct Railing {
     pub path: Vec<DVec2>,
     pub base_offset: f64,
+    /// The stair side the railing follows: its path and rise come from the
+    /// stair (`path` keeps the last one, for when the stair is gone).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stair: Option<crate::StairRailing>,
 }
 
 impl Railing {

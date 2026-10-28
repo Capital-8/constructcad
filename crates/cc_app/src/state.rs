@@ -120,6 +120,10 @@ pub struct AppState {
     pub wall_height: f64,
     /// Location line for new walls.
     pub wall_location_line: cc_core::LocationLine,
+    /// Plan layout for new stairs (shape, turn, landing, winders, radius).
+    pub stair_layout: cc_core::StairLayout,
+    /// Plan layout for new ramps (shape, turn, slope, landing, radius).
+    pub ramp_layout: cc_core::RampLayout,
     /// The wall tool draws arcs (start, end, then a point on the arc).
     pub wall_arc: bool,
     /// Level new walls rise to (`None`: unconnected, `wall_height` tall).
@@ -188,6 +192,8 @@ impl AppState {
             typed: Default::default(),
             wall_height: 3.0,
             wall_location_line: Default::default(),
+            stair_layout: Default::default(),
+            ramp_layout: Default::default(),
             wall_arc: false,
             wall_top_level: None,
             quit_confirmed: false,
