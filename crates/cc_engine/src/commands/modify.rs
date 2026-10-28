@@ -686,6 +686,85 @@ impl Command for ElementMoveEnd {
     }
 }
 
+/// Give grids the extents of a reference grid, so their bubbles line up:
+/// each grid parallel to the reference (within 1°) has its ends moved along
+/// its own line onto the lines through the reference's ends perpendicular
+/// to it (each end to the reference end on its side). Grids that are not
+/// parallel and pinned grids are left alone.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GridsAlignEnds {
+    /// Id of the reference grid.
+    pub reference: u64,
+    /// Ids of the grids to align (default: every other grid parallel to the reference).
+    #[serde(default)]
+    pub grids: Vec<u64>,
+    /// Which ends move: `both` (default), `start` (the bubble end) or `end`.
+    #[serde(default)]
+    pub ends: Option<String>,
+}
+
+impl Command for GridsAlignEnds {
+    const NAME: &'static str = "grids_align_ends";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let grid_of = |id: ElementId| match p.element(id).map(|e| &e.kind) {
+            Some(ElementKind::Grid(g)) => Ok(g),
+            _ => Err(EngineError::invalid(format!("element {} is not a grid", id.0))),
+        };
+        let reference_id = refs::element(p, self.reference)?;
+        let reference = grid_of(reference_id)?.clone();
+        let (start, end) = match self.ends.as_deref().unwrap_or("both") {
+            "both" => (true, true),
+            "start" => (true, false),
+            "end" => (false, true),
+            other => return Err(EngineError::invalid(format!("ends must be 'both', 'start' or 'end', not '{other}'"))),
+        };
+        let ids: Vec<ElementId> = if self.grids.is_empty() {
+            super::create::grids(p).map(|(id, _)| id).collect()
+        } else {
+            let ids = refs::elements(p, &self.grids)?;
+            for id in &ids {
+                grid_of(*id)?;
+            }
+            ids
+        };
+        let ids: Vec<ElementId> = ids.into_iter().filter(|id| *id != reference_id).collect();
+        let (free, pinned) = unpinned(p, ids);
+        let mut lines: Vec<(ElementId, (DVec2, DVec2))> = Vec::new();
+        let mut not_parallel: Vec<ElementId> = Vec::new();
+        for id in free {
+            let Ok(g) = grid_of(id) else { continue };
+            match cc_core::grid::aligned_ends(g, &reference, start, end) {
+                Some((a, b)) if g.start.distance(a) > 1e-9 || g.end.distance(b) > 1e-9 => lines.push((id, (a, b))),
+                Some(_) => {}
+                None => not_parallel.push(id),
+            }
+        }
+        // Explicit ids that are not parallel are reported; by default they are just other grids.
+        if self.grids.is_empty() {
+            not_parallel.clear();
+        }
+        let changed: Vec<ElementId> = lines.iter().map(|(id, _)| *id).collect();
+        if !lines.is_empty() {
+            edit(s, t!("tx-align-grid-ends"), |e| {
+                for (id, (a, b)) in &lines {
+                    if let Some(ElementKind::Grid(g)) = e.element_mut(*id).map(|el| &mut el.kind) {
+                        (g.start, g.end) = (*a, *b);
+                    }
+                }
+                Ok(())
+            })?;
+        }
+        Ok(json!({
+            "changed": ids_json(&changed),
+            "pinned_skipped": ids_json(&pinned),
+            "not_parallel": ids_json(&not_parallel),
+        }))
+    }
+}
+
 /// Turn elements a quarter: components and columns rotate 90° about their
 /// insertion point; doors and windows flip to the other side of their wall
 /// (the Space key on a selection). Others and pinned elements are left alone.

@@ -12,6 +12,7 @@ mod document;
 mod element;
 pub mod expr;
 pub mod graphics;
+pub mod grid;
 mod ids;
 pub mod material;
 pub mod mep;
