@@ -1646,6 +1646,18 @@ lib-save = ບັນທຶກຊິ້ນສ່ວນໂຄງການ
 lib-save-into = ໃສ່ໃນໂຟນເດີ
 lib-save-button = ບັນທຶກໃສ່ຄັງ
 
+# ການກູ້ຄືນ
+dlg-recovery = ກູ້ຄືນວຽກທີ່ບໍ່ໄດ້ບັນທຶກ
+dlg-recovery-text = ConstructCAD ໄດ້ປິດໂດຍບໍ່ໄດ້ບັນທຶກການປ່ຽນແປງເຫຼົ່ານີ້. ເລືອກໂຄງການເພື່ອກູ້ຄືນ; ມັນຈະເປີດພ້ອມກັບການປ່ຽນແປງທີ່ບໍ່ໄດ້ບັນທຶກ.
+recovery-never-saved = ບໍ່ເຄີຍບັນທຶກ
+recovery-age-now = ຫາກໍ່ນີ້
+recovery-age-minutes = { $count } ນາທີກ່ອນ
+recovery-age-hours = { $count } ຊົ່ວໂມງກ່ອນ
+recovery-age-days = { $count } ມື້ກ່ອນ
+action-restore = ກູ້ຄືນ
+msg-recovered = ກູ້ຄືນແລ້ວ: { $name } (ບັນທຶກເພື່ອຮັກສາການປ່ຽນແປງ)
+msg-recovery-failed = ບໍ່ສາມາດກູ້ຄືນໂຄງການໄດ້: { $error }
+
 ## ຂັ້ນໄດ
 stair-shape-straight = ຊື່
 stair-shape-straight-landing = ຊື່ມີຊານພັກ

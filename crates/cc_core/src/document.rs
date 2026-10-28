@@ -617,6 +617,12 @@ impl Document {
         self.view_state_changed = false;
     }
 
+    /// Treat the project as not saved (one restored from a recovery copy,
+    /// whose changes never reached its file).
+    pub fn mark_unsaved(&mut self) {
+        self.saved_revision = 0;
+    }
+
     /// Run `f` as one undoable transaction named `name`.
     pub fn edit<R>(&mut self, name: impl Into<String>, f: impl FnOnce(&mut EditCtx) -> R) -> R {
         self.edit_impl(name.into(), None, f)

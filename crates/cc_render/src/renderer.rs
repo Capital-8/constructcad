@@ -139,6 +139,21 @@ impl Renderer3D {
             self.buffers = None;
             return;
         }
+        // A buffer beyond the device's limit is a validation error, which
+        // wgpu treats as fatal: draw nothing rather than abort the app.
+        let largest = [
+            std::mem::size_of_val(mesh.vertices.as_slice()),
+            std::mem::size_of_val(mesh.edges.as_slice()),
+            std::mem::size_of_val(mesh.indices.as_slice()),
+            std::mem::size_of_val(mesh.transparent_indices.as_slice()),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0);
+        if !fits(largest, device.limits().max_buffer_size) {
+            self.buffers = None;
+            return;
+        }
         let init = |label, contents: &[u8], usage| {
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents, usage })
         };
@@ -325,5 +340,23 @@ impl Renderer3D {
         drop(data);
         buffer.unmap();
         Some(rgba)
+    }
+}
+
+/// Whether a buffer of `bytes` is within the device's `limit`, and its
+/// element counts fit the `u32` draw ranges.
+fn fits(bytes: usize, limit: u64) -> bool {
+    u64::try_from(bytes).is_ok_and(|b| b <= limit) && bytes / std::mem::size_of::<u32>() <= u32::MAX as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn meshes_beyond_the_buffer_limit_are_not_uploaded() {
+        let limit = wgpu::Limits::default().max_buffer_size;
+        assert!(fits(0, limit) && fits(1 << 20, limit));
+        assert!(!fits(usize::try_from(limit).unwrap_or(usize::MAX).saturating_add(1), limit));
     }
 }

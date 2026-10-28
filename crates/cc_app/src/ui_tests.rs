@@ -691,3 +691,66 @@ fn component_editor_snapshots() {
     results.add(harness.try_snapshot("component_editor_new"));
     results.unwrap();
 }
+
+/// The structure tab's automation, the way its buttons run it, with the
+/// panels and every 2D view drawn after each step and the 3D mesh rebuilt
+/// (issue #51: a crash while placing columns, beams, footings and slabs).
+#[test]
+fn structure_automation_redraws_panels_and_views() {
+    let mut state = sample_state();
+    for (a, b) in [([-1.0, 0.0], [12.0, 0.0]), ([-1.0, 6.0], [12.0, 6.0]), ([0.0, -1.0], [0.0, 8.0])] {
+        state.session.execute("grid_create", serde_json::json!({"start": a, "end": b})).unwrap();
+    }
+    state.session.execute("grid_create", serde_json::json!({"start": [10.0, -1.0], "end": [10.0, 8.0]})).unwrap();
+    state.session.execute("view_create", serde_json::json!({"kind": "structural_plan"})).unwrap();
+    let mut harness = themed_harness(state, egui::vec2(1400.0, 900.0), egui::Theme::Light, |ui, state| {
+        state.sync();
+        state.follow_selection();
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(300.0);
+                crate::browser::show(ui, state);
+                crate::properties::show(ui, state);
+            });
+            if let Some(view) = state.active_view
+                && state.project().view(view).is_some_and(|v| !matches!(v.kind, cc_core::ViewKind::ThreeD { .. }))
+            {
+                crate::canvas::show(ui, state, view);
+            }
+        });
+    });
+    let steps: [fn(&mut AppState); 9] = [
+        crate::actions::columns_at_grids,
+        crate::actions::beams_on_grids,
+        crate::actions::footings_under_columns,
+        crate::actions::strip_footings_under_walls,
+        |s| drop(s.session.execute("floor_create", serde_json::json!({"from_walls": true}))),
+        |s| drop(s.session.execute("foundation_slab_create", serde_json::json!({"from_walls": true}))),
+        crate::actions::slab_join_supports,
+        crate::actions::number_structure,
+        crate::actions::beams_between_columns,
+    ];
+    let views: Vec<cc_core::ViewId> = harness.state().project().views.keys().copied().collect();
+    for round in 0..2 {
+        for step in steps {
+            step(harness.state_mut());
+            for &view in &views {
+                harness.state_mut().active_view = Some(view);
+                harness.run();
+            }
+            let state = harness.state_mut();
+            let selection = state.selection.clone();
+            let tess = cc_render::Tessellation::new(state.session.geometry());
+            cc_render::SceneMesh::build_plain(&tess, &selection);
+        }
+        if round == 0 {
+            // Undo all of it, then redo, as Ctrl+Z / Ctrl+Y would.
+            while harness.state_mut().session.execute("undo", serde_json::json!({})).is_ok() {
+                harness.run();
+            }
+            while harness.state_mut().session.execute("redo", serde_json::json!({})).is_ok() {
+                harness.run();
+            }
+        }
+    }
+}

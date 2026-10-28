@@ -1644,6 +1644,18 @@ ph-default-filter-name = Filtr { $n }
 ph-filter-none = Brak
 ph-not-demolished = Brak
 
+# Odzyskiwanie
+dlg-recovery = Odzyskaj niezapisaną pracę
+dlg-recovery-text = ConstructCAD został zamknięty bez zapisania tych zmian. Wybierz projekt do przywrócenia; otworzy się z niezapisanymi zmianami.
+recovery-never-saved = Nigdy niezapisany
+recovery-age-now = przed chwilą
+recovery-age-minutes = { $count } min temu
+recovery-age-hours = { $count } godz. temu
+recovery-age-days = { $count } dni temu
+action-restore = Przywróć
+msg-recovered = Przywrócono: { $name } (zapisz, aby zachować zmiany)
+msg-recovery-failed = Nie można przywrócić projektu: { $error }
+
 ## Schody
 stair-shape-straight = Proste
 stair-shape-straight-landing = Proste ze spocznikiem
