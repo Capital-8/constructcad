@@ -16,6 +16,7 @@ pub mod modify;
 pub mod phases;
 pub mod project;
 pub mod query;
+pub mod ramp;
 pub mod rebar;
 pub mod stair;
 pub mod structure;

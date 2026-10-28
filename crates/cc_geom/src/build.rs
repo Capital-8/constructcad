@@ -395,7 +395,7 @@ impl ModelGeometry {
         }
     }
 
-    /// Columns, beams, stairs and railings.
+    /// Columns, beams, stairs, ramps and railings.
     fn build_structure(&mut self, project: &Project) {
         for e in project.elements.values() {
             let Some(ty) = project.element_type(e.type_id) else { continue };
@@ -414,6 +414,10 @@ impl ModelGeometry {
                 (ElementKind::Stair(st), TypeData::Stair { build, .. }) => {
                     let Some(g) = crate::stair_geom(project, e, st) else { continue };
                     g.add_to(build, &mut s);
+                }
+                (ElementKind::Ramp(r), TypeData::Ramp { thickness, .. }) => {
+                    let Some(g) = crate::ramp_geom(project, e, r) else { continue };
+                    g.add_to(*thickness, &mut s);
                 }
                 (ElementKind::Railing(r), TypeData::Railing { .. }) => crate::add_railing(project, e, r, &mut s),
                 _ => continue,

@@ -789,7 +789,7 @@ impl<'a> Exporter<'a> {
         Some(self.w.add("IFCPOLYGONALFACESET", args![points, Value::Null, ifc_faces, Value::Null]))
     }
 
-    /// Columns, beams, stairs and railings.
+    /// Columns, beams, stairs, ramps and railings.
     fn write_structure(&mut self) {
         let project = self.project;
         for e in project.elements.values() {
@@ -949,6 +949,19 @@ impl<'a> Exporter<'a> {
                         props: Some(("Pset_StairCommon", props)),
                         ..StructureProduct::new("IFCSTAIR", shape, items)
                     }
+                }
+                (ElementKind::Ramp(r), TypeData::Ramp { thickness, .. }) => {
+                    let Some(g) = cc_geom::ramp_geom(project, e, r) else { continue };
+                    let items = self.pieces(e, g.pieces(*thickness), level_z);
+                    let shape = match (r.layout.shape, g.check.flights) {
+                        (cc_core::RampShape::Straight, 1) => "STRAIGHT_RUN_RAMP",
+                        (cc_core::RampShape::Straight, 2) => "TWO_STRAIGHT_RUN_RAMP",
+                        (cc_core::RampShape::LShaped, _) => "QUARTER_TURN_RAMP",
+                        (cc_core::RampShape::UShaped, 2) => "HALF_TURN_RAMP",
+                        (cc_core::RampShape::Spiral, _) => "SPIRAL_RAMP",
+                        _ => "NOTDEFINED",
+                    };
+                    StructureProduct::new("IFCRAMP", shape, items)
                 }
                 (ElementKind::Railing(r), TypeData::Railing { .. }) => {
                     let items = self.pieces(e, cc_geom::railing_pieces(project, e, r), level_z);
@@ -1421,6 +1434,7 @@ impl<'a> Exporter<'a> {
                 ("IFCSLABTYPE", args![Value::Enum("BASESLAB")])
             }
             TypeData::Stair { .. } => ("IFCSTAIRTYPE", args![Value::Enum("STRAIGHT_RUN_STAIR")]),
+            TypeData::Ramp { .. } => ("IFCRAMPTYPE", args![Value::Enum("NOTDEFINED")]),
             TypeData::Railing { .. } => ("IFCRAILINGTYPE", args![Value::Enum("GUARDRAIL")]),
             TypeData::Wall { .. } => ("IFCWALLTYPE", args![Value::Enum("STANDARD")]),
             TypeData::Floor { .. } => ("IFCSLABTYPE", args![Value::Enum("FLOOR")]),
@@ -2050,6 +2064,7 @@ fn common_pset(project: &Project, e: &Element) -> Option<&'static str> {
         ElementKind::Column(_) => "Pset_ColumnCommon",
         ElementKind::Beam(_) => "Pset_BeamCommon",
         ElementKind::Stair(_) => "Pset_StairCommon",
+        ElementKind::Ramp(_) => "Pset_RampCommon",
         ElementKind::Railing(_) => "Pset_RailingCommon",
         ElementKind::Foundation(_) => match project.element_type(e.type_id).map(|t| &t.data) {
             Some(TypeData::Foundation { kind: cc_core::FoundationKind::Slab, .. }) => "Pset_SlabCommon",

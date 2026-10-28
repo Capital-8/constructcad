@@ -21,6 +21,7 @@ pub mod phase;
 pub mod profile;
 mod project;
 pub mod properties;
+pub mod ramp;
 mod repair;
 mod schedule;
 pub mod stair;
@@ -35,8 +36,8 @@ pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
     BarFace, Beam, BeamLateral, BeamVertical, Ceiling, Column, Component, Dimension, DimensionKind, Element,
-    ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Rebar,
-    RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
+    ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Ramp,
+    Rebar, RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
 pub use graphics::{
     CategoryGraphics, FillGraphics, FilterOp, FilterParam, FilterRule, FilterUse, GraphicOverride, LineGraphics,
@@ -53,6 +54,7 @@ pub use persist::{
 pub use phase::{Phase, PhaseDisplay, PhaseFilter, PhaseGraphics, PhaseState, PhaseStatus};
 pub use profile::{ProfilePoint, SketchPlane};
 pub use project::{Group, Level, Project, ProjectInfo, can_join_geometry, join_priority};
+pub use ramp::{RampCheck, RampIssue, RampLayout, RampRules, RampShape, ramp_flights};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use stair::{
     StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout, StairRailing, StairRules, StairShape,

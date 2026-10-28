@@ -652,6 +652,16 @@ impl Project {
         (base, top.max(base + 0.05))
     }
 
+    /// Base and top elevation of a ramp (the top at least 1 cm above).
+    pub fn ramp_span(&self, element: &Element, ramp: &crate::Ramp) -> (f64, f64) {
+        let base = self.level_elevation(element.level) + ramp.base_offset;
+        let top = match ramp.top {
+            crate::WallTop::Unconnected => base + ramp.height,
+            crate::WallTop::Level { level, offset } => self.level_elevation(level) + offset,
+        };
+        (base, top.max(base + 0.01))
+    }
+
     /// Elevation of a wall's base.
     pub fn wall_base_z(&self, element: &Element, wall: &crate::Wall) -> f64 {
         self.level_elevation(element.level) + wall.base_offset

@@ -221,6 +221,12 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
                 derived.insert("check".into(), json!(g.check));
             }
         }
+        ElementKind::Ramp(r) => {
+            if let Some(g) = cc_geom::ramp_geom(p, &e, r) {
+                derived.insert("run".into(), json!(g.run()));
+                derived.insert("check".into(), json!(g.check));
+            }
+        }
         ElementKind::Pipe(seg) | ElementKind::Conduit(seg) => {
             derived.insert("length".into(), json!(seg.length()));
             derived.insert("slope".into(), json!(seg.slope()));

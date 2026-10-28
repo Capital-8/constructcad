@@ -140,6 +140,10 @@ pub fn open_default_3d(state: &mut AppState) {
 }
 
 pub fn activate_category_tool(state: &mut AppState, category: Category) {
+    // A project without a ramp type gets one.
+    if category == Category::Ramp && state.project().default_type(Category::Ramp).is_none() {
+        run_command(state, cc_engine::commands::ramp::RampTypeCreate::default());
+    }
     match Tool::for_category(state.project(), category) {
         Some(tool) => {
             // Doors and windows also go on walls clicked in a 3D view.

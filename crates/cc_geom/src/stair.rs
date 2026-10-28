@@ -771,15 +771,25 @@ impl Builder<'_> {
     }
 }
 
-/// Path of a railing with elevations: along its stair's side when it has
+/// Path of a railing with elevations: along its stair's or ramp's side when it has
 /// one, else its own path at its base.
 pub fn railing_path(project: &Project, element: &cc_core::Element, railing: &cc_core::Railing) -> Vec<DVec3> {
     if let Some(h) = railing.stair
         && let Some(host) = project.element(h.host)
-        && let cc_core::ElementKind::Stair(st) = &host.kind
-        && let Some(g) = stair_geom(project, host, st)
     {
-        return g.railing_path(h.side, h.inset);
+        match &host.kind {
+            cc_core::ElementKind::Stair(st) => {
+                if let Some(g) = stair_geom(project, host, st) {
+                    return g.railing_path(h.side, h.inset);
+                }
+            }
+            cc_core::ElementKind::Ramp(r) => {
+                if let Some(g) = crate::ramp_geom(project, host, r) {
+                    return g.railing_path(h.side, h.inset);
+                }
+            }
+            _ => {}
+        }
     }
     let base = project.level_elevation(element.level) + railing.base_offset;
     railing.path.iter().map(|p| DVec3::new(p.x, p.y, base)).collect()

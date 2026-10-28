@@ -413,6 +413,40 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 actions::run_command(state, command);
             }
         }
+        ElementKind::Ramp(rp) => {
+            section(ui, "constraints", t!("section-constraints"), |ui| {
+                level_row(ui, state, &el);
+                length_row(ui, state, &t!("prop-base-offset"), id, "base", rp.base_offset, |e, v| {
+                    if let ElementKind::Ramp(r) = &mut e.kind {
+                        r.base_offset = v;
+                    }
+                });
+                top_rows(ui, state, &el, rp.top, rp.height);
+            });
+            section(ui, "ramp-layout", t!("section-ramp-layout"), |ui| {
+                let mut layout = rp.layout;
+                let edited = crate::stair_ui::ramp_layout_controls(ui, id.0, &mut layout, true);
+                if edited.changed {
+                    modify(state, id, "layout", |e| {
+                        if let ElementKind::Ramp(r) = &mut e.kind {
+                            r.layout = layout;
+                        }
+                    });
+                }
+                if edited.done {
+                    state.session.doc.break_merge();
+                }
+            });
+            if let Some(g) = cc_geom::ramp_geom(state.project(), &el, rp) {
+                section(ui, "dimensions", t!("section-ramp-check"), |ui| crate::stair_ui::ramp_check_rows(ui, &g));
+            }
+            let railings = state.project().railings_of(id).count();
+            if railings == 0 && ui.button(t!("action-stair-railings")).clicked() {
+                let command =
+                    cc_engine::commands::stair::StairRailingsAdd { id: id.0, side: None, type_ref: None, inset: None };
+                actions::run_command(state, command);
+            }
+        }
         ElementKind::Railing(r) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
@@ -422,8 +456,12 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                             r.base_offset = v;
                         }
                     });
-                } else {
-                    readonly_row(ui, &t!("prop-railing-host"), t!("prop-railing-on-stair"));
+                } else if let Some(h) = r.stair {
+                    // The host's category and mark, e.g. "Ramp R1".
+                    let host = state.project().element(h.host).map(|e| (e.category(), e.mark.clone()));
+                    let text =
+                        host.map_or(String::new(), |(c, mark)| format!("{} {mark}", tr(c.key())).trim().to_string());
+                    readonly_row(ui, &t!("prop-railing-host"), text);
                 }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
@@ -558,7 +596,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     });
 }
 
-/// Top constraint rows shared by columns and stairs (walls have their own).
+/// Top constraint rows shared by columns, stairs and ramps (walls have their own).
 fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallTop, height: f64) {
     use cc_core::WallTop;
     let id = el.id;
@@ -574,6 +612,12 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
                 s.top = top;
                 if let Some(h) = height {
                     s.height = h;
+                }
+            }
+            ElementKind::Ramp(r) => {
+                r.top = top;
+                if let Some(h) = height {
+                    r.height = h;
                 }
             }
             _ => {}
@@ -608,6 +652,7 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
             length_row(ui, state, &t!("prop-top-offset"), id, "top-offset", offset, move |e, v| match &mut e.kind {
                 ElementKind::Column(c) => c.top = WallTop::Level { level, offset: v },
                 ElementKind::Stair(s) => s.top = WallTop::Level { level, offset: v },
+                ElementKind::Ramp(r) => r.top = WallTop::Level { level, offset: v },
                 _ => {}
             });
         }
@@ -615,6 +660,7 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
             length_row(ui, state, &t!("prop-unconnected-height"), id, "height", height, |e, v| match &mut e.kind {
                 ElementKind::Column(c) => c.height = v.max(0.1),
                 ElementKind::Stair(s) => s.height = v.max(0.1),
+                ElementKind::Ramp(r) => r.height = v.max(0.01),
                 _ => {}
             });
         }

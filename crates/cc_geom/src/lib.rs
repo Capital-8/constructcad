@@ -14,6 +14,7 @@ pub mod mep;
 pub mod mep_net;
 mod mesh;
 pub mod polygon;
+pub mod ramp;
 pub mod rebar;
 pub mod roofs;
 mod rooms;
@@ -33,6 +34,7 @@ pub use component::{resolve_component, resolve_component_in};
 pub use cut::{clip_polygon, face_plane_segments};
 pub use mep::{SegmentGeom, segment_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};
+pub use ramp::{RampGeom, RampPiece, ramp_geom};
 pub use rooms::{outer_boundary, room_boundary};
 pub use solid::{Face, Ray, Solid};
 pub use stair::{

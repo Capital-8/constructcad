@@ -294,6 +294,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     | TypeData::Beam { material, .. }
     | TypeData::Foundation { material, .. }
     | TypeData::Stair { material, .. }
+    | TypeData::Ramp { material, .. }
     | TypeData::Pipe { material, .. }
     | TypeData::Conduit { material, .. }
     | TypeData::Railing { material, .. } = &ty.data
@@ -311,6 +312,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     | TypeData::Beam { material, .. }
                     | TypeData::Foundation { material, .. }
                     | TypeData::Stair { material, .. }
+                    | TypeData::Ramp { material, .. }
                     | TypeData::Pipe { material, .. }
                     | TypeData::Conduit { material, .. }
                     | TypeData::Railing { material, .. } => *material = m,
@@ -450,7 +452,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     });
 }
 
-/// Section and layout parameters of columns, beams, stairs and railings.
+/// Section and layout parameters of columns, beams, stairs, ramps and railings.
 fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let tid = ty.id;
     match ty.data {
@@ -556,6 +558,34 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         *diameter = v.clamp(0.005, 2.0);
                     }
                 });
+            });
+        }
+        TypeData::Ramp { width, thickness, rules, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                length_row(ui, state, &t!("col-width"), tid, "rw", width, |d, v| {
+                    if let TypeData::Ramp { width, .. } = d {
+                        *width = v.clamp(0.3, 50.0);
+                    }
+                });
+                length_row(ui, state, &t!("col-thickness"), tid, "rt", thickness, |d, v| {
+                    if let TypeData::Ramp { thickness, .. } = d {
+                        *thickness = v.clamp(0.01, 5.0);
+                    }
+                });
+            });
+            crate::table::section(ui, "type-ramp-rules", t!("section-ramp-rules"), |ui| {
+                let mut r = rules;
+                let edited = crate::stair_ui::ramp_rules_rows(ui, &mut r);
+                if edited.changed {
+                    update(state, tid, "rq", |t| {
+                        if let TypeData::Ramp { rules, .. } = &mut t.data {
+                            *rules = r;
+                        }
+                    });
+                }
+                if edited.done {
+                    state.session.doc.break_merge();
+                }
             });
         }
         TypeData::Railing { height, post_spacing, .. } => {

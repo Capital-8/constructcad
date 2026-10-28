@@ -173,7 +173,7 @@ fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &s
     d.text(c + DVec2::new(r + 0.08, -r - 0.05), name, 2.5);
 }
 
-/// Columns, beams, stairs and railings of `level` as seen from the cut plane.
+/// Columns, beams, stairs, ramps and railings of `level` as seen from the cut plane.
 /// Outlines of component pieces marked for plans: in floor plans the pieces
 /// starting below the cut (pieces above it dashed), in ceiling plans only
 /// the pieces above the cut (light fixtures and the like).
@@ -288,6 +288,11 @@ fn draw_structure(
                     draw_stair(d, &g, cut_z, e.id);
                 }
             }
+            (ElementKind::Ramp(r), Some(TypeData::Ramp { .. })) => {
+                if let Some(g) = cc_geom::ramp_geom(project, e, r) {
+                    draw_ramp(d, &g, cut_z, e.id);
+                }
+            }
             (ElementKind::Railing(r), Some(TypeData::Railing { .. })) => {
                 let path: Vec<DVec2> = cc_geom::railing_path(project, e, r).iter().map(|p| p.truncate()).collect();
                 d.polyline(&path, false, LineStyle::Projection, id);
@@ -351,6 +356,111 @@ fn draw_stair(d: &mut Drawing2D, g: &cc_geom::StairGeom, cut_z: f64, element: cc
     let start_dir = arrow.get(1).map_or(g.u, |p| (*p - first).normalize_or(g.u));
     let foot = start_dir.perp() * 0.06;
     d.line(first - foot, first + foot, LineStyle::Annotation, id);
+}
+
+/// The part of a polygon with an elevation per vertex at or below `cut`
+/// (`below`) or above it, with the elevations interpolated along its edges.
+fn clip_at(outline: &[DVec2], z: &[f64], cut: f64, below: bool) -> Vec<DVec2> {
+    let inside = |v: f64| if below { v <= cut + 1e-9 } else { v > cut + 1e-9 };
+    let n = outline.len().min(z.len());
+    let mut out = Vec::new();
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let (a, b, za, zb) = (outline[i], outline[j], z[i], z[j]);
+        if inside(za) {
+            out.push(a);
+        }
+        if inside(za) != inside(zb) && (zb - za).abs() > 1e-12 {
+            out.push(a.lerp(b, (cut - za) / (zb - za)));
+        }
+    }
+    out
+}
+
+/// Ramp symbol: the flights and landings (dashed above the cut plane, with a
+/// break line where a flight passes it), an arrow along the walking line
+/// pointing up and the slope written along the first flight.
+fn draw_ramp(d: &mut Drawing2D, g: &cc_geom::RampGeom, cut_z: f64, element: cc_core::ElementId) {
+    use crate::drawing::Anchor;
+    let id = Some(element);
+    // Edges of the parts below and above the cut; those two flight parts
+    // share (the facets of a helix, the cut itself) are not drawn.
+    let mut edges: Vec<(DVec2, DVec2, LineStyle, bool)> = Vec::new();
+    for p in &g.pieces {
+        let below = clip_at(&p.outline, &p.z, cut_z, true);
+        let above = clip_at(&p.outline, &p.z, cut_z, false);
+        for (part, style) in [(&below, LineStyle::Projection), (&above, LineStyle::Hidden)] {
+            if part.len() >= 3 {
+                let n = part.len();
+                edges.extend((0..n).map(|i| (part[i], part[(i + 1) % n], style, !p.landing)));
+            }
+        }
+        if below.len() >= 3 && above.len() >= 3 && !p.landing {
+            // The cut runs between the two points the parts share.
+            let shared: Vec<DVec2> =
+                below.iter().copied().filter(|q| above.iter().any(|r| r.distance(*q) < 1e-9)).collect();
+            if let [a, b] = shared.as_slice() {
+                let m = (*a + *b) * 0.5;
+                let z = (*b - *a).perp().normalize_or_zero() * 0.08;
+                d.polyline(&[*a, m - z, m + z, *b], false, LineStyle::Projection, id);
+            }
+        }
+    }
+    // Edges keyed by their ends rounded to a micrometer, in either direction.
+    let point = |p: DVec2| ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64);
+    let key = |a: DVec2, b: DVec2| {
+        let (a, b) = (point(a), point(b));
+        if a <= b { (a, b) } else { (b, a) }
+    };
+    let mut flight_edges: std::collections::HashMap<_, usize> = std::collections::HashMap::new();
+    for &(a, b, _, flight) in &edges {
+        if flight {
+            *flight_edges.entry(key(a, b)).or_default() += 1;
+        }
+    }
+    for &(a, b, style, flight) in &edges {
+        let shared = flight && flight_edges.get(&key(a, b)).is_some_and(|n| *n > 1);
+        if !shared && a.distance(b) > 1e-9 {
+            d.line(a, b, style, id);
+        }
+    }
+    // Arrow along the walking line, to the cut plane (or the top).
+    let limit = cut_z.max(g.base + 0.05);
+    let mut arrow: Vec<DVec2> = Vec::new();
+    for w in g.walkline.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if arrow.is_empty() {
+            arrow.push(a.truncate());
+        }
+        if b.z <= limit + 1e-9 || (b.z - a.z).abs() < 1e-12 {
+            arrow.push(b.truncate());
+            continue;
+        }
+        if a.z < limit {
+            arrow.push(a.truncate().lerp(b.truncate(), (limit - a.z) / (b.z - a.z)));
+        }
+        break;
+    }
+    arrow.dedup_by(|a, b| a.distance(*b) < 1e-6);
+    if let [.., before, end] = arrow.as_slice() {
+        let (before, end) = (*before, *end);
+        d.polyline(&arrow, false, LineStyle::Annotation, id);
+        let dir = (end - before).normalize_or(g.u);
+        let head = 0.15;
+        d.line(end, end - dir * head + dir.perp() * head * 0.6, LineStyle::Annotation, id);
+        d.line(end, end - dir * head - dir.perp() * head * 0.6, LineStyle::Annotation, id);
+    }
+    // The slope beside the walking line of the first flight, kept upright.
+    if let [a, b, ..] = g.walkline.as_slice() {
+        let (a, b) = (a.truncate(), b.truncate());
+        let dir = (b - a).normalize_or(g.u);
+        let mut angle = dir.y.atan2(dir.x);
+        if angle > PI / 2.0 + 1e-9 || angle <= -PI / 2.0 {
+            angle += if angle > 0.0 { -PI } else { PI };
+        }
+        let at = a.lerp(b, 0.5) + dir.perp() * (g.width * 0.2);
+        d.tag_text(at, crate::format::slope(g.check.slope), 2.5, Anchor::Center, angle, id);
+    }
 }
 
 fn draw_wall(d: &mut Drawing2D, project: &Project, g: &WallGeom, cut_z: f64, spacing: f64) {
