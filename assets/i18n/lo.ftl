@@ -1590,7 +1590,7 @@ ph-default-filter-name = ຕົວກັ່ນຕອງ { $n }
 ph-filter-none = ບໍ່ມີ
 ph-not-demolished = ບໍ່ມີ
 
-# Not yet translated: English text until a Lao translation comes in.
+# Lao translated.
 comp-kind-door = ປະຕູ
 comp-kind-window = ປ່ອງຢ້ຽມ
 conn-dir-down = ລົງ
