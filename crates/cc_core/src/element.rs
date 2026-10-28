@@ -839,8 +839,8 @@ pub struct Rebar {
     pub cover: f64,
 }
 
-/// A straight stair run starting at `start` (bottom of the first riser,
-/// center of the width) going up along `direction_deg`.
+/// A stair starting at `start` (bottom of the first riser, center of the
+/// width) going up along `direction_deg`; `layout` gives its plan shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stair {
     pub start: DVec2,
@@ -849,6 +849,8 @@ pub struct Stair {
     /// Height when `top` is unconnected.
     pub height: f64,
     pub top: WallTop,
+    #[serde(default)]
+    pub layout: crate::StairLayout,
 }
 
 /// A railing along an open path.
@@ -856,6 +858,10 @@ pub struct Stair {
 pub struct Railing {
     pub path: Vec<DVec2>,
     pub base_offset: f64,
+    /// The stair side the railing follows: its path and rise come from the
+    /// stair (`path` keeps the last one, for when the stair is gone).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stair: Option<crate::StairRailing>,
 }
 
 impl Railing {

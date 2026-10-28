@@ -287,7 +287,14 @@ impl Project {
             ),
             (
                 &n("tpl-type-stair"),
-                TypeData::Stair { width: 1.0, max_riser: 0.18, tread: 0.28, material: n("tpl-mat-concrete") },
+                TypeData::Stair {
+                    width: 1.0,
+                    max_riser: 0.18,
+                    tread: 0.28,
+                    material: n("tpl-mat-concrete"),
+                    build: Default::default(),
+                    rules: Default::default(),
+                },
             ),
             (&n("tpl-type-railing"), TypeData::Railing { height: 1.1, post_spacing: 1.2, material: n("tpl-mat-wood") }),
             (&n("tpl-type-pipe-20"), TypeData::Pipe { diameter: 0.020, material: n("tpl-mat-pvc") }),
@@ -421,6 +428,8 @@ impl Project {
                     max_riser: 0.18,
                     tread: 0.28,
                     material: template_default("tpl-mat-concrete").to_string(),
+                    build: Default::default(),
+                    rules: Default::default(),
                 },
             ),
             (
@@ -830,6 +839,13 @@ impl Project {
     /// Doors and windows hosted by `wall`.
     pub fn hosted_by(&self, wall: ElementId) -> impl Iterator<Item = &Element> {
         self.elements.values().filter(move |e| e.as_hosted().is_some_and(|h| h.host == wall))
+    }
+
+    /// The railings that follow stair `host`.
+    pub fn railings_of(&self, host: ElementId) -> impl Iterator<Item = &Element> {
+        self.elements
+            .values()
+            .filter(move |e| matches!(&e.kind, ElementKind::Railing(r) if r.stair.is_some_and(|h| h.host == host)))
     }
 
     /// The reinforcement sets of beam or column `host`.

@@ -8,7 +8,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
-- **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
+- **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
@@ -634,16 +634,42 @@ No parameters.
 
 ### `stair_create`
 
-*edit* — Create a straight stair starting at `start` and rising along `direction` (degrees) up to the level above (or `height`). Risers follow the type.
+*edit* — Create a stair starting at `start` (the middle of its first riser) and rising along `direction` up to the level above (or `height`). Risers and treads follow the type: the fewest risers within its maximum, and a fixed tread or one from Blondel's formula (`2 × riser + tread`). `shape` lays it out straight, with a landing, L- or U-shaped, or around a center.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `start` | [x, y] | required | Start of the run (center of the first step's edge). |
-| `direction` | number | optional | Direction of the run in plan, degrees counter-clockwise from +X. |
+| `direction` | number | optional | Direction of the first flight in plan, degrees counter-clockwise from +X. |
+| `gap` | number | optional | Clear gap between the flights of a U-shaped stair, meters (default 0.1). |
 | `height` | number | optional | Height when there is no level above (default 3). |
+| `inner_radius` | number | optional | Radius of the inner edge of a spiral stair, meters (default 0.15). |
+| `landing` | number | optional | Landing depth along the first flight, meters (default: the stair width). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `shape` | string | optional | Plan shape: `straight` (default), `straight_landing`, `l_shaped`, `u_shaped` or `spiral`. |
+| `split` | integer | optional | Risers of the first flight (default: half of them). |
 | `top_level` | id or name | optional | Level the stair rises to (default: the level above). |
+| `turn` | string | optional | Side the stair turns to, walking up: `left` (default) or `right`. |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
+| `winders` | integer | optional | Winder treads in the corner of an L-shaped stair instead of a landing (2 to 6). |
+
+### `stair_check`
+
+*query* — Check a stair's steps: riser count and height, tread on the walking line, Blondel's step `2 × riser + tread` and the rules of its type they break (riser out of range, short tread, step out of the Blondel range, short landing).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `id` | integer | required | Stair element id. |
+
+### `stair_railings_add`
+
+*edit* — Add railings along the sides of a stair: they follow its flights, landings and turns at the pitch of the nosings, and go with the stair when it changes, moves or is deleted.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `id` | integer | required | Stair element id. |
+| `inset` | number | optional | Distance in from the edge of the stair, meters (default 0.05). |
+| `side` | string | optional | `left`, `right` or `both` (default), walking up. |
+| `type` | id or name | optional | Railing type id or name (default: the category's default type). |
 
 ### `railing_create`
 

@@ -163,8 +163,19 @@ impl Element {
             ElementKind::Stair(s) => {
                 p(&mut s.start);
                 s.direction_deg = t.apply_angle_deg(s.direction_deg);
+                // The run keeps its direction, so the turn changes sides.
+                if t.mirror {
+                    s.layout.turn = s.layout.turn.flipped();
+                }
             }
-            ElementKind::Railing(r) => r.path.iter_mut().for_each(p),
+            ElementKind::Railing(r) => {
+                r.path.iter_mut().for_each(p);
+                if t.mirror
+                    && let Some(h) = &mut r.stair
+                {
+                    h.side = h.side.flipped();
+                }
+            }
             ElementKind::Component(c) => {
                 p(&mut c.position);
                 c.rotation_deg = t.apply_angle_deg(c.rotation_deg);
@@ -238,7 +249,8 @@ impl crate::EditCtx<'_> {
 
 impl crate::Project {
     /// The elements a copy of `ids` takes: the non-hosted ones, plus the
-    /// doors and windows of copied walls and any selected hosted element.
+    /// doors and windows of copied walls, the railings of copied stairs and
+    /// any selected hosted element.
     /// The snapshot stays valid after the originals are deleted (cut).
     pub fn copy_set(&self, ids: &[ElementId]) -> Vec<Element> {
         let set: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
@@ -248,6 +260,15 @@ impl crate::Project {
             self.elements
                 .values()
                 .filter(|e| e.as_hosted().is_some_and(|h| set.contains(&h.host) || set.contains(&e.id)))
+                .cloned(),
+        );
+        out.extend(
+            self.elements
+                .values()
+                .filter(|e| !set.contains(&e.id))
+                .filter(
+                    |e| matches!(&e.kind, ElementKind::Railing(r) if r.stair.is_some_and(|h| set.contains(&h.host))),
+                )
                 .cloned(),
         );
         out
@@ -331,6 +352,13 @@ impl crate::EditCtx<'_> {
                 self.detach_missing_top(&mut c);
                 remap.insert(el.id, c.id);
                 created.push(self.add_element(c));
+            }
+            // Copied railings follow the copies of their stairs, or become free.
+            for id in &created {
+                let Some(ElementKind::Railing(r)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                if let Some(h) = r.stair {
+                    r.stair = remap.get(&h.host).map(|n| crate::StairRailing { host: *n, ..h });
+                }
             }
             // Copied dimensions follow the copies of what they measure, or nothing.
             for id in &created {

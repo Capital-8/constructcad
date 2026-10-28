@@ -982,9 +982,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.separator();
                 ui.label(theme::muted(t!("hint-truss")));
             }
-            Tool::Stair { .. } => {
-                ui.label(theme::muted(t!("hint-stair")));
-            }
+            Tool::Stair { .. } => crate::stair_ui::tool_options(ui, state),
             Tool::Pipe { type_id } => segment_options(ui, state, type_id, true),
             Tool::Conduit { type_id } => segment_options(ui, state, type_id, false),
             Tool::Component { type_id } if crate::tools::device_type(state.project(), type_id).is_some() => {

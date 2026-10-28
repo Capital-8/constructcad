@@ -89,7 +89,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // A stair in the living room up to the upper level.
         let stair_t = p.default_type(Category::Stair).ok_or("template lacks a stair type")?;
         let up = WallTop::Level { level: upper, offset: 0.0 };
-        let stair = Stair { start: DVec2::new(1.0, 0.8), direction_deg: 90.0, base_offset: 0.0, height: 3.0, top: up };
+        let stair = Stair {
+            start: DVec2::new(1.0, 0.8),
+            direction_deg: 90.0,
+            base_offset: 0.0,
+            height: 3.0,
+            top: up,
+            layout: Default::default(),
+        };
         add(e, stair_t, "", ElementKind::Stair(stair));
 
         // A front porch: two columns, a beam and a railing.
@@ -109,7 +116,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let beam = Beam::new(DVec2::new(2.0, -2.5), DVec2::new(7.0, -2.5), 3.0);
         add(e, beam_t, "", ElementKind::Beam(beam));
-        let railing = Railing { path: vec![DVec2::new(2.1, -2.5), DVec2::new(5.5, -2.5)], base_offset: 0.0 };
+        let railing =
+            Railing { path: vec![DVec2::new(2.1, -2.5), DVec2::new(5.5, -2.5)], base_offset: 0.0, stair: None };
         add(e, railing_t, "", ElementKind::Railing(railing));
 
         // Furniture from the default library: living room and bedroom.

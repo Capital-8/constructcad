@@ -171,10 +171,11 @@ impl Project {
                         + usize::from(fix_positive(length, 1.0))
                         + usize::from(fix_positive(thickness, 0.4));
                 }
-                TypeData::Stair { width, max_riser, tread, .. } => {
+                TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(max_riser, 0.18))
                         + usize::from(fix_positive(tread, 0.28));
+                    repairs += build.repair() + rules.repair();
                 }
                 TypeData::Railing { height, post_spacing, .. } => {
                     repairs += usize::from(fix_positive(height, 1.1)) + usize::from(fix_positive(post_spacing, 1.2));
@@ -252,6 +253,27 @@ impl Project {
                     *r = None;
                     repairs += 1;
                 }
+            }
+        }
+        // Stair layouts get valid sizes; railings of missing stairs keep their path.
+        let stairs: std::collections::BTreeSet<_> =
+            self.elements.values().filter(|e| matches!(e.kind, ElementKind::Stair(_))).map(|e| e.id).collect();
+        for e in self.elements.values_mut() {
+            match &mut e.kind {
+                ElementKind::Stair(s) => repairs += s.layout.repair(),
+                ElementKind::Railing(r) => {
+                    if r.stair.is_some_and(|h| !stairs.contains(&h.host)) {
+                        r.stair = None;
+                        repairs += 1;
+                    }
+                    if let Some(h) = &mut r.stair
+                        && !(h.inset.is_finite() && h.inset.abs() < 1.0)
+                    {
+                        h.inset = 0.05;
+                        repairs += 1;
+                    }
+                }
+                _ => {}
             }
         }
         // Pins of missing elements go.

@@ -23,6 +23,7 @@ mod project;
 pub mod properties;
 mod repair;
 mod schedule;
+pub mod stair;
 pub mod transform;
 mod types;
 pub mod units;
@@ -53,6 +54,10 @@ pub use phase::{Phase, PhaseDisplay, PhaseFilter, PhaseGraphics, PhaseState, Pha
 pub use profile::{ProfilePoint, SketchPlane};
 pub use project::{Group, Level, Project, ProjectInfo, can_join_geometry, join_priority};
 pub use schedule::{ScheduleDef, ScheduleField};
+pub use stair::{
+    StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout, StairRailing, StairRules, StairShape,
+    StairSide, Stringers, TreadRule, Turn, stair_steps,
+};
 pub use transform::PlanTransform;
 pub use types::{
     Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, TypeData, TypeInfo,
