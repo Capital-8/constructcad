@@ -603,7 +603,7 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
             &[place(Component), UiCommand::NewComponent, UiCommand::LoadComponent, UiCommand::ComponentLibrary],
         );
     });
-    group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Grid)));
+    group(ui, t!("group-datum"), |ui| command_buttons(ui, state, &[place(Grid), UiCommand::AlignGridEnds]));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
 }
 
@@ -626,7 +626,7 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-documentation"), |ui| {
         stacks(ui, state, &[&[StructuralPlan, NumberStructure, StructuralSchedules]]);
     });
-    group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Category::Grid)));
+    group(ui, t!("group-datum"), |ui| command_buttons(ui, state, &[place(Category::Grid), AlignGridEnds]));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
 }
 

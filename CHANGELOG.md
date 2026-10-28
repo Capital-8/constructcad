@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Grids are named in series (#52). A new grid takes the name after the most recently placed grid parallel to it (within 10°): `1` → `2`, `09` → `10`, `A` → `B`, `Z` → `AA`, `A1` → `A2`, `1.1` → `1.2`. A grid across the existing ones starts a new series: letters across numbered grids, numbers otherwise. The name is unique among the grids (a taken one is skipped). The grid tool shows the name next to the cursor before the second click. `grid_create` uses these names when `name` is left out.
+- Grid ends line up with the bubbles of the other grids (#52). When the grid tool places a point or an end handle of a selected grid is dragged, the end snaps (within the usual 10-pixel snap distance) to the line through the matching end of a parallel grid, perpendicular to it. The second point also keeps the grid parallel to that grid. A dashed guide from that grid's end shows the alignment. Model points and guide crossings still take priority.
+- *Align Grid Ends* (*Architecture* and *Structure* tabs, *Datum* group; `grids_align_ends`): with one grid selected, every grid parallel to it (within 1°) takes its extents. Each end moves along its own line to the reference end on its side. Pinned grids are left alone. `ends` limits the move to the `start` (bubble) or `end` ends, and `grids` picks the grids to align.
+
 ## [0.6.1] - 2026-10-28
 
 ### Added

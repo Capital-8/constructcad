@@ -8,8 +8,8 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::{
-    Beam, BeamLateral, BeamVertical, Category, Ceiling, Column, Component, ElementKind, Floor, Grid, Hosted, LevelId,
-    LocationLine, Project, Railing, Roof, RoofShape, Room, Stair, Wall, WallTop,
+    Beam, BeamLateral, BeamVertical, Category, Ceiling, Column, Component, ElementId, ElementKind, Floor, Grid, Hosted,
+    LevelId, LocationLine, Project, Railing, Roof, RoofShape, Room, Stair, Wall, WallTop,
 };
 use cc_geom::polygon;
 use glam::DVec2;
@@ -613,7 +613,19 @@ impl Command for RoomCreate {
     }
 }
 
-/// Create a grid line (named with the next free number unless `name` is given).
+/// The grids of `p` with their ids.
+pub fn grids(p: &Project) -> impl Iterator<Item = (ElementId, &Grid)> {
+    p.elements.values().filter_map(|e| match &e.kind {
+        ElementKind::Grid(g) => Some((e.id, g)),
+        _ => None,
+    })
+}
+
+/// Create a grid line. Without `name` it takes the next name of its series:
+/// the one after the most recently placed grid parallel to it (`1` → `2`,
+/// `A` → `B`, `Z` → `AA`, `A1` → `A2`, `1.1` → `1.2`); a grid across the
+/// existing ones starts a new series (letters across numbered grids,
+/// numbers otherwise). Names given this way are unique among the grids.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct GridCreate {
@@ -621,7 +633,7 @@ pub struct GridCreate {
     pub start: Point,
     /// End point.
     pub end: Point,
-    /// Grid name (default: the next free number).
+    /// Grid name (default: the next name of its series).
     #[serde(default)]
     pub name: Option<String>,
     /// Level id or name (default: the lowest level).
@@ -639,12 +651,7 @@ impl Command for GridCreate {
         }
         let p = s.project();
         let level = refs::level_or_first(p, self.level.as_ref())?;
-        let name = self.name.unwrap_or_else(|| {
-            next_number(p.elements.values().filter_map(|e| match &e.kind {
-                ElementKind::Grid(g) => Some(g.name.as_str()),
-                _ => None,
-            }))
-        });
+        let name = self.name.unwrap_or_else(|| cc_core::grid::next_name(grids(p), start, end));
         create(s, t!("tx-create-grid"), level, Category::Grid, None, ElementKind::Grid(Grid { start, end, name }))
     }
 }
