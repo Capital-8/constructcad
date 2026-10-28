@@ -62,8 +62,12 @@ pub fn contains(poly: &[DVec2], pt: DVec2) -> bool {
     inside
 }
 
-/// Triangulate a simple polygon; returns index triples.
+/// Triangulate a simple polygon; returns index triples (none when a point
+/// is not finite: earcutr panics on such input).
 pub fn triangulate(poly: &[DVec2]) -> Vec<[usize; 3]> {
+    if poly.iter().any(|p| !p.is_finite()) {
+        return Vec::new();
+    }
     match poly.len() {
         0..=2 => vec![],
         3 => vec![[0, 1, 2]],
@@ -146,6 +150,24 @@ mod tests {
 
     fn square() -> Vec<DVec2> {
         vec![DVec2::new(0.0, 0.0), DVec2::new(4.0, 0.0), DVec2::new(4.0, 4.0), DVec2::new(0.0, 4.0)]
+    }
+
+    /// Regression: earcutr panics on non-finite coordinates, and the 3D view
+    /// triangulates every face each time the model changes (issue #51).
+    #[test]
+    fn triangulating_non_finite_points_gives_nothing() {
+        let n = f64::NAN;
+        let mut bad = vec![
+            DVec2::new(0.0, 0.0),
+            DVec2::new(1.0, n),
+            DVec2::new(1.0, 1.0),
+            DVec2::new(0.0, 1.0),
+            DVec2::new(0.5, 2.0),
+        ];
+        assert!(triangulate(&bad).is_empty());
+        bad[1] = DVec2::new(f64::INFINITY, 0.0);
+        assert!(triangulate(&bad).is_empty());
+        assert!(triangulate(&[DVec2::new(n, n); 6]).is_empty());
     }
 
     #[test]

@@ -1639,6 +1639,18 @@ ph-default-filter-name = Filter { $n }
 ph-filter-none = Keiner
 ph-not-demolished = Keine
 
+# Wiederherstellung
+dlg-recovery = Nicht gespeicherte Arbeit wiederherstellen
+dlg-recovery-text = ConstructCAD wurde beendet, ohne diese Änderungen zu speichern. Wählen Sie ein Projekt zum Wiederherstellen; es öffnet sich mit den nicht gespeicherten Änderungen.
+recovery-never-saved = Nie gespeichert
+recovery-age-now = gerade eben
+recovery-age-minutes = vor { $count } Min.
+recovery-age-hours = vor { $count } Std.
+recovery-age-days = vor { $count } Tagen
+action-restore = Wiederherstellen
+msg-recovered = Wiederhergestellt: { $name } (speichern, um die Änderungen zu behalten)
+msg-recovery-failed = Das Projekt konnte nicht wiederhergestellt werden: { $error }
+
 ## Treppen
 stair-shape-straight = Gerade
 stair-shape-straight-landing = Gerade mit Podest

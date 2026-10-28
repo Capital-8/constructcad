@@ -41,6 +41,8 @@ pub struct ConstructApp {
     dock: DockState<ViewId>,
     /// Document generation the dock layout belongs to.
     dock_generation: u64,
+    /// Autosave and crash recovery of the open project.
+    recovery: crate::recovery::Recovery,
 }
 
 impl ConstructApp {
@@ -48,6 +50,12 @@ impl ConstructApp {
     pub fn new(cc: &eframe::CreationContext<'_>, args: Args) -> Self {
         let Args { path, views, language } = args;
         crate::theme::apply(&cc.egui_ctx);
+        // wgpu panics on an uncaptured GPU error (a validation error or a
+        // failed allocation) by default; log it and keep the app (and the
+        // open project) alive instead.
+        if let Some(rs) = &cc.wgpu_render_state {
+            rs.device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU error: {e}")));
+        }
         // Command line, then saved preference, then the operating system language.
         let saved = cc.storage.and_then(|s| s.get_string(LANGUAGE_KEY)).and_then(|c| Language::from_code(&c));
         crate::i18n::set_language(language.or(saved).unwrap_or_else(Language::from_system));
@@ -85,7 +93,8 @@ impl ConstructApp {
         }
         let dock = if named.is_empty() { initial_dock(state.project()) } else { named_dock(&named) };
         let dock_generation = state.generation;
-        Self { state, dock, dock_generation }
+        let recovery = crate::recovery::Recovery::new(crate::recovery::folder());
+        Self { state, dock, dock_generation, recovery }
     }
 }
 
@@ -364,9 +373,28 @@ impl eframe::App for ConstructApp {
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        // A panic in a frame ends the app, as before, but writes a last
+        // recovery copy of the open project first (the panic hook has
+        // logged it to the crash log).
+        let shown = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.frame(ui, frame)));
+        if let Err(payload) = shown {
+            self.recovery.write_now(&self.state);
+            std::panic::resume_unwind(payload);
+        }
+    }
+
+    /// A clean exit: the changes were saved or discarded, so the copy goes.
+    fn on_exit(&mut self) {
+        self.recovery.exit();
+    }
+}
+
+impl ConstructApp {
+    fn frame(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         crate::theme::sync(&ctx);
         self.state.sync();
+        self.recovery.tick(&self.state);
         self.state.updates.poll();
         self.state.follow_selection();
         if !self.state.textures_to_free.is_empty()
@@ -399,6 +427,7 @@ impl eframe::App for ConstructApp {
         if self.state.show_home {
             crate::home::show(ui, &mut self.state);
             dialogs::show(&ctx, &mut self.state);
+            self.recovery.dialog(&ctx, &mut self.state);
             crate::palette::show(&ctx, &mut self.state);
             return;
         }
@@ -441,6 +470,7 @@ impl eframe::App for ConstructApp {
                 .show_inside(ui, &mut Tabs { state: &mut self.state, render_state });
         });
         dialogs::show(&ctx, &mut self.state);
+        self.recovery.dialog(&ctx, &mut self.state);
         crate::palette::show(&ctx, &mut self.state);
     }
 }
