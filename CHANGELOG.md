@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-28
+
 ### Added
 
 - Stair shapes (#29): straight, straight with a landing, L-shaped (with a landing or 2 to 6 winders), U-shaped (with a gap between the flights) and spiral/helical (around an inner radius), turning left or right, with the risers of the first flight and the landing depth adjustable. The stair tool's options bar picks the shape; the properties palette edits it; `stair_create` takes `shape`, `turn`, `split`, `landing`, `gap`, `winders` and `inner_radius`. Plans draw every tread, landing and winder (dashed above the cut) with the break line and the arrow along the walking line; IFC export writes the matching `IfcStair` type (`TWO_STRAIGHT_RUN_STAIR`, `QUARTER_TURN_STAIR`, `QUARTER_WINDING_STAIR`, `HALF_TURN_STAIR`, `SPIRAL_STAIR`) with one closed B-rep per piece.
@@ -293,7 +295,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/francisreboucas/constructcad/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/francisreboucas/constructcad/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/francisreboucas/constructcad/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/francisreboucas/constructcad/compare/v0.4.2...v0.5.0
