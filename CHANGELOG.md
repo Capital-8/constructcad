@@ -6,10 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-28
+
 ### Added
 
-- Lao interface (ພາສາລາວ, `lo`), contributed by @bounkirdni-2025. It is picked from the system language for `lo`; texts added in 0.6.0 are still in English.
+- Lao interface (ພາສາລາວ, `lo`), contributed by @bounkirdni-2025. It is picked from the system language for `lo`.
 - Lao text shows in the interface and in PNG export through a system font that has Lao letters (Leelawadee UI on Windows 10 and later, Lao Sangam MN on macOS, Noto Sans Lao or Phetsarath on Linux), after the CJK ones. No font is bundled.
+
+### Changed
+
+- Faster 3D views. Ending an orbit, pan or zoom no longer rebuilds the model's geometry and every view's drawing (saving the camera redraws only that view and the sheets showing it); selecting, hiding or isolating elements repaints the 3D mesh instead of rebuilding it; an unchanged 3D view is not rendered again on every repaint; clicking to select tests the nearest elements first (about 10 times faster). Outline edges of dense meshes, such as imported IFC elements, are found in near-linear time (an element of 8,000 triangles: 184 ms → 13 ms).
+
+### Fixed
+
+- Component editor: text fields shrank to a few letters, the dialog stretched to the window's width, the piece buttons (move down, remove) and the connectors were cut off, and the dialog could run off short windows. The fields have fixed widths, the previews sit in a column beside the parameters and pieces, the connectors span the width below, and the body scrolls when the window is short.
+- A 3D view of only transparent solids (with no edges) showed nothing.
 
 ## [0.6.0] - 2026-10-27
 
@@ -255,7 +266,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/francisreboucas/constructcad/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/francisreboucas/constructcad/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/francisreboucas/constructcad/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/francisreboucas/constructcad/compare/v0.4.1...v0.4.2
