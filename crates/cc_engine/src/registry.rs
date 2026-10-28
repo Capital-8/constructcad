@@ -203,6 +203,7 @@ registry![
         modify::ElementOffset,
         modify::ElementAlign,
         modify::ElementMoveEnd,
+        modify::GridsAlignEnds,
         edit::ElementSet,
         edit::ElementsSetType,
     ],

@@ -1828,6 +1828,87 @@ fn component_library_lists_folders() {
     assert_eq!(found["components"].as_array().unwrap().len(), 1, "{found}");
 }
 
+#[test]
+fn grids_are_named_in_series() {
+    let mut s = Session::default();
+    let grid = |s: &mut Session, args: Value| run(s, "grid_create", args)["params"]["name"].clone();
+    // Vertical grids count 1, 2; across them a new series starts with letters.
+    assert_eq!(grid(&mut s, json!({"start": [0, 0], "end": [0, 10]})), "1");
+    assert_eq!(grid(&mut s, json!({"start": [6, 0], "end": [6, 10]})), "2");
+    assert_eq!(grid(&mut s, json!({"start": [-1, 1], "end": [13, 1]})), "A");
+    // Each series goes on after its last grid, whichever way it is drawn.
+    assert_eq!(grid(&mut s, json!({"start": [12, 10], "end": [12, 0]})), "3");
+    assert_eq!(grid(&mut s, json!({"start": [-1, 5], "end": [13, 5]})), "B");
+    // A given name is kept and the series continues from it.
+    assert_eq!(grid(&mut s, json!({"start": [-1, 7], "end": [13, 7], "name": "Y"})), "Y");
+    assert_eq!(grid(&mut s, json!({"start": [-1, 8], "end": [13, 8]})), "Z");
+    assert_eq!(grid(&mut s, json!({"start": [-1, 9], "end": [13, 9]})), "AA");
+    assert_eq!(grid(&mut s, json!({"start": [3, 0], "end": [3, 10], "name": "1.1"})), "1.1");
+    assert_eq!(grid(&mut s, json!({"start": [4, 0], "end": [4, 10]})), "1.2");
+    // Names stay unique: a taken successor is skipped.
+    assert_eq!(grid(&mut s, json!({"start": [20, 0], "end": [20, 10], "name": "5"})), "5");
+    assert_eq!(grid(&mut s, json!({"start": [15, 0], "end": [15, 10], "name": "4"})), "4");
+    assert_eq!(grid(&mut s, json!({"start": [16, 0], "end": [16, 10]})), "6");
+    let ids: Vec<Value> = run(&mut s, "elements_list", json!({"category": "grid"}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].clone())
+        .collect();
+    let mut names: Vec<String> = ids
+        .iter()
+        .map(|id| run(&mut s, "element_get", json!({"id": id}))["params"]["name"].as_str().unwrap().to_string())
+        .collect();
+    let count = names.len();
+    names.sort();
+    names.dedup();
+    assert_eq!(names.len(), count, "{names:?}");
+}
+
+#[test]
+fn grid_ends_align_to_a_reference() {
+    let mut s = Session::default();
+    let point = |s: &mut Session, id: u64, end: &str| run(s, "element_get", json!({"id": id}))["params"][end].clone();
+    let reference = id(&run(&mut s, "grid_create", json!({"start": [0, -1], "end": [0, 10]})));
+    let short = id(&run(&mut s, "grid_create", json!({"start": [5, 0.5], "end": [5, 7]})));
+    // Drawn the other way: its start goes to the reference's end.
+    let back = id(&run(&mut s, "grid_create", json!({"start": [9, 8], "end": [9, 2]})));
+    let across = id(&run(&mut s, "grid_create", json!({"start": [-2, 3], "end": [11, 3]})));
+    let pinned = id(&run(&mut s, "grid_create", json!({"start": [12, 0], "end": [12, 9]})));
+    run(&mut s, "elements_pin", json!({"ids": [pinned], "pinned": true}));
+
+    // The bubble ends only.
+    let out = run(&mut s, "grids_align_ends", json!({"reference": reference, "ends": "start"}));
+    assert_eq!(out["changed"], json!([short, back]), "{out}");
+    assert_eq!(out["pinned_skipped"], json!([pinned]));
+    assert_eq!(out["not_parallel"], json!([]));
+    assert_eq!(point(&mut s, short, "start"), json!([5.0, -1.0]));
+    assert_eq!(point(&mut s, short, "end"), json!([5.0, 7.0]));
+    assert_eq!(point(&mut s, back, "start"), json!([9.0, 10.0]));
+    // Then both ends, in one undo step.
+    run(&mut s, "grids_align_ends", json!({"reference": reference}));
+    assert_eq!(point(&mut s, short, "end"), json!([5.0, 10.0]));
+    assert_eq!(point(&mut s, back, "end"), json!([9.0, -1.0]));
+    assert_eq!(point(&mut s, across, "start"), json!([-2.0, 3.0]));
+    run(&mut s, "undo", json!({}));
+    assert_eq!(point(&mut s, short, "end"), json!([5.0, 7.0]));
+    assert_eq!(point(&mut s, back, "end"), json!([9.0, 2.0]));
+    // Aligned already: nothing changes.
+    let again = run(&mut s, "grids_align_ends", json!({"reference": reference, "ends": "start"}));
+    assert_eq!(again["changed"], json!([]));
+    // Explicit grids that are not parallel are reported, not moved.
+    let out = run(&mut s, "grids_align_ends", json!({"reference": reference, "grids": [across, short]}));
+    assert_eq!((out["changed"].clone(), out["not_parallel"].clone()), (json!([short]), json!([across])), "{out}");
+    // Bad arguments.
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0, 20], "end": [5, 20]})));
+    assert_eq!(fails(&mut s, "grids_align_ends", json!({"reference": wall})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "grids_align_ends", json!({"reference": 999_999})), ErrorCode::NotFound);
+    let bad = json!({"reference": reference, "grids": [wall]});
+    assert_eq!(fails(&mut s, "grids_align_ends", bad), ErrorCode::InvalidArguments);
+    let bad = json!({"reference": reference, "ends": "middle"});
+    assert_eq!(fails(&mut s, "grids_align_ends", bad), ErrorCode::InvalidArguments);
+}
+
 /// Stairs in every shape and construction: their steps are checked against
 /// the type's rules (Blondel's formula), and railings added along them
 /// follow the stair when it is copied, mirrored or deleted.

@@ -37,6 +37,7 @@ pub enum UiCommand {
     Select,
     SelectInstances,
     ColumnsAtGrids,
+    AlignGridEnds,
     BeamsOnGrids,
     BeamsBetweenColumns,
     StructuralSchedules,
@@ -167,7 +168,7 @@ impl UiCommand {
         ];
         all.extend(PLACED.map(Place));
         all.extend([NewComponent, LoadComponent, ComponentLibrary, Select, SelectInstances]);
-        all.extend([ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
+        all.extend([AlignGridEnds, ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
@@ -263,6 +264,7 @@ impl UiCommand {
             Select => Icon::Select,
             SelectInstances => Icon::SelectInstances,
             ColumnsAtGrids => Icon::ColumnsAtGrids,
+            AlignGridEnds => Icon::AlignGridEnds,
             BeamsOnGrids => Icon::BeamsOnGrids,
             BeamsBetweenColumns => Icon::BeamsBetweenColumns,
             StructuralSchedules => Icon::Schedule,
@@ -383,6 +385,7 @@ impl UiCommand {
             Select => t!("tool-select"),
             SelectInstances => t!("action-select-instances"),
             ColumnsAtGrids => t!("action-columns-at-grids"),
+            AlignGridEnds => t!("action-align-grid-ends"),
             BeamsOnGrids => t!("action-beams-on-grids"),
             BeamsBetweenColumns => t!("action-beams-between-columns"),
             StructuralSchedules => t!("action-structural-schedules"),
@@ -512,6 +515,7 @@ impl UiCommand {
             Select => t!("cmd-desc-select"),
             SelectInstances => t!("cmd-desc-select-instances"),
             ColumnsAtGrids => t!("cmd-desc-columns-at-grids"),
+            AlignGridEnds => t!("cmd-desc-align-grid-ends"),
             BeamsOnGrids => t!("cmd-desc-beams-on-grids"),
             BeamsBetweenColumns => t!("cmd-desc-beams-between-columns"),
             StructuralSchedules => t!("cmd-desc-structural-schedules"),
@@ -685,6 +689,7 @@ impl UiCommand {
             Undo => "undo",
             SelectInstances => "elements_list",
             ColumnsAtGrids => "columns_at_grids",
+            AlignGridEnds => "grids_align_ends",
             BeamsOnGrids => "beams_on_grids",
             BeamsBetweenColumns => "beams_between_columns",
             Redo => "redo",
@@ -799,6 +804,7 @@ impl UiCommand {
             SelectInstances if state.active_view.is_none() => Some(t!("why-no-view")),
             Group if state.selection.len() < 2 => Some(t!("msg-group-two")),
             ColumnsAtGrids if crate::actions::grids_for(state).len() < 2 => Some(t!("msg-grids-two")),
+            AlignGridEnds if crate::actions::reference_grid(state).is_none() => Some(t!("why-select-one-grid")),
             BeamsOnGrids if crate::actions::grids_for(state).is_empty() => Some(t!("why-no-grids")),
             BeamsBetweenColumns if crate::actions::selected_columns(state).len() < 2 => Some(t!("msg-columns-two")),
             FootingsUnderColumns if Tool::for_category(project, Category::Foundation).is_none() => {
@@ -1025,6 +1031,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         SelectInstances => crate::actions::select_instances(state),
         Group => crate::actions::group_selection(state),
         ColumnsAtGrids => crate::actions::columns_at_grids(state),
+        AlignGridEnds => crate::actions::align_grid_ends(state),
         BeamsOnGrids => crate::actions::beams_on_grids(state),
         BeamsBetweenColumns => crate::actions::beams_between_columns(state),
         FootingsUnderColumns => crate::actions::footings_under_columns(state),

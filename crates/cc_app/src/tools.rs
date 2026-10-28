@@ -1273,6 +1273,37 @@ fn grid_crossings(project: &Project) -> Vec<DVec2> {
     points
 }
 
+/// A grid end being drawn or dragged lines up with the ends of the other
+/// grids (`cc_core::grid::align_end`, within the snap distance): `s` moves
+/// onto the bubble line of a parallel grid's end, drawn as a guide from that
+/// end, unless it already sits on a model point or a crossing of guides.
+/// `skip` is the grid being dragged.
+fn align_grid_end(
+    project: &Project,
+    skip: Option<ElementId>,
+    fixed: Option<DVec2>,
+    raw: DVec2,
+    s: Snap,
+    scale: f64,
+) -> Snap {
+    if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint | SnapKind::Intersection) {
+        return s;
+    }
+    let others: Vec<(DVec2, DVec2)> = project
+        .elements
+        .values()
+        .filter(|e| Some(e.id) != skip)
+        .filter_map(|e| match &e.kind {
+            ElementKind::Grid(g) => Some((g.start, g.end)),
+            _ => None,
+        })
+        .collect();
+    match cc_core::grid::align_end(&others, fixed, raw, SNAP_PX / scale) {
+        Some(a) => Snap { point: a.point, kind: SnapKind::Alignment, guides: [Some((a.reference, a.point)), None] },
+        None => s,
+    }
+}
+
 /// Two clicks: start and end of a beam. Its top is at the level above by default.
 fn beam_tool(
     ui: &Ui,
@@ -1504,9 +1535,12 @@ fn grid_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let shift = ui.input(|i| i.modifiers.shift);
-    let s = snap_at(state, Some(level), raw, state.interaction.anchor, &[], xf.scale, shift);
+    let anchor = state.interaction.anchor;
+    let s = snap_at(state, Some(level), raw, anchor, &[], xf.scale, shift);
+    // The ends line up with the bubbles of the other grids.
+    let s = align_grid_end(state.project(), None, anchor, raw, s, xf.scale);
     draw_snap(painter, xf, s);
-    if let Some(a) = state.interaction.anchor {
+    if let Some(a) = anchor {
         painter.add(egui::Shape::dashed_line(
             &[xf.to_screen(a), xf.to_screen(s.point)],
             Stroke::new(1.5, PREVIEW),
@@ -1514,6 +1548,11 @@ fn grid_tool(
             4.0,
         ));
         temp_dimension(painter, xf, a, s.point, None, None, 0.0);
+        // The name the grid will get (the engine's default for `grid_create`).
+        if a.distance(s.point) > 0.1 {
+            let name = cc_core::grid::next_name(create::grids(state.project()), a, s.point);
+            label(painter, xf.to_screen(s.point), format!("{} {name}", t!("tool-grid")));
+        }
     }
     if resp.clicked() {
         match state.interaction.anchor {
@@ -2487,6 +2526,9 @@ fn select(
         ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(raw) - xf.to_screen(fixed)));
         let level = state.project().element(id).map(|e| e.level);
         let s = snap_at(state, level, raw, Some(fixed), &[], xf.scale, shift);
+        // A grid's end lines up with the ends of the other grids.
+        let is_grid = state.project().element(id).is_some_and(|e| e.category() == Category::Grid);
+        let s = if is_grid { align_grid_end(state.project(), Some(id), Some(fixed), raw, s, xf.scale) } else { s };
         draw_snap(painter, xf, s);
         // An arc wall keeps its bulge: the arc stretches with the end.
         let bulge = state.project().element(id).and_then(|e| e.as_wall()).map_or(0.0, |w| w.bulge);

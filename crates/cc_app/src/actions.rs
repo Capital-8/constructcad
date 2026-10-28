@@ -552,6 +552,30 @@ pub fn grids_for(state: &AppState) -> Vec<u64> {
     project.elements_of(Category::Grid).map(|e| e.id.0).collect()
 }
 
+/// The single selected grid, the reference of [`align_grid_ends`].
+pub fn reference_grid(state: &AppState) -> Option<u64> {
+    let project = state.project();
+    let mut grids =
+        state.selection.iter().filter(|id| project.element(**id).is_some_and(|e| e.category() == Category::Grid));
+    match (grids.next(), grids.next()) {
+        (Some(id), None) => Some(id.0),
+        _ => None,
+    }
+}
+
+/// Give every grid parallel to the selected one its extents, so their
+/// bubbles line up (the engine's `grids_align_ends`).
+pub fn align_grid_ends(state: &mut AppState) {
+    let Some(reference) = reference_grid(state) else {
+        state.message = t!("why-select-one-grid");
+        return;
+    };
+    let command = cc_engine::commands::modify::GridsAlignEnds { reference, grids: Vec::new(), ends: None };
+    let Some(out) = run(state, command) else { return };
+    let count = out["changed"].as_array().map_or(0, Vec::len);
+    state.message = t!("msg-grid-ends-aligned", "count" => count);
+}
+
 /// The selected columns as a chain: from the lowest-left one, each followed by the nearest left.
 pub fn selected_columns(state: &AppState) -> Vec<u64> {
     let project = state.project();
