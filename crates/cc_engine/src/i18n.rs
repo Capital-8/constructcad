@@ -14,19 +14,21 @@ pub enum Language {
     Fr,
     De,
     It,
+    Lo,
     Pl,
     Uk,
     ZhTw,
 }
 
 impl Language {
-    pub const ALL: [Language; 9] = [
+    pub const ALL: [Language; 10] = [
         Language::PtBr,
         Language::En,
         Language::Es,
         Language::Fr,
         Language::De,
         Language::It,
+        Language::Lo,
         Language::Pl,
         Language::Uk,
         Language::ZhTw,
@@ -41,6 +43,7 @@ impl Language {
             Language::Fr => "fr",
             Language::De => "de",
             Language::It => "it",
+            Language::Lo => "lo",
             Language::Pl => "pl",
             Language::Uk => "uk-UA",
             Language::ZhTw => "zh-TW",
@@ -56,6 +59,7 @@ impl Language {
             Language::Fr => "Français",
             Language::De => "Deutsch",
             Language::It => "Italiano",
+            Language::Lo => "ພາສາລາວ",
             Language::Pl => "Polski",
             Language::Uk => "Українська",
             Language::ZhTw => "繁體中文",
@@ -75,6 +79,7 @@ impl Language {
             "fr" => Language::Fr,
             "de" => Language::De,
             "it" => Language::It,
+            "lo" => Language::Lo,
             "pl" => Language::Pl,
             "uk" => Language::Uk,
             "zh" if traditional => Language::ZhTw,
@@ -97,6 +102,7 @@ impl Language {
             Language::Fr => include_str!("../../../assets/i18n/fr.ftl"),
             Language::De => include_str!("../../../assets/i18n/de.ftl"),
             Language::It => include_str!("../../../assets/i18n/it.ftl"),
+            Language::Lo => include_str!("../../assets/i18n/lo.ftl"),
             Language::Pl => include_str!("../../../assets/i18n/pl.ftl"),
             Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
             Language::ZhTw => include_str!("../../../assets/i18n/zh-TW.ftl"),
@@ -192,6 +198,7 @@ mod tests {
         assert_eq!(Language::from_code("fr-FR"), Some(Language::Fr));
         assert_eq!(Language::from_code("de_DE"), Some(Language::De));
         assert_eq!(Language::from_code("it-IT"), Some(Language::It));
+        assert_eq!(Language::from_code("lo-LA"), Some(Language::Lo));
         assert_eq!(Language::from_code("pl-PL"), Some(Language::Pl));
         assert_eq!(Language::from_code("uk-UA"), Some(Language::Uk));
         assert_eq!(Language::from_code("zh-TW"), Some(Language::ZhTw));
