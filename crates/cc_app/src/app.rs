@@ -19,23 +19,6 @@ pub struct Args {
     pub language: Option<Language>,
 }
 
-/// eframe storage key of the UI language preference.
-const LANGUAGE_KEY: &str = "language";
-/// eframe storage key of the recent projects (one path per line).
-const RECENT_KEY: &str = "recent_files";
-/// eframe storage key of the component library folders (one path per line).
-const LIBRARY_KEY: &str = "component_library_folders";
-/// eframe storage key of the interface theme ("system", "light" or "dark").
-const THEME_KEY: &str = "theme";
-/// eframe storage key of the collapsed ribbon preference ("1" when collapsed).
-const RIBBON_KEY: &str = "ribbon_collapsed";
-/// eframe storage key of the automatic update check preference ("0" when off).
-const UPDATE_AUTO_KEY: &str = "update_check_auto";
-/// eframe storage key of the time of the last update check (seconds since the Unix epoch).
-const UPDATE_LAST_KEY: &str = "update_check_last";
-/// eframe storage key of the version whose update notice the user skipped.
-const UPDATE_SKIPPED_KEY: &str = "update_skipped_version";
-
 pub struct ConstructApp {
     state: AppState,
     dock: DockState<ViewId>,
@@ -43,6 +26,8 @@ pub struct ConstructApp {
     dock_generation: u64,
     /// Autosave and crash recovery of the open project.
     recovery: crate::recovery::Recovery,
+    /// What the interface last applied of the preferences (theme, zoom, font size).
+    look: crate::preferences::Look,
 }
 
 impl ConstructApp {
@@ -71,24 +56,15 @@ impl ConstructApp {
             let info = rs.adapter.get_info();
             log::info!("graphics: {} ({:?}, {})", info.name, info.backend, info.driver_info);
         }
-        // Command line, then saved preference, then the operating system language.
-        let saved = cc.storage.and_then(|s| s.get_string(LANGUAGE_KEY)).and_then(|c| Language::from_code(&c));
-        crate::i18n::set_language(language.or(saved).unwrap_or_else(Language::from_system));
+        let stored = |key: &str| cc.storage.and_then(|s| s.get_string(key));
+        // Command line, then saved preference, then the operating system
+        // language; set first, since the placeholder project is named in it.
+        crate::preferences::load_language(stored, language);
         let mut state = AppState::new(Document::new(actions::new_project()));
-        if let Some(recent) = cc.storage.and_then(|s| s.get_string(RECENT_KEY)) {
-            state.recent = recent.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
-        }
-        if let Some(folders) = cc.storage.and_then(|s| s.get_string(LIBRARY_KEY)) {
-            state.library_folders = folders.lines().filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
-        }
-        state.ribbon_collapsed = cc.storage.and_then(|s| s.get_string(RIBBON_KEY)).is_some_and(|v| v == "1");
-        let stored = |key| cc.storage.and_then(|s| s.get_string(key));
-        state.theme = stored(THEME_KEY).and_then(|v| crate::theme::ThemeChoice::from_code(&v)).unwrap_or_default();
-        crate::theme::set_theme(&cc.egui_ctx, state.theme);
-        state.updates.auto = stored(UPDATE_AUTO_KEY).is_none_or(|v| v != "0");
-        state.updates.last_check = stored(UPDATE_LAST_KEY).and_then(|v| v.parse().ok());
-        state.updates.skipped = stored(UPDATE_SKIPPED_KEY).and_then(|v| crate::update::Version::parse(&v));
-        state.updates.start_if_due(&cc.egui_ctx);
+        crate::preferences::load(&mut state, stored, cc.egui_ctx.zoom_factor());
+        let mut look = crate::preferences::Look::current(&cc.egui_ctx);
+        crate::preferences::sync_look(&cc.egui_ctx, &mut state.prefs, &mut look);
+        state.updates.start_if_due(&cc.egui_ctx, state.prefs.check_updates);
         match path {
             Some(path) => actions::open_path(&mut state, path),
             None => {
@@ -109,7 +85,7 @@ impl ConstructApp {
         let dock = if named.is_empty() { initial_dock(state.project()) } else { named_dock(&named) };
         let dock_generation = state.generation;
         let recovery = crate::recovery::Recovery::new(crate::recovery::folder());
-        Self { state, dock, dock_generation, recovery }
+        Self { state, dock, dock_generation, recovery, look }
     }
 }
 
@@ -202,115 +178,122 @@ impl TabViewer for Tabs<'_> {
 
 impl ConstructApp {
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        let state = &mut self.state;
-        let cmd = |i: &mut egui::InputState, k| i.consume_key(Modifiers::COMMAND, k);
-        let cmd_shift = |i: &mut egui::InputState, k| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, k);
-        let (undo, redo, save, save_as, open, new, close) = ctx.input_mut(|i| {
-            let redo = cmd(i, Key::Y) || cmd_shift(i, Key::Z);
-            let close = cmd(i, Key::W);
-            (cmd(i, Key::Z), redo, cmd(i, Key::S), cmd_shift(i, Key::S), cmd(i, Key::O), cmd(i, Key::N), close)
-        });
-        if open {
-            actions::guarded(state, PendingAction::Open);
-        }
-        if ctx.input_mut(|i| cmd_shift(i, Key::P)) {
-            crate::palette::toggle(state);
-        }
-        if ctx.input_mut(|i| cmd(i, Key::F1)) {
-            crate::commands::run(state, ctx, crate::commands::UiCommand::ToggleRibbon);
-        }
-        if new {
-            actions::guarded(state, PendingAction::New);
-        }
-        // The remaining commands act on the project, which the home screen hides.
-        if state.show_home || !state.project_open {
-            return;
-        }
-        if close {
-            actions::guarded(state, PendingAction::Close);
-        }
-        if undo && state.interaction.is_idle() {
-            let _ = state.session.run(cc_engine::commands::project::Undo {});
-        }
-        if redo {
-            let _ = state.session.run(cc_engine::commands::project::Redo {});
-        }
-        if save_as {
-            actions::save(state, true);
-        } else if save {
-            actions::save(state, false);
-        }
+        shortcuts(ctx, &mut self.state);
+    }
+}
 
-        // Plain keys only when no text field has focus.
-        if ctx.memory(|m| m.focused().is_some()) {
-            return;
+/// The keyboard shortcuts of the app: Ctrl ones, plain keys and two-letter tool keys.
+pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
+    let cmd = |i: &mut egui::InputState, k| i.consume_key(Modifiers::COMMAND, k);
+    let cmd_shift = |i: &mut egui::InputState, k| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, k);
+    let (undo, redo, save, save_as, open, new, close) = ctx.input_mut(|i| {
+        let redo = cmd(i, Key::Y) || cmd_shift(i, Key::Z);
+        let close = cmd(i, Key::W);
+        (cmd(i, Key::Z), redo, cmd(i, Key::S), cmd_shift(i, Key::S), cmd(i, Key::O), cmd(i, Key::N), close)
+    });
+    if open {
+        actions::guarded(state, PendingAction::Open);
+    }
+    if ctx.input_mut(|i| cmd_shift(i, Key::P)) {
+        crate::palette::toggle(state);
+    }
+    if ctx.input_mut(|i| cmd(i, Key::Comma)) {
+        crate::commands::run(state, ctx, crate::commands::UiCommand::Preferences);
+    }
+    if ctx.input_mut(|i| cmd(i, Key::F1)) {
+        crate::commands::run(state, ctx, crate::commands::UiCommand::ToggleRibbon);
+    }
+    if new {
+        actions::guarded(state, PendingAction::New);
+    }
+    // The remaining commands act on the project, which the home screen hides.
+    if state.show_home || !state.project_open {
+        return;
+    }
+    if close {
+        actions::guarded(state, PendingAction::Close);
+    }
+    if undo && state.interaction.is_idle() {
+        let _ = state.session.run(cc_engine::commands::project::Undo {});
+    }
+    if redo {
+        let _ = state.session.run(cc_engine::commands::project::Redo {});
+    }
+    if save_as {
+        actions::save(state, true);
+    } else if save {
+        actions::save(state, false);
+    }
+
+    // Plain keys only when no text field has focus.
+    if ctx.memory(|m| m.focused().is_some()) {
+        return;
+    }
+    let (escape, delete, backspace, space, events) = ctx.input(|i| {
+        let keys = (i.key_pressed(Key::Escape), i.key_pressed(Key::Delete), i.key_pressed(Key::Backspace));
+        (keys.0, keys.1, keys.2, i.key_pressed(Key::Space), i.events.clone())
+    });
+    // Space turns or flips the selection (tools use it for their own preview).
+    if space && state.tool == Tool::Select && crate::tools::rotate_selection(state) {
+        state.message = t!("msg-rotated");
+    }
+    if escape {
+        if !state.typed.is_empty() || state.typed.angle_active {
+            state.typed.clear();
+        } else if !state.interaction.is_idle() {
+            state.interaction = Default::default();
+        } else if state.tool != Tool::Select {
+            state.set_tool(Tool::Select);
+        } else {
+            state.selection.clear();
+            state.sheet_selection = None;
         }
-        let (escape, delete, backspace, space, events) = ctx.input(|i| {
-            let keys = (i.key_pressed(Key::Escape), i.key_pressed(Key::Delete), i.key_pressed(Key::Backspace));
-            (keys.0, keys.1, keys.2, i.key_pressed(Key::Space), i.events.clone())
-        });
-        // Space turns or flips the selection (tools use it for their own preview).
-        if space && state.tool == Tool::Select && crate::tools::rotate_selection(state) {
-            state.message = t!("msg-rotated");
+        state.key_buffer.clear();
+    }
+    if delete {
+        match state.sheet_selection {
+            Some((sheet, index)) if state.active_view == Some(sheet) => actions::remove_viewport(state, sheet, index),
+            _ => state.delete_selection(),
         }
-        if escape {
-            if !state.typed.is_empty() || state.typed.angle_active {
-                state.typed.clear();
-            } else if !state.interaction.is_idle() {
-                state.interaction = Default::default();
-            } else if state.tool != Tool::Select {
-                state.set_tool(Tool::Select);
-            } else {
-                state.selection.clear();
-                state.sheet_selection = None;
+    }
+    let typing_length = state.typing_segment();
+    if backspace && typing_length {
+        state.typed.pop();
+    }
+    for event in &events {
+        match event {
+            Event::Copy => {
+                crate::clipboard::copy(ctx, state);
             }
-            state.key_buffer.clear();
+            Event::Cut => crate::clipboard::cut(ctx, state),
+            Event::Paste(_) => crate::clipboard::paste(state),
+            _ => {}
         }
-        if delete {
-            match state.sheet_selection {
-                Some((sheet, index)) if state.active_view == Some(sheet) => {
-                    actions::remove_viewport(state, sheet, index)
-                }
-                _ => state.delete_selection(),
+    }
+    for event in events {
+        let Event::Text(text) = event else { continue };
+        for ch in text.chars() {
+            if typing_length && (ch.is_ascii_digit() || ch == ',' || ch == '.') {
+                state.typed.push(ch);
+                continue;
             }
-        }
-        let typing_length = state.typing_segment();
-        if backspace && typing_length {
-            state.typed.pop();
-        }
-        for event in &events {
-            match event {
-                Event::Copy => {
-                    crate::clipboard::copy(ctx, state);
-                }
-                Event::Cut => crate::clipboard::cut(ctx, state),
-                Event::Paste(_) => crate::clipboard::paste(state),
-                _ => {}
+            if !ch.is_ascii_alphabetic() {
+                continue;
             }
-        }
-        for event in events {
-            let Event::Text(text) = event else { continue };
-            for ch in text.chars() {
-                if typing_length && (ch.is_ascii_digit() || ch == ',' || ch == '.') {
-                    state.typed.push(ch);
-                    continue;
-                }
-                if !ch.is_ascii_alphabetic() {
-                    continue;
-                }
-                state.key_buffer.push(ch.to_ascii_uppercase());
-                if state.key_buffer.len() > 2 {
-                    state.key_buffer.remove(0);
-                }
-                // Two-letter shortcuts come from the command table, as the tooltips show them.
-                if let Some(command) = crate::commands::UiCommand::from_keys(&state.key_buffer) {
-                    crate::commands::invoke(state, ctx, command);
-                    state.key_buffer.clear();
-                }
+            state.key_buffer.push(ch.to_ascii_uppercase());
+            if state.key_buffer.len() > 2 {
+                state.key_buffer.remove(0);
+            }
+            // Two-letter shortcuts come from the command table, as the tooltips show them.
+            if let Some(command) = crate::commands::UiCommand::from_keys(&state.key_buffer) {
+                crate::commands::invoke(state, ctx, command);
+                state.key_buffer.clear();
             }
         }
     }
+}
 
+impl ConstructApp {
     fn handle_close(&mut self, ctx: &egui::Context) {
         let state = &mut self.state;
         if state.quit_confirmed {
@@ -373,18 +356,7 @@ impl eframe::App for ConstructApp {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        storage.set_string(LANGUAGE_KEY, crate::i18n::language().code().to_string());
-        let recent: Vec<String> = self.state.recent.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-        storage.set_string(RECENT_KEY, recent.join("\n"));
-        let folders: Vec<String> =
-            self.state.library_folders.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-        storage.set_string(LIBRARY_KEY, folders.join("\n"));
-        storage.set_string(RIBBON_KEY, if self.state.ribbon_collapsed { "1" } else { "0" }.to_string());
-        storage.set_string(THEME_KEY, self.state.theme.code().to_string());
-        let updates = &self.state.updates;
-        storage.set_string(UPDATE_AUTO_KEY, if updates.auto { "1" } else { "0" }.to_string());
-        storage.set_string(UPDATE_LAST_KEY, updates.last_check.map(|t| t.to_string()).unwrap_or_default());
-        storage.set_string(UPDATE_SKIPPED_KEY, updates.skipped.map(|v| v.to_string()).unwrap_or_default());
+        crate::preferences::save(&self.state, |key, value| storage.set_string(key, value));
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
@@ -408,8 +380,10 @@ impl eframe::App for ConstructApp {
 impl ConstructApp {
     fn frame(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        crate::preferences::sync_look(&ctx, &mut self.state.prefs, &mut self.look);
         crate::theme::sync(&ctx);
         self.state.sync();
+        self.recovery.set_interval(self.state.prefs.autosave_interval());
         self.recovery.tick(&self.state);
         self.state.updates.poll();
         self.state.follow_selection();

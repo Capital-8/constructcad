@@ -676,7 +676,7 @@ fn component_library_loads_a_component() {
         .unwrap();
     let path = dir.join("porta.ccomp");
     state.session.run(cc_engine::commands::io::ComponentSave { component: door.clone(), path: path.clone() }).unwrap();
-    state.library_folders = vec![dir];
+    state.prefs.library_folders = vec![dir];
     crate::library::open(&mut state);
     assert_eq!(state.dialogs.library.as_ref().unwrap().entries.len(), 1);
     let before = state.project().types.len();
@@ -690,6 +690,135 @@ fn component_library_loads_a_component() {
     assert!(harness.state().dialogs.library.is_none());
     assert!(harness.state().project().types.len() > before, "the door's types joined the project");
     assert!(matches!(harness.state().tool, crate::tools::Tool::Hosted { .. }), "doors are placed in walls");
+}
+
+/// The ribbon, the app's shortcuts and the dialogs (Preferences among them).
+fn app_harness(state: AppState) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(1200.0, 760.0), egui::Theme::Light, |ui, state| {
+        crate::app::shortcuts(ui.ctx(), state);
+        crate::ribbon::ribbon(ui, state);
+        crate::dialogs::show(ui.ctx(), state);
+    })
+}
+
+/// Preferences opens from the File tab and with Ctrl+,.
+#[test]
+fn preferences_open_from_the_file_tab_and_the_shortcut() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::File;
+    let mut harness = app_harness(state);
+    harness.get_by_role_and_label(Role::Button, &t!("action-preferences")).click();
+    harness.run();
+    assert!(harness.state().dialogs.preferences.is_some(), "the File tab button opens it");
+    assert!(harness.query_by_label(&t!("pref-file-locations")).is_some(), "its sections are listed");
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.preferences.is_none());
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Comma);
+    harness.run();
+    assert!(harness.state().dialogs.preferences.is_some(), "Ctrl+, opens it");
+}
+
+/// Changes show at once; Cancel brings back the values the window opened
+/// with, and OK keeps them.
+#[test]
+fn preferences_cancel_restores_and_ok_keeps() {
+    let mut state = sample_state();
+    crate::preferences::open(&mut state, crate::preferences::Section::Interface);
+    let mut harness = app_harness(state);
+    let tooltips = t!("pref-detailed-tooltips");
+    let ribbon = t!("pref-ribbon-collapsed");
+    harness.get_by_role_and_label(Role::CheckBox, &tooltips).click();
+    harness.get_by_role_and_label(Role::CheckBox, &ribbon).click();
+    harness.run();
+    assert!(!harness.state().prefs.detailed_tooltips);
+    assert!(harness.state().prefs.ribbon_collapsed);
+    assert!(harness.state().ribbon_collapsed, "the ribbon collapses at once");
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.preferences.is_none());
+    assert!(harness.state().prefs.detailed_tooltips, "Cancel restores");
+    assert!(!harness.state().prefs.ribbon_collapsed && !harness.state().ribbon_collapsed);
+    // Again, with OK.
+    crate::preferences::open(harness.state_mut(), crate::preferences::Section::Interface);
+    harness.run();
+    harness.get_by_role_and_label(Role::CheckBox, &tooltips).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.preferences.is_none());
+    assert!(!harness.state().prefs.detailed_tooltips, "OK keeps");
+}
+
+/// The library window's Manage Folders opens Preferences on the file
+/// locations, where the folder list now lives.
+#[test]
+fn library_manages_folders_in_preferences() {
+    let mut state = sample_state();
+    state.prefs.library_folders = vec![std::path::PathBuf::from("/no/such/library/ccad")];
+    crate::library::open(&mut state);
+    let mut harness = app_harness(state);
+    harness.get_by_label(&t!("lib-manage-folders")).click();
+    harness.run();
+    let dialog = harness.state().dialogs.preferences.as_ref().map(|d| d.section);
+    assert_eq!(dialog, Some(crate::preferences::Section::FileLocations));
+    let remove = format!("{} {}", t!("action-remove"), std::path::Path::new("/no/such/library/ccad").display());
+    harness.get_by_label(&remove).click();
+    harness.run();
+    assert!(harness.state().prefs.library_folders.is_empty());
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.library.is_some(), "the library stays open");
+    assert!(harness.state().prefs.library_folders.is_empty());
+}
+
+#[test]
+fn preferences_snapshots() {
+    if !snapshots_requested() {
+        return;
+    }
+    let mut results = egui_kittest::SnapshotResults::new();
+    for section in crate::preferences::Section::ALL {
+        let mut state = sample_state();
+        state.prefs.library_folders = vec![std::path::PathBuf::from("/no/such/library/ccad")];
+        crate::preferences::open(&mut state, section);
+        let mut harness = themed_harness(state, egui::vec2(900.0, 480.0), egui::Theme::Light, |ui, state| {
+            crate::preferences::show(ui.ctx(), state)
+        });
+        harness.run();
+        results.add(harness.try_snapshot(format!("preferences_{section:?}").to_lowercase()));
+    }
+    results.unwrap();
+}
+
+/// Run Macro is a menu of the macros in the macros folder, plus Browse….
+#[test]
+fn macro_menu_lists_the_macros_folder() {
+    let dir = std::env::temp_dir().join(format!("ccad-macro-menu-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("walls.ccmacro"), "").unwrap();
+    std::fs::write(dir.join("doors.ccmacro"), "").unwrap();
+    std::fs::write(dir.join("notes.txt"), "").unwrap();
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Manage;
+    state.prefs.macro_folder = Some(dir.clone());
+    let mut harness = ribbon_harness_sized(state, egui::vec2(1100.0, 400.0));
+    harness.get_by_role_and_label(Role::Button, &t!("action-macro-run")).click();
+    harness.run();
+    assert!(harness.query_by_label("walls").is_some());
+    assert!(harness.query_by_label("doors").is_some());
+    assert!(harness.query_by_label("notes").is_none(), "only macro files");
+    assert!(harness.query_by_label(&t!("pref-browse")).is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+    // Without a folder: a hint and Browse….
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Manage;
+    let mut harness = ribbon_harness_sized(state, egui::vec2(1100.0, 400.0));
+    harness.get_by_role_and_label(Role::Button, &t!("action-macro-run")).click();
+    harness.run();
+    assert!(harness.query_by_label(&t!("macro-no-folder")).is_some());
+    assert!(harness.query_by_label(&t!("pref-browse")).is_some());
 }
 
 /// The component editor on the sample house's window (a door or window: the

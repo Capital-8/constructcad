@@ -1,6 +1,7 @@
 //! Autosave and crash recovery of the open project (the files are written by
 //! `cc_core::recovery`): a copy of a project with unsaved changes is written
-//! in the background a minute after its last copy; a clean save, close or
+//! in the background an interval (a preference: a minute by default, or off)
+//! after its last copy; a clean save, close or
 //! exit removes it; a panic writes a final copy and appends to a crash log;
 //! at start-up, copies left by earlier sessions are offered for restoring.
 
@@ -12,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-/// How long unsaved changes wait before a copy of them is written.
+/// How long unsaved changes wait before a copy is written, until the preference is read.
 const INTERVAL: Duration = Duration::from_secs(60);
 /// The crash log is started over once it grows past this many bytes.
 const CRASH_LOG_LIMIT: u64 = 1 << 20;
@@ -40,6 +41,8 @@ pub struct Recovery {
     /// This session's entry id.
     id: String,
     autosave: Autosave,
+    /// Autosave copies are written (the preference is not "off").
+    enabled: bool,
     /// A copy being written in the background: its revision and the thread.
     writing: Option<(u64, JoinHandle<bool>)>,
     /// The document generation the copy belongs to.
@@ -54,7 +57,16 @@ impl Recovery {
     pub fn new(dir: Option<PathBuf>) -> Self {
         let id = format!("session-{}-{}", std::process::id(), recovery::now_seconds());
         let offered = dir.as_deref().map(recovery::list).unwrap_or_default();
-        Self { dir, id, autosave: Autosave::new(INTERVAL), writing: None, generation: 0, offered, picked: 0 }
+        let autosave = Autosave::new(INTERVAL);
+        Self { dir, id, autosave, enabled: true, writing: None, generation: 0, offered, picked: 0 }
+    }
+
+    /// Follow the autosave preference: copies every `interval`, or none (`None`).
+    pub fn set_interval(&mut self, interval: Option<Duration>) {
+        self.enabled = interval.is_some();
+        if let Some(interval) = interval {
+            self.autosave.interval = interval;
+        }
     }
 
     fn meta(state: &AppState) -> RecoveryMeta {
@@ -94,6 +106,8 @@ impl Recovery {
         let dirty = state.project_open && doc.is_dirty();
         match self.autosave.poll(doc.revision(), dirty, Instant::now()) {
             AutosaveAction::Nothing => {}
+            // Autosave off: no new copies (one already written still goes once the changes are saved).
+            AutosaveAction::Write if !self.enabled => {}
             AutosaveAction::Remove => recovery::remove(&dir, &self.id),
             AutosaveAction::Write => {
                 // The copy is cheap next to serializing and writing it, which
@@ -351,6 +365,25 @@ mod tests {
         // A clean exit removes the restored session's copy.
         next.exit();
         assert!(recovery::list(&dir).iter().all(|e| e.id != next.id));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// With autosave off (a preference) unsaved changes are not copied.
+    #[test]
+    fn autosave_off_writes_no_copy() {
+        let dir = scratch("off");
+        let mut r = Recovery::new(Some(dir.clone()));
+        r.set_interval(None);
+        r.autosave.interval = Duration::ZERO;
+        let mut state = open_state();
+        state.session.execute("wall_create", serde_json::json!({"start": [0, 0], "end": [5, 0]})).unwrap();
+        r.tick(&state);
+        assert!(r.writing.is_none() && recovery::list(&dir).is_empty());
+        // Turned on again with an interval: the copy is written.
+        r.set_interval(Some(Duration::ZERO));
+        r.tick(&state);
+        settle(&mut r, &state);
+        assert_eq!(recovery::list(&dir).len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

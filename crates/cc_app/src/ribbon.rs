@@ -295,8 +295,11 @@ fn command_big(ui: &mut Ui, state: &AppState, command: UiCommand, dropdown: bool
 
 /// The rich tooltip of a command: title and shortcut, what it does, why it
 /// is unavailable, and the engine command that scripts call for the same change.
+/// With detailed tooltips off (a preference), only the title, shortcut and
+/// why it is unavailable.
 pub fn command_tooltip(response: Response, state: &AppState, command: UiCommand, why: Option<String>) -> Response {
     let title = command.title(state);
+    let detailed = state.prefs.detailed_tooltips;
     response.on_hover_ui(|ui| {
         ui.set_max_width(300.0);
         ui.spacing_mut().item_spacing.y = 4.0;
@@ -306,11 +309,13 @@ pub fn command_tooltip(response: Response, state: &AppState, command: UiCommand,
                 key_cap(ui, keys);
             }
         });
-        ui.label(theme::muted(command.description()));
+        if detailed {
+            ui.label(theme::muted(command.description()));
+        }
         if let Some(why) = &why {
             ui.label(RichText::new(t!("tip-unavailable", "reason" => why)).color(PALETTE.warning));
         }
-        if let Some(name) = command.engine() {
+        if let Some(name) = command.engine().filter(|_| detailed) {
             ui.label(RichText::new(t!("tip-engine", "command" => name)).size(11.0).color(PALETTE.text_faint));
         }
     })
@@ -559,30 +564,7 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[New, Open, Save, SaveAs, CloseProject]));
     group(ui, t!("group-import"), |ui| command_button(ui, state, ImportIfc));
     group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportPdf, ExportSvg, ExportImage]));
-    group(ui, t!("group-settings"), |ui| {
-        ui.allocate_ui_with_layout(vec2(170.0, BUTTON_HEIGHT), Layout::top_down(Align::Min), |ui| {
-            ui.add_space(6.0);
-            ui.label(theme::muted(t!("settings-language")).size(12.0));
-            let mut lang = crate::i18n::language();
-            egui::ComboBox::from_id_salt("language").width(150.0).selected_text(lang.native_name()).show_ui(ui, |ui| {
-                for l in crate::i18n::Language::ALL {
-                    ui.selectable_value(&mut lang, l, l.native_name());
-                }
-            });
-            actions::set_language(state, lang);
-        });
-        ui.allocate_ui_with_layout(vec2(130.0, BUTTON_HEIGHT), Layout::top_down(Align::Min), |ui| {
-            ui.add_space(6.0);
-            ui.label(theme::muted(t!("settings-theme")).size(12.0));
-            let mut choice = state.theme;
-            egui::ComboBox::from_id_salt("theme").width(110.0).selected_text(choice.label()).show_ui(ui, |ui| {
-                for t in theme::ThemeChoice::ALL {
-                    ui.selectable_value(&mut choice, t, t.label());
-                }
-            });
-            actions::set_theme(ui.ctx(), state, choice);
-        });
-    });
+    group(ui, t!("group-settings"), |ui| command_button(ui, state, UiCommand::Preferences));
     group(ui, t!("group-help"), |ui| command_buttons(ui, state, &[UiCommand::About, UiCommand::CheckUpdates]));
 }
 
@@ -771,7 +753,43 @@ fn manage_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[ProjectInfo, Units, Levels, Materials]));
     group(ui, t!("group-graphics"), |ui| command_buttons(ui, state, &[ViewTemplates, ViewFilters]));
     group(ui, t!("group-phasing"), |ui| command_button(ui, state, Phases));
-    group(ui, t!("group-macros"), |ui| command_buttons(ui, state, &[MacroRecord, MacroRun]));
+    group(ui, t!("group-macros"), |ui| {
+        command_button(ui, state, MacroRecord);
+        macro_menu(ui, state);
+    });
+}
+
+/// Run Macro: a menu of the macros in the macros folder (see Preferences)
+/// and Browse… for any other file.
+fn macro_menu(ui: &mut Ui, state: &mut AppState) {
+    let r = command_menu(ui, state, UiCommand::MacroRun);
+    egui::Popup::menu(&r).show(|ui| {
+        match state.prefs.macro_folder.clone() {
+            None => {
+                ui.label(theme::muted(t!("macro-no-folder")).size(12.0));
+            }
+            Some(folder) => {
+                let files = crate::preferences::macro_files(&folder);
+                if files.is_empty() {
+                    ui.label(theme::muted(t!("macro-none")).size(12.0));
+                }
+                egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                    for path in files {
+                        let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                        if ui.button(name).on_hover_text(path.display().to_string()).clicked() {
+                            state.ribbon_peek = false;
+                            actions::run_macro_file(state, &path);
+                        }
+                    }
+                });
+            }
+        }
+        ui.separator();
+        if ui.button(t!("pref-browse")).clicked() {
+            state.ribbon_peek = false;
+            actions::run_macro(state);
+        }
+    });
 }
 
 /// Context options for the active tool (options bar).

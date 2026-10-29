@@ -53,6 +53,14 @@ fn sidebar(ui: &mut Ui, state: &mut AppState) {
     ui.separator();
     ui.add_space(8.0);
     nav_item(ui, Icon::Open, &t!("home-recent"), true);
+    // App settings at the bottom of the sidebar.
+    ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+        let command = crate::commands::UiCommand::Preferences;
+        let label = command.label(state);
+        if side_button(ui, Icon::Settings, &label).on_hover_text(command.shortcut().unwrap_or_default()).clicked() {
+            crate::preferences::open(state, crate::preferences::Section::General);
+        }
+    });
 }
 
 fn round_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
@@ -207,12 +215,12 @@ fn load_thumbnail(ctx: &egui::Context, file: &Path) -> Option<egui::TextureHandl
     Some(texture)
 }
 
-/// Remember `path` at the top of the recent projects list.
-pub fn push_recent(recent: &mut Vec<PathBuf>, path: &Path) {
+/// Remember `path` at the top of the recent projects list, which keeps at most `max` (at least one).
+pub fn push_recent(recent: &mut Vec<PathBuf>, path: &Path, max: usize) {
     let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
     recent.retain(|p| *p != path);
     recent.insert(0, path);
-    recent.truncate(12);
+    recent.truncate(max.max(1));
 }
 
 #[cfg(test)]
@@ -230,11 +238,16 @@ mod tests {
     fn recent_list_is_deduplicated_and_capped() {
         let mut recent = Vec::new();
         for i in 0..15 {
-            push_recent(&mut recent, Path::new(&format!("p{i}.ccad")));
+            push_recent(&mut recent, Path::new(&format!("p{i}.ccad")), 12);
         }
-        push_recent(&mut recent, Path::new("p10.ccad"));
+        push_recent(&mut recent, Path::new("p10.ccad"), 12);
         assert_eq!(recent.len(), 12);
         assert!(recent[0].ends_with("p10.ccad"));
         assert_eq!(recent.iter().filter(|p| p.ends_with("p10.ccad")).count(), 1);
+        // A smaller count (the preference) trims the list.
+        push_recent(&mut recent, Path::new("p3.ccad"), 5);
+        assert_eq!(recent.len(), 5);
+        push_recent(&mut recent, Path::new("p4.ccad"), 0);
+        assert_eq!(recent.len(), 1, "always keeps the latest");
     }
 }
