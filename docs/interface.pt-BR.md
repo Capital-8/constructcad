@@ -32,7 +32,7 @@ Os ícones têm dois tons: os traços na cor do texto e os preenchimentos suaves
 | Selo | Significado | Exemplos |
 |---|---|---|
 | **+** verde | cria algo novo | nova planta de piso ou de forro, vista 3D, legenda, tabela, folha, novo componente |
-| seta azul para baixo | traz dados de um arquivo | Importar IFC, Carregar componente |
+| seta azul para baixo | traz dados de um arquivo | Importar IFC, Importar CAD, Carregar componente |
 | seta azul para cima | grava dados num arquivo | Exportar PDF, Exportar SVG, Exportar imagem |
 | **−** vermelho | remove algo | Excluir |
 
@@ -113,6 +113,14 @@ As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto
 - Com elementos selecionados, **Sobrepor gráficos** muda seus gráficos só na vista ativa e **Ocultar na vista** (EH) os oculta nela (reexibidos em Visibilidade/gráficos).
 - **Ocultar/isolar** (temporário): HH oculta a seleção, HI a isola, HC e IC ocultam ou isolam suas categorias, HR redefine. Enquanto ativo, a vista ganha uma borda colorida e um aviso com *Redefinir* e *Tornar permanente*. A ocultação temporária não é salva, não entra no desfazer e não é impressa.
 
+## Desenhos CAD importados
+
+- **Arquivo → Importar CAD…** coloca um desenho DWG ou DXF na planta, planta de forro, elevação, corte ou legenda ativa (nas outras vistas o botão fica cinza e diz por quê). Também dá para soltar arquivos `.dwg` e `.dxf` na janela. O diálogo de arquivo começa na *Pasta de projetos*. A origem do desenho fica na origem da vista, a menos que isso o deixe a mais de 1 km do modelo (um desenho em coordenadas de levantamento); então ele é centrado no que a vista mostra. A barra de status informa quantos itens e camadas foram lidos, quantas entidades não foram desenhadas (sólidos 3D, imagens, linhas infinitas…) e que unidades foram supostas quando o arquivo não tem nenhuma.
+- O desenho é um fundo para traçar por cima: linhas finas cinzas sob o modelo, com seus textos. Ele aparece só na vista em que foi importado (não em outras plantas nem em vistas 3D), sai nas folhas e exportações e fica fora da exportação IFC. *Visibilidade/gráficos* o oculta ou sobrepõe pela categoria *CAD importado*.
+- Ele começa **fixado**, para não ser movido sem querer; use *Liberar* para movê-lo ou girá-lo com as ferramentas de sempre. Um clique nas linhas dele só o seleciona onde não há elemento do modelo sob o cursor.
+- As propriedades definem as **unidades** (lidas do arquivo, senão supostas), uma **escala** extra, a **rotação**, a **posição** da origem, as **cores** (*Cinza*, *Cores das camadas*, com as cores muito claras escurecidas para o papel branco, ou *Preto*) e o **Meio-tom**. A seção *Camadas* mostra ou oculta cada camada (*Todas as camadas* alterna todas); camadas desligadas ou congeladas no arquivo começam ocultas.
+- As ferramentas de desenho fazem snap nas extremidades e vértices, pontos médios, centros de arcos e círculos (um marcador de círculo) e em pontos das linhas dele.
+
 ## Fases de construção
 
 - **Gerenciar → Fases** tem três abas. *Fases* lista as fases do projeto da mais antiga para a mais recente, com nome, descrição e quantos elementos são construídos e demolidos em cada uma; *Adicionar* acrescenta uma no fim, *Inserir antes* põe uma antes da selecionada, ↑ ↓ reordenam (uma mudança que poria uma demolição antes da construção é recusada), e excluir uma fase passa seus elementos e vistas para a fase escolhida em *Mesclar elementos e vistas em*. *Filtros de fase* define, para cada filtro, como aparecem os elementos existentes, demolidos, novos e temporários: *Não exibido*, *Por categoria* ou *Substituído*. *Gráficos de fase* define as sobreposições de cada estado (as mesmas células de Visibilidade/gráficos). OK mantém as mudanças; Cancelar as desfaz.
@@ -125,7 +133,7 @@ As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto
 
 - **Geral**: o idioma da interface, o tema (claro, escuro ou o do sistema) e *Verificar atualizações automaticamente* (veja o aviso de atualização abaixo).
 - **Interface**: a *Escala da interface* (75–200%, tudo cresce: painéis, ícones, texto; Ctrl+Mais e Ctrl+Menos também a mudam), o *Tamanho do texto* (pequeno, normal, grande, muito grande; só o texto, em qualquer escala), *Iniciar com o ribbon recolhido* e *Dicas detalhadas*: desligadas, as dicas dos comandos mostram só o nome, o atalho e por que o comando está indisponível, sem a descrição e o comando do motor.
-- **Locais de arquivos**: a *Pasta de macros* (os diálogos de arquivo de macro começam nela e *Gerenciar → Executar macro* lista as macros dela), a *Pasta de projetos* (onde começam Abrir, Importar IFC e o primeiro Salvar de um projeto novo; um projeto já salvo é salvo de novo ao lado dele mesmo) e as pastas da biblioteca de componentes (*Adicionar pasta…*, *Remover*). O botão *Gerenciar pastas…* da janela da biblioteca de componentes abre esta página. Uma pasta que não existe mais aparece como *Não encontrada* e é ignorada.
+- **Locais de arquivos**: a *Pasta de macros* (os diálogos de arquivo de macro começam nela e *Gerenciar → Executar macro* lista as macros dela), a *Pasta de projetos* (onde começam Abrir, Importar IFC, Importar CAD e o primeiro Salvar de um projeto novo; um projeto já salvo é salvo de novo ao lado dele mesmo) e as pastas da biblioteca de componentes (*Adicionar pasta…*, *Remover*). O botão *Gerenciar pastas…* da janela da biblioteca de componentes abre esta página. Uma pasta que não existe mais aparece como *Não encontrada* e é ignorada.
 - **Salvamento**: o intervalo do *Salvamento automático* (desligado, ou a cada 1, 2, 5, 10 ou 15 minutos; veja abaixo) e quantos projetos recentes a tela inicial lista.
 
 ## Aviso de atualização

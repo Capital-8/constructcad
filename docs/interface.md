@@ -32,7 +32,7 @@ Icons are drawn in two tones: the strokes in the text color and the soft fills i
 | Badge | Meaning | Examples |
 |---|---|---|
 | green **+** | creates something new | new floor or ceiling plan, 3D view, legend, schedule, sheet, new component |
-| blue arrow down | brings data in from a file | Import IFC, Load component |
+| blue arrow down | brings data in from a file | Import IFC, Import CAD, Load component |
 | blue arrow up | writes data out to a file | Export PDF, Export SVG, Export Image |
 | red **−** | removes something | Delete |
 
@@ -113,6 +113,14 @@ Two-letter keys work while a view has the focus and no text field is being edite
 - With elements selected, **Override Graphics** changes their graphics in the active view only and **Hide in View** (EH) hides them there (shown again from Visibility/Graphics).
 - **Hide/Isolate** (temporary): HH hides the selection, HI isolates it, HC and IC hide or isolate its categories, HR resets. While active, the view has a colored border and a chip with *Reset* and *Make Permanent*. Temporary hiding is not saved, not undone and not printed.
 
+## Imported CAD drawings
+
+- **File → Import CAD…** places a DWG or DXF drawing in the active floor plan, ceiling plan, elevation, section or legend (the button is greyed out in other views, and says why). You can also drop `.dwg` and `.dxf` files on the window. The file dialog starts in the *Projects folder*. The drawing keeps its origin at the view's origin, unless that leaves it more than 1 km from the model (a drawing in survey coordinates), then it is centered on what the view shows. The status bar says how many items and layers were read, how many entities were not drawn (3D solids, images, infinite lines…) and which units were assumed when the file has none.
+- The drawing is a background to trace over: thin grey lines under the model, with its texts. It shows only in the view it was imported into (not in other plans or in 3D views), prints on sheets and exports, and is left out of IFC export. *Visibility/Graphics* hides or overrides it with the *Imported CAD* category.
+- It starts **pinned**, so it is not moved by accident; *Unpin* it to move or rotate it with the usual tools. Clicking its lines selects it only where no model element is under the pointer.
+- Its properties set the **units** (read from the file, else assumed), an extra **scale**, the **rotation**, the **position** of its origin, the **colors** (*Grey*, *Layer colors* with very light colors darkened for white paper, or *Black*) and **Halftone**. The *Layers* section shows or hides each layer (*All layers* toggles them all); layers that are off or frozen in the file start hidden.
+- The drawing tools snap to its endpoints and vertices, midpoints, arc and circle centers (a circle marker), and to points on its lines.
+
 ## Construction phases
 
 - **Manage → Phases** has three tabs. *Phases* lists the project's phases from earliest to latest with their name, description and how many elements are built and demolished in each; *Add* appends one, *Insert Before* puts one before the selected phase, ↑ ↓ reorder (a move that would put a demolition before its construction is refused), and deleting a phase moves its elements and views into the phase chosen under *Merge elements and views into*. *Phase Filters* sets, for each filter, how existing, demolished, new and temporary elements show: *Not Displayed*, *By Category* or *Overridden*. *Phase Graphics* sets the overrides used for each status (the same cells as Visibility/Graphics). OK keeps the changes, Cancel undoes them.
@@ -125,7 +133,7 @@ Two-letter keys work while a view has the focus and no text field is being edite
 
 - **General**: the interface language, the theme (light, dark or the system's) and *Check for updates automatically* (see the update notice below).
 - **Interface**: the *Interface scale* (75–200%, everything grows: panels, icons, text; Ctrl+Plus and Ctrl+Minus change it too), the *Text size* (small, normal, large, extra large; only the text, at any scale), *Start with the ribbon collapsed*, and *Detailed tooltips*: when off, command tooltips show only the name, the shortcut and why a command is unavailable, without the description and the engine command.
-- **File locations**: the *Macros folder* (the macro file dialogs start there and *Manage → Run Macro* lists its macros), the *Projects folder* (where Open, Import IFC and the first Save of a new project start; a saved project is saved again next to itself), and the component library folders (*Add Folder…*, *Remove*). The component library window's *Manage Folders…* opens this page. A folder that no longer exists is marked *Not found* and skipped.
+- **File locations**: the *Macros folder* (the macro file dialogs start there and *Manage → Run Macro* lists its macros), the *Projects folder* (where Open, Import IFC, Import CAD and the first Save of a new project start; a saved project is saved again next to itself), and the component library folders (*Add Folder…*, *Remove*). The component library window's *Manage Folders…* opens this page. A folder that no longer exists is marked *Not found* and skipped.
 - **Saving**: the *Autosave* interval (off, or every 1, 2, 5, 10 or 15 minutes; see below) and how many recent projects the home screen lists.
 
 ## Update notice
