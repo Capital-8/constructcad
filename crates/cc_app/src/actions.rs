@@ -154,6 +154,13 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
                     .is_some_and(|v| matches!(v.kind, cc_core::ViewKind::ThreeD { .. }));
             state.set_tool(tool);
             let in_plan = state.active_level().is_some();
+            // Pipes and conduits show only in the plans of their discipline:
+            // drawn in another plan they would vanish once created (#66).
+            if in_plan && let Some((discipline, message)) = services_plan_needed(state, category) {
+                open_mep_plan(state, discipline);
+                state.message = message;
+                return;
+            }
             state.message = match () {
                 _ if in_plan => String::new(),
                 _ if in_3d => t!("hint-hosted"),
@@ -162,6 +169,19 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
         }
         None => state.message = t!("msg-no-type"),
     }
+}
+
+/// The services plan to draw `category` in (with the message telling so),
+/// when it is a pipe or conduit and the active plan does not show it.
+fn services_plan_needed(state: &AppState, category: Category) -> Option<(cc_core::MepDiscipline, String)> {
+    let (discipline, message) = match category {
+        Category::Pipe => (cc_core::MepDiscipline::Plumbing, t!("msg-pipes-in-plumbing-plan")),
+        Category::Conduit => (cc_core::MepDiscipline::Electrical, t!("msg-conduits-in-electrical-plan")),
+        _ => return None,
+    };
+    let view = state.active_view.and_then(|v| state.project().view(v))?;
+    let shown = matches!(view.kind, ViewKind::FloorPlan { mep: Some(d), .. } if d == discipline);
+    (!shown).then_some((discipline, message))
 }
 
 /// A new project from the template, named in the active UI language.
@@ -985,5 +1005,63 @@ mod tests {
         assert_eq!(w.top, cc_core::WallTop::Unconnected);
         assert!((state.project().wall_height(e, w) - height).abs() < 1e-9);
         assert!(state.project().level(upper).is_none());
+    }
+
+    /// Issue #66: a pipe drawn from the ground floor plan of a new project
+    /// vanished once created, since architectural plans leave pipes out.
+    #[test]
+    fn the_pipe_tool_draws_in_a_plan_that_shows_pipes() {
+        use cc_core::MepDiscipline;
+        let mut state = AppState::new(Document::new(new_project()));
+        let level = state.project().levels[0].id;
+        let plan = state
+            .project()
+            .views
+            .values()
+            .find(|v| matches!(v.kind, ViewKind::FloorPlan { level: l, mep: None, .. } if l == level))
+            .map(|v| v.id)
+            .unwrap();
+        state.active_view = Some(plan);
+        // The app's dock makes the last view asked for the active one.
+        let follow = |state: &mut AppState| {
+            if let Some(id) = std::mem::take(&mut state.open_requests).pop() {
+                state.active_view = Some(id);
+            }
+        };
+
+        activate_category_tool(&mut state, Category::Pipe);
+        follow(&mut state);
+        assert!(matches!(state.tool, Tool::Pipe { .. }));
+        let view = state.active_view.and_then(|v| state.project().view(v)).unwrap();
+        assert!(
+            matches!(view.kind, ViewKind::FloorPlan { level: l, mep: Some(MepDiscipline::Plumbing), .. } if l == level)
+        );
+        let plumbing = view.id;
+
+        // The pipe the tool creates shows in the plan it is drawn in.
+        let pipe = run_command(
+            &mut state,
+            cc_engine::commands::mep::PipeCreate {
+                start: [0.0, 0.0],
+                end: Some([3.0, 0.0]),
+                level: Some(Ref::Id(level.0)),
+                ..Default::default()
+            },
+        )
+        .and_then(|o| o["id"].as_u64())
+        .map(cc_core::ElementId)
+        .unwrap();
+        let drawing = state.session.drawing(plumbing).unwrap();
+        assert!(drawing.prims.iter().any(|p| p.element() == Some(pipe)));
+
+        // Already in the plumbing plan, the tool stays there; conduits go to the electrical plan.
+        let views = state.project().views.len();
+        activate_category_tool(&mut state, Category::Pipe);
+        assert!(state.open_requests.is_empty() && state.project().views.len() == views);
+        activate_category_tool(&mut state, Category::Conduit);
+        follow(&mut state);
+        let view = state.active_view.and_then(|v| state.project().view(v)).unwrap();
+        assert!(matches!(view.kind, ViewKind::FloorPlan { mep: Some(MepDiscipline::Electrical), .. }));
+        assert!(matches!(state.tool, Tool::Conduit { .. }));
     }
 }
