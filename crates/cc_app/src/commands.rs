@@ -20,6 +20,8 @@ pub enum UiCommand {
     SaveAs,
     CloseProject,
     ImportIfc,
+    /// Import a DWG or DXF drawing into the active view.
+    ImportCad,
     ExportIfc,
     ExportPdf,
     ExportSvg,
@@ -157,6 +159,7 @@ impl UiCommand {
             SaveAs,
             CloseProject,
             ImportIfc,
+            ImportCad,
             ExportIfc,
             ExportPdf,
             ExportSvg,
@@ -255,6 +258,7 @@ impl UiCommand {
             ExportIfc => Icon::Export,
             ExportPdf | ExportSvg | Sheet => Icon::Sheet,
             ExportImage => Icon::Image,
+            ImportCad => Icon::CadImport,
             About => Icon::About,
             CheckUpdates => Icon::Update,
             Preferences => Icon::Settings,
@@ -354,7 +358,7 @@ impl UiCommand {
             | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules | PanelDiagram => {
                 Some(Badge::New)
             }
-            ImportIfc | LoadComponent => Some(Badge::Import),
+            ImportIfc | ImportCad | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | ExportImage | AnalyticalExport => Some(Badge::Export),
             Delete => Some(Badge::Remove),
             _ => None,
@@ -372,6 +376,7 @@ impl UiCommand {
             SaveAs => t!("action-save-as"),
             CloseProject => t!("action-close-project"),
             ImportIfc => t!("action-import-ifc"),
+            ImportCad => t!("action-import-cad"),
             ExportIfc => t!("action-export-ifc"),
             ExportPdf => t!("action-export-pdf"),
             ExportSvg => t!("action-export-svg"),
@@ -503,6 +508,7 @@ impl UiCommand {
             SaveAs => t!("cmd-desc-save-as"),
             CloseProject => t!("cmd-desc-close-project"),
             ImportIfc => t!("cmd-desc-import-ifc"),
+            ImportCad => t!("cmd-desc-import-cad"),
             ExportIfc => t!("cmd-desc-export-ifc"),
             ExportPdf => t!("cmd-desc-export-pdf"),
             ExportSvg => t!("cmd-desc-export-svg"),
@@ -689,6 +695,7 @@ impl UiCommand {
             Open => "project_open",
             Save | SaveAs => "project_save",
             ImportIfc => "ifc_import",
+            ImportCad => "cad_import",
             ExportIfc => "ifc_export",
             ExportPdf | ExportSvg => "sheet_export",
             ExportImage => "view_export",
@@ -796,6 +803,7 @@ impl UiCommand {
             Redo if !state.session.doc.can_redo() => Some(t!("why-nothing-redo")),
             ExportPdf | ExportSvg if actions::active_sheet(state).is_none() => Some(t!("hint-export-sheet")),
             ExportImage if actions::image_view(state).is_none() => Some(t!("hint-export-image")),
+            ImportCad if crate::cad_ui::cad_view(state).is_none() => Some(t!("why-cad-view")),
             // A project without a ramp type gets one when the tool starts.
             Place(category) if category != Category::Ramp && Tool::for_category(project, category).is_none() => {
                 Some(t!("msg-no-type"))
@@ -966,6 +974,7 @@ fn place_label(category: Category) -> String {
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::Component => t!("tool-component"),
+        Category::CadImport => t!("action-import-cad"),
     }
 }
 
@@ -991,6 +1000,7 @@ fn place_description(category: Category) -> String {
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::Component => t!("cmd-desc-component"),
+        Category::CadImport => t!("cmd-desc-import-cad"),
     }
 }
 
@@ -1020,6 +1030,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         }
         CloseProject => actions::guarded(state, PendingAction::Close),
         ImportIfc => actions::guarded(state, PendingAction::ImportIfc),
+        ImportCad => crate::cad_ui::import_cad(state),
         ExportIfc => actions::export_ifc(state),
         ExportPdf => actions::export_sheet(state, actions::SheetFormat::Pdf),
         ExportSvg => actions::export_sheet(state, actions::SheetFormat::Svg),

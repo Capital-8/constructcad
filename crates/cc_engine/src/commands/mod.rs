@@ -3,6 +3,7 @@
 
 pub mod analytical;
 pub mod annotate;
+pub mod cad;
 pub mod create;
 pub mod edit;
 pub mod foundation;

@@ -150,6 +150,9 @@ pub struct Drawing2D {
     /// Fit the view to the geometry of elements only (plans: the markers of
     /// elevations and sections stand outside the model).
     pub fit_elements: bool,
+    /// Elements drawn as background (imported CAD drawings): picked only
+    /// where nothing else is.
+    pub background: std::collections::BTreeSet<ElementId>,
 }
 
 impl Drawing2D {
@@ -242,12 +245,20 @@ impl Drawing2D {
         }
     }
 
-    /// Topmost element under `p` within `tol` (view units).
+    /// Topmost element under `p` within `tol` (view units). Background
+    /// elements (imported drawings) are picked only where nothing else is.
     pub fn hit_test(&self, p: DVec2, tol: f64) -> Option<ElementId> {
+        self.hit_test_tier(p, tol, false).or_else(|| self.hit_test_tier(p, tol, true))
+    }
+
+    fn hit_test_tier(&self, p: DVec2, tol: f64, background: bool) -> Option<ElementId> {
+        let tier = |id: &ElementId| self.background.contains(id) == background;
         // Lines first: they are thin and drawn over fills.
         let mut best: Option<(f64, ElementId)> = None;
         for prim in &self.prims {
-            if let Prim::Line { a, b, element: Some(id), .. } = prim {
+            if let Prim::Line { a, b, element: Some(id), .. } = prim
+                && tier(id)
+            {
                 let (q, _) = cc_geom::polygon::closest_on_segment(*a, *b, p);
                 let d = q.distance(p);
                 if d <= tol && best.is_none_or(|(bd, _)| d < bd) {
@@ -260,7 +271,9 @@ impl Drawing2D {
         }
         self.prims.iter().rev().find_map(|prim| match prim {
             // Fully transparent fills only show selection (room areas); they are not picked.
-            Prim::Fill { pts, element: Some(id), color, .. } if color[3] > 0 && cc_geom::polygon::contains(pts, p) => {
+            Prim::Fill { pts, element: Some(id), color, .. }
+                if color[3] > 0 && tier(id) && cc_geom::polygon::contains(pts, p) =>
+            {
                 Some(*id)
             }
             _ => None,

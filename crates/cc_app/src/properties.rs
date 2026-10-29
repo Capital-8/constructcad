@@ -486,6 +486,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
         }
         ElementKind::Text(note) => text_props(ui, state, id, note),
+        ElementKind::CadImport(c) => crate::cad_ui::props(ui, state, id, c),
         ElementKind::Dimension(d) => {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 dimension_value_row(ui, state, id, d);

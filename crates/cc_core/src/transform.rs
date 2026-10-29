@@ -152,6 +152,7 @@ impl Element {
                 p(&mut c.position);
                 c.rotation_deg = t.apply_angle_deg(c.rotation_deg);
             }
+            ElementKind::CadImport(c) => c.transform(t),
             ElementKind::Beam(b) => {
                 p(&mut b.start);
                 p(&mut b.end);
@@ -314,6 +315,7 @@ impl crate::Project {
                 .is_some_and(|w| w.as_wall().is_some()),
             ElementKind::Dimension(d) => self.view(d.view).is_some(),
             ElementKind::Text(t) => self.view(t.view).is_some(),
+            ElementKind::CadImport(c) => self.view(c.view).is_some(),
             _ => true,
         };
         type_ok && other_ok && self.level(e.level).is_some()

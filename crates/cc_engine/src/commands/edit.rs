@@ -47,7 +47,15 @@ impl Command for ElementSet {
         let element = p.element(id).ok_or_else(|| EngineError::not_found("element"))?.clone();
         let level = self.level.as_ref().map(|l| refs::level(p, l)).transpose()?;
         let type_id = self.type_ref.as_ref().map(|t| refs::type_of(p, element.category(), Some(t))).transpose()?;
-        let kind = self.params.as_ref().map(|patch| patch_variant(&element.kind, patch)).transpose()?;
+        let kind = self
+            .params
+            .as_ref()
+            .map(|patch| match &element.kind {
+                // The drawing read from the file is not a parameter.
+                cc_core::ElementKind::CadImport(c) => super::cad::patch(c, patch),
+                kind => patch_variant(kind, patch),
+            })
+            .transpose()?;
         if kind.as_ref().is_some_and(|k| std::mem::discriminant(k) != std::mem::discriminant(&element.kind)) {
             return Err(EngineError::invalid("params cannot change the element's category"));
         }

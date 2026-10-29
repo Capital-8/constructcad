@@ -191,7 +191,7 @@ impl Command for ElementsList {
 /// Full description of an element: everything `element_set` can change, plus derived values.
 pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     let e = s.project().element(id)?.clone();
-    let (_, params) = variant(to_json(&e.kind));
+    let params = super::cad::params(&e.kind);
     let p = s.project();
     let mut derived = serde_json::Map::new();
     match &e.kind {
@@ -237,6 +237,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
                 .collect();
             derived.insert("systems".into(), json!(systems));
         }
+        ElementKind::CadImport(c) => super::cad::derived(c, &mut derived),
         ElementKind::Component(c) => {
             if let Some(mep) = p.mep_data(&e) {
                 derived.insert("mep".into(), to_json(&mep));

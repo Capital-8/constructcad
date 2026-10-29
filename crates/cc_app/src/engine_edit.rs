@@ -40,7 +40,7 @@ pub fn element(state: &mut AppState, id: ElementId, key: Option<u64>, f: impl Fn
         type_ref: (new.type_id != old.type_id).then_some(Ref::Id(new.type_id.0)),
         mark: (new.mark != old.mark).then_some(new.mark),
         comments: (new.comments != old.comments).then_some(new.comments),
-        params: (new.kind != old.kind).then(|| cc_engine::params_of(&new.kind)),
+        params: (new.kind != old.kind).then(|| cc_engine::element_params(&new.kind)),
     };
     run(state, key, command)
 }

@@ -47,6 +47,8 @@ pub enum ElementKind {
     Rebar(Rebar),
     Pipe(crate::MepSegment),
     Conduit(crate::MepSegment),
+    /// A DWG or DXF drawing placed in a 2D view (an underlay to trace over).
+    CadImport(Box<crate::cad::CadImport>),
 }
 
 impl Element {
@@ -72,6 +74,18 @@ impl Element {
             ElementKind::Rebar(_) => Category::Rebar,
             ElementKind::Pipe(_) => Category::Pipe,
             ElementKind::Conduit(_) => Category::Conduit,
+            ElementKind::CadImport(_) => Category::CadImport,
+        }
+    }
+
+    /// The view that owns the element (dimensions, text notes and imported
+    /// drawings live in one view and go with it).
+    pub fn owner_view(&self) -> Option<ViewId> {
+        match &self.kind {
+            ElementKind::Dimension(d) => Some(d.view),
+            ElementKind::Text(t) => Some(t.view),
+            ElementKind::CadImport(c) => Some(c.view),
+            _ => None,
         }
     }
 
@@ -179,6 +193,7 @@ impl Element {
                 s.end += delta;
             }
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
+            ElementKind::CadImport(c) => c.position += delta,
             // Placed by their hosts.
             ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}
         }
