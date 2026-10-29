@@ -18,10 +18,11 @@ pub enum Language {
     Pl,
     Uk,
     ZhTw,
+    ZhCn,
 }
 
 impl Language {
-    pub const ALL: [Language; 10] = [
+    pub const ALL: [Language; 11] = [
         Language::PtBr,
         Language::En,
         Language::Es,
@@ -32,6 +33,7 @@ impl Language {
         Language::Pl,
         Language::Uk,
         Language::ZhTw,
+        Language::ZhCn,
     ];
 
     /// BCP 47 code, used for persistence.
@@ -47,6 +49,7 @@ impl Language {
             Language::Pl => "pl",
             Language::Uk => "uk-UA",
             Language::ZhTw => "zh-TW",
+            Language::ZhCn => "zh-CN",
         }
     }
 
@@ -63,15 +66,26 @@ impl Language {
             Language::Pl => "Polski",
             Language::Uk => "Українська",
             Language::ZhTw => "繁體中文",
+            Language::ZhCn => "简体中文",
         }
     }
 
     pub fn from_code(code: &str) -> Option<Language> {
         let code = code.to_ascii_lowercase();
-        // Chinese only in its traditional forms (zh-TW, zh-HK, zh-Hant…).
-        let traditional = code
-            .get(2..)
-            .is_some_and(|rest| rest.split(['-', '_']).any(|part| matches!(part, "tw" | "hk" | "mo" | "hant")));
+        // Chinese: traditional forms for Taiwan, Hong Kong, Macau and Hant
+        // (zh-TW, zh-HK, zh-Hant…); simplified for the rest (zh, zh-CN,
+        // zh-SG, zh-Hans…). An explicit script wins over the region
+        // (zh-Hans-HK is simplified, zh-Hant-CN traditional).
+        // POSIX locales may carry an encoding or modifier (zh_TW.UTF-8).
+        let tag = code.split(['.', '@']).next().unwrap_or("");
+        let parts: Vec<&str> = tag.get(2..).unwrap_or("").split(['-', '_']).filter(|p| !p.is_empty()).collect();
+        let traditional = if parts.contains(&"hant") {
+            true
+        } else if parts.contains(&"hans") {
+            false
+        } else {
+            parts.iter().any(|part| matches!(*part, "tw" | "hk" | "mo"))
+        };
         let lang = match code.get(..2)? {
             "pt" => Language::PtBr,
             "en" => Language::En,
@@ -83,6 +97,7 @@ impl Language {
             "pl" => Language::Pl,
             "uk" => Language::Uk,
             "zh" if traditional => Language::ZhTw,
+            "zh" => Language::ZhCn,
             _ => return None,
         };
         Some(lang)
@@ -106,6 +121,7 @@ impl Language {
             Language::Pl => include_str!("../../../assets/i18n/pl.ftl"),
             Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
             Language::ZhTw => include_str!("../../../assets/i18n/zh-TW.ftl"),
+            Language::ZhCn => include_str!("../../../assets/i18n/zh-CN.ftl"),
         }
     }
 
@@ -115,7 +131,7 @@ impl Language {
 
     /// Whether numbers use a decimal comma.
     pub fn decimal_comma(self) -> bool {
-        !matches!(self, Language::En | Language::ZhTw)
+        !matches!(self, Language::En | Language::ZhTw | Language::ZhCn)
     }
 }
 
@@ -204,9 +220,16 @@ mod tests {
         assert_eq!(Language::from_code("zh-TW"), Some(Language::ZhTw));
         assert_eq!(Language::from_code("zh_HK"), Some(Language::ZhTw));
         assert_eq!(Language::from_code("zh-Hant-TW"), Some(Language::ZhTw));
-        assert_eq!(Language::from_code("zh-CN"), None);
-        assert_eq!(Language::from_code("zh-Hans"), None);
-        assert_eq!(Language::from_code("zh"), None);
+        assert_eq!(Language::from_code("zh-MO"), Some(Language::ZhTw));
+        assert_eq!(Language::from_code("zh_TW.UTF-8"), Some(Language::ZhTw));
+        assert_eq!(Language::from_code("zh-Hant-CN"), Some(Language::ZhTw));
+        assert_eq!(Language::from_code("zh-CN"), Some(Language::ZhCn));
+        assert_eq!(Language::from_code("zh_CN.UTF-8"), Some(Language::ZhCn));
+        assert_eq!(Language::from_code("zh-SG"), Some(Language::ZhCn));
+        assert_eq!(Language::from_code("zh-Hans"), Some(Language::ZhCn));
+        assert_eq!(Language::from_code("zh-Hans-CN"), Some(Language::ZhCn));
+        assert_eq!(Language::from_code("zh-Hans-HK"), Some(Language::ZhCn));
+        assert_eq!(Language::from_code("zh"), Some(Language::ZhCn));
         assert_eq!(Language::from_code("ja-JP"), None);
         assert_eq!(Language::from_code("p"), None);
         for l in Language::ALL {

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Simplified Chinese interface (简体中文, `zh-CN`) (#67). It is picked from the system language for `zh`, `zh-CN`, `zh-SG` and `zh-Hans`; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant` keep Traditional Chinese. The system's CJK fonts now also have to cover a Simplified-only character, so Simplified glyphs never show as boxes.
+
 ## [0.7.0] - 2026-10-28
 
 ### Added
