@@ -1667,6 +1667,8 @@ recovery-age-days = { $count } дн. тому
 action-restore = Відновити
 msg-recovered = Відновлено: { $name } (збережіть, щоб зберегти зміни)
 msg-recovery-failed = Не вдалося відновити проєкт: { $error }
+gpu-failed-title = Не вдалося запустити ConstructCAD
+gpu-failed-text = Не вдалося запустити графіку (DirectX, Vulkan, Metal або OpenGL): { $error }. Оновлення драйвера відеокарти може допомогти. Подробиці в { $log }.
 
 ## Сходи
 stair-shape-straight = Прямі

@@ -133,6 +133,15 @@ Um minuto depois que um projeto passa a ter alterações não salvas (também um
 
 Se o ConstructCAD travar ou for encerrado à força, a próxima abertura mostra *Recuperar trabalho não salvo* com as cópias deixadas: *Restaurar* abre o projeto escolhido com as alterações não salvas (salvá-lo grava no arquivo original, ou pergunta onde, para um projeto nunca salvo), *Descartar* apaga a cópia e *Cancelar* guarda as cópias para a próxima abertura. Uma falha na interface também grava uma última cópia antes de o programa fechar, e toda falha é acrescentada a `crash.log` na pasta de dados; anexe-o ao relatar uma falha.
 
+## Inicialização gráfica
+
+O ConstructCAD desenha com a API gráfica nativa do sistema (DirectX 12 ou Vulkan no Windows, Metal no macOS, Vulkan no Linux) e passa sozinho para o OpenGL quando ela falha, o que algumas GPUs integradas antigas ou pequenas exigem:
+
+- Se a API nativa informar um erro, a mesma abertura tenta o OpenGL. Se ela travar antes de a janela aparecer, o ConstructCAD abre de novo uma vez com o OpenGL; se o processo inteiro morrer (uma falha do driver), a próxima abertura tenta o OpenGL primeiro.
+- Depois que o OpenGL foi necessário, ele continua em primeiro: a escolha fica no arquivo `gpu-backend` da pasta de dados. Apague esse arquivo (depois de atualizar o driver de vídeo, por exemplo) para tentar a API nativa de novo.
+- Toda abertura que falha é registrada em `crash.log` na pasta de dados. Quando nenhuma API funciona, uma mensagem avisa e indica esse arquivo.
+- A variável de ambiente `WGPU_BACKEND` escolhe a API e desliga a troca automática: `gl` para OpenGL, `dx12`, `vulkan` ou `metal`, ou várias separadas por vírgulas (no Windows, por exemplo, `set WGPU_BACKEND=gl` num prompt de comando antes de abrir `constructcad.exe`, ou como variável de ambiente do usuário). `WGPU_POWER_PREF=low` prefere a GPU integrada em computadores com duas.
+
 ## Acessibilidade
 
 Os botões do ribbon, os títulos das abas, as setas de rolagem, os itens da paleta, as linhas do navegador, os cartões da tela inicial, os botões de fechar dos diálogos, as seções de propriedades e o botão de início do cubo de vista são desenhados pelo próprio ConstructCAD. Eles informam à interface de acessibilidade do sistema seu papel (botão, item selecionável, cabeçalho recolhível), seu nome e seu estado (habilitado, selecionado, expandido), para que leitores de tela possam anunciá-los.
