@@ -142,7 +142,7 @@ Scripts have no variables: a step cannot use an id created by an earlier one. Co
 
 ## Macros in the app
 
-*Manage → Macros → Record Macro* records the changes you make until you press *Stop Recording*; the macro is saved as a script (`.ccmacro`, the format above). *Run Macro* plays a macro or any script on the open project; `ccad script` runs the same files.
+*Manage → Macros → Record Macro* records the changes you make until you press *Stop Recording*; the macro is saved as a script (`.ccmacro`, the format above). *Run Macro* plays a macro or any script on the open project; `ccad script` runs the same files. With a macros folder set in *Preferences → File locations*, the macro file dialogs start there and *Run Macro* is a menu of its `.ccmacro` files (plus *Browse…* for any other file).
 
 - Only edits are recorded: opening, saving and exporting are left out, so replaying never overwrites files.
 - A value dragged in the properties is recorded once, with its final value; changes made in a dialog that you cancel are not recorded.

@@ -142,7 +142,7 @@ Scripts não têm variáveis: um passo não usa o id criado por um passo anterio
 
 ## Macros no aplicativo
 
-*Gerenciar → Macros → Gravar macro* grava as alterações que você fizer até apertar *Parar gravação*; a macro é salva como script (`.ccmacro`, o formato acima). *Executar macro* roda uma macro ou qualquer script no projeto aberto; `ccad script` roda os mesmos arquivos.
+*Gerenciar → Macros → Gravar macro* grava as alterações que você fizer até apertar *Parar gravação*; a macro é salva como script (`.ccmacro`, o formato acima). *Executar macro* roda uma macro ou qualquer script no projeto aberto; `ccad script` roda os mesmos arquivos. Com uma pasta de macros definida em *Preferências → Locais de arquivos*, os diálogos de arquivo de macro começam nela e *Executar macro* vira um menu dos arquivos `.ccmacro` dela (mais *Procurar…* para qualquer outro arquivo).
 
 - Só edições são gravadas: abrir, salvar e exportar ficam de fora, então reproduzir nunca sobrescreve arquivos.
 - Um valor arrastado nas propriedades é gravado uma vez, com o valor final; alterações feitas num diálogo cancelado não são gravadas.

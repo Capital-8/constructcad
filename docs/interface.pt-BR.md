@@ -46,7 +46,7 @@ Para dar mais espaço às vistas, recolha o ribbon até os títulos das abas. Qu
 - um **clique duplo** em qualquer aba;
 - a **seta** no fim da fileira de abas, à direita.
 
-Com o ribbon recolhido, um clique numa aba mostra o painel dela por cima das vistas. O painel fecha quando um comando é executado, quando você aperta Esc ou clica em outro lugar, ou quando clica de novo na mesma aba. O ConstructCAD lembra entre as sessões se o ribbon estava recolhido.
+Com o ribbon recolhido, um clique numa aba mostra o painel dela por cima das vistas. O painel fecha quando um comando é executado, quando você aperta Esc ou clica em outro lugar, ou quando clica de novo na mesma aba. Se o ribbon começa recolhido é definido em *Preferências → Interface*.
 
 ## Janelas estreitas
 
@@ -84,6 +84,7 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 |---|---|
 | Ctrl+Shift+P | Paleta de comandos |
 | Ctrl+F1 | Recolher / expandir o ribbon |
+| Ctrl+, | Preferências |
 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S / Ctrl+W | Novo / Abrir / Salvar / Salvar como / Fechar projeto |
 | Ctrl+Z / Ctrl+Y | Desfazer / Refazer |
 | Ctrl+X / Ctrl+C / Ctrl+V | Recortar / Copiar / Colar |
@@ -118,6 +119,15 @@ As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto
 - As propriedades da vista (plantas, elevações, cortes, vistas 3D, tabelas) têm a seção *Fases* com sua *Fase* e *Filtro de fase*; o filtro fica só para leitura quando o modelo da vista o controla. Os elementos mostram *Fase de criação* e *Fase de demolição*. Elementos novos são construídos na fase da vista ativa.
 - **Modificar → Demolir** (DE) demole os elementos clicados na fase da planta, elevação ou corte ativo; suas portas e janelas vão junto.
 
+## Preferências
+
+*Arquivo → Preferências* (Ctrl+,, também no pé da tela inicial) reúne as configurações do próprio aplicativo; elas não fazem parte de nenhum projeto e ficam guardadas entre as sessões. Escolha uma página à esquerda. As mudanças aparecem na hora; **OK** as mantém e **Cancelar** (ou Esc) volta aos valores de quando a janela abriu.
+
+- **Geral**: o idioma da interface, o tema (claro, escuro ou o do sistema) e *Verificar atualizações automaticamente* (veja o aviso de atualização abaixo).
+- **Interface**: a *Escala da interface* (75–200%, tudo cresce: painéis, ícones, texto; Ctrl+Mais e Ctrl+Menos também a mudam), o *Tamanho do texto* (pequeno, normal, grande, muito grande; só o texto, em qualquer escala), *Iniciar com o ribbon recolhido* e *Dicas detalhadas*: desligadas, as dicas dos comandos mostram só o nome, o atalho e por que o comando está indisponível, sem a descrição e o comando do motor.
+- **Locais de arquivos**: a *Pasta de macros* (os diálogos de arquivo de macro começam nela e *Gerenciar → Executar macro* lista as macros dela), a *Pasta de projetos* (onde começam Abrir, Importar IFC e o primeiro Salvar de um projeto novo; um projeto já salvo é salvo de novo ao lado dele mesmo) e as pastas da biblioteca de componentes (*Adicionar pasta…*, *Remover*). O botão *Gerenciar pastas…* da janela da biblioteca de componentes abre esta página. Uma pasta que não existe mais aparece como *Não encontrada* e é ignorada.
+- **Salvamento**: o intervalo do *Salvamento automático* (desligado, ou a cada 1, 2, 5, 10 ou 15 minutos; veja abaixo) e quantos projetos recentes a tela inicial lista.
+
 ## Aviso de atualização
 
 O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa nem instala nada por conta própria.
@@ -125,11 +135,11 @@ O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa 
 - **Quando**: ao iniciar, no máximo uma vez por dia, em segundo plano (a janela nunca espera por isso). *Arquivo → Verificar atualizações* (também no diálogo *Sobre*) verifica na hora e informa "está atualizado", a nova versão ou que não foi possível verificar.
 - **O que é contatado**: uma requisição HTTPS à API do GitHub, `https://api.github.com/repos/francisreboucas/constructcad/releases/latest`, que devolve a última versão publicada. A requisição envia os dados usuais de conexão (seu endereço IP) e o agente `ConstructCAD/<versão>`; nenhum dado de projeto, identificador ou informação de uso. Vale para ela a declaração de privacidade do GitHub.
 - **O que aparece**: quando a versão publicada é mais nova que a em uso (pré-lançamentos são ignorados), um aviso aparece na barra de status e na tela inicial: *Baixar* abre a página da versão no navegador, *Ignorar esta versão* esconde o aviso até sair uma versão posterior, e × o esconde até a próxima verificação. Qualquer falha (sem conexão, tempo esgotado, proxy, limite de requisições) é silenciosa.
-- **Como desligar**: desmarque *Verificar atualizações automaticamente* em *Arquivo → Sobre*. A variável de ambiente `CONSTRUCTCAD_NO_UPDATE_CHECK=1` desliga toda verificação, automática ou pedida (útil em CI, quiosques e instalações sem rede). O ConstructCAD guarda a hora da última verificação, a versão ignorada e a opção junto com as outras preferências.
+- **Como desligar**: desmarque *Verificar atualizações automaticamente* em *Preferências → Geral*. A variável de ambiente `CONSTRUCTCAD_NO_UPDATE_CHECK=1` desliga toda verificação, automática ou pedida (útil em CI, quiosques e instalações sem rede). O ConstructCAD guarda a hora da última verificação, a versão ignorada e a opção junto com as outras preferências.
 
 ## Salvamento automático e recuperação
 
-Um minuto depois que um projeto passa a ter alterações não salvas (também um projeto novo, nunca salvo), o ConstructCAD grava uma cópia dele, em segundo plano, na pasta `recovery` da sua pasta de dados (`%APPDATA%\ConstructCAD\data` no Windows, `~/Library/Application Support/ConstructCAD` no macOS, `~/.local/share/constructcad` no Linux). Ele só grava de novo depois que o modelo muda, e nunca sobre o arquivo do projeto. Salvar, fechar o projeto ou sair remove a cópia.
+Um minuto depois que um projeto passa a ter alterações não salvas (também um projeto novo, nunca salvo; *Preferências → Salvamento* define outro intervalo ou desliga o salvamento automático), o ConstructCAD grava uma cópia dele, em segundo plano, na pasta `recovery` da sua pasta de dados (`%APPDATA%\ConstructCAD\data` no Windows, `~/Library/Application Support/ConstructCAD` no macOS, `~/.local/share/constructcad` no Linux). Ele só grava de novo depois que o modelo muda, e nunca sobre o arquivo do projeto. Salvar, fechar o projeto ou sair remove a cópia.
 
 Se o ConstructCAD travar ou for encerrado à força, a próxima abertura mostra *Recuperar trabalho não salvo* com as cópias deixadas: *Restaurar* abre o projeto escolhido com as alterações não salvas (salvá-lo grava no arquivo original, ou pergunta onde, para um projeto nunca salvo), *Descartar* apaga a cópia e *Cancelar* guarda as cópias para a próxima abertura. Uma falha na interface também grava uma última cópia antes de o programa fechar, e toda falha é acrescentada a `crash.log` na pasta de dados; anexe-o ao relatar uma falha.
 
@@ -166,7 +176,7 @@ As cores são tokens de `theme::Palette`: `PALETTE` (claro) e `DARK`, com um tes
 
 ### Testes de interface
 
-O `crates/cc_app/src/ui_tests.rs` roda o ribbon e a paleta sem janela, com o [egui_kittest](https://crates.io/crates/egui_kittest). Os testes clicam e digitam pela árvore de acessibilidade, então widgets próprios precisam chamar `Response::widget_info`. As capturas de referência ficam em `crates/cc_app/tests/snapshots`. Elas cobrem cada aba do ribbon, o ribbon estreito e o recolhido, uma dica completa, a paleta e uma galeria de ícones nos dois temas. Placas de vídeo renderizam com pequenas diferenças, então a comparação das capturas roda sob demanda:
+O `crates/cc_app/src/ui_tests.rs` roda o ribbon e a paleta sem janela, com o [egui_kittest](https://crates.io/crates/egui_kittest). Os testes clicam e digitam pela árvore de acessibilidade, então widgets próprios precisam chamar `Response::widget_info`. As capturas de referência ficam em `crates/cc_app/tests/snapshots`. Elas cobrem cada aba do ribbon, o ribbon estreito e o recolhido, uma dica completa, a paleta, cada página da janela de Preferências e uma galeria de ícones nos dois temas. Placas de vídeo renderizam com pequenas diferenças, então a comparação das capturas roda sob demanda:
 
 ```sh
 CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots     # compara com as referências

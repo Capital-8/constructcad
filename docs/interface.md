@@ -46,7 +46,7 @@ To give the views more room, collapse the ribbon to its tab titles. Any of these
 - a **double click** on any tab;
 - the **arrow** at the right end of the tab row.
 
-While the ribbon is collapsed, a click on a tab shows that tab's panel over the views. The panel closes when a command runs, when you press Esc or click elsewhere, or when you click the same tab again. ConstructCAD remembers between sessions whether the ribbon was collapsed.
+While the ribbon is collapsed, a click on a tab shows that tab's panel over the views. The panel closes when a command runs, when you press Esc or click elsewhere, or when you click the same tab again. Whether the ribbon starts collapsed is set in *Preferences → Interface*.
 
 ## Narrow windows
 
@@ -84,6 +84,7 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 |---|---|
 | Ctrl+Shift+P | Command palette |
 | Ctrl+F1 | Collapse / expand the ribbon |
+| Ctrl+, | Preferences |
 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S / Ctrl+W | New / Open / Save / Save as / Close project |
 | Ctrl+Z / Ctrl+Y | Undo / Redo |
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / Copy / Paste |
@@ -118,6 +119,15 @@ Two-letter keys work while a view has the focus and no text field is being edite
 - The view's properties (plans, elevations, sections, 3D views, schedules) have a *Phasing* section with its *Phase* and *Phase Filter*; the filter is read-only when the view's template controls it. Elements show *Phase Created* and *Phase Demolished*. New elements are built in the active view's phase.
 - **Modify → Demolish** (DE) demolishes the clicked elements in the active plan's, elevation's or section's phase; their doors and windows go with them.
 
+## Preferences
+
+*File → Preferences* (Ctrl+,, also at the bottom of the home screen) holds the settings of the app itself; they are not part of any project and are kept between sessions. Pick a page on the left. Changes show at once; **OK** keeps them and **Cancel** (or Esc) brings back the values the window opened with.
+
+- **General**: the interface language, the theme (light, dark or the system's) and *Check for updates automatically* (see the update notice below).
+- **Interface**: the *Interface scale* (75–200%, everything grows: panels, icons, text; Ctrl+Plus and Ctrl+Minus change it too), the *Text size* (small, normal, large, extra large; only the text, at any scale), *Start with the ribbon collapsed*, and *Detailed tooltips*: when off, command tooltips show only the name, the shortcut and why a command is unavailable, without the description and the engine command.
+- **File locations**: the *Macros folder* (the macro file dialogs start there and *Manage → Run Macro* lists its macros), the *Projects folder* (where Open, Import IFC and the first Save of a new project start; a saved project is saved again next to itself), and the component library folders (*Add Folder…*, *Remove*). The component library window's *Manage Folders…* opens this page. A folder that no longer exists is marked *Not found* and skipped.
+- **Saving**: the *Autosave* interval (off, or every 1, 2, 5, 10 or 15 minutes; see below) and how many recent projects the home screen lists.
+
 ## Update notice
 
 ConstructCAD tells you when a newer version is published; it never downloads or installs anything by itself.
@@ -125,11 +135,11 @@ ConstructCAD tells you when a newer version is published; it never downloads or 
 - **When**: at startup, at most once a day, in the background (the window never waits for it). *File → Check for Updates* (also in the *About* dialog) checks at once and reports "up to date", the new version, or that it could not check.
 - **What is contacted**: one HTTPS request to the GitHub API, `https://api.github.com/repos/francisreboucas/constructcad/releases/latest`, which returns the latest published release. The request sends the usual connection data (your IP address) and a `ConstructCAD/<version>` user agent; no project data, identifier or usage information. GitHub's privacy statement applies to it.
 - **What you see**: when the release is newer than the running version (pre-releases are ignored), a notice appears in the status bar and on the home screen: *Download* opens the release page in your browser, *Skip This Version* hides the notice until a later version comes out, and × hides it until the next check. Any failure (offline, timeout, proxy, rate limit) is silent.
-- **Turning it off**: clear *Check for updates automatically* in *File → About*. The environment variable `CONSTRUCTCAD_NO_UPDATE_CHECK=1` turns off every check, automatic or on request (useful for CI, kiosks and offline installations). ConstructCAD remembers the last check time, the skipped version and the setting with its other preferences.
+- **Turning it off**: clear *Check for updates automatically* in *Preferences → General*. The environment variable `CONSTRUCTCAD_NO_UPDATE_CHECK=1` turns off every check, automatic or on request (useful for CI, kiosks and offline installations). ConstructCAD remembers the last check time, the skipped version and the setting with its other preferences.
 
 ## Autosave and recovery
 
-A minute after a project gets unsaved changes (a new project that was never saved too), ConstructCAD writes a copy of it, in the background, to the `recovery` folder of its data folder (`%APPDATA%\ConstructCAD\data` on Windows, `~/Library/Application Support/ConstructCAD` on macOS, `~/.local/share/constructcad` on Linux). It writes again only after the model changes, and never over your project file. Saving, closing the project or quitting removes the copy.
+A minute after a project gets unsaved changes (a new project that was never saved too; *Preferences → Saving* sets another interval or turns autosave off), ConstructCAD writes a copy of it, in the background, to the `recovery` folder of its data folder (`%APPDATA%\ConstructCAD\data` on Windows, `~/Library/Application Support/ConstructCAD` on macOS, `~/.local/share/constructcad` on Linux). It writes again only after the model changes, and never over your project file. Saving, closing the project or quitting removes the copy.
 
 If ConstructCAD crashes or is killed, the next start shows *Recover Unsaved Work* with the copies left behind: *Restore* opens the chosen project with its unsaved changes (saving it writes to its original file, or asks where for a project that was never saved), *Discard* deletes the copy, and *Cancel* keeps the copies for the next start. A crash in the interface also writes a last copy before the app closes, and every crash is appended to `crash.log` in the data folder; attach it when you report a crash.
 
@@ -166,7 +176,7 @@ Colors are tokens of `theme::Palette`: `PALETTE` (light) and `DARK`, with a test
 
 ### Interface tests
 
-`crates/cc_app/src/ui_tests.rs` runs the ribbon and the palette headlessly with [egui_kittest](https://crates.io/crates/egui_kittest). The tests click and type through the accessibility tree, so custom widgets must call `Response::widget_info`. Screenshot references live in `crates/cc_app/tests/snapshots`. They cover each ribbon tab, the narrow and collapsed ribbon, a rich tooltip, the palette, and an icon gallery in both themes. GPUs render slightly differently, so the screenshot comparisons run on request:
+`crates/cc_app/src/ui_tests.rs` runs the ribbon and the palette headlessly with [egui_kittest](https://crates.io/crates/egui_kittest). The tests click and type through the accessibility tree, so custom widgets must call `Response::widget_info`. Screenshot references live in `crates/cc_app/tests/snapshots`. They cover each ribbon tab, the narrow and collapsed ribbon, a rich tooltip, the palette, each page of the Preferences window, and an icon gallery in both themes. GPUs render slightly differently, so the screenshot comparisons run on request:
 
 ```sh
 CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots     # compare with the references
