@@ -11,7 +11,7 @@ use egui_dock::tab_viewer::OnCloseResponse;
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 
 /// Command-line options.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Args {
     pub path: Option<std::path::PathBuf>,
     /// Views (by name or tab title) to open at startup.
@@ -54,7 +54,22 @@ impl ConstructApp {
         // failed allocation) by default; log it and keep the app (and the
         // open project) alive instead.
         if let Some(rs) = &cc.wgpu_render_state {
-            rs.device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU error: {e}")));
+            // The first one also goes to the crash log (release builds on Windows have no console).
+            let logged = std::sync::atomic::AtomicBool::new(false);
+            rs.device.on_uncaptured_error(std::sync::Arc::new(move |e| {
+                log::error!("GPU error: {e}");
+                if !logged.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    crate::recovery::log_event(&format!("GPU error: {e}"));
+                }
+            }));
+            rs.device.set_device_lost_callback(|reason, message| {
+                if reason == wgpu::DeviceLostReason::Unknown {
+                    log::error!("GPU device lost: {message}");
+                    crate::recovery::log_event(&format!("GPU device lost: {message}"));
+                }
+            });
+            let info = rs.adapter.get_info();
+            log::info!("graphics: {} ({:?}, {})", info.name, info.backend, info.driver_info);
         }
         // Command line, then saved preference, then the operating system language.
         let saved = cc.storage.and_then(|s| s.get_string(LANGUAGE_KEY)).and_then(|c| Language::from_code(&c));
@@ -373,6 +388,7 @@ impl eframe::App for ConstructApp {
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        crate::gpu::note_frame();
         // A panic in a frame ends the app, as before, but writes a last
         // recovery copy of the open project first (the panic hook has
         // logged it to the crash log).

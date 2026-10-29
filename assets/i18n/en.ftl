@@ -1666,6 +1666,8 @@ recovery-age-days = { $count } days ago
 action-restore = Restore
 msg-recovered = Restored: { $name } (save to keep the changes)
 msg-recovery-failed = Could not restore the project: { $error }
+gpu-failed-title = ConstructCAD could not start
+gpu-failed-text = Could not start the graphics (DirectX, Vulkan, Metal or OpenGL): { $error }. Updating the graphics driver may help. Details are in { $log }.
 
 ## Stairs
 stair-shape-straight = Straight

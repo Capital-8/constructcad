@@ -1668,6 +1668,8 @@ recovery-age-days = { $count } ມື້ກ່ອນ
 action-restore = ກູ້ຄືນ
 msg-recovered = ກູ້ຄືນແລ້ວ: { $name } (ບັນທຶກເພື່ອຮັກສາການປ່ຽນແປງ)
 msg-recovery-failed = ບໍ່ສາມາດກູ້ຄືນໂຄງການໄດ້: { $error }
+gpu-failed-title = ConstructCAD ບໍ່ສາມາດເລີ່ມໄດ້
+gpu-failed-text = ບໍ່ສາມາດເລີ່ມລະບົບກຣາຟິກໄດ້ (DirectX, Vulkan, Metal ຫຼື OpenGL): { $error }. ການອັບເດດໄດຣເວີກາດຈໍອາດຊ່ວຍໄດ້. ລາຍລະອຽດຢູ່ໃນ { $log }.
 
 ## ຂັ້ນໄດ
 stair-shape-straight = ຊື່

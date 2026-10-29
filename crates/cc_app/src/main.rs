@@ -14,6 +14,7 @@ mod dialog;
 mod dialogs;
 mod dim_edit;
 mod engine_edit;
+mod gpu;
 mod graphics_dialog;
 mod home;
 mod i18n;
@@ -61,8 +62,42 @@ fn main() -> eframe::Result<()> {
     // (lowercased) folder name on Linux, so nothing moves.
     #[cfg(target_os = "linux")]
     let viewport = viewport.with_app_id("constructcad");
-    let options = eframe::NativeOptions { viewport, renderer: eframe::Renderer::Wgpu, ..Default::default() };
-    eframe::run_native("ConstructCAD", options, Box::new(|cc| Ok(Box::new(app::ConstructApp::new(cc, args)))))
+    // The language of a start-up error message (the app then applies the saved preference).
+    i18n::set_language(args.language.unwrap_or_else(i18n::Language::from_system));
+    // Try the graphics APIs in turn until one shows the window (issue #74).
+    let mut last_error = None;
+    for api in gpu::startup_plan() {
+        gpu::begin(api);
+        let options = eframe::NativeOptions {
+            viewport: viewport.clone(),
+            renderer: eframe::Renderer::Wgpu,
+            wgpu_options: gpu::wgpu_options(api),
+            ..Default::default()
+        };
+        let args = args.clone();
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            eframe::run_native("ConstructCAD", options, Box::new(|cc| Ok(Box::new(app::ConstructApp::new(cc, args)))))
+        }));
+        match run {
+            Ok(Ok(())) => return Ok(()),
+            // eframe returned cleanly before the first frame: try the next API.
+            Ok(Err(error)) if !gpu::started() => {
+                gpu::failed(api, &error.to_string());
+                last_error = Some(error);
+            }
+            Ok(Err(error)) => {
+                recovery::log_event(&format!("The app stopped with an error: {error}"));
+                return Err(error);
+            }
+            // A panic (already in the crash log) before the first frame:
+            // restart the app, which tries the next API first.
+            Err(_) if !gpu::started() && gpu::restart(api) => return Ok(()),
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+    let error = last_error.unwrap_or_else(|| eframe::Error::AppCreation("no graphics API to try".into()));
+    gpu::report_failure(&error.to_string());
+    Err(error)
 }
 
 /// Window and taskbar icon.

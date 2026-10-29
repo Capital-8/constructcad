@@ -1666,6 +1666,8 @@ recovery-age-days = { $count } 天前
 action-restore = 還原
 msg-recovered = 已還原：{ $name }（請儲存以保留變更）
 msg-recovery-failed = 無法還原專案：{ $error }
+gpu-failed-title = ConstructCAD 無法啟動
+gpu-failed-text = 無法啟動圖形系統（DirectX、Vulkan、Metal 或 OpenGL）：{ $error }。更新顯示卡驅動程式可能會有幫助。詳細資訊請見 { $log }。
 
 ## 樓梯
 stair-shape-straight = 直跑
