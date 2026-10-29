@@ -26,6 +26,7 @@ pub enum UiCommand {
     ExportImage,
     About,
     CheckUpdates,
+    Preferences,
     Undo,
     Redo,
     Default3D,
@@ -162,6 +163,7 @@ impl UiCommand {
             ExportImage,
             About,
             CheckUpdates,
+            Preferences,
             Undo,
             Redo,
             Default3D,
@@ -255,6 +257,7 @@ impl UiCommand {
             ExportImage => Icon::Image,
             About => Icon::About,
             CheckUpdates => Icon::Update,
+            Preferences => Icon::Settings,
             Undo => Icon::Undo,
             Redo => Icon::Redo,
             Default3D | New3D => Icon::View3D,
@@ -375,6 +378,7 @@ impl UiCommand {
             ExportImage => t!("action-export-image"),
             About => t!("dlg-about"),
             CheckUpdates => t!("action-check-updates"),
+            Preferences => t!("action-preferences"),
             Undo => t!("action-undo"),
             Redo => t!("action-redo"),
             Default3D => t!("action-default-3d"),
@@ -505,6 +509,7 @@ impl UiCommand {
             ExportImage => t!("cmd-desc-export-image"),
             About => t!("cmd-desc-about"),
             CheckUpdates => t!("cmd-desc-check-updates"),
+            Preferences => t!("cmd-desc-preferences"),
             Undo => t!("cmd-desc-undo"),
             Redo => t!("cmd-desc-redo"),
             Default3D => t!("cmd-desc-default-3d"),
@@ -670,6 +675,7 @@ impl UiCommand {
             TempReset => "HR",
             Demolish => "DE",
             ToggleRibbon => "Ctrl+F1",
+            Preferences => "Ctrl+,",
             CommandPalette => "Ctrl+Shift+P",
             _ => return None,
         })
@@ -777,7 +783,9 @@ impl UiCommand {
         use UiCommand::*;
         let project_open = state.project_open && !state.show_home;
         match self {
-            Home | New | Open | ImportIfc | About | CheckUpdates | ToggleRibbon | CommandPalette => return None,
+            Home | New | Open | ImportIfc | About | CheckUpdates | Preferences | ToggleRibbon | CommandPalette => {
+                return None;
+            }
             _ if !project_open => return Some(t!("why-no-project")),
             _ => {}
         }
@@ -1018,6 +1026,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         ExportImage => actions::export_image(state),
         About => state.dialogs.about = true,
         CheckUpdates => state.updates.start(ctx, true),
+        Preferences => crate::preferences::open(state, crate::preferences::Section::General),
         Undo => {
             actions::run_command(state, cc_engine::commands::project::Undo {});
         }

@@ -199,19 +199,15 @@ pub fn set_language(state: &mut AppState, lang: crate::i18n::Language) {
     state.message = t!("msg-language-changed");
 }
 
-/// Show the interface in `theme` (saved with the other preferences).
-pub fn set_theme(ctx: &egui::Context, state: &mut AppState, theme: crate::theme::ThemeChoice) {
-    if state.theme == theme {
-        return;
-    }
-    state.theme = theme;
-    crate::theme::set_theme(ctx, theme);
-}
-
 // --- Files ---
 
-fn file_dialog() -> rfd::FileDialog {
-    rfd::FileDialog::new().add_filter(t!("file-filter"), &["ccad"])
+/// The project file dialog, starting in the default projects folder when one is set.
+fn file_dialog(state: &AppState) -> rfd::FileDialog {
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter"), &["ccad"]);
+    match state.prefs.projects_dir() {
+        Some(dir) => dialog.set_directory(dir),
+        None => dialog,
+    }
 }
 
 /// Run `action` now, or ask for confirmation first if there are unsaved changes.
@@ -253,7 +249,7 @@ fn close_project(state: &mut AppState) {
 }
 
 pub fn open(state: &mut AppState) {
-    let Some(path) = file_dialog().pick_file() else { return };
+    let Some(path) = file_dialog(state).pick_file() else { return };
     open_path(state, path);
 }
 
@@ -268,7 +264,7 @@ pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
             } else {
                 t!("msg-opened", "path" => path.display())
             };
-            crate::home::push_recent(&mut state.recent, &path);
+            crate::home::push_recent(&mut state.recent, &path, state.prefs.recent_count);
             if crate::thumbnails::project_file(&path).is_some_and(|f| !f.exists()) {
                 state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path));
             }
@@ -324,7 +320,10 @@ pub fn load_component_path(state: &mut AppState, path: std::path::PathBuf) {
 /// Replace the document with a project imported from an IFC file. The
 /// result has no file path: saving asks where to write the `.ccad`.
 fn import_ifc(state: &mut AppState) {
-    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-ifc"), &["ifc"]);
+    let mut dialog = rfd::FileDialog::new().add_filter(t!("file-filter-ifc"), &["ifc"]);
+    if let Some(dir) = state.prefs.projects_dir() {
+        dialog = dialog.set_directory(dir);
+    }
     let Some(path) = dialog.pick_file() else { return };
     let mut session = cc_engine::Session::default();
     match session.run(io::IfcImport { path: path.clone() }) {
@@ -435,8 +434,13 @@ pub fn export_image(state: &mut AppState) {
 
 // --- Macros ---
 
-fn macro_dialog() -> rfd::FileDialog {
-    rfd::FileDialog::new().add_filter(t!("file-filter-macro"), &["ccmacro", "jsonl", "json"])
+/// The macro file dialog, starting in the macros folder when one is set.
+fn macro_dialog(state: &AppState) -> rfd::FileDialog {
+    let dialog = rfd::FileDialog::new().add_filter(t!("file-filter-macro"), &["ccmacro", "jsonl", "json"]);
+    match state.prefs.macro_dir() {
+        Some(dir) => dialog.set_directory(dir),
+        None => dialog,
+    }
 }
 
 /// Start recording a macro, or stop and save it as a script of commands
@@ -452,7 +456,7 @@ pub fn toggle_macro_recording(state: &mut AppState) {
         state.message = t!("msg-macro-empty");
         return;
     }
-    let Some(mut path) = macro_dialog().set_file_name("macro.ccmacro").save_file() else { return };
+    let Some(mut path) = macro_dialog(state).set_file_name("macro.ccmacro").save_file() else { return };
     if path.extension().is_none() {
         path.set_extension("ccmacro");
     }
@@ -464,7 +468,7 @@ pub fn toggle_macro_recording(state: &mut AppState) {
 
 /// Run a macro (a script of commands) on the open project; each step is one undo step.
 pub fn run_macro(state: &mut AppState) {
-    let Some(path) = macro_dialog().pick_file() else { return };
+    let Some(path) = macro_dialog(state).pick_file() else { return };
     run_macro_file(state, &path);
 }
 
@@ -498,7 +502,12 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
         (Some(p), false) => p.clone(),
         _ => {
             let name = format!("{}.ccad", state.project().info.name);
-            let Some(mut p) = file_dialog().set_file_name(name).save_file() else { return false };
+            // A saved project is saved again next to itself; a new one in the projects folder.
+            let mut dialog = file_dialog(state).set_file_name(name);
+            if let Some(dir) = state.session.doc.path.as_deref().and_then(std::path::Path::parent) {
+                dialog = dialog.set_directory(dir);
+            }
+            let Some(mut p) = dialog.save_file() else { return false };
             if p.extension().is_none() {
                 p.set_extension("ccad");
             }
@@ -508,7 +517,7 @@ pub fn save(state: &mut AppState, save_as: bool) -> bool {
     match state.session.run(project::ProjectSave { path: Some(path.clone()) }) {
         Ok(_) => {
             state.message = t!("msg-saved", "path" => path.display());
-            crate::home::push_recent(&mut state.recent, &path);
+            crate::home::push_recent(&mut state.recent, &path, state.prefs.recent_count);
             state.thumbnail_jobs.push(crate::thumbnails::Job::Project(path.clone()));
             true
         }

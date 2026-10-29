@@ -173,11 +173,9 @@ fn spawn(ctx: egui::Context) -> Receiver<Outcome> {
     rx
 }
 
-/// Update checks of the app: preferences, the check in progress and what to show.
-#[derive(Debug)]
+/// Update checks of the app: when the last ran, the check in progress and what to show.
+#[derive(Debug, Default)]
 pub struct Updates {
-    /// Check automatically at startup (at most once per [`CHECK_INTERVAL`]).
-    pub auto: bool,
     /// When the last check started (seconds since the Unix epoch).
     pub last_check: Option<u64>,
     /// A version the user chose to skip: its notice is not shown again.
@@ -190,16 +188,10 @@ pub struct Updates {
     pub report: Option<Outcome>,
 }
 
-impl Default for Updates {
-    fn default() -> Self {
-        Self { auto: true, last_check: None, skipped: None, pending: None, available: None, report: None }
-    }
-}
-
 impl Updates {
-    /// Start an automatic check if one is due.
-    pub fn start_if_due(&mut self, ctx: &egui::Context) {
-        if !disabled_by_env() && auto_check_due(self.auto, self.last_check, now()) {
+    /// Start an automatic check if one is due (`enabled`: the preference is on).
+    pub fn start_if_due(&mut self, ctx: &egui::Context, enabled: bool) {
+        if !disabled_by_env() && auto_check_due(enabled, self.last_check, now()) {
             self.start(ctx, false);
         }
     }

@@ -26,6 +26,7 @@ mod modify3d;
 mod paint;
 mod palette;
 mod phases_dialog;
+mod preferences;
 mod properties;
 mod recovery;
 mod ribbon;

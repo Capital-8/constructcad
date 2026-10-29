@@ -33,6 +33,8 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::graphics_dialog::show(ctx, state);
     crate::phases_dialog::show(ctx, state);
     crate::library::show(ctx, state);
+    // After the library window, which opens it over itself.
+    crate::preferences::show(ctx, state);
     confirm(ctx, state);
     error(ctx, state);
     about(ctx, state);
@@ -265,7 +267,6 @@ fn about(ctx: &Context, state: &mut AppState) {
     let repository = env!("CARGO_PKG_REPOSITORY");
     let mut open_repo = 0;
     let mut check = 0;
-    let auto = &mut state.updates.auto;
     let response = Dialog::new("about", t!("dlg-about")).width(440.0).show(
         ctx,
         |ui| {
@@ -300,8 +301,6 @@ fn about(ctx: &Context, state: &mut AppState) {
                 ui.hyperlink_to(repository.trim_start_matches("https://"), repository);
                 ui.end_row();
             });
-            ui.add_space(4.0);
-            ui.checkbox(auto, t!("update-auto")).on_hover_text(t!("update-auto-hint"));
             ui.add_space(8.0);
             ui.label(theme::title(t!("about-credits")));
             for line in [t!("about-built-with"), t!("about-font-credit"), t!("about-icon-credit")] {

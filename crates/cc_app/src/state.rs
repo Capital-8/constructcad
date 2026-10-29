@@ -76,6 +76,8 @@ pub struct Dialogs {
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
+    /// The Preferences window.
+    pub preferences: Option<crate::preferences::PreferencesDialog>,
 }
 
 pub struct AppState {
@@ -102,8 +104,6 @@ pub struct AppState {
     /// The ribbon shows only its tabs; clicking one shows its panel over the views (`ribbon_peek`).
     pub ribbon_collapsed: bool,
     pub ribbon_peek: bool,
-    /// The interface theme the user chose (light, dark or the system's).
-    pub theme: crate::theme::ThemeChoice,
     /// The open command palette.
     pub palette: Option<crate::palette::Palette>,
     /// Browser inline rename in progress.
@@ -143,8 +143,8 @@ pub struct AppState {
     pub project_open: bool,
     /// Recently opened or saved projects, most recent first.
     pub recent: Vec<std::path::PathBuf>,
-    /// Folders of the component library (saved with the preferences).
-    pub library_folders: Vec<std::path::PathBuf>,
+    /// The app preferences (saved with eframe; see `preferences.rs`).
+    pub prefs: crate::preferences::Preferences,
     /// Update checks and the notice of a newer release.
     pub updates: crate::update::Updates,
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
@@ -184,7 +184,6 @@ impl AppState {
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
             ribbon_collapsed: false,
-            theme: Default::default(),
             ribbon_peek: false,
             palette: None,
             rename: None,
@@ -205,7 +204,7 @@ impl AppState {
             show_home: false,
             project_open: true,
             recent: Vec::new(),
-            library_folders: Vec::new(),
+            prefs: Default::default(),
             updates: Default::default(),
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),
@@ -227,11 +226,15 @@ impl AppState {
         let generation = self.generation + 1;
         let recent = std::mem::take(&mut self.recent);
         let updates = std::mem::take(&mut self.updates);
+        let prefs = std::mem::take(&mut self.prefs);
+        let ribbon_collapsed = self.ribbon_collapsed;
         let jobs = std::mem::take(&mut self.thumbnail_jobs);
         let requested = std::mem::take(&mut self.requested_samples);
         *self = Self::new(doc);
         self.recent = recent;
         self.updates = updates;
+        self.prefs = prefs;
+        self.ribbon_collapsed = ribbon_collapsed;
         self.thumbnail_jobs = jobs;
         self.requested_samples = requested;
         self.textures_to_free = textures;

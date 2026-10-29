@@ -114,6 +114,28 @@ pub fn palette(ctx: &egui::Context) -> &'static Palette {
 thread_local! {
     /// Whether the interface painted on this thread shows the dark theme.
     static DARK_SHOWN: Cell<bool> = const { Cell::new(false) };
+    /// Multiplier of the interface text sizes (the font size preference).
+    static FONT_SCALE: Cell<f32> = const { Cell::new(1.0) };
+}
+
+/// Smallest and largest font size multipliers.
+pub const FONT_SCALE_RANGE: std::ops::RangeInclusive<f32> = 0.8..=1.5;
+
+/// The multiplier of the interface text sizes (see [`set_font_scale`]).
+pub fn font_scale() -> f32 {
+    FONT_SCALE.with(Cell::get)
+}
+
+/// Make the interface text `scale` times its normal size (independent of
+/// the interface zoom): the text styles of both themes and the property
+/// tables follow it. Out-of-range values are clamped.
+pub fn set_font_scale(ctx: &egui::Context, scale: f32) {
+    let (lo, hi) = (*FONT_SCALE_RANGE.start(), *FONT_SCALE_RANGE.end());
+    let scale = if scale.is_finite() { scale.clamp(lo, hi) } else { 1.0 };
+    FONT_SCALE.with(|f| f.set(scale));
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        ctx.style_mut_of(theme, |style| style.text_styles = text_styles(scale));
+    }
 }
 
 /// The palette of the theme shown: read like a constant (`PALETTE.text`).
@@ -252,14 +274,7 @@ pub fn apply(ctx: &egui::Context) {
 
 fn style_of(style: &mut egui::Style, palette: &Palette) {
     style.visuals = visuals(palette);
-    style.text_styles = [
-        (TextStyle::Small, FontId::proportional(11.5)),
-        (TextStyle::Body, FontId::proportional(13.5)),
-        (TextStyle::Button, FontId::proportional(13.5)),
-        (TextStyle::Heading, FontId::new(17.0, semibold())),
-        (TextStyle::Monospace, FontId::monospace(12.5)),
-    ]
-    .into();
+    style.text_styles = text_styles(font_scale());
     let s = &mut style.spacing;
     s.item_spacing = egui::vec2(8.0, 6.0);
     s.button_padding = egui::vec2(8.0, 4.0);
@@ -268,6 +283,18 @@ fn style_of(style: &mut egui::Style, palette: &Palette) {
     s.window_margin = Margin::same(12);
     s.indent = 16.0;
     s.combo_height = 320.0;
+}
+
+/// The text styles at `scale` times their normal size.
+fn text_styles(scale: f32) -> std::collections::BTreeMap<TextStyle, FontId> {
+    [
+        (TextStyle::Small, FontId::proportional(11.5 * scale)),
+        (TextStyle::Body, FontId::proportional(13.5 * scale)),
+        (TextStyle::Button, FontId::proportional(13.5 * scale)),
+        (TextStyle::Heading, FontId::new(17.0 * scale, semibold())),
+        (TextStyle::Monospace, FontId::monospace(12.5 * scale)),
+    ]
+    .into()
 }
 
 fn fonts() -> FontDefinitions {
@@ -449,5 +476,25 @@ mod tests {
             assert_eq!(ThemeChoice::from_code(t.code()), Some(t));
         }
         assert_eq!(ThemeChoice::from_code("sepia"), None);
+    }
+
+    /// The font size preference scales the text styles of both themes, clamped.
+    #[test]
+    fn font_scale_resizes_text_styles() {
+        let ctx = egui::Context::default();
+        apply(&ctx);
+        let body = |theme| ctx.style_of(theme).text_styles[&TextStyle::Body].size;
+        assert_eq!(body(egui::Theme::Light), 13.5);
+        set_font_scale(&ctx, 1.2);
+        assert!((body(egui::Theme::Light) - 16.2).abs() < 1e-4);
+        assert!((body(egui::Theme::Dark) - 16.2).abs() < 1e-4);
+        // Applying the theme again keeps the scale.
+        apply(&ctx);
+        assert!((body(egui::Theme::Dark) - 16.2).abs() < 1e-4);
+        set_font_scale(&ctx, f32::NAN);
+        assert_eq!(font_scale(), 1.0);
+        set_font_scale(&ctx, 9.0);
+        assert_eq!(font_scale(), 1.5);
+        set_font_scale(&ctx, 1.0);
     }
 }
