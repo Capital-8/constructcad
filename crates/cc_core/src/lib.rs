@@ -5,6 +5,7 @@
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
 pub mod arc;
+pub mod cad;
 pub mod component;
 pub mod component_file;
 pub mod dim_line;
@@ -34,6 +35,7 @@ pub mod units;
 mod view;
 pub mod wall_ops;
 
+pub use cad::{CadColorMode, CadDrawing, CadImport, CadLayer, CadPrim, CadUnit};
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
