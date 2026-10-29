@@ -1411,6 +1411,8 @@ cmd-desc-mep-connect = 将所选卫浴装置和电气设备连接到最近的管
 why-select-fixtures = 请先选择卫浴装置或电气设备。
 msg-mep-connected = 已创建 { $count } 段（{ $skipped } 个附近没有管网）。
 msg-not-fixture = 图元 { $id } 不是卫浴装置或电气设备。
+msg-pipes-in-plumbing-plan = 管道显示在给排水平面图中：已打开本楼层的给排水平面图以便绘制。
+msg-conduits-in-electrical-plan = 线管显示在电气平面图中：已打开本楼层的电气平面图以便绘制。
 tx-mep-connect = 连接到管网
 group-analysis = 分析
 dlg-mep-sizing = 尺寸计算
@@ -1664,6 +1666,8 @@ recovery-age-days = { $count } 天前
 action-restore = 恢复
 msg-recovered = 已恢复：{ $name }（请保存以保留更改）
 msg-recovery-failed = 无法恢复项目：{ $error }
+gpu-failed-title = ConstructCAD 无法启动
+gpu-failed-text = 无法启动图形系统（DirectX、Vulkan、Metal 或 OpenGL）：{ $error }。更新显卡驱动程序可能会有帮助。详细信息请参阅 { $log }。
 
 ## Stairs
 stair-shape-straight = 直跑
