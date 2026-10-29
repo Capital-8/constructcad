@@ -1664,6 +1664,8 @@ recovery-age-days = il y a { $count } jours
 action-restore = Restaurer
 msg-recovered = Restauré : { $name } (enregistrez pour conserver les modifications)
 msg-recovery-failed = Impossible de restaurer le projet : { $error }
+gpu-failed-title = ConstructCAD n’a pas pu démarrer
+gpu-failed-text = Impossible de démarrer l’affichage graphique (DirectX, Vulkan, Metal ou OpenGL) : { $error }. Mettre à jour le pilote graphique peut aider. Détails dans { $log }.
 
 ## Escaliers
 stair-shape-straight = Droit

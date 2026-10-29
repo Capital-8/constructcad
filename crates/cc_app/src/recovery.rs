@@ -18,7 +18,7 @@ const INTERVAL: Duration = Duration::from_secs(60);
 const CRASH_LOG_LIMIT: u64 = 1 << 20;
 
 /// The app's data folder (where eframe keeps its preferences).
-fn data_dir() -> Option<PathBuf> {
+pub fn data_dir() -> Option<PathBuf> {
     eframe::storage_dir("ConstructCAD")
 }
 
@@ -27,7 +27,8 @@ pub fn folder() -> Option<PathBuf> {
     data_dir().map(|d| d.join("recovery"))
 }
 
-/// The crash log: one entry per panic, with its message, place and backtrace.
+/// The crash log: one entry per panic, with its message, place and backtrace,
+/// and per failed graphics start-up or lost GPU device.
 pub fn crash_log() -> Option<PathBuf> {
     data_dir().map(|d| d.join("crash.log"))
 }
@@ -243,10 +244,17 @@ fn age(now: u64, then: u64) -> String {
 /// Append a panic to the crash log (no recursion, no panics: errors are ignored).
 pub fn log_panic(info: &std::panic::PanicHookInfo<'_>) {
     let Some(path) = crash_log() else { return };
-    write_crash_entry(&path, &info.to_string());
+    write_crash_entry(&path, &info.to_string(), true);
 }
 
-fn write_crash_entry(path: &Path, what: &str) {
+/// Append an event that is not a panic (a failed graphics start-up, a lost
+/// GPU device) to the crash log, without a backtrace; errors are ignored.
+pub fn log_event(what: &str) {
+    let Some(path) = crash_log() else { return };
+    write_crash_entry(&path, what, false);
+}
+
+fn write_crash_entry(path: &Path, what: &str, with_backtrace: bool) {
     use std::io::Write;
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -254,7 +262,7 @@ fn write_crash_entry(path: &Path, what: &str) {
     let fresh = std::fs::metadata(path).is_ok_and(|m| m.len() > CRASH_LOG_LIMIT);
     let file = std::fs::OpenOptions::new().create(true).append(!fresh).write(true).truncate(fresh).open(path);
     let Ok(mut file) = file else { return };
-    let backtrace = std::backtrace::Backtrace::force_capture();
+    let backtrace = if with_backtrace { std::backtrace::Backtrace::force_capture().to_string() } else { String::new() };
     let _ = writeln!(
         file,
         "--- ConstructCAD {} ({} {}), {} s after the Unix epoch\n{what}\n{backtrace}\n",
@@ -358,10 +366,10 @@ mod tests {
         r.write_now(&state);
         assert_eq!(recovery::list(&dir).len(), 1);
         let log = dir.join("crash.log");
-        write_crash_entry(&log, "panicked at somewhere.rs:1:1");
-        write_crash_entry(&log, "panicked again");
+        write_crash_entry(&log, "panicked at somewhere.rs:1:1", true);
+        write_crash_entry(&log, "graphics start-up failed", false);
         let text = std::fs::read_to_string(&log).unwrap();
-        assert!(text.contains("somewhere.rs") && text.contains("panicked again"), "{text}");
+        assert!(text.contains("somewhere.rs") && text.contains("graphics start-up failed"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -133,6 +133,15 @@ A minute after a project gets unsaved changes (a new project that was never save
 
 If ConstructCAD crashes or is killed, the next start shows *Recover Unsaved Work* with the copies left behind: *Restore* opens the chosen project with its unsaved changes (saving it writes to its original file, or asks where for a project that was never saved), *Discard* deletes the copy, and *Cancel* keeps the copies for the next start. A crash in the interface also writes a last copy before the app closes, and every crash is appended to `crash.log` in the data folder; attach it when you report a crash.
 
+## Graphics start-up
+
+ConstructCAD draws with the system's native graphics API (DirectX 12 or Vulkan on Windows, Metal on macOS, Vulkan on Linux) and falls back to OpenGL by itself when that fails, which some older or small integrated GPUs need:
+
+- If the native API reports an error, the same start tries OpenGL. If it crashes before the window appears, ConstructCAD starts again once with OpenGL; if the whole process dies (a driver crash), the next start tries OpenGL first.
+- Once OpenGL was needed, it stays first: the choice is kept in the file `gpu-backend` of the data folder. Delete that file (after updating the graphics driver, for example) to try the native API again.
+- Every failed start is written to `crash.log` in the data folder. When no API works, a message says so and names that file.
+- The environment variable `WGPU_BACKEND` picks the API yourself and turns the fallback off: `gl` for OpenGL, `dx12`, `vulkan` or `metal`, or several separated by commas (on Windows, for example, `set WGPU_BACKEND=gl` in a command prompt before starting `constructcad.exe`, or as a user environment variable). `WGPU_POWER_PREF=low` prefers the integrated GPU on computers with two.
+
 ## Accessibility
 
 The ribbon buttons, tab titles, scroll arrows, palette entries, browser rows, home screen cards, dialog close buttons, property sections and the view cube's home button are drawn by ConstructCAD itself. They report their role (button, selectable item, collapsible header), their name and their state (enabled, selected, expanded) to the operating system's accessibility interface, so screen readers can announce them.

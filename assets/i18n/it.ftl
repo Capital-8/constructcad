@@ -1664,6 +1664,8 @@ recovery-age-days = { $count } giorni fa
 action-restore = Ripristina
 msg-recovered = Ripristinato: { $name } (salva per conservare le modifiche)
 msg-recovery-failed = Impossibile ripristinare il progetto: { $error }
+gpu-failed-title = ConstructCAD non è riuscito ad avviarsi
+gpu-failed-text = Impossibile avviare la grafica (DirectX, Vulkan, Metal o OpenGL): { $error }. Aggiornare il driver della scheda video può aiutare. Dettagli in { $log }.
 
 ## Scale
 stair-shape-straight = Dritta
