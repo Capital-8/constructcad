@@ -90,6 +90,7 @@ fn element_is_valid(e: &Element) -> bool {
                 && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
         }
         ElementKind::CadImport(c) => c.is_valid(),
+        ElementKind::Mass(m) => m.is_valid(),
     }
 }
 
@@ -144,7 +145,7 @@ impl Project {
                 TypeData::Grid { bubble } => repairs += usize::from(fix_positive(bubble, 8.0)),
                 TypeData::Dimension { text_size } => repairs += usize::from(fix_positive(text_size, 2.5)),
                 TypeData::Text { size, .. } => repairs += usize::from(fix_positive(size, 2.5)),
-                TypeData::Room {} | TypeData::CadImport {} => {}
+                TypeData::Room {} | TypeData::CadImport {} | TypeData::Mass { .. } => {}
                 TypeData::Column { section, .. } => match section {
                     crate::ColumnSection::Rectangular { width, depth } => {
                         repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
@@ -225,6 +226,17 @@ impl Project {
                 && c.drawing.needs_repair()
             {
                 repairs += std::sync::Arc::make_mut(&mut c.drawing).repair();
+            }
+        }
+
+        // Mass floors on levels that are gone.
+        let levels: std::collections::BTreeSet<_> = self.levels.iter().map(|l| l.id).collect();
+        for e in self.elements.values_mut() {
+            if let ElementKind::Mass(m) = &mut e.kind {
+                let before = m.floors.len();
+                m.floors.retain(|l| levels.contains(l));
+                m.floors.dedup();
+                repairs += before - m.floors.len();
             }
         }
 

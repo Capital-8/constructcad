@@ -10,6 +10,7 @@ mod build;
 pub mod component;
 pub mod csg;
 mod cut;
+pub mod mass;
 pub mod mep;
 pub mod mep_net;
 mod mesh;

@@ -287,6 +287,11 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("perimeter".into(), json!(polygon::perimeter(boundary)));
         derived.insert("boundary".into(), json!(boundary.iter().map(|q| [q.x, q.y]).collect::<Vec<_>>()));
     }
+    if let Some(g) = geom.masses.get(&id).cloned() {
+        derived.insert("volume".into(), json!(g.volume));
+        derived.insert("floor_area".into(), json!(g.floor_area()));
+        derived.insert("floors".into(), json!(super::mass::floors_json(s.project(), &g)));
+    }
     Some(json!({
         "id": id.0,
         "category": refs::category_name(e.category()),

@@ -28,10 +28,12 @@ pub enum Category {
     Ramp,
     /// Imported DWG/DXF drawings (underlays).
     CadImport,
+    /// Conceptual masses (massing studies).
+    Mass,
 }
 
 impl Category {
-    pub const ALL: [Category; 21] = [
+    pub const ALL: [Category; 22] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -53,6 +55,7 @@ impl Category {
         Category::Dimension,
         Category::Text,
         Category::CadImport,
+        Category::Mass,
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
@@ -76,7 +79,7 @@ impl Category {
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 17] = [
+    pub const SCHEDULABLE: [Category; 18] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -94,6 +97,7 @@ impl Category {
         Category::Railing,
         Category::Component,
         Category::Room,
+        Category::Mass,
     ];
 
     pub fn is_model(self) -> bool {
@@ -124,6 +128,7 @@ impl Category {
             Category::Pipe => "category-pipe",
             Category::Conduit => "category-conduit",
             Category::CadImport => "category-cad-import",
+            Category::Mass => "category-mass",
         }
     }
 
@@ -338,6 +343,10 @@ pub enum TypeData {
     },
     /// Imported CAD drawings have no type parameters; the type names them.
     CadImport {},
+    /// Conceptual masses, shown in `material`.
+    Mass {
+        material: String,
+    },
 }
 
 impl TypeData {
@@ -358,7 +367,8 @@ impl TypeData {
             | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
-            | TypeData::Railing { material, .. } => vec![material.as_str()],
+            | TypeData::Railing { material, .. }
+            | TypeData::Mass { material } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
             TypeData::Room {}
             | TypeData::Grid { .. }
@@ -407,7 +417,8 @@ impl TypeData {
             | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
-            | TypeData::Railing { material, .. } => fix(material),
+            | TypeData::Railing { material, .. }
+            | TypeData::Mass { material } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
             TypeData::Room {}
             | TypeData::Grid { .. }
@@ -554,6 +565,7 @@ impl ElementType {
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { def, .. } => def.category(),
             TypeData::CadImport {} => Category::CadImport,
+            TypeData::Mass { .. } => Category::Mass,
         }
     }
 
@@ -648,7 +660,8 @@ impl ElementType {
             | TypeData::Conduit { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
-            | TypeData::Railing { material, .. } => material,
+            | TypeData::Railing { material, .. }
+            | TypeData::Mass { material } => material,
             TypeData::Component { def, .. } => def.main_material(),
             TypeData::Floor { .. } => self
                 .layers()

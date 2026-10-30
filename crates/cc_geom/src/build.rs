@@ -144,6 +144,8 @@ pub struct ModelGeometry {
     pub components: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
     /// Pieces of each door and window in the world (see [`opening_parts`]).
     pub opening_fills: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
+    /// Conceptual masses: body, volume and mass floors.
+    pub masses: BTreeMap<ElementId, crate::mass::MassGeom>,
 }
 
 /// A foundation's body: a vertical prism.
@@ -291,6 +293,7 @@ impl ModelGeometry {
         geom.build_structure(project);
         geom.rebar = crate::rebar::build_rebar(project, &geom.beams);
         geom.build_components(project);
+        geom.build_masses(project);
         geom.build_mep(project);
         geom.apply_joins(project);
         geom.build_rooms(project);
@@ -392,6 +395,21 @@ impl ModelGeometry {
                 }
             }
             self.components.insert(e.id, parts);
+        }
+    }
+
+    /// Conceptual masses: see-through bodies, and their mass floors.
+    fn build_masses(&mut self, project: &Project) {
+        for e in project.elements.values() {
+            let ElementKind::Mass(m) = &e.kind else { continue };
+            let Some(g) = crate::mass::mass_geom(project, e, m) else { continue };
+            let material = project.element_type(e.type_id).map_or("", |t| t.main_material());
+            let mut s = Solid::of_material(e.id, e.category(), project, material);
+            // Masses are studied through: at least partly transparent.
+            s.transparency = s.transparency.max(0.4);
+            s.add_polygons(g.faces.clone());
+            self.solids.push(s);
+            self.masses.insert(e.id, g);
         }
     }
 

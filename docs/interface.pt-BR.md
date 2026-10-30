@@ -123,6 +123,14 @@ Com a ferramenta Selecionar, um clique escolhe o elemento sob o cursor (Ctrl som
 - Com elementos selecionados, **Sobrepor gráficos** muda seus gráficos só na vista ativa e **Ocultar na vista** (EH) os oculta nela (reexibidos em Visibilidade/gráficos).
 - **Ocultar/isolar** (temporário): HH oculta a seleção, HI a isola, HC e IC ocultam ou isolam suas categorias, HR redefine. Enquanto ativo, a vista ganha uma borda colorida e um aviso com *Redefinir* e *Tornar permanente*. A ocultação temporária não é salva, não entra no desfazer e não é impressa.
 
+## Massas conceituais
+
+*Arquitetura → Estudo de massa → Massa* (`MS`) desenha um contorno na planta, como uma laje, e o extruda até o nível de cima. As massas servem para estudos de volumetria antes de existirem paredes e lajes: corpos transparentes nas vistas 3D, elevações e cortes, cortados nas plantas que atravessam.
+
+- **Propriedades**: o deslocamento da base e a altura, e se a massa é uma extrusão ou uma transição (um contorno de topo diferente da base, feito com `mass_create` e `top` ou `top_inset`).
+- **Pisos de massa**: uma caixa por nível que a massa atravessa, com a área do piso naquele nível. As plantas desenham o piso do seu nível com a área; as propriedades e a tabela de *Massas* dão a área bruta de pisos (a soma dos pisos), o número de pisos e o volume.
+- Mover, girar, espelhar, copiar e colar funcionam como nos outros elementos. Excluir um nível remove os pisos de massa dele. A exportação IFC deixa as massas de fora.
+
 ## Desenhos CAD importados
 
 - **Arquivo → Importar CAD…** coloca um desenho DWG ou DXF na planta, planta de forro, elevação, corte ou legenda ativa (nas outras vistas o botão fica cinza e diz por quê). Também dá para soltar arquivos `.dwg` e `.dxf` na janela. O diálogo de arquivo começa na *Pasta de projetos*. A origem do desenho fica na origem da vista, a menos que isso o deixe a mais de 1 km do modelo (um desenho em coordenadas de levantamento); então ele é centrado no que a vista mostra. A barra de status informa quantos itens e camadas foram lidos, quantas entidades não foram desenhadas (sólidos 3D, imagens, linhas infinitas…) e que unidades foram supostas quando o arquivo não tem nenhuma.

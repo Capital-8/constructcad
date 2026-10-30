@@ -120,6 +120,31 @@ pub fn sweep(
     outward(faces)
 }
 
+/// The points of two outlines matched one to one, both starting at their
+/// point farthest along +U from their center (so they line up): vertex to
+/// vertex when they have as many (an exact loft between similar shapes, such
+/// as an outline and its inset), else both resampled evenly.
+fn matched(bottom: &[DVec2], top: &[DVec2]) -> (Vec<DVec2>, Vec<DVec2>) {
+    if bottom.len() == top.len() {
+        return (from_start(bottom), from_start(top));
+    }
+    let count = bottom.len().max(top.len()).clamp(BLEND_SAMPLES, MAX_POINTS);
+    (resample(bottom, count), resample(top, count))
+}
+
+/// `outline` starting from its point farthest along +U from its center.
+fn from_start(outline: &[DVec2]) -> Vec<DVec2> {
+    let n = outline.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let center = outline.iter().copied().sum::<DVec2>() / n as f64;
+    // Ties (an edge facing +U) take the lowest V, so both outlines pick the same corner.
+    let key = |p: DVec2| (p - center).x - (p - center).y * 1e-9;
+    let start = (0..n).max_by(|a, b| key(outline[*a]).total_cmp(&key(outline[*b]))).unwrap_or(0);
+    (0..n).map(|i| outline[(start + i) % n]).collect()
+}
+
 /// `outline` (closed) resampled to `count` points evenly spaced along it,
 /// starting from its point farthest along +U from its center (so two
 /// outlines line up).
@@ -145,6 +170,24 @@ fn resample(outline: &[DVec2], count: usize) -> Vec<DVec2> {
     out
 }
 
+/// `outline` in counter-clockwise order.
+pub fn counter_clockwise(outline: &[DVec2]) -> Vec<DVec2> {
+    let n = outline.len();
+    let signed: f64 = (0..n).map(|i| outline[i].perp_dot(outline[(i + 1) % n])).sum();
+    if signed < 0.0 { outline.iter().rev().copied().collect() } else { outline.to_vec() }
+}
+
+/// The section of [`blend`] between counter-clockwise `bottom` and `top` at
+/// `t` (0 at the bottom, 1 at the top): its outlines resampled alike and
+/// joined point by point, as the blend's faces are.
+pub fn blend_section(bottom: &[DVec2], top: &[DVec2], t: f64) -> Vec<DVec2> {
+    if bottom.len() < 3 || top.len() < 3 {
+        return bottom.to_vec();
+    }
+    let (b, u) = matched(bottom, top);
+    b.iter().zip(&u).map(|(p, q)| p.lerp(*q, t)).collect()
+}
+
 /// The solid between a counter-clockwise `bottom` outline on `plane` at
 /// `offset` and a `top` outline `depth` farther along its normal.
 pub fn blend(
@@ -157,8 +200,8 @@ pub fn blend(
     if bottom.len() < 3 || top.len() < 3 || depth.abs() < 1e-6 || !depth.is_finite() {
         return Err(ProfileError::Degenerate);
     }
-    let count = bottom.len().max(top.len()).clamp(BLEND_SAMPLES, MAX_POINTS);
-    let (b, t) = (resample(bottom, count), resample(top, count));
+    let (b, t) = matched(bottom, top);
+    let count = b.len();
     let low: Vec<DVec3> = b.iter().map(|p| plane.point(p.x, p.y, offset)).collect();
     let high: Vec<DVec3> = t.iter().map(|p| plane.point(p.x, p.y, offset + depth)).collect();
     let mut faces = Vec::with_capacity(count + 2);
