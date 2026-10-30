@@ -79,11 +79,12 @@ No parameters.
 
 ### `units_set`
 
-*edit* — Change the project units: `values` is merged into the object `units_get` returns (only the fields given change).
+*edit* — Change the project units: `values` is merged into the object `units_get` returns (only the fields given change), after `preset` when given. Length units are `Millimeter`, `Centimeter`, `Meter`, `Foot`, `Inch`, `FeetInches` (`12'-6 1/2"`) and `FractionalInch`; for the last two, `decimals` is the precision, 1/2^decimals of an inch.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `values` | JSON | required | Fields to change, shaped like the result of `units_get`. |
+| `preset` | string | optional | Start from `metric` (the defaults) or `imperial` (feet and inches to 1/16", square and cubic feet). |
+| `values` | JSON | optional | Fields to change, shaped like the result of `units_get`. |
 
 ### `language_set`
 

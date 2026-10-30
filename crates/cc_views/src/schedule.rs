@@ -307,6 +307,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
         F::Diameter => match ty.map(|t| &t.data) {
+            Some(
+                TypeData::Rebar { diameter, .. } | TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. },
+            ) if format::imperial() => Value::Text(format!("Ø {}\"", format::inches(*diameter))),
             Some(TypeData::Rebar { diameter, .. }) => {
                 Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
             }

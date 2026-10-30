@@ -773,8 +773,13 @@ pub(crate) fn temp_dimension(
     for q in [da, dp] {
         painter.line_segment([xf.to_screen(q - tick), xf.to_screen(q + tick)], Stroke::new(1.5, TEMP_DIM));
     }
-    let unit = format::current().0.length.unit.symbol();
-    let text = if typed.length.is_empty() { format::length(len) } else { format!("{} {unit} \u{23ce}", typed.length) };
+    let unit = format::current().0.length.unit;
+    let text = match (typed.length.is_empty(), unit.is_fractional()) {
+        (true, _) => format::length(len),
+        // Feet and inches carry their own marks.
+        (false, true) => format!("{} \u{23ce}", typed.length),
+        (false, false) => format!("{} {} \u{23ce}", typed.length, unit.symbol()),
+    };
     let screen_dir = xf.to_screen(dp) - xf.to_screen(da);
     let mid = xf.to_screen((da + dp) * 0.5) + (xf.to_screen(da + n) - xf.to_screen(da)).normalized() * 9.0;
     dim_text(painter, mid, text, screen_dir.y.atan2(screen_dir.x), !typed.angle_active);

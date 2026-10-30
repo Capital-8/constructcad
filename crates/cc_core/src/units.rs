@@ -4,23 +4,47 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Meters in an inch (exact, by definition).
+pub const INCH: f64 = 0.0254;
+/// Meters in a foot (exact, by definition).
+pub const FOOT: f64 = 0.3048;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum LengthUnit {
     Millimeter,
     Centimeter,
     #[default]
     Meter,
+    /// Decimal feet.
+    Foot,
+    /// Decimal inches.
+    Inch,
+    /// Feet and fractional inches (`12'-6 1/2"`).
+    FeetInches,
+    /// Fractional inches (`150 1/2"`).
+    FractionalInch,
 }
 
 impl LengthUnit {
-    pub const ALL: [LengthUnit; 3] = [LengthUnit::Millimeter, LengthUnit::Centimeter, LengthUnit::Meter];
+    pub const ALL: [LengthUnit; 7] = [
+        LengthUnit::Millimeter,
+        LengthUnit::Centimeter,
+        LengthUnit::Meter,
+        LengthUnit::Foot,
+        LengthUnit::Inch,
+        LengthUnit::FeetInches,
+        LengthUnit::FractionalInch,
+    ];
 
-    /// Display units per meter.
+    /// Display units per meter (feet for feet and inches, inches for
+    /// fractional inches: the unit a bare typed number is read in).
     pub fn per_meter(self) -> f64 {
         match self {
             LengthUnit::Millimeter => 1000.0,
             LengthUnit::Centimeter => 100.0,
             LengthUnit::Meter => 1.0,
+            LengthUnit::Foot | LengthUnit::FeetInches => 1.0 / FOOT,
+            LengthUnit::Inch | LengthUnit::FractionalInch => 1.0 / INCH,
         }
     }
 
@@ -29,7 +53,20 @@ impl LengthUnit {
             LengthUnit::Millimeter => "mm",
             LengthUnit::Centimeter => "cm",
             LengthUnit::Meter => "m",
+            LengthUnit::Foot | LengthUnit::FeetInches => "ft",
+            LengthUnit::Inch | LengthUnit::FractionalInch => "in",
         }
+    }
+
+    /// Shown with fractions of an inch: the decimals setting `d` is then
+    /// the precision, 1/2^d of an inch.
+    pub fn is_fractional(self) -> bool {
+        matches!(self, LengthUnit::FeetInches | LengthUnit::FractionalInch)
+    }
+
+    /// A US customary (imperial) unit.
+    pub fn is_imperial(self) -> bool {
+        matches!(self, LengthUnit::Foot | LengthUnit::Inch | LengthUnit::FeetInches | LengthUnit::FractionalInch)
     }
 }
 
@@ -38,15 +75,20 @@ pub enum AreaUnit {
     #[default]
     SquareMeter,
     SquareCentimeter,
+    SquareFoot,
+    SquareInch,
 }
 
 impl AreaUnit {
-    pub const ALL: [AreaUnit; 2] = [AreaUnit::SquareMeter, AreaUnit::SquareCentimeter];
+    pub const ALL: [AreaUnit; 4] =
+        [AreaUnit::SquareMeter, AreaUnit::SquareCentimeter, AreaUnit::SquareFoot, AreaUnit::SquareInch];
 
     pub fn per_square_meter(self) -> f64 {
         match self {
             AreaUnit::SquareMeter => 1.0,
             AreaUnit::SquareCentimeter => 10_000.0,
+            AreaUnit::SquareFoot => 1.0 / (FOOT * FOOT),
+            AreaUnit::SquareInch => 1.0 / (INCH * INCH),
         }
     }
 
@@ -54,6 +96,8 @@ impl AreaUnit {
         match self {
             AreaUnit::SquareMeter => "m²",
             AreaUnit::SquareCentimeter => "cm²",
+            AreaUnit::SquareFoot => "ft²",
+            AreaUnit::SquareInch => "in²",
         }
     }
 }
@@ -63,15 +107,24 @@ pub enum VolumeUnit {
     #[default]
     CubicMeter,
     Liter,
+    CubicFoot,
+    CubicYard,
+    /// US liquid gallon.
+    Gallon,
 }
 
 impl VolumeUnit {
-    pub const ALL: [VolumeUnit; 2] = [VolumeUnit::CubicMeter, VolumeUnit::Liter];
+    pub const ALL: [VolumeUnit; 5] =
+        [VolumeUnit::CubicMeter, VolumeUnit::Liter, VolumeUnit::CubicFoot, VolumeUnit::CubicYard, VolumeUnit::Gallon];
 
     pub fn per_cubic_meter(self) -> f64 {
         match self {
             VolumeUnit::CubicMeter => 1.0,
             VolumeUnit::Liter => 1000.0,
+            VolumeUnit::CubicFoot => 1.0 / (FOOT * FOOT * FOOT),
+            VolumeUnit::CubicYard => 1.0 / (27.0 * FOOT * FOOT * FOOT),
+            // 231 cubic inches.
+            VolumeUnit::Gallon => 1.0 / (231.0 * INCH * INCH * INCH),
         }
     }
 
@@ -79,6 +132,9 @@ impl VolumeUnit {
         match self {
             VolumeUnit::CubicMeter => "m³",
             VolumeUnit::Liter => "L",
+            VolumeUnit::CubicFoot => "ft³",
+            VolumeUnit::CubicYard => "yd³",
+            VolumeUnit::Gallon => "gal",
         }
     }
 }
@@ -186,6 +242,18 @@ impl Default for Units {
 }
 
 impl Units {
+    /// US customary units: feet and inches to 1/16", square feet, cubic
+    /// feet, point decimals with comma groups.
+    pub fn imperial() -> Self {
+        Self {
+            length: Format { unit: LengthUnit::FeetInches, decimals: 4, symbol: false },
+            area: Format { unit: AreaUnit::SquareFoot, decimals: 2, symbol: true },
+            volume: Format { unit: VolumeUnit::CubicFoot, decimals: 2, symbol: true },
+            style: NumberStyle::PointDecimalCommaGroups,
+            ..Self::default()
+        }
+    }
+
     /// Clamp decimals to [`MAX_DECIMALS`]; returns whether anything changed.
     pub fn repair(&mut self) -> bool {
         let mut changed = false;
