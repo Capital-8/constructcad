@@ -8,6 +8,7 @@ pub mod arc;
 pub mod cad;
 pub mod component;
 pub mod component_file;
+pub mod component_ref;
 pub mod dim_line;
 pub mod dim_refs;
 mod document;
@@ -29,6 +30,7 @@ pub mod recovery;
 mod repair;
 mod schedule;
 pub mod stair;
+pub mod sweep;
 pub mod transform;
 mod types;
 pub mod units;
@@ -37,6 +39,7 @@ pub mod wall_ops;
 
 pub use cad::{CadColorMode, CadDrawing, CadImport, CadLayer, CadPrim, CadUnit};
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
+pub use component_ref::{PlaneAxis, RefDimension, RefEqual, RefLine, RefPlane};
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{

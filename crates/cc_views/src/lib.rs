@@ -6,6 +6,7 @@
 
 mod annotate;
 pub mod cad;
+pub mod component_view;
 mod cut;
 mod diagram;
 mod drawing;
@@ -24,6 +25,7 @@ mod schedule;
 mod sheet;
 
 pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout};
+pub use component_view::{ComponentView, ComponentViewKind, component_view};
 pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, halftone};
 pub use legend::legend;
 pub use plan::{is_structural, plan, plan_of};

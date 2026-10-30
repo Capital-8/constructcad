@@ -37,6 +37,19 @@ pub enum UiCommand {
     NewComponent,
     LoadComponent,
     ComponentLibrary,
+    /// Open the component modeling environment on the selected component.
+    EditComponent,
+    /// Environment tools and actions.
+    CompExtrusion,
+    CompRevolution,
+    CompSweep,
+    CompBlend,
+    CompRefPlane,
+    CompDimension,
+    CompEqual,
+    CompSaveFile,
+    CompFinish,
+    CompCancel,
     Select,
     SelectInstances,
     ColumnsAtGrids,
@@ -172,7 +185,19 @@ impl UiCommand {
             Default3D,
         ];
         all.extend(PLACED.map(Place));
-        all.extend([NewComponent, LoadComponent, ComponentLibrary, Select, SelectInstances]);
+        all.extend([NewComponent, LoadComponent, ComponentLibrary, EditComponent, Select, SelectInstances]);
+        all.extend([
+            CompExtrusion,
+            CompRevolution,
+            CompSweep,
+            CompBlend,
+            CompRefPlane,
+            CompDimension,
+            CompEqual,
+            CompSaveFile,
+            CompFinish,
+            CompCancel,
+        ]);
         all.extend([AlignGridEnds, ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
@@ -266,7 +291,17 @@ impl UiCommand {
             Redo => Icon::Redo,
             Default3D | New3D => Icon::View3D,
             Place(category) => category_icon(category),
-            NewComponent | LoadComponent => Icon::Component,
+            NewComponent | LoadComponent | EditComponent => Icon::Component,
+            CompExtrusion => Icon::Extrusion,
+            CompRevolution => Icon::Revolution,
+            CompSweep => Icon::Sweep,
+            CompBlend => Icon::Blend,
+            CompRefPlane => Icon::RefPlane,
+            CompDimension => Icon::Dimension,
+            CompEqual => Icon::Equal,
+            CompSaveFile => Icon::Save,
+            CompFinish => Icon::Finish,
+            CompCancel => Icon::Close,
             ComponentLibrary => Icon::Library,
             Select => Icon::Select,
             SelectInstances => Icon::SelectInstances,
@@ -389,6 +424,17 @@ impl UiCommand {
             Default3D => t!("action-default-3d"),
             Place(category) => place_label(category),
             NewComponent => t!("action-new-component"),
+            EditComponent => t!("action-edit-component"),
+            CompExtrusion => t!("comp-env-extrusion"),
+            CompRevolution => t!("comp-env-revolution"),
+            CompSweep => t!("comp-env-sweep"),
+            CompBlend => t!("comp-env-blend"),
+            CompRefPlane => t!("comp-env-ref-plane"),
+            CompDimension => t!("comp-env-dimension"),
+            CompEqual => t!("comp-env-equal"),
+            CompSaveFile => t!("action-save-component"),
+            CompFinish => t!("comp-env-finish"),
+            CompCancel => t!("comp-env-cancel"),
             LoadComponent => t!("action-load-component"),
             ComponentLibrary => t!("action-component-library"),
             Select => t!("tool-select"),
@@ -521,6 +567,17 @@ impl UiCommand {
             Default3D => t!("cmd-desc-default-3d"),
             Place(category) => place_description(category),
             NewComponent => t!("cmd-desc-new-component"),
+            EditComponent => t!("cmd-desc-edit-component"),
+            CompExtrusion => t!("cmd-desc-comp-extrusion"),
+            CompRevolution => t!("cmd-desc-comp-revolution"),
+            CompSweep => t!("cmd-desc-comp-sweep"),
+            CompBlend => t!("cmd-desc-comp-blend"),
+            CompRefPlane => t!("cmd-desc-comp-ref-plane"),
+            CompDimension => t!("cmd-desc-comp-dimension"),
+            CompEqual => t!("cmd-desc-comp-equal"),
+            CompSaveFile => t!("cmd-desc-comp-save"),
+            CompFinish => t!("cmd-desc-comp-finish"),
+            CompCancel => t!("cmd-desc-comp-cancel"),
             LoadComponent => t!("cmd-desc-load-component"),
             ComponentLibrary => t!("cmd-desc-component-library"),
             Select => t!("cmd-desc-select"),
@@ -555,6 +612,7 @@ impl UiCommand {
             PanelDiagram => t!("cmd-desc-panel-diagram"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
+            Dimension(DimensionMode::Ordinate) => t!("cmd-desc-dim-ordinate"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
             Dimension(DimensionMode::Radial) => t!("cmd-desc-dim-radial"),
             Dimension(DimensionMode::Diameter) => t!("cmd-desc-dim-diameter"),
@@ -742,6 +800,12 @@ impl UiCommand {
             StructureTags => "view_set",
             Place(_) => "component_place",
             NewComponent => "component_create",
+            EditComponent => "component_get",
+            CompExtrusion | CompRevolution | CompSweep | CompBlend => "component_piece_add",
+            CompRefPlane => "component_ref_plane_add",
+            CompDimension => "component_dimension_add",
+            CompEqual => "component_equal_add",
+            CompSaveFile => "component_save",
             LoadComponent => "component_load",
             ComponentLibrary => "component_library_list",
             Dimension(_) => "dimension_create",
@@ -875,6 +939,13 @@ impl UiCommand {
                 Some(t!("msg-plan-only"))
             }
             MacroRun if state.session.is_recording() => Some(t!("why-recording")),
+            EditComponent if crate::component_env::target_type(state).is_none() => Some(t!("why-select-component")),
+            CompExtrusion | CompRevolution | CompSweep | CompBlend | CompRefPlane | CompDimension | CompEqual
+            | CompSaveFile | CompFinish | CompCancel
+                if state.component_env.is_none() =>
+            {
+                Some(t!("why-no-component-env"))
+            }
             _ => None,
         }
     }
@@ -892,7 +963,34 @@ impl UiCommand {
             PlaceDevice => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(true)),
             Truss => matches!(tool, Tool::Truss { .. }),
             StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
+            Select if state.component_env.is_some() => {
+                state.component_env.as_ref().is_some_and(|e| e.tool == crate::component_env::EnvTool::Select)
+            }
             Select => *tool == Tool::Select,
+            CompExtrusion | CompRevolution | CompSweep | CompBlend => {
+                let want = match self {
+                    CompExtrusion => crate::component_sketch::PieceKind::Extrusion,
+                    CompRevolution => crate::component_sketch::PieceKind::Revolution,
+                    CompSweep => crate::component_sketch::PieceKind::Sweep,
+                    _ => crate::component_sketch::PieceKind::Blend,
+                };
+                state
+                    .component_env
+                    .as_ref()
+                    .is_some_and(|e| matches!(&e.tool, crate::component_env::EnvTool::Sketch(s) if s.kind == want))
+            }
+            CompRefPlane => state
+                .component_env
+                .as_ref()
+                .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::RefPlane { .. })),
+            CompEqual => state
+                .component_env
+                .as_ref()
+                .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::Equal { .. })),
+            CompDimension => state
+                .component_env
+                .as_ref()
+                .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::Dimension { .. })),
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
             AddLeader => matches!(tool, Tool::AddLeader { .. }),
@@ -1050,7 +1148,52 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
         }
         LoadComponent => actions::load_component(state),
+        EditComponent => {
+            if let Some(t) = crate::component_env::target_type(state) {
+                crate::component_env::open(state, t);
+            }
+        }
+        CompExtrusion => crate::component_env::set_tool(
+            state,
+            crate::component_env::EnvTool::Sketch(crate::component_sketch::Sketch::new(
+                crate::component_sketch::PieceKind::Extrusion,
+            )),
+        ),
+        CompRevolution => crate::component_env::set_tool(
+            state,
+            crate::component_env::EnvTool::Sketch(crate::component_sketch::Sketch::new(
+                crate::component_sketch::PieceKind::Revolution,
+            )),
+        ),
+        CompSweep => crate::component_env::set_tool(
+            state,
+            crate::component_env::EnvTool::Sketch(crate::component_sketch::Sketch::new(
+                crate::component_sketch::PieceKind::Sweep,
+            )),
+        ),
+        CompBlend => crate::component_env::set_tool(
+            state,
+            crate::component_env::EnvTool::Sketch(crate::component_sketch::Sketch::new(
+                crate::component_sketch::PieceKind::Blend,
+            )),
+        ),
+        CompRefPlane => {
+            crate::component_env::set_tool(state, crate::component_env::EnvTool::RefPlane { first: None });
+        }
+        CompDimension => {
+            crate::component_env::set_tool(state, crate::component_env::EnvTool::Dimension { first: None });
+        }
+        CompEqual => crate::component_env::set_tool(
+            state,
+            crate::component_env::EnvTool::Equal { picked: Vec::new(), view: None },
+        ),
+        CompSaveFile => crate::component_env::save_file(state),
+        CompFinish => crate::component_env::finish(state),
+        CompCancel => crate::component_env::cancel(state),
         ComponentLibrary => crate::library::open(state),
+        Select if state.component_env.is_some() => {
+            crate::component_env::set_tool(state, crate::component_env::EnvTool::Select);
+        }
         Select => state.set_tool(Tool::Select),
         SelectInstances => crate::actions::select_instances(state),
         Group => crate::actions::group_selection(state),

@@ -228,6 +228,11 @@ fn icon_button(ui: &mut Ui, (icon, badge): (Icon, Option<Badge>), enabled: bool)
     response
 }
 
+/// A group of the component environment's ribbon.
+pub fn env_group(ui: &mut Ui, state: &mut AppState, caption: String, commands: &[UiCommand]) {
+    group(ui, caption, |ui| command_buttons(ui, state, commands));
+}
+
 /// A captioned group of ribbon buttons followed by a vertical divider.
 fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
     let caption_w =
@@ -584,7 +589,13 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
         command_buttons(
             ui,
             state,
-            &[place(Component), UiCommand::NewComponent, UiCommand::LoadComponent, UiCommand::ComponentLibrary],
+            &[
+                place(Component),
+                UiCommand::NewComponent,
+                UiCommand::EditComponent,
+                UiCommand::LoadComponent,
+                UiCommand::ComponentLibrary,
+            ],
         );
     });
     group(ui, t!("group-datum"), |ui| command_buttons(ui, state, &[place(Grid), UiCommand::AlignGridEnds]));
@@ -630,6 +641,7 @@ pub fn dimension_icon(mode: DimensionMode) -> Icon {
     match mode {
         DimensionMode::Aligned => Icon::Dimension,
         DimensionMode::Linear => Icon::DimLinear,
+        DimensionMode::Ordinate => Icon::DimOrdinate,
         DimensionMode::Angular => Icon::DimAngular,
         DimensionMode::Radial => Icon::DimRadial,
         DimensionMode::Diameter => Icon::DimDiameter,
@@ -973,13 +985,15 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     ui.selectable_value(c, true, t!("dim-continuous")).on_hover_text(t!("dim-continuous-tip"));
                     ui.separator();
                 }
-                let hint = if state.interaction.dim_chain.is_some() {
+                let hint = if state.interaction.dim_chain.is_some_and(|c| c.ordinate) {
+                    t!("hint-dim-ordinate-next")
+                } else if state.interaction.dim_chain.is_some() {
                     t!("hint-dim-chain")
                 } else {
                     crate::i18n::tr(mode.hint_key())
                 };
                 let r = ui.label(theme::muted(hint));
-                if matches!(mode, DimensionMode::Aligned | DimensionMode::Linear) {
+                if matches!(mode, DimensionMode::Aligned | DimensionMode::Linear | DimensionMode::Ordinate) {
                     r.on_hover_text(t!("hint-dim-align"));
                 }
             }

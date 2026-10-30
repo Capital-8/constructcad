@@ -104,7 +104,7 @@ pub fn units(state: &mut AppState, key: Option<u64>, f: impl FnOnce(&mut cc_core
     let old = state.project().units.clone();
     let mut new = old.clone();
     f(&mut new);
-    new != old && run(state, key, project::UnitsSet { values: json(&new) })
+    new != old && run(state, key, project::UnitsSet { values: json(&new), preset: None })
 }
 
 /// Change the project information as `f` changes a copy of it (`project_info_set`).

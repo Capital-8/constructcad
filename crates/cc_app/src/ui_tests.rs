@@ -292,6 +292,21 @@ fn ribbon_buttons_are_accessible() {
             found.insert(label);
         }
     }
+    // The component environment shows its own ribbon.
+    let mut state = sample_state();
+    let table = state
+        .project()
+        .types_of(cc_core::Category::Component)
+        .find(|t| matches!(&t.data, cc_core::TypeData::Component { component, .. } if component == "Mesa"))
+        .map(|t| t.id)
+        .unwrap();
+    crate::component_env::open(&mut state, table);
+    let harness = themed_harness(state, egui::vec2(1600.0, 140.0), egui::Theme::Light, |ui, state| {
+        crate::component_env::ribbon(ui, state)
+    });
+    for node in harness.query_all_by_role(Role::Button) {
+        found.insert(node.accesskit_node().label().unwrap_or_default());
+    }
     let state = sample_state();
     let hidden = [UiCommand::CommandPalette, UiCommand::ToggleRibbon];
     for command in UiCommand::all().into_iter().filter(|c| !hidden.contains(c)) {
@@ -333,13 +348,26 @@ fn dimension_tool_has_a_continuous_mode() {
     assert!(harness.state().dim_continuous);
     // A chain in progress shows how to continue and end it.
     let view = cc_core::ViewId(1);
-    let chain = DimChain { view, last: glam::DVec2::ZERO, dir: glam::DVec2::X, line: glam::DVec2::Y, linear: true };
+    let chain = DimChain {
+        view,
+        last: glam::DVec2::ZERO,
+        dir: glam::DVec2::X,
+        line: glam::DVec2::Y,
+        linear: true,
+        ordinate: false,
+    };
     harness.state_mut().interaction.dim_chain = Some(chain);
     harness.run();
     assert!(harness.query_by_label(&t!("hint-dim-chain")).is_some());
     harness.get_by_label(&t!("dim-single")).click();
     harness.run();
     assert!(!harness.state().dim_continuous);
+    // Ordinate dimensions always continue from their origin.
+    harness.state_mut().tool = Tool::Dimension { type_id, mode: DimensionMode::Ordinate };
+    harness.state_mut().interaction.dim_chain = Some(DimChain { ordinate: true, ..chain });
+    harness.run();
+    assert!(harness.query_by_label(&t!("dim-continuous")).is_none());
+    assert!(harness.query_by_label(&t!("hint-dim-ordinate-next")).is_some());
     // Angular dimensions have no chain.
     harness.state_mut().interaction.dim_chain = None;
     harness.state_mut().tool = Tool::Dimension { type_id, mode: DimensionMode::Angular };

@@ -237,6 +237,16 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
     if space && state.tool == Tool::Select && crate::tools::rotate_selection(state) {
         state.message = t!("msg-rotated");
     }
+    // The component environment has its own tools and selection.
+    if state.component_env.is_some() {
+        if escape {
+            crate::component_env::escape(state);
+        }
+        if delete {
+            crate::component_env::delete_pick(state);
+        }
+        return;
+    }
     if escape {
         if !state.typed.is_empty() || state.typed.angle_active {
             state.typed.clear();
@@ -274,6 +284,16 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
         let Event::Text(text) = event else { continue };
         for ch in text.chars() {
             if typing_length && (ch.is_ascii_digit() || ch == ',' || ch == '.') {
+                state.typed.push(ch);
+                continue;
+            }
+            // Feet and inch marks and fractions (`12'6 1/2"`); a space or a
+            // dash only inside a length already started.
+            let started = !state.typed.length.is_empty() && !state.typed.angle_active;
+            if typing_length
+                && cc_views::format::imperial()
+                && (matches!(ch, '\'' | '"' | '/') || (started && matches!(ch, ' ' | '-')))
+            {
                 state.typed.push(ch);
                 continue;
             }
@@ -424,12 +444,19 @@ impl ConstructApp {
         }
         let state = &mut self.state;
         let bar = |fill, y| egui::Frame::new().fill(fill).inner_margin(egui::Margin::symmetric(10, y));
-        egui::Panel::top("ribbon")
-            .frame(bar(PALETTE.panel, 6).stroke(egui::Stroke::new(1.0, PALETTE.border)))
-            .show(ui, |ui| ribbon::ribbon(ui, state));
-        egui::Panel::top("options")
-            .frame(bar(PALETTE.surface, 5).stroke(egui::Stroke::new(1.0, PALETTE.border)))
-            .show(ui, |ui| ribbon::options_bar(ui, state));
+        let env = state.component_env.is_some();
+        egui::Panel::top("ribbon").frame(bar(PALETTE.panel, 6).stroke(egui::Stroke::new(1.0, PALETTE.border))).show(
+            ui,
+            |ui| {
+                if env { crate::component_env::ribbon(ui, state) } else { ribbon::ribbon(ui, state) }
+            },
+        );
+        egui::Panel::top("options").frame(bar(PALETTE.surface, 5).stroke(egui::Stroke::new(1.0, PALETTE.border))).show(
+            ui,
+            |ui| {
+                if env { crate::component_env::options(ui, state) } else { ribbon::options_bar(ui, state) }
+            },
+        );
         egui::Panel::bottom("status")
             .frame(bar(PALETTE.surface, 3).stroke(egui::Stroke::new(1.0, PALETTE.border)))
             .show(ui, |ui| ribbon::status_bar(ui, state));
@@ -439,6 +466,10 @@ impl ConstructApp {
             .default_size(290.0)
             .size_range(220.0..=520.0)
             .show(ui, |ui| {
+                if env {
+                    crate::component_env::panel(ui, state);
+                    return;
+                }
                 let h = ui.available_height();
                 egui::Panel::top("browser")
                     .frame(egui::Frame::new().fill(PALETTE.panel))
@@ -451,6 +482,10 @@ impl ConstructApp {
         let render_state = frame.wgpu_render_state();
         let central = egui::Frame::new().fill(PALETTE.app_bg).inner_margin(egui::Margin::same(4));
         egui::CentralPanel::no_frame().frame(central).show(ui, |ui| {
+            if self.state.component_env.is_some() {
+                crate::component_env::central(ui, &mut self.state);
+                return;
+            }
             if self.dock.iter_all_tabs().next().is_none() {
                 ui.centered_and_justified(|ui| ui.label(t!("msg-no-views-open")));
             }

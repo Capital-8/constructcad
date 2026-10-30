@@ -196,19 +196,33 @@ impl Command for UnitsGet {
 }
 
 /// Change the project units: `values` is merged into the object `units_get`
-/// returns (only the fields given change).
+/// returns (only the fields given change), after `preset` when given.
+/// Length units are `Millimeter`, `Centimeter`, `Meter`, `Foot`, `Inch`,
+/// `FeetInches` (`12'-6 1/2"`) and `FractionalInch`; for the last two,
+/// `decimals` is the precision, 1/2^decimals of an inch.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UnitsSet {
     /// Fields to change, shaped like the result of `units_get`.
+    #[serde(default)]
     pub values: Value,
+    /// Start from `metric` (the defaults) or `imperial` (feet and inches to 1/16", square and cubic feet).
+    #[serde(default)]
+    pub preset: Option<String>,
 }
 
 impl Command for UnitsSet {
     const NAME: &'static str = "units_set";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let mut units = patch_value(&s.project().units, &self.values)?;
+        let base = match self.preset.as_deref() {
+            None => s.project().units.clone(),
+            Some("metric") => cc_core::Units::default(),
+            Some("imperial") => cc_core::Units::imperial(),
+            Some(other) => return Err(EngineError::invalid(format!("unknown preset '{other}' (metric or imperial)"))),
+        };
+        let values = if self.values.is_null() { serde_json::json!({}) } else { self.values };
+        let mut units = patch_value(&base, &values)?;
         if units.repair() {
             return Err(EngineError::invalid("invalid unit values"));
         }

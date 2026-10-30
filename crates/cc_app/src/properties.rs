@@ -674,14 +674,13 @@ fn top_rows(ui: &mut Ui, state: &mut AppState, el: &Element, top: cc_core::WallT
 pub fn length_drag(value: &mut f64) -> DragValue<'_> {
     let (units, comma) = format::current();
     let unit = units.length.unit;
-    let decimals = units.length.decimals as usize;
-    let per_meter = unit.per_meter();
     let parse_units = units.clone();
-    DragValue::new(value)
+    let drag = DragValue::new(value)
         .speed(0.005)
-        .custom_formatter(move |v, _| format::number_with(&units, comma, v * per_meter, decimals))
-        .custom_parser(move |s| format::parse_length_with(&parse_units, s))
-        .suffix(format!(" {}", unit.symbol()))
+        .custom_formatter(move |v, _| format::length_number_with(&units, comma, v))
+        .custom_parser(move |s| format::parse_length_with(&parse_units, s));
+    // Feet and inches carry their own marks.
+    if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", unit.symbol())) }
 }
 
 /// Drag value for a component parameter, with the unit of its kind.

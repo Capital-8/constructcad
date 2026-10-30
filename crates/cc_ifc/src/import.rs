@@ -1932,8 +1932,16 @@ impl<'a> Importer<'a> {
         }
         let ifc = Some(self.ifc_class(id, e));
         let properties = self.property_sets(id);
-        let def =
-            ComponentDef { kind, params: Vec::new(), items, ifc, mep: None, opening: None, connectors: Vec::new() };
+        let def = ComponentDef {
+            kind,
+            params: Vec::new(),
+            items,
+            ifc,
+            mep: None,
+            opening: None,
+            connectors: Vec::new(),
+            ..Default::default()
+        };
         let Some((lo, hi)) = def_bounds(&def, &Default::default()) else { return false };
         // Instance parameter values written by ConstructCAD.
         let overrides: std::collections::BTreeMap<String, f64> = self
