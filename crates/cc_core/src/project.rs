@@ -905,6 +905,52 @@ impl Project {
         self.levels.iter().filter(|l| l.elevation > elevation + 1e-9).min_by(|a, b| a.elevation.total_cmp(&b.elevation))
     }
 
+    /// Before `e` moves from its level to `to`: a top attached to a level
+    /// moves up or down as many levels as the base (a column from the ground
+    /// floor to the first floor pasted on the first floor reaches the second).
+    /// When there is no such level, or it is not above the new base, the top
+    /// is unconnected at the element's height.
+    pub fn move_top_with_base(&self, e: &mut crate::Element, to: LevelId) {
+        let from = e.level;
+        if from == to {
+            return;
+        }
+        let p = self;
+        let span = |(base, top): (f64, f64)| top - base;
+        let height = match &e.kind {
+            crate::ElementKind::Wall(w) => p.wall_height(e, w),
+            crate::ElementKind::Column(c) => span(p.column_span(e, c)),
+            crate::ElementKind::Stair(s) => span(p.stair_span(e, s)),
+            crate::ElementKind::Ramp(r) => span(p.ramp_span(e, r)),
+            _ => return,
+        };
+        let (top, own_height, base_offset) = match &mut e.kind {
+            crate::ElementKind::Wall(w) => (&mut w.top, &mut w.height, w.base_offset),
+            crate::ElementKind::Column(c) => (&mut c.top, &mut c.height, c.base_offset),
+            crate::ElementKind::Stair(s) => (&mut s.top, &mut s.height, s.base_offset),
+            crate::ElementKind::Ramp(r) => (&mut r.top, &mut r.height, r.base_offset),
+            _ => return,
+        };
+        let crate::WallTop::Level { level: top_level, offset } = *top else { return };
+        let mut order: Vec<&crate::Level> = p.levels.iter().collect();
+        order.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+        let index = |id: LevelId| order.iter().position(|l| l.id == id);
+        let shifted = match (index(from), index(top_level), index(to)) {
+            (Some(f), Some(t), Some(n)) => (n + t).checked_sub(f).and_then(|i| order.get(i)),
+            _ => None,
+        };
+        let base_z = p.level_elevation(to) + base_offset;
+        match shifted {
+            Some(l) if l.elevation + offset > base_z + 1e-6 => *top = crate::WallTop::Level { level: l.id, offset },
+            _ => {
+                *top = crate::WallTop::Unconnected;
+                if height.is_finite() && height > 0.0 {
+                    *own_height = height;
+                }
+            }
+        }
+    }
+
     pub fn sort_levels(&mut self) {
         self.levels.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
     }

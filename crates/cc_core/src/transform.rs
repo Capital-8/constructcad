@@ -391,6 +391,7 @@ impl crate::EditCtx<'_> {
                 (c.phase_created, c.phase_demolished) = (Default::default(), None);
                 c.transform(t);
                 if let Some(level) = level {
+                    self.project().move_top_with_base(&mut c, level);
                     c.level = level;
                 }
                 self.detach_missing_top(&mut c);

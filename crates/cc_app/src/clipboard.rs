@@ -127,18 +127,19 @@ fn preview(state: &mut AppState, view: ViewId, level: LevelId) -> Option<(Rc<Dra
         .filter(|h| !copied.contains(&h.host))
         .filter_map(|h| project.element(h.host).cloned())
         .collect();
-    project.elements = elements
+    let pasted: Vec<Element> = elements
         .iter()
         .cloned()
         .map(|mut e| {
             if e.as_hosted().is_none_or(|h| copied.contains(&h.host)) {
+                // As the paste does it: tops move up with the base.
+                project.move_top_with_base(&mut e, level);
                 e.level = level;
             }
             e
         })
-        .chain(hosts)
-        .map(|e| (e.id, e))
         .collect();
+    project.elements = pasted.into_iter().chain(hosts).map(|e| (e.id, e)).collect();
     let geom = cc_geom::ModelGeometry::build(&project);
     let drawing = Rc::new(cc_views::generate(&project, &geom, project.view(view)?)?);
     let pts = drawing.prims.iter().flat_map(|p| match p {

@@ -585,6 +585,37 @@ fn export_and_paste_elements() {
     assert_eq!(fails(&mut s, "elements_paste", json!({"elements": [{"bogus": true}]})), ErrorCode::InvalidArguments);
 }
 
+/// Columns copied on one level and pasted on another keep their span: the
+/// top moves up as many levels as the base (issue #99: it stayed on the
+/// level it was copied with, so the copies ended at their own base). With
+/// no level that high, the top is left unconnected at the same height.
+#[test]
+fn pasted_columns_reach_the_matching_level() {
+    let mut s = Session::default();
+    let levels = run(&mut s, "levels_list", json!({}));
+    let ids: Vec<u64> = levels.as_array().unwrap().iter().map(id).collect();
+    assert_eq!(ids.len(), 2, "the template's ground and first floor");
+    let roof = id(&run(&mut s, "level_create", json!({"name": "Cobertura", "elevation": 6.0})));
+    let column = run(&mut s, "column_create", json!({"position": [0, 0], "level": ids[0], "top_level": ids[1]}));
+    let set = run(&mut s, "elements_export", json!({"ids": [id(&column)]}));
+    let top_of = |s: &mut Session, c: &Value| {
+        let e = run(s, "element_get", json!({"id": c}));
+        (e["level"]["id"].as_u64(), e["params"]["top"]["Level"]["level"].as_u64(), e["params"]["height"].as_f64())
+    };
+    let pasted = run(&mut s, "elements_paste", json!({"elements": set["elements"], "level": ids[1]}));
+    let (base, top, _) = top_of(&mut s, &pasted["created"][0]);
+    assert_eq!((base, top), (Some(ids[1]), Some(roof)), "one level up, base and top");
+    // From the top level there is none above: unconnected, as tall as the original.
+    let pasted = run(&mut s, "elements_paste", json!({"elements": set["elements"], "level": roof}));
+    let (base, top, height) = top_of(&mut s, &pasted["created"][0]);
+    assert_eq!((base, top), (Some(roof), None));
+    let floor = run(&mut s, "levels_list", json!({}))[1]["elevation"].as_f64().unwrap();
+    assert!((height.unwrap() - floor).abs() < 1e-9, "{height:?} vs {floor}");
+    // On its own level nothing changes.
+    let pasted = run(&mut s, "elements_paste", json!({"elements": set["elements"], "level": ids[0], "delta": [2, 0]}));
+    assert_eq!(top_of(&mut s, &pasted["created"][0]).1, Some(ids[1]));
+}
+
 /// A window copied without its wall and pasted on another level goes into
 /// the wall there (it used to stay on the wall it was copied from).
 #[test]
