@@ -76,7 +76,7 @@ fn side_button(ui: &mut Ui, icon: Icon, label: &str) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     let painter = ui.painter();
-    let fill = if response.hovered() { PALETTE.hover } else { Color32::WHITE };
+    let fill = if response.hovered() { PALETTE.hover } else { PALETTE.canvas };
     painter.rect_filled(rect, theme::RADIUS as f32, fill);
     let border = if response.hovered() { PALETTE.border_strong } else { PALETTE.border };
     painter.rect_stroke(rect, theme::RADIUS as f32, Stroke::new(1.0, border), StrokeKind::Inside);

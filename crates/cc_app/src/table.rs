@@ -104,7 +104,7 @@ pub fn readonly_row(ui: &mut Ui, label: &str, value: String) {
 pub fn header_block(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
     ui.horizontal(|ui| {
         let (tile, _) = ui.allocate_exact_size(vec2(42.0, 42.0), Sense::hover());
-        ui.painter().rect_filled(tile, theme::RADIUS as f32, egui::Color32::WHITE);
+        ui.painter().rect_filled(tile, theme::RADIUS as f32, PALETTE.canvas);
         ui.painter().rect_stroke(
             tile,
             theme::RADIUS as f32,

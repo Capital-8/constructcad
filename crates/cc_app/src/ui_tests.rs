@@ -1046,3 +1046,27 @@ fn a_view_picked_on_a_sheet_shows_its_properties() {
     assert!(harness.query_by_label(&t!("section-position")).is_some(), "the viewport's position");
     assert!(harness.query_by_label(&t!("section-graphics")).is_some(), "and the view's own graphics");
 }
+
+/// The home screen in both themes, the Open button under the pointer: the
+/// sidebar buttons take the theme's colors (they stayed white in the dark
+/// theme, their light text unreadable).
+#[test]
+fn home_snapshots() {
+    if !snapshots_requested() {
+        return;
+    }
+    let mut results = egui_kittest::SnapshotResults::new();
+    for (theme, name) in [(egui::Theme::Light, "home_light"), (egui::Theme::Dark, "home_dark")] {
+        let mut state = sample_state();
+        state.show_home = true;
+        let mut harness = themed_harness(state, egui::vec2(900.0, 500.0), theme, |ui, state| {
+            crate::home::show(ui, state);
+        });
+        harness.run();
+        let label = t!("action-open");
+        harness.get_by_label(&label).hover();
+        harness.run();
+        results.add(harness.try_snapshot(name));
+    }
+    results.unwrap();
+}
