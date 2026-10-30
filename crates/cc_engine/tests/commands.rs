@@ -2744,6 +2744,20 @@ fn roof_tiles_and_framing() {
     assert!(near(e["derived"]["volume"].as_f64().unwrap(), volume_bare), "framing is not the roof's volume");
     assert_eq!(e["derived"]["roofing"]["ok"], true);
     assert!(s.geometry().solids_of(cc_core::ElementId(roof)).any(|x| x.category == cc_core::Category::Beam));
+    assert_eq!(check["framing"]["trusses"], 0);
+
+    // Timber trusses under the purlins, no farther apart than their spacing along the 10 m ridge.
+    run(
+        &mut s,
+        "type_set",
+        json!({"type": ty, "params": {"framing": {"system": "TimberTrusses", "truss_spacing": 2.5}}}),
+    );
+    let trussed = run(&mut s, "roof_check", json!({"id": roof}));
+    let n = trussed["framing"]["trusses"].as_u64().unwrap();
+    assert!((5..=6).contains(&n), "{trussed}");
+    assert!(trussed["framing"]["truss_members"].as_f64().unwrap() > n as f64 * 8.0, "chords and tie span 8 m");
+    assert!(trussed["framing"]["volume"].as_f64().unwrap() > check["framing"]["volume"].as_f64().unwrap());
+    run(&mut s, "type_set", json!({"type": ty, "params": {"framing": {"system": "Timber"}}}));
 
     // A schedule lists the tiles and the framing.
     let schedule = run(&mut s, "view_create", json!({"kind": "schedule", "category": "roof"}));

@@ -1290,7 +1290,11 @@ fn roofing_rows(ui: &mut Ui, state: &mut AppState, el: &Element) {
             readonly_row(ui, &t!("col-weight"), format!("{:.0} kg", spec.weight * g.sloped_area));
         }
         if !g.members.is_empty() {
+            if g.trusses > 0 {
+                readonly_row(ui, &t!("prop-truss-count"), g.trusses.to_string());
+            }
             for (label, kind) in [
+                ("prop-truss", MemberKind::Truss),
                 ("prop-purlin", MemberKind::Purlin),
                 ("prop-rafter", MemberKind::Rafter),
                 ("prop-batten", MemberKind::Batten),

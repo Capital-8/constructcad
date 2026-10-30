@@ -19,6 +19,8 @@ pub enum MemberKind {
     Purlin,
     Rafter,
     Batten,
+    /// A member of a truss: top chord, tie, king post or strut.
+    Truss,
 }
 
 /// A framing member: its axis (along the roof plane), section, the
@@ -78,6 +80,8 @@ pub struct RoofFramingGeom {
     pub sloped_area: f64,
     /// The gentlest and steepest slopes of the faces, rise over run.
     pub slopes: Option<(f64, f64)>,
+    /// How many trusses carry the purlins.
+    pub trusses: usize,
 }
 
 impl RoofFramingGeom {
@@ -132,10 +136,136 @@ fn every(lo: f64, hi: f64, start: f64, step: f64, margin: f64) -> Vec<f64> {
     out
 }
 
+/// Where the vertical plane `p · r = c` crosses a planar polygon: the
+/// segments inside it, ordered along `across`.
+fn plane_cuts(poly: &[DVec3], r: DVec3, c: f64, across: DVec3) -> Vec<(DVec3, DVec3)> {
+    let n = poly.len();
+    let mut hits: Vec<DVec3> = (0..n)
+        .filter_map(|i| {
+            let (p, q) = (*poly.get(i)?, *poly.get((i + 1) % n)?);
+            let (u, v) = (p.dot(r) - c, q.dot(r) - c);
+            ((u <= 0.0) != (v <= 0.0)).then(|| p + (q - p) * (u / (u - v)))
+        })
+        .collect();
+    hits.sort_by(|a, b| a.dot(across).total_cmp(&b.dot(across)));
+    hits.as_chunks::<2>().0.iter().map(|[a, b]| (*a, *b)).filter(|(a, b)| a.distance(*b) > 0.05).collect()
+}
+
+/// The two highest top chords rising toward each other (the two sides of a
+/// ridge), moved down under their faces, cross past each other or stop short:
+/// end both where their lines cross, so they meet at the truss's apex.
+fn meet_at_apex(cuts: &mut [(DVec3, DVec3)], across: DVec3) {
+    // Each chord with its high end last.
+    for (a, b) in cuts.iter_mut() {
+        if a.z > b.z {
+            std::mem::swap(a, b);
+        }
+    }
+    let rising = |k: usize, cuts: &[(DVec3, DVec3)]| cuts.get(k).map(|(a, b)| (b.dot(across) - a.dot(across)).signum());
+    let mut order: Vec<usize> = (0..cuts.len()).collect();
+    order.sort_by(|i, j| cuts[*j].1.z.total_cmp(&cuts[*i].1.z));
+    let Some(&i) = order.first() else { return };
+    let Some(&j) = order.iter().skip(1).find(|&&k| rising(k, cuts) != rising(i, cuts)) else { return };
+    let (a1, b1) = cuts[i];
+    let (a2, b2) = cuts[j];
+    let flat = |p: DVec3| DVec2::new(p.dot(across), p.z);
+    let (p, d1) = (flat(a1), flat(b1) - flat(a1));
+    let (q, d2) = (flat(a2), flat(b2) - flat(a2));
+    let den = d1.perp_dot(d2);
+    if den.abs() < 1e-9 {
+        return;
+    }
+    let t = (q - p).perp_dot(d2) / den;
+    let apex2 = p + d1 * t;
+    // Only a small extension: chords that do not belong together stay as they are.
+    let reach = |b: DVec3| flat(b).distance(apex2);
+    if reach(b1) > 1.0 || reach(b2) > 1.0 {
+        return;
+    }
+    let lift = |a: DVec3, b: DVec3| a + (b - a) * ((apex2.x - a.dot(across)) / (b.dot(across) - a.dot(across)));
+    cuts[i].1 = lift(a1, b1);
+    cuts[j].1 = lift(a2, b2);
+}
+
+/// Trusses under the purlins: plane frames across the ridge (the eave
+/// direction of the largest sloped face), spread evenly along it no farther
+/// apart than the truss spacing. In each, the top chords follow the roof's
+/// faces `depth` under them (under the purlins), the tie runs level at the
+/// height of the chords' lowest end, a king post drops from their highest
+/// point to the tie, and struts run from its foot to the middle of each
+/// sloped chord.
+fn trusses(faces: &[(Vec<DVec3>, DVec3, DVec3, f64)], framing: &RoofFraming, depth: f64, out: &mut RoofFramingGeom) {
+    let Some((_, _, r, _)) = faces.iter().max_by(|a, b| a.3.total_cmp(&b.3)) else { return };
+    let r = DVec3::new(r.x, r.y, 0.0).normalize_or_zero();
+    let across = DVec3::new(-r.y, r.x, 0.0);
+    if r == DVec3::ZERO {
+        return;
+    }
+    // The faces moved down to the chords' top.
+    let chords_at: Vec<Vec<DVec3>> =
+        faces.iter().map(|(v, n, _, _)| v.iter().map(|p| *p + *n * depth).collect()).collect();
+    let (lo, hi) = chords_at
+        .iter()
+        .flatten()
+        .map(|p| p.dot(r))
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
+    if (hi - lo).is_nan() || hi - lo <= 0.3 {
+        return;
+    }
+    let t = framing.truss;
+    let put = |out: &mut RoofFramingGeom, a: DVec3, b: DVec3, down: DVec3, depth: f64| {
+        if out.members.len() < MAX_MEMBERS && a.distance(b) > 0.05 {
+            out.members.push(Member { kind: MemberKind::Truss, a, b, size: t, side: r, down, depth });
+        }
+    };
+    for c in spread(lo, hi, 0.15, framing.truss_spacing.max(0.3)) {
+        let mut cuts: Vec<(DVec3, DVec3)> = chords_at.iter().flat_map(|f| plane_cuts(f, r, c, across)).collect();
+        meet_at_apex(&mut cuts, across);
+        let ends = cuts.iter().flat_map(|(a, b)| [*a, *b]);
+        let Some(low) = ends.clone().map(|p| p.z).reduce(f64::min) else { continue };
+        let (s0, s1) = ends
+            .clone()
+            .map(|p| p.dot(across))
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), s| (a.min(s), b.max(s)));
+        let Some(apex) = ends.max_by(|a, b| a.z.total_cmp(&b.z)) else { continue };
+        if s1 - s0 < 1.0 {
+            continue;
+        }
+        // In the truss plane, at `s` across and height `z`.
+        let point = |s: f64, z: f64| r * c + across * s + DVec3::Z * z;
+        // Top chords, their height running down from the roof's side.
+        for (a, b) in &cuts {
+            let d = (*b - *a).normalize_or_zero();
+            let mut down = r.cross(d).normalize_or_zero();
+            if down.z > 0.0 {
+                down = -down;
+            }
+            put(out, *a, *b, down, 0.0);
+        }
+        // The tie, level, its top at the chords' lowest end.
+        put(out, point(s0, low), point(s1, low), -DVec3::Z, 0.0);
+        // The king post and the struts, centered on their lines.
+        let foot = point(apex.dot(across), low);
+        if apex.z - low > 0.3 {
+            put(out, foot, apex, across, -t.height / 2.0);
+            for (a, b) in &cuts {
+                let mid = (*a + *b) / 2.0;
+                if (b.z - a.z).abs() > 0.05 && mid.distance(foot) > 0.3 {
+                    let d = (mid - foot).normalize_or_zero();
+                    put(out, foot, mid, r.cross(d).normalize_or_zero(), -t.height / 2.0);
+                }
+            }
+        }
+        out.trusses += 1;
+    }
+}
+
 /// The framing under a roof's body `roof` (its solid) for `framing` and
 /// `covering`.
 pub fn roof_framing(roof: &Solid, framing: &RoofFraming, covering: Option<TileKind>) -> RoofFramingGeom {
     let mut out = RoofFramingGeom::default();
+    // The sloped undersides, for the trusses: outline, outward normal, eave direction, area.
+    let mut sloped: Vec<(Vec<DVec3>, DVec3, DVec3, f64)> = Vec::new();
     for face in &roof.faces {
         let n = face.normal.normalize_or_zero();
         // Sloped undersides: facing down, neither flat nor vertical.
@@ -153,6 +283,7 @@ pub fn roof_framing(roof: &Solid, framing: &RoofFraming, covering: Option<TileKi
         if up == DVec3::ZERO || along == DVec3::ZERO {
             continue;
         }
+        sloped.push((face.verts.clone(), n, along, face.area()));
         let Some(&o) = face.verts.first() else { continue };
         let poly: Vec<DVec2> = face.verts.iter().map(|p| DVec2::new((*p - o).dot(along), (*p - o).dot(up))).collect();
         let lo = poly.iter().copied().fold(DVec2::splat(f64::INFINITY), DVec2::min);
@@ -182,7 +313,7 @@ pub fn roof_framing(roof: &Solid, framing: &RoofFraming, covering: Option<TileKi
                 let ts = spread(lo.y, hi.y, 0.1, framing.purlin_step(covering));
                 eave_lines(MemberKind::Purlin, framing.purlin, 0.0, ts, &mut put);
             }
-            FramingSystem::Timber => {
+            FramingSystem::Timber | FramingSystem::TimberTrusses => {
                 let (bh, rh) = (framing.batten.height, framing.rafter.height);
                 let gauge = framing.batten_step(covering);
                 let ts = every(lo.y, hi.y, 0.05, gauge, 0.02);
@@ -196,6 +327,10 @@ pub fn roof_framing(roof: &Solid, framing: &RoofFraming, covering: Option<TileKi
                 eave_lines(MemberKind::Purlin, framing.purlin, bh + rh, ts, &mut put);
             }
         }
+    }
+    if framing.system == FramingSystem::TimberTrusses {
+        let depth = framing.batten.height + framing.rafter.height + framing.purlin.height;
+        trusses(&sloped, framing, depth, &mut out);
     }
     out
 }
@@ -266,5 +401,53 @@ mod tests {
         assert_eq!(spread(0.0, 1.0, 0.1, 0.5), vec![0.1, 0.5, 0.9]);
         assert_eq!(spread(0.0, 0.1, 0.1, 0.5), vec![0.05]);
         assert_eq!(every(0.0, 1.0, 0.1, 0.4, 0.05).len(), 3);
+    }
+
+    /// A gable's undersides: 10 m along the ridge (X), 8 m across, rising
+    /// at 50 % to a ridge 2 m up at y = 4.
+    fn gable() -> Solid {
+        let mut s = Solid::new(ElementId(1), Category::Roof, [0; 3]);
+        let p = |x: f64, y: f64| DVec3::new(x, y, 2.0 - 0.5 * (y - 4.0).abs());
+        s.add_polygons(vec![
+            vec![p(0.0, 0.0), p(0.0, 4.0), p(10.0, 4.0), p(10.0, 0.0)],
+            vec![p(0.0, 4.0), p(0.0, 8.0), p(10.0, 8.0), p(10.0, 4.0)],
+        ]);
+        s
+    }
+
+    #[test]
+    fn trusses_carry_the_purlins() {
+        let roof = gable();
+        assert!(roof.faces.iter().all(|f| f.normal.z < 0.0), "undersides look down");
+        let f = RoofFraming { system: FramingSystem::TimberTrusses, ..RoofFraming::timber(String::new()) };
+        let g = roof_framing(&roof, &f, Some(TileKind::CeramicColonial));
+        // At most 3 m apart over 10 m (inset 15 cm): 5 trusses.
+        assert_eq!(g.trusses, 5);
+        let truss: Vec<&Member> = g.members.iter().filter(|m| m.kind == MemberKind::Truss).collect();
+        // Each: two top chords, the tie, the king post and two struts.
+        assert_eq!(truss.len(), 5 * 6);
+        // Every member lies in one of the trusses' vertical planes across the ridge.
+        assert!(truss.iter().all(|m| (m.a.x - m.b.x).abs() < 1e-9));
+        // The ties run level across the 8 m, below the chords' top.
+        let depth = f.batten.height + f.rafter.height + f.purlin.height;
+        let ties: Vec<&&Member> =
+            truss.iter().filter(|m| (m.a.z - m.b.z).abs() < 1e-9 && (m.a.y - m.b.y).abs() > 7.0).collect();
+        assert_eq!(ties.len(), 5);
+        assert!(ties[0].a.z < -depth + 1e-6 + 0.0 + 1.0, "at the eaves' height, under the purlins");
+        // The king posts rise from the tie to the apex at the ridge.
+        let posts: Vec<&&Member> =
+            truss.iter().filter(|m| (m.a.y - m.b.y).abs() < 1e-9 && (m.a.z - m.b.z).abs() > 1.0).collect();
+        assert_eq!(posts.len(), 5);
+        assert!(posts.iter().all(|m| (m.a.y - 4.0).abs() < 1e-6));
+        // Purlins, rafters and battens are still there, above the trusses.
+        assert!(
+            g.length(MemberKind::Purlin) > 0.0
+                && g.length(MemberKind::Rafter) > 0.0
+                && g.length(MemberKind::Batten) > 0.0
+        );
+        // A shed (one face) gets half trusses: a chord, the tie, the post at the high end and a strut.
+        let g = roof_framing(&shed(), &f, None);
+        assert!(g.trusses > 0);
+        assert_eq!(g.members.iter().filter(|m| m.kind == MemberKind::Truss).count(), g.trusses * 4);
     }
 }

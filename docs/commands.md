@@ -735,7 +735,7 @@ No parameters.
 
 ### `roof_check`
 
-*query* — Check a roof against its covering: the least slope its tiles take and the roof's slopes, the area covered, the number of tiles and their weight, and its framing (purlins, rafters and battens: lengths and volume). The covering and framing are set on the roof's type (`type_set` with `covering` and `framing`).
+*query* — Check a roof against its covering: the least slope its tiles take and the roof's slopes, the area covered, the number of tiles and their weight, and its framing (purlins, rafters, battens and truss members: lengths, the number of trusses and the volume). The covering and framing are set on the roof's type (`type_set` with `covering` and `framing`).
 
 | Parameter | Type | | Description |
 |---|---|---|---|

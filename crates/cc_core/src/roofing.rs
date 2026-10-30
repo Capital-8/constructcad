@@ -115,17 +115,21 @@ pub enum FramingSystem {
     None,
     /// Timber purlins carrying rafters, the rafters carrying battens.
     Timber,
+    /// Timber trusses carrying the purlins, rafters and battens of `Timber`.
+    TimberTrusses,
     /// Steel purlins carrying sheets or panels directly.
     Steel,
 }
 
 impl FramingSystem {
-    pub const ALL: [FramingSystem; 3] = [FramingSystem::None, FramingSystem::Timber, FramingSystem::Steel];
+    pub const ALL: [FramingSystem; 4] =
+        [FramingSystem::None, FramingSystem::Timber, FramingSystem::TimberTrusses, FramingSystem::Steel];
 
     pub fn key(self) -> &'static str {
         match self {
             FramingSystem::None => "framing-none",
             FramingSystem::Timber => "framing-timber",
+            FramingSystem::TimberTrusses => "framing-trusses",
             FramingSystem::Steel => "framing-steel",
         }
     }
@@ -165,6 +169,22 @@ pub struct RoofFraming {
     pub rafter_spacing: f64,
     /// Battens (timber), along the eaves at the tile's gauge.
     pub batten: MemberSize,
+    /// Trusses (`TimberTrusses`): the section of their members and the
+    /// widest distance between them along the ridge.
+    #[serde(default = "default_truss")]
+    pub truss: MemberSize,
+    #[serde(default = "default_truss_spacing")]
+    pub truss_spacing: f64,
+}
+
+/// Trusses of 6 x 16 cm members.
+fn default_truss() -> MemberSize {
+    MemberSize::new(0.06, 0.16)
+}
+
+/// Trusses at most 3 m apart.
+fn default_truss_spacing() -> f64 {
+    3.0
 }
 
 impl Default for RoofFraming {
@@ -186,6 +206,8 @@ impl RoofFraming {
             rafter: MemberSize::new(0.05, 0.06),
             rafter_spacing: 0.5,
             batten: MemberSize::new(0.015, 0.05),
+            truss: default_truss(),
+            truss_spacing: default_truss_spacing(),
         }
     }
 
@@ -194,16 +216,22 @@ impl RoofFraming {
     pub fn repair(&mut self) -> usize {
         let d = Self::timber(String::new());
         let mut n = 0;
-        for (size, default) in
-            [(&mut self.purlin, d.purlin), (&mut self.rafter, d.rafter), (&mut self.batten, d.batten)]
-        {
+        for (size, default) in [
+            (&mut self.purlin, d.purlin),
+            (&mut self.rafter, d.rafter),
+            (&mut self.batten, d.batten),
+            (&mut self.truss, d.truss),
+        ] {
             if !size.is_valid() {
                 *size = default;
                 n += 1;
             }
         }
-        for (v, default) in [(&mut self.purlin_spacing, d.purlin_spacing), (&mut self.rafter_spacing, d.rafter_spacing)]
-        {
+        for (v, default) in [
+            (&mut self.purlin_spacing, d.purlin_spacing),
+            (&mut self.rafter_spacing, d.rafter_spacing),
+            (&mut self.truss_spacing, d.truss_spacing),
+        ] {
             if !v.is_finite() || *v < 0.1 {
                 *v = default;
                 n += 1;

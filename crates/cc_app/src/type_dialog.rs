@@ -405,8 +405,14 @@ fn roofing(
         set(state, "framing-mat", &|_, fr| fr.material = m.clone());
     }
     type Pick = fn(&mut RoofFraming) -> &mut MemberSize;
-    let mut members: Vec<(&str, Pick)> = vec![("prop-purlin", |f| &mut f.purlin)];
-    if framing.system == FramingSystem::Timber {
+    let timber = matches!(framing.system, FramingSystem::Timber | FramingSystem::TimberTrusses);
+    let trusses = framing.system == FramingSystem::TimberTrusses;
+    let mut members: Vec<(&str, Pick)> = Vec::new();
+    if trusses {
+        members.push(("prop-truss", |f| &mut f.truss));
+    }
+    members.push(("prop-purlin", |f| &mut f.purlin));
+    if timber {
         members.push(("prop-rafter", |f| &mut f.rafter));
         members.push(("prop-batten", |f| &mut f.batten));
     }
@@ -426,12 +432,19 @@ fn roofing(
             });
         }
     }
+    if trusses {
+        length_row(ui, state, &t!("prop-truss-spacing"), tid, "truss-sp", framing.truss_spacing, |d, v| {
+            if let TypeData::Roof { framing, .. } = d {
+                framing.truss_spacing = v.max(0.3);
+            }
+        });
+    }
     length_row(ui, state, &t!("prop-purlin-spacing"), tid, "purlin-sp", framing.purlin_spacing, |d, v| {
         if let TypeData::Roof { framing, .. } = d {
             framing.purlin_spacing = v.max(0.1);
         }
     });
-    if framing.system == FramingSystem::Timber {
+    if timber {
         length_row(ui, state, &t!("prop-rafter-spacing"), tid, "rafter-sp", framing.rafter_spacing, |d, v| {
             if let TypeData::Roof { framing, .. } = d {
                 framing.rafter_spacing = v.max(0.1);

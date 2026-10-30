@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 
 /// Check a roof against its covering: the least slope its tiles take and
 /// the roof's slopes, the area covered, the number of tiles and their
-/// weight, and its framing (purlins, rafters and battens: lengths and
-/// volume). The covering and framing are set on the roof's type
+/// weight, and its framing (purlins, rafters, battens and truss members:
+/// lengths, the number of trusses and the volume). The covering and framing are set on the roof's type
 /// (`type_set` with `covering` and `framing`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -50,6 +50,8 @@ pub fn roof_json(covering: Option<TileKind>, system: FramingSystem, g: &RoofFram
             "purlins": g.length(MemberKind::Purlin),
             "rafters": g.length(MemberKind::Rafter),
             "battens": g.length(MemberKind::Batten),
+            "trusses": g.trusses,
+            "truss_members": g.length(MemberKind::Truss),
             "members": g.members.len(),
             "volume": g.volume(),
         },
