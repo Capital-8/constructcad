@@ -32,6 +32,8 @@ pub struct View3DState {
     /// "Zoom in region" waits for a window; the drag's start once it began.
     zoom_region: bool,
     region_start: Option<egui::Pos2>,
+    /// Where a window or crossing selection drag started.
+    select_start: Option<egui::Pos2>,
     /// Snap points and previews of the modify tools.
     pub(crate) picks: crate::modify3d::PickCache,
 }
@@ -71,6 +73,7 @@ impl View3DState {
             last_wheel: f64::NEG_INFINITY,
             zoom_region: false,
             region_start: None,
+            select_start: None,
             picks: Default::default(),
         }
     }
@@ -285,7 +288,16 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if resp.dragged() {
         v3.anim = None;
     }
-    if resp.drag_started() && !zooming {
+    // A selection box: a left drag with the Select tool, or Shift+drag, as the preference says.
+    let shift = ui.input(|i| i.modifiers.shift);
+    if resp.drag_started_by(PointerButton::Primary)
+        && !zooming
+        && state.tool == crate::tools::Tool::Select
+        && state.prefs.select_drag_3d != shift
+    {
+        v3.select_start = ui.input(|i| i.pointer.press_origin());
+    }
+    if resp.drag_started() && !zooming && v3.select_start.is_none() {
         v3.remember();
     }
     let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) as f64 } else { 0.0 };
@@ -300,9 +312,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
     let cam = &mut v3.camera;
     let d = resp.drag_delta();
-    let shift = ui.input(|i| i.modifiers.shift);
-    if zooming {
-        // The window drag is not an orbit.
+    if zooming || v3.select_start.is_some() {
+        // The zoom window and the selection box are not an orbit.
     } else if resp.dragged_by(PointerButton::Primary) || (shift && resp.dragged_by(PointerButton::Middle)) {
         cam.yaw_deg += d.x as f64 * 0.4;
         cam.pitch_deg = (cam.pitch_deg + d.y as f64 * 0.4).clamp(-89.0, 89.0);
@@ -418,6 +429,33 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if let Some(tex) = v3.texture {
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         painter.image(tex, rect, uv, egui::Color32::WHITE);
+    }
+    if let Some(start) = v3.select_start {
+        let cur = resp.interact_pointer_pos().or(resp.hover_pos()).unwrap_or(start);
+        crate::tools::select_box(&painter, start, cur);
+        if resp.drag_stopped() {
+            v3.select_start = None;
+            let ndc = |p: egui::Pos2| {
+                let x = (p.x - rect.left()) / rect.width().max(1.0) * 2.0 - 1.0;
+                let y = 1.0 - (p.y - rect.top()) / rect.height().max(1.0) * 2.0;
+                glam::DVec2::new(x as f64, y as f64)
+            };
+            let (a, b, window) = (ndc(start), ndc(cur), cur.x >= start.x);
+            let (project, temporary) = (&state.session.doc.project, state.session.temporary(view_id));
+            let geom = state.session.geom_for(view_id);
+            let ids = match project.view(view_id) {
+                Some(view) => {
+                    let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
+                    let mut shown = |e| resolver.style(e).is_some();
+                    cc_render::elements_in_rect(&geom.solids, &v3.camera, aspect, a, b, window, &mut shown)
+                }
+                None => cc_render::elements_in_rect(&geom.solids, &v3.camera, aspect, a, b, window, &mut |_| true),
+            };
+            if !ui.input(|i| i.modifiers.command) {
+                state.selection.clear();
+            }
+            state.selection.extend(ids);
+        }
     }
     let cube = crate::view_cube::show(ui, rect, &v3.camera);
     if cube.look_from.is_some() || cube.home {

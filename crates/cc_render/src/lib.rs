@@ -7,7 +7,9 @@
 mod camera;
 mod mesh;
 mod renderer;
+mod select;
 
 pub use camera::{pick_ray, view_proj};
 pub use mesh::{SceneMesh, SolidStyle, Tessellation, Vertex};
 pub use renderer::Renderer3D;
+pub use select::elements_in_rect;

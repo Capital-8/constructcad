@@ -492,6 +492,21 @@ fn round_step(scale: f64) -> f64 {
 /// with the anchor and `extra` they cast horizontal, vertical and wall-line
 /// guides; a crossing of two guides, or of a guide with the current
 /// direction from the anchor, is a snap point.
+/// The selection rectangle from `start` to `cur`: a window (solid outline)
+/// dragged to the right, a crossing (dashed, green) dragged to the left.
+pub(crate) fn select_box(painter: &egui::Painter, start: egui::Pos2, cur: egui::Pos2) {
+    let rect = egui::Rect::from_two_pos(start, cur);
+    let crossing = cur.x < start.x;
+    let color = if crossing { Color32::from_rgb(30, 160, 60) } else { HIGHLIGHT };
+    painter.rect_filled(rect, 0.0, color.gamma_multiply(0.08));
+    if crossing {
+        let c = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom(), rect.left_top()];
+        painter.extend(egui::Shape::dashed_line(&c, Stroke::new(1.0, color), 5.0, 3.0));
+    } else {
+        painter.rect_stroke(rect, 0.0, Stroke::new(1.0, color), egui::StrokeKind::Middle);
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn snap(
@@ -2810,17 +2825,7 @@ fn select(
         }
         (Some(Drag::Box { start }), _) => {
             if let Some(cur) = resp.interact_pointer_pos().or(resp.hover_pos()) {
-                let rect = egui::Rect::from_two_pos(*start, cur);
-                let crossing = cur.x < start.x;
-                let color = if crossing { Color32::from_rgb(30, 160, 60) } else { HIGHLIGHT };
-                painter.rect_filled(rect, 0.0, color.gamma_multiply(0.08));
-                if crossing {
-                    let c =
-                        [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom(), rect.left_top()];
-                    painter.extend(egui::Shape::dashed_line(&c, Stroke::new(1.0, color), 5.0, 3.0));
-                } else {
-                    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, color), egui::StrokeKind::Middle);
-                }
+                select_box(painter, *start, cur);
             }
         }
         _ => {}

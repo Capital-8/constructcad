@@ -39,6 +39,8 @@ const UI_SCALE_KEY: &str = "ui_scale";
 const FONT_SIZE_KEY: &str = "font_size";
 /// eframe storage key of the detailed tooltips preference ("0" when off).
 const TOOLTIPS_KEY: &str = "detailed_tooltips";
+/// eframe storage key of the 3D left-drag preference ("1" when it selects).
+const SELECT_3D_KEY: &str = "select_drag_3d";
 /// eframe storage key of the macros folder.
 const MACRO_FOLDER_KEY: &str = "macro_folder";
 /// eframe storage key of the default projects folder.
@@ -81,6 +83,9 @@ pub struct Preferences {
     pub ribbon_collapsed: bool,
     /// Tooltips of commands show what they do and the engine command, not only the name.
     pub detailed_tooltips: bool,
+    /// A left drag in 3D views draws a selection box (Shift+drag orbits);
+    /// otherwise it orbits and Shift+drag selects.
+    pub select_drag_3d: bool,
     /// Folders of the component library.
     pub library_folders: Vec<PathBuf>,
     /// Where macros are recorded to and listed from.
@@ -102,6 +107,7 @@ impl Default for Preferences {
             font_size: 100,
             ribbon_collapsed: false,
             detailed_tooltips: true,
+            select_drag_3d: false,
             library_folders: Vec::new(),
             macro_folder: None,
             projects_folder: None,
@@ -168,6 +174,7 @@ impl Preferences {
             font_size: number(FONT_SIZE_KEY).map_or(d.font_size, |v| clamp_font(v.min(u32::MAX as u64) as u32)),
             ribbon_collapsed: on(RIBBON_KEY, d.ribbon_collapsed),
             detailed_tooltips: on(TOOLTIPS_KEY, d.detailed_tooltips),
+            select_drag_3d: on(SELECT_3D_KEY, d.select_drag_3d),
             library_folders: get(LIBRARY_KEY).map(|v| path_lines(&v, MAX_LIBRARY_FOLDERS)).unwrap_or_default(),
             macro_folder: folder(get(MACRO_FOLDER_KEY)),
             projects_folder: folder(get(PROJECTS_FOLDER_KEY)),
@@ -184,6 +191,7 @@ impl Preferences {
         set(FONT_SIZE_KEY, self.font_size.to_string());
         set(RIBBON_KEY, flag(self.ribbon_collapsed));
         set(TOOLTIPS_KEY, flag(self.detailed_tooltips));
+        set(SELECT_3D_KEY, flag(self.select_drag_3d));
         set(LIBRARY_KEY, join_paths(&self.library_folders));
         let text = |p: &Option<PathBuf>| p.as_ref().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
         set(MACRO_FOLDER_KEY, text(&self.macro_folder));
@@ -486,6 +494,10 @@ fn interface(ui: &mut Ui, state: &mut AppState) {
     table::row(ui, &label, |ui| {
         check(ui, &label, &mut state.prefs.detailed_tooltips, Some(t!("pref-detailed-tooltips-hint")))
     });
+    let label = t!("pref-select-drag-3d");
+    table::row(ui, &label, |ui| {
+        check(ui, &label, &mut state.prefs.select_drag_3d, Some(t!("pref-select-drag-3d-hint")))
+    });
 }
 
 /// A folder in a table row: its path, Browse… and Clear.
@@ -614,6 +626,7 @@ mod tests {
             font_size: 115,
             ribbon_collapsed: true,
             detailed_tooltips: false,
+            select_drag_3d: true,
             library_folders: vec![PathBuf::from("/lib/a"), PathBuf::from("C:\\lib b")],
             macro_folder: Some(PathBuf::from("/macros")),
             projects_folder: Some(PathBuf::from("/projects")),
