@@ -460,3 +460,61 @@ impl Command for TextRemoveLeader {
         Ok(created(s, id))
     }
 }
+
+/// Move the tag of an element in a plan (the tag of a door, window, beam,
+/// column or footing): by `delta` from where it is, to `offset` from its
+/// default spot, or back there with `reset`. A tag moved away from its
+/// element gets a leader to it. Each plan keeps its own tag positions.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TagMove {
+    /// Plan id or name.
+    pub view: Ref,
+    /// Id of the element the tag names.
+    pub id: u64,
+    /// Move by `[dx, dy]` meters in plan.
+    #[serde(default)]
+    pub delta: Option<Point>,
+    /// Place the tag `[dx, dy]` meters from its default spot.
+    #[serde(default)]
+    pub offset: Option<Point>,
+    /// Put the tag back in its default spot.
+    #[serde(default)]
+    pub reset: bool,
+}
+
+/// Farthest a tag may be moved from its default spot, meters.
+const MAX_TAG_OFFSET: f64 = 1000.0;
+
+impl Command for TagMove {
+    const NAME: &'static str = "tag_move";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let view = refs::view(p, &self.view)?;
+        if p.view(view).and_then(|v| v.level()).is_none() {
+            return Err(EngineError::invalid("tags are moved in floor and ceiling plans"));
+        }
+        let id = refs::element(p, self.id)?;
+        let current = p.view(view).and_then(|v| v.tag_offsets.get(&id).copied()).unwrap_or(DVec2::ZERO);
+        let new = match (self.delta, self.offset, self.reset) {
+            (Some(d), None, false) => current + point(d)?,
+            (None, Some(o), false) => point(o)?,
+            (None, None, true) => DVec2::ZERO,
+            _ => return Err(EngineError::invalid("give one of delta, offset or reset")),
+        };
+        if new.length() > MAX_TAG_OFFSET {
+            return Err(EngineError::invalid(format!("a tag stays within {MAX_TAG_OFFSET} m of its element")));
+        }
+        edit(s, t!("tx-move-tag"), |e| {
+            let v = e.view_mut(view).ok_or_else(|| EngineError::not_found("view"))?;
+            if new == DVec2::ZERO {
+                v.tag_offsets.remove(&id);
+            } else {
+                v.tag_offsets.insert(id, new);
+            }
+            Ok(())
+        })?;
+        Ok(serde_json::json!({ "view": view.0, "id": id.0, "offset": [new.x, new.y] }))
+    }
+}

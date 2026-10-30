@@ -26,7 +26,7 @@ mod sheet;
 
 pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout};
 pub use component_view::{ComponentView, ComponentViewKind, component_view};
-pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, halftone};
+pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, TagHandle, halftone};
 pub use legend::legend;
 pub use plan::{is_structural, plan, plan_of};
 pub use projected::{Frame, axonometric, elevation, section};
@@ -78,9 +78,9 @@ pub fn generate_temporary(
                 fade(&mut d);
                 mep::services(&mut d, project, geom, *level, *cut_height, discipline, view.scale);
             }
-            annotate::plan_annotations(&mut d, project, geom, *level, ceiling, structural, view.scale);
+            annotate::plan_annotations(&mut d, project, geom, *level, ceiling, structural, view);
             if tags {
-                annotate::structure_tags(&mut d, project, geom, *level, view.scale);
+                annotate::structure_tags(&mut d, project, geom, *level, view.scale, &view.tag_offsets);
             }
             d
         }

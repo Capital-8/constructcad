@@ -214,6 +214,10 @@ pub struct View {
     /// Which statuses the view shows, and how (`None`: all, by category).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_filter: Option<crate::PhaseFilterId>,
+    /// Tags moved by hand in this view: their offset in plan from where they
+    /// sit by default, by the element they tag.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub tag_offsets: std::collections::BTreeMap<crate::ElementId, glam::DVec2>,
 }
 
 impl ViewKind {
@@ -267,6 +271,7 @@ impl View {
             template: None,
             phase: Default::default(),
             phase_filter: None,
+            tag_offsets: Default::default(),
         }
     }
 

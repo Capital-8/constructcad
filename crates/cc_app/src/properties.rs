@@ -601,10 +601,28 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     section(ui, "ifc", t!("section-ifc"), |ui| {
         readonly_row(ui, &t!("prop-ifc-guid"), cc_ifc::guid::encode(el.uid.0));
     });
+    let view = state.active_view;
+    let moved = view.and_then(|v| state.project().view(v)).is_some_and(|v| v.tag_offsets.contains_key(&id));
     padded(ui, |ui| {
-        if ui.button(t!("action-delete")).clicked() {
-            state.delete_selection();
-        }
+        ui.horizontal(|ui| {
+            if ui.button(t!("action-delete")).clicked() {
+                state.delete_selection();
+            }
+            // The tag was moved in this view: put it back.
+            if moved
+                && let Some(view) = view
+                && ui.button(t!("action-reset-tag")).clicked()
+            {
+                let reset = cc_engine::commands::annotate::TagMove {
+                    view: cc_engine::Ref::Id(view.0),
+                    id: id.0,
+                    delta: None,
+                    offset: None,
+                    reset: true,
+                };
+                actions::run_command(state, reset);
+            }
+        });
     });
 }
 
