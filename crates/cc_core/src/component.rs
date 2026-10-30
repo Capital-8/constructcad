@@ -415,6 +415,9 @@ pub struct ComponentDef {
     /// Dimensions between reference planes, labeled by the parameters that drive them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dimensions: Vec<crate::component_ref::RefDimension>,
+    /// Planes kept halfway between two others (EQ).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equals: Vec<crate::component_ref::RefEqual>,
 }
 
 /// An IFC entity class with its predefined and object types.
@@ -627,6 +630,13 @@ impl ComponentDef {
             }
             if d.label.as_deref() == Some(old) {
                 d.label = Some(new.to_string());
+            }
+        }
+        for q in &mut self.equals {
+            for name in [&mut q.a, &mut q.middle, &mut q.b] {
+                if name == old {
+                    *name = new.to_string();
+                }
             }
         }
         for item in &mut self.items {

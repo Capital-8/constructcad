@@ -1859,3 +1859,7 @@ comp-field-path = ເສັ້ນທາງ
 comp-field-section = ໜ້າຕັດ (u ຊ້າຍຂອງເສັ້ນທາງ, v ຕາມແນວຕັ້ງສາກ)
 comp-field-bottom = ໂຄງຮ່າງລຸ່ມ
 comp-field-top = ໂຄງຮ່າງເທິງ
+comp-env-equal = ເທົ່າກັນ (EQ)
+cmd-desc-comp-equal = ຮັກສາລະນາບອ້າງອີງໄວ້ເຄິ່ງກາງລະຫວ່າງສອງລະນາບທີ່ຂະໜານ: ມັນຈະຕາມເມື່ອພວກມັນຍ້າຍ.
+comp-env-hint-equal = ຄລິກລະນາບ { $count } ຈາກ 3: ອັນນອກ, ອັນທີ່ຢູ່ເຄິ່ງກາງ, ອັນນອກອີກອັນ · Esc ເລີ່ມໃໝ່
+comp-env-points = ຈຸດ

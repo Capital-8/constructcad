@@ -434,6 +434,7 @@ impl Command for ComponentRefPlaneDelete {
             }
             def.ref_planes.retain(|p| p.name != self.name);
             def.dimensions.retain(|d| d.from != self.name && d.to != self.name);
+            def.equals.retain(|q| ![&q.a, &q.middle, &q.b].contains(&&self.name));
             Ok(())
         })
         .map_err(|e| match e.code {
@@ -710,6 +711,81 @@ impl Command for ComponentDimensionDelete {
                 return Err(EngineError::not_found(format!("no dimension {}", self.index)));
             }
             def.dimensions.remove(self.index);
+            Ok(())
+        })?;
+        Ok(json!({ "deleted": self.index }))
+    }
+}
+
+/// Keep the plane `middle` halfway between the parallel planes `a` and `b`
+/// (an equality, EQ): its position becomes `(a + b) / 2`, so it follows
+/// whatever moves them. Shown in `view` (`plan`, `front` or `side`) as two
+/// equal dimensions.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentEqualAdd {
+    /// A type of the component: id or name.
+    #[serde(rename = "type")]
+    pub type_ref: Ref,
+    /// `plan`, `front` or `side`.
+    pub view: String,
+    /// One outer plane.
+    pub a: String,
+    /// The plane kept halfway (not an origin plane).
+    pub middle: String,
+    /// The other outer plane.
+    pub b: String,
+    /// Where the dimensions' line sits across the planes (meters, default 0).
+    #[serde(default)]
+    pub place: Option<f64>,
+}
+
+impl Command for ComponentEqualAdd {
+    const NAME: &'static str = "component_equal_add";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let view = sketch_plane(&self.view)?;
+        let place = refs::finite(self.place.unwrap_or(0.0), "place")?;
+        if self.a == self.b || self.a == self.middle || self.b == self.middle {
+            return Err(EngineError::invalid("an equality needs three different planes"));
+        }
+        let index = edit_def(s, &self.type_ref, &[], |def| {
+            if component_ref::ORIGIN_PLANES.iter().any(|(n, _)| *n == self.middle) {
+                return Err(EngineError::rejected(t!("msg-comp-origin-plane")));
+            }
+            let q =
+                cc_core::RefEqual { view, a: self.a.clone(), middle: self.middle.clone(), b: self.b.clone(), place };
+            let Some(plane) = def.ref_planes.iter_mut().find(|p| p.name == self.middle) else {
+                return Err(EngineError::invalid(format!("no reference plane '{}'", self.middle)));
+            };
+            plane.at = q.expression();
+            def.equals.push(q);
+            Ok(def.equals.len() - 1)
+        })?;
+        Ok(json!({ "index": index }))
+    }
+}
+
+/// Remove an equality (EQ); its middle plane stays halfway as written.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentEqualDelete {
+    /// A type of the component: id or name.
+    #[serde(rename = "type")]
+    pub type_ref: Ref,
+    /// The equality's index (from `component_get`).
+    pub index: usize,
+}
+
+impl Command for ComponentEqualDelete {
+    const NAME: &'static str = "component_equal_delete";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        edit_def(s, &self.type_ref, &[], |def| {
+            if self.index >= def.equals.len() {
+                return Err(EngineError::not_found(format!("no equality {}", self.index)));
+            }
+            def.equals.remove(self.index);
             Ok(())
         })?;
         Ok(json!({ "deleted": self.index }))

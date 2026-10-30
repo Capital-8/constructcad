@@ -1857,3 +1857,7 @@ comp-field-path = 路徑
 comp-field-section = 斷面（u 在路徑左側，v 沿法線）
 comp-field-bottom = 底部輪廓
 comp-field-top = 頂部輪廓
+comp-env-equal = 等分 (EQ)
+cmd-desc-comp-equal = 使參考平面保持在兩個平行平面的正中間：它們移動時會跟著移動。
+comp-env-hint-equal = 點擊第 { $count } 個平面（共 3 個）：一個外側平面、保持居中的平面、另一個外側平面 · Esc 重新開始
+comp-env-points = 點

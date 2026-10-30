@@ -333,3 +333,58 @@ fn sweeps_follow_paths_and_blends_join_outlines() {
         assert_eq!(fails(&mut s, cmd, args.clone()), ErrorCode::InvalidArguments, "{cmd} {args}");
     }
 }
+
+#[test]
+fn equalities_keep_a_plane_halfway_as_the_others_move() {
+    let mut s = Session::default();
+    let ty = bench(&mut s)["id"].clone();
+    for (name, at) in [("Left", "-0.6"), ("Right", "0.4"), ("Mid", "0")] {
+        run(&mut s, "component_ref_plane_add", json!({"type": ty, "axis": "x", "at": at, "name": name}));
+    }
+    let depth = s.doc.undo_depth();
+    let eq = run(
+        &mut s,
+        "component_equal_add",
+        json!({"type": ty, "view": "plan", "a": "Left", "middle": "Mid", "b": "Right", "place": 0.5}),
+    );
+    assert_eq!(eq["index"], 0);
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert!((plane(&c, "Mid") + 0.1).abs() < 1e-12);
+    // A labeled dimension drives Right; Mid follows.
+    run(
+        &mut s,
+        "component_dimension_add",
+        json!({"type": ty, "view": "plan", "from": "Left", "to": "Right", "label": "Width"}),
+    );
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert!((plane(&c, "Right") - 0.6).abs() < 1e-12 && plane(&c, "Mid").abs() < 1e-12, "{c}");
+    assert!(c["problems"].as_array().unwrap().is_empty(), "{}", c["problems"]);
+    // Moving the middle by hand would break it: refused. Origin planes cannot be the middle.
+    assert_eq!(
+        fails(&mut s, "component_ref_plane_set", json!({"type": ty, "name": "Mid", "at": "0.2"})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(
+            &mut s,
+            "component_equal_add",
+            json!({"type": ty, "view": "plan", "a": "Left", "middle": "CenterX", "b": "Right"})
+        ),
+        ErrorCode::Rejected
+    );
+    assert_eq!(
+        fails(
+            &mut s,
+            "component_equal_add",
+            json!({"type": ty, "view": "front", "a": "Left", "middle": "Mid", "b": "Mid"})
+        ),
+        ErrorCode::InvalidArguments
+    );
+    // Deleting the equality keeps Mid halfway; deleting one of its planes takes the equality too.
+    run(&mut s, "component_equal_delete", json!({"type": ty, "index": 0}));
+    run(&mut s, "component_ref_plane_set", json!({"type": ty, "name": "Mid", "at": "0.2"}));
+    run(&mut s, "component_equal_add", json!({"type": ty, "view": "plan", "a": "Left", "middle": "Mid", "b": "Right"}));
+    run(&mut s, "component_ref_plane_delete", json!({"type": ty, "name": "Mid"}));
+    assert!(run(&mut s, "component_get", json!({"type": ty}))["def"]["equals"].is_null());
+}

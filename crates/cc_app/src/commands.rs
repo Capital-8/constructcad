@@ -44,6 +44,7 @@ pub enum UiCommand {
     CompBlend,
     CompRefPlane,
     CompDimension,
+    CompEqual,
     CompSaveFile,
     CompFinish,
     CompCancel,
@@ -189,6 +190,7 @@ impl UiCommand {
             CompBlend,
             CompRefPlane,
             CompDimension,
+            CompEqual,
             CompSaveFile,
             CompFinish,
             CompCancel,
@@ -292,6 +294,7 @@ impl UiCommand {
             CompBlend => Icon::Blend,
             CompRefPlane => Icon::RefPlane,
             CompDimension => Icon::Dimension,
+            CompEqual => Icon::Equal,
             CompSaveFile => Icon::Save,
             CompFinish => Icon::Finish,
             CompCancel => Icon::Close,
@@ -423,6 +426,7 @@ impl UiCommand {
             CompBlend => t!("comp-env-blend"),
             CompRefPlane => t!("comp-env-ref-plane"),
             CompDimension => t!("comp-env-dimension"),
+            CompEqual => t!("comp-env-equal"),
             CompSaveFile => t!("action-save-component"),
             CompFinish => t!("comp-env-finish"),
             CompCancel => t!("comp-env-cancel"),
@@ -564,6 +568,7 @@ impl UiCommand {
             CompBlend => t!("cmd-desc-comp-blend"),
             CompRefPlane => t!("cmd-desc-comp-ref-plane"),
             CompDimension => t!("cmd-desc-comp-dimension"),
+            CompEqual => t!("cmd-desc-comp-equal"),
             CompSaveFile => t!("cmd-desc-comp-save"),
             CompFinish => t!("cmd-desc-comp-finish"),
             CompCancel => t!("cmd-desc-comp-cancel"),
@@ -791,6 +796,7 @@ impl UiCommand {
             CompExtrusion | CompRevolution | CompSweep | CompBlend => "component_piece_add",
             CompRefPlane => "component_ref_plane_add",
             CompDimension => "component_dimension_add",
+            CompEqual => "component_equal_add",
             CompSaveFile => "component_save",
             LoadComponent => "component_load",
             ComponentLibrary => "component_library_list",
@@ -925,8 +931,8 @@ impl UiCommand {
             }
             MacroRun if state.session.is_recording() => Some(t!("why-recording")),
             EditComponent if crate::component_env::target_type(state).is_none() => Some(t!("why-select-component")),
-            CompExtrusion | CompRevolution | CompSweep | CompBlend | CompRefPlane | CompDimension | CompSaveFile
-            | CompFinish | CompCancel
+            CompExtrusion | CompRevolution | CompSweep | CompBlend | CompRefPlane | CompDimension | CompEqual
+            | CompSaveFile | CompFinish | CompCancel
                 if state.component_env.is_none() =>
             {
                 Some(t!("why-no-component-env"))
@@ -968,6 +974,10 @@ impl UiCommand {
                 .component_env
                 .as_ref()
                 .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::RefPlane { .. })),
+            CompEqual => state
+                .component_env
+                .as_ref()
+                .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::Equal { .. })),
             CompDimension => state
                 .component_env
                 .as_ref()
@@ -1161,6 +1171,10 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         CompDimension => {
             crate::component_env::set_tool(state, crate::component_env::EnvTool::Dimension { first: None });
         }
+        CompEqual => crate::component_env::set_tool(
+            state,
+            crate::component_env::EnvTool::Equal { picked: Vec::new(), view: None },
+        ),
         CompSaveFile => crate::component_env::save_file(state),
         CompFinish => crate::component_env::finish(state),
         CompCancel => crate::component_env::cancel(state),
