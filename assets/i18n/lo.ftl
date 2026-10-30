@@ -951,6 +951,7 @@ tx-beam-join = ການເຊື່ອມຕໍ່ຄານ
 msg-pinned = ລັອກແລ້ວ { $count } ອົງປະກອບ
 msg-unpinned = ປົດລັອກແລ້ວ { $count } ອົງປະກອບ
 msg-pinned-skipped = ອົງປະກອບທີ່ລັອກໄວ້ຈຳນວນ { $count } ອັນບໍ່ໄດ້ຮັບການປ່ຽນແປງ
+msg-pinned-not-deleted = ອົງປະກອບທີ່ລັອກໄວ້ຈຳນວນ { $count } ອັນບໍ່ໄດ້ຖືກລຶບ: ຍົກເລີກການລັອກໃນຄຸນສົມບັດເພື່ອລຶບ
 action-pin = ລັອກຕຳແໜ່ງ
 action-unpin = ປົດລັອກ
 tool-toggle-join = ອະນຸຍາດ/ຫ້າມ ເຊື່ອມຕໍ່

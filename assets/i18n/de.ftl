@@ -981,6 +981,7 @@ tx-beam-join = Trägerverbindung
 msg-pinned = { $count } Bauteil(e) fixiert
 msg-unpinned = { $count } Bauteil(e) gelöst
 msg-pinned-skipped = { $count } fixierte(s) Bauteil(e) wurde(n) nicht geändert
+msg-pinned-not-deleted = { $count } fixierte(s) Bauteil(e) wurde(n) nicht gelöscht: Fixiert in den Eigenschaften abwählen, um zu löschen
 action-pin = Fixieren
 action-unpin = Lösen
 tool-toggle-join = Verbindung zulassen/unterbinden

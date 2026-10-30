@@ -981,6 +981,7 @@ tx-beam-join = Unione travi
 msg-pinned = { $count } elementi bloccati
 msg-unpinned = { $count } elementi sbloccati
 msg-pinned-skipped = { $count } elementi bloccati non sono stati modificati
+msg-pinned-not-deleted = { $count } elementi bloccati non sono stati eliminati: deseleziona Bloccato nelle proprietà per eliminarli
 action-pin = Blocca
 action-unpin = Sblocca
 tool-toggle-join = Consenti/impedisci unione

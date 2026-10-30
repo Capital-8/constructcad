@@ -309,3 +309,26 @@ fn auto_alignment_centers_far_drawings() {
     let e = run(&mut s, "element_get", json!({"id": out["id"]}));
     assert_eq!(e["params"]["position"], json!([0.0, 0.0]), "a drawing near the origin stays there");
 }
+
+#[test]
+fn the_properties_panel_patch_with_every_param_applies() {
+    // The app sends back all of `element_get`'s params, the view included.
+    let path = scratch("panel.dxf");
+    std::fs::write(&path, sample_dxf()).unwrap();
+    let mut s = Session::default();
+    let view = plan(&mut s);
+    let id = run(&mut s, "cad_import", json!({"path": path, "view": view}))["id"].as_u64().unwrap();
+    let mut params = run(&mut s, "element_get", json!({"id": id}))["params"].clone();
+    params["units"] = json!("Centimeters");
+    run(&mut s, "element_set", json!({"id": id, "params": params}));
+    assert_eq!(run(&mut s, "element_get", json!({"id": id}))["params"]["units"], "Centimeters");
+    params["view"] = json!(view + 1000);
+    assert_ne!(fails(&mut s, "element_set", json!({"id": id, "params": params})), ErrorCode::Internal);
+
+    // Pinned on import: deleting skips it until it is unpinned.
+    let out = run(&mut s, "elements_delete", json!({"ids": [id]}));
+    assert_eq!(out["pinned_skipped"], json!([id]));
+    run(&mut s, "elements_pin", json!({"ids": [id], "pinned": false}));
+    run(&mut s, "elements_delete", json!({"ids": [id]}));
+    assert!(s.doc.project.element(cc_core::ElementId(id)).is_none());
+}

@@ -999,6 +999,7 @@ tx-beam-join = Beam join
 msg-pinned = { $count } element(s) pinned
 msg-unpinned = { $count } element(s) unpinned
 msg-pinned-skipped = { $count } pinned element(s) were not changed
+msg-pinned-not-deleted = { $count } pinned element(s) were not deleted: clear Pinned in the properties to delete
 action-pin = Pin
 action-unpin = Unpin
 tool-toggle-join = Allow/Disallow Join

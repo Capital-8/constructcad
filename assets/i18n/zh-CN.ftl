@@ -999,6 +999,7 @@ tx-beam-join = 梁连接
 msg-pinned = 已锁定 { $count } 个图元
 msg-unpinned = 已解锁 { $count } 个图元
 msg-pinned-skipped = { $count } 个已锁定的图元未被更改
+msg-pinned-not-deleted = { $count } 个已锁定的图元未被删除：在属性中取消“锁定”后即可删除
 action-pin = 锁定
 action-unpin = 解锁
 tool-toggle-join = 允许/不允许连接

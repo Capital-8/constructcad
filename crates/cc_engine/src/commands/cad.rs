@@ -44,7 +44,9 @@ pub fn params(kind: &ElementKind) -> Value {
 
 /// Apply a `params` patch to an imported drawing's element, keeping its drawing.
 pub(crate) fn patch(c: &CadImport, patch: &Value) -> Result<ElementKind> {
-    if patch.get("drawing").is_some() || patch.get("view").is_some() {
+    // `element_get` shows the view, so a patch built from it repeats it unchanged.
+    let view_changed = patch.get("view").is_some_and(|v| v.as_u64() != Some(c.view.0));
+    if patch.get("drawing").is_some() || view_changed {
         return Err(EngineError::invalid("the drawing and the view of an imported drawing cannot be changed"));
     }
     let kind = super::patch_variant(light(&ElementKind::CadImport(Box::new(c.clone()))).as_ref(), patch)?;
