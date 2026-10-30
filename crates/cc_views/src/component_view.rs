@@ -93,6 +93,8 @@ pub struct ComponentView {
     pub drawing: Drawing2D,
     pub planes: Vec<ViewPlane>,
     pub dimensions: Vec<ViewDimension>,
+    /// Each piece's edges in this view (by index in the definition), for picking.
+    pub pieces: Vec<(usize, Vec<(DVec2, DVec2)>)>,
     /// Box of the pieces and planes, for zoom to fit.
     pub bounds: Option<(DVec2, DVec2)>,
     /// Pieces that do not resolve, with why.
@@ -128,15 +130,22 @@ pub fn component_view(
     let pieces = solids
         .iter()
         .filter(|p| !p.plan_only || kind == ComponentViewKind::Plan)
-        .map(|p| (false, cc_geom::component::faces_of(p)))
-        .chain(all.iter().filter(|p| p.void).map(|p| (true, cc_geom::component::faces_of(p))));
-    for (void, faces) in pieces {
+        .map(|p| (p.item, false, cc_geom::component::faces_of(p)))
+        .chain(all.iter().filter(|p| p.void).map(|p| (p.item, true, cc_geom::component::faces_of(p))));
+    for (item, void, faces) in pieces {
         let turned: Vec<Vec<DVec3>> = faces.iter().map(|f| f.iter().map(|p| kind.project(*p)).collect()).collect();
+        let mut edges = Vec::new();
         for (a, b) in cc_geom::plan_edges(&turned) {
             let (a, b) = (a.truncate(), b.truncate());
             grow(&mut out.bounds, a);
             grow(&mut out.bounds, b);
             out.drawing.line(a, b, if void { LineStyle::Hidden } else { LineStyle::Projection }, None);
+            edges.push((a, b));
+        }
+        // A solid cut by voids comes in parts: they all pick the same piece.
+        match out.pieces.iter_mut().find(|(i, _)| *i == item) {
+            Some((_, e)) => e.extend(edges),
+            None => out.pieces.push((item, edges)),
         }
     }
     let Some(view) = kind.plane() else {

@@ -170,3 +170,106 @@ fn every_type_of_the_component_follows_but_keeps_its_values() {
     let wall = run(&mut s, "types_list", json!({"category": "wall"}))[0]["id"].clone();
     assert_eq!(fails(&mut s, "component_get", json!({"type": wall})), ErrorCode::InvalidArguments);
 }
+
+/// The example bench, modeled with commands only: sketched pieces locked to
+/// planes follow the parameters, and the void cuts the seat.
+#[test]
+fn the_example_bench_is_built_and_follows_its_parameters() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/component_bench.ccmacro");
+    let steps = cc_engine::script::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut s = Session::default();
+    cc_engine::script::run(&mut s, &steps).unwrap_or_else(|(_, e)| panic!("step {}: {}", e.index + 1, e.error));
+    let c = run(&mut s, "component_get", json!({"type": "Bench"}));
+    assert!(c["problems"].as_array().unwrap().is_empty(), "{}", c["problems"]);
+    let items = c["def"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), 4);
+    assert_eq!(items[0]["shape"]["Profile"]["offset"], "Under");
+    assert_eq!(items[0]["shape"]["Profile"]["depth"], "Top - Under");
+    let width = |s: &mut Session| {
+        let ty = s.project().types.values().find(|t| t.name == "Bench").unwrap().clone();
+        let cc_core::TypeData::Component { def, .. } = &ty.data else { panic!() };
+        let solids = cc_geom::resolve_component(def, &Default::default());
+        let xs = solids
+            .iter()
+            .flat_map(|p| p.footprint.iter().map(|q| q.x))
+            .chain(solids.iter().flat_map(|p| p.faces.iter().flatten().map(|q| q.x)));
+        let (lo, hi) = xs.fold((f64::MAX, f64::MIN), |(lo, hi), x| (lo.min(x), hi.max(x)));
+        (hi - lo, solids.len())
+    };
+    let (w, solids) = width(&mut s);
+    assert!((w - 1.2).abs() < 1e-9, "{w}");
+    // Seat (cut by the hole) and two legs.
+    assert!(solids >= 3, "{solids}");
+    run(&mut s, "component_param_set", json!({"type": "Bench", "name": "Width", "value": 1.6}));
+    assert!((width(&mut s).0 - 1.6).abs() < 1e-9);
+    let c = run(&mut s, "component_get", json!({"type": "Bench"}));
+    assert!((plane(&c, "Right") - 0.8).abs() < 1e-12);
+}
+
+#[test]
+fn sketched_pieces_extrude_revolve_and_change() {
+    let mut s = Session::default();
+    let ty = bench(&mut s)["id"].clone();
+    run(&mut s, "component_ref_plane_add", json!({"type": ty, "axis": "z", "at": "0.4", "name": "Seat"}));
+    run(&mut s, "component_ref_plane_add", json!({"type": ty, "axis": "x", "at": "0.5", "name": "Post"}));
+    // A turned foot: a rectangle on the front plane revolved about the Post plane.
+    let foot = run(
+        &mut s,
+        "component_piece_add",
+        json!({"type": ty, "kind": "revolution", "plane": "front", "axis": "Post",
+               "points": [{"u": "Post", "v": 0}, {"u": "Post + 0.03", "v": 0}, {"u": "Post + 0.03", "v": "Seat"}, {"u": "Post", "v": "Seat"}]}),
+    );
+    assert_eq!(foot["index"], 1);
+    // An extrusion's end can be moved alone; its start stays.
+    let slab = run(
+        &mut s,
+        "component_piece_add",
+        json!({"type": ty, "plane": "plan", "start": "Base", "end": "Seat",
+               "points": [{"u": -0.1, "v": -0.1}, {"u": 0.1, "v": -0.1}, {"u": 0.1, "v": 0.1}, {"u": -0.1, "v": 0.1}]}),
+    );
+    run(
+        &mut s,
+        "component_piece_set",
+        json!({"type": ty, "index": slab["index"], "end": "Seat - 0.05", "void": true, "name": "Pocket"}),
+    );
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    let item = &c["def"]["items"][2];
+    assert_eq!(item["name"], "Pocket");
+    assert_eq!(item["void"], true);
+    assert_eq!(item["shape"]["Profile"]["offset"], "Base");
+    assert_eq!(item["shape"]["Profile"]["depth"], "(Seat - 0.05) - Base");
+    run(&mut s, "component_piece_set", json!({"type": ty, "index": 2, "start": 0.1}));
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert_eq!(c["def"]["items"][2]["shape"]["Profile"]["depth"], "(Seat - 0.05) - 0.1");
+    assert!(c["problems"].as_array().unwrap().is_empty(), "{}", c["problems"]);
+    // Moving the post plane moves the turned foot.
+    run(&mut s, "component_ref_plane_set", json!({"type": ty, "name": "Post", "at": "0.55"}));
+    // Refused: bad kinds, too few points, unknown names, a revolution without an axis,
+    // axis on an extrusion, a box given a sketch, deleting the last piece.
+    let depth = s.doc.undo_depth();
+    for (cmd, args) in [
+        (
+            "component_piece_add",
+            json!({"type": ty, "kind": "loft", "plane": "plan", "points": [{"u": 0, "v": 0}, {"u": 1, "v": 0}]}),
+        ),
+        ("component_piece_add", json!({"type": ty, "plane": "plan", "points": [{"u": 0, "v": 0}]})),
+        (
+            "component_piece_add",
+            json!({"type": ty, "plane": "plan", "points": [{"u": "Nope", "v": 0}, {"u": 1, "v": 0}, {"u": 1, "v": 1}]}),
+        ),
+        (
+            "component_piece_add",
+            json!({"type": ty, "kind": "revolution", "plane": "front", "points": [{"u": 0.1, "v": 0}, {"u": 0.2, "v": 0}, {"u": 0.2, "v": 1}]}),
+        ),
+        ("component_piece_set", json!({"type": ty, "index": 2, "axis": 0})),
+        ("component_piece_set", json!({"type": ty, "index": 0, "end": 1})),
+        ("component_piece_set", json!({"type": ty, "index": 9, "void": true})),
+    ] {
+        let code = fails(&mut s, cmd, args.clone());
+        assert!(matches!(code, ErrorCode::InvalidArguments | ErrorCode::NotFound), "{cmd} {args}: {code:?}");
+    }
+    run(&mut s, "component_piece_delete", json!({"type": ty, "index": 2}));
+    run(&mut s, "component_piece_delete", json!({"type": ty, "index": 1}));
+    assert_eq!(fails(&mut s, "component_piece_delete", json!({"type": ty, "index": 0})), ErrorCode::InvalidArguments);
+    assert_eq!(s.doc.undo_depth(), depth + 2);
+}

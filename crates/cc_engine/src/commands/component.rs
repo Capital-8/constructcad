@@ -41,7 +41,7 @@ fn component_of(s: &Session, r: &Ref) -> Result<(ElementTypeId, String, Componen
 /// it and write it to every type of the component in one undo step. The
 /// type named takes the new parameter values; the others keep theirs
 /// (following `renames`, `[old, new]`), and take new parameters' values.
-fn edit_def<T>(
+pub(crate) fn edit_def<T>(
     s: &mut Session,
     r: &Ref,
     renames: &[(String, String)],
@@ -93,7 +93,7 @@ fn free_name(def: &ComponentDef, prefix: &str) -> String {
 }
 
 /// An expression that must evaluate: a number, or names of the component.
-fn check_expr(text: &str) -> Result<String> {
+pub(crate) fn check_expr(text: &str) -> Result<String> {
     let text = text.trim();
     if text.is_empty() {
         return Err(EngineError::invalid("an empty expression"));
@@ -102,7 +102,7 @@ fn check_expr(text: &str) -> Result<String> {
 }
 
 /// A number written so the expression parser reads it back exactly.
-fn number(v: f64) -> String {
+pub(crate) fn number(v: f64) -> String {
     let v = if v.abs() < 1e-12 { 0.0 } else { v };
     format!("{v}")
 }
@@ -116,7 +116,7 @@ fn plane_axis(name: &str) -> Result<PlaneAxis> {
     }
 }
 
-fn sketch_plane(name: &str) -> Result<SketchPlane> {
+pub(crate) fn sketch_plane(name: &str) -> Result<SketchPlane> {
     match name.to_ascii_lowercase().as_str() {
         "plan" => Ok(SketchPlane::Plan),
         "front" => Ok(SketchPlane::Front),
