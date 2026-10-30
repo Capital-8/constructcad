@@ -1857,3 +1857,7 @@ comp-field-path = Caminho
 comp-field-section = Seção (u à esquerda do caminho, v na normal)
 comp-field-bottom = Contorno da base
 comp-field-top = Contorno do topo
+comp-env-equal = Igualdade (EQ)
+cmd-desc-comp-equal = Mantém um plano de referência no meio de dois outros paralelos: ele acompanha quando eles se movem.
+comp-env-hint-equal = Clique o plano { $count } de 3: um externo, o que fica no meio, o outro externo · Esc recomeça
+comp-env-points = Pontos

@@ -111,6 +111,26 @@ pub struct RefDimension {
     pub place: f64,
 }
 
+/// An equality (EQ): the plane `middle` stays halfway between the parallel
+/// planes `a` and `b`, shown in `view` as two equal dimensions at `place`.
+/// Its position is written `(a + b) / 2` when the equality is made.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RefEqual {
+    pub view: SketchPlane,
+    pub a: String,
+    pub middle: String,
+    pub b: String,
+    #[serde(default)]
+    pub place: f64,
+}
+
+impl RefEqual {
+    /// The expression that keeps `middle` halfway.
+    pub fn expression(&self) -> String {
+        format!("({} + {}) / 2", self.a, self.b)
+    }
+}
+
 /// Why a reference plane, line or dimension does not evaluate.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RefError {
@@ -119,6 +139,9 @@ pub enum RefError {
     Expr { name: String, error: ExprError },
     /// A dimension names a missing plane, or planes that are not parallel.
     Dimension { index: usize },
+    /// An equality names a missing plane, planes that are not parallel, or
+    /// its middle plane is no longer halfway.
+    Equal { index: usize },
 }
 
 impl std::fmt::Display for RefError {
@@ -127,6 +150,9 @@ impl std::fmt::Display for RefError {
             RefError::Expr { name, error } => write!(f, "{name}: {error}"),
             RefError::Dimension { index } => {
                 write!(f, "dimension {}: its planes are missing or not parallel", index + 1)
+            }
+            RefError::Equal { index } => {
+                write!(f, "equality {}: its planes are missing, not parallel or not kept halfway", index + 1)
             }
         }
     }
@@ -233,6 +259,24 @@ impl ComponentDef {
         Ok((scope.get(&d.to).ok_or_else(bad)? - scope.get(&d.from).ok_or_else(bad)?).abs())
     }
 
+    /// Whether equality `index` holds: three parallel planes seen edge-on
+    /// in its view, the middle one written halfway between the others.
+    pub fn equal_holds(&self, index: usize) -> Result<(), RefError> {
+        let bad = || RefError::Equal { index };
+        let q = self.equals.get(index).ok_or_else(bad)?;
+        let planes: Vec<RefPlane> =
+            [&q.a, &q.middle, &q.b].iter().map(|n| self.ref_plane(n)).collect::<Option<_>>().ok_or_else(bad)?;
+        let axis = planes.first().map(|p| p.axis).ok_or_else(bad)?;
+        if planes.iter().any(|p| p.axis != axis) || axis.in_view(q.view).is_none() {
+            return Err(bad());
+        }
+        let middle = planes.get(1).ok_or_else(bad)?;
+        if middle.at.replace(' ', "") != q.expression().replace(' ', "") {
+            return Err(bad());
+        }
+        Ok(())
+    }
+
     /// The names an expression of the component reads, other than parameters
     /// and planes, that do not exist; and repeated or invalid names. Empty
     /// when the references are sound.
@@ -245,7 +289,12 @@ impl ComponentDef {
             }
             seen.push(name);
         }
-        if self.ref_planes.len() + self.ref_lines.len() + self.dimensions.len() > MAX_REFS {
+        for i in 0..self.equals.len() {
+            if let Err(e) = self.equal_holds(i) {
+                out.push(e.to_string());
+            }
+        }
+        if self.ref_planes.len() + self.ref_lines.len() + self.dimensions.len() + self.equals.len() > MAX_REFS {
             out.push("too many reference planes, lines and dimensions".into());
         }
         let scope = self.scope(&BTreeMap::new(), &[(crate::component::WALL_THICKNESS, 0.2)]);
@@ -335,6 +384,31 @@ mod tests {
         def.ref_planes[0].name = BASE.into();
         assert!(!def.ref_problems().is_empty());
         assert!(def.name_taken("Height") && def.name_taken(CENTER_Y) && !def.name_taken("Depth"));
+    }
+
+    #[test]
+    fn equalities_keep_a_plane_halfway() {
+        let mut def = boxed();
+        def.ref_planes.push(plane("Mid", PlaneAxis::X, "(Left + Right) / 2"));
+        def.equals.push(RefEqual {
+            view: SketchPlane::Plan,
+            a: "Left".into(),
+            middle: "Mid".into(),
+            b: "Right".into(),
+            place: 0.0,
+        });
+        assert!(def.equal_holds(0).is_ok());
+        assert!(def.ref_problems().is_empty(), "{:?}", def.ref_problems());
+        // Renaming follows into the equality and its expression.
+        def.rename("Left", "L");
+        assert_eq!(def.equals[0].a, "L");
+        assert!(def.equal_holds(0).is_ok(), "{:?}", def.ref_planes);
+        // A middle moved by hand breaks it; so does a plane of another axis.
+        def.ref_planes[3].at = "0.1".into();
+        assert!(def.equal_holds(0).is_err());
+        def.ref_planes[3].at = "(L + Right) / 2".into();
+        def.equals[0].b = "Top".into();
+        assert!(def.equal_holds(0).is_err());
     }
 
     #[test]

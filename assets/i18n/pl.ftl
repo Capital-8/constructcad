@@ -1857,3 +1857,7 @@ comp-field-path = Ścieżka
 comp-field-section = Przekrój (u na lewo od ścieżki, v wzdłuż normalnej)
 comp-field-bottom = Kontur dolny
 comp-field-top = Kontur górny
+comp-env-equal = Równość (EQ)
+cmd-desc-comp-equal = Utrzymuje płaszczyznę odniesienia w połowie między dwiema równoległymi: podąża, gdy się przesuwają.
+comp-env-hint-equal = Kliknij płaszczyznę { $count } z 3: zewnętrzną, środkową, drugą zewnętrzną · Esc zaczyna od nowa
+comp-env-points = Punkty

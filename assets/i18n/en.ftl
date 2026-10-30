@@ -1857,3 +1857,7 @@ comp-field-path = Path
 comp-field-section = Section (u left of the path, v along the normal)
 comp-field-bottom = Bottom outline
 comp-field-top = Top outline
+comp-env-equal = Equality (EQ)
+cmd-desc-comp-equal = Keeps a reference plane halfway between two parallel ones: it follows when they move.
+comp-env-hint-equal = Click plane { $count } of 3: an outer one, the one kept halfway, the other outer one · Esc starts over
+comp-env-points = Points

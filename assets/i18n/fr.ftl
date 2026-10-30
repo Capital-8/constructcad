@@ -1857,3 +1857,7 @@ comp-field-path = Chemin
 comp-field-section = Section (u à gauche du chemin, v selon la normale)
 comp-field-bottom = Contour de base
 comp-field-top = Contour du sommet
+comp-env-equal = Égalité (EQ)
+cmd-desc-comp-equal = Maintient un plan de référence à mi-chemin entre deux autres parallèles : il suit quand ils bougent.
+comp-env-hint-equal = Cliquez le plan { $count } sur 3 : un extérieur, celui maintenu au milieu, l'autre extérieur · Échap recommence
+comp-env-points = Points

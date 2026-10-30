@@ -1857,3 +1857,7 @@ comp-field-path = Pfad
 comp-field-section = Querschnitt (u links vom Pfad, v entlang der Normalen)
 comp-field-bottom = Unterer Umriss
 comp-field-top = Oberer Umriss
+comp-env-equal = Gleichheit (EQ)
+cmd-desc-comp-equal = Hält eine Referenzebene mittig zwischen zwei parallelen: sie folgt, wenn diese sich bewegen.
+comp-env-hint-equal = Ebene { $count } von 3 klicken: eine äußere, die mittig gehaltene, die andere äußere · Esc beginnt neu
+comp-env-points = Punkte

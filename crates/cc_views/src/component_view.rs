@@ -93,6 +93,8 @@ pub struct ComponentView {
     pub drawing: Drawing2D,
     pub planes: Vec<ViewPlane>,
     pub dimensions: Vec<ViewDimension>,
+    /// Equalities (EQ) drawn in this view, by index: where each "EQ" text sits.
+    pub equals: Vec<ViewDimension>,
     /// Each piece's edges in this view (by index in the definition), for picking.
     pub pieces: Vec<(usize, Vec<(DVec2, DVec2)>)>,
     /// Box of the pieces and planes, for zoom to fit.
@@ -240,6 +242,45 @@ pub fn component_view(
             value,
             label: d.label.clone(),
         });
+    }
+    // Equalities: two equal dimensions marked EQ.
+    for (index, q) in def.equals.iter().enumerate().filter(|(_, q)| q.view == view) {
+        let (Some(a), Some(m), Some(b), Some(vertical)) = (
+            scope.get(&q.a),
+            scope.get(&q.middle),
+            scope.get(&q.b),
+            def.ref_plane(&q.a).and_then(|p| p.axis.in_view(view)),
+        ) else {
+            continue;
+        };
+        for (from, to) in [(a, m), (m, b)] {
+            let (pa, pb, dir) = if vertical {
+                (DVec2::new(from, q.place), DVec2::new(to, q.place), DVec2::X)
+            } else {
+                (DVec2::new(q.place, from), DVec2::new(q.place, to), DVec2::Y)
+            };
+            let dim = Dimension {
+                view: ViewId(0),
+                a: pa,
+                b: pb,
+                offset: 0.0,
+                kind: DimensionKind::Linear { dir },
+                refs: Default::default(),
+            };
+            let Some(layout) = crate::dimension_layout(&dim, scale) else { continue };
+            for (p, q2, style) in layout.lines {
+                out.drawing.line(p, q2, style, None);
+            }
+            out.drawing.text_at(layout.text_pos, "EQ", 2.5, Anchor::CenterBottom, layout.text_angle);
+            grow(&mut out.bounds, layout.text_pos);
+            out.equals.push(ViewDimension {
+                index,
+                text_pos: layout.text_pos,
+                text_angle: layout.text_angle,
+                value: (to - from).abs(),
+                label: Some("EQ".into()),
+            });
+        }
     }
     out
 }

@@ -1858,3 +1858,7 @@ comp-field-path = Шлях
 comp-field-section = Переріз (u ліворуч від шляху, v уздовж нормалі)
 comp-field-bottom = Нижній контур
 comp-field-top = Верхній контур
+comp-env-equal = Рівність (EQ)
+cmd-desc-comp-equal = Тримає опорну площину посередині між двома паралельними: вона рухається разом із ними.
+comp-env-hint-equal = Клацніть площину { $count } з 3: зовнішню, ту, що посередині, іншу зовнішню · Esc починає заново
+comp-env-points = Точки
