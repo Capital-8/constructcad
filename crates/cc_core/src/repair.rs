@@ -89,6 +89,7 @@ fn element_is_valid(e: &Element) -> bool {
                 && finite_points(&[s.start, s.end])
                 && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
         }
+        ElementKind::CadImport(c) => c.is_valid(),
     }
 }
 
@@ -143,7 +144,7 @@ impl Project {
                 TypeData::Grid { bubble } => repairs += usize::from(fix_positive(bubble, 8.0)),
                 TypeData::Dimension { text_size } => repairs += usize::from(fix_positive(text_size, 2.5)),
                 TypeData::Text { size, .. } => repairs += usize::from(fix_positive(size, 2.5)),
-                TypeData::Room {} => {}
+                TypeData::Room {} | TypeData::CadImport {} => {}
                 TypeData::Column { section, .. } => match section {
                     crate::ColumnSection::Rectangular { width, depth } => {
                         repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(depth, 0.2));
@@ -217,6 +218,16 @@ impl Project {
             }
         }
 
+        // Imported drawings: invalid primitives and layer references go (copied
+        // only when something is wrong, since the drawing is shared).
+        for e in self.elements.values_mut() {
+            if let ElementKind::CadImport(c) = &mut e.kind
+                && c.drawing.needs_repair()
+            {
+                repairs += std::sync::Arc::make_mut(&mut c.drawing).repair();
+            }
+        }
+
         // Elements: repeat until stable, since removing a wall orphans what it hosts.
         loop {
             let invalid: Vec<_> = self
@@ -234,6 +245,7 @@ impl Project {
                             .is_some_and(|h| matches!(h.kind, ElementKind::Beam(_) | ElementKind::Column(_))),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
+                        ElementKind::CadImport(c) => self.view(c.view).is_some(),
                         _ => true,
                     };
                     !(type_ok && level_ok && host_ok && element_is_valid(e))

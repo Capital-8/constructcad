@@ -6,6 +6,7 @@
 mod actions;
 mod app;
 mod browser;
+mod cad_ui;
 mod canvas;
 mod clipboard;
 mod commands;

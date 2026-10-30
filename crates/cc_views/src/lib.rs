@@ -5,6 +5,7 @@
 //! computes tables.
 
 mod annotate;
+pub mod cad;
 pub mod component_view;
 mod cut;
 mod diagram;
@@ -96,10 +97,27 @@ pub fn generate_temporary(
         ViewKind::Diagram { panel } => diagram::panel_diagram(project, geom, *panel, view.scale, label),
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
     };
+    // Imported CAD drawings, under everything (not in 3D views or diagrams).
+    if hosts_cad(&view.kind) {
+        cad::underlays(&mut d, project, view.id, view.scale);
+    }
     annotate::dimensions(&mut d, project, view.id, view.scale);
     notes::notes(&mut d, project, view.id, view.scale);
     graphics::apply(&mut d, &mut graphics::Resolver::new(project, geom, view, temporary), view.scale);
     Some(d)
+}
+
+/// Whether a view can hold imported CAD drawings: plans, ceiling plans,
+/// elevations, sections and legends (2D views with a drawing plane).
+pub fn hosts_cad(kind: &ViewKind) -> bool {
+    matches!(
+        kind,
+        ViewKind::FloorPlan { .. }
+            | ViewKind::CeilingPlan { .. }
+            | ViewKind::Elevation { .. }
+            | ViewKind::Section { .. }
+            | ViewKind::Legend { .. }
+    )
 }
 
 /// Draw everything so far faint: lines in the faint pen (dashes kept),

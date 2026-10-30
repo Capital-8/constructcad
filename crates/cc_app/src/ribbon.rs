@@ -40,6 +40,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Railing => Icon::Railing,
         Category::Component => Icon::Component,
         Category::Text => Icon::Text,
+        Category::CadImport => Icon::CadImport,
     }
 }
 
@@ -567,7 +568,7 @@ fn command_buttons(ui: &mut Ui, state: &mut AppState, list: &[UiCommand]) {
 fn file_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::{CloseProject, ExportIfc, ExportImage, ExportPdf, ExportSvg, ImportIfc, New, Open, Save, SaveAs};
     group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[New, Open, Save, SaveAs, CloseProject]));
-    group(ui, t!("group-import"), |ui| command_button(ui, state, ImportIfc));
+    group(ui, t!("group-import"), |ui| command_buttons(ui, state, &[ImportIfc, UiCommand::ImportCad]));
     group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportPdf, ExportSvg, ExportImage]));
     group(ui, t!("group-settings"), |ui| command_button(ui, state, UiCommand::Preferences));
     group(ui, t!("group-help"), |ui| command_buttons(ui, state, &[UiCommand::About, UiCommand::CheckUpdates]));

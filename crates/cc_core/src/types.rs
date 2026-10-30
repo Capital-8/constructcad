@@ -26,10 +26,12 @@ pub enum Category {
     /// Electrical conduits.
     Conduit,
     Ramp,
+    /// Imported DWG/DXF drawings (underlays).
+    CadImport,
 }
 
 impl Category {
-    pub const ALL: [Category; 20] = [
+    pub const ALL: [Category; 21] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -50,6 +52,7 @@ impl Category {
         Category::Grid,
         Category::Dimension,
         Category::Text,
+        Category::CadImport,
     ];
 
     /// Categories with physical elements (shown in legends and 3D).
@@ -120,6 +123,7 @@ impl Category {
             Category::Rebar => "category-rebar",
             Category::Pipe => "category-pipe",
             Category::Conduit => "category-conduit",
+            Category::CadImport => "category-cad-import",
         }
     }
 
@@ -332,6 +336,8 @@ pub enum TypeData {
         component: String,
         def: crate::component::ComponentDef,
     },
+    /// Imported CAD drawings have no type parameters; the type names them.
+    CadImport {},
 }
 
 impl TypeData {
@@ -354,9 +360,11 @@ impl TypeData {
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. } => vec![material.as_str()],
             TypeData::Component { def, .. } => def.items.iter().map(|i| i.material.as_str()).collect(),
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {
-                Vec::new()
-            }
+            TypeData::Room {}
+            | TypeData::Grid { .. }
+            | TypeData::Dimension { .. }
+            | TypeData::Text { .. }
+            | TypeData::CadImport {} => Vec::new(),
         }
     }
 
@@ -401,7 +409,11 @@ impl TypeData {
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. } => fix(material),
             TypeData::Component { def, .. } => def.items.iter_mut().for_each(|i| fix(&mut i.material)),
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => {}
+            TypeData::Room {}
+            | TypeData::Grid { .. }
+            | TypeData::Dimension { .. }
+            | TypeData::Text { .. }
+            | TypeData::CadImport {} => {}
         }
     }
 }
@@ -541,6 +553,7 @@ impl ElementType {
             TypeData::Ramp { .. } => Category::Ramp,
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { def, .. } => def.category(),
+            TypeData::CadImport {} => Category::CadImport,
         }
     }
 
@@ -622,7 +635,11 @@ impl ElementType {
             TypeData::Wall { layers, .. } | TypeData::Roof { layers } => {
                 layers.first().map_or("", |l| l.material.as_str())
             }
-            TypeData::Room {} | TypeData::Grid { .. } | TypeData::Dimension { .. } | TypeData::Text { .. } => "",
+            TypeData::Room {}
+            | TypeData::Grid { .. }
+            | TypeData::Dimension { .. }
+            | TypeData::Text { .. }
+            | TypeData::CadImport {} => "",
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }

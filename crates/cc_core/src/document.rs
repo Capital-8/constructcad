@@ -209,6 +209,11 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);
+            // A pinned element removed with its host or view takes its pin along.
+            if self.project.pinned.contains(&id) {
+                self.touch_settings();
+                self.project.pinned.remove(&id);
+            }
             if self.project.joined_with(id).next().is_some() {
                 self.touch_settings();
                 self.project.joins.retain(|&(a, b)| a != id && b != id);
@@ -255,8 +260,14 @@ impl<'a> EditCtx<'a> {
         self.project.views.get_mut(&id)
     }
 
-    /// Remove a view and any sheet viewports showing it.
+    /// Remove a view, the elements it owns (dimensions, text notes,
+    /// imported drawings) and any sheet viewports showing it.
     pub fn remove_view(&mut self, id: ViewId) {
+        let owned: Vec<ElementId> =
+            self.project.elements.values().filter(|e| e.owner_view() == Some(id)).map(|e| e.id).collect();
+        for e in owned {
+            self.remove_element(e);
+        }
         let sheets: Vec<_> = self
             .project
             .views

@@ -30,6 +30,12 @@ pub fn params_of<T: serde::Serialize>(value: &T) -> serde_json::Value {
     commands::variant(serde_json::to_value(value).unwrap_or_default()).1
 }
 
+/// An element's `params` as `element_get` shows them (an imported drawing
+/// without the drawing itself, which is not a parameter).
+pub fn element_params(kind: &cc_core::ElementKind) -> serde_json::Value {
+    commands::cad::params(kind)
+}
+
 pub use defaults::{
     conduit_offset, default_roof_base, default_top, device_height, drain_slope, next_number, pipe_offset, walls_loop,
 };

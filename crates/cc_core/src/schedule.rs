@@ -160,7 +160,7 @@ impl ScheduleField {
                     F::PhaseDemolished,
                 ];
             }
-            Category::Grid | Category::Dimension | Category::Text => return Vec::new(),
+            Category::Grid | Category::Dimension | Category::Text | Category::CadImport => return Vec::new(),
         };
         common.iter().chain(specific).chain(&type_info).chain(&phases).copied().collect()
     }
@@ -197,7 +197,7 @@ impl ScheduleField {
             Category::Conduit => vec![F::Type, F::System, F::Level, F::Diameter, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
-            Category::Grid | Category::Dimension | Category::Text => Vec::new(),
+            Category::Grid | Category::Dimension | Category::Text | Category::CadImport => Vec::new(),
         }
     }
 }

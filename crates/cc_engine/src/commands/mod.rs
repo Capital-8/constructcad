@@ -3,6 +3,7 @@
 
 pub mod analytical;
 pub mod annotate;
+pub mod cad;
 pub mod component;
 pub mod component_piece;
 pub mod create;

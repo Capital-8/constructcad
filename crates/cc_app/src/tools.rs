@@ -267,6 +267,8 @@ impl Tool {
             Category::Pipe => Tool::Pipe { type_id },
             Category::Conduit => Tool::Conduit { type_id },
             Category::Text => Tool::Text { type_id },
+            // Imported, not drawn.
+            Category::CadImport => return None,
         })
     }
 }
@@ -395,6 +397,8 @@ pub struct DimChain {
 enum SnapKind {
     Endpoint,
     Midpoint,
+    /// The center of an arc or circle (imported drawings).
+    Center,
     Nearest,
     /// On a guide from an acquired point.
     Alignment,
@@ -432,9 +436,10 @@ pub(crate) fn snap_at(
     scale: f64,
     ortho: bool,
 ) -> Snap {
+    let cad = cad_snap(state, raw, SNAP_PX / scale * 1.5);
     let (project, geom) = (&state.session.doc.project, state.session.geom());
-    let s = snap(project, geom, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho);
-    if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint) {
+    let s = snap_with(project, geom, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho, &cad);
+    if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint | SnapKind::Center) {
         let tracked = &mut state.interaction.tracked;
         tracked.retain(|p| p.distance(s.point) > 1e-9);
         tracked.insert(0, s.point);
@@ -444,6 +449,38 @@ pub(crate) fn snap_at(
 }
 
 const SNAP_PX: f64 = 10.0;
+
+/// Snap features of the imported drawings shown in the active view near `raw`.
+fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
+    let mut out = cc_core::cad::CadSnap::default();
+    let Some(view) = state.active_view else { return out };
+    let ids: Vec<ElementId> = state
+        .project()
+        .elements
+        .values()
+        .filter(|e| matches!(&e.kind, ElementKind::CadImport(c) if c.view == view))
+        .map(|e| e.id)
+        .collect();
+    if ids.is_empty() {
+        return out;
+    }
+    // Only drawings the view shows (not hidden by its graphics or temporarily).
+    let Some(drawing) = state.drawing(view) else { return out };
+    for id in ids {
+        if !drawing.prims.iter().any(|p| p.element() == Some(id)) {
+            continue;
+        }
+        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| &e.kind) {
+            let f = c.snap_features(raw, r);
+            out.ends.extend(f.ends);
+            out.mids.extend(f.mids);
+            out.centers.extend(f.centers);
+            out.lines.extend(f.lines);
+            out.arcs.extend(f.arcs);
+        }
+    }
+    out
+}
 
 /// Increment for rounding free coordinates at the current zoom.
 fn round_step(scale: f64) -> f64 {
@@ -455,6 +492,7 @@ fn round_step(scale: f64) -> f64 {
 /// with the anchor and `extra` they cast horizontal, vertical and wall-line
 /// guides; a crossing of two guides, or of a guide with the current
 /// direction from the anchor, is a snap point.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn snap(
     project: &Project,
@@ -467,11 +505,34 @@ fn snap(
     scale: f64,
     ortho: bool,
 ) -> Snap {
+    let cad = cc_core::cad::CadSnap::default();
+    snap_with(project, geom, level, raw, anchor, extra, tracked, scale, ortho, &cad)
+}
+
+/// [`snap`] with the snap features of imported drawings too (their
+/// endpoints, midpoints, arc centers, lines and arcs).
+#[allow(clippy::too_many_arguments)]
+fn snap_with(
+    project: &Project,
+    geom: &ModelGeometry,
+    level: Option<LevelId>,
+    raw: DVec2,
+    anchor: Option<DVec2>,
+    extra: &[DVec2],
+    tracked: &[DVec2],
+    scale: f64,
+    ortho: bool,
+    cad: &cc_core::cad::CadSnap,
+) -> Snap {
     let r = SNAP_PX / scale;
     let mut ends: Vec<DVec2> = extra.to_vec();
     let mut mids = Vec::new();
     let mut lines = Vec::new();
     let mut arcs: Vec<cc_core::arc::Arc> = Vec::new();
+    ends.extend_from_slice(&cad.ends);
+    mids.extend_from_slice(&cad.mids);
+    lines.extend_from_slice(&cad.lines);
+    arcs.extend_from_slice(&cad.arcs);
     for e in project.elements.values().filter(|e| Some(e.level) == level) {
         if let Some(w) = e.as_wall() {
             ends.extend([w.start, w.end]);
@@ -538,6 +599,9 @@ fn snap(
     };
     if let Some((p, _)) = nearest(&ends) {
         return Snap::at(p, SnapKind::Endpoint);
+    }
+    if let Some((p, _)) = nearest(&cad.centers) {
+        return Snap::at(p, SnapKind::Center);
     }
     if let Some((p, _)) = nearest(&mids) {
         return Snap::at(p, SnapKind::Midpoint);
@@ -675,6 +739,11 @@ pub(crate) fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
         SnapKind::Midpoint => {
             let pts = vec![c + egui::vec2(0.0, -6.0), c + egui::vec2(6.0, 5.0), c + egui::vec2(-6.0, 5.0)];
             painter.add(egui::Shape::closed_line(pts, stroke));
+        }
+        SnapKind::Center => {
+            painter.circle_stroke(c, 6.0, stroke);
+            painter.line_segment([c + egui::vec2(-3.0, 0.0), c + egui::vec2(3.0, 0.0)], stroke);
+            painter.line_segment([c + egui::vec2(0.0, -3.0), c + egui::vec2(0.0, 3.0)], stroke);
         }
         SnapKind::Nearest => {
             painter.line_segment([c + egui::vec2(-5.0, -5.0), c + egui::vec2(5.0, 5.0)], stroke);
@@ -3037,6 +3106,35 @@ mod tests {
         let p = crate::actions::new_project();
         let level = p.levels[0].id;
         (p, level)
+    }
+
+    /// The tools snap to an imported drawing's ends and circle centers in its view only.
+    #[test]
+    fn snaps_to_imported_drawings() {
+        let dir = std::env::temp_dir().join(format!("ccad-app-snap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("snap.dxf");
+        let dxf = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n3\n21\n0\n\
+                   0\nCIRCLE\n8\n0\n10\n6\n20\n2\n40\n1\n0\nENDSEC\n0\nEOF\n";
+        std::fs::write(&path, dxf).unwrap();
+        let mut state = AppState::new(cc_core::Document::new(crate::actions::new_project()));
+        let level = state.project().levels[0].id;
+        let plan = state.project().views.values().find(|v| v.level() == Some(level)).map(|v| v.id).unwrap();
+        state.active_view = Some(plan);
+        crate::cad_ui::import_cad_path(&mut state, path);
+        assert_eq!(state.selection.len(), 1, "{}", state.message);
+        state.sync();
+        let s = snap_at(&mut state, Some(level), DVec2::new(3.04, 0.03), None, &[], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Endpoint);
+        assert!(s.point.distance(DVec2::new(3.0, 0.0)) < 1e-12);
+        let s = snap_at(&mut state, Some(level), DVec2::new(6.03, 2.02), None, &[], SCALE, false);
+        assert_eq!(s.kind, SnapKind::Center);
+        assert!(s.point.distance(DVec2::new(6.0, 2.0)) < 1e-12);
+        // Not in another view.
+        let other = state.project().views.values().find(|v| v.level().is_some() && v.id != plan).map(|v| v.id);
+        state.active_view = other;
+        let s = snap_at(&mut state, Some(level), DVec2::new(6.03, 2.02), None, &[], SCALE, false);
+        assert_ne!(s.kind, SnapKind::Center);
     }
 
     #[test]

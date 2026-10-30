@@ -135,11 +135,12 @@ pub enum Icon {
     Image,
     Library,
     Settings,
+    CadImport,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 124] = [
+    pub const ALL: [Icon; 125] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -264,6 +265,7 @@ impl Icon {
         Icon::Image,
         Icon::Library,
         Icon::Settings,
+        Icon::CadImport,
     ];
 
     /// The icon's SVG source.
@@ -391,6 +393,7 @@ impl Icon {
             Icon::Phases => include_str!("../../../assets/icons/ui/phases.svg"),
             Icon::Demolish => include_str!("../../../assets/icons/ui/demolish.svg"),
             Icon::Image => include_str!("../../../assets/icons/ui/image.svg"),
+            Icon::CadImport => include_str!("../../../assets/icons/ui/cad-import.svg"),
             Icon::Library => include_str!("../../../assets/icons/ui/library.svg"),
             Icon::Settings => include_str!("../../../assets/icons/ui/settings.svg"),
         }

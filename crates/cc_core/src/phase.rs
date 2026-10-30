@@ -246,7 +246,7 @@ pub const TEMPLATE_PHASES: [&str; 2] = ["tpl-phase-existing", "tpl-phase-new"];
 impl Category {
     /// Whether elements of the category belong to phases (annotations do not).
     pub fn is_phased(self) -> bool {
-        !matches!(self, Category::Dimension | Category::Text | Category::Grid)
+        !matches!(self, Category::Dimension | Category::Text | Category::Grid | Category::CadImport)
     }
 }
 

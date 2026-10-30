@@ -135,6 +135,19 @@ fn pen(lines: &LineGraphics, halftone: bool) -> Option<Pen> {
     })
 }
 
+/// `over` on top of `own`, attribute by attribute.
+fn merge(own: Option<Pen>, over: Option<Pen>) -> Option<Pen> {
+    match (own, over) {
+        (Some(o), Some(n)) => Some(Pen {
+            color: n.color.or(o.color),
+            weight: n.weight.or(o.weight),
+            pattern: n.pattern.or(o.pattern),
+            halftone: n.halftone || o.halftone,
+        }),
+        (o, n) => n.or(o),
+    }
+}
+
 fn rgb(c: [u8; 4]) -> [u8; 3] {
     [c[0], c[1], c[2]]
 }
@@ -162,14 +175,15 @@ pub fn apply(d: &mut Drawing2D, resolver: &mut Resolver, scale: u32) {
         }
         let halftone = g.halftone == Some(true);
         match prim {
-            Prim::Line { a, b, style, element, pen: _ } => {
+            Prim::Line { a, b, style, element, pen: own } => {
                 let lines = match style {
                     LineStyle::Hatch if g.cut_fill.pattern.is_some() => continue,
                     LineStyle::Hatch => LineGraphics { color: g.cut_fill.color, ..Default::default() },
                     LineStyle::Cut => g.cut_lines,
                     _ => g.projection_lines,
                 };
-                d.prims.push(Prim::Line { a, b, style, element, pen: pen(&lines, halftone) });
+                // Overrides replace what they set; a line's own pen (imported drawings) keeps the rest.
+                d.prims.push(Prim::Line { a, b, style, element, pen: merge(own, pen(&lines, halftone)) });
             }
             Prim::Fill { pts, color, element, cut } => {
                 // Invisible fills (pick areas, highlight-only regions) stay as they are.

@@ -419,6 +419,7 @@ impl ConstructApp {
             crate::thumbnails::process(&mut self.state, rs);
         }
         self.shortcuts(&ctx);
+        crate::cad_ui::dropped_files(&ctx, &mut self.state);
         if self.dock_generation != self.state.generation {
             self.dock = initial_dock(self.state.project());
             self.dock_generation = self.state.generation;

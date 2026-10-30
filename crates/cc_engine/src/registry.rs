@@ -110,6 +110,9 @@ registry![
         io::ComponentLoad,
         io::ComponentLibraryList,
         io::ComponentSave,
+        cad::CadImportFile,
+        cad::CadLayers,
+        cad::CadLayersSet,
     ],
     "Queries" => [
         query::CategoriesList,
