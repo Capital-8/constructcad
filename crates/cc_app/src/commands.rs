@@ -549,6 +549,7 @@ impl UiCommand {
             PanelDiagram => t!("cmd-desc-panel-diagram"),
             Dimension(DimensionMode::Aligned) => t!("cmd-desc-dim-aligned"),
             Dimension(DimensionMode::Linear) => t!("cmd-desc-dim-linear"),
+            Dimension(DimensionMode::Ordinate) => t!("cmd-desc-dim-ordinate"),
             Dimension(DimensionMode::Angular) => t!("cmd-desc-dim-angular"),
             Dimension(DimensionMode::Radial) => t!("cmd-desc-dim-radial"),
             Dimension(DimensionMode::Diameter) => t!("cmd-desc-dim-diameter"),

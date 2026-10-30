@@ -243,6 +243,43 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
             let (angle, up) = upright(u);
             (format::meters(dim.value()), (pa + pb) / 2.0 + up * 0.8 * mm, angle)
         }
+        DimensionKind::Ordinate { .. } => {
+            let dir = dim.direction()?;
+            let n = dir.perp();
+            let measured = (dim.b - dim.a).dot(dir);
+            if measured.abs() < 1e-9 {
+                return None;
+            }
+            let pa = dim.a + n * dim.offset;
+            let pb = pa + dir * measured;
+            let side = if dim.offset >= 0.0 { 1.0 } else { -1.0 };
+            let mut out_b = n * side;
+            for (p, q) in [(dim.a, pa), (dim.b, pb)] {
+                let v = q - p;
+                let out = v.try_normalize().unwrap_or(n * side);
+                out_b = out;
+                let from = p + out * (1.0 * mm).min(v.length());
+                lines.push((from, q + out * 1.5 * mm, LineStyle::Annotation));
+            }
+            // The origin is a small circle; the line runs from it to an arrow at the point.
+            let r = 1.0 * mm;
+            let steps = 16;
+            let at = |i: usize| pa + DVec2::from_angle(std::f64::consts::TAU * i as f64 / steps as f64) * r;
+            for i in 0..steps {
+                lines.push((at(i), at(i + 1), LineStyle::Annotation));
+            }
+            let u = dir * measured.signum();
+            lines.push((pa + u * r, pb, LineStyle::Annotation));
+            for s in [-1.0, 1.0] {
+                lines.push((pb, pb + DVec2::from_angle(s * 0.3).rotate(-u) * 2.5 * mm, LineStyle::Annotation));
+            }
+            // The running total reads along the witness line, past the dimension line.
+            let text = format::meters(measured.abs());
+            let (angle, up) = upright(out_b);
+            let width = text.chars().count() as f64 * 0.6 * 2.5 * mm;
+            let pos = pb + out_b * (2.0 * mm + width / 2.0) - up * 1.25 * mm;
+            (text, pos, angle)
+        }
         DimensionKind::Angular { vertex, .. } => {
             let (r1, r2) = ((dim.a - vertex).try_normalize()?, (dim.b - vertex).try_normalize()?);
             let sweep = r1.angle_to(r2);
@@ -360,5 +397,28 @@ mod tests {
         let d = Dimension { kind: DimensionKind::Diameter, ..r };
         assert!((d.value() - 4.0).abs() < 1e-12);
         assert!(dimension_layout(&d, 50).unwrap().text.starts_with('\u{d8}'));
+    }
+
+    #[test]
+    fn ordinate_dimensions_show_the_running_total_along_their_witness_line() {
+        // From the origin (0, 0) to (2.4, 0.3), the line 1 m below.
+        let d = dim((0.0, 0.0), (2.4, 0.3), -1.0, DimensionKind::Ordinate { dir: DVec2::X });
+        assert!((d.value() - 2.4).abs() < 1e-12);
+        let mm = 0.05;
+        let layout = dimension_layout(&d, 50).unwrap();
+        assert_eq!(layout.text, format::meters(2.4));
+        // The dimension line runs from the origin's circle to the point, at y = -1.
+        assert!(layout.lines.iter().any(|(a, b, _)| (a.x - mm).abs() < 1e-9
+            && (b.x - 2.4).abs() < 1e-9
+            && (a.y + 1.0).abs() < 1e-9
+            && (b.y + 1.0).abs() < 1e-9));
+        // The text reads along the point's witness line (vertical), below the dimension line.
+        assert!((layout.text_angle.abs() - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        assert!(layout.text_pos.y < -1.0 && (layout.text_pos.x - 2.4).abs() < 0.1, "{:?}", layout.text_pos);
+        // A point at the origin measures nothing.
+        assert!(
+            dimension_layout(&dim((0.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Ordinate { dir: DVec2::X }), 50)
+                .is_none()
+        );
     }
 }
