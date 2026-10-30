@@ -1,6 +1,7 @@
 //! Pieces of a component drawn as sketches: an outline on the plan, front
-//! or side plane extruded along the plane's normal or revolved about an
-//! axis in it, solid or void. Coordinates are expressions, so a reference
+//! or side plane extruded along the plane's normal, revolved about an axis
+//! in it, swept along a path or blended into a second outline; solid or
+//! void. Coordinates are expressions, so a reference
 //! plane's name locks a point (or the start and end) to that plane.
 
 use super::component::{check_expr, edit_def, number, sketch_plane};
@@ -68,9 +69,12 @@ fn depth_expr(start: &str, end: &str) -> String {
 
 /// Add a piece drawn as a sketch on the `plan`, `front` or `side` plane: an
 /// `extrusion` of the closed outline from `start` to `end` along the plane's
-/// normal (Z for the plan, Y for the front, X for the side), or a
+/// normal (Z for the plan, Y for the front, X for the side); a
 /// `revolution` about the line u = `axis` of the plane, `angle` degrees
-/// (default 360). Coordinates are numbers or expressions; a reference
+/// (default 360); a `sweep` of the closed outline (`points`: u to the left
+/// of the path, v along the normal) along the open `path` drawn on the
+/// plane at `start`, mitered at its corners; or a `blend` from the outline
+/// at `start` to the `top` outline at `end`. Coordinates are numbers or expressions; a reference
 /// plane's name locks a coordinate (or `start`, `end`, `axis`) to that
 /// plane, so the piece follows it. With `void`, the piece is cut out of the
 /// solid pieces it overlaps.
@@ -80,17 +84,23 @@ pub struct ComponentPieceAdd {
     /// A type of the component: id or name.
     #[serde(rename = "type")]
     pub type_ref: Ref,
-    /// `extrusion` (default) or `revolution`.
+    /// `extrusion` (default), `revolution`, `sweep` or `blend`.
     #[serde(default)]
     pub kind: Option<String>,
     /// `plan`, `front` or `side`.
     pub plane: String,
-    /// The closed outline, in order.
+    /// The closed outline, in order (a sweep's section, a blend's bottom).
     pub points: Vec<SketchPointArg>,
+    /// Sweeps: the open path the section follows.
+    #[serde(default)]
+    pub path: Option<Vec<SketchPointArg>>,
+    /// Blends: the closed outline at `end`.
+    #[serde(default)]
+    pub top: Option<Vec<SketchPointArg>>,
     /// Where the sketch plane stands along its normal (default 0).
     #[serde(default)]
     pub start: Option<ExprArg>,
-    /// Extrusions: where they end along the normal (default 0.1 past `start`).
+    /// Extrusions and blends: where they end along the normal (default 0.1 past `start`).
     #[serde(default)]
     pub end: Option<ExprArg>,
     /// Revolutions: the axis, u = `axis` in the sketch plane.
@@ -130,8 +140,22 @@ impl Command for ComponentPieceAdd {
                 let angle = self.angle.as_ref().map(ExprArg::text).transpose()?.unwrap_or_else(|| "360".into());
                 ComponentShape::Revolution { plane, points, offset: start, axis: axis.text()?, angle }
             }
+            "sweep" => {
+                let path = self.path.as_deref().ok_or_else(|| EngineError::invalid("a sweep needs a path"))?;
+                ComponentShape::Sweep { plane, path: profile_points(path)?, offset: start, profile: points }
+            }
+            "blend" => {
+                let top = self.top.as_deref().ok_or_else(|| EngineError::invalid("a blend needs a top outline"))?;
+                let depth = match &self.end {
+                    Some(end) => depth_expr(&start, &end.text()?),
+                    None => "0.1".into(),
+                };
+                ComponentShape::Blend { plane, bottom: points, top: profile_points(top)?, offset: start, depth }
+            }
             other => {
-                return Err(EngineError::invalid(format!("unknown piece kind '{other}' (extrusion or revolution)")));
+                return Err(EngineError::invalid(format!(
+                    "unknown piece kind '{other}' (extrusion, revolution, sweep or blend)"
+                )));
             }
         };
         let index = edit_def(s, &self.type_ref, &[], |def| {
@@ -179,9 +203,15 @@ pub struct ComponentPieceSet {
     /// Drawn in plans.
     #[serde(default)]
     pub in_plan: Option<bool>,
-    /// New outline.
+    /// New outline (a sweep's section, a blend's bottom).
     #[serde(default)]
     pub points: Option<Vec<SketchPointArg>>,
+    /// Sweeps: new path.
+    #[serde(default)]
+    pub path: Option<Vec<SketchPointArg>>,
+    /// Blends: new top outline.
+    #[serde(default)]
+    pub top: Option<Vec<SketchPointArg>>,
     /// Where the sketch plane stands along its normal.
     #[serde(default)]
     pub start: Option<ExprArg>,
@@ -201,9 +231,18 @@ impl Command for ComponentPieceSet {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let points = self.points.as_deref().map(profile_points).transpose()?;
+        let path = self.path.as_deref().map(profile_points).transpose()?;
+        let top = self.top.as_deref().map(profile_points).transpose()?;
         let text = |e: &Option<ExprArg>| e.as_ref().map(ExprArg::text).transpose();
         let (start, end, axis, angle) = (text(&self.start)?, text(&self.end)?, text(&self.axis)?, text(&self.angle)?);
         let sketched = points.is_some() || start.is_some() || end.is_some() || axis.is_some() || angle.is_some();
+        let wrong = |what: &str| Err(EngineError::invalid(format!("this piece has no {what}")));
+        if path.is_some() && !matches!(self.kind_hint(s), Some("sweep")) {
+            return wrong("path");
+        }
+        if top.is_some() && !matches!(self.kind_hint(s), Some("blend")) {
+            return wrong("top outline");
+        }
         edit_def(s, &self.type_ref, &[], |def| {
             let Some(item) = def.items.get_mut(self.index) else {
                 return Err(EngineError::not_found(format!("no piece {}", self.index)));
@@ -249,12 +288,57 @@ impl Command for ComponentPieceSet {
                         }
                     }
                 }
+                ComponentShape::Sweep { path: pa, offset, profile, .. } => {
+                    if end.is_some() || axis.is_some() || angle.is_some() {
+                        return Err(EngineError::invalid("a sweep has no end, axis or angle"));
+                    }
+                    if let Some(p) = points {
+                        *profile = p;
+                    }
+                    if let Some(p) = path {
+                        *pa = p;
+                    }
+                    if let Some(v) = start {
+                        *offset = v;
+                    }
+                }
+                ComponentShape::Blend { bottom, top: tp, offset, depth, .. } => {
+                    if axis.is_some() || angle.is_some() {
+                        return Err(EngineError::invalid("a blend has no axis or angle"));
+                    }
+                    if let Some(p) = points {
+                        *bottom = p;
+                    }
+                    if let Some(p) = top {
+                        *tp = p;
+                    }
+                    if start.is_some() || end.is_some() {
+                        let old_end = depth_end(offset, depth);
+                        let new_start = start.unwrap_or_else(|| offset.clone());
+                        *depth = depth_expr(&new_start, &end.unwrap_or(old_end));
+                        *offset = new_start;
+                    }
+                }
                 _ if sketched => return Err(EngineError::invalid("this piece is not a sketch")),
                 _ => {}
             }
             Ok(())
         })?;
         Ok(json!({ "index": self.index }))
+    }
+}
+
+impl ComponentPieceSet {
+    /// The kind of the piece named, if it is a sweep or a blend.
+    fn kind_hint(&self, s: &Session) -> Option<&'static str> {
+        let p = s.project();
+        let id = refs::element_type(p, &self.type_ref).ok()?;
+        let cc_core::TypeData::Component { def, .. } = &p.element_type(id)?.data else { return None };
+        match def.items.get(self.index).map(|i| &i.shape) {
+            Some(ComponentShape::Sweep { .. }) => Some("sweep"),
+            Some(ComponentShape::Blend { .. }) => Some("blend"),
+            _ => None,
+        }
     }
 }
 

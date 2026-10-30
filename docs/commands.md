@@ -1330,20 +1330,22 @@ No parameters.
 
 ### `component_piece_add`
 
-*edit* — Add a piece drawn as a sketch on the `plan`, `front` or `side` plane: an `extrusion` of the closed outline from `start` to `end` along the plane's normal (Z for the plan, Y for the front, X for the side), or a `revolution` about the line u = `axis` of the plane, `angle` degrees (default 360). Coordinates are numbers or expressions; a reference plane's name locks a coordinate (or `start`, `end`, `axis`) to that plane, so the piece follows it. With `void`, the piece is cut out of the solid pieces it overlaps.
+*edit* — Add a piece drawn as a sketch on the `plan`, `front` or `side` plane: an `extrusion` of the closed outline from `start` to `end` along the plane's normal (Z for the plan, Y for the front, X for the side); a `revolution` about the line u = `axis` of the plane, `angle` degrees (default 360); a `sweep` of the closed outline (`points`: u to the left of the path, v along the normal) along the open `path` drawn on the plane at `start`, mitered at its corners; or a `blend` from the outline at `start` to the `top` outline at `end`. Coordinates are numbers or expressions; a reference plane's name locks a coordinate (or `start`, `end`, `axis`) to that plane, so the piece follows it. With `void`, the piece is cut out of the solid pieces it overlaps.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `plane` | string | required | `plan`, `front` or `side`. |
-| `points` | [object, …] | required | The closed outline, in order. |
+| `points` | [object, …] | required | The closed outline, in order (a sweep's section, a blend's bottom). |
 | `type` | id or name | required | A type of the component: id or name. |
 | `angle` | number or string | optional | Revolutions: degrees turned (default 360). |
 | `axis` | number or string | optional | Revolutions: the axis, u = `axis` in the sketch plane. |
-| `end` | number or string | optional | Extrusions: where they end along the normal (default 0.1 past `start`). |
-| `kind` | string | optional | `extrusion` (default) or `revolution`. |
+| `end` | number or string | optional | Extrusions and blends: where they end along the normal (default 0.1 past `start`). |
+| `kind` | string | optional | `extrusion` (default), `revolution`, `sweep` or `blend`. |
 | `material` | string | optional | Project material name. |
 | `name` | string | optional | Name (default `Piece1`, `Piece2`…). |
+| `path` | [object, …] | optional | Sweeps: the open path the section follows. |
 | `start` | number or string | optional | Where the sketch plane stands along its normal (default 0). |
+| `top` | [object, …] | optional | Blends: the closed outline at `end`. |
 | `void` | boolean | optional | Cut out of the solid pieces it overlaps. |
 
 ### `component_piece_set`
@@ -1360,8 +1362,10 @@ No parameters.
 | `in_plan` | boolean | optional | Drawn in plans. |
 | `material` | string | optional | Project material name (empty for the default color). |
 | `name` | string | optional | New name. |
-| `points` | [object, …] | optional | New outline. |
+| `path` | [object, …] | optional | Sweeps: new path. |
+| `points` | [object, …] | optional | New outline (a sweep's section, a blend's bottom). |
 | `start` | number or string | optional | Where the sketch plane stands along its normal. |
+| `top` | [object, …] | optional | Blends: new top outline. |
 | `void` | boolean | optional | Cut out of the solid pieces it overlaps. |
 
 ### `component_piece_delete`

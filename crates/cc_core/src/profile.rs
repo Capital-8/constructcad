@@ -132,6 +132,10 @@ pub fn outline(points: &[ProfilePoint], lookup: &dyn Fn(&str) -> Option<f64>) ->
 }
 
 /// The inner points of the arc of `radius` from `a` to `b` (see [`ProfilePoint`]).
+pub(crate) fn arc_between(a: DVec2, b: DVec2, radius: f64, out: &mut Vec<DVec2>) -> Result<(), ProfileError> {
+    arc_points(a, b, radius, out)
+}
+
 fn arc_points(a: DVec2, b: DVec2, radius: f64, out: &mut Vec<DVec2>) -> Result<(), ProfileError> {
     let chord = a.distance(b);
     let r = radius.abs();

@@ -29,6 +29,7 @@ pub mod recovery;
 mod repair;
 mod schedule;
 pub mod stair;
+pub mod sweep;
 pub mod transform;
 mod types;
 pub mod units;

@@ -225,7 +225,12 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         crate::ribbon::env_group(ui, state, t!("group-selection"), &[Select]);
-        crate::ribbon::env_group(ui, state, t!("comp-env-group-forms"), &[CompExtrusion, CompRevolution]);
+        crate::ribbon::env_group(
+            ui,
+            state,
+            t!("comp-env-group-forms"),
+            &[CompExtrusion, CompRevolution, CompSweep, CompBlend],
+        );
         crate::ribbon::env_group(ui, state, t!("comp-env-group-datum"), &[CompRefPlane, CompDimension]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-component"), &[CompSaveFile]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-editor"), &[CompFinish, CompCancel]);
@@ -466,12 +471,15 @@ pub fn escape(state: &mut AppState) {
     env.tool = match &env.tool {
         EnvTool::RefPlane { first: Some(_) } => EnvTool::RefPlane { first: None },
         EnvTool::Dimension { first: Some(_) } => EnvTool::Dimension { first: None },
-        EnvTool::Sketch(s) if !s.points.is_empty() => EnvTool::Sketch(crate::component_sketch::Sketch {
-            view: None,
-            points: Vec::new(),
-            closed: false,
-            ..s.clone()
-        }),
+        EnvTool::Sketch(s) if !s.points.is_empty() || !s.bottom.is_empty() => {
+            EnvTool::Sketch(crate::component_sketch::Sketch {
+                view: None,
+                points: Vec::new(),
+                bottom: Vec::new(),
+                closed: false,
+                ..s.clone()
+            })
+        }
         EnvTool::Select => {
             env.pick = None;
             EnvTool::Select
@@ -770,6 +778,8 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         void: None,
         in_plan: None,
         points: None,
+        path: None,
+        top: None,
         start: None,
         end: None,
         axis: None,
@@ -809,12 +819,17 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         SketchPlane::Side => PlaneAxis::X,
     };
     match &item.shape {
-        S::Profile { plane, offset, depth, .. } => {
+        S::Profile { plane, offset, depth, .. } | S::Blend { plane, offset, depth, .. } => {
             let planes = planes_on(def, normal(*plane));
             let end = cc_engine::commands::component_piece::depth_end(offset, depth);
             set.start = expr_row(ui, state, &t!("comp-env-start"), &format!("piece-start:{index}"), offset, &planes)
                 .map(ExprArg::Text);
             set.end = expr_row(ui, state, &t!("comp-env-end"), &format!("piece-end:{index}"), &end, &planes)
+                .map(ExprArg::Text);
+        }
+        S::Sweep { plane, offset, .. } => {
+            let planes = planes_on(def, normal(*plane));
+            set.start = expr_row(ui, state, &t!("comp-env-start"), &format!("piece-start:{index}"), offset, &planes)
                 .map(ExprArg::Text);
         }
         S::Revolution { plane, offset, axis, angle, .. } => {
@@ -947,6 +962,44 @@ mod tests {
         assert_eq!(piece_at(&plan, DVec2::new(0.35, 0.15), 0.005), Some(before));
         delete_pick(&mut state);
         assert_eq!(component(&state).unwrap().1.items.len(), before);
+    }
+
+    #[test]
+    fn blends_take_two_outlines_and_sweeps_a_path() {
+        use crate::component_sketch::{PieceKind, Sketch, rect_points, snap};
+        let (mut state, table) = table_state();
+        open(&mut state, table);
+        let plan = view(&state, ComponentViewKind::Plan).unwrap();
+        let pt = |x: f64, y: f64| snap(&plan, DVec2::new(x, y), 1e-6);
+        let before = component(&state).unwrap().1.items.len();
+        // The bottom outline is kept; the top one makes the piece.
+        let sketch = Sketch {
+            view: Some(ComponentViewKind::Plan),
+            points: rect_points(&pt(-0.2, -0.2), &pt(0.2, 0.2)),
+            ..Sketch::new(PieceKind::Blend)
+        };
+        crate::component_sketch::finish_for_tests(&mut state, sketch);
+        let Some(EnvTool::Sketch(waiting)) = state.component_env.as_ref().map(|e| e.tool.clone()) else { panic!() };
+        assert_eq!(waiting.bottom.len(), 4);
+        assert_eq!(component(&state).unwrap().1.items.len(), before);
+        let top = Sketch { points: rect_points(&pt(-0.1, -0.1), &pt(0.1, 0.1)), ..waiting };
+        crate::component_sketch::finish_for_tests(&mut state, top);
+        let (_, def) = component(&state).unwrap();
+        assert!(matches!(def.items.last().map(|i| &i.shape), Some(cc_core::ComponentShape::Blend { .. })));
+        // A sweep's drawn points are its path, with the section from the options.
+        let sweep = Sketch {
+            view: Some(ComponentViewKind::Plan),
+            points: vec![pt(-0.5, 0.0), pt(0.0, 0.0), pt(0.0, 0.4)],
+            round: true,
+            ..Sketch::new(PieceKind::Sweep)
+        };
+        crate::component_sketch::finish_for_tests(&mut state, sweep);
+        let (_, def) = component(&state).unwrap();
+        let Some(cc_core::ComponentShape::Sweep { path, profile, .. }) = def.items.last().map(|i| &i.shape) else {
+            panic!()
+        };
+        assert_eq!((path.len(), profile.len()), (3, 2));
+        assert!(def.resolve(&Default::default()).1.is_empty());
     }
 
     #[test]
