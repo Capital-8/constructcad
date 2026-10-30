@@ -65,6 +65,10 @@ impl ConstructApp {
         let mut look = crate::preferences::Look::current(&cc.egui_ctx);
         crate::preferences::sync_look(&cc.egui_ctx, &mut state.prefs, &mut look);
         state.updates.start_if_due(&cc.egui_ctx, state.prefs.check_updates);
+        // The executables an update replaced on Windows stay as `.old` until now.
+        if let Ok(exe) = std::env::current_exe() {
+            crate::update_install::remove_old_executables(&exe);
+        }
         match path {
             Some(path) => actions::open_path(&mut state, path),
             None => {
@@ -375,6 +379,10 @@ impl eframe::App for ConstructApp {
     /// A clean exit: the changes were saved or discarded, so the copy goes.
     fn on_exit(&mut self) {
         self.recovery.exit();
+        // Update Now left the new version to start, or its installer to run.
+        if let Some(next) = self.state.updates.on_exit.take() {
+            crate::update_install::finish(&next);
+        }
     }
 }
 
