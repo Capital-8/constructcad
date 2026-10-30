@@ -149,12 +149,13 @@ With the Select tool, a click picks the element under the pointer (Ctrl adds or 
 
 ## Preferences
 
-*File → Preferences* (Ctrl+,, also at the bottom of the home screen) holds the settings of the app itself; they are not part of any project and are kept between sessions. Pick a page on the left. Changes show at once; **OK** keeps them and **Cancel** (or Esc) brings back the values the window opened with.
+*File → Preferences* (Ctrl+,, also at the bottom of the home screen) holds the settings of the app itself; they are not part of any project and are kept between sessions. Pick a page on the left. Changes show at once; **OK** keeps them and **Cancel** (or Esc) brings back the values the window opened with. **Restore defaults** (bottom left) resets the settings of the page shown; the language and the folders stay as they are.
 
 - **General**: the interface language, the theme (light, dark or the system's) and *Check for updates automatically* (see the update notice below).
 - **Interface**: the *Interface scale* (75–200%, everything grows: panels, icons, text; Ctrl+Plus and Ctrl+Minus change it too), the *Text size* (small, normal, large, extra large; only the text, at any scale), *Start with the ribbon collapsed*, *Detailed tooltips* (when off, command tooltips show only the name, the shortcut and why a command is unavailable, without the description and the engine command) and *Dragging in 3D views selects* (a left drag draws a selection box and Shift+drag orbits; off, the other way round).
 - **File locations**: the *Macros folder* (the macro file dialogs start there and *Manage → Run Macro* lists its macros), the *Projects folder* (where Open, Import IFC, Import CAD and the first Save of a new project start; a saved project is saved again next to itself), and the component library folders (*Add Folder…*, *Remove*). The component library window's *Manage Folders…* opens this page. A folder that no longer exists is marked *Not found* and skipped.
 - **Saving**: the *Autosave* interval (off, or every 1, 2, 5, 10 or 15 minutes; see below) and how many recent projects the home screen lists.
+- **Keyboard shortcuts**: every command with its keys. Click a command's box and type two letters to give it new keys (they replace the old ones at once, in tooltips, the palette and views); keys another command already has are refused and the row says which. Leave the box empty to take the keys away, and *Default* brings back the original ones. Search finds a command by name or keys. Ctrl shortcuts, Delete and Esc are fixed.
 
 ## Update notice
 

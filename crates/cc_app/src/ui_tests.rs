@@ -800,6 +800,31 @@ fn library_manages_folders_in_preferences() {
     assert!(harness.state().prefs.library_folders.is_empty());
 }
 
+/// Shortcuts: typing two letters gives a command new keys, and Default
+/// brings the old ones back.
+#[test]
+fn preferences_change_shortcuts() {
+    let mut state = sample_state();
+    crate::preferences::open(&mut state, crate::preferences::Section::Shortcuts);
+    let mut harness = app_harness(state);
+    let label = crate::commands::UiCommand::Demolish.label(harness.state());
+    harness.run();
+    // The search field has the focus; one command is left.
+    harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text(&label);
+    harness.run();
+    harness.query_all_by_role(Role::TextInput).find(|n| n.value().as_deref() == Some("DE")).unwrap().click();
+    harness.run();
+    harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text("QZ");
+    harness.run();
+    assert_eq!(harness.state().prefs.shortcut_keys.get("Demolish").map(String::as_str), Some("QZ"));
+    harness.get_by_label(&format!("{} {label}", t!("pref-shortcut-reset"))).click();
+    harness.run();
+    assert!(harness.state().prefs.shortcut_keys.is_empty(), "Default restores the keys");
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    crate::commands::set_key_overrides(&Default::default());
+}
+
 #[test]
 fn preferences_snapshots() {
     if !snapshots_requested() {
@@ -810,7 +835,7 @@ fn preferences_snapshots() {
         let mut state = sample_state();
         state.prefs.library_folders = vec![std::path::PathBuf::from("/no/such/library/ccad")];
         crate::preferences::open(&mut state, section);
-        let mut harness = themed_harness(state, egui::vec2(900.0, 480.0), egui::Theme::Light, |ui, state| {
+        let mut harness = themed_harness(state, egui::vec2(940.0, 600.0), egui::Theme::Light, |ui, state| {
             crate::preferences::show(ui.ctx(), state)
         });
         harness.run();

@@ -312,7 +312,7 @@ pub fn command_tooltip(response: Response, state: &AppState, command: UiCommand,
         ui.horizontal(|ui| {
             ui.label(RichText::new(&title).family(theme::semibold()).color(PALETTE.text));
             if let Some(keys) = command.shortcut() {
-                key_cap(ui, keys);
+                key_cap(ui, &keys);
             }
         });
         if detailed {
@@ -328,7 +328,7 @@ pub fn command_tooltip(response: Response, state: &AppState, command: UiCommand,
 }
 
 /// A keyboard shortcut drawn as a key cap.
-fn key_cap(ui: &mut Ui, keys: &str) {
+pub(crate) fn key_cap(ui: &mut Ui, keys: &str) -> egui::Response {
     egui::Frame::new()
         .fill(PALETTE.surface)
         .stroke(Stroke::new(1.0, PALETTE.border))
@@ -336,7 +336,8 @@ fn key_cap(ui: &mut Ui, keys: &str) {
         .inner_margin(egui::Margin::symmetric(5, 1))
         .show(ui, |ui| {
             ui.label(RichText::new(keys).size(11.0).color(PALETTE.text_muted));
-        });
+        })
+        .response
 }
 
 /// A small quick access button for `command`.
