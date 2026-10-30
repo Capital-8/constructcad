@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-30
+
 ### Added
 
 - Push/Pull on masses (#71). *Massing → Push/Pull* (`PP`) in a 3D view: click a face of a mass, move the pointer along its arrow or type the distance, and click or press Enter. The top changes the height, the bottom the base, a side of an extrusion moves its edge with the neighbors keeping their directions; a mass with a floor at every level it spans keeps one at every level it spans after. New command `mass_face_move`.
@@ -329,7 +331,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/francisreboucas/constructcad/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/francisreboucas/constructcad/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/francisreboucas/constructcad/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/francisreboucas/constructcad/compare/v0.5.0...v0.6.0
