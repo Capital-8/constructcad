@@ -11,6 +11,7 @@ mod clipboard;
 mod commands;
 mod component_editor;
 mod component_env;
+mod component_sketch;
 mod dialog;
 mod dialogs;
 mod dim_edit;

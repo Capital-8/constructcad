@@ -33,6 +33,8 @@ const PICK_PX: f32 = 6.0;
 pub enum Pick {
     Plane(String),
     Dimension(usize),
+    /// A piece, by its index in the definition.
+    Piece(usize),
 }
 
 /// The tool of the environment.
@@ -44,6 +46,8 @@ pub enum EnvTool {
     RefPlane { first: Option<(ComponentViewKind, DVec2)> },
     /// Two parallel planes, then the line's place.
     Dimension { first: Option<(ComponentViewKind, String)> },
+    /// An outline drawn in a view, made into a piece.
+    Sketch(crate::component_sketch::Sketch),
 }
 
 /// Pan and zoom of one view.
@@ -179,6 +183,17 @@ pub fn plane_at(view: &ComponentView, p: DVec2, tol: f64) -> Option<String> {
         .map(|(_, pl)| pl.name.clone())
 }
 
+/// The piece with an edge within `tol` of `p`.
+pub fn piece_at(view: &ComponentView, p: DVec2, tol: f64) -> Option<usize> {
+    view.pieces
+        .iter()
+        .flat_map(|(i, edges)| edges.iter().map(move |(a, b)| (*i, *a, *b)))
+        .map(|(i, a, b)| (cc_geom::polygon::closest_on_segment(a, b, p).0.distance(p), i))
+        .filter(|(d, _)| *d <= tol)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, i)| i)
+}
+
 /// The dimension whose text is within `tol` of `p`.
 pub fn dimension_at(view: &ComponentView, p: DVec2, tol: f64) -> Option<usize> {
     view.dimensions
@@ -210,6 +225,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         crate::ribbon::env_group(ui, state, t!("group-selection"), &[Select]);
+        crate::ribbon::env_group(ui, state, t!("comp-env-group-forms"), &[CompExtrusion, CompRevolution]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-datum"), &[CompRefPlane, CompDimension]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-component"), &[CompSaveFile]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-editor"), &[CompFinish, CompCancel]);
@@ -217,9 +233,13 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
 }
 
 /// The hint of the active tool, for the options bar.
-pub fn options(ui: &mut Ui, state: &AppState) {
+pub fn options(ui: &mut Ui, state: &mut AppState) {
     let Some(env) = &state.component_env else { return };
     let hint = match &env.tool {
+        EnvTool::Sketch(_) => {
+            crate::component_sketch::options(ui, state);
+            return;
+        }
         EnvTool::Select => t!("comp-env-hint-select"),
         EnvTool::RefPlane { first: None } => t!("comp-env-hint-plane"),
         EnvTool::RefPlane { first: Some(_) } => t!("comp-env-hint-plane-second"),
@@ -326,6 +346,13 @@ fn canvas(ui: &mut Ui, state: &mut AppState, kind: ComponentViewKind) {
     {
         painter.circle_stroke(xf.to_screen(d.text_pos), 10.0, Stroke::new(1.5, PALETTE.accent));
     }
+    if let Some(Pick::Piece(i)) = pick
+        && let Some((_, edges)) = view.pieces.iter().find(|(item, _)| *item == i)
+    {
+        for (a, b) in edges {
+            painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], Stroke::new(2.0, PALETTE.accent));
+        }
+    }
     let hovered_plane = hover.and_then(|p| plane_at(&view, p, tol));
     if let Some(name) = &hovered_plane {
         highlight(name, PALETTE.accent.gamma_multiply(0.5));
@@ -335,11 +362,17 @@ fn canvas(ui: &mut Ui, state: &mut AppState, kind: ComponentViewKind) {
     match tool {
         EnvTool::Select => {
             if clicked && let Some(p) = hover {
-                let picked = dimension_at(&view, p, tol * 2.0).map(Pick::Dimension).or(hovered_plane.map(Pick::Plane));
+                let picked = dimension_at(&view, p, tol * 2.0)
+                    .map(Pick::Dimension)
+                    .or(hovered_plane.map(Pick::Plane))
+                    .or_else(|| piece_at(&view, p, tol).map(Pick::Piece));
                 if let Some(env) = state.component_env.as_mut() {
                     env.pick = picked;
                 }
             }
+        }
+        EnvTool::Sketch(sketch) => {
+            crate::component_sketch::handle(state, sketch, &view, kind, &xf, &painter, hover, clicked, tol);
         }
         EnvTool::RefPlane { first } => {
             let Some(p) = hover else { return };
@@ -433,6 +466,12 @@ pub fn escape(state: &mut AppState) {
     env.tool = match &env.tool {
         EnvTool::RefPlane { first: Some(_) } => EnvTool::RefPlane { first: None },
         EnvTool::Dimension { first: Some(_) } => EnvTool::Dimension { first: None },
+        EnvTool::Sketch(s) if !s.points.is_empty() => EnvTool::Sketch(crate::component_sketch::Sketch {
+            view: None,
+            points: Vec::new(),
+            closed: false,
+            ..s.clone()
+        }),
         EnvTool::Select => {
             env.pick = None;
             EnvTool::Select
@@ -450,6 +489,10 @@ pub fn delete_pick(state: &mut AppState) {
         Pick::Dimension(index) => {
             crate::actions::run_command(state, cmd::ComponentDimensionDelete { type_ref: t, index })
         }
+        Pick::Piece(index) => crate::actions::run_command(
+            state,
+            cc_engine::commands::component_piece::ComponentPieceDelete { type_ref: t, index },
+        ),
     };
     if done.is_some()
         && let Some(env) = state.component_env.as_mut()
@@ -499,6 +542,11 @@ pub fn panel(ui: &mut Ui, state: &mut AppState) {
             Some(Pick::Dimension(index)) => {
                 crate::table::section(ui, "comp-env-dimension", t!("comp-env-dimension"), |ui| {
                     dimension_props(ui, state, &def, index);
+                });
+            }
+            Some(Pick::Piece(index)) => {
+                crate::table::section(ui, "comp-env-piece", t!("comp-env-piece"), |ui| {
+                    crate::component_env::piece_props(ui, state, &def, index);
                 });
             }
             None => {}
@@ -672,6 +720,136 @@ fn dimension_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
     }
 }
 
+/// The planes square to `axis`, origin ones first (for locking an end).
+fn planes_on(def: &cc_core::ComponentDef, axis: PlaneAxis) -> Vec<String> {
+    def.all_ref_planes().into_iter().filter(|p| p.axis == axis).map(|p| p.name).collect()
+}
+
+/// An expression field with a menu that locks it to a plane.
+fn expr_row(
+    ui: &mut Ui,
+    state: &mut AppState,
+    label: &str,
+    key: &str,
+    current: &str,
+    planes: &[String],
+) -> Option<String> {
+    let mut out = None;
+    crate::table::row(ui, label, |ui| {
+        ui.horizontal(|ui| {
+            out = draft_field(ui, state, key, current, 130.0);
+            if !planes.is_empty() {
+                ui.menu_button("⌖", |ui| {
+                    for name in planes {
+                        if ui.button(name).clicked() {
+                            out = Some(name.clone());
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(t!("comp-env-lock-plane"));
+            }
+        });
+    });
+    out
+}
+
+/// A piece: name, solid or void, material, shown in plans, and where a
+/// sketched one starts and ends (or its axis and angle).
+pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDef, index: usize) {
+    use cc_core::ComponentShape as S;
+    use cc_engine::commands::component_piece::{ComponentPieceSet, ExprArg};
+    let Some(item) = def.items.get(index).cloned() else { return };
+    let t = type_ref(state);
+    let mut set = ComponentPieceSet {
+        type_ref: t,
+        index,
+        name: None,
+        material: None,
+        void: None,
+        in_plan: None,
+        points: None,
+        start: None,
+        end: None,
+        axis: None,
+        angle: None,
+    };
+    crate::table::row(ui, &t!("prop-name"), |ui| {
+        set.name = draft_field(ui, state, &format!("piece-name:{index}"), &item.name, 150.0)
+    });
+    let mut void = item.void;
+    crate::table::row(ui, &t!("comp-sketch-void"), |ui| ui.checkbox(&mut void, ""));
+    if void != item.void {
+        set.void = Some(void);
+    }
+    let mut in_plan = item.in_plan;
+    crate::table::row(ui, &t!("comp-env-in-plan"), |ui| ui.checkbox(&mut in_plan, ""));
+    if in_plan != item.in_plan {
+        set.in_plan = Some(in_plan);
+    }
+    let materials: Vec<String> = state.project().materials.iter().map(|m| m.name.clone()).collect();
+    let mut material = item.material.clone();
+    crate::table::row(ui, &t!("col-material"), |ui| {
+        egui::ComboBox::from_id_salt("comp-env-material")
+            .selected_text(if material.is_empty() { t!("comp-env-no-label") } else { material.clone() })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut material, String::new(), t!("comp-env-no-label"));
+                for m in &materials {
+                    ui.selectable_value(&mut material, m.clone(), m);
+                }
+            });
+    });
+    if material != item.material {
+        set.material = Some(material);
+    }
+    let normal = |plane: SketchPlane| match plane {
+        SketchPlane::Plan => PlaneAxis::Z,
+        SketchPlane::Front => PlaneAxis::Y,
+        SketchPlane::Side => PlaneAxis::X,
+    };
+    match &item.shape {
+        S::Profile { plane, offset, depth, .. } => {
+            let planes = planes_on(def, normal(*plane));
+            let end = cc_engine::commands::component_piece::depth_end(offset, depth);
+            set.start = expr_row(ui, state, &t!("comp-env-start"), &format!("piece-start:{index}"), offset, &planes)
+                .map(ExprArg::Text);
+            set.end = expr_row(ui, state, &t!("comp-env-end"), &format!("piece-end:{index}"), &end, &planes)
+                .map(ExprArg::Text);
+        }
+        S::Revolution { plane, offset, axis, angle, .. } => {
+            let vertical: Vec<String> = def
+                .all_ref_planes()
+                .into_iter()
+                .filter(|p| p.axis.in_view(*plane) == Some(true))
+                .map(|p| p.name)
+                .collect();
+            let planes = planes_on(def, normal(*plane));
+            set.start = expr_row(ui, state, &t!("comp-env-start"), &format!("piece-start:{index}"), offset, &planes)
+                .map(ExprArg::Text);
+            set.axis = expr_row(ui, state, &t!("comp-env-axis-line"), &format!("piece-axis:{index}"), axis, &vertical)
+                .map(ExprArg::Text);
+            set.angle = expr_row(ui, state, &t!("comp-env-angle"), &format!("piece-angle:{index}"), angle, &[])
+                .map(ExprArg::Text);
+        }
+        _ => {}
+    }
+    let changed = set.name.is_some()
+        || set.void.is_some()
+        || set.in_plan.is_some()
+        || set.material.is_some()
+        || set.start.is_some()
+        || set.end.is_some()
+        || set.axis.is_some()
+        || set.angle.is_some();
+    if changed {
+        crate::actions::run_command(state, set);
+    }
+    if ui.button(t!("action-delete")).clicked() {
+        delete_pick(state);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -730,6 +908,45 @@ mod tests {
         assert!(state.component_env.is_none());
         let TypeData::Component { def, .. } = &state.project().element_type(table).unwrap().data else { panic!() };
         assert!(def.ref_planes.is_empty() && def.param("Half").is_none());
+    }
+
+    #[test]
+    fn sketched_rectangles_become_pieces_locked_to_planes() {
+        use crate::component_sketch::{PieceKind, Sketch, rect_points, snap};
+        let (mut state, table) = table_state();
+        open(&mut state, table);
+        add_plane(&mut state, PlaneAxis::X, 0.3);
+        let plan = view(&state, ComponentViewKind::Plan).unwrap();
+        let a = snap(&plan, DVec2::new(0.301, 0.1), 0.01);
+        let b = snap(&plan, DVec2::new(0.0, 0.2), 0.01);
+        assert_eq!(a.u, "Plane1");
+        let sketch = Sketch {
+            view: Some(ComponentViewKind::Plan),
+            points: rect_points(&a, &b),
+            void: true,
+            ..Sketch::new(PieceKind::Extrusion)
+        };
+        let before = component(&state).unwrap().1.items.len();
+        crate::component_sketch::finish_for_tests(&mut state, sketch);
+        let (_, def) = component(&state).unwrap();
+        assert_eq!(def.items.len(), before + 1);
+        let piece = def.items.last().unwrap();
+        assert!(piece.void);
+        let cc_core::ComponentShape::Profile { points, .. } = &piece.shape else { panic!("{:?}", piece.shape) };
+        assert!(points.iter().any(|p| p.u == "Plane1"));
+        // The new piece is selected and picked by its edges.
+        assert_eq!(state.component_env.as_ref().unwrap().pick, Some(Pick::Piece(before)));
+        let plan = view(&state, ComponentViewKind::Plan).unwrap();
+        assert!(plan.pieces.iter().any(|(i, _)| *i == before));
+        // Moving the plane moves the piece; Delete removes it.
+        let t = type_ref(&state);
+        let command =
+            cmd::ComponentRefPlaneSet { type_ref: t, name: "Plane1".into(), at: Some("0.35".into()), rename: None };
+        crate::actions::run_command(&mut state, command).unwrap();
+        let plan = view(&state, ComponentViewKind::Plan).unwrap();
+        assert_eq!(piece_at(&plan, DVec2::new(0.35, 0.15), 0.005), Some(before));
+        delete_pick(&mut state);
+        assert_eq!(component(&state).unwrap().1.items.len(), before);
     }
 
     #[test]
