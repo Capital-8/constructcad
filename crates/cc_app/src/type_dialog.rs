@@ -352,7 +352,9 @@ fn identity(ui: &mut Ui, state: &mut AppState, tid: ElementTypeId, info: &TypeIn
     ];
     for (label, field) in fields {
         let mut text = field(&mut info.clone()).clone();
-        let r = row(ui, &tr(label), |ui| ui.text_edit_singleline(&mut text));
+        let r = row(ui, &tr(label), |ui| {
+            crate::table::live_text(ui, ("type-info", tid, label), &mut text, |ui, t| ui.text_edit_singleline(t))
+        });
         if r.changed() {
             update(state, tid, label, |t| *field(&mut t.info) = text);
         }

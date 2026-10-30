@@ -278,13 +278,17 @@ fn row(ui: &mut Ui, state: &mut AppState, id: SystemId, s: &cc_core::MepSystem, 
         crate::engine_edit::system(state, id, Some(key((id, "color"))), |x| x.color = Some(color));
     }
     let mut code = s.code.clone();
-    let r = ui.add_sized([60.0, 22.0], egui::TextEdit::singleline(&mut code));
+    let r = crate::table::live_text(ui, ("system-code", id), &mut code, |ui, t| {
+        ui.add_sized([60.0, 22.0], egui::TextEdit::singleline(t))
+    });
     if r.changed() {
         crate::engine_edit::system(state, id, Some(key((id, "code"))), |x| x.code = code);
     }
     done(state, &r);
     let mut name = s.name.clone();
-    let r = ui.add_sized([180.0, 22.0], egui::TextEdit::singleline(&mut name));
+    let r = crate::table::live_text(ui, ("system-name", id), &mut name, |ui, t| {
+        ui.add_sized([180.0, 22.0], egui::TextEdit::singleline(t))
+    });
     if r.changed() && !name.trim().is_empty() {
         crate::engine_edit::system(state, id, Some(key((id, "name"))), |x| x.name = name);
     }

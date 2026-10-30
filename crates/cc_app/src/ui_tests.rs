@@ -966,3 +966,59 @@ fn structure_automation_redraws_panels_and_views() {
         }
     }
 }
+
+/// Renaming a view in the project browser ends with Enter or a click
+/// elsewhere (issue #82: the field kept the focus for good, so the name
+/// never changed and no other field took typing).
+#[test]
+fn renaming_a_view_in_the_browser_ends() {
+    let mut state = sample_state();
+    let original = state.project().views_of(cc_core::ViewCategory::ThreeD).next().map(|v| v.id).unwrap();
+    let out = state.session.execute("view_duplicate", serde_json::json!({"view": original.0})).unwrap();
+    let copy = cc_core::ViewId(out["id"].as_u64().unwrap());
+    state.rename = Some((copy, String::new()));
+    let mut harness = themed_harness(state, egui::vec2(400.0, 900.0), egui::Theme::Light, |ui, state| {
+        egui::ScrollArea::vertical().show(ui, |ui| crate::browser::show(ui, state));
+    });
+    harness.run();
+    harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text("Perspectiva");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(harness.state().rename.is_none(), "Enter ends the rename");
+    assert_eq!(harness.state().project().view(copy).map(|v| v.name.as_str()), Some("Perspectiva"));
+
+    // A click on another row ends it too and keeps the name.
+    harness.state_mut().rename = Some((copy, "Vista externa".into()));
+    harness.run();
+    let other = harness.state().project().view(original).map(|v| v.name.clone()).unwrap();
+    harness.get_by_label(&other).click();
+    harness.run();
+    harness.run();
+    assert!(harness.state().rename.is_none(), "a click elsewhere ends the rename");
+    assert_eq!(harness.state().project().view(copy).map(|v| v.name.as_str()), Some("Vista externa"));
+}
+
+/// Typed one key per frame, as people type, a name keeps its spaces and
+/// can be emptied and typed again, though the command trims the name and
+/// refuses an empty one at every key (issue #82: fields went back to the
+/// model's value under the cursor).
+#[test]
+fn names_typed_key_by_key_keep_spaces_and_survive_emptying() {
+    let mut state = sample_state();
+    state.dialogs.levels = true;
+    let (level, old) = state.project().levels.last().map(|l| (l.id, l.name.clone())).unwrap();
+    let mut harness = app_harness(state);
+    harness.run();
+    harness.query_all_by_role(Role::TextInput).find(|n| n.value().as_deref() == Some(old.as_str())).unwrap().click();
+    harness.run();
+    for _ in 0..old.chars().count() {
+        harness.key_press(egui::Key::End);
+        harness.key_press(egui::Key::Backspace);
+        harness.run();
+    }
+    for ch in "Piso 2 B".chars() {
+        harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text(&ch.to_string());
+        harness.run();
+    }
+    assert_eq!(harness.state().project().level_name(level), "Piso 2 B");
+}

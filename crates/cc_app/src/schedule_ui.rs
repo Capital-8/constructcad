@@ -207,7 +207,10 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
                 },
             );
             ui.label(theme::muted(t!("schedule-contains")));
-            let r = ui.add_enabled(field.is_some(), egui::TextEdit::singleline(&mut text).desired_width(160.0));
+            let enabled = field.is_some();
+            let r = crate::table::live_text(ui, ("schedule-filter", view), &mut text, |ui, t| {
+                ui.add_enabled(enabled, egui::TextEdit::singleline(t).desired_width(160.0))
+            });
             let new = field.map(|f| (f, text));
             if new != def.filter {
                 crate::engine_edit::view(state, view, Some(view.0 ^ 0x5c4e), |x| {

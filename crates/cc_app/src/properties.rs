@@ -96,7 +96,9 @@ fn dimension_value_row(ui: &mut Ui, state: &mut AppState, id: ElementId, d: &cc_
 
 fn text_row(ui: &mut Ui, label: &str, value: String) -> (Response, String) {
     let mut text = value;
-    let r = row(ui, label, |ui| ui.text_edit_singleline(&mut text));
+    let r = row(ui, label, |ui| {
+        crate::table::live_text(ui, ("prop-text", label), &mut text, |ui, t| ui.text_edit_singleline(t))
+    });
     (r, text)
 }
 
