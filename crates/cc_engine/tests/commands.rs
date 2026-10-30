@@ -1779,6 +1779,39 @@ fn arc_walls_through_commands() {
     assert!(host["derived"]["radius"].is_number());
 }
 
+/// Align by faces, as picked (#86): a wall's face goes onto another wall's
+/// face, not its location line onto the other's; a wall at an angle turns
+/// until parallel, then moves.
+#[test]
+fn align_walls_by_the_faces_picked() {
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    let a = id(&run(&mut s, "wall_create", json!({"start": [0.0, 0.0], "end": [5.0, 0.0]})));
+    let half = run(&mut s, "element_get", json!({"id": a}))["derived"]["thickness"].as_f64().unwrap() / 2.0;
+    let b = id(&run(&mut s, "wall_create", json!({"start": [0.0, 3.0], "end": [5.0, 3.0]})));
+    // B's south face onto A's north face: B's line ends a whole thickness from A's.
+    let args = json!({"id": b, "reference": a, "pick": [2.0, 3.0 - half], "reference_pick": [2.0, half]});
+    run(&mut s, "element_align", args);
+    let w = run(&mut s, "element_get", json!({"id": b}));
+    assert!(near(w["params"]["start"][1].as_f64().unwrap(), 2.0 * half), "{w}");
+    assert!(near(w["params"]["end"][1].as_f64().unwrap(), 2.0 * half), "{w}");
+
+    // A wall at an angle turns about the point picked, then its face lands on A's south face.
+    let c = id(&run(&mut s, "wall_create", json!({"start": [0.0, -6.0], "end": [4.0, -5.0]})));
+    let dir = glam::DVec2::new(4.0, 1.0).normalize();
+    let north = dir.perp() * half;
+    let pick = glam::DVec2::new(2.0, -5.5) + north;
+    run(
+        &mut s,
+        "element_align",
+        json!({"id": c, "reference": a, "pick": pick.to_array(), "reference_pick": [2.0, -half]}),
+    );
+    let w = run(&mut s, "element_get", json!({"id": c}));
+    let (y0, y1) = (w["params"]["start"][1].as_f64().unwrap(), w["params"]["end"][1].as_f64().unwrap());
+    assert!(near(y0, y1), "parallel now: {w}");
+    assert!(near(y0, -2.0 * half), "its north face on A's south face: {w}");
+}
+
 /// Align works in plan, whatever the levels: a column of the upper floor
 /// moves onto the faces of the column below by the outline edges picked,
 /// onto a grid by its center, and a wall onto a column face.
@@ -1818,10 +1851,15 @@ fn align_columns_across_levels() {
     let (x, y, _) = position(&mut s, above);
     assert!(near(x, 2.0) && near(y, 0.0), "({x}, {y})");
 
-    // A turned column has no edge parallel to the reference face.
+    // A turned column turns until the side picked is parallel to the face, then moves onto it (#86).
     run(&mut s, "element_set", json!({"id": above, "params": {"rotation_deg": 30.0}}));
-    let turned = json!({"id": above, "reference": below, "pick": [2.2, 0.0], "reference_pick": [0.2, 0.0]});
-    assert_eq!(fails(&mut s, "element_align", turned), ErrorCode::Rejected);
+    let side = [2.0 + 0.15 * 30f64.to_radians().cos(), 0.15 * 30f64.to_radians().sin()];
+    let turned = json!({"id": above, "reference": below, "pick": side, "reference_pick": [0.2, 0.0]});
+    run(&mut s, "element_align", turned);
+    let (x, _, _) = position(&mut s, above);
+    let rotation = run(&mut s, "element_get", json!({"id": above}))["params"]["rotation_deg"].as_f64().unwrap();
+    assert!(near(rotation.rem_euclid(90.0).min(90.0 - rotation.rem_euclid(90.0)), 0.0), "{rotation}");
+    assert!(near(x, 0.0), "its east side on the east face: {x}");
 
     // A wall moves its line onto the column's west face.
     let wall = id(&run(&mut s, "wall_create", json!({"start": [-3.0, -1.0], "end": [-3.0, 1.0]})));

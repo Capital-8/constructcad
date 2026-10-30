@@ -473,14 +473,8 @@ fn mirror(ctx: &Ctx, state: &mut AppState, draw: bool, targets: &BTreeSet<Elemen
     }
 }
 
-/// The plan line an element aligns by when picked at `at`: its location
-/// line, or the edge of its outline nearest to the pick.
-fn align_line(state: &AppState, view_id: ViewId, id: ElementId, at: DVec2) -> Option<(DVec2, DVec2)> {
-    match state.project().element(id).and_then(cc_core::wall_ops::path_of) {
-        Some(cc_core::wall_ops::Path::Line(a, b)) => Some((a, b)),
-        Some(cc_core::wall_ops::Path::Arc(_)) => None,
-        None => state.session.geom_for(view_id).nearest_plan_edge(id, at),
-    }
+fn align_line(state: &AppState, _view_id: ViewId, id: ElementId, at: DVec2) -> Option<(DVec2, DVec2)> {
+    crate::modify::align_edge(state, id, at)
 }
 
 /// Align: click the reference element's face (or line), then the face of the
