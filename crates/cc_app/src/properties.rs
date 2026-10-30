@@ -185,6 +185,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     }
 
     match &el.kind {
+        ElementKind::Mass(m) => mass_props(ui, state, &el, m),
         ElementKind::Component(c) => component_props(ui, state, &el, c),
         ElementKind::Wall(w) => {
             section(ui, "constraints", t!("section-constraints"), |ui| wall_constraints(ui, state, &el, w));
@@ -794,6 +795,62 @@ fn component_services(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_co
                 readonly_row(ui, &t!("col-drain-units"), format::number(drain_units, 1));
                 readonly_row(ui, &t!("prop-supply-weight"), format::number(supply_weight, 2));
             }
+        }
+    });
+}
+
+/// A conceptual mass: its level, base offset and height, whether it is a
+/// loft, and its mass floors (a box per level it spans, with the area of
+/// each and the totals).
+fn mass_props(ui: &mut Ui, state: &mut AppState, el: &Element, m: &cc_core::mass::Mass) {
+    let id = el.id;
+    section(ui, "constraints", t!("section-constraints"), |ui| {
+        level_row(ui, state, el);
+        length_row(ui, state, &t!("prop-base-offset"), id, "base", m.base_offset, |e, v| {
+            if let ElementKind::Mass(m) = &mut e.kind {
+                m.base_offset = v;
+            }
+        });
+        length_row(ui, state, &t!("prop-height"), id, "height", m.height, |e, v| {
+            if let ElementKind::Mass(m) = &mut e.kind {
+                m.height = v.max(0.1);
+            }
+        });
+        let shape = if m.top.is_some() { t!("mass-loft") } else { t!("mass-extrusion") };
+        readonly_row(ui, &t!("prop-mass-shape"), shape);
+    });
+    let geom = state.session.geom().masses.get(&id).cloned();
+    section(ui, "mass-floors", t!("section-mass-floors"), |ui| {
+        let project = state.project();
+        let base = project.level_elevation(el.level) + m.base_offset;
+        let spanned = cc_engine::commands::mass::spanned_levels(project, base, base + m.height);
+        let rows: Vec<_> = spanned.iter().map(|l| (*l, project.level_name(*l).to_string())).collect();
+        if rows.is_empty() {
+            readonly_row(ui, &t!("section-mass-floors"), t!("mass-no-levels"));
+        }
+        for (level, name) in rows {
+            let mut on = m.floors.contains(&level);
+            let area = geom.as_ref().and_then(|g| g.floors.iter().find(|f| f.level == level)).map(|f| f.area);
+            let changed = row(ui, &name, |ui| {
+                let r = ui.checkbox(&mut on, area.map(format::area).unwrap_or_default());
+                r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, &name));
+                r.changed()
+            });
+            if changed {
+                let mut levels: Vec<_> = m.floors.iter().copied().filter(|l| *l != level).collect();
+                if on {
+                    levels.push(level);
+                }
+                let levels = levels.into_iter().map(|l| cc_engine::Ref::Id(l.0)).collect();
+                actions::run_command(
+                    state,
+                    cc_engine::commands::mass::MassFloorsSet { id: id.0, levels: Some(levels) },
+                );
+            }
+        }
+        if let Some(g) = &geom {
+            readonly_row(ui, &t!("col-floor-area"), format::area(g.floor_area()));
+            readonly_row(ui, &t!("prop-volume"), format::volume(g.volume));
         }
     });
 }

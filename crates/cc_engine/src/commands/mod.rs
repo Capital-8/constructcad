@@ -13,6 +13,7 @@ pub mod framing;
 pub mod graphics;
 pub mod io;
 pub mod levels;
+pub mod mass;
 pub mod materials;
 pub mod mep;
 pub mod modify;

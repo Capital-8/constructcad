@@ -1383,12 +1383,13 @@ impl<'a> Exporter<'a> {
         let mut base =
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
-            // Rooms, grids, dimensions, texts and imported drawings have no IFC type object.
+            // Rooms, grids, dimensions, texts, imported drawings and masses have no IFC type object.
             TypeData::Room {}
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
-            | TypeData::CadImport {} => {
+            | TypeData::CadImport {}
+            | TypeData::Mass { .. } => {
                 return None;
             }
             TypeData::Component { ref def, .. } => {

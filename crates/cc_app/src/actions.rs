@@ -144,6 +144,9 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
     if category == Category::Ramp && state.project().default_type(Category::Ramp).is_none() {
         run_command(state, cc_engine::commands::ramp::RampTypeCreate::default());
     }
+    if category == Category::Mass && state.project().default_type(Category::Mass).is_none() {
+        run_command(state, cc_engine::commands::mass::MassTypeCreate::default());
+    }
     match Tool::for_category(state.project(), category) {
         Some(tool) => {
             // Doors and windows also go on walls clicked in a 3D view.

@@ -1096,3 +1096,31 @@ fn update_install_dialog_offers_what_is_left_to_do() {
     assert_eq!(harness.state().updates.on_exit, Some(next), "the installer runs when the app closes");
     assert!(!harness.state().quit_confirmed, "On Exit does not close the app");
 }
+
+/// A mass's properties list a box per level it spans with that floor's area;
+/// clearing one takes the mass floor away (#31).
+#[test]
+fn mass_floors_are_chosen_in_the_properties() {
+    let mut state = sample_state();
+    let out = state
+        .session
+        .execute("mass_create", serde_json::json!({"outline": [[0, 0], [10, 0], [10, 6], [0, 6]], "height": 5.5}))
+        .unwrap();
+    let mass = cc_core::ElementId(out["id"].as_u64().unwrap());
+    state.selection = [mass].into_iter().collect();
+    let ground = state.project().levels[0].name.clone();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1400.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.query_by_label(&t!("section-mass-floors")).is_some());
+    let floors = |h: &Harness<'_, AppState>| match &h.state().project().element(mass).unwrap().kind {
+        cc_core::ElementKind::Mass(m) => m.floors.len(),
+        _ => 0,
+    };
+    let before = floors(&harness);
+    assert!(before >= 1, "the mass spans the ground level at least");
+    harness.get_by_role_and_label(Role::CheckBox, &ground).click();
+    harness.run();
+    assert_eq!(floors(&harness), before - 1);
+}

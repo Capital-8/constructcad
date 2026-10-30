@@ -2464,3 +2464,100 @@ fn ramps_shapes_rules_and_railings() {
     assert!(ifc.contains("IFCRAMPTYPE("));
     assert_representation_types(&ifc);
 }
+
+/// Conceptual masses (#31): an extrusion and a loft, their mass floors at
+/// the levels they span with areas, perimeters and volume, choosing the
+/// floors, schedules, moving, undo, saving, and a level deleted under them.
+#[test]
+fn masses_and_mass_floors() {
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    let levels = run(&mut s, "levels_list", json!({}));
+    let ground = id(&levels[0]);
+    let first_z = levels[1]["elevation"].as_f64().unwrap();
+    let top_level = id(&run(&mut s, "level_create", json!({"name": "Cobertura", "elevation": 2.0 * first_z})));
+    // 10 x 6 m, three storeys high: floors at the three levels it spans.
+    let outline = json!([[0, 0], [10, 0], [10, 6], [0, 6]]);
+    let mass = run(&mut s, "mass_create", json!({"outline": outline, "height": 3.0 * first_z}));
+    let m = id(&mass);
+    assert_eq!(mass["category"], "mass");
+    let floors = run(&mut s, "mass_floors", json!({"id": m}));
+    assert_eq!(floors["floors"].as_array().unwrap().len(), 3);
+    assert!(near(floors["floor_area"].as_f64().unwrap(), 180.0), "{floors}");
+    assert!(near(floors["volume"].as_f64().unwrap(), 60.0 * 3.0 * first_z));
+    assert!(near(floors["floors"][0]["perimeter"].as_f64().unwrap(), 32.0));
+    let e = run(&mut s, "element_get", json!({"id": m}));
+    assert!(near(e["derived"]["floor_area"].as_f64().unwrap(), 180.0));
+    // Plans: the upper floor's plan cuts the mass (it stands on the ground
+    // level) and labels the mass floor of that level with its area.
+    let first_name = levels[1]["name"].clone();
+    let plans = run(&mut s, "views_list", json!({"category": "floor_plan"}));
+    let upper_plan = plans.as_array().unwrap().iter().find(|v| v["name"] == first_name).map(id).unwrap();
+    let d = s.drawing(cc_core::ViewId(upper_plan)).unwrap();
+    let mine = |e: &Option<cc_core::ElementId>| e.is_some_and(|e| e.0 == m);
+    assert!(
+        d.prims.iter().any(
+            |p| matches!(p, cc_views::Prim::Line { style: cc_views::LineStyle::Cut, element, .. } if mine(element))
+        )
+    );
+    assert!(
+        d.prims
+            .iter()
+            .any(|p| matches!(p, cc_views::Prim::Text { text, element, .. } if mine(element) && text.contains("60")))
+    );
+
+    // Only the ground and the roof level.
+    run(&mut s, "mass_floors_set", json!({"id": m, "levels": [ground, "Cobertura"]}));
+    assert!(near(run(&mut s, "mass_floors", json!({"id": m}))["floor_area"].as_f64().unwrap(), 120.0));
+    // No floors, then all again.
+    run(&mut s, "mass_floors_set", json!({"id": m, "levels": []}));
+    assert_eq!(run(&mut s, "mass_floors", json!({"id": m}))["floors"], json!([]));
+    run(&mut s, "mass_floors_set", json!({"id": m}));
+    assert_eq!(run(&mut s, "mass_floors", json!({"id": m}))["floors"].as_array().unwrap().len(), 3);
+
+    // A loft set in by 1 m: 10 x 6 at the base, 8 x 4 at the top; halfway 9 x 5.
+    let loft = id(&run(
+        &mut s,
+        "mass_create",
+        json!({"outline": [[20, 0], [30, 0], [30, 6], [20, 6]], "height": 2.0 * first_z, "top_inset": 1.0}),
+    ));
+    let floors = run(&mut s, "mass_floors", json!({"id": loft}));
+    let areas: Vec<f64> = floors["floors"].as_array().unwrap().iter().map(|f| f["area"].as_f64().unwrap()).collect();
+    assert_eq!(areas.len(), 2, "the top level is not a floor of a mass that ends there");
+    assert!(near(areas[0], 60.0) && near(areas[1], 45.0), "{areas:?}");
+
+    // A schedule of masses: floors, gross floor area, volume.
+    let schedule = run(&mut s, "view_create", json!({"kind": "schedule", "category": "mass"}));
+    let table = run(&mut s, "schedule_table", json!({"view": schedule["id"]})).to_string();
+    assert!(table.contains("180"), "{table}");
+
+    // Moving moves both outlines; undo puts it back.
+    run(&mut s, "elements_move", json!({"ids": [loft], "delta": [0, 10]}));
+    let e = run(&mut s, "element_get", json!({"id": loft}));
+    assert!(near(e["params"]["outline"][0][1].as_f64().unwrap(), 10.0), "{e}");
+    assert!(near(e["params"]["top"][0][1].as_f64().unwrap(), 11.0), "{e}");
+    run(&mut s, "undo", json!({}));
+
+    // Saved and reopened.
+    let path = scratch("masses.ccad");
+    run(&mut s, "project_save", json!({"path": path}));
+    let mut reopened = Session::default();
+    run(&mut reopened, "project_open", json!({"path": path}));
+    assert!(near(run(&mut reopened, "mass_floors", json!({"id": m}))["floor_area"].as_f64().unwrap(), 180.0));
+
+    // Deleting a level takes its mass floors along.
+    run(&mut s, "level_delete", json!({"level": top_level}));
+    assert_eq!(run(&mut s, "mass_floors", json!({"id": m}))["floors"].as_array().unwrap().len(), 2);
+
+    // Bad input is refused.
+    for args in [
+        json!({"outline": [[0, 0], [1, 0]]}),
+        json!({"outline": [[0, 0], [1, 0], [2, 0]]}),
+        json!({"outline": outline, "height": -1}),
+        json!({"outline": outline, "top_inset": 10}),
+        json!({"outline": outline, "top_inset": 1, "top": outline}),
+    ] {
+        assert_eq!(fails(&mut s, "mass_create", args), ErrorCode::InvalidArguments);
+    }
+    assert_eq!(fails(&mut s, "mass_floors", json!({"id": id(&levels[0])})), ErrorCode::NotFound);
+}

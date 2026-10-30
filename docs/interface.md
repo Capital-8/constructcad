@@ -121,6 +121,14 @@ With the Select tool, a click picks the element under the pointer (Ctrl adds or 
 - With elements selected, **Override Graphics** changes their graphics in the active view only and **Hide in View** (EH) hides them there (shown again from Visibility/Graphics).
 - **Hide/Isolate** (temporary): HH hides the selection, HI isolates it, HC and IC hide or isolate its categories, HR resets. While active, the view has a colored border and a chip with *Reset* and *Make Permanent*. Temporary hiding is not saved, not undone and not printed.
 
+## Conceptual masses
+
+*Architecture → Massing → Mass* (`MS`) sketches an outline in a plan, like a floor, and extrudes it up to the level above. Masses are for massing studies before walls and floors exist: see-through bodies in 3D views, elevations and sections, cut in the plans they cross.
+
+- **Properties**: the base offset and the height, and whether the mass is an extrusion or a loft (a top outline different from the base, made with `mass_create` and `top` or `top_inset`).
+- **Mass floors**: one box per level the mass spans, with the area of the floor at that level. Plans draw the floor of their level with its area; the properties and the *Masses* schedule give the gross floor area (the sum of the floors), the number of floors and the volume.
+- Moving, rotating, mirroring, copying and pasting work as for other elements. Deleting a level removes its mass floors. IFC export leaves masses out.
+
 ## Imported CAD drawings
 
 - **File → Import CAD…** places a DWG or DXF drawing in the active floor plan, ceiling plan, elevation, section or legend (the button is greyed out in other views, and says why). You can also drop `.dwg` and `.dxf` files on the window. The file dialog starts in the *Projects folder*. The drawing keeps its origin at the view's origin, unless that leaves it more than 1 km from the model (a drawing in survey coordinates), then it is centered on what the view shows. The status bar says how many items and layers were read, how many entities were not drawn (3D solids, images, infinite lines…) and which units were assumed when the file has none.

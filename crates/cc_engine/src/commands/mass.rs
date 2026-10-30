@@ -1,0 +1,256 @@
+//! Conceptual masses: creating them (an extrusion, or a loft to another
+//! outline) and choosing and reading their mass floors.
+
+use super::{add_element, created, edit};
+use crate::error::{EngineError, Result};
+use crate::refs::{self, Point, Ref, finite, point, positive};
+use crate::registry::{Command, CommandKind};
+use crate::session::Session;
+use crate::t;
+use cc_core::mass::{MAX_OUTLINE, Mass};
+use cc_core::{Category, ElementId, ElementKind, ElementType, ElementTypeId, LevelId, Project, TypeData};
+use glam::DVec2;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+/// Create a conceptual mass: `outline` extruded `height` up from its level
+/// (plus `base_offset`), or lofted to another outline (`top`, or the base
+/// outline set in by `top_inset`). Mass floors are taken at every level the
+/// mass spans unless `floors` lists them. A project without a mass type
+/// gets one.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MassCreate {
+    /// Base outline `[[x, y], …]` in plan, closed (at least three points).
+    pub outline: Vec<Point>,
+    /// Level id or name (default: the lowest level).
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Type id or name (default: the category's default type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// Height above the base, meters (default: up to the level above, else 3).
+    #[serde(default)]
+    pub height: Option<f64>,
+    /// Offset of the base from the level elevation, meters (default 0).
+    #[serde(default)]
+    pub base_offset: Option<f64>,
+    /// Top outline of a loft `[[x, y], …]` (default: the base outline, an extrusion).
+    #[serde(default)]
+    pub top: Option<Vec<Point>>,
+    /// Loft to the base outline set in by this distance, meters (instead of `top`).
+    #[serde(default)]
+    pub top_inset: Option<f64>,
+    /// Levels (ids or names) where mass floors are taken (default: every level the mass spans).
+    #[serde(default)]
+    pub floors: Option<Vec<Ref>>,
+}
+
+/// An outline from command points: at least three finite points, at most [`MAX_OUTLINE`].
+fn outline(points: &[Point], field: &str) -> Result<Vec<DVec2>> {
+    if points.len() < 3 || points.len() > MAX_OUTLINE {
+        return Err(EngineError::invalid(format!("{field} needs 3 to {MAX_OUTLINE} points")));
+    }
+    let pts = points.iter().map(|p| point(*p)).collect::<Result<Vec<_>>>()?;
+    if cc_core::mass::area(&pts) < 1e-6 {
+        return Err(EngineError::invalid(format!("{field} encloses no area")));
+    }
+    Ok(pts)
+}
+
+/// The levels a mass from `base` to `top` (elevations) spans: at or above
+/// the base, below the top.
+pub fn spanned_levels(p: &Project, base: f64, top: f64) -> Vec<LevelId> {
+    p.levels.iter().filter(|l| l.elevation >= base - 1e-9 && l.elevation < top - 1e-9).map(|l| l.id).collect()
+}
+
+/// Levels named in a command, or every level the mass spans.
+fn floor_levels(p: &Project, refs_: Option<&[Ref]>, base: f64, top: f64) -> Result<Vec<LevelId>> {
+    match refs_ {
+        Some(list) => {
+            let mut ids = list.iter().map(|r| refs::level(p, r)).collect::<Result<Vec<_>>>()?;
+            ids.sort_by(|a, b| p.level_elevation(*a).total_cmp(&p.level_elevation(*b)));
+            ids.dedup();
+            Ok(ids)
+        }
+        None => Ok(spanned_levels(p, base, top)),
+    }
+}
+
+/// A mass type for a project that has none, in its first material.
+pub fn new_mass_type(p: &Project, id: ElementTypeId) -> ElementType {
+    ElementType {
+        id,
+        name: t!("tpl-type-mass"),
+        data: TypeData::Mass { material: p.materials.first().map(|m| m.name.clone()).unwrap_or_default() },
+        info: Default::default(),
+        uid: Default::default(),
+    }
+}
+
+impl Command for MassCreate {
+    const NAME: &'static str = "mass_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let level = refs::level_or_first(p, self.level.as_ref())?;
+        let base_offset = finite(self.base_offset.unwrap_or(0.0), "base_offset")?;
+        let height = match self.height {
+            Some(h) => positive(h, "height")?,
+            None => p.level_height(level, 3.0).max(0.1),
+        };
+        let base = outline(&self.outline, "outline")?;
+        let top = match (&self.top, self.top_inset) {
+            (Some(_), Some(_)) => return Err(EngineError::invalid("give top or top_inset, not both")),
+            (Some(top), None) => Some(outline(top, "top")?),
+            (None, Some(inset)) => {
+                let inset = positive(inset, "top_inset")?;
+                let top = cc_geom::polygon::offset(&base, -inset);
+                if top.len() < 3
+                    || cc_core::mass::area(&top) < 1e-6
+                    || cc_core::mass::area(&top) >= cc_core::mass::area(&base)
+                {
+                    return Err(EngineError::invalid("top_inset leaves no top outline"));
+                }
+                Some(top)
+            }
+            (None, None) => None,
+        };
+        let base_z = p.level_elevation(level) + base_offset;
+        let floors = floor_levels(p, self.floors.as_deref(), base_z, base_z + height)?;
+        let ty = match (&self.type_ref, p.default_type(Category::Mass)) {
+            (None, None) => None,
+            (r, _) => Some(refs::type_of(p, Category::Mass, r.as_ref())?),
+        };
+        let mass = Mass { outline: base, base_offset, height, top, floors };
+        let id = edit(s, t!("tx-create-mass"), |e| {
+            let type_id = match ty {
+                Some(t) => t,
+                None => {
+                    let id = ElementTypeId(e.alloc_id());
+                    e.add_type(new_mass_type(e.project(), id))
+                }
+            };
+            Ok(add_element(e, level, type_id, ElementKind::Mass(mass)))
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// Choose the levels where a mass takes mass floors: `levels` (ids or
+/// names), or every level it spans when `levels` is left out; an empty list
+/// takes none.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MassFloorsSet {
+    /// Mass element id.
+    pub id: u64,
+    /// Levels (ids or names); left out: every level the mass spans.
+    #[serde(default)]
+    pub levels: Option<Vec<Ref>>,
+}
+
+fn mass_of(p: &Project, id: u64) -> Result<(&cc_core::Element, &Mass)> {
+    let e = p.element(ElementId(id)).ok_or_else(|| EngineError::not_found(format!("no element {id}")))?;
+    match &e.kind {
+        ElementKind::Mass(m) => Ok((e, m)),
+        _ => Err(EngineError::invalid(format!("element {id} is not a mass"))),
+    }
+}
+
+impl Command for MassFloorsSet {
+    const NAME: &'static str = "mass_floors_set";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let (e, m) = mass_of(p, self.id)?;
+        let base = p.level_elevation(e.level) + m.base_offset;
+        let floors = floor_levels(p, self.levels.as_deref(), base, base + m.height)?;
+        let id = e.id;
+        edit(s, t!("tx-modify"), |e| {
+            if let Some(ElementKind::Mass(m)) = e.element_mut(id).map(|x| &mut x.kind) {
+                m.floors = floors;
+            }
+            Ok(())
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// The mass floors of a mass: for each, its level, elevation, area and
+/// perimeter (and outline), with the gross floor area and the volume.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MassFloors {
+    /// Mass element id.
+    pub id: u64,
+}
+
+/// A mass's floors as JSON.
+pub fn floors_json(p: &Project, g: &cc_geom::mass::MassGeom) -> Vec<Value> {
+    g.floors
+        .iter()
+        .map(|f| {
+            json!({
+                "level": {"id": f.level.0, "name": p.level_name(f.level)},
+                "elevation": p.level_elevation(f.level),
+                "area": f.area,
+                "perimeter": f.perimeter,
+                "outline": f.outline.iter().map(|q| [q.x, q.y]).collect::<Vec<_>>(),
+            })
+        })
+        .collect()
+}
+
+impl Command for MassFloors {
+    const NAME: &'static str = "mass_floors";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = mass_of(s.project(), self.id)?.0.id;
+        s.geometry();
+        let g = s.geom().masses.get(&id).cloned().ok_or_else(|| EngineError::invalid("the mass is degenerate"))?;
+        let p = s.project();
+        Ok(json!({
+            "floors": floors_json(p, &g),
+            "floor_area": g.floor_area(),
+            "volume": g.volume,
+        }))
+    }
+}
+
+/// Create a mass type, shown in `material` (default: the project's first material).
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MassTypeCreate {
+    /// Type name (default: the template's mass name).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Material name.
+    #[serde(default)]
+    pub material: Option<String>,
+}
+
+impl Command for MassTypeCreate {
+    const NAME: &'static str = "mass_type_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let material = match self.material {
+            Some(m) => Some(refs::material(s.project(), &Ref::Name(m))?),
+            None => None,
+        };
+        let name = self.name.filter(|n| !n.trim().is_empty());
+        let id = edit(s, t!("tx-create-mass-type"), |e| {
+            let id = ElementTypeId(e.alloc_id());
+            let mut ty = new_mass_type(e.project(), id);
+            if let (TypeData::Mass { material: m }, Some(name)) = (&mut ty.data, material) {
+                *m = name;
+            }
+            if let Some(name) = name {
+                ty.name = name;
+            }
+            Ok(e.add_type(ty))
+        })?;
+        Ok(json!({ "id": id.0 }))
+    }
+}

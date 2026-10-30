@@ -17,6 +17,7 @@ pub mod expr;
 pub mod graphics;
 pub mod grid;
 mod ids;
+pub mod mass;
 pub mod material;
 pub mod mep;
 pub mod openings;
