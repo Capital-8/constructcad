@@ -337,7 +337,7 @@ impl AppState {
                 let count = |k: &str| out[k].as_array().map_or(0, Vec::len);
                 let (deleted, pinned) = (count("deleted"), count("pinned_skipped"));
                 self.message = if deleted == 0 {
-                    crate::t!("msg-pinned-skipped", "count" => pinned)
+                    crate::t!("msg-pinned-not-deleted", "count" => pinned)
                 } else {
                     crate::t!("msg-deleted", "count" => deleted)
                 };

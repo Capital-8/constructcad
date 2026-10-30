@@ -981,6 +981,7 @@ tx-beam-join = Jonction de poutres
 msg-pinned = { $count } élément(s) épinglé(s)
 msg-unpinned = { $count } élément(s) désépinglé(s)
 msg-pinned-skipped = { $count } élément(s) épinglé(s) n'ont pas été modifiés
+msg-pinned-not-deleted = { $count } élément(s) épinglé(s) n'ont pas été supprimés : décochez Épinglé dans les propriétés pour supprimer
 action-pin = Épingler
 action-unpin = Désépingler
 tool-toggle-join = Autoriser/interdire la jonction

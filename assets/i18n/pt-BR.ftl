@@ -999,6 +999,7 @@ tx-beam-join = União de vigas
 msg-pinned = { $count } elemento(s) fixado(s)
 msg-unpinned = { $count } elemento(s) liberado(s)
 msg-pinned-skipped = { $count } elemento(s) fixado(s) não foram alterados
+msg-pinned-not-deleted = { $count } elemento(s) fixado(s) não foram excluídos: desmarque Fixado nas propriedades para excluir
 action-pin = Fixar
 action-unpin = Liberar
 tool-toggle-join = Permitir/impedir união

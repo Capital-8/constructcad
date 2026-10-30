@@ -981,6 +981,7 @@ tx-beam-join = 樑連接
 msg-pinned = 已固定 { $count } 個元素
 msg-unpinned = 已解除固定 { $count } 個元素
 msg-pinned-skipped = { $count } 個已固定的元素未變更
+msg-pinned-not-deleted = { $count } 個已固定的元素未刪除：在屬性中取消「固定」即可刪除
 action-pin = 固定
 action-unpin = 取消固定
 tool-toggle-join = 允許／禁止接合

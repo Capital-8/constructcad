@@ -981,6 +981,7 @@ tx-beam-join = Połączenie belek
 msg-pinned = Przypięte elementy: { $count }
 msg-unpinned = Odpięte elementy: { $count }
 msg-pinned-skipped = Niezmienione przypięte elementy: { $count }
+msg-pinned-not-deleted = Nieusunięte przypięte elementy: { $count }. Odznacz Przypięty we właściwościach, aby usunąć
 action-pin = Przypnij
 action-unpin = Odepnij
 tool-toggle-join = Zezwól/zabroń połączenia
