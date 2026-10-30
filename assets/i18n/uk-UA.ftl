@@ -382,6 +382,7 @@ prop-volume = Об'єм
 prop-host = Основа
 prop-offset = Зсув уздовж стіни
 prop-sill = Висота підвіконня
+prop-head-height = Висота перемички
 prop-flip-facing = Розвернути напрямок
 prop-flip-hand = Змінити бік відкривання
 prop-overhang = Звис

@@ -382,6 +382,7 @@ prop-volume = Volumen
 prop-host = Anfitrión
 prop-offset = Posición en el muro
 prop-sill = Altura del alféizar
+prop-head-height = Altura del dintel
 prop-flip-facing = Invertir orientación
 prop-flip-hand = Invertir mano
 prop-overhang = Alero

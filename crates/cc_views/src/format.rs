@@ -7,11 +7,17 @@
 //! previews); the others read the current ones.
 
 use cc_core::Units;
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{LazyLock, RwLock};
 
 static DECIMAL_COMMA: AtomicBool = AtomicBool::new(true);
-static UNITS: LazyLock<RwLock<Units>> = LazyLock::new(|| RwLock::new(Units::default()));
+
+thread_local! {
+    /// The units quantities are shown in, per thread: the app draws on one
+    /// thread, and sessions on other threads (tests, scripts) each keep
+    /// their own project's units instead of overwriting one another's.
+    static UNITS: RefCell<Units> = RefCell::new(Units::default());
+}
 
 /// Use `,` (true) or `.` (false) as the decimal separator of the language.
 pub fn set_decimal_comma(comma: bool) {
@@ -20,15 +26,16 @@ pub fn set_decimal_comma(comma: bool) {
 
 /// Display quantities with `units` from now on.
 pub fn set_units(units: &Units) {
-    let mut guard = UNITS.write().unwrap_or_else(|e| e.into_inner());
-    if *guard != *units {
-        *guard = units.clone();
-    }
+    UNITS.with_borrow_mut(|current| {
+        if *current != *units {
+            *current = units.clone();
+        }
+    });
 }
 
 /// The current units and language decimal symbol.
 pub fn current() -> (Units, bool) {
-    let units = UNITS.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let units = UNITS.with_borrow(Units::clone);
     (units, DECIMAL_COMMA.load(Ordering::Relaxed))
 }
 

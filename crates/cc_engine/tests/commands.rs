@@ -570,6 +570,23 @@ fn turning_and_pinned_elements() {
     assert_eq!(moved["pinned_skipped"], json!([wall["id"]]));
 }
 
+/// A door raised above the wall's base (#70): the opening in the wall
+/// moves up with it, and the head is the raised sill plus the door's height.
+#[test]
+fn raised_doors_cut_their_wall_higher() {
+    let mut s = Session::default();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [5, 0]}));
+    let door = run(&mut s, "door_create", json!({"wall": wall["id"]}));
+    let opening = |s: &mut Session| {
+        let o = &s.geometry().walls[&cc_core::ElementId(id(&wall))].openings[0];
+        (o.z0, o.z1)
+    };
+    let (z0, z1) = opening(&mut s);
+    run(&mut s, "element_set", json!({"id": door["id"], "params": {"sill_height": 0.3}}));
+    let (r0, r1) = opening(&mut s);
+    assert!((r0 - z0 - 0.3).abs() < 1e-9 && (r1 - z1 - 0.3).abs() < 1e-9, "({z0}, {z1}) → ({r0}, {r1})");
+}
+
 #[test]
 fn export_and_paste_elements() {
     let mut s = Session::default();

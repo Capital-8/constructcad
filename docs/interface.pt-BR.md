@@ -94,6 +94,10 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
 
+## Selecionar em vistas 2D
+
+Um clique escolhe o elemento sob o cursor (Ctrl soma ou retira). Um arrasto que começa no papel vazio, ou dentro de uma laje, de um hachurado ou de outro preenchimento, desenha uma caixa de seleção: arrastada para a direita é uma janela e pega os elementos inteiramente dentro dela (linhas, preenchimentos e textos); para a esquerda é um cruzamento, tracejado e verde, e pega também os que ela corta ou em que está: uma parede cortada entre as pontas, uma laje em volta da caixa, um texto ancorado nela. Áreas de ambiente e desenhos importados não entram por cruzamento (uma janela em volta deles os pega). Ctrl mantém a seleção atual e soma a ela. Um arrasto que começa na linha de um elemento, ou num elemento já selecionado, o move (Ctrl+arrastar copia).
+
 ## Selecionar em vistas 3D
 
 Com a ferramenta Selecionar, um clique escolhe o elemento sob o cursor (Ctrl soma ou retira). Shift+arrastar desenha uma caixa de seleção, como nas plantas: arrastada para a direita é uma janela e pega os elementos inteiramente dentro dela; para a esquerda é um cruzamento e pega também os que ela toca. Elementos atrás de outros contam; os ocultos, não. Ctrl mantém a seleção atual e soma a ela. Com *Arrastar na vista 3D seleciona* ligado em *Preferências → Interface*, arrastar com o botão esquerdo desenha a caixa e Shift+arrastar orbita.

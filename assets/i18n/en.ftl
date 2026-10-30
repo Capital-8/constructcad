@@ -382,6 +382,7 @@ prop-volume = Volume
 prop-host = Host
 prop-offset = Position on Wall
 prop-sill = Sill Height
+prop-head-height = Head Height
 prop-flip-facing = Flip Facing
 prop-flip-hand = Flip Hand
 prop-overhang = Overhang

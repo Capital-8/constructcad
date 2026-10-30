@@ -382,6 +382,7 @@ prop-volume = Volume
 prop-host = Hôte
 prop-offset = Position sur le mur
 prop-sill = Hauteur d'allège
+prop-head-height = Hauteur du linteau
 prop-flip-facing = Inverser l'orientation
 prop-flip-hand = Inverser le sens
 prop-overhang = Débord

@@ -382,6 +382,7 @@ prop-volume = Volume
 prop-host = Elemento ospite
 prop-offset = Posizione sul muro
 prop-sill = Altezza davanzale
+prop-head-height = Altezza architrave
 prop-flip-facing = Inverti lato
 prop-flip-hand = Inverti verso di apertura
 prop-overhang = Sporto

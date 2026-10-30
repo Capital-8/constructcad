@@ -382,6 +382,7 @@ prop-volume = Volume
 prop-host = Hospedeiro
 prop-offset = Posição na parede
 prop-sill = Peitoril
+prop-head-height = Altura da verga
 prop-flip-facing = Inverter face
 prop-flip-hand = Inverter lado
 prop-overhang = Beiral

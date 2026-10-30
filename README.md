@@ -94,7 +94,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Modify tools**: move, copy, rotate, mirror, array, trim/extend, split, offset, align, wall join control and pinning; cut, copy and paste, and match type properties.
 - **Navigation and drawing aids**: 3D navigation cube, editable temporary dimensions and angles (type a length, Tab for the angle), alignment guides, Space to rotate or flip.
 - **Snapping**: endpoints, midpoints, on wall, 15° angles, Shift for orthogonal, typed length + Enter.
-- **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
+- **Editing**: click or box selection (to the right a window takes what lies inside, to the left a crossing also takes what it cuts), drag an element by its lines (or a selected one anywhere) to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
 - **Properties**: instance and view parameters in collapsible sections; walls with base and top constraints (unconnected height or up to a level), location line, room bounding and structural flags.
 - **Types**: Type Properties dialog with duplicate and rename, layer editor with layer functions (core, finishes), wall function and identity data (type mark, manufacturer, model, classification, fire rating, cost…).
 - **3D view** (wgpu, MSAA): orbit, pan, zoom, zoom to fit, click selection and window or crossing selection (Shift+drag).

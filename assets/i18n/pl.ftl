@@ -382,6 +382,7 @@ prop-volume = Objętość
 prop-host = Element nośny
 prop-offset = Położenie na ścianie
 prop-sill = Wysokość parapetu
+prop-head-height = Wysokość nadproża
 prop-flip-facing = Odwróć stronę
 prop-flip-hand = Odwróć kierunek otwierania
 prop-overhang = Okap
