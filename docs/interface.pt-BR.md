@@ -94,9 +94,13 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
 
+## Selecionar em vistas 3D
+
+Com a ferramenta Selecionar, um clique escolhe o elemento sob o cursor (Ctrl soma ou retira). Shift+arrastar desenha uma caixa de seleção, como nas plantas: arrastada para a direita é uma janela e pega os elementos inteiramente dentro dela; para a esquerda é um cruzamento e pega também os que ela toca. Elementos atrás de outros contam; os ocultos, não. Ctrl mantém a seleção atual e soma a ela. Com *Arrastar na vista 3D seleciona* ligado em *Preferências → Interface*, arrastar com o botão esquerdo desenha a caixa e Shift+arrastar orbita.
+
 ## Modificar em vistas 3D
 
-**Mover**, **Copiar**, **Matriz**, **Girar**, **Espelhar** (escolher ou desenhar o eixo), **Alinhar** e **Unir geometria**/**Desunir geometria** também funcionam em vistas 3D; arrastar com o botão esquerdo continua orbitando, com o do meio ou o direito desloca a vista.
+**Mover**, **Copiar**, **Matriz**, **Girar**, **Espelhar** (escolher ou desenhar o eixo), **Alinhar** e **Unir geometria**/**Desunir geometria** também funcionam em vistas 3D; arrastar com o botão esquerdo continua orbitando (ou Shift+arrastar, veja acima), com o do meio ou o direito desloca a vista.
 
 - Os pontos são escolhidos num plano de trabalho horizontal no nível dos elementos alterados; depois do primeiro ponto, os seguintes ficam na altura dele. Um quadrado indica a atração a um ponto do modelo perto do cursor: um canto de elemento, o centro de um pilar ou componente na base ou no topo, a ponta de uma parede, o cruzamento de eixos. Uma cruz indica um ponto no plano. Shift mantém o eixo principal; digitar a distância e Enter funciona como nas plantas. A prévia mostra o contorno dos elementos onde eles vão ficar.
 - Toda alteração é uma transformação em planta: os elementos continuam no seu nível. Mover um pilar do pavimento 1 de um canto até o canto correspondente do pilar de baixo o coloca sobre esse pilar.
@@ -148,7 +152,7 @@ As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto
 *Arquivo → Preferências* (Ctrl+,, também no pé da tela inicial) reúne as configurações do próprio aplicativo; elas não fazem parte de nenhum projeto e ficam guardadas entre as sessões. Escolha uma página à esquerda. As mudanças aparecem na hora; **OK** as mantém e **Cancelar** (ou Esc) volta aos valores de quando a janela abriu.
 
 - **Geral**: o idioma da interface, o tema (claro, escuro ou o do sistema) e *Verificar atualizações automaticamente* (veja o aviso de atualização abaixo).
-- **Interface**: a *Escala da interface* (75–200%, tudo cresce: painéis, ícones, texto; Ctrl+Mais e Ctrl+Menos também a mudam), o *Tamanho do texto* (pequeno, normal, grande, muito grande; só o texto, em qualquer escala), *Iniciar com o ribbon recolhido* e *Dicas detalhadas*: desligadas, as dicas dos comandos mostram só o nome, o atalho e por que o comando está indisponível, sem a descrição e o comando do motor.
+- **Interface**: a *Escala da interface* (75–200%, tudo cresce: painéis, ícones, texto; Ctrl+Mais e Ctrl+Menos também a mudam), o *Tamanho do texto* (pequeno, normal, grande, muito grande; só o texto, em qualquer escala), *Iniciar com o ribbon recolhido*, *Dicas detalhadas* (desligadas, as dicas dos comandos mostram só o nome, o atalho e por que o comando está indisponível, sem a descrição e o comando do motor) e *Arrastar na vista 3D seleciona* (arrastar com o botão esquerdo desenha uma caixa de seleção e Shift+arrastar orbita; desligado, o contrário).
 - **Locais de arquivos**: a *Pasta de macros* (os diálogos de arquivo de macro começam nela e *Gerenciar → Executar macro* lista as macros dela), a *Pasta de projetos* (onde começam Abrir, Importar IFC, Importar CAD e o primeiro Salvar de um projeto novo; um projeto já salvo é salvo de novo ao lado dele mesmo) e as pastas da biblioteca de componentes (*Adicionar pasta…*, *Remover*). O botão *Gerenciar pastas…* da janela da biblioteca de componentes abre esta página. Uma pasta que não existe mais aparece como *Não encontrada* e é ignorada.
 - **Salvamento**: o intervalo do *Salvamento automático* (desligado, ou a cada 1, 2, 5, 10 ou 15 minutos; veja abaixo) e quantos projetos recentes a tela inicial lista.
 

@@ -97,7 +97,7 @@ Translations live in `assets/i18n/*.ftl`. A test ensures every language has the 
 - **Editing**: click or window selection (inside or crossing), drag to move, Ctrl+drag to copy, delete. Undo and redo cover every edit.
 - **Properties**: instance and view parameters in collapsible sections; walls with base and top constraints (unconnected height or up to a level), location line, room bounding and structural flags.
 - **Types**: Type Properties dialog with duplicate and rename, layer editor with layer functions (core, finishes), wall function and identity data (type mark, manufacturer, model, classification, fire rating, cost…).
-- **3D view** (wgpu, MSAA): orbit, pan, zoom, zoom to fit and click selection.
+- **3D view** (wgpu, MSAA): orbit, pan, zoom, zoom to fit, click selection and window or crossing selection (Shift+drag).
 - **Elevations and sections**: hidden line removal, cut hatching and annotated levels.
 - **Schedules** for every model category and rooms: choose and order the fields (instance, type and computed values such as length, area and volume), sort, filter, show totals and export to CSV.
 - **Sheets** A0–A4: title block with project data and draggable, scaled viewports; export to vector PDF and SVG (*File → Export PDF/SVG…*), identical to the screen.
@@ -148,7 +148,7 @@ If you do not have Revit, independent third-party tools can convert `.rvt` files
 | HH / HI | Temporarily hide / isolate elements | HC / IC | Temporarily hide / isolate categories |
 | HR | Reset temporary hide/isolate | DE | Demolish (in the view's phase) |
 
-2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, right or middle drag pans and the wheel zooms.
+2D navigation: the mouse wheel zooms and the middle button pans. 3D navigation: left drag orbits, Shift+left drag selects with a window or crossing box (swapped by a preference), right or middle drag pans and the wheel zooms.
 
 ## Automation (command line and MCP)
 

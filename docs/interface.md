@@ -94,9 +94,13 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
 
+## Selecting in 3D views
+
+With the Select tool, a click picks the element under the pointer (Ctrl adds or removes it). Shift+drag draws a selection box, as in plans: dragged to the right it is a window and takes the elements wholly inside it; dragged to the left it is a crossing and also takes those it touches. Elements behind others count too; hidden ones do not. Ctrl keeps the current selection and adds to it. With *Dragging in 3D views selects* on in *Preferences → Interface*, a plain left drag draws the box and Shift+drag orbits instead.
+
 ## Modifying in 3D views
 
-**Move**, **Copy**, **Array**, **Rotate**, **Mirror** (pick or draw the axis), **Align** and **Join Geometry**/**Unjoin Geometry** also work in 3D views; left-drag still orbits, middle or right drag pans.
+**Move**, **Copy**, **Array**, **Rotate**, **Mirror** (pick or draw the axis), **Align** and **Join Geometry**/**Unjoin Geometry** also work in 3D views; left-drag still orbits (or Shift+drag, see above), middle or right drag pans.
 
 - Points are picked on a horizontal working plane at the level of the elements being changed; once the first point is picked, the next ones stay at its height. A square marks a snap to a model point near the pointer: a corner of an element, the center of a column or component at its base or top, a wall end, a grid crossing. A cross marks a point on the plane. Shift keeps the main axis; a typed distance and Enter work as in plans. The preview shows the elements' outline where they will go.
 - Every change is a plan transform: elements keep their level. Moving a level 2 column from one of its corners to the matching corner of the column below puts it over that column.
@@ -148,7 +152,7 @@ Two-letter keys work while a view has the focus and no text field is being edite
 *File → Preferences* (Ctrl+,, also at the bottom of the home screen) holds the settings of the app itself; they are not part of any project and are kept between sessions. Pick a page on the left. Changes show at once; **OK** keeps them and **Cancel** (or Esc) brings back the values the window opened with.
 
 - **General**: the interface language, the theme (light, dark or the system's) and *Check for updates automatically* (see the update notice below).
-- **Interface**: the *Interface scale* (75–200%, everything grows: panels, icons, text; Ctrl+Plus and Ctrl+Minus change it too), the *Text size* (small, normal, large, extra large; only the text, at any scale), *Start with the ribbon collapsed*, and *Detailed tooltips*: when off, command tooltips show only the name, the shortcut and why a command is unavailable, without the description and the engine command.
+- **Interface**: the *Interface scale* (75–200%, everything grows: panels, icons, text; Ctrl+Plus and Ctrl+Minus change it too), the *Text size* (small, normal, large, extra large; only the text, at any scale), *Start with the ribbon collapsed*, *Detailed tooltips* (when off, command tooltips show only the name, the shortcut and why a command is unavailable, without the description and the engine command) and *Dragging in 3D views selects* (a left drag draws a selection box and Shift+drag orbits; off, the other way round).
 - **File locations**: the *Macros folder* (the macro file dialogs start there and *Manage → Run Macro* lists its macros), the *Projects folder* (where Open, Import IFC, Import CAD and the first Save of a new project start; a saved project is saved again next to itself), and the component library folders (*Add Folder…*, *Remove*). The component library window's *Manage Folders…* opens this page. A folder that no longer exists is marked *Not found* and skipped.
 - **Saving**: the *Autosave* interval (off, or every 1, 2, 5, 10 or 15 minutes; see below) and how many recent projects the home screen lists.
 
