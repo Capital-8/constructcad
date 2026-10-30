@@ -1495,7 +1495,13 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         let category_name = tr(view.category().key());
         header_block(ui, crate::browser::category_icon(view.category()), &view.name, &category_name);
     });
+    view_sections(ui, state, id);
+}
 
+/// The sections of a view's properties (also shown for a view placed on a
+/// sheet, so it can be changed there).
+fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
+    let Some(view) = state.project().view(id).cloned() else { return };
     let graphical = !matches!(view.kind, ViewKind::Schedule { .. } | ViewKind::Sheet { .. });
     if graphical {
         section(ui, "graphics", t!("section-graphics"), |ui| {
@@ -1731,4 +1737,7 @@ fn viewport_props(ui: &mut Ui, state: &mut AppState, sheet: ViewId, index: usize
             }
         });
     });
+    // The placed view's own properties: its scale, graphics, crop and phase
+    // change here, and the sheet follows.
+    view_sections(ui, state, vp.view);
 }

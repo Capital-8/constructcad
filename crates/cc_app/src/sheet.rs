@@ -58,6 +58,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
         state.sheet_selection = resp.interact_pointer_pos().and_then(hit).map(|i| (sheet_id, i));
         state.selection.clear();
     }
+    // A double click on a placed view opens it.
+    if resp.double_clicked()
+        && let Some(i) = resp.interact_pointer_pos().and_then(hit)
+        && let Some(view) = placed.iter().find(|p| p.index == i).map(|p| p.view)
+    {
+        state.open_view(view);
+    }
     if resp.drag_started_by(egui::PointerButton::Primary) {
         let origin = ui.input(|i| i.pointer.press_origin());
         state.sheet_selection = origin.and_then(hit).map(|i| (sheet_id, i));

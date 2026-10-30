@@ -1022,3 +1022,27 @@ fn names_typed_key_by_key_keep_spaces_and_survive_emptying() {
     }
     assert_eq!(harness.state().project().level_name(level), "Piso 2 B");
 }
+
+/// A view placed on a sheet shows its own properties when picked on the
+/// sheet, so its scale or graphics change there (#90).
+#[test]
+fn a_view_picked_on_a_sheet_shows_its_properties() {
+    let mut state = sample_state();
+    let sheet = state
+        .project()
+        .views
+        .values()
+        .find_map(|v| match &v.kind {
+            cc_core::ViewKind::Sheet { viewports, .. } => viewports.first().map(|_| v.id),
+            _ => None,
+        })
+        .expect("the sample has a sheet with a view");
+    state.active_view = Some(sheet);
+    state.sheet_selection = Some((sheet, 0));
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1400.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.query_by_label(&t!("section-position")).is_some(), "the viewport's position");
+    assert!(harness.query_by_label(&t!("section-graphics")).is_some(), "and the view's own graphics");
+}
