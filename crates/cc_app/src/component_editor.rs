@@ -83,6 +83,7 @@ impl Editor {
                 void: false,
                 plan_only: false,
             }],
+            ..Default::default()
         };
         Editor {
             type_id: None,
@@ -627,6 +628,29 @@ fn shape_fields(
             field(ui, &format!("{} ({u})", t!("comp-field-axis")), axis);
             field(ui, &t!("comp-field-angle"), angle);
             profile_points(ui, *plane, points, lookup);
+        }
+        ComponentShape::Sweep { plane, path, offset, profile } => {
+            plane_combo(ui, plane);
+            let (_, _, normal) = plane_axes(*plane);
+            field(ui, &format!("{} ({normal})", t!("comp-field-offset")), offset);
+            ui.label(theme::muted(t!("comp-field-path")));
+            ui.end_row();
+            profile_points(ui, *plane, path, lookup);
+            ui.label(theme::muted(t!("comp-field-section")));
+            ui.end_row();
+            profile_points(ui, *plane, profile, lookup);
+        }
+        ComponentShape::Blend { plane, bottom, top, offset, depth } => {
+            plane_combo(ui, plane);
+            let (_, _, normal) = plane_axes(*plane);
+            field(ui, &format!("{} ({normal})", t!("comp-field-offset")), offset);
+            field(ui, &format!("{} (+{normal})", t!("comp-field-extrusion")), depth);
+            ui.label(theme::muted(t!("comp-field-bottom")));
+            ui.end_row();
+            profile_points(ui, *plane, bottom, lookup);
+            ui.label(theme::muted(t!("comp-field-top")));
+            ui.end_row();
+            profile_points(ui, *plane, top, lookup);
         }
         ComponentShape::Mesh { vertices, faces } => {
             ui.label(theme::muted(t!("comp-field-mesh")));

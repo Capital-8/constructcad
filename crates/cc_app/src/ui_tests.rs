@@ -292,6 +292,21 @@ fn ribbon_buttons_are_accessible() {
             found.insert(label);
         }
     }
+    // The component environment shows its own ribbon.
+    let mut state = sample_state();
+    let table = state
+        .project()
+        .types_of(cc_core::Category::Component)
+        .find(|t| matches!(&t.data, cc_core::TypeData::Component { component, .. } if component == "Mesa"))
+        .map(|t| t.id)
+        .unwrap();
+    crate::component_env::open(&mut state, table);
+    let harness = themed_harness(state, egui::vec2(1600.0, 140.0), egui::Theme::Light, |ui, state| {
+        crate::component_env::ribbon(ui, state)
+    });
+    for node in harness.query_all_by_role(Role::Button) {
+        found.insert(node.accesskit_node().label().unwrap_or_default());
+    }
     let state = sample_state();
     let hidden = [UiCommand::CommandPalette, UiCommand::ToggleRibbon];
     for command in UiCommand::all().into_iter().filter(|c| !hidden.contains(c)) {

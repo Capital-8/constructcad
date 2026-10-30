@@ -138,6 +138,19 @@ fn validate(file: &ComponentFile) -> Result<(), ComponentFileError> {
             return bad("invalid type");
         }
     }
+    if def.ref_planes.len() + def.ref_lines.len() + def.dimensions.len() + def.equals.len()
+        > crate::component_ref::MAX_REFS
+    {
+        return bad("too many reference planes, lines and dimensions");
+    }
+    let names = def.ref_planes.iter().map(|p| &p.name).chain(def.ref_lines.iter().map(|l| &l.name));
+    let mut seen: Vec<&str> = def.params.iter().map(|p| p.name.as_str()).collect();
+    for name in names {
+        if !expr::is_valid_name(name) || crate::component_ref::is_reserved(name) || seen.contains(&name.as_str()) {
+            return bad(&format!("invalid or repeated reference name '{name}'"));
+        }
+        seen.push(name);
+    }
     Ok(())
 }
 

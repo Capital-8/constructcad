@@ -3,6 +3,8 @@
 
 pub mod analytical;
 pub mod annotate;
+pub mod component;
+pub mod component_piece;
 pub mod create;
 pub mod edit;
 pub mod foundation;

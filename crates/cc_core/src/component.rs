@@ -118,6 +118,13 @@ pub enum ComponentShape {
     /// `angle` degrees about the line `u = axis` of the plane (vertical in
     /// the front and side planes).
     Revolution { plane: SketchPlane, points: Vec<ProfilePoint>, offset: String, axis: String, angle: String },
+    /// Closed `profile` (u to the left of the path, v along the plane's
+    /// normal) carried along the open `path` drawn on `plane`, which stands
+    /// at `offset` on its normal axis; mitered at the path's corners.
+    Sweep { plane: SketchPlane, path: Vec<ProfilePoint>, offset: String, profile: Vec<ProfilePoint> },
+    /// The solid joining the closed `bottom` outline on `plane` at `offset`
+    /// to the closed `top` outline `depth` farther along its normal.
+    Blend { plane: SketchPlane, bottom: Vec<ProfilePoint>, top: Vec<ProfilePoint>, offset: String, depth: String },
     /// Fixed polyhedral surface (not parametric): vertices in the component
     /// frame and faces as counter-clockwise (seen from outside) index loops.
     Mesh { vertices: Vec<[f64; 3]>, faces: Vec<Vec<u32>> },
@@ -153,6 +160,19 @@ impl ComponentShape {
                 out.push(("angle", angle));
                 out
             }
+            ComponentShape::Sweep { path, offset, profile, .. } => {
+                let mut out = profile_expressions(path);
+                out.extend(profile_expressions(profile));
+                out.push(("offset", offset));
+                out
+            }
+            ComponentShape::Blend { bottom, top, offset, depth, .. } => {
+                let mut out = profile_expressions(bottom);
+                out.extend(profile_expressions(top));
+                out.push(("offset", offset));
+                out.push(("depth", depth));
+                out
+            }
             ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
@@ -178,6 +198,18 @@ impl ComponentShape {
                 out.extend([offset, axis, angle]);
                 out
             }
+            ComponentShape::Sweep { path, offset, profile, .. } => {
+                let mut out = profile_expressions_mut(path);
+                out.extend(profile_expressions_mut(profile));
+                out.push(offset);
+                out
+            }
+            ComponentShape::Blend { bottom, top, offset, depth, .. } => {
+                let mut out = profile_expressions_mut(bottom);
+                out.extend(profile_expressions_mut(top));
+                out.extend([offset, depth]);
+                out
+            }
             ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
@@ -187,6 +219,8 @@ impl ComponentShape {
         match self {
             ComponentShape::Extrusion { points, .. } => points.len(),
             ComponentShape::Profile { points, .. } | ComponentShape::Revolution { points, .. } => points.len(),
+            ComponentShape::Sweep { path, profile, .. } => path.len() + profile.len(),
+            ComponentShape::Blend { bottom, top, .. } => bottom.len() + top.len(),
             _ => 0,
         }
     }
@@ -372,6 +406,18 @@ pub struct ComponentDef {
     /// Where pipes and conduits connect to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub connectors: Vec<ComponentConnector>,
+    /// Named planes whose positions expressions read (see [`crate::component_ref`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ref_planes: Vec<crate::component_ref::RefPlane>,
+    /// Named lines on the sketch planes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ref_lines: Vec<crate::component_ref::RefLine>,
+    /// Dimensions between reference planes, labeled by the parameters that drive them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dimensions: Vec<crate::component_ref::RefDimension>,
+    /// Planes kept halfway between two others (EQ).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equals: Vec<crate::component_ref::RefEqual>,
 }
 
 /// An IFC entity class with its predefined and object types.
@@ -454,16 +500,16 @@ impl ComponentDef {
     /// other components, or when they do not evaluate to positive sizes).
     pub fn opening_size(&self) -> Option<(f64, f64)> {
         let o = self.opening.as_ref()?;
-        let values = self.values(&BTreeMap::new());
-        let lookup = |name: &str| values.get(name).copied();
+        let scope = self.scope(&BTreeMap::new(), &[]);
+        let lookup = |name: &str| scope.get(name);
         let (w, h) = (expr::eval(&o.width, &lookup).ok()?, expr::eval(&o.height, &lookup).ok()?);
         (w > 0.0 && h > 0.0).then_some((w, h))
     }
 
     /// The connectors whose expressions evaluate, in the component's frame.
     pub fn resolve_connectors(&self, overrides: &BTreeMap<String, f64>) -> Vec<ResolvedConnector> {
-        let values = self.values(overrides);
-        let lookup = |name: &str| values.get(name).copied();
+        let scope = self.scope(overrides, &[]);
+        let lookup = |name: &str| scope.get(name);
         self.connectors
             .iter()
             .enumerate()
@@ -486,8 +532,8 @@ impl ComponentDef {
     /// Sill height of new doors and windows of this definition (0 when unset or invalid).
     pub fn default_sill(&self) -> f64 {
         let Some(o) = self.opening.as_ref().filter(|o| !o.sill.trim().is_empty()) else { return 0.0 };
-        let values = self.values(&BTreeMap::new());
-        expr::eval(&o.sill, &|name: &str| values.get(name).copied()).map_or(0.0, |v| v.max(0.0))
+        let scope = self.scope(&BTreeMap::new(), &[]);
+        expr::eval(&o.sill, &|name: &str| scope.get(name)).map_or(0.0, |v| v.max(0.0))
     }
 
     /// The category of the types of this definition: doors and windows
@@ -506,23 +552,24 @@ impl ComponentDef {
     }
 
     /// Resolve every piece with `extra` names defined too (a door's
-    /// [`WALL_THICKNESS`]); parameters of the same name win.
+    /// [`WALL_THICKNESS`]); parameters of the same name win. Pieces also
+    /// read the reference planes.
     pub fn resolve_in(
         &self,
         overrides: &BTreeMap<String, f64>,
         extra: &[(&str, f64)],
     ) -> (Vec<ComponentPart>, Vec<(usize, PartError)>) {
-        let values = self.values(overrides);
-        let lookup =
-            |name: &str| values.get(name).copied().or_else(|| extra.iter().find(|(n, _)| *n == name).map(|(_, v)| *v));
+        let scope = self.scope(overrides, extra);
+        let lookup = |name: &str| scope.get(name);
         let mut parts = Vec::new();
         let mut errors = Vec::new();
         for (i, item) in self.items.iter().enumerate() {
             let resolved = match &item.shape {
                 ComponentShape::Mesh { vertices, faces } => resolve_mesh(vertices, faces),
-                ComponentShape::Profile { .. } | ComponentShape::Revolution { .. } => {
-                    resolve_profile(&item.shape, &lookup)
-                }
+                ComponentShape::Profile { .. }
+                | ComponentShape::Revolution { .. }
+                | ComponentShape::Sweep { .. }
+                | ComponentShape::Blend { .. } => resolve_profile(&item.shape, &lookup),
                 shape => resolve_shape(shape, &lookup).map(|(footprint, z0, z1)| (footprint, z0, z1, Vec::new())),
             };
             match resolved {
@@ -550,9 +597,46 @@ impl ComponentDef {
 
     /// Rename a parameter and every reference to it in the pieces.
     pub fn rename_param(&mut self, old: &str, new: &str) {
+        self.rename(old, new);
+    }
+
+    /// Rename a parameter, reference plane or line and every expression,
+    /// dimension and label that reads it.
+    pub fn rename(&mut self, old: &str, new: &str) {
         for p in &mut self.params {
             if p.name == old {
                 p.name = new.to_string();
+            }
+        }
+        for p in &mut self.ref_planes {
+            if p.name == old {
+                p.name = new.to_string();
+            }
+            p.at = replace_name(&p.at, old, new);
+        }
+        for l in &mut self.ref_lines {
+            if l.name == old {
+                l.name = new.to_string();
+            }
+            for e in [&mut l.offset, &mut l.start.0, &mut l.start.1, &mut l.end.0, &mut l.end.1] {
+                *e = replace_name(e, old, new);
+            }
+        }
+        for d in &mut self.dimensions {
+            for name in [&mut d.from, &mut d.to] {
+                if name == old {
+                    *name = new.to_string();
+                }
+            }
+            if d.label.as_deref() == Some(old) {
+                d.label = Some(new.to_string());
+            }
+        }
+        for q in &mut self.equals {
+            for name in [&mut q.a, &mut q.middle, &mut q.b] {
+                if name == old {
+                    *name = new.to_string();
+                }
             }
         }
         for item in &mut self.items {
@@ -575,7 +659,7 @@ impl ComponentDef {
 
 /// Replace whole-identifier occurrences of `old` in `text` (numbers such as
 /// `2e3` are left alone).
-fn replace_name(text: &str, old: &str, new: &str) -> String {
+pub fn replace_name(text: &str, old: &str, new: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
@@ -632,6 +716,16 @@ fn resolve_profile(shape: &ComponentShape, lookup: &dyn Fn(&str) -> Option<f64>)
             let outline = profile::outline(points, lookup).map_err(from)?;
             let (offset, axis, angle) = (ev("offset", offset)?, ev("axis", axis)?, ev("angle", angle)?);
             profile::revolve(*plane, &outline, offset, axis, angle).map_err(from)?
+        }
+        ComponentShape::Sweep { plane, path, offset, profile } => {
+            let path = crate::sweep::path(path, lookup).map_err(from)?;
+            let section = profile::outline(profile, lookup).map_err(from)?;
+            crate::sweep::sweep(*plane, &path, ev("offset", offset)?, &section).map_err(from)?
+        }
+        ComponentShape::Blend { plane, bottom, top, offset, depth } => {
+            let (low, high) =
+                (profile::outline(bottom, lookup).map_err(from)?, profile::outline(top, lookup).map_err(from)?);
+            crate::sweep::blend(*plane, &low, &high, ev("offset", offset)?, ev("depth", depth)?).map_err(from)?
         }
         _ => return Err(PartError::Degenerate),
     };
@@ -729,9 +823,11 @@ fn resolve_shape(
             }
             Ok((footprint, z, z + h))
         }
-        ComponentShape::Mesh { .. } | ComponentShape::Profile { .. } | ComponentShape::Revolution { .. } => {
-            Err(PartError::Degenerate)
-        }
+        ComponentShape::Mesh { .. }
+        | ComponentShape::Profile { .. }
+        | ComponentShape::Revolution { .. }
+        | ComponentShape::Sweep { .. }
+        | ComponentShape::Blend { .. } => Err(PartError::Degenerate),
     }
 }
 
@@ -804,6 +900,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
         mep: None,
         params: vec![length(&w, 1.2), length(&d, 0.8), length(&h, 0.75)],
         items,
+        ..Default::default()
     };
     out.push((n("tpl-comp-table"), n("tpl-type-table"), table));
 
@@ -840,6 +937,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
         mep: None,
         params: vec![length(&w, 0.45), length(&d, 0.5), length(&h, 0.9), length(&seat, 0.45)],
         items,
+        ..Default::default()
     };
     out.push((n("tpl-comp-chair"), n("tpl-type-chair"), chair));
 
@@ -875,6 +973,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 true,
             ),
         ],
+        ..Default::default()
     };
     out.push((n("tpl-comp-bed"), n("tpl-type-bed"), bed));
 
@@ -933,6 +1032,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 true,
             ),
         ],
+        ..Default::default()
     };
     out.push((n("tpl-comp-sofa"), n("tpl-type-sofa"), sofa));
 
@@ -994,6 +1094,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 true,
             ),
         ],
+        ..Default::default()
     };
     out.push((n("tpl-comp-toilet"), n("tpl-type-toilet"), toilet));
 
@@ -1043,6 +1144,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
                 plan_only: false,
             },
         ],
+        ..Default::default()
     };
     out.push((n("tpl-comp-washbasin"), n("tpl-type-washbasin"), basin));
 
@@ -1065,6 +1167,7 @@ pub fn library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, ComponentDef)
             &wood,
             true,
         )],
+        ..Default::default()
     };
     out.push((n("tpl-comp-wardrobe"), n("tpl-type-wardrobe"), wardrobe));
     out.extend(mep_library(n));
@@ -1105,9 +1208,17 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
         depth: d.clone(),
         height: h.clone(),
     };
-    let def = |kind: ComponentKind, params: Vec<ComponentParam>, items: Vec<ComponentItem>, mep: MepData| {
-        ComponentDef { kind, params, items, ifc: None, mep: Some(mep), opening: None, connectors: Vec::new() }
-    };
+    let def =
+        |kind: ComponentKind, params: Vec<ComponentParam>, items: Vec<ComponentItem>, mep: MepData| ComponentDef {
+            kind,
+            params,
+            items,
+            ifc: None,
+            mep: Some(mep),
+            opening: None,
+            connectors: Vec::new(),
+            ..Default::default()
+        };
     let device = |device: D, power: f64| MepData::Device { device, power };
     let body = n("tpl-part-body");
     let mut out = Vec::new();

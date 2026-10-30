@@ -12,7 +12,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
-- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
+- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
@@ -1212,6 +1212,206 @@ No parameters.
 |---|---|---|---|
 | `def` | JSON | required | The definition: `params` (name, value, kind, instance) and `items` (pieces), shaped like a component type's `params.def` in `type_get`. |
 | `name` | string | required | Name of the component and of its first type. |
+
+### `component_get`
+
+*query* — The component of a type, as the modeling environment shows it: the definition, the value of every parameter and reference plane, the value of each dimension, the problems found, and the component's types with their parameter values.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `type` | id or name | required | A type of the component: id or name. |
+
+### `component_param_add`
+
+*edit* — Add a parameter to a component (to every type, with the same value).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name used in expressions (letters, digits and `_`, not starting with a digit). |
+| `type` | id or name | required | A type of the component: id or name. |
+| `instance` | boolean | optional | Elements may override the value. |
+| `kind` | string | optional | `length` (default), `angle` or `number`. |
+| `value` | number | optional | Value (meters for lengths, degrees for angles; default 0). |
+
+### `component_param_set`
+
+*edit* — Change a component parameter: its value (for the type named only), kind, whether elements may override it, or its name (every expression, dimension and type follows a rename).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The parameter's current name. |
+| `type` | id or name | required | A type of the component: id or name (the value changes for this type). |
+| `instance` | boolean | optional | Elements may override the value. |
+| `kind` | string | optional | `length`, `angle` or `number`. |
+| `rename` | string | optional | New name. |
+| `value` | number | optional | New value for the type named. |
+
+### `component_param_delete`
+
+*edit* — Remove a component parameter; refused while an expression reads it. Dimensions it labels lose the label (their planes keep their place).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The parameter's name. |
+| `type` | id or name | required | A type of the component: id or name. |
+
+### `component_ref_plane_add`
+
+*edit* — Add a reference plane to a component: square to `axis` (`x`: a left/right plane, `y`: front/back, `z`: a height), at the position `at`, an expression that may read parameters and other planes (`Left + Width`).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `at` | string | required | Position along the axis (meters): a number or an expression. |
+| `axis` | string | required | `x`, `y` or `z`. |
+| `type` | id or name | required | A type of the component: id or name. |
+| `name` | string | optional | Name (default `Plane1`, `Plane2`…). |
+
+### `component_ref_plane_set`
+
+*edit* — Move or rename a reference plane: `at` is its new position (an expression); a rename follows into every expression and dimension.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The plane's current name. |
+| `type` | id or name | required | A type of the component: id or name. |
+| `at` | string | optional | New position: a number or an expression. |
+| `rename` | string | optional | New name. |
+
+### `component_ref_plane_delete`
+
+*edit* — Remove a reference plane and the dimensions on it; refused while an expression reads it.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The plane's name. |
+| `type` | id or name | required | A type of the component: id or name. |
+
+### `component_ref_line_add`
+
+*edit* — Add a reference line on one of the sketch planes (`plan`, `front` or `side`, standing at `offset` along its normal axis): its ends are `[u, v]` pairs of expressions in that plane.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `end` | [old, new] | required | Second end `[u, v]`. |
+| `plane` | string | required | `plan`, `front` or `side`. |
+| `start` | [old, new] | required | First end `[u, v]`: numbers or expressions. |
+| `type` | id or name | required | A type of the component: id or name. |
+| `name` | string | optional | Name (default `Line1`, `Line2`…). |
+| `offset` | string | optional | Position of the sketch plane along its normal axis (default 0). |
+
+### `component_ref_line_delete`
+
+*edit* — Remove a reference line.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The line's name. |
+| `type` | id or name | required | A type of the component: id or name. |
+
+### `component_dimension_add`
+
+*edit* — Dimension two parallel reference planes in a view (`plan`, `front` or `side`, one that sees them edge-on). With `label`, a length parameter drives it: the second plane moves to the first plus the parameter (the parameter is created with the current distance when missing).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `from` | string | required | The plane it measures from. |
+| `to` | string | required | The plane it measures to (the one a label moves). |
+| `type` | id or name | required | A type of the component: id or name. |
+| `view` | string | required | `plan`, `front` or `side`. |
+| `label` | string | optional | Parameter that drives the distance. |
+| `place` | number | optional | Where the dimension line sits across the planes (meters, default 0). |
+
+### `component_dimension_set`
+
+*edit* — Change a dimension between reference planes: label it with a parameter (`label`, created when missing), take its label off (`label: ""`, the planes stay), move its line (`place`) or give it a new `value` (the label's parameter for this type, or the moving plane's position).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `index` | integer | required | The dimension's index (from `component_get`). |
+| `type` | id or name | required | A type of the component: id or name. |
+| `label` | string | optional | Parameter that drives it; empty to take the label off. |
+| `place` | number | optional | Where the dimension line sits across the planes. |
+| `value` | number | optional | New distance (meters). |
+
+### `component_dimension_delete`
+
+*edit* — Remove a dimension between reference planes (the planes stay).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `index` | integer | required | The dimension's index. |
+| `type` | id or name | required | A type of the component: id or name. |
+
+### `component_equal_add`
+
+*edit* — Keep the plane `middle` halfway between the parallel planes `a` and `b` (an equality, EQ): its position becomes `(a + b) / 2`, so it follows whatever moves them. Shown in `view` (`plan`, `front` or `side`) as two equal dimensions.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `a` | string | required | One outer plane. |
+| `b` | string | required | The other outer plane. |
+| `middle` | string | required | The plane kept halfway (not an origin plane). |
+| `type` | id or name | required | A type of the component: id or name. |
+| `view` | string | required | `plan`, `front` or `side`. |
+| `place` | number | optional | Where the dimensions' line sits across the planes (meters, default 0). |
+
+### `component_equal_delete`
+
+*edit* — Remove an equality (EQ); its middle plane stays halfway as written.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `index` | integer | required | The equality's index (from `component_get`). |
+| `type` | id or name | required | A type of the component: id or name. |
+
+### `component_piece_add`
+
+*edit* — Add a piece drawn as a sketch on the `plan`, `front` or `side` plane: an `extrusion` of the closed outline from `start` to `end` along the plane's normal (Z for the plan, Y for the front, X for the side); a `revolution` about the line u = `axis` of the plane, `angle` degrees (default 360); a `sweep` of the closed outline (`points`: u to the left of the path, v along the normal) along the open `path` drawn on the plane at `start`, mitered at its corners; or a `blend` from the outline at `start` to the `top` outline at `end`. Coordinates are numbers or expressions; a reference plane's name locks a coordinate (or `start`, `end`, `axis`) to that plane, so the piece follows it. With `void`, the piece is cut out of the solid pieces it overlaps.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `plane` | string | required | `plan`, `front` or `side`. |
+| `points` | [object, …] | required | The closed outline, in order (a sweep's section, a blend's bottom). |
+| `type` | id or name | required | A type of the component: id or name. |
+| `angle` | number or string | optional | Revolutions: degrees turned (default 360). |
+| `axis` | number or string | optional | Revolutions: the axis, u = `axis` in the sketch plane. |
+| `end` | number or string | optional | Extrusions and blends: where they end along the normal (default 0.1 past `start`). |
+| `kind` | string | optional | `extrusion` (default), `revolution`, `sweep` or `blend`. |
+| `material` | string | optional | Project material name. |
+| `name` | string | optional | Name (default `Piece1`, `Piece2`…). |
+| `path` | [object, …] | optional | Sweeps: the open path the section follows. |
+| `start` | number or string | optional | Where the sketch plane stands along its normal (default 0). |
+| `top` | [object, …] | optional | Blends: the closed outline at `end`. |
+| `void` | boolean | optional | Cut out of the solid pieces it overlaps. |
+
+### `component_piece_set`
+
+*edit* — Change a piece of a component: its name, material, whether it is a void or drawn in plans, and for sketched pieces their outline, `start`, `end` (extrusions), `axis` and `angle` (revolutions).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `index` | integer | required | The piece's index (from `component_get`). |
+| `type` | id or name | required | A type of the component: id or name. |
+| `angle` | number or string | optional | Revolutions: degrees turned. |
+| `axis` | number or string | optional | Revolutions: the axis, u = `axis` in the sketch plane. |
+| `end` | number or string | optional | Extrusions: where they end along the normal. |
+| `in_plan` | boolean | optional | Drawn in plans. |
+| `material` | string | optional | Project material name (empty for the default color). |
+| `name` | string | optional | New name. |
+| `path` | [object, …] | optional | Sweeps: new path. |
+| `points` | [object, …] | optional | New outline (a sweep's section, a blend's bottom). |
+| `start` | number or string | optional | Where the sketch plane stands along its normal. |
+| `top` | [object, …] | optional | Blends: new top outline. |
+| `void` | boolean | optional | Cut out of the solid pieces it overlaps. |
+
+### `component_piece_delete`
+
+*edit* — Remove a piece of a component (a component keeps at least one).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `index` | integer | required | The piece's index. |
+| `type` | id or name | required | A type of the component: id or name. |
 
 ### `material_create`
 

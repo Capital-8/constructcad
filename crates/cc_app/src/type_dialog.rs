@@ -179,13 +179,20 @@ fn component_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     section(ui, "type-component", t!("section-component"), |ui| {
         readonly_row(ui, &t!("col-component"), component.clone());
         readonly_row(ui, &t!("col-component-kind"), tr(def.kind.key()));
-        let (edit, save) = row(ui, &t!("comp-definition"), |ui| {
+        let (edit, quick, save) = row(ui, &t!("comp-definition"), |ui| {
             ui.horizontal(|ui| {
-                (ui.button(t!("action-edit-component")).clicked(), ui.button(t!("action-save-component")).clicked())
+                (
+                    ui.button(t!("action-edit-component")).clicked(),
+                    ui.button(t!("action-quick-edit-component")).clicked(),
+                    ui.button(t!("action-save-component")).clicked(),
+                )
             })
             .inner
         });
         if edit {
+            crate::component_env::open(state, tid);
+        }
+        if quick {
             state.dialogs.component_editor = crate::component_editor::Editor::open(state, tid);
         }
         if save {

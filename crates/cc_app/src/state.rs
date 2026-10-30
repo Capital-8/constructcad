@@ -156,6 +156,8 @@ pub struct AppState {
     pub zoom_default: crate::canvas::ZoomCommand,
     /// Value field open over a view (dimension values).
     pub value_edit: Option<crate::dim_edit::ValueEdit>,
+    /// The component modeling environment, when open (it replaces the views).
+    pub component_env: Option<crate::component_env::Env>,
     /// Text editor open over a view (text notes).
     pub text_edit: Option<crate::text_tool::TextEditor>,
     /// Options of the text tools.
@@ -212,6 +214,7 @@ impl AppState {
             zoom_default: Default::default(),
             seen_selection: Default::default(),
             value_edit: None,
+            component_env: None,
             text_edit: None,
             text_options: Default::default(),
         }
