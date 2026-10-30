@@ -472,7 +472,12 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
         })
         .collect();
     (
-        Drawing2D { prims, fit_elements: drawing.fit_elements, background: drawing.background.clone() },
+        Drawing2D {
+            prims,
+            fit_elements: drawing.fit_elements,
+            background: drawing.background.clone(),
+            tags: Vec::new(),
+        },
         hi - lo + DVec2::splat(2.0 * margin),
     )
 }

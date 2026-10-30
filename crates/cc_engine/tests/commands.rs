@@ -2465,6 +2465,52 @@ fn ramps_shapes_rules_and_railings() {
     assert_representation_types(&ifc);
 }
 
+/// Tags move by hand in a plan (door, window, beam, column tags): the tag
+/// is drawn where it was put, with a leader back to its element, each plan
+/// keeping its own; reset puts it back, and deleting the element drops it.
+#[test]
+fn tags_are_moved_in_their_plan() {
+    let mut s = Session::default();
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));
+    let window = id(&run(&mut s, "window_create", json!({"wall": wall["id"], "mark": "J1"})));
+    let plans = run(&mut s, "views_list", json!({"category": "floor_plan"}));
+    let plan = cc_core::ViewId(id(&plans[0]));
+    let tag = |s: &mut Session| {
+        let d = s.drawing(plan).unwrap();
+        let t = d.tags.iter().find(|t| t.element.0 == window).copied().unwrap();
+        let leader = d.prims.iter().filter(|p| matches!(p, cc_views::Prim::Line { style: cc_views::LineStyle::Annotation, element: Some(e), .. } if e.0 == window)).count();
+        (t.center, leader)
+    };
+    let (home, lines_home) = tag(&mut s);
+    run(&mut s, "tag_move", json!({"view": plan.0, "id": window, "delta": [0.5, 2.0]}));
+    let (moved, lines_moved) = tag(&mut s);
+    assert!((moved - home - glam::DVec2::new(0.5, 2.0)).length() < 1e-9, "{home} → {moved}");
+    assert_eq!(lines_moved, lines_home + 1, "a leader to the window");
+    // A duplicate plan starts with the same tag positions, then each keeps its own.
+    let other = id(&run(&mut s, "view_duplicate", json!({"view": plan.0})));
+    run(&mut s, "tag_move", json!({"view": other, "id": window, "reset": true}));
+    let d = s.drawing(cc_core::ViewId(other)).unwrap();
+    assert!((d.tags.iter().find(|t| t.element.0 == window).unwrap().center - home).length() < 1e-9);
+    assert!((tag(&mut s).0 - moved).length() < 1e-9, "the first plan keeps its tag");
+    // Back home, then moved again and the window deleted: the offset goes with it.
+    run(&mut s, "tag_move", json!({"view": plan.0, "id": window, "reset": true}));
+    assert!((tag(&mut s).0 - home).length() < 1e-9);
+    run(&mut s, "tag_move", json!({"view": plan.0, "id": window, "offset": [1, 1]}));
+    run(&mut s, "elements_delete", json!({"ids": [window]}));
+    assert!(s.project().view(plan).unwrap().tag_offsets.is_empty());
+    // Bad requests.
+    let three_d = run(&mut s, "view_create", json!({"kind": "three_d"}));
+    assert_eq!(
+        fails(&mut s, "tag_move", json!({"view": three_d["id"], "id": id(&wall), "reset": true})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(fails(&mut s, "tag_move", json!({"view": plan.0, "id": id(&wall)})), ErrorCode::InvalidArguments);
+    assert_eq!(
+        fails(&mut s, "tag_move", json!({"view": plan.0, "id": id(&wall), "offset": [5000, 0]})),
+        ErrorCode::InvalidArguments
+    );
+}
+
 /// Conceptual masses (#31): an extrusion and a loft, their mass floors at
 /// the levels they span with areas, perimeters and volume, choosing the
 /// floors, schedules, moving, undo, saving, and a level deleted under them.

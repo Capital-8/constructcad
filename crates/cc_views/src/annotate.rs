@@ -18,6 +18,43 @@ pub const HIGHLIGHT_ONLY: [u8; 4] = [255, 255, 255, 0];
 /// Nearly invisible fill that makes text tags clickable.
 const PICK_AREA: [u8; 4] = [255, 255, 255, 1];
 
+/// Tags a view moved by hand: offsets in plan by the element they tag.
+pub type TagOffsets = std::collections::BTreeMap<cc_core::ElementId, DVec2>;
+
+/// Where a tag sits once the view's offset for `id` moves it from its
+/// default spot: its box (center and half size, the default box moved) is
+/// recorded so it can be dragged, and a tag moved away from the element gets
+/// a leader from `anchor` (the point of the element it names) to its edge.
+/// Returns the offset to add to what the tag draws.
+fn place_tag(
+    d: &mut Drawing2D,
+    offsets: &TagOffsets,
+    id: cc_core::ElementId,
+    center: DVec2,
+    half: DVec2,
+    anchor: DVec2,
+) -> DVec2 {
+    let offset = offsets.get(&id).copied().filter(|o| o.is_finite()).unwrap_or(DVec2::ZERO);
+    let center = center + offset;
+    d.tags.push(crate::TagHandle { element: id, center, half, offset });
+    if offset.length() > 1e-9 && !(anchor - center).abs().cmple(half).all() {
+        // The leader stops at the edge of the tag's box.
+        let dir = (anchor - center).normalize_or_zero();
+        let tx = if dir.x.abs() > 1e-12 { half.x / dir.x.abs() } else { f64::INFINITY };
+        let ty = if dir.y.abs() > 1e-12 { half.y / dir.y.abs() } else { f64::INFINITY };
+        d.line(anchor, center + dir * tx.min(ty), LineStyle::Annotation, Some(id));
+    }
+    offset
+}
+
+/// Half size, in plan, of a single line of `text` `size` paper millimeters
+/// high, turned `angle` radians (its bounding box).
+fn text_half(text: &str, size: f64, angle: f64, mm: f64) -> DVec2 {
+    let (w, h) = (text.chars().count().max(1) as f64 * size * 0.6 * mm / 2.0, size * mm / 2.0);
+    let (s, c) = angle.sin_cos();
+    DVec2::new((w * c).abs() + (h * s).abs(), (w * s).abs() + (h * c).abs())
+}
+
 /// Tags of rooms and openings, and grids, for a floor or ceiling plan of `level`.
 pub fn plan_annotations(
     d: &mut Drawing2D,
@@ -26,9 +63,9 @@ pub fn plan_annotations(
     level: LevelId,
     ceiling: bool,
     structural: bool,
-    scale: u32,
+    view: &cc_core::View,
 ) {
-    let mm = mm(scale);
+    let (mm, offsets) = (mm(view.scale), &view.tag_offsets);
     for e in project.elements.values() {
         match &e.kind {
             ElementKind::Room(room) if e.level == level && !structural => {
@@ -55,7 +92,7 @@ pub fn plan_annotations(
         }
     }
     if !ceiling && !structural {
-        opening_tags(d, project, geom, level, mm);
+        opening_tags(d, project, geom, level, mm, offsets);
     }
 }
 
@@ -91,7 +128,14 @@ pub fn section_label(data: &TypeData) -> Option<String> {
 /// Tags of the beams, columns and pad footings of `level`: their mark and
 /// section (`V1 15×40`). Beam tags run along the beam, beside it; column
 /// and footing tags sit above and to the right.
-pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, scale: u32) {
+pub fn structure_tags(
+    d: &mut Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    scale: u32,
+    offsets: &TagOffsets,
+) {
     let mm = mm(scale);
     for e in project.elements.values().filter(|e| e.level == level) {
         let Some(section) = project.element_type(e.type_id).and_then(|t| section_label(&t.data)) else { continue };
@@ -107,7 +151,11 @@ pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry
                 }
                 let up = dir.perp();
                 let p = g.world(u, 0.0) + up * (g.half + 1.0 * mm);
-                d.tag_text(p, &text, 2.5, Anchor::CenterBottom, dir.y.atan2(dir.x), Some(e.id));
+                let angle = dir.y.atan2(dir.x);
+                let center = p + up * (1.25 * mm);
+                let half = text_half(&text, 2.5, angle, mm);
+                let offset = place_tag(d, offsets, e.id, center, half, g.world(u, 0.0));
+                d.tag_text(p + offset, &text, 2.5, Anchor::CenterBottom, angle, Some(e.id));
             }
             ElementKind::Column(c) if c.structural => {
                 let Some(TypeData::Column { section, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
@@ -115,13 +163,19 @@ pub fn structure_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry
                 };
                 let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
                 let hi = outline.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
-                d.tag_text(hi + DVec2::splat(1.0 * mm), &text, 2.5, Anchor::LeftBottom, 0.0, Some(e.id));
+                let p = hi + DVec2::splat(1.0 * mm);
+                let half = text_half(&text, 2.5, 0.0, mm);
+                let offset = place_tag(d, offsets, e.id, p + half, half, c.position);
+                d.tag_text(p + offset, &text, 2.5, Anchor::LeftBottom, 0.0, Some(e.id));
             }
             ElementKind::Foundation(_) => {
                 let Some(g) = geom.foundations.get(&e.id) else { continue };
                 let lo = g.footprint.iter().fold(DVec2::splat(f64::INFINITY), |a, p| a.min(*p));
                 let hi = g.footprint.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
-                d.tag_text(DVec2::new(hi.x + mm, lo.y), &text, 2.5, Anchor::LeftBottom, 0.0, Some(e.id));
+                let p = DVec2::new(hi.x + mm, lo.y);
+                let half = text_half(&text, 2.5, 0.0, mm);
+                let offset = place_tag(d, offsets, e.id, p + half, half, (lo + hi) * 0.5);
+                d.tag_text(p + offset, &text, 2.5, Anchor::LeftBottom, 0.0, Some(e.id));
             }
             _ => {}
         }
@@ -153,7 +207,14 @@ fn grid_line(d: &mut Drawing2D, start: DVec2, end: DVec2, name: &str, bubble_mm:
     d.tag_text(center, name, bubble_mm * 0.45, Anchor::Center, 0.0, Some(id));
 }
 
-fn opening_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, mm: f64) {
+fn opening_tags(
+    d: &mut Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    level: LevelId,
+    mm: f64,
+    offsets: &TagOffsets,
+) {
     for wall in geom.walls.values() {
         if project.element(wall.element).is_none_or(|e| e.level != level) {
             continue;
@@ -170,6 +231,7 @@ fn opening_tags(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, leve
             let u = (o.u0 + o.u1) / 2.0;
             let r = 2.6 * mm;
             let c = wall.world(u, side * (wall.half + r + 2.0 * mm));
+            let c = c + place_tag(d, offsets, e.id, c, DVec2::splat(r), wall.world(u, side * wall.half));
             if door {
                 let circle: Vec<DVec2> =
                     (0..24).map(|i| c + DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU) * r).collect();

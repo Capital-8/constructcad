@@ -342,6 +342,11 @@ pub enum Drag {
         ids: Vec<ElementId>,
         copy: bool,
     },
+    /// The tag of an element, as drawn when the drag started.
+    Tag {
+        tag: cc_views::TagHandle,
+        start: DVec2,
+    },
 }
 
 /// Transient state of the active tool.
@@ -2732,11 +2737,19 @@ fn select(
         // The handle moves the arc's middle toward or away from its center.
         let mid = arc.point(arc.length() * 0.5);
         ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(mid) - xf.to_screen(arc.center)));
+    } else if movable && raw.is_some_and(|p| drawing.tag_at(p).is_some()) {
+        // Tags are dragged to a new spot.
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
     }
 
     if resp.drag_started_by(egui::PointerButton::Primary) {
         let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or_default();
         let w = xf.to_world(origin);
+        // A tag is dragged on its own, away from its element.
+        if movable && let Some(tag) = drawing.tag_at(w) {
+            state.interaction.drag = Some(Drag::Tag { tag, start: w });
+            return;
+        }
         if let Some((id, at_start, _, fixed)) = grip_at(origin) {
             state.interaction.drag = Some(Drag::Grip { id, at_start, fixed });
             return;
@@ -2839,6 +2852,12 @@ fn select(
             let verb = if *copy { t!("label-copy") } else { t!("label-move") };
             label(painter, xf.to_screen(raw), format!("{verb} {}", format::length(delta.length())));
         }
+        (Some(Drag::Tag { tag, start }), Some(raw)) => {
+            // The tag's box where it would go.
+            let center = tag.center + (raw - *start);
+            let rect = egui::Rect::from_two_pos(xf.to_screen(center - tag.half), xf.to_screen(center + tag.half));
+            painter.rect_stroke(rect.expand(2.0), 2.0, Stroke::new(1.5, PREVIEW), egui::StrokeKind::Middle);
+        }
         (Some(Drag::Box { start }), _) => {
             if let Some(cur) = resp.interact_pointer_pos().or(resp.hover_pos()) {
                 select_box(painter, *start, cur);
@@ -2863,6 +2882,20 @@ fn select(
             }
             // Handled above while the pointer is over the view.
             Some(Drag::Grip { .. } | Drag::Bend { .. }) => {}
+            Some(Drag::Tag { tag, start }) => {
+                if let (Some(raw), Some(view)) = (raw.or(state.cursor), state.active_view)
+                    && raw.distance(start) > 1e-6
+                {
+                    let command = cc_engine::commands::annotate::TagMove {
+                        view: Ref::Id(view.0),
+                        id: tag.element.0,
+                        delta: Some((raw - start).to_array()),
+                        offset: None,
+                        reset: false,
+                    };
+                    crate::actions::run_command(state, command);
+                }
+            }
             Some(Drag::Box { start }) => {
                 let end = resp.interact_pointer_pos().or(resp.hover_pos()).unwrap_or(start);
                 let (a, b) = (xf.to_world(start), xf.to_world(end));

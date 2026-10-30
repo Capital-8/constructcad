@@ -456,7 +456,7 @@ impl<'a> EditCtx<'a> {
         let changed: Vec<(ViewId, View)> = p
             .views
             .values()
-            .filter(|v| v.template.is_some() || !v.graphics.is_empty())
+            .filter(|v| v.template.is_some() || !v.graphics.is_empty() || !v.tag_offsets.is_empty())
             .filter_map(|v| {
                 let mut new = v.clone();
                 match new.template.map(|t| p.templates.get(&t)) {
@@ -465,6 +465,8 @@ impl<'a> EditCtx<'a> {
                     None => {}
                 }
                 new.graphics.repair(&p.filters, Some(&|id| p.elements.contains_key(&id)));
+                // Tags of deleted elements go.
+                new.tag_offsets.retain(|id, o| p.elements.contains_key(id) && o.is_finite());
                 (new != *v).then_some((v.id, new))
             })
             .collect();

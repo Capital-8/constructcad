@@ -216,6 +216,7 @@ registry![
     ],
     "Dimensions and text" => [
         annotate::DimensionCreate,
+        annotate::TagMove,
         annotate::DimensionChainCreate,
         annotate::DimensionOrdinateCreate,
         annotate::DimensionSetValue,

@@ -98,6 +98,8 @@ Two-letter keys work while a view has the focus and no text field is being edite
 
 A click picks the element under the pointer (Ctrl adds or removes it). A drag that starts on empty paper, or inside a floor, a hatch or another fill, draws a selection box: dragged to the right it is a window and takes the elements wholly inside it (their lines, fills and texts); dragged to the left it is a crossing, dashed and green, and also takes those it cuts or lies in: a wall crossed between its ends, a floor around the box, a text anchored in it. Room areas and imported drawings are not taken by a crossing (a window around them takes them). Ctrl keeps the current selection and adds to it. A drag that starts on an element's line, or on an element already selected, moves it instead (Ctrl+drag copies).
 
+Tags of doors, windows, beams, columns and footings can be dragged to another spot with the Select tool (the pointer turns into a hand over them). The tag keeps its text and gets a leader back to its element; each plan keeps its own tag positions (a duplicated plan starts with those of the original). *Reset Tag*, in the element's properties, puts it back where it sits by default.
+
 ## Selecting in 3D views
 
 With the Select tool, a click picks the element under the pointer (Ctrl adds or removes it). Shift+drag draws a selection box, as in plans: dragged to the right it is a window and takes the elements wholly inside it; dragged to the left it is a crossing and also takes those it touches. Elements behind others count too; hidden ones do not. Ctrl keeps the current selection and adds to it. With *Dragging in 3D views selects* on in *Preferences → Interface*, a plain left drag draws the box and Shift+drag orbits instead.
