@@ -90,6 +90,8 @@ pub enum Tool {
     Split,
     Offset,
     Align,
+    /// Push or pull a face of a mass in a 3D view.
+    PushPull,
     /// Click near a wall end to allow or disallow its join.
     ToggleJoin,
     /// Measure between two points; the result stays until the next pick.
@@ -158,6 +160,7 @@ impl Tool {
             Tool::Split => "tool-split",
             Tool::Offset => "tool-offset",
             Tool::Align => "tool-align",
+            Tool::PushPull => "tool-push-pull",
             Tool::ToggleJoin => "tool-toggle-join",
             Tool::Measure => "tool-measure",
             Tool::JoinGeometry { unjoin: false } => "tool-join-geometry",
@@ -371,6 +374,8 @@ pub struct Interaction {
     pub plane_z: Option<f64>,
     /// The dimension chain being continued (continuous dimensioning).
     pub dim_chain: Option<DimChain>,
+    /// Push/pull: the mass face picked (the mass, the face, a point on it and its outward normal).
+    pub push: Option<(ElementId, cc_core::mass::MassFace, glam::DVec3, glam::DVec3)>,
 }
 
 impl Interaction {

@@ -110,6 +110,7 @@ pub enum UiCommand {
     MirrorDraw,
     Array,
     Align,
+    PushPull,
     Offset,
     TrimCorner,
     TrimExtend,
@@ -238,6 +239,7 @@ impl UiCommand {
             MirrorDraw,
             Array,
             Align,
+            PushPull,
             Offset,
             TrimCorner,
             TrimExtend,
@@ -371,6 +373,7 @@ impl UiCommand {
             MirrorDraw => Icon::MirrorDraw,
             Array => Icon::Array,
             Align => Icon::Align,
+            PushPull => Icon::PushPull,
             Offset => Icon::Offset,
             TrimCorner => Icon::TrimCorner,
             TrimExtend => Icon::TrimExtend,
@@ -507,6 +510,7 @@ impl UiCommand {
             MirrorDraw => t!("tool-mirror-draw"),
             Array => t!("tool-array"),
             Align => t!("tool-align"),
+            PushPull => t!("tool-push-pull"),
             Offset => t!("tool-offset"),
             TrimCorner => t!("tool-trim-corner"),
             TrimExtend => t!("tool-trim-extend"),
@@ -656,6 +660,7 @@ impl UiCommand {
             MirrorDraw => t!("cmd-desc-mirror-draw"),
             Array => t!("cmd-desc-array"),
             Align => t!("cmd-desc-align"),
+            PushPull => t!("cmd-desc-push-pull"),
             Offset => t!("cmd-desc-offset"),
             TrimCorner => t!("cmd-desc-trim-corner"),
             TrimExtend => t!("cmd-desc-trim-extend"),
@@ -777,6 +782,7 @@ impl UiCommand {
             MirrorDraw => "DM",
             Array => "AR",
             Align => "AL",
+            PushPull => "PP",
             Offset => "OF",
             TrimCorner => "TR",
             TrimExtend => "TX",
@@ -877,6 +883,7 @@ impl UiCommand {
             Rotate => "elements_rotate",
             MirrorPick | MirrorDraw => "elements_mirror",
             Align => "element_align",
+            PushPull => "mass_face_move",
             Offset => "element_offset",
             TrimCorner => "trim_corner",
             TrimExtend => "trim_extend",
@@ -978,6 +985,7 @@ impl UiCommand {
                 Some(t!("why-select-fixtures"))
             }
             StructureTags if crate::actions::active_floor_plan(state).is_none() => Some(t!("msg-plan-only")),
+            PushPull if !crate::modify3d::active_3d(state) => Some(t!("why-push-pull-3d")),
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
@@ -1066,6 +1074,7 @@ impl UiCommand {
             MirrorDraw => *tool == Tool::Mirror { draw: true },
             Array => *tool == Tool::Array,
             Align => *tool == Tool::Align,
+            PushPull => *tool == Tool::PushPull,
             Offset => *tool == Tool::Offset,
             TrimCorner => *tool == Tool::TrimCorner,
             TrimExtend => *tool == Tool::TrimExtend,
@@ -1341,6 +1350,10 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         MirrorDraw => crate::modify::start(state, Tool::Mirror { draw: true }),
         Array => crate::modify::start(state, Tool::Array),
         Align => crate::modify::start_pick(state, Tool::Align),
+        PushPull => {
+            state.set_tool(Tool::PushPull);
+            state.message = t!("hint-push-pull");
+        }
         Offset => crate::modify::start_pick(state, Tool::Offset),
         TrimCorner => crate::modify::start_pick(state, Tool::TrimCorner),
         TrimExtend => crate::modify::start_pick(state, Tool::TrimExtend),

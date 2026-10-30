@@ -254,3 +254,61 @@ impl Command for MassTypeCreate {
         Ok(json!({ "id": id.0 }))
     }
 }
+
+/// Push or pull a face of a mass `distance` meters outward (inward when
+/// negative): `top` changes its height, `bottom` its base offset and
+/// height, and `side` (with `side`, the index of the base outline's edge
+/// from that point to the next) moves that side, the sides beside it
+/// keeping their directions. A loft's sides are not moved.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MassFaceMove {
+    /// Mass element id.
+    pub id: u64,
+    /// `top`, `bottom` or `side`.
+    pub face: String,
+    /// The side's edge of the base outline (with `face: "side"`).
+    #[serde(default)]
+    pub side: Option<usize>,
+    /// Distance outward, meters (negative: inward).
+    pub distance: f64,
+}
+
+impl Command for MassFaceMove {
+    const NAME: &'static str = "mass_face_move";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        use cc_core::mass::MassFace;
+        let (e, m) = mass_of(s.project(), self.id)?;
+        let face = match (self.face.as_str(), self.side) {
+            ("top", None) => MassFace::Top,
+            ("bottom", None) => MassFace::Bottom,
+            ("side", Some(i)) if i < m.outline.len() => MassFace::Side(i),
+            ("side", _) => return Err(EngineError::invalid(format!("side must be 0 to {}", m.outline.len() - 1))),
+            _ => return Err(EngineError::invalid("face must be top, bottom or side (with side)")),
+        };
+        let distance = finite(self.distance, "distance")?;
+        if m.top.is_some() && matches!(face, MassFace::Side(_)) {
+            return Err(EngineError::rejected(t!("msg-loft-sides")));
+        }
+        let mut moved = m.pushed(face, distance).ok_or_else(|| EngineError::rejected(t!("msg-mass-face-too-far")))?;
+        // A mass with a floor at every level it spans keeps one at every level it spans now.
+        let p = s.project();
+        let span = |m: &Mass| {
+            let base = p.level_elevation(e.level) + m.base_offset;
+            spanned_levels(p, base, base + m.height)
+        };
+        let set = |l: &[LevelId]| l.iter().copied().collect::<std::collections::BTreeSet<_>>();
+        if set(&m.floors) == set(&span(m)) {
+            moved.floors = span(&moved);
+        }
+        let id = e.id;
+        edit(s, t!("tx-push-pull"), |e| {
+            if let Some(ElementKind::Mass(m)) = e.element_mut(id).map(|x| &mut x.kind) {
+                *m = moved;
+            }
+            Ok(())
+        })?;
+        Ok(created(s, id))
+    }
+}

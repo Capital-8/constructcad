@@ -318,7 +318,7 @@ impl AppState {
 
     /// A segment is being drawn with typed input (wall, move, copy, array).
     pub fn typing_segment(&self) -> bool {
-        matches!(self.tool, Tool::Wall { .. } | Tool::Move | Tool::Copy | Tool::Array)
+        matches!(self.tool, Tool::Wall { .. } | Tool::Move | Tool::Copy | Tool::Array | Tool::PushPull)
             && self.interaction.anchor.is_some()
     }
 
