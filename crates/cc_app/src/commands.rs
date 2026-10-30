@@ -111,6 +111,10 @@ pub enum UiCommand {
     Array,
     Align,
     PushPull,
+    /// Walls, floors and a roof from the selected masses.
+    MassWalls,
+    MassSlabs,
+    MassRoof,
     Offset,
     TrimCorner,
     TrimExtend,
@@ -240,6 +244,9 @@ impl UiCommand {
             Array,
             Align,
             PushPull,
+            MassWalls,
+            MassSlabs,
+            MassRoof,
             Offset,
             TrimCorner,
             TrimExtend,
@@ -374,6 +381,9 @@ impl UiCommand {
             Array => Icon::Array,
             Align => Icon::Align,
             PushPull => Icon::PushPull,
+            MassWalls => Icon::Wall,
+            MassSlabs => Icon::Floor,
+            MassRoof => Icon::Roof,
             Offset => Icon::Offset,
             TrimCorner => Icon::TrimCorner,
             TrimExtend => Icon::TrimExtend,
@@ -511,6 +521,9 @@ impl UiCommand {
             Array => t!("tool-array"),
             Align => t!("tool-align"),
             PushPull => t!("tool-push-pull"),
+            MassWalls => t!("action-mass-walls"),
+            MassSlabs => t!("action-mass-slabs"),
+            MassRoof => t!("action-mass-roof"),
             Offset => t!("tool-offset"),
             TrimCorner => t!("tool-trim-corner"),
             TrimExtend => t!("tool-trim-extend"),
@@ -661,6 +674,9 @@ impl UiCommand {
             Array => t!("cmd-desc-array"),
             Align => t!("cmd-desc-align"),
             PushPull => t!("cmd-desc-push-pull"),
+            MassWalls => t!("cmd-desc-mass-walls"),
+            MassSlabs => t!("cmd-desc-mass-slabs"),
+            MassRoof => t!("cmd-desc-mass-roof"),
             Offset => t!("cmd-desc-offset"),
             TrimCorner => t!("cmd-desc-trim-corner"),
             TrimExtend => t!("cmd-desc-trim-extend"),
@@ -884,6 +900,9 @@ impl UiCommand {
             MirrorPick | MirrorDraw => "elements_mirror",
             Align => "element_align",
             PushPull => "mass_face_move",
+            MassWalls => "mass_walls_create",
+            MassSlabs => "mass_slabs_create",
+            MassRoof => "mass_roof_create",
             Offset => "element_offset",
             TrimCorner => "trim_corner",
             TrimExtend => "trim_extend",
@@ -986,6 +1005,9 @@ impl UiCommand {
             }
             StructureTags if crate::actions::active_floor_plan(state).is_none() => Some(t!("msg-plan-only")),
             PushPull if !crate::modify3d::active_3d(state) => Some(t!("why-push-pull-3d")),
+            MassWalls | MassSlabs | MassRoof if crate::actions::selected_masses(state).is_empty() => {
+                Some(t!("why-select-mass"))
+            }
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
@@ -1350,6 +1372,9 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         MirrorDraw => crate::modify::start(state, Tool::Mirror { draw: true }),
         Array => crate::modify::start(state, Tool::Array),
         Align => crate::modify::start_pick(state, Tool::Align),
+        MassWalls => crate::actions::from_masses(state, "walls"),
+        MassSlabs => crate::actions::from_masses(state, "slabs"),
+        MassRoof => crate::actions::from_masses(state, "roof"),
         PushPull => {
             state.set_tool(Tool::PushPull);
             state.message = t!("hint-push-pull");

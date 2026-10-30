@@ -312,3 +312,141 @@ impl Command for MassFaceMove {
         Ok(created(s, id))
     }
 }
+
+/// The ids of new elements as JSON.
+fn ids(list: &[ElementId]) -> Value {
+    json!(list.iter().map(|i| i.0).collect::<Vec<_>>())
+}
+
+/// Walls by face: a wall over each side of a mass extruded straight up
+/// (`sides`: the base outline's edges, by default all), its exterior face
+/// on the mass's face, from the mass's base up its height. Walls meeting at
+/// the mass's corners join. A loft's slanted sides take no walls.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MassWallsCreate {
+    /// Mass element id.
+    pub id: u64,
+    /// Wall type id or name (default: the category's default type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// Edges of the base outline to put walls on (default: every edge).
+    #[serde(default)]
+    pub sides: Option<Vec<usize>>,
+}
+
+impl Command for MassWallsCreate {
+    const NAME: &'static str = "mass_walls_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let (e, m) = mass_of(p, self.id)?;
+        if m.top.is_some() {
+            return Err(EngineError::rejected(t!("msg-loft-walls")));
+        }
+        let n = m.outline.len();
+        let sides = self.sides.unwrap_or_else(|| (0..n).collect());
+        if let Some(bad) = sides.iter().find(|i| **i >= n) {
+            return Err(EngineError::invalid(format!("side {bad} is not an edge (0 to {})", n - 1)));
+        }
+        let type_id = refs::type_of(p, Category::Wall, self.type_ref.as_ref())?;
+        // Walls keep their exterior on the left of their line: the outline runs
+        // clockwise for that, with the line on the exterior face.
+        let ccw = cc_geom::polygon::signed_area(&m.outline) > 0.0;
+        let walls: Vec<cc_core::Wall> = sides
+            .iter()
+            .filter_map(|&i| {
+                let (a, b) = (*m.outline.get(i)?, *m.outline.get((i + 1) % n)?);
+                let (start, end) = if ccw { (b, a) } else { (a, b) };
+                (start.distance(end) > 1e-3).then(|| cc_core::Wall {
+                    start,
+                    end,
+                    base_offset: m.base_offset,
+                    height: m.height,
+                    location_line: cc_core::LocationLine::FinishExterior,
+                    ..Default::default()
+                })
+            })
+            .collect();
+        let level = e.level;
+        let created = edit(s, t!("tx-mass-walls"), |e| {
+            Ok(walls.into_iter().map(|w| add_element(e, level, type_id, ElementKind::Wall(w))).collect::<Vec<_>>())
+        })?;
+        Ok(json!({ "created": ids(&created) }))
+    }
+}
+
+/// Floors from mass floors: a floor on each mass floor of a mass (or those
+/// at `levels`), its outline the mass's at that level and its top at the level.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MassSlabsCreate {
+    /// Mass element id.
+    pub id: u64,
+    /// Floor type id or name (default: the category's default type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// Levels (ids or names) of the mass floors to build (default: all of them).
+    #[serde(default)]
+    pub levels: Option<Vec<Ref>>,
+}
+
+impl Command for MassSlabsCreate {
+    const NAME: &'static str = "mass_slabs_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let id = mass_of(s.project(), self.id)?.0.id;
+        let p = s.project();
+        let type_id = refs::type_of(p, Category::Floor, self.type_ref.as_ref())?;
+        let only = self
+            .levels
+            .as_ref()
+            .map(|l| l.iter().map(|r| refs::level(p, r)).collect::<Result<Vec<_>>>())
+            .transpose()?;
+        s.geometry();
+        let g = s.geom().masses.get(&id).cloned().ok_or_else(|| EngineError::invalid("the mass is degenerate"))?;
+        let floors: Vec<_> = g
+            .floors
+            .iter()
+            .filter(|f| only.as_ref().is_none_or(|l| l.contains(&f.level)))
+            .map(|f| (f.level, cc_core::Floor::new(f.outline.clone(), 0.0)))
+            .collect();
+        if floors.is_empty() {
+            return Err(EngineError::rejected(t!("msg-no-mass-floors")));
+        }
+        let created = edit(s, t!("tx-mass-slabs"), |e| {
+            Ok(floors.into_iter().map(|(l, f)| add_element(e, l, type_id, ElementKind::Floor(f))).collect::<Vec<_>>())
+        })?;
+        Ok(json!({ "created": ids(&created) }))
+    }
+}
+
+/// Roof by face: a flat roof on the top face of a mass, over its top
+/// outline, on the mass's level at the height of its top.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MassRoofCreate {
+    /// Mass element id.
+    pub id: u64,
+    /// Roof type id or name (default: the category's default type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+    /// How far the eaves reach past the top outline, meters (default 0).
+    #[serde(default)]
+    pub overhang: Option<f64>,
+}
+
+impl Command for MassRoofCreate {
+    const NAME: &'static str = "mass_roof_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let (e, m) = mass_of(p, self.id)?;
+        let type_id = refs::type_of(p, Category::Roof, self.type_ref.as_ref())?;
+        let overhang = finite(self.overhang.unwrap_or(0.0), "overhang")?.clamp(0.0, 10.0);
+        let roof = cc_core::Roof::new(m.section(1.0), m.base_offset + m.height, overhang, cc_core::RoofShape::Flat);
+        let level = e.level;
+        let id = edit(s, t!("tx-mass-roof"), |e| Ok(add_element(e, level, type_id, ElementKind::Roof(roof))))?;
+        Ok(created(s, id))
+    }
+}

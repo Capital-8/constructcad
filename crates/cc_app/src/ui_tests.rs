@@ -1124,3 +1124,36 @@ fn mass_floors_are_chosen_in_the_properties() {
     harness.run();
     assert_eq!(floors(&harness), before - 1);
 }
+
+/// Walls, floors and roofs from masses need a mass selected, and select
+/// what they make (#31).
+#[test]
+fn walls_floors_and_roofs_come_from_selected_masses() {
+    use crate::commands::UiCommand;
+    let mut state = sample_state();
+    assert!(UiCommand::MassWalls.unavailable(&state).is_some(), "no mass selected");
+    let out = state
+        .session
+        .execute("mass_create", serde_json::json!({"outline": [[40, 0], [50, 0], [50, 6], [40, 6]], "height": 3.0}))
+        .unwrap();
+    let mass = cc_core::ElementId(out["id"].as_u64().unwrap());
+    state.selection = [mass].into_iter().collect();
+    assert_eq!(UiCommand::MassWalls.unavailable(&state), None);
+    let ctx = egui::Context::default();
+    crate::commands::run(&mut state, &ctx, UiCommand::MassWalls);
+    assert_eq!(state.selection.len(), 4, "the four walls are selected");
+    assert!(
+        state
+            .selection
+            .iter()
+            .all(|id| state.project().element(*id).is_some_and(|e| e.category() == cc_core::Category::Wall))
+    );
+    state.selection = [mass].into_iter().collect();
+    crate::commands::run(&mut state, &ctx, UiCommand::MassRoof);
+    assert!(
+        state
+            .selection
+            .iter()
+            .all(|id| state.project().element(*id).is_some_and(|e| e.category() == cc_core::Category::Roof))
+    );
+}
