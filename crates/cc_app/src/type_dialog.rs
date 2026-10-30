@@ -329,11 +329,115 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         });
     }
 
+    if let TypeData::Roof { covering, framing, .. } = &ty.data {
+        section(ui, "type-roofing", t!("section-roofing"), |ui| roofing(ui, state, tid, *covering, framing));
+    }
+
     section(ui, "type-identity", t!("section-identity"), |ui| identity(ui, state, tid, &ty.info));
 
     section(ui, "type-ifc", t!("section-ifc"), |ui| {
         readonly_row(ui, &t!("prop-ifc-guid"), cc_ifc::guid::encode(ty.uid.0));
     });
+}
+
+/// A roof type's covering (from the catalog, with its least slope and
+/// weight) and framing: the system, material, and the members' sizes and
+/// spacings (rafters and battens only for timber).
+fn roofing(
+    ui: &mut Ui,
+    state: &mut AppState,
+    tid: ElementTypeId,
+    covering: Option<cc_core::roofing::TileKind>,
+    framing: &cc_core::roofing::RoofFraming,
+) {
+    use cc_core::roofing::{FramingSystem, MemberSize, RoofFraming, TileKind};
+    let set = |state: &mut AppState, field: &str, f: &dyn Fn(&mut Option<TileKind>, &mut RoofFraming)| {
+        update(state, tid, field, |t| {
+            if let TypeData::Roof { covering, framing, .. } = &mut t.data {
+                f(covering, framing);
+            }
+        });
+    };
+    let mut c = covering;
+    let name = |c: Option<TileKind>| c.map_or_else(|| t!("tile-none"), |k| tr(k.key()));
+    row(ui, &t!("prop-covering"), |ui| {
+        egui::ComboBox::from_id_salt(("covering", tid.0)).selected_text(name(c)).show_ui(ui, |ui| {
+            ui.selectable_value(&mut c, None, name(None));
+            for k in TileKind::ALL {
+                ui.selectable_value(&mut c, Some(k), name(Some(k)));
+            }
+        });
+    });
+    if c != covering {
+        // A new covering brings the framing it usually lies on, if none was chosen.
+        set(state, "covering", &|cov, fr| {
+            *cov = c;
+            if fr.system == FramingSystem::None
+                && let Some(k) = c
+            {
+                fr.system = k.spec().framing;
+            }
+        });
+    }
+    if let Some(spec) = covering.map(TileKind::spec) {
+        readonly_row(ui, &t!("prop-min-slope"), format!("{:.0} %", spec.min_slope * 100.0));
+        readonly_row(ui, &t!("prop-covering-weight"), format!("{:.0} kg/m²", spec.weight));
+        if let Some(n) = spec.per_m2 {
+            readonly_row(ui, &t!("prop-tiles-per-m2"), format!("{n:.1}"));
+        }
+    }
+    let mut system = framing.system;
+    row(ui, &t!("prop-framing"), |ui| {
+        egui::ComboBox::from_id_salt(("framing", tid.0)).selected_text(tr(system.key())).show_ui(ui, |ui| {
+            for s in FramingSystem::ALL {
+                ui.selectable_value(&mut system, s, tr(s.key()));
+            }
+        });
+    });
+    if system != framing.system {
+        set(state, "framing", &|_, fr| fr.system = system);
+    }
+    if framing.system == FramingSystem::None {
+        return;
+    }
+    let mut m = framing.material.clone();
+    if row(ui, &t!("prop-material"), |ui| crate::dialogs::material_combo(ui, state, ("framing-mat", tid.0), &mut m)) {
+        set(state, "framing-mat", &|_, fr| fr.material = m.clone());
+    }
+    type Pick = fn(&mut RoofFraming) -> &mut MemberSize;
+    let mut members: Vec<(&str, Pick)> = vec![("prop-purlin", |f| &mut f.purlin)];
+    if framing.system == FramingSystem::Timber {
+        members.push(("prop-rafter", |f| &mut f.rafter));
+        members.push(("prop-batten", |f| &mut f.batten));
+    }
+    for (label, pick) in members {
+        let size = *pick(&mut framing.clone());
+        for (axis, value) in [("w", size.width), ("h", size.height)] {
+            let caption = format!("{} ({})", tr(label), if axis == "w" { t!("col-width") } else { t!("col-height") });
+            length_row(ui, state, &caption, tid, &format!("{label}-{axis}"), value, |d, v| {
+                if let TypeData::Roof { framing, .. } = d {
+                    let s = pick(framing);
+                    if axis == "w" {
+                        s.width = v.max(0.005);
+                    } else {
+                        s.height = v.max(0.005);
+                    }
+                }
+            });
+        }
+    }
+    length_row(ui, state, &t!("prop-purlin-spacing"), tid, "purlin-sp", framing.purlin_spacing, |d, v| {
+        if let TypeData::Roof { framing, .. } = d {
+            framing.purlin_spacing = v.max(0.1);
+        }
+    });
+    if framing.system == FramingSystem::Timber {
+        length_row(ui, state, &t!("prop-rafter-spacing"), tid, "rafter-sp", framing.rafter_spacing, |d, v| {
+            if let TypeData::Roof { framing, .. } = d {
+                framing.rafter_spacing = v.max(0.1);
+            }
+        });
+    }
 }
 
 /// Text fields of the type information.
@@ -376,7 +480,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let layers = ty.layers().to_vec();
     let set_layers = |state: &mut AppState, field: &str, layers: Vec<Layer>| {
         update(state, tid, field, |t| match &mut t.data {
-            TypeData::Wall { layers: l, .. } | TypeData::Floor { layers: l } | TypeData::Roof { layers: l } => {
+            TypeData::Wall { layers: l, .. } | TypeData::Floor { layers: l } | TypeData::Roof { layers: l, .. } => {
                 *l = layers
             }
             _ => {}

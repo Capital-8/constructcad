@@ -146,6 +146,8 @@ pub struct ModelGeometry {
     pub opening_fills: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
     /// Conceptual masses: body, volume and mass floors.
     pub masses: BTreeMap<ElementId, crate::mass::MassGeom>,
+    /// Roofs: their framing members and covering figures.
+    pub roof_framing: BTreeMap<ElementId, crate::roof_framing::RoofFramingGeom>,
 }
 
 /// A foundation's body: a vertical prism.
@@ -812,6 +814,20 @@ impl ModelGeometry {
                 }
                 _ => continue,
             }
+            // A roof's framing and covering figures, from its sloped faces.
+            if let (ElementKind::Roof(_), TypeData::Roof { covering, framing, .. }) = (&e.kind, &ty.data) {
+                let g = crate::roof_framing::roof_framing(&s, framing, *covering);
+                if !g.members.is_empty() {
+                    // Its own solid, in the framing's material; a beam solid, so
+                    // the roof's volume leaves it out (see `volume`).
+                    let mut members = Solid::of_material(e.id, Category::Beam, project, &framing.material);
+                    for m in &g.members {
+                        m.add_to(&mut members);
+                    }
+                    self.solids.push(members);
+                }
+                self.roof_framing.insert(e.id, g);
+            }
             self.solids.push(s);
         }
     }
@@ -857,7 +873,9 @@ impl ModelGeometry {
             let shared = self.join_deductions.get(&id).copied().unwrap_or(0.0);
             return (wall.volume() - shared).max(0.0);
         }
-        self.solids_of(id).map(Solid::volume).sum()
+        // A roof's framing members are not part of the roof's own volume.
+        let framed = self.roof_framing.contains_key(&id);
+        self.solids_of(id).filter(|s| !framed || s.category != Category::Beam).map(Solid::volume).sum()
     }
 
     /// The nearest solid along `ray` among the elements `shown` accepts.
