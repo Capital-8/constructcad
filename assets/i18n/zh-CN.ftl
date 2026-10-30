@@ -382,6 +382,7 @@ prop-volume = 体积
 prop-host = 主体
 prop-offset = 在墙上的位置
 prop-sill = 窗台高度
+prop-head-height = 门窗顶高度
 prop-flip-facing = 翻转朝向
 prop-flip-hand = 左右翻转
 prop-overhang = 悬挑

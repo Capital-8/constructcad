@@ -382,6 +382,7 @@ prop-volume = Volumen
 prop-host = Host
 prop-offset = Position in der Wand
 prop-sill = Brüstungshöhe
+prop-head-height = Sturzhöhe
 prop-flip-facing = Seite spiegeln
 prop-flip-hand = Anschlag spiegeln
 prop-overhang = Überstand

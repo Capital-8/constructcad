@@ -251,10 +251,18 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                         h.offset = v;
                     }
                 });
-                if category == Category::Window {
-                    length_row(ui, state, &t!("prop-sill"), id, "sill", h.sill_height, |e, v| {
+                // Doors too may stand above the wall's base (a raised floor, a step).
+                let sill_label = if category == Category::Window { t!("prop-sill") } else { t!("prop-base-offset") };
+                length_row(ui, state, &sill_label, id, "sill", h.sill_height, |e, v| {
+                    if let Some(h) = e.as_hosted_mut() {
+                        h.sill_height = v.max(0.0);
+                    }
+                });
+                // The head: typing it moves the opening, keeping its height.
+                if let Some((_, height)) = state.project().element_type(el.type_id).and_then(|t| t.opening_size()) {
+                    length_row(ui, state, &t!("prop-head-height"), id, "head", h.sill_height + height, |e, v| {
                         if let Some(h) = e.as_hosted_mut() {
-                            h.sill_height = v.max(0.0);
+                            h.sill_height = (v - height).max(0.0);
                         }
                     });
                 }
