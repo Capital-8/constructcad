@@ -374,6 +374,7 @@ prop-volume = ບໍລິມາດ
 prop-host = ອົງປະກອບຮອງຮັບ
 prop-offset = ຕຳແໜ່ງເທິງຝາ
 prop-sill = ຄວາມສູງຂອບລຸ່ມປ່ອງຢ້ຽມ
+prop-head-height = ຄວາມສູງຂອບເທິງ
 prop-flip-facing = ພິກດ້ານໜ້າ
 prop-flip-hand = ພິກດ້ານມືເປີດ
 prop-overhang = ໄລຍະຍື່ນ
