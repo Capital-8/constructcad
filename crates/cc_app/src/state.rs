@@ -99,6 +99,10 @@ pub struct AppState {
     pub view3d: HashMap<ViewId, View3DState>,
     /// Views the dock should open (or focus) this frame.
     pub open_requests: Vec<ViewId>,
+    /// View tabs open (kept by the dock each frame).
+    pub open_tabs: usize,
+    /// Close every view tab but this one on the next frame.
+    pub close_others_than: Option<ViewId>,
     pub dialogs: Dialogs,
     pub ribbon_tab: RibbonTab,
     /// The ribbon shows only its tabs; clicking one shows its panel over the views (`ribbon_peek`).
@@ -183,6 +187,8 @@ impl AppState {
             view2d: HashMap::new(),
             view3d: HashMap::new(),
             open_requests: Vec::new(),
+            open_tabs: 0,
+            close_others_than: None,
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
             ribbon_collapsed: false,

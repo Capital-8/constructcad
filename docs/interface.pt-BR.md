@@ -2,7 +2,7 @@
 
 *English version: [interface.md](interface.md).*
 
-A janela do ConstructCAD segue a disposição que usuários de CAD e BIM de desktop esperam. A **barra de acesso rápido** fica no canto superior esquerdo. Abaixo dela está o **ribbon**, uma fileira de abas com grupos de botões. Em seguida vem a **barra de opções** da ferramenta ativa. O **navegador de projeto** e as **propriedades** ficam encaixados à esquerda, as **vistas** ocupam as abas no centro e a **barra de status** fica embaixo.
+A janela do ConstructCAD segue a disposição que usuários de CAD e BIM de desktop esperam. A **barra de acesso rápido** fica no canto superior esquerdo. Abaixo dela está o **ribbon**, uma fileira de abas com grupos de botões. Em seguida vem a **barra de opções** da ferramenta ativa. O **navegador de projeto** e as **propriedades** ficam encaixados à esquerda, as **vistas** ocupam as abas no centro e a **barra de status** fica embaixo. Com muitas vistas abertas, **Fechar vistas inativas** (na barra de acesso rápido e em *Vista → Janelas*) fecha todas as abas menos a ativa, e o clique direito numa aba oferece *Fechar as outras vistas*.
 
 ## Comandos e suas dicas
 

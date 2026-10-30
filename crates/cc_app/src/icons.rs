@@ -137,12 +137,13 @@ pub enum Icon {
     Settings,
     Keyboard,
     Interface,
+    CloseViews,
     CadImport,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 127] = [
+    pub const ALL: [Icon; 128] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -269,6 +270,7 @@ impl Icon {
         Icon::Settings,
         Icon::Keyboard,
         Icon::Interface,
+        Icon::CloseViews,
         Icon::CadImport,
     ];
 
@@ -402,6 +404,7 @@ impl Icon {
             Icon::Settings => include_str!("../../../assets/icons/ui/settings.svg"),
             Icon::Keyboard => include_str!("../../../assets/icons/ui/keyboard.svg"),
             Icon::Interface => include_str!("../../../assets/icons/ui/interface.svg"),
+            Icon::CloseViews => include_str!("../../../assets/icons/ui/close-views.svg"),
         }
     }
 }
