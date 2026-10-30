@@ -222,8 +222,9 @@ fn body(ui: &mut Ui, state: &mut AppState) {
 
         ui.label(t!("units-currency"));
         let mut currency = u.currency.clone();
-        let r =
-            ui.add(egui::TextEdit::singleline(&mut currency).desired_width(150.0).hint_text(t!("units-currency-hint")));
+        let r = crate::table::live_text(ui, "units-currency", &mut currency, |ui, c| {
+            ui.add(egui::TextEdit::singleline(c).desired_width(150.0).hint_text(t!("units-currency-hint")))
+        });
         if r.changed() {
             let currency: String = currency.chars().take(8).collect();
             set(state, "currency", |u| u.currency = currency);

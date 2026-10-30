@@ -87,7 +87,9 @@ fn project_info(ctx: &Context, state: &mut AppState) {
                 for (label, field, value) in fields {
                     form_label(ui, &label);
                     let mut text = value;
-                    let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(300.0));
+                    let r = crate::table::live_text(ui, ("project-info", field), &mut text, |ui, t| {
+                        ui.add(egui::TextEdit::singleline(t).desired_width(300.0))
+                    });
                     if r.changed() {
                         crate::engine_edit::info(state, Some(key(("info", field))), |info| match field {
                             "name" => info.name = text,
@@ -129,7 +131,9 @@ fn levels(ctx: &Context, state: &mut AppState) {
                 ui.end_row();
                 for level in levels.iter().rev() {
                     let mut name = level.name.clone();
-                    let r = ui.add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut name));
+                    let r = crate::table::live_text(ui, ("level-name", level.id), &mut name, |ui, t| {
+                        ui.add_sized([220.0, 22.0], egui::TextEdit::singleline(t))
+                    });
                     if r.changed() {
                         crate::engine_edit::level(state, level.id, Some(key((level.id, "name"))), |l| l.name = name);
                     }

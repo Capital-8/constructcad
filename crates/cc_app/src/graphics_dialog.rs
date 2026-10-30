@@ -859,7 +859,9 @@ fn filter_form(ui: &mut Ui, state: &mut AppState, mut f: cc_core::ViewFilter) {
     let mut name = f.name.clone();
     ui.horizontal(|ui| {
         ui.label(t!("prop-name"));
-        let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0));
+        let r = crate::table::live_text(ui, ("filter-name", id), &mut name, |ui, t| {
+            ui.add(egui::TextEdit::singleline(t).desired_width(260.0))
+        });
         if r.lost_focus() && name.trim() != f.name && !name.trim().is_empty() {
             let command = cmd::FilterSet {
                 filter: Ref::Id(id.0),
@@ -920,7 +922,9 @@ fn filter_form(ui: &mut Ui, state: &mut AppState, mut f: cc_core::ViewFilter) {
                     },
                 );
                 if rule.op.needs_value() {
-                    let r = ui.add(egui::TextEdit::singleline(&mut rule.value).desired_width(120.0));
+                    let r = crate::table::live_text(ui, ("filter-rule", id, i), &mut rule.value, |ui, t| {
+                        ui.add(egui::TextEdit::singleline(t).desired_width(120.0))
+                    });
                     changed |= r.changed();
                 }
                 if ui.small_button("×").on_hover_text(t!("vg-remove-rule")).clicked() {
@@ -1050,7 +1054,9 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
     let mut name = t.name.clone();
     ui.horizontal(|ui| {
         ui.label(t!("prop-name"));
-        let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0));
+        let r = crate::table::live_text(ui, ("template-name", id), &mut name, |ui, t| {
+            ui.add(egui::TextEdit::singleline(t).desired_width(260.0))
+        });
         if r.lost_focus() && name.trim() != t.name && !name.trim().is_empty() {
             run(
                 state,

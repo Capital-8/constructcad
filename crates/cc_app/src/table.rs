@@ -133,3 +133,30 @@ pub fn padded<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
         })
         .inner
 }
+
+/// A single-line text field over a value read from the model every frame.
+/// While it has the focus it shows what was typed, not the value read back,
+/// so a command that trims or refuses the text mid-typing (a trailing
+/// space, an emptied name) or a value only kept when the field is left
+/// never undoes the typing. `text` holds what was typed this frame; `salt`
+/// names the field (unique among those shown), `add` draws it.
+pub fn live_text(
+    ui: &mut Ui,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    text: &mut String,
+    add: impl FnOnce(&mut Ui, &mut String) -> egui::Response,
+) -> egui::Response {
+    let key = egui::Id::new(("live-text", salt));
+    if let Some((widget, typed)) = ui.data(|d| d.get_temp::<(egui::Id, String)>(key))
+        && ui.memory(|m| m.has_focus(widget))
+    {
+        *text = typed;
+    }
+    let r = add(ui, text);
+    if r.has_focus() {
+        ui.data_mut(|d| d.insert_temp(key, (r.id, text.clone())));
+    } else {
+        ui.data_mut(|d| d.remove::<(egui::Id, String)>(key));
+    }
+    r
+}

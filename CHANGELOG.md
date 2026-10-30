@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Renaming a view in the project browser never ended (#82): the name field took the focus back every frame, so Enter or a click elsewhere did nothing, the name did not change, and no other field (a level's elevation, for one) took typing. It now takes the focus once; Enter or a click elsewhere keeps the name and Esc cancels.
+- Text fields that change the model as you type no longer undo the typing (#82): a level, view, filter, template, system or project name, a type's identity data, a filter rule value, the schedule filter and the currency now show what was typed while they have the focus. Before, a space typed at the end of a name vanished (the command trims it), emptying a name to type a new one brought the old one back, and the names of view filters and view templates (kept when the field is left) could not be typed at all.
 
 ## [0.7.0] - 2026-10-28
 
