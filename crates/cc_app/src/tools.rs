@@ -2735,7 +2735,13 @@ fn select(
             state.interaction.drag = Some(Drag::Bend { id, a, b });
             return;
         }
-        match drawing.hit_test(w, tol) {
+        // A drag moves what it starts on: an element's line, or an element
+        // already selected. Elsewhere (empty paper, inside a floor or a
+        // hatch) it draws a selection box.
+        let grabbed = drawing
+            .hit_test_line(w, tol)
+            .or_else(|| drawing.hit_test(w, tol).filter(|id| state.selection.contains(id)));
+        match grabbed {
             Some(hit) if movable => {
                 if !state.selection.contains(&hit) {
                     state.selection = BTreeSet::from([hit]);

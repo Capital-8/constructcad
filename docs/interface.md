@@ -94,6 +94,10 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
 
+## Selecting in 2D views
+
+A click picks the element under the pointer (Ctrl adds or removes it). A drag that starts on empty paper, or inside a floor, a hatch or another fill, draws a selection box: dragged to the right it is a window and takes the elements wholly inside it (their lines, fills and texts); dragged to the left it is a crossing, dashed and green, and also takes those it cuts or lies in: a wall crossed between its ends, a floor around the box, a text anchored in it. Room areas and imported drawings are not taken by a crossing (a window around them takes them). Ctrl keeps the current selection and adds to it. A drag that starts on an element's line, or on an element already selected, moves it instead (Ctrl+drag copies).
+
 ## Selecting in 3D views
 
 With the Select tool, a click picks the element under the pointer (Ctrl adds or removes it). Shift+drag draws a selection box, as in plans: dragged to the right it is a window and takes the elements wholly inside it; dragged to the left it is a crossing and also takes those it touches. Elements behind others count too; hidden ones do not. Ctrl keeps the current selection and adds to it. With *Dragging in 3D views selects* on in *Preferences → Interface*, a plain left drag draws the box and Shift+drag orbits instead.
