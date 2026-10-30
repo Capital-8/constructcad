@@ -153,6 +153,25 @@ pub struct Drawing2D {
     /// Elements drawn as background (imported CAD drawings): picked only
     /// where nothing else is.
     pub background: std::collections::BTreeSet<ElementId>,
+    /// Tags that can be dragged: where each is and how far it was moved.
+    pub tags: Vec<TagHandle>,
+}
+
+/// A tag of an element in a view, as drawn: picked within `half` of
+/// `center`; `offset` is how far the view moved it from its default spot.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TagHandle {
+    pub element: ElementId,
+    pub center: DVec2,
+    pub half: DVec2,
+    pub offset: DVec2,
+}
+
+impl Drawing2D {
+    /// The tag at `p` (the last drawn on top), if any.
+    pub fn tag_at(&self, p: DVec2) -> Option<TagHandle> {
+        self.tags.iter().rev().find(|t| (p - t.center).abs().cmple(t.half).all()).copied()
+    }
 }
 
 impl Drawing2D {
@@ -407,5 +426,21 @@ mod tests {
         assert_eq!(d.hit_test_line(v(25.0, 5.0), 0.1), None, "inside the floor");
         assert_eq!(d.hit_test(v(25.0, 5.0), 0.1), Some(ElementId(2)), "a click still picks it");
         assert_eq!(d.hit_test_line(v(25.0, 12.5), 0.1), None, "on the imported line");
+    }
+
+    /// Tags are picked within their box, the last drawn first.
+    #[test]
+    fn tags_are_picked_in_their_box() {
+        let mut d = Drawing2D::default();
+        let tag = |id: u64, x: f64| TagHandle {
+            element: ElementId(id),
+            center: v(x, 0.0),
+            half: v(1.0, 0.5),
+            offset: DVec2::ZERO,
+        };
+        d.tags = vec![tag(1, 0.0), tag(2, 1.5)];
+        assert_eq!(d.tag_at(v(-0.9, 0.4)).map(|t| t.element.0), Some(1));
+        assert_eq!(d.tag_at(v(0.8, 0.0)).map(|t| t.element.0), Some(2), "both boxes: the one on top");
+        assert_eq!(d.tag_at(v(0.0, 0.6)), None);
     }
 }

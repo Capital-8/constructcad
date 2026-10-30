@@ -471,6 +471,9 @@ impl Project {
         let exists = |id: crate::ElementId| elements.contains_key(&id);
         for view in self.views.values_mut() {
             repairs += view.graphics.repair(&self.filters, Some(&exists));
+            let tags = view.tag_offsets.len();
+            view.tag_offsets.retain(|id, o| exists(*id) && o.is_finite() && o.length() < 1e4);
+            repairs += tags - view.tag_offsets.len();
             match view.template.map(|t| self.templates.get(&t)) {
                 Some(None) => {
                     view.template = None;
