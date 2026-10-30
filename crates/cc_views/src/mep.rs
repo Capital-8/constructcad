@@ -99,7 +99,11 @@ fn circle(c: DVec2, r: f64) -> Vec<DVec2> {
 /// Tag text of a segment: its systems' codes and its diameter.
 fn tag(project: &Project, e: &Element, diameter: f64) -> String {
     let codes: Vec<&str> = e.systems().iter().filter_map(|s| project.system(*s)).map(|s| s.label()).collect();
-    let size = format!("Ø{}", format::number(diameter * 1000.0, 0));
+    let size = if format::imperial() {
+        format!("Ø{}\"", format::inches(diameter))
+    } else {
+        format!("Ø{}", format::number(diameter * 1000.0, 0))
+    };
     match e.kind {
         // Conduits carry circuit numbers; pipes their system code.
         ElementKind::Conduit(_) if !codes.is_empty() => format!("{size} ({})", codes.join(", ")),

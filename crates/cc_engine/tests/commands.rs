@@ -435,6 +435,41 @@ fn a_dimension_chain_shares_one_line_and_follows_its_elements() {
 }
 
 #[test]
+fn imperial_units_show_feet_and_inches_and_survive_a_save() {
+    let mut s = Session::default();
+    let units = run(&mut s, "units_set", json!({"preset": "imperial"}));
+    assert_eq!(units["length"]["unit"], "FeetInches");
+    assert_eq!(units["length"]["decimals"], 4);
+    assert_eq!(units["area"]["unit"], "SquareFoot");
+    // Values merge over the preset: precision to 1/8".
+    let units = run(&mut s, "units_set", json!({"preset": "imperial", "values": {"length": {"decimals": 3}}}));
+    assert_eq!(units["length"]["decimals"], 3);
+    // A 12'-6" wall: lengths are still meters in the model and the commands.
+    let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [3.81, 0]}));
+    let end = run(&mut s, "element_get", json!({"id": wall["id"]}))["params"]["end"][0].as_f64().unwrap();
+    assert!((end - 3.81).abs() < 1e-12);
+    // A schedule shows feet and inches, areas in square feet.
+    let schedule = run(&mut s, "view_create", json!({"kind": "schedule", "category": "wall"}));
+    let table = run(&mut s, "schedule_table", json!({"view": schedule["id"]})).to_string();
+    assert!(table.contains("12'-6\\\""), "{table}");
+    assert!(table.contains("ft²"), "{table}");
+    // Saved and reopened, the project keeps its units.
+    let path = scratch("imperial.ccad");
+    run(&mut s, "project_save", json!({"path": path}));
+    let mut reopened = Session::default();
+    run(&mut reopened, "project_open", json!({"path": path}));
+    assert_eq!(run(&mut reopened, "units_get", json!({}))["length"]["unit"], "FeetInches");
+    // Back to metric; unknown presets and units are refused.
+    let units = run(&mut s, "units_set", json!({"preset": "metric"}));
+    assert_eq!(units["length"]["unit"], "Meter");
+    assert_eq!(fails(&mut s, "units_set", json!({"preset": "nautical"})), ErrorCode::InvalidArguments);
+    assert_eq!(
+        fails(&mut s, "units_set", json!({"values": {"length": {"unit": "Furlong"}}})),
+        ErrorCode::InvalidArguments
+    );
+}
+
+#[test]
 fn turning_and_pinned_elements() {
     let mut s = Session::default();
     let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));

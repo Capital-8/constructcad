@@ -59,13 +59,17 @@ pub fn plan_annotations(
     }
 }
 
-/// A length in centimeters, without decimals when whole.
+/// A section size: centimeters, without decimals when whole, or inches
+/// with a fraction in imperial units.
 fn cm(meters: f64) -> String {
+    if format::imperial() {
+        return format::inches(meters);
+    }
     let v = meters * 100.0;
     if (v - v.round()).abs() < 1e-6 { format!("{v:.0}") } else { format!("{v:.1}") }
 }
 
-/// A section's size in centimeters: `15×40`, `Ø30`.
+/// A section's size in centimeters (inches in imperial units): `15×40`, `Ø30`.
 pub fn section_label(data: &TypeData) -> Option<String> {
     use cc_core::ColumnSection as C;
     Some(match data {

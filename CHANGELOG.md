@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Imperial units (#80). The project length unit can be decimal feet, decimal inches, feet and fractional inches (`12'-6 1/2"`) or fractional inches (`150 1/2"`); for the fractional ones the precision goes from 1" to 1/64" and values round to it. Areas can be square feet or square inches, volumes cubic feet, cubic yards or US gallons. Lengths are typed the same ways — `12'6"`, `12'-6 1/2"`, `12' 6.5"`, `6 1/2"`, `3/4"`, `12ft 6in`, and in feet and inches bare numbers as feet then inches (`10 6 1/2`); metric values with their symbol (`2,5 m`) still work — in property fields, dimension values and while drawing. Beam, column and footing section tags and pipe, conduit and bar diameters show in inches. *Imperial (US)* in the Project Units dialog (or `units_set` with `preset: "imperial"`) sets feet and inches to 1/16", square and cubic feet and point decimals; *Restore Defaults* goes back to metric. The model still stores meters. Project files move to format version 13.
 - Simplified Chinese interface (简体中文, `zh-CN`) (#67). It is picked from the system language for `zh`, `zh-CN`, `zh-SG` and `zh-Hans`; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant` keep Traditional Chinese. The system's CJK fonts now also have to cover a Simplified-only character, so Simplified glyphs never show as boxes.
 
 ## [0.7.0] - 2026-10-28
