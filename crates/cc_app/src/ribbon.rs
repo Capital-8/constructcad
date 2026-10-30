@@ -585,7 +585,10 @@ fn place(category: Category) -> UiCommand {
 fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
     use Category::*;
     let buttons = |list: &[Category]| list.iter().map(|c| place(*c)).collect::<Vec<_>>();
-    group(ui, t!("group-massing"), |ui| command_buttons(ui, state, &[place(Mass), UiCommand::PushPull]));
+    group(ui, t!("group-massing"), |ui| {
+        command_buttons(ui, state, &[place(Mass), UiCommand::PushPull]);
+        stacks(ui, state, &[&[UiCommand::MassWalls, UiCommand::MassSlabs, UiCommand::MassRoof]]);
+    });
     group(ui, t!("group-build"), |ui| command_buttons(ui, state, &buttons(&[Wall, Door, Window])));
     group(ui, t!("group-horizontal"), |ui| command_buttons(ui, state, &buttons(&[Floor, Ceiling, Roof])));
     group(ui, t!("group-circulation"), |ui| command_buttons(ui, state, &buttons(&[Stair, Ramp, Railing])));

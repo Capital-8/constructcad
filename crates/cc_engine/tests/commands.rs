@@ -2656,3 +2656,55 @@ fn mass_faces_push_and_pull() {
     );
     run(&mut s, "mass_face_move", json!({"id": loft, "face": "top", "distance": 1.0}));
 }
+
+/// Walls, floors and a roof from a mass (#31): walls on its sides with
+/// their exterior faces on the mass's, joined at the corners; a floor on
+/// each mass floor; a flat roof on its top. Lofts take no walls.
+#[test]
+fn walls_floors_and_roof_by_face() {
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    let levels = run(&mut s, "levels_list", json!({}));
+    let first_z = levels[1]["elevation"].as_f64().unwrap();
+    let outline = json!([[0, 0], [10, 0], [10, 6], [0, 6]]);
+    let m = id(&run(&mut s, "mass_create", json!({"outline": outline, "height": 2.0 * first_z})));
+    let walls = run(&mut s, "mass_walls_create", json!({"id": m}));
+    let walls: Vec<u64> = walls["created"].as_array().unwrap().iter().filter_map(Value::as_u64).collect();
+    assert_eq!(walls.len(), 4);
+    let geom = s.geometry().clone();
+    for w in &walls {
+        let g = &geom.walls[&cc_core::ElementId(*w)];
+        assert!(g.start_joined && g.end_joined, "wall {w} joins at both corners");
+        // The exterior face lies on the mass's outline: every corner of the
+        // body is within the 10 x 6 rectangle.
+        for f in geom.solids_of(cc_core::ElementId(*w)).flat_map(|s| s.faces.iter()) {
+            for v in &f.verts {
+                assert!(v.x > -1e-6 && v.x < 10.0 + 1e-6 && v.y > -1e-6 && v.y < 6.0 + 1e-6, "{v}");
+            }
+        }
+        let e = run(&mut s, "element_get", json!({"id": w}));
+        assert!(near(e["params"]["height"].as_f64().unwrap(), 2.0 * first_z));
+    }
+    // Two mass floors: two floors of 60 m².
+    let slabs = run(&mut s, "mass_slabs_create", json!({"id": m}));
+    let slabs = slabs["created"].as_array().unwrap();
+    assert_eq!(slabs.len(), 2);
+    let floor = run(&mut s, "element_get", json!({"id": slabs[1]}));
+    assert_eq!(floor["level"]["id"], levels[1]["id"]);
+    // A flat roof on the top.
+    let roof = run(&mut s, "mass_roof_create", json!({"id": m}));
+    assert_eq!(roof["category"], "roof");
+    assert!(near(roof["params"]["base_offset"].as_f64().unwrap(), 2.0 * first_z));
+    // One undo step each.
+    run(&mut s, "undo", json!({}));
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "elements_list", json!({"category": "floor"})).as_array().unwrap().len(), 0);
+    // Lofts take no walls, some sides only, bad sides refused.
+    let loft =
+        id(&run(&mut s, "mass_create", json!({"outline": [[20, 0], [30, 0], [30, 6], [20, 6]], "top_inset": 1.0})));
+    assert_eq!(fails(&mut s, "mass_walls_create", json!({"id": loft})), ErrorCode::Rejected);
+    run(&mut s, "mass_roof_create", json!({"id": loft}));
+    let two = run(&mut s, "mass_walls_create", json!({"id": m, "sides": [0, 2]}));
+    assert_eq!(two["created"].as_array().unwrap().len(), 2);
+    assert_eq!(fails(&mut s, "mass_walls_create", json!({"id": m, "sides": [4]})), ErrorCode::InvalidArguments);
+}

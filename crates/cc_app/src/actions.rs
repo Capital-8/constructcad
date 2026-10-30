@@ -3,7 +3,7 @@
 use crate::state::{AppState, PendingAction};
 use crate::t;
 use crate::tools::Tool;
-use cc_core::{Category, Document, LevelId, Project, ViewCategory, ViewId, ViewKind};
+use cc_core::{Category, Document, ElementId, LevelId, Project, ViewCategory, ViewId, ViewKind};
 use cc_engine::Ref;
 use cc_engine::commands::{io, levels, project, views};
 
@@ -946,6 +946,40 @@ pub fn temporary(state: &mut AppState, action: &str) {
 pub fn temporary_permanent(state: &mut AppState) {
     let Some(view) = crate::commands::graphics_view(state) else { return };
     run(state, cc_engine::commands::graphics::ViewTemporaryApply { view: Ref::Id(view.0) });
+}
+
+/// The masses in the selection.
+pub fn selected_masses(state: &AppState) -> Vec<ElementId> {
+    let project = state.project();
+    state
+        .selection
+        .iter()
+        .copied()
+        .filter(|id| project.element(*id).is_some_and(|e| e.category() == Category::Mass))
+        .collect()
+}
+
+/// Walls (`walls`), floors (`slabs`) or roofs (`roof`) from each selected
+/// mass; what they make is selected.
+pub fn from_masses(state: &mut AppState, what: &str) {
+    use cc_engine::commands::mass::{MassRoofCreate, MassSlabsCreate, MassWallsCreate};
+    let mut made = Vec::new();
+    for id in selected_masses(state) {
+        let out = match what {
+            "walls" => run_command(state, MassWallsCreate { id: id.0, type_ref: None, sides: None }),
+            "slabs" => run_command(state, MassSlabsCreate { id: id.0, type_ref: None, levels: None }),
+            _ => run_command(state, MassRoofCreate { id: id.0, type_ref: None, overhang: None }),
+        };
+        let Some(out) = out else { continue };
+        match out["created"].as_array() {
+            Some(list) => made.extend(list.iter().filter_map(serde_json::Value::as_u64).map(ElementId)),
+            None => made.extend(out["id"].as_u64().map(ElementId)),
+        }
+    }
+    if !made.is_empty() {
+        state.message = t!("msg-mass-made", "count" => made.len());
+        state.selection = made.into_iter().collect();
+    }
 }
 
 #[cfg(test)]
