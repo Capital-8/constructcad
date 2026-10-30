@@ -273,3 +273,118 @@ fn sketched_pieces_extrude_revolve_and_change() {
     assert_eq!(fails(&mut s, "component_piece_delete", json!({"type": ty, "index": 0})), ErrorCode::InvalidArguments);
     assert_eq!(s.doc.undo_depth(), depth + 2);
 }
+
+#[test]
+fn sweeps_follow_paths_and_blends_join_outlines() {
+    let mut s = Session::default();
+    let ty = bench(&mut s)["id"].clone();
+    run(&mut s, "component_ref_plane_add", json!({"type": ty, "axis": "x", "at": "0.5", "name": "Edge"}));
+    let square = |h: f64| json!([{"u": -h, "v": -h}, {"u": h, "v": -h}, {"u": h, "v": h}, {"u": -h, "v": h}]);
+    // A rail: a 4 cm square section along an L path that ends on the Edge plane.
+    let rail = run(
+        &mut s,
+        "component_piece_add",
+        json!({"type": ty, "kind": "sweep", "plane": "plan", "start": 0.6, "points": square(0.02),
+               "path": [{"u": -0.5, "v": 0}, {"u": 0, "v": 0, "radius": 0.4}, {"u": "Edge", "v": 0.3}]}),
+    );
+    // A tapered foot: a square blended into a circle.
+    let foot = run(
+        &mut s,
+        "component_piece_add",
+        json!({"type": ty, "kind": "blend", "plane": "plan", "start": 0, "end": 0.3, "points": square(0.05),
+               "top": [{"u": -0.02, "v": 0, "radius": 0.02}, {"u": 0.02, "v": 0, "radius": 0.02}]}),
+    );
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert!(c["problems"].as_array().unwrap().is_empty(), "{}", c["problems"]);
+    assert!(c["def"]["items"][rail["index"].as_u64().unwrap() as usize]["shape"]["Sweep"].is_object());
+    let blend = &c["def"]["items"][foot["index"].as_u64().unwrap() as usize]["shape"]["Blend"];
+    assert_eq!(blend["depth"], "0.3");
+    // The pieces resolve to closed solids with volume.
+    let ty_data = s.project().types.values().find(|t| t.name == "Bench").unwrap().data.clone();
+    let cc_core::TypeData::Component { def, .. } = ty_data else { panic!() };
+    let (parts, errors) = def.resolve(&Default::default());
+    assert!(errors.is_empty(), "{errors:?}");
+    for p in parts.iter().filter(|p| !p.faces.is_empty()) {
+        assert!(cc_core::sweep::volume(&p.faces) > 0.0);
+    }
+    // Moving the Edge plane moves the rail's end; the blend's top and end change.
+    run(&mut s, "component_ref_plane_set", json!({"type": ty, "name": "Edge", "at": "0.6"}));
+    run(&mut s, "component_piece_set", json!({"type": ty, "index": foot["index"], "end": 0.4, "top": square(0.03)}));
+    run(
+        &mut s,
+        "component_piece_set",
+        json!({"type": ty, "index": rail["index"], "path": [{"u": 0, "v": 0}, {"u": 0, "v": 0.4}]}),
+    );
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert!(c["problems"].as_array().unwrap().is_empty(), "{}", c["problems"]);
+    // Paths only on sweeps, tops only on blends; a sweep needs a path, a blend a top.
+    for (cmd, args) in [
+        ("component_piece_set", json!({"type": ty, "index": 0, "path": [{"u": 0, "v": 0}, {"u": 1, "v": 0}]})),
+        ("component_piece_set", json!({"type": ty, "index": rail["index"], "top": square(0.1)})),
+        ("component_piece_set", json!({"type": ty, "index": rail["index"], "end": 1})),
+        ("component_piece_add", json!({"type": ty, "kind": "sweep", "plane": "plan", "points": square(0.02)})),
+        ("component_piece_add", json!({"type": ty, "kind": "blend", "plane": "plan", "points": square(0.02)})),
+        (
+            "component_piece_add",
+            json!({"type": ty, "kind": "sweep", "plane": "plan", "points": square(0.02),
+                                        "path": [{"u": 0, "v": 0}, {"u": 0, "v": 0}]}),
+        ),
+    ] {
+        assert_eq!(fails(&mut s, cmd, args.clone()), ErrorCode::InvalidArguments, "{cmd} {args}");
+    }
+}
+
+#[test]
+fn equalities_keep_a_plane_halfway_as_the_others_move() {
+    let mut s = Session::default();
+    let ty = bench(&mut s)["id"].clone();
+    for (name, at) in [("Left", "-0.6"), ("Right", "0.4"), ("Mid", "0")] {
+        run(&mut s, "component_ref_plane_add", json!({"type": ty, "axis": "x", "at": at, "name": name}));
+    }
+    let depth = s.doc.undo_depth();
+    let eq = run(
+        &mut s,
+        "component_equal_add",
+        json!({"type": ty, "view": "plan", "a": "Left", "middle": "Mid", "b": "Right", "place": 0.5}),
+    );
+    assert_eq!(eq["index"], 0);
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert!((plane(&c, "Mid") + 0.1).abs() < 1e-12);
+    // A labeled dimension drives Right; Mid follows.
+    run(
+        &mut s,
+        "component_dimension_add",
+        json!({"type": ty, "view": "plan", "from": "Left", "to": "Right", "label": "Width"}),
+    );
+    let c = run(&mut s, "component_get", json!({"type": ty}));
+    assert!((plane(&c, "Right") - 0.6).abs() < 1e-12 && plane(&c, "Mid").abs() < 1e-12, "{c}");
+    assert!(c["problems"].as_array().unwrap().is_empty(), "{}", c["problems"]);
+    // Moving the middle by hand would break it: refused. Origin planes cannot be the middle.
+    assert_eq!(
+        fails(&mut s, "component_ref_plane_set", json!({"type": ty, "name": "Mid", "at": "0.2"})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(
+            &mut s,
+            "component_equal_add",
+            json!({"type": ty, "view": "plan", "a": "Left", "middle": "CenterX", "b": "Right"})
+        ),
+        ErrorCode::Rejected
+    );
+    assert_eq!(
+        fails(
+            &mut s,
+            "component_equal_add",
+            json!({"type": ty, "view": "front", "a": "Left", "middle": "Mid", "b": "Mid"})
+        ),
+        ErrorCode::InvalidArguments
+    );
+    // Deleting the equality keeps Mid halfway; deleting one of its planes takes the equality too.
+    run(&mut s, "component_equal_delete", json!({"type": ty, "index": 0}));
+    run(&mut s, "component_ref_plane_set", json!({"type": ty, "name": "Mid", "at": "0.2"}));
+    run(&mut s, "component_equal_add", json!({"type": ty, "view": "plan", "a": "Left", "middle": "Mid", "b": "Right"}));
+    run(&mut s, "component_ref_plane_delete", json!({"type": ty, "name": "Mid"}));
+    assert!(run(&mut s, "component_get", json!({"type": ty}))["def"]["equals"].is_null());
+}

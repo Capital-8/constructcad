@@ -232,6 +232,8 @@ registry![
         component::ComponentDimensionAdd,
         component::ComponentDimensionSet,
         component::ComponentDimensionDelete,
+        component::ComponentEqualAdd,
+        component::ComponentEqualDelete,
         component_piece::ComponentPieceAdd,
         component_piece::ComponentPieceSet,
         component_piece::ComponentPieceDelete,

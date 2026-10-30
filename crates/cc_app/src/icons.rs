@@ -107,6 +107,9 @@ pub enum Icon {
     Finish,
     Extrusion,
     Revolution,
+    Sweep,
+    Blend,
+    Equal,
     DimAngular,
     DimRadial,
     DimDiameter,
@@ -135,7 +138,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 120] = [
+    pub const ALL: [Icon; 123] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -232,6 +235,9 @@ impl Icon {
         Icon::Finish,
         Icon::Extrusion,
         Icon::Revolution,
+        Icon::Sweep,
+        Icon::Blend,
+        Icon::Equal,
         Icon::DimAngular,
         Icon::DimRadial,
         Icon::DimDiameter,
@@ -357,6 +363,9 @@ impl Icon {
             Icon::Finish => include_str!("../../../assets/icons/ui/finish.svg"),
             Icon::Extrusion => include_str!("../../../assets/icons/ui/extrusion.svg"),
             Icon::Revolution => include_str!("../../../assets/icons/ui/revolution.svg"),
+            Icon::Sweep => include_str!("../../../assets/icons/ui/sweep.svg"),
+            Icon::Blend => include_str!("../../../assets/icons/ui/blend.svg"),
+            Icon::Equal => include_str!("../../../assets/icons/ui/equal.svg"),
             Icon::DimAngular => include_str!("../../../assets/icons/ui/dim-angular.svg"),
             Icon::DimRadial => include_str!("../../../assets/icons/ui/dim-radial.svg"),
             Icon::DimDiameter => include_str!("../../../assets/icons/ui/dim-diameter.svg"),

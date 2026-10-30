@@ -35,6 +35,8 @@ pub enum Pick {
     Dimension(usize),
     /// A piece, by its index in the definition.
     Piece(usize),
+    /// An equality (EQ), by its index.
+    Equal(usize),
 }
 
 /// The tool of the environment.
@@ -48,6 +50,8 @@ pub enum EnvTool {
     Dimension { first: Option<(ComponentViewKind, String)> },
     /// An outline drawn in a view, made into a piece.
     Sketch(crate::component_sketch::Sketch),
+    /// Three parallel planes: an outer one, the one kept halfway, the other.
+    Equal { picked: Vec<String>, view: Option<ComponentViewKind> },
 }
 
 /// Pan and zoom of one view.
@@ -225,8 +229,13 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         crate::ribbon::env_group(ui, state, t!("group-selection"), &[Select]);
-        crate::ribbon::env_group(ui, state, t!("comp-env-group-forms"), &[CompExtrusion, CompRevolution]);
-        crate::ribbon::env_group(ui, state, t!("comp-env-group-datum"), &[CompRefPlane, CompDimension]);
+        crate::ribbon::env_group(
+            ui,
+            state,
+            t!("comp-env-group-forms"),
+            &[CompExtrusion, CompRevolution, CompSweep, CompBlend],
+        );
+        crate::ribbon::env_group(ui, state, t!("comp-env-group-datum"), &[CompRefPlane, CompDimension, CompEqual]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-component"), &[CompSaveFile]);
         crate::ribbon::env_group(ui, state, t!("comp-env-group-editor"), &[CompFinish, CompCancel]);
     });
@@ -245,6 +254,7 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         EnvTool::RefPlane { first: Some(_) } => t!("comp-env-hint-plane-second"),
         EnvTool::Dimension { first: None } => t!("comp-env-hint-dimension"),
         EnvTool::Dimension { first: Some(_) } => t!("comp-env-hint-dimension-second"),
+        EnvTool::Equal { picked, .. } => t!("comp-env-hint-equal", "count" => picked.len() + 1),
     };
     ui.label(theme::muted(hint));
 }
@@ -346,6 +356,11 @@ fn canvas(ui: &mut Ui, state: &mut AppState, kind: ComponentViewKind) {
     {
         painter.circle_stroke(xf.to_screen(d.text_pos), 10.0, Stroke::new(1.5, PALETTE.accent));
     }
+    if let Some(Pick::Equal(i)) = pick {
+        for d in view.equals.iter().filter(|d| d.index == i) {
+            painter.circle_stroke(xf.to_screen(d.text_pos), 10.0, Stroke::new(1.5, PALETTE.accent));
+        }
+    }
     if let Some(Pick::Piece(i)) = pick
         && let Some((_, edges)) = view.pieces.iter().find(|(item, _)| *item == i)
     {
@@ -362,8 +377,15 @@ fn canvas(ui: &mut Ui, state: &mut AppState, kind: ComponentViewKind) {
     match tool {
         EnvTool::Select => {
             if clicked && let Some(p) = hover {
-                let picked = dimension_at(&view, p, tol * 2.0)
-                    .map(Pick::Dimension)
+                let equal = view
+                    .equals
+                    .iter()
+                    .map(|d| (d.text_pos.distance(p), d.index))
+                    .filter(|(dist, _)| *dist <= tol * 2.0)
+                    .min_by(|a, b| a.0.total_cmp(&b.0))
+                    .map(|(_, i)| Pick::Equal(i));
+                let picked = equal
+                    .or(dimension_at(&view, p, tol * 2.0).map(Pick::Dimension))
                     .or(hovered_plane.map(Pick::Plane))
                     .or_else(|| piece_at(&view, p, tol).map(Pick::Piece));
                 if let Some(env) = state.component_env.as_mut() {
@@ -373,6 +395,41 @@ fn canvas(ui: &mut Ui, state: &mut AppState, kind: ComponentViewKind) {
         }
         EnvTool::Sketch(sketch) => {
             crate::component_sketch::handle(state, sketch, &view, kind, &xf, &painter, hover, clicked, tol);
+        }
+        EnvTool::Equal { mut picked, view: picked_view } => {
+            if picked_view.is_some_and(|v| v != kind) {
+                return;
+            }
+            for name in &picked {
+                highlight(name, PALETTE.accent);
+            }
+            let (true, Some(p), Some(name)) = (clicked, hover, hovered_plane) else { return };
+            if picked.contains(&name) {
+                return;
+            }
+            picked.push(name);
+            if let [a, middle, b] = picked.as_slice() {
+                let place = match view.planes.iter().find(|pl| pl.name == *a) {
+                    Some(pl) if (pl.b - pl.a).x.abs() < 1e-9 => p.y,
+                    _ => p.x,
+                };
+                let command = cmd::ComponentEqualAdd {
+                    type_ref: type_ref(state),
+                    view: view_name(kind).into(),
+                    a: a.clone(),
+                    middle: middle.clone(),
+                    b: b.clone(),
+                    place: Some(place),
+                };
+                if let Some(out) = crate::actions::run_command(state, command)
+                    && let Some(env) = state.component_env.as_mut()
+                {
+                    env.pick = out["index"].as_u64().map(|i| Pick::Equal(i as usize));
+                }
+                set_tool(state, EnvTool::Equal { picked: Vec::new(), view: None });
+            } else {
+                set_tool(state, EnvTool::Equal { picked, view: Some(kind) });
+            }
         }
         EnvTool::RefPlane { first } => {
             let Some(p) = hover else { return };
@@ -466,12 +523,16 @@ pub fn escape(state: &mut AppState) {
     env.tool = match &env.tool {
         EnvTool::RefPlane { first: Some(_) } => EnvTool::RefPlane { first: None },
         EnvTool::Dimension { first: Some(_) } => EnvTool::Dimension { first: None },
-        EnvTool::Sketch(s) if !s.points.is_empty() => EnvTool::Sketch(crate::component_sketch::Sketch {
-            view: None,
-            points: Vec::new(),
-            closed: false,
-            ..s.clone()
-        }),
+        EnvTool::Sketch(s) if !s.points.is_empty() || !s.bottom.is_empty() => {
+            EnvTool::Sketch(crate::component_sketch::Sketch {
+                view: None,
+                points: Vec::new(),
+                bottom: Vec::new(),
+                closed: false,
+                ..s.clone()
+            })
+        }
+        EnvTool::Equal { picked, .. } if !picked.is_empty() => EnvTool::Equal { picked: Vec::new(), view: None },
         EnvTool::Select => {
             env.pick = None;
             EnvTool::Select
@@ -489,6 +550,7 @@ pub fn delete_pick(state: &mut AppState) {
         Pick::Dimension(index) => {
             crate::actions::run_command(state, cmd::ComponentDimensionDelete { type_ref: t, index })
         }
+        Pick::Equal(index) => crate::actions::run_command(state, cmd::ComponentEqualDelete { type_ref: t, index }),
         Pick::Piece(index) => crate::actions::run_command(
             state,
             cc_engine::commands::component_piece::ComponentPieceDelete { type_ref: t, index },
@@ -542,6 +604,21 @@ pub fn panel(ui: &mut Ui, state: &mut AppState) {
             Some(Pick::Dimension(index)) => {
                 crate::table::section(ui, "comp-env-dimension", t!("comp-env-dimension"), |ui| {
                     dimension_props(ui, state, &def, index);
+                });
+            }
+            Some(Pick::Equal(index)) => {
+                crate::table::section(ui, "comp-env-equal", t!("comp-env-equal"), |ui| {
+                    if let Some(q) = def.equals.get(index) {
+                        crate::table::readonly_row(
+                            ui,
+                            &t!("comp-env-between"),
+                            format!("{} — {} — {}", q.a, q.middle, q.b),
+                        );
+                        crate::table::readonly_row(ui, &t!("comp-env-at"), q.expression());
+                    }
+                    if ui.button(t!("action-delete")).clicked() {
+                        delete_pick(state);
+                    }
                 });
             }
             Some(Pick::Piece(index)) => {
@@ -720,6 +797,73 @@ fn dimension_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
     }
 }
 
+/// A list of sketch points: u and v of each, as expressions; the ⌖ menus
+/// lock a coordinate to a plane seen edge-on in the sketch's view. The new
+/// list when a coordinate was changed.
+#[allow(clippy::too_many_arguments)]
+fn points_table(
+    ui: &mut Ui,
+    state: &mut AppState,
+    def: &cc_core::ComponentDef,
+    piece: usize,
+    which: &str,
+    title: &str,
+    plane: SketchPlane,
+    points: &[cc_core::component::ProfilePoint],
+) -> Option<Vec<cc_engine::commands::component_piece::SketchPointArg>> {
+    use cc_engine::commands::component_piece::{ExprArg, SketchPointArg};
+    let lock = |vertical: bool| -> Vec<String> {
+        def.all_ref_planes().into_iter().filter(|p| p.axis.in_view(plane) == Some(vertical)).map(|p| p.name).collect()
+    };
+    let (us, vs) = (lock(true), lock(false));
+    let mut changed: Option<(usize, bool, String)> = None;
+    egui::CollapsingHeader::new(format!("{title} ({})", points.len())).id_salt(("comp-env-points", piece, which)).show(
+        ui,
+        |ui| {
+            for (i, p) in points.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(theme::muted(format!("{}", i + 1)));
+                    for (is_u, current, planes) in [(true, &p.u, &us), (false, &p.v, &vs)] {
+                        let key = format!("pt:{piece}:{which}:{i}:{is_u}");
+                        if let Some(new) = draft_field(ui, state, &key, current, 80.0) {
+                            changed = Some((i, is_u, new));
+                        }
+                        ui.menu_button("⌖", |ui| {
+                            for name in planes {
+                                if ui.button(name).clicked() {
+                                    changed = Some((i, is_u, name.clone()));
+                                    ui.close();
+                                }
+                            }
+                        });
+                    }
+                    if !p.radius.trim().is_empty() {
+                        ui.label(theme::muted(format!("R {}", p.radius)));
+                    }
+                });
+            }
+        },
+    );
+    let (i, is_u, new) = changed?;
+    Some(
+        points
+            .iter()
+            .enumerate()
+            .map(|(j, p)| {
+                let (mut u, mut v) = (p.u.clone(), p.v.clone());
+                if j == i {
+                    if is_u { u = new.clone() } else { v = new.clone() }
+                }
+                SketchPointArg {
+                    u: ExprArg::Text(u),
+                    v: ExprArg::Text(v),
+                    radius: (!p.radius.trim().is_empty()).then(|| ExprArg::Text(p.radius.clone())),
+                }
+            })
+            .collect(),
+    )
+}
+
 /// The planes square to `axis`, origin ones first (for locking an end).
 fn planes_on(def: &cc_core::ComponentDef, axis: PlaneAxis) -> Vec<String> {
     def.all_ref_planes().into_iter().filter(|p| p.axis == axis).map(|p| p.name).collect()
@@ -770,6 +914,8 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         void: None,
         in_plan: None,
         points: None,
+        path: None,
+        top: None,
         start: None,
         end: None,
         axis: None,
@@ -809,12 +955,17 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         SketchPlane::Side => PlaneAxis::X,
     };
     match &item.shape {
-        S::Profile { plane, offset, depth, .. } => {
+        S::Profile { plane, offset, depth, .. } | S::Blend { plane, offset, depth, .. } => {
             let planes = planes_on(def, normal(*plane));
             let end = cc_engine::commands::component_piece::depth_end(offset, depth);
             set.start = expr_row(ui, state, &t!("comp-env-start"), &format!("piece-start:{index}"), offset, &planes)
                 .map(ExprArg::Text);
             set.end = expr_row(ui, state, &t!("comp-env-end"), &format!("piece-end:{index}"), &end, &planes)
+                .map(ExprArg::Text);
+        }
+        S::Sweep { plane, offset, .. } => {
+            let planes = planes_on(def, normal(*plane));
+            set.start = expr_row(ui, state, &t!("comp-env-start"), &format!("piece-start:{index}"), offset, &planes)
                 .map(ExprArg::Text);
         }
         S::Revolution { plane, offset, axis, angle, .. } => {
@@ -834,7 +985,33 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         }
         _ => {}
     }
+    // The outline's points, each coordinate an expression lockable to a plane.
+    let lists: Vec<(&str, SketchPlane, &Vec<cc_core::component::ProfilePoint>)> = match &item.shape {
+        S::Profile { plane, points, .. } | S::Revolution { plane, points, .. } => vec![("points", *plane, points)],
+        S::Sweep { plane, path, profile, .. } => vec![("path", *plane, path), ("section", *plane, profile)],
+        S::Blend { plane, bottom, top, .. } => vec![("points", *plane, bottom), ("top", *plane, top)],
+        _ => Vec::new(),
+    };
+    for (which, plane, points) in lists {
+        let title = match which {
+            "path" => t!("comp-field-path"),
+            "section" => t!("comp-field-section"),
+            "top" => t!("comp-field-top"),
+            _ => t!("comp-env-points"),
+        };
+        if let Some(new) = points_table(ui, state, def, index, which, &title, plane, points) {
+            match which {
+                "path" => set.path = Some(new),
+                "top" => set.top = Some(new),
+                // A sweep's section is its outline (`points`).
+                _ => set.points = Some(new),
+            }
+        }
+    }
     let changed = set.name.is_some()
+        || set.points.is_some()
+        || set.path.is_some()
+        || set.top.is_some()
         || set.void.is_some()
         || set.in_plan.is_some()
         || set.material.is_some()
@@ -947,6 +1124,69 @@ mod tests {
         assert_eq!(piece_at(&plan, DVec2::new(0.35, 0.15), 0.005), Some(before));
         delete_pick(&mut state);
         assert_eq!(component(&state).unwrap().1.items.len(), before);
+    }
+
+    #[test]
+    fn blends_take_two_outlines_and_sweeps_a_path() {
+        use crate::component_sketch::{PieceKind, Sketch, rect_points, snap};
+        let (mut state, table) = table_state();
+        open(&mut state, table);
+        let plan = view(&state, ComponentViewKind::Plan).unwrap();
+        let pt = |x: f64, y: f64| snap(&plan, DVec2::new(x, y), 1e-6);
+        let before = component(&state).unwrap().1.items.len();
+        // The bottom outline is kept; the top one makes the piece.
+        let sketch = Sketch {
+            view: Some(ComponentViewKind::Plan),
+            points: rect_points(&pt(-0.2, -0.2), &pt(0.2, 0.2)),
+            ..Sketch::new(PieceKind::Blend)
+        };
+        crate::component_sketch::finish_for_tests(&mut state, sketch);
+        let Some(EnvTool::Sketch(waiting)) = state.component_env.as_ref().map(|e| e.tool.clone()) else { panic!() };
+        assert_eq!(waiting.bottom.len(), 4);
+        assert_eq!(component(&state).unwrap().1.items.len(), before);
+        let top = Sketch { points: rect_points(&pt(-0.1, -0.1), &pt(0.1, 0.1)), ..waiting };
+        crate::component_sketch::finish_for_tests(&mut state, top);
+        let (_, def) = component(&state).unwrap();
+        assert!(matches!(def.items.last().map(|i| &i.shape), Some(cc_core::ComponentShape::Blend { .. })));
+        // A sweep's drawn points are its path, with the section from the options.
+        let sweep = Sketch {
+            view: Some(ComponentViewKind::Plan),
+            points: vec![pt(-0.5, 0.0), pt(0.0, 0.0), pt(0.0, 0.4)],
+            round: true,
+            ..Sketch::new(PieceKind::Sweep)
+        };
+        crate::component_sketch::finish_for_tests(&mut state, sweep);
+        let (_, def) = component(&state).unwrap();
+        let Some(cc_core::ComponentShape::Sweep { path, profile, .. }) = def.items.last().map(|i| &i.shape) else {
+            panic!()
+        };
+        assert_eq!((path.len(), profile.len()), (3, 2));
+        assert!(def.resolve(&Default::default()).1.is_empty());
+    }
+
+    #[test]
+    fn equalities_are_drawn_picked_and_deleted() {
+        let (mut state, table) = table_state();
+        open(&mut state, table);
+        add_plane(&mut state, PlaneAxis::X, -0.4);
+        add_plane(&mut state, PlaneAxis::X, 0.4);
+        add_plane(&mut state, PlaneAxis::X, 0.1);
+        let command = cmd::ComponentEqualAdd {
+            type_ref: type_ref(&state),
+            view: "plan".into(),
+            a: "Plane1".into(),
+            middle: "Plane3".into(),
+            b: "Plane2".into(),
+            place: Some(0.6),
+        };
+        crate::actions::run_command(&mut state, command).unwrap();
+        let plan = view(&state, ComponentViewKind::Plan).unwrap();
+        assert_eq!(plan.equals.len(), 2);
+        assert!(plan.equals.iter().all(|d| (d.value - 0.4).abs() < 1e-9));
+        assert!(plan.planes.iter().any(|p| p.name == "Plane3" && p.a.x.abs() < 1e-9));
+        state.component_env.as_mut().unwrap().pick = Some(Pick::Equal(0));
+        delete_pick(&mut state);
+        assert!(component(&state).unwrap().1.equals.is_empty());
     }
 
     #[test]

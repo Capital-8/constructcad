@@ -1,6 +1,8 @@
 //! Sketching pieces in the component modeling environment: an outline
 //! drawn in the plan, front or side view (lines with optional arcs, a
-//! rectangle or a circle), extruded or revolved into a solid or void piece.
+//! rectangle or a circle), extruded or revolved into a solid or void piece;
+//! a path that a rectangular or round section is swept along; or two
+//! outlines blended into each other.
 //!
 //! A point that lands on a reference plane seen edge-on is locked to it:
 //! its coordinate is written as the plane's name, so the piece follows the
@@ -37,6 +39,10 @@ pub enum PieceKind {
     Extrusion,
     /// Turned about an axis picked after the outline closes.
     Revolution,
+    /// A section carried along an open path (the path is what is drawn).
+    Sweep,
+    /// A bottom outline, then a top one.
+    Blend,
 }
 
 /// A point of the sketch: where it is and how its coordinates are written.
@@ -62,12 +68,40 @@ pub struct Sketch {
     pub points: Vec<SketchPt>,
     /// A closed outline of a revolution, waiting for its axis.
     pub closed: bool,
+    /// A blend's bottom outline, once drawn.
+    pub bottom: Vec<SketchPt>,
+    /// A sweep's section: width (or diameter) and height, round or not.
+    pub section: (f64, f64),
+    pub round: bool,
 }
 
 impl Sketch {
     pub fn new(kind: PieceKind) -> Self {
-        Self { kind, ..Self::default() }
+        Self { kind, section: (0.05, 0.05), ..Self::default() }
     }
+
+    /// The same tool, ready for the next outline.
+    fn restart(&self) -> Self {
+        Self { view: None, points: Vec::new(), closed: false, bottom: Vec::new(), ..self.clone() }
+    }
+}
+
+/// A sweep's section about the path: a `w` by `h` rectangle, or a circle of
+/// diameter `w`, centered on it (u to the left of the path, v along the normal).
+pub fn section_points(w: f64, h: f64, round: bool) -> Vec<SketchPointArg> {
+    let n = |v: f64| ExprArg::Text(mm(v));
+    if round {
+        let r = w / 2.0;
+        return vec![
+            SketchPointArg { u: n(-r), v: n(0.0), radius: Some(n(r)) },
+            SketchPointArg { u: n(r), v: n(0.0), radius: Some(n(r)) },
+        ];
+    }
+    let (a, b) = (w / 2.0, h / 2.0);
+    [(-a, -b), (a, -b), (a, b), (-a, b)]
+        .iter()
+        .map(|(u, v)| SketchPointArg { u: n(*u), v: n(*v), radius: None })
+        .collect()
 }
 
 /// A number rounded to the millimeter, as an expression.
@@ -176,14 +210,27 @@ fn create(state: &mut AppState, sketch: &Sketch, axis: Option<String>) {
     let kind = match sketch.kind {
         PieceKind::Extrusion => "extrusion",
         PieceKind::Revolution => "revolution",
+        PieceKind::Sweep => "sweep",
+        PieceKind::Blend => "blend",
+    };
+    // A sweep's drawn points are its path; a blend's are its top over the bottom drawn first.
+    let (points, path, top, end) = match sketch.kind {
+        PieceKind::Sweep => {
+            let (w, h) = sketch.section;
+            (section_points(w, h, sketch.round), Some(args(&sketch.points)), None, None)
+        }
+        PieceKind::Blend => (args(&sketch.bottom), None, Some(args(&sketch.points)), Some(ExprArg::Number(0.3))),
+        _ => (args(&sketch.points), None, None, None),
     };
     let command = ComponentPieceAdd {
         type_ref: cc_engine::Ref::Id(env.type_id.0),
         kind: Some(kind.into()),
         plane: plane_name(view).into(),
-        points: args(&sketch.points),
+        points,
+        path,
+        top,
         start: None,
-        end: None,
+        end,
         axis: axis.map(ExprArg::Text),
         angle: None,
         void: sketch.void,
@@ -195,7 +242,7 @@ fn create(state: &mut AppState, sketch: &Sketch, axis: Option<String>) {
         if let Some(i) = out.and_then(|o| o["index"].as_u64()) {
             env.pick = Some(Pick::Piece(i as usize));
         }
-        env.tool = EnvTool::Sketch(Sketch { view: None, points: Vec::new(), closed: false, ..sketch.clone() });
+        env.tool = EnvTool::Sketch(sketch.restart());
     }
 }
 
@@ -223,6 +270,11 @@ pub fn handle(
     }
     let stroke = Stroke::new(1.5, PALETTE.accent);
     let line = |a: DVec2, b: DVec2| painter.line_segment([xf.to_screen(a), xf.to_screen(b)], stroke);
+    let n = sketch.bottom.len();
+    for i in 0..n {
+        let (a, b) = (sketch.bottom[i].pos, sketch.bottom[(i + 1) % n].pos);
+        painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(1.0, PALETTE.accent.gamma_multiply(0.6)));
+    }
     for w in sketch.points.windows(2) {
         line(w[0].pos, w[1].pos);
     }
@@ -260,8 +312,12 @@ pub fn handle(
     let mut sketch = sketch;
     match sketch.mode {
         SketchMode::Line => {
-            let closes = sketch.points.len() >= 2
-                && sketch.points.first().is_some_and(|f| xf.to_screen(f.pos).distance(at) < 8.0);
+            let near = |q: &SketchPt| xf.to_screen(q.pos).distance(at) < 8.0;
+            let closes = if sketch.kind == PieceKind::Sweep {
+                sketch.points.len() >= 2 && sketch.points.last().is_some_and(near)
+            } else {
+                sketch.points.len() >= 2 && sketch.points.first().is_some_and(near)
+            };
             if let Some(last) = sketch.points.last() {
                 line(last.pos, s.pos);
             }
@@ -318,11 +374,16 @@ pub fn handle(
     }
 }
 
-/// A closed outline: an extrusion is made at once, a revolution asks for its axis.
+/// A finished outline: an extrusion or sweep is made at once, a revolution
+/// asks for its axis, a blend for its top outline after the bottom one.
 fn finish(state: &mut AppState, sketch: Sketch) {
     match sketch.kind {
-        PieceKind::Extrusion => create(state, &sketch, None),
+        PieceKind::Extrusion | PieceKind::Sweep => create(state, &sketch, None),
         PieceKind::Revolution => set(state, Sketch { closed: true, ..sketch }),
+        PieceKind::Blend if sketch.bottom.is_empty() => {
+            set(state, Sketch { bottom: sketch.points.clone(), points: Vec::new(), ..sketch });
+        }
+        PieceKind::Blend => create(state, &sketch, None),
     }
 }
 
@@ -335,14 +396,34 @@ pub fn finish_for_tests(state: &mut AppState, sketch: Sketch) {
 pub fn options(ui: &mut Ui, state: &mut AppState) {
     let Some(EnvTool::Sketch(mut sketch)) = state.component_env.as_ref().map(|e| e.tool.clone()) else { return };
     let before = sketch.clone();
+    if sketch.kind == PieceKind::Sweep {
+        sketch.mode = SketchMode::Line;
+    }
     ui.horizontal(|ui| {
-        for (mode, key) in [
-            (SketchMode::Line, "comp-sketch-line"),
-            (SketchMode::Rect, "comp-sketch-rect"),
-            (SketchMode::Circle, "comp-sketch-circle"),
-        ] {
+        let modes: &[(SketchMode, &str)] = if sketch.kind == PieceKind::Sweep {
+            &[]
+        } else {
+            &[
+                (SketchMode::Line, "comp-sketch-line"),
+                (SketchMode::Rect, "comp-sketch-rect"),
+                (SketchMode::Circle, "comp-sketch-circle"),
+            ]
+        };
+        for (mode, key) in modes.iter().copied() {
             if ui.selectable_label(sketch.mode == mode, crate::i18n::tr(key)).clicked() && sketch.mode != mode {
-                sketch = Sketch { mode, view: None, points: Vec::new(), closed: false, ..sketch.clone() };
+                sketch = Sketch { mode, ..sketch.restart() };
+            }
+        }
+        if sketch.kind == PieceKind::Sweep {
+            ui.label(t!("comp-sketch-section"));
+            ui.selectable_value(&mut sketch.round, false, t!("comp-sketch-rect"));
+            ui.selectable_value(&mut sketch.round, true, t!("comp-sketch-circle"));
+            ui.add(crate::properties::length_drag(&mut sketch.section.0).range(0.001..=100.0))
+                .on_hover_text(t!("comp-sketch-section-width"));
+            if !sketch.round {
+                ui.label("×");
+                ui.add(crate::properties::length_drag(&mut sketch.section.1).range(0.001..=100.0))
+                    .on_hover_text(t!("comp-sketch-section-height"));
             }
         }
         ui.separator();
@@ -357,6 +438,8 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         ui.separator();
         let hint = match (sketch.closed, sketch.mode, sketch.points.is_empty()) {
             (true, ..) => t!("comp-sketch-hint-axis"),
+            _ if sketch.kind == PieceKind::Sweep => t!("comp-sketch-hint-path"),
+            _ if sketch.kind == PieceKind::Blend && !sketch.bottom.is_empty() => t!("comp-sketch-hint-top"),
             (_, SketchMode::Line, true) => t!("comp-sketch-hint-line"),
             (_, SketchMode::Line, false) => t!("comp-sketch-hint-line-next"),
             (_, SketchMode::Rect, _) => t!("comp-sketch-hint-rect"),
@@ -395,6 +478,17 @@ mod tests {
         assert_eq!(s.pos, DVec2::new(-0.6, -0.4));
         let s = snap(&v, DVec2::new(0.12345, -0.398), 0.01);
         assert_eq!((s.u.as_str(), s.v.as_str()), ("0.123", "Front"));
+    }
+
+    #[test]
+    fn sweep_sections_are_centered_on_the_path() {
+        let rect = section_points(0.1, 0.04, false);
+        assert_eq!(rect.len(), 4);
+        assert_eq!(rect[0].u, ExprArg::Text("-0.05".into()));
+        assert_eq!(rect[2].v, ExprArg::Text("0.02".into()));
+        let round = section_points(0.1, 0.0, true);
+        assert_eq!(round.len(), 2);
+        assert_eq!(round[1].radius, Some(ExprArg::Text("0.05".into())));
     }
 
     #[test]

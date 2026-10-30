@@ -118,6 +118,13 @@ pub enum ComponentShape {
     /// `angle` degrees about the line `u = axis` of the plane (vertical in
     /// the front and side planes).
     Revolution { plane: SketchPlane, points: Vec<ProfilePoint>, offset: String, axis: String, angle: String },
+    /// Closed `profile` (u to the left of the path, v along the plane's
+    /// normal) carried along the open `path` drawn on `plane`, which stands
+    /// at `offset` on its normal axis; mitered at the path's corners.
+    Sweep { plane: SketchPlane, path: Vec<ProfilePoint>, offset: String, profile: Vec<ProfilePoint> },
+    /// The solid joining the closed `bottom` outline on `plane` at `offset`
+    /// to the closed `top` outline `depth` farther along its normal.
+    Blend { plane: SketchPlane, bottom: Vec<ProfilePoint>, top: Vec<ProfilePoint>, offset: String, depth: String },
     /// Fixed polyhedral surface (not parametric): vertices in the component
     /// frame and faces as counter-clockwise (seen from outside) index loops.
     Mesh { vertices: Vec<[f64; 3]>, faces: Vec<Vec<u32>> },
@@ -153,6 +160,19 @@ impl ComponentShape {
                 out.push(("angle", angle));
                 out
             }
+            ComponentShape::Sweep { path, offset, profile, .. } => {
+                let mut out = profile_expressions(path);
+                out.extend(profile_expressions(profile));
+                out.push(("offset", offset));
+                out
+            }
+            ComponentShape::Blend { bottom, top, offset, depth, .. } => {
+                let mut out = profile_expressions(bottom);
+                out.extend(profile_expressions(top));
+                out.push(("offset", offset));
+                out.push(("depth", depth));
+                out
+            }
             ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
@@ -178,6 +198,18 @@ impl ComponentShape {
                 out.extend([offset, axis, angle]);
                 out
             }
+            ComponentShape::Sweep { path, offset, profile, .. } => {
+                let mut out = profile_expressions_mut(path);
+                out.extend(profile_expressions_mut(profile));
+                out.push(offset);
+                out
+            }
+            ComponentShape::Blend { bottom, top, offset, depth, .. } => {
+                let mut out = profile_expressions_mut(bottom);
+                out.extend(profile_expressions_mut(top));
+                out.extend([offset, depth]);
+                out
+            }
             ComponentShape::Mesh { .. } => Vec::new(),
         }
     }
@@ -187,6 +219,8 @@ impl ComponentShape {
         match self {
             ComponentShape::Extrusion { points, .. } => points.len(),
             ComponentShape::Profile { points, .. } | ComponentShape::Revolution { points, .. } => points.len(),
+            ComponentShape::Sweep { path, profile, .. } => path.len() + profile.len(),
+            ComponentShape::Blend { bottom, top, .. } => bottom.len() + top.len(),
             _ => 0,
         }
     }
@@ -381,6 +415,9 @@ pub struct ComponentDef {
     /// Dimensions between reference planes, labeled by the parameters that drive them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dimensions: Vec<crate::component_ref::RefDimension>,
+    /// Planes kept halfway between two others (EQ).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equals: Vec<crate::component_ref::RefEqual>,
 }
 
 /// An IFC entity class with its predefined and object types.
@@ -529,9 +566,10 @@ impl ComponentDef {
         for (i, item) in self.items.iter().enumerate() {
             let resolved = match &item.shape {
                 ComponentShape::Mesh { vertices, faces } => resolve_mesh(vertices, faces),
-                ComponentShape::Profile { .. } | ComponentShape::Revolution { .. } => {
-                    resolve_profile(&item.shape, &lookup)
-                }
+                ComponentShape::Profile { .. }
+                | ComponentShape::Revolution { .. }
+                | ComponentShape::Sweep { .. }
+                | ComponentShape::Blend { .. } => resolve_profile(&item.shape, &lookup),
                 shape => resolve_shape(shape, &lookup).map(|(footprint, z0, z1)| (footprint, z0, z1, Vec::new())),
             };
             match resolved {
@@ -592,6 +630,13 @@ impl ComponentDef {
             }
             if d.label.as_deref() == Some(old) {
                 d.label = Some(new.to_string());
+            }
+        }
+        for q in &mut self.equals {
+            for name in [&mut q.a, &mut q.middle, &mut q.b] {
+                if name == old {
+                    *name = new.to_string();
+                }
             }
         }
         for item in &mut self.items {
@@ -671,6 +716,16 @@ fn resolve_profile(shape: &ComponentShape, lookup: &dyn Fn(&str) -> Option<f64>)
             let outline = profile::outline(points, lookup).map_err(from)?;
             let (offset, axis, angle) = (ev("offset", offset)?, ev("axis", axis)?, ev("angle", angle)?);
             profile::revolve(*plane, &outline, offset, axis, angle).map_err(from)?
+        }
+        ComponentShape::Sweep { plane, path, offset, profile } => {
+            let path = crate::sweep::path(path, lookup).map_err(from)?;
+            let section = profile::outline(profile, lookup).map_err(from)?;
+            crate::sweep::sweep(*plane, &path, ev("offset", offset)?, &section).map_err(from)?
+        }
+        ComponentShape::Blend { plane, bottom, top, offset, depth } => {
+            let (low, high) =
+                (profile::outline(bottom, lookup).map_err(from)?, profile::outline(top, lookup).map_err(from)?);
+            crate::sweep::blend(*plane, &low, &high, ev("offset", offset)?, ev("depth", depth)?).map_err(from)?
         }
         _ => return Err(PartError::Degenerate),
     };
@@ -768,9 +823,11 @@ fn resolve_shape(
             }
             Ok((footprint, z, z + h))
         }
-        ComponentShape::Mesh { .. } | ComponentShape::Profile { .. } | ComponentShape::Revolution { .. } => {
-            Err(PartError::Degenerate)
-        }
+        ComponentShape::Mesh { .. }
+        | ComponentShape::Profile { .. }
+        | ComponentShape::Revolution { .. }
+        | ComponentShape::Sweep { .. }
+        | ComponentShape::Blend { .. } => Err(PartError::Degenerate),
     }
 }
 
