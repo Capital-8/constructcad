@@ -103,6 +103,7 @@ pub enum Icon {
     Paste,
     MatchType,
     DimLinear,
+    DimOrdinate,
     DimAngular,
     DimRadial,
     DimDiameter,
@@ -131,7 +132,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 116] = [
+    pub const ALL: [Icon; 117] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -224,6 +225,7 @@ impl Icon {
         Icon::Paste,
         Icon::MatchType,
         Icon::DimLinear,
+        Icon::DimOrdinate,
         Icon::DimAngular,
         Icon::DimRadial,
         Icon::DimDiameter,
@@ -345,6 +347,7 @@ impl Icon {
             Icon::Paste => include_str!("../../../assets/icons/ui/paste.svg"),
             Icon::MatchType => include_str!("../../../assets/icons/ui/match-type.svg"),
             Icon::DimLinear => include_str!("../../../assets/icons/ui/dim-linear.svg"),
+            Icon::DimOrdinate => include_str!("../../../assets/icons/ui/dim-ordinate.svg"),
             Icon::DimAngular => include_str!("../../../assets/icons/ui/dim-angular.svg"),
             Icon::DimRadial => include_str!("../../../assets/icons/ui/dim-radial.svg"),
             Icon::DimDiameter => include_str!("../../../assets/icons/ui/dim-diameter.svg"),

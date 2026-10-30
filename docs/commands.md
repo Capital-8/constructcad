@@ -11,7 +11,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Creating elements**: [`wall_create`](#wall_create), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set_type`](#elements_set_type)
-- **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_chain_create`](#dimension_chain_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
+- **Dimensions and text**: [`dimension_create`](#dimension_create), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
@@ -1089,15 +1089,15 @@ No parameters.
 
 ### `dimension_create`
 
-*edit* — Place a dimension in a 2D view (points in the view's drawing coordinates: plan X/Y in plans; horizontal position and height in elevations and sections). Its ends follow the elements (or level lines) their points lie on, so it keeps measuring them. Aligned dimensions measure from `a` to `b`, linear ones along a horizontal or vertical `direction`, angular ones the angle at `vertex` between the rays through `a` and `b`, radial and diameter ones the arc centered at `a` through `b`.
+*edit* — Place a dimension in a 2D view (points in the view's drawing coordinates: plan X/Y in plans; horizontal position and height in elevations and sections). Its ends follow the elements (or level lines) their points lie on, so it keeps measuring them. Aligned dimensions measure from `a` to `b`, linear ones along a horizontal or vertical `direction`, ordinate ones from the origin `a` to `b` along that direction (a running dimension; see `dimension_ordinate_create`), angular ones the angle at `vertex` between the rays through `a` and `b`, radial and diameter ones the arc centered at `a` through `b`.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `a` | [x, y] | required | First point (center for radial and diameter). |
 | `b` | [x, y] | required | Second point (a point on the arc for radial and diameter). |
 | `view` | id or name | required | View id or name. |
-| `direction` | string | optional | Linear dimensions: `horizontal` or `vertical` (default: the larger extent). |
-| `kind` | string | optional | `aligned` (default), `linear`, `angular`, `radial` or `diameter`. |
+| `direction` | string | optional | Linear and ordinate dimensions: `horizontal` or `vertical` (default: the larger extent). |
+| `kind` | string | optional | `aligned` (default), `linear`, `ordinate`, `angular`, `radial` or `diameter`. |
 | `offset` | number | optional | Distance of the dimension line from `a` (left of a→b positive), or the arc radius for angular ones (default 1). |
 | `type` | id or name | optional | Dimension type id or name (default: the default dimension type). |
 | `vertex` | [x, y] | optional | Vertex of an angular dimension. |
@@ -1114,6 +1114,19 @@ No parameters.
 | `direction` | string | optional | Linear chains: `horizontal` or `vertical` (default: the larger extent of the first two points). |
 | `kind` | string | optional | `aligned` (default: along the first two points) or `linear` (horizontal or vertical). |
 | `offset` | number | optional | Distance of the dimension line from the first point, positive to the left of the direction (default 1). |
+| `type` | id or name | optional | Dimension type id or name (default: the default dimension type). |
+
+### `dimension_ordinate_create`
+
+*edit* — Place running (ordinate) dimensions on one dimension line: one dimension from the origin (the first point) to each other point, measured along the same direction, each showing its running total from the origin, in one undo step. Points are in the view's drawing coordinates, as for `dimension_create`, and each end follows the element (or level line) it lies on, so the totals follow the model; giving one a new value with `dimension_set_value` moves what its point measures, keeping the origin.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `points` | [[x, y], …] | required | The origin, then the measured points (at least 2 in all, at most 500). |
+| `view` | id or name | required | View id or name. |
+| `angle` | number | optional | Direction to measure along, degrees counter-clockwise from the X axis (overrides `direction`). |
+| `direction` | string | optional | `horizontal` or `vertical` (default: along the origin and the second point). |
+| `offset` | number | optional | Distance of the dimension line from the origin, positive to the left of the direction (default 1). |
 | `type` | id or name | optional | Dimension type id or name (default: the default dimension type). |
 
 ### `dimension_set_value`

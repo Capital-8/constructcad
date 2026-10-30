@@ -40,7 +40,9 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Grid(g) => finite_points(&[g.start, g.end]),
         ElementKind::Dimension(d) => {
             let kind = match d.kind {
-                crate::DimensionKind::Linear { dir } => dir.is_finite() && dir.length() > 1e-9,
+                crate::DimensionKind::Linear { dir } | crate::DimensionKind::Ordinate { dir } => {
+                    dir.is_finite() && dir.length() > 1e-9
+                }
                 crate::DimensionKind::Angular { vertex, .. } => vertex.is_finite(),
                 _ => true,
             };
