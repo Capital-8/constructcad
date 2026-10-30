@@ -171,6 +171,15 @@ impl TabViewer for Tabs<'_> {
         OnCloseResponse::Close
     }
 
+    /// Right-click on a tab: close the other views.
+    fn context_menu(&mut self, ui: &mut Ui, tab: &mut ViewId, _path: egui_dock::NodePath) {
+        let enabled = self.state.open_tabs > 1;
+        if ui.add_enabled(enabled, egui::Button::new(t!("action-close-other-views"))).clicked() {
+            self.state.close_others_than = Some(*tab);
+            ui.close();
+        }
+    }
+
     fn scroll_bars(&self, _tab: &ViewId) -> [bool; 2] {
         [false, false]
     }
@@ -327,35 +336,7 @@ impl ConstructApp {
     }
 
     fn sync_dock(&mut self) {
-        let state = &mut self.state;
-        // Drop tabs whose view no longer exists (deleted or undone).
-        let project = &state.session.doc.project;
-        let mut removed = Vec::new();
-        self.dock.retain_tabs(|tab| {
-            let keep = project.views.contains_key(tab);
-            if !keep {
-                removed.push(*tab);
-            }
-            keep
-        });
-        for tab in removed {
-            if let Some(v) = state.view3d.remove(&tab) {
-                state.textures_to_free.extend(v.texture);
-            }
-        }
-        for id in std::mem::take(&mut state.open_requests) {
-            if state.project().view(id).is_none() {
-                continue;
-            }
-            match self.dock.find_tab(&id) {
-                Some(path) => {
-                    let _ = self.dock.set_active_tab(path);
-                    self.dock.set_focused_node_and_surface(path.node_path());
-                }
-                None => self.dock.push_to_focused_leaf(id),
-            }
-        }
-        state.active_view = active_tab(&mut self.dock);
+        sync_tabs(&mut self.dock, &mut self.state);
     }
 }
 
@@ -501,6 +482,47 @@ impl ConstructApp {
     }
 }
 
+/// Bring the view tabs in step with the app: drop tabs of deleted views
+/// (and, after Close Inactive Views, all but one), open requested views,
+/// and record the active view and how many tabs are open.
+fn sync_tabs(dock: &mut DockState<ViewId>, state: &mut AppState) {
+    // Drop tabs whose view no longer exists (deleted or undone).
+    let project = &state.session.doc.project;
+    // Close Inactive Views (or Close Other Views on a tab) keeps one tab.
+    let only = state.close_others_than.take();
+    let mut removed = Vec::new();
+    dock.retain_tabs(|tab| {
+        let keep = project.views.contains_key(tab) && only.is_none_or(|v| v == *tab);
+        if !keep {
+            removed.push(*tab);
+        }
+        keep
+    });
+    for tab in removed {
+        if let Some(v) = state.view3d.remove(&tab) {
+            state.textures_to_free.extend(v.texture);
+        }
+    }
+    // The tab kept takes the focus (closing the others may leave none focused).
+    if let Some(kept) = only {
+        state.open_requests.insert(0, kept);
+    }
+    for id in std::mem::take(&mut state.open_requests) {
+        if state.project().view(id).is_none() {
+            continue;
+        }
+        match dock.find_tab(&id) {
+            Some(path) => {
+                let _ = dock.set_active_tab(path);
+                dock.set_focused_node_and_surface(path.node_path());
+            }
+            None => dock.push_to_focused_leaf(id),
+        }
+    }
+    state.active_view = active_tab(dock);
+    state.open_tabs = dock.iter_all_tabs().count();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,5 +540,37 @@ mod tests {
         // Opening a view again recreates the tree.
         dock.push_to_focused_leaf(ViewId(2));
         assert_eq!(active_tab(&mut dock), Some(ViewId(2)));
+    }
+
+    /// Close Inactive Views keeps the active tab only; Close Other Views on a
+    /// tab keeps that one (#89).
+    #[test]
+    fn closing_inactive_views_keeps_one_tab() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let views: Vec<ViewId> = state.project().views.keys().copied().take(4).collect();
+        let mut dock = DockState::new(vec![views[0]]);
+        let first = dock.find_tab(&views[0]).unwrap();
+        dock.set_focused_node_and_surface(first.node_path());
+        for v in &views {
+            state.open_view(*v);
+        }
+        sync_tabs(&mut dock, &mut state);
+        assert_eq!(state.open_tabs, 4);
+        let active = state.active_view.unwrap();
+        crate::commands::run(&mut state, &egui::Context::default(), crate::commands::UiCommand::CloseInactiveViews);
+        sync_tabs(&mut dock, &mut state);
+        assert_eq!(dock.iter_all_tabs().map(|(_, t)| *t).collect::<Vec<_>>(), [active]);
+        assert_eq!((state.open_tabs, state.active_view), (1, Some(active)));
+        assert!(crate::commands::UiCommand::CloseInactiveViews.unavailable(&state).is_some(), "one view left");
+        // From a tab's menu: that tab stays, even if it is not the active one.
+        for v in &views {
+            state.open_view(*v);
+        }
+        sync_tabs(&mut dock, &mut state);
+        state.close_others_than = Some(views[1]);
+        sync_tabs(&mut dock, &mut state);
+        assert_eq!(dock.iter_all_tabs().map(|(_, t)| *t).collect::<Vec<_>>(), [views[1]]);
     }
 }

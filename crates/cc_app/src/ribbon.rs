@@ -381,6 +381,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             UiCommand::Dimension(DimensionMode::Aligned),
             UiCommand::Default3D,
             UiCommand::Section,
+            UiCommand::CloseInactiveViews,
         ] {
             command_icon(ui, state, command);
         }
@@ -760,6 +761,7 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         );
     });
     group(ui, t!("group-navigate"), |ui| command_button(ui, state, UiCommand::ZoomFit));
+    group(ui, t!("group-windows"), |ui| command_button(ui, state, UiCommand::CloseInactiveViews));
 }
 
 fn manage_tab(ui: &mut Ui, state: &mut AppState) {

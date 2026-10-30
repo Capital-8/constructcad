@@ -2,7 +2,7 @@
 
 *Versão em português: [interface.pt-BR.md](interface.pt-BR.md).*
 
-ConstructCAD's window follows the layout desktop CAD and BIM users expect. The **quick access toolbar** sits at the top left. Below it is the **ribbon**, a row of tabs with groups of buttons. The **options bar** for the active tool comes next. The **project browser** and **properties** are docked on the left, the **views** fill the tabs in the middle, and the **status bar** is at the bottom.
+ConstructCAD's window follows the layout desktop CAD and BIM users expect. The **quick access toolbar** sits at the top left. Below it is the **ribbon**, a row of tabs with groups of buttons. The **options bar** for the active tool comes next. The **project browser** and **properties** are docked on the left, the **views** fill the tabs in the middle, and the **status bar** is at the bottom. When many views are open, **Close Inactive Views** (in the quick access toolbar and in *View → Windows*) closes every tab but the active one, and right-clicking a tab offers *Close Other Views*.
 
 ## Commands and their tooltips
 

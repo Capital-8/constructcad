@@ -136,6 +136,8 @@ pub enum UiCommand {
     Schedule,
     Sheet,
     ZoomFit,
+    /// Close every view tab but the active one.
+    CloseInactiveViews,
     VisibilityGraphics,
     ViewFilters,
     ViewTemplates,
@@ -261,6 +263,7 @@ impl UiCommand {
             Schedule,
             Sheet,
             ZoomFit,
+            CloseInactiveViews,
             VisibilityGraphics,
             ViewFilters,
             ViewTemplates,
@@ -390,6 +393,7 @@ impl UiCommand {
             Legend => Icon::Legend,
             Schedule => Icon::Schedule,
             ZoomFit => Icon::ZoomFit,
+            CloseInactiveViews => Icon::CloseViews,
             VisibilityGraphics => Icon::Visibility,
             ViewFilters => Icon::Filter,
             ViewTemplates => Icon::ViewTemplate,
@@ -528,6 +532,7 @@ impl UiCommand {
             Schedule => t!("view-new-schedule"),
             Sheet => t!("view-new-sheet"),
             ZoomFit => t!("action-zoom-fit"),
+            CloseInactiveViews => t!("action-close-inactive-views"),
             VisibilityGraphics => t!("action-visibility-graphics"),
             ViewFilters => t!("action-view-filters"),
             ViewTemplates => t!("action-view-templates"),
@@ -676,6 +681,7 @@ impl UiCommand {
             Schedule => t!("cmd-desc-schedule"),
             Sheet => t!("cmd-desc-sheet"),
             ZoomFit => t!("cmd-desc-zoom-fit"),
+            CloseInactiveViews => t!("cmd-desc-close-inactive-views"),
             VisibilityGraphics => t!("cmd-desc-visibility-graphics"),
             ViewFilters => t!("cmd-desc-view-filters"),
             ViewTemplates => t!("cmd-desc-view-templates"),
@@ -971,6 +977,7 @@ impl UiCommand {
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             Elevations if project.views_of(ViewCategory::Elevation).next().is_none() => Some(t!("why-no-elevations")),
             ZoomFit | Measure if state.active_view.is_none() => Some(t!("why-no-view")),
+            CloseInactiveViews if state.open_tabs <= 1 => Some(t!("why-one-view-open")),
             VisibilityGraphics | OverrideGraphics | HideInView | TempHide | TempIsolate | TempHideCategory
             | TempIsolateCategory | TempReset | TempPermanent
                 if graphics_view(state).is_none() =>
@@ -1377,6 +1384,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             actions::new_sheet(state);
         }
         ZoomFit => crate::app::zoom_fit(state),
+        CloseInactiveViews => state.close_others_than = state.active_view,
         VisibilityGraphics => {
             if let Some(view) = graphics_view(state) {
                 crate::graphics_dialog::open(state, crate::graphics_dialog::Target::View(view));
