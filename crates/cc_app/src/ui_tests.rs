@@ -966,3 +966,34 @@ fn structure_automation_redraws_panels_and_views() {
         }
     }
 }
+
+/// Renaming a view in the project browser ends with Enter or a click
+/// elsewhere (issue #82: the field kept the focus for good, so the name
+/// never changed and no other field took typing).
+#[test]
+fn renaming_a_view_in_the_browser_ends() {
+    let mut state = sample_state();
+    let original = state.project().views_of(cc_core::ViewCategory::ThreeD).next().map(|v| v.id).unwrap();
+    let out = state.session.execute("view_duplicate", serde_json::json!({"view": original.0})).unwrap();
+    let copy = cc_core::ViewId(out["id"].as_u64().unwrap());
+    state.rename = Some((copy, String::new()));
+    let mut harness = themed_harness(state, egui::vec2(400.0, 900.0), egui::Theme::Light, |ui, state| {
+        egui::ScrollArea::vertical().show(ui, |ui| crate::browser::show(ui, state));
+    });
+    harness.run();
+    harness.query_all_by_role(Role::TextInput).find(|n| n.is_focused()).unwrap().type_text("Perspectiva");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(harness.state().rename.is_none(), "Enter ends the rename");
+    assert_eq!(harness.state().project().view(copy).map(|v| v.name.as_str()), Some("Perspectiva"));
+
+    // A click on another row ends it too and keeps the name.
+    harness.state_mut().rename = Some((copy, "Vista externa".into()));
+    harness.run();
+    let other = harness.state().project().view(original).map(|v| v.name.clone()).unwrap();
+    harness.get_by_label(&other).click();
+    harness.run();
+    harness.run();
+    assert!(harness.state().rename.is_none(), "a click elsewhere ends the rename");
+    assert_eq!(harness.state().project().view(copy).map(|v| v.name.as_str()), Some("Vista externa"));
+}

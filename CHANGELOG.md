@@ -23,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Preferences window: pages listed with icons, the current one marked; settings grouped under headings, each with its explanation shown under it; folders with an icon, long paths shortened in the middle (whole on hover) and framed *Browse…*, *Clear* and *Remove* buttons; *Restore defaults* resets the page shown. The footer now spans the whole window.
 
+### Fixed
+
+- Renaming a view in the project browser never ended (#82): the name field took the focus back every frame, so Enter or a click elsewhere did nothing, the name did not change, and no other field (a level's elevation, for one) took typing. It now takes the focus once; Enter or a click elsewhere keeps the name and Esc cancels.
+
 ## [0.7.0] - 2026-10-28
 
 ### Added

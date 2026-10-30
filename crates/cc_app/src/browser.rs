@@ -147,8 +147,19 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
                 .horizontal(|ui| {
                     ui.add_space(PAD + CHEVRON + INDENT + 21.0);
                     let r = ui.add(egui::TextEdit::singleline(text).desired_width(ui.available_width() - 8.0));
-                    r.request_focus();
-                    r.lost_focus().then(|| !ui.input(|i| i.key_pressed(egui::Key::Escape)))
+                    // Focus once when renaming starts: Enter, Esc or a click
+                    // elsewhere then ends it (asking every frame kept the
+                    // field focused for good, and every other field locked).
+                    let started = egui::Id::new(("rename-focused", rid.0));
+                    if !ui.data(|d| d.get_temp::<bool>(started).unwrap_or(false)) {
+                        ui.data_mut(|d| d.insert_temp(started, true));
+                        r.request_focus();
+                    }
+                    let done = r.lost_focus();
+                    if done {
+                        ui.data_mut(|d| d.remove::<bool>(started));
+                    }
+                    done.then(|| !ui.input(|i| i.key_pressed(egui::Key::Escape)))
                 })
                 .inner;
             if let Some(accept) = finished
@@ -172,6 +183,7 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
             if ui.button(t!("browser-rename")).clicked() {
                 let name = state.project().view(id).map(|v| v.name.clone()).unwrap_or_default();
                 state.rename = Some((id, name));
+                ui.data_mut(|d| d.remove::<bool>(egui::Id::new(("rename-focused", id.0))));
                 ui.close();
             }
             if ui.button(t!("browser-duplicate")).clicked() {
