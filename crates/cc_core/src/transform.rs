@@ -153,6 +153,9 @@ impl Element {
                 c.rotation_deg = t.apply_angle_deg(c.rotation_deg);
             }
             ElementKind::CadImport(c) => c.transform(t),
+            ElementKind::Mass(m) => {
+                m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(p);
+            }
             ElementKind::Beam(b) => {
                 p(&mut b.start);
                 p(&mut b.end);

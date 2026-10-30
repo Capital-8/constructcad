@@ -112,6 +112,9 @@ pub fn plan_of(
     if !structural {
         draw_components(&mut d, project, geom, level, cut_z, ceiling);
     }
+    if !structural && !ceiling {
+        draw_masses(&mut d, project, geom, level, cut_z);
+    }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
         if let Some(g) = geom.walls.get(&e.id) {
@@ -211,6 +214,32 @@ fn draw_components(
 
 /// A mesh piece: its section at the cut plane, the edges seen below it and,
 /// dashed, those above (in ceiling plans only the edges above).
+/// Conceptual masses in a floor plan: those on its level or cut by its cut
+/// plane, as their body cuts and shows (see [`draw_mesh`]), with the mass
+/// floor of the level and its area.
+fn draw_masses(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, cut_z: f64) {
+    for (id, g) in &geom.masses {
+        let own = project.element(*id).is_some_and(|e| e.level == level);
+        if !own && !(g.z_range.0 <= cut_z && cut_z <= g.z_range.1) {
+            continue;
+        }
+        draw_mesh(d, &g.faces, cut_z, false, *id);
+        if let Some(floor) = g.floors.iter().find(|f| f.level == level) {
+            d.polyline(&floor.outline, true, LineStyle::Thin, Some(*id));
+            let n = floor.outline.len().max(1) as f64;
+            let center = floor.outline.iter().copied().sum::<DVec2>() / n;
+            d.prims.push(crate::Prim::Text {
+                pos: center,
+                text: crate::format::area(floor.area),
+                size: 2.5,
+                anchor: crate::Anchor::Center,
+                angle: 0.0,
+                element: Some(*id),
+            });
+        }
+    }
+}
+
 fn draw_mesh(d: &mut Drawing2D, faces: &[Vec<glam::DVec3>], cut_z: f64, ceiling: bool, id: cc_core::ElementId) {
     let plan = cc_geom::mesh_plan(faces, cut_z);
     let id = Some(id);

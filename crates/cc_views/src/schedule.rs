@@ -222,6 +222,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 Value::Length(top - base)
             }
             (ElementKind::Room(r), _) => Value::Length(r.height),
+            (ElementKind::Mass(m), _) => Value::Length(m.height),
             (ElementKind::Door(_) | ElementKind::Window(_), _) => {
                 ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(_, h)| Value::Length(h))
             }
@@ -339,6 +340,8 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ => Value::Missing,
         },
         F::BarCount => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Count(r.count())),
+        F::FloorArea => geom.masses.get(&e.id).map_or(Value::Missing, |m| Value::Area(m.floor_area())),
+        F::FloorCount => geom.masses.get(&e.id).map_or(Value::Missing, |m| Value::Count(m.floors.len())),
         F::BarLength => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.bar_length())),
         F::Weight => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Weight(r.weight())),
         F::Number => match &e.kind {

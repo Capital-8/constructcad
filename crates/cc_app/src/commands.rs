@@ -162,7 +162,7 @@ pub enum UiCommand {
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
-const PLACED: [Category; 17] = [
+const PLACED: [Category; 18] = [
     Category::Wall,
     Category::Door,
     Category::Window,
@@ -180,6 +180,7 @@ const PLACED: [Category; 17] = [
     Category::Foundation,
     Category::Pipe,
     Category::Conduit,
+    Category::Mass,
 ];
 
 impl UiCommand {
@@ -752,6 +753,7 @@ impl UiCommand {
             Place(Category::Roof) => "TE",
             Place(Category::Stair) => "ST",
             Place(Category::Ramp) => "RP",
+            Place(Category::Mass) => "MS",
             Place(Category::Railing) => "RA",
             Place(Category::Room) => "RM",
             Place(Category::Component) => "CM",
@@ -830,6 +832,7 @@ impl UiCommand {
             Place(Category::Roof) => "roof_create",
             Place(Category::Stair) => "stair_create",
             Place(Category::Ramp) => "ramp_create",
+            Place(Category::Mass) => "mass_create",
             Place(Category::Railing) => "railing_create",
             Place(Category::Room) => "room_create",
             Place(Category::Grid) => "grid_create",
@@ -926,8 +929,11 @@ impl UiCommand {
             ExportPdf | ExportSvg if actions::active_sheet(state).is_none() => Some(t!("hint-export-sheet")),
             ExportImage if actions::image_view(state).is_none() => Some(t!("hint-export-image")),
             ImportCad if crate::cad_ui::cad_view(state).is_none() => Some(t!("why-cad-view")),
-            // A project without a ramp type gets one when the tool starts.
-            Place(category) if category != Category::Ramp && Tool::for_category(project, category).is_none() => {
+            // A project without a ramp or mass type gets one when the tool starts.
+            Place(category)
+                if !matches!(category, Category::Ramp | Category::Mass)
+                    && Tool::for_category(project, category).is_none() =>
+            {
                 Some(t!("msg-no-type"))
             }
             Dimension(_) if Tool::for_category(project, Category::Dimension).is_none() => Some(t!("msg-no-type")),
@@ -1132,6 +1138,7 @@ fn place_label(category: Category) -> String {
         Category::Text => t!("tool-text"),
         Category::Component => t!("tool-component"),
         Category::CadImport => t!("action-import-cad"),
+        Category::Mass => t!("tool-mass"),
     }
 }
 
@@ -1158,6 +1165,7 @@ fn place_description(category: Category) -> String {
         Category::Text => t!("cmd-desc-text"),
         Category::Component => t!("cmd-desc-component"),
         Category::CadImport => t!("cmd-desc-import-cad"),
+        Category::Mass => t!("cmd-desc-mass"),
     }
 }
 

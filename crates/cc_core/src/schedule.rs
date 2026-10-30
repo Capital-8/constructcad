@@ -63,6 +63,10 @@ pub enum ScheduleField {
     PhaseCreated,
     /// The phase the element is demolished in.
     PhaseDemolished,
+    /// Gross floor area of a mass: the sum of its mass floors.
+    FloorArea,
+    /// How many mass floors a mass has.
+    FloorCount,
 }
 
 impl ScheduleField {
@@ -111,6 +115,8 @@ impl ScheduleField {
             ScheduleField::DrainUnits => "col-drain-units",
             ScheduleField::PhaseCreated => "col-phase-created",
             ScheduleField::PhaseDemolished => "col-phase-demolished",
+            ScheduleField::FloorArea => "col-floor-area",
+            ScheduleField::FloorCount => "col-floor-count",
         }
     }
 
@@ -146,6 +152,7 @@ impl ScheduleField {
                 F::Power,
                 F::DrainUnits,
             ],
+            Category::Mass => &[F::Height, F::FloorCount, F::FloorArea, F::Volume],
             Category::Room => {
                 return vec![
                     F::Number,
@@ -197,6 +204,7 @@ impl ScheduleField {
             Category::Conduit => vec![F::Type, F::System, F::Level, F::Diameter, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
+            Category::Mass => vec![F::Mark, F::Type, F::Level, F::Height, F::FloorCount, F::FloorArea, F::Volume],
             Category::Grid | Category::Dimension | Category::Text | Category::CadImport => Vec::new(),
         }
     }

@@ -49,6 +49,8 @@ pub enum ElementKind {
     Conduit(crate::MepSegment),
     /// A DWG or DXF drawing placed in a 2D view (an underlay to trace over).
     CadImport(Box<crate::cad::CadImport>),
+    /// A conceptual mass (massing studies).
+    Mass(crate::mass::Mass),
 }
 
 impl Element {
@@ -75,6 +77,7 @@ impl Element {
             ElementKind::Pipe(_) => Category::Pipe,
             ElementKind::Conduit(_) => Category::Conduit,
             ElementKind::CadImport(_) => Category::CadImport,
+            ElementKind::Mass(_) => Category::Mass,
         }
     }
 
@@ -194,6 +197,7 @@ impl Element {
             }
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
             ElementKind::CadImport(c) => c.position += delta,
+            ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
             // Placed by their hosts.
             ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}
         }
