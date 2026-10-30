@@ -163,11 +163,23 @@ Com a ferramenta Selecionar, um clique escolhe o elemento sob o cursor (Ctrl som
 
 ## Aviso de atualização
 
-O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa nem instala nada por conta própria.
+O ConstructCAD avisa quando uma versão mais nova é publicada; ele nunca baixa nem instala nada por conta própria, só quando você escolhe **Atualizar agora**.
 
 - **Quando**: ao iniciar, no máximo uma vez por dia, em segundo plano (a janela nunca espera por isso). *Arquivo → Verificar atualizações* (também no diálogo *Sobre*) verifica na hora e informa "está atualizado", a nova versão ou que não foi possível verificar.
 - **O que é contatado**: uma requisição HTTPS à API do GitHub, `https://api.github.com/repos/francisreboucas/constructcad/releases/latest`, que devolve a última versão publicada. A requisição envia os dados usuais de conexão (seu endereço IP) e o agente `ConstructCAD/<versão>`; nenhum dado de projeto, identificador ou informação de uso. Vale para ela a declaração de privacidade do GitHub.
 - **O que aparece**: quando a versão publicada é mais nova que a em uso (pré-lançamentos são ignorados), um aviso aparece na barra de status e na tela inicial: *Baixar* abre a página da versão no navegador, *Ignorar esta versão* esconde o aviso até sair uma versão posterior, e × o esconde até a próxima verificação. Qualquer falha (sem conexão, tempo esgotado, proxy, limite de requisições) é silenciosa.
+- **Atualizar agora**: onde o ConstructCAD pode se substituir com segurança, o aviso e o diálogo da verificação oferecem *Atualizar agora*. Ele baixa o pacote que corresponde à forma como esta cópia foi instalada e confere o SHA-256 com o `SHA256SUMS.txt` da versão (os dois pelos links de download da própria versão no GitHub) antes de mudar qualquer coisa; um download que não confere é apagado e a cópia instalada fica como estava.
+
+  | Instalado como | Atualizar agora faz |
+  |---|---|
+  | AppImage | Baixa o novo AppImage ao lado do antigo, confere, renomeia por cima do arquivo antigo e oferece *Reiniciar agora* |
+  | Instalador do Windows (`.msi`, em Arquivos de Programas) | Baixa e confere o instalador; ele roda quando o ConstructCAD fecha (*Instalar agora* fecha, perguntando antes sobre alterações não salvas; *Ao sair* espera), e o ConstructCAD abre de novo ao terminar |
+  | `.zip` do Windows | Baixa e confere o arquivo, coloca o novo `constructcad.exe` e o `ccad.exe` no lugar (os antigos ficam como `.old` e são apagados na próxima abertura) e oferece *Reiniciar agora* |
+  | App do macOS | Baixa e confere a imagem de disco e a abre: arraste o ConstructCAD para Aplicativos |
+  | `.deb` | Nada: o diálogo mostra o comando do `apt`, com Copiar, e *Baixar* pega o pacote |
+  | `.tar.gz`, compilação própria | Nada: *Baixar* abre a página da versão |
+
+  Atualizar agora precisa de permissão de escrita nos arquivos instalados: um AppImage numa pasta sem permissão falha com uma mensagem, e *Baixar* é o caminho para atualizá-lo.
 - **Como desligar**: desmarque *Verificar atualizações automaticamente* em *Preferências → Geral*. A variável de ambiente `CONSTRUCTCAD_NO_UPDATE_CHECK=1` desliga toda verificação, automática ou pedida (útil em CI, quiosques e instalações sem rede). O ConstructCAD guarda a hora da última verificação, a versão ignorada e a opção junto com as outras preferências.
 
 ## Salvamento automático e recuperação

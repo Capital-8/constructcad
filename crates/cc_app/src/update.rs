@@ -1,7 +1,8 @@
 //! Update notice: at startup (at most once a day) and on request, the app
 //! asks GitHub for the latest release of ConstructCAD in a background thread
 //! and, when it is newer than this build, shows a notice with a link to the
-//! release page. It only notifies: nothing is downloaded or installed.
+//! release page. Checks only notify; *Update Now* (see [`crate::update_install`])
+//! downloads, verifies and installs a release, and only when the user asks.
 //!
 //! The one request is an HTTPS GET of [`RELEASES_API`] with a short timeout
 //! and a bounded response; every failure is silent (logged) and reported as
@@ -81,6 +82,8 @@ pub struct Release {
     pub version: Version,
     /// Its page on GitHub (built from the tag, never taken from the response).
     pub url: String,
+    /// Its packages and checksum list (only links to this repository's releases).
+    pub assets: Vec<crate::update_install::Asset>,
 }
 
 /// The result of a check.
@@ -117,7 +120,8 @@ pub fn evaluate(current: Version, json: &str) -> Outcome {
         return Outcome::UpToDate;
     }
     // `parse` accepted the tag, so it only holds `v`, digits, `.`, `+`, `-` and letters.
-    Outcome::Available(Release { version: latest, url: format!("{RELEASE_PAGE}{}", tag.trim()) })
+    let assets = crate::update_install::assets_of(&value);
+    Outcome::Available(Release { version: latest, url: format!("{RELEASE_PAGE}{}", tag.trim()), assets })
 }
 
 /// Whether [`NO_CHECK_ENV`] turns checks off.
@@ -186,6 +190,43 @@ pub struct Updates {
     pub available: Option<Release>,
     /// The result of a check the user asked for, shown in a dialog.
     pub report: Option<Outcome>,
+    /// Update Now: its progress or result, shown in a dialog.
+    pub install: Option<Install>,
+    /// What an installed update starts when the app closes (the new version, or the installer).
+    pub on_exit: Option<crate::update_install::Next>,
+}
+
+/// Update Now, as the dialog shows it.
+#[derive(Debug)]
+pub enum Install {
+    /// Downloading and verifying `version` (its release page for a manual download).
+    Running(Version, String, crate::update_install::Running),
+    /// Done: what is left to do.
+    Ready(Version, crate::update_install::Next),
+    /// The package manager updates this copy: the command, and the release page.
+    Command(String, String),
+    /// Failed (why, and the release page for a manual download).
+    Failed(String, String),
+}
+
+/// How Update Now would update to `release` here, if it can.
+pub enum Plan {
+    /// Download, verify and install `package` (with the release's checksum list).
+    Install(crate::update_install::InstallKind, crate::update_install::Asset, String),
+    /// Show the package manager's command.
+    Command(String),
+}
+
+/// What Update Now does for `release` on this installation, or `None` (Download only).
+pub fn plan(release: &Release) -> Option<Plan> {
+    use crate::update_install::{InstallKind, SUMS, deb_command, installs_itself, package_for, this_install};
+    let kind = this_install();
+    let package = package_for(&kind, std::env::consts::ARCH, &release.assets)?.clone();
+    if kind == InstallKind::Deb {
+        return Some(Plan::Command(deb_command(&package)));
+    }
+    let sums = release.assets.iter().find(|a| a.name == SUMS)?.url.clone();
+    installs_itself(&kind).then_some(Plan::Install(kind, package, sums))
 }
 
 impl Updates {
@@ -229,6 +270,7 @@ impl Updates {
 
     /// Take the result of the check in progress, if it arrived.
     pub fn poll(&mut self) {
+        self.poll_install();
         let Some((rx, manual)) = &self.pending else { return };
         let manual = *manual;
         let outcome = match rx.try_recv() {
@@ -251,6 +293,41 @@ impl Updates {
         if manual {
             self.report = Some(outcome);
         }
+    }
+
+    /// Update Now: install `release` here (or show how), in the update dialog.
+    pub fn update_now(&mut self, ctx: &egui::Context, release: &Release) {
+        self.available = None;
+        self.report = None;
+        self.install = Some(match plan(release) {
+            Some(Plan::Install(kind, package, sums)) => {
+                match crate::update_install::Running::start(ctx, kind, package, sums) {
+                    Ok(running) => Install::Running(release.version, release.url.clone(), running),
+                    Err(e) => Install::Failed(e, release.url.clone()),
+                }
+            }
+            Some(Plan::Command(command)) => Install::Command(command, release.url.clone()),
+            None => {
+                ctx.open_url(egui::OpenUrl::new_tab(&release.url));
+                return;
+            }
+        });
+    }
+
+    /// Take the result of Update Now, if it arrived.
+    pub fn poll_install(&mut self) {
+        let Some(Install::Running(version, url, running)) = &self.install else { return };
+        let Some(result) = running.poll() else { return };
+        let (version, url) = (*version, url.clone());
+        self.install = Some(match result {
+            Ok(next) => Install::Ready(version, next),
+            // Cancel closes the dialog.
+            Err(_) if running.progress.cancel.load(std::sync::atomic::Ordering::Relaxed) => {
+                self.install = None;
+                return;
+            }
+            Err(e) => Install::Failed(e, url),
+        });
     }
 
     /// Hide the notice until the next check.
@@ -280,6 +357,9 @@ pub fn notice(ui: &mut egui::Ui, updates: &mut Updates) {
         ui.add_space(20.0);
         let text = t!("update-available", "version" => release.version.to_string());
         ui.label(egui::RichText::new(text).color(PALETTE.accent_text));
+        if plan(&release).is_some() && ui.button(t!("update-now")).clicked() {
+            updates.update_now(ui.ctx(), &release);
+        }
         if ui.button(t!("update-download")).on_hover_text(&release.url).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab(&release.url));
             updates.dismiss();
@@ -339,7 +419,8 @@ mod tests {
             evaluate(now, &json("v0.4.0")),
             Outcome::Available(Release {
                 version: v(0, 4, 0),
-                url: "https://github.com/francisreboucas/constructcad/releases/tag/v0.4.0".into()
+                url: "https://github.com/francisreboucas/constructcad/releases/tag/v0.4.0".into(),
+                assets: Vec::new(),
             })
         );
         assert_eq!(evaluate(now, &json("v0.3.0")), Outcome::UpToDate);
@@ -367,7 +448,7 @@ mod tests {
     }
 
     fn release(version: Version) -> Release {
-        Release { version, url: String::new() }
+        Release { version, url: String::new(), assets: Vec::new() }
     }
 
     #[test]
@@ -420,5 +501,22 @@ mod tests {
         assert!(!updates.checking());
         assert_eq!(updates.report, Some(Outcome::Disabled));
         assert_eq!(updates.last_check, None);
+    }
+
+    /// A newer release keeps its packages, but only links to this repository's releases.
+    #[test]
+    fn available_releases_carry_their_packages() {
+        let prefix = crate::update_install::DOWNLOAD_PREFIX;
+        let body = serde_json::json!({
+            "tag_name": "v9.0.0", "draft": false, "prerelease": false,
+            "assets": [
+                {"name": "constructcad-v9.0.0-x86_64.msi", "browser_download_url": format!("{prefix}v9.0.0/constructcad-v9.0.0-x86_64.msi")},
+                {"name": "SHA256SUMS.txt", "browser_download_url": format!("{prefix}v9.0.0/SHA256SUMS.txt")},
+                {"name": "elsewhere.msi", "browser_download_url": "https://example.com/elsewhere.msi"},
+            ]
+        });
+        let Outcome::Available(release) = evaluate(v(0, 1, 0), &body.to_string()) else { panic!("newer") };
+        let names: Vec<&str> = release.assets.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["constructcad-v9.0.0-x86_64.msi", "SHA256SUMS.txt"]);
     }
 }

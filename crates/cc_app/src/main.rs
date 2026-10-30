@@ -48,6 +48,7 @@ mod type_dialog;
 mod ui_tests;
 mod units_dialog;
 mod update;
+mod update_install;
 mod view3d;
 mod view_cube;
 

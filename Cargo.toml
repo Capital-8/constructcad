@@ -46,6 +46,8 @@ acadrust = { version = "0.6.8", default-features = false }
 encoding_rs = "0.8"
 # Update notice (cc_app): HTTPS with rustls, no other TLS stack.
 ureq = { version = "3.5.0", default-features = false, features = ["rustls"] }
+# SHA-256 of downloaded updates (cc_app), checked against the release's SHA256SUMS.txt.
+sha2 = "0.10.9"
 
 # Robustness rules (see AGENTS.md): no unsafe, and no panics outside tests.
 [workspace.lints.rust]

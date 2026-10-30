@@ -1070,3 +1070,29 @@ fn home_snapshots() {
     }
     results.unwrap();
 }
+
+/// Update Now's dialog: a failed update offers the download; an installer
+/// ready to run is kept for when the app closes, "On Exit" or not.
+#[test]
+fn update_install_dialog_offers_what_is_left_to_do() {
+    use crate::update::{Install, Version};
+    let mut state = sample_state();
+    let version = Version { major: 9, minor: 0, patch: 0 };
+    state.updates.install = Some(Install::Failed("checksum".into(), "https://example.com/r".into()));
+    let mut harness = app_harness(state);
+    harness.run();
+    assert!(harness.query_by_label(&t!("update-download")).is_some());
+    harness.query_all_by_label(&t!("action-close")).last().unwrap().click();
+    harness.run();
+    assert!(harness.state().updates.install.is_none());
+
+    let msi = std::path::PathBuf::from("C:/Temp/constructcad-v9.0.0-x86_64.msi");
+    let next = crate::update_install::Next::Installer(msi);
+    harness.state_mut().updates.install = Some(Install::Ready(version, next.clone()));
+    harness.run();
+    harness.get_by_label(&t!("update-install-on-exit")).click();
+    harness.run();
+    assert!(harness.state().updates.install.is_none());
+    assert_eq!(harness.state().updates.on_exit, Some(next), "the installer runs when the app closes");
+    assert!(!harness.state().quit_confirmed, "On Exit does not close the app");
+}

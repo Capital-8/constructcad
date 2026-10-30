@@ -163,11 +163,23 @@ With the Select tool, a click picks the element under the pointer (Ctrl adds or 
 
 ## Update notice
 
-ConstructCAD tells you when a newer version is published; it never downloads or installs anything by itself.
+ConstructCAD tells you when a newer version is published; it never downloads or installs anything by itself, only when you choose **Update Now**.
 
 - **When**: at startup, at most once a day, in the background (the window never waits for it). *File → Check for Updates* (also in the *About* dialog) checks at once and reports "up to date", the new version, or that it could not check.
 - **What is contacted**: one HTTPS request to the GitHub API, `https://api.github.com/repos/francisreboucas/constructcad/releases/latest`, which returns the latest published release. The request sends the usual connection data (your IP address) and a `ConstructCAD/<version>` user agent; no project data, identifier or usage information. GitHub's privacy statement applies to it.
 - **What you see**: when the release is newer than the running version (pre-releases are ignored), a notice appears in the status bar and on the home screen: *Download* opens the release page in your browser, *Skip This Version* hides the notice until a later version comes out, and × hides it until the next check. Any failure (offline, timeout, proxy, rate limit) is silent.
+- **Update Now**: where ConstructCAD can replace itself safely, the notice and the check's dialog offer *Update Now*. It downloads the package that fits how this copy was installed and checks its SHA-256 against the release's `SHA256SUMS.txt` (both from the release's own download links on GitHub) before anything changes; a download that does not match is deleted and the installed copy is left as it was.
+
+  | Installed as | Update Now does |
+  |---|---|
+  | AppImage | Downloads the new AppImage next to the old one, checks it, renames it over the old file and offers *Restart Now* |
+  | Windows installer (`.msi`, under Program Files) | Downloads and checks the installer; it runs when ConstructCAD closes (*Install Now* closes it, asking about unsaved changes first; *On Exit* waits), and ConstructCAD opens again when it is done |
+  | Windows `.zip` | Downloads and checks the archive, puts the new `constructcad.exe` and `ccad.exe` in place (the old ones are kept as `.old` and removed at the next start) and offers *Restart Now* |
+  | macOS app | Downloads and checks the disk image and opens it: drag ConstructCAD to Applications |
+  | `.deb` | Nothing: the dialog shows the `apt` command, with Copy, and *Download* gets the package |
+  | `.tar.gz`, builds from source | Nothing: *Download* opens the release page |
+
+  Update Now needs write access to the installed files: an AppImage in a folder you cannot write to fails with a message, and *Download* is the way to update it.
 - **Turning it off**: clear *Check for updates automatically* in *Preferences → General*. The environment variable `CONSTRUCTCAD_NO_UPDATE_CHECK=1` turns off every check, automatic or on request (useful for CI, kiosks and offline installations). ConstructCAD remembers the last check time, the skipped version and the setting with its other preferences.
 
 ## Autosave and recovery

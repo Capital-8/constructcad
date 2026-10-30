@@ -39,6 +39,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     error(ctx, state);
     about(ctx, state);
     update_report(ctx, state);
+    update_install(ctx, state);
 }
 
 /// Footer of a data dialog: OK keeps the edits, Cancel (or Esc / close) undoes them.
@@ -341,7 +342,8 @@ fn update_report(ctx: &Context, state: &mut AppState) {
     }
     let report = updates.report.clone();
     let current = env!("CARGO_PKG_VERSION");
-    let (mut download, mut skip) = (usize::MAX, usize::MAX);
+    let (mut download, mut skip, mut now) = (usize::MAX, usize::MAX, usize::MAX);
+    let installable = matches!(&report, Some(Outcome::Available(r)) if crate::update::plan(r).is_some());
     let mut dialog = Dialog::new("update-check", t!("action-check-updates")).width(420.0);
     if matches!(report, Some(Outcome::Failed | Outcome::Disabled)) {
         dialog = dialog.kind(Kind::Warning);
@@ -371,7 +373,12 @@ fn update_report(ctx: &Context, state: &mut AppState) {
         },
         |f| {
             if matches!(report, Some(Outcome::Available(_))) {
-                download = f.primary(t!("update-download"));
+                if installable {
+                    now = f.primary(t!("update-now"));
+                    download = f.secondary(t!("update-download"));
+                } else {
+                    download = f.primary(t!("update-download"));
+                }
                 skip = f.extra(t!("update-skip"));
                 f.secondary(t!("action-close"));
             } else {
@@ -380,6 +387,12 @@ fn update_report(ctx: &Context, state: &mut AppState) {
         },
     );
     match response.clicked {
+        Some(i) if i == now => {
+            if let Some(Outcome::Available(release)) = &report {
+                updates.update_now(ctx, release);
+            }
+            updates.cancel_report();
+        }
         Some(i) if i == download => {
             if let Some(Outcome::Available(release)) = &report {
                 ctx.open_url(egui::OpenUrl::new_tab(&release.url));
@@ -394,5 +407,107 @@ fn update_report(ctx: &Context, state: &mut AppState) {
         Some(_) => updates.cancel_report(),
         None if response.dismissed => updates.cancel_report(),
         None => {}
+    }
+}
+
+/// Update Now: the download's progress, then what is left to do (restart,
+/// run the installer, drag the app) or why it failed.
+fn update_install(ctx: &Context, state: &mut AppState) {
+    use crate::update::Install;
+    use crate::update_install::Next;
+    use std::sync::atomic::Ordering;
+    let Some(install) = &state.updates.install else { return };
+    let mut ids = [usize::MAX; 3];
+    let mut dialog = Dialog::new("update-install", t!("dlg-update-install")).width(440.0);
+    if matches!(install, Install::Failed(..)) {
+        dialog = dialog.kind(Kind::Warning);
+    }
+    let response = dialog.show(
+        ctx,
+        |ui| match install {
+            Install::Running(version, _, running) => {
+                ui.label(t!("update-downloading", "version" => version.to_string()));
+                let (done, total) =
+                    (running.progress.done.load(Ordering::Relaxed), running.progress.total.load(Ordering::Relaxed));
+                let mb = |b: u64| format!("{:.1}", b as f64 / 1_048_576.0);
+                let bar = if total > 0 {
+                    egui::ProgressBar::new(done as f32 / total as f32).text(format!("{} / {} MB", mb(done), mb(total)))
+                } else {
+                    egui::ProgressBar::new(0.0).animate(true).text(format!("{} MB", mb(done)))
+                };
+                ui.add(bar);
+                ui.label(theme::muted(t!("update-verify-note")));
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+            }
+            Install::Ready(version, Next::Restart(_)) => {
+                ui.label(t!("update-installed-restart", "version" => version.to_string()));
+            }
+            Install::Ready(version, Next::Installer(_)) => {
+                ui.label(t!("update-installer-ready", "version" => version.to_string()));
+            }
+            Install::Ready(_, Next::Opened) => {
+                ui.label(t!("update-dmg-opened"));
+            }
+            Install::Command(command, _) => {
+                ui.label(t!("update-deb-command"));
+                ui.horizontal(|ui| {
+                    ui.add(egui::Label::new(RichText::new(command).monospace()).wrap());
+                    if ui.small_button(t!("update-copy")).clicked() {
+                        ui.ctx().copy_text(command.clone());
+                    }
+                });
+            }
+            Install::Failed(why, _) => {
+                ui.label(t!("update-install-failed"));
+                ui.label(theme::muted(why.clone()));
+            }
+        },
+        |f| match install {
+            Install::Running(..) => {
+                ids[0] = f.secondary(t!("action-cancel"));
+            }
+            Install::Ready(_, Next::Restart(_)) => {
+                ids[0] = f.primary(t!("update-restart"));
+                ids[1] = f.secondary(t!("update-later"));
+            }
+            Install::Ready(_, Next::Installer(_)) => {
+                ids[0] = f.primary(t!("update-install-close"));
+                ids[1] = f.secondary(t!("update-install-on-exit"));
+            }
+            Install::Ready(_, Next::Opened) => {
+                ids[1] = f.primary(t!("action-close"));
+            }
+            Install::Command(..) | Install::Failed(..) => {
+                ids[2] = f.primary(t!("update-download"));
+                ids[1] = f.secondary(t!("action-close"));
+            }
+        },
+    );
+    let Some(clicked) = response.clicked.or(response.dismissed.then_some(usize::MAX - 1)) else { return };
+    let updates = &mut state.updates;
+    match updates.install.take() {
+        Some(Install::Running(version, url, running)) => {
+            if clicked == ids[0] || clicked == usize::MAX - 1 {
+                running.progress.cancel.store(true, Ordering::Relaxed);
+                // The thread ends on its own; its result is no longer read.
+            } else {
+                updates.install = Some(Install::Running(version, url, running));
+            }
+        }
+        Some(Install::Ready(_, next @ (Next::Restart(_) | Next::Installer(_)))) => {
+            let now = clicked == ids[0];
+            // The installer runs when the app closes, now or later; a replaced
+            // copy restarts only when asked (its files are already in place).
+            if now || matches!(next, Next::Installer(_)) {
+                updates.on_exit = Some(next);
+            }
+            if now {
+                actions::guarded(state, crate::state::PendingAction::Quit);
+            }
+        }
+        Some(Install::Command(_, url) | Install::Failed(_, url)) if clicked == ids[2] => {
+            ctx.open_url(egui::OpenUrl::new_tab(&url));
+        }
+        _ => {}
     }
 }
