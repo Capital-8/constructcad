@@ -119,6 +119,18 @@ As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto
 - As propriedades da vista (plantas, elevações, cortes, vistas 3D, tabelas) têm a seção *Fases* com sua *Fase* e *Filtro de fase*; o filtro fica só para leitura quando o modelo da vista o controla. Os elementos mostram *Fase de criação* e *Fase de demolição*. Elementos novos são construídos na fase da vista ativa.
 - **Modificar → Demolir** (DE) demole os elementos clicados na fase da planta, elevação ou corte ativo; suas portas e janelas vão junto.
 
+## Ambiente de modelagem de componentes
+
+*Editar componente* (*Arquitetura → Modelo*, ou *Editar componente…* nas propriedades de um tipo de componente) abre um espaço de trabalho próprio para o componente selecionado, ou para o que a ferramenta *Componente* coloca. *Edição rápida…* mantém o editor antigo, numa só janela.
+
+- **Vistas:** as vistas do projeto dão lugar às vistas *Planta*, *Frente*, *Lateral* e *3D* do componente. A rodinha aproxima, arrastar com o botão do meio ou o direito move a vista, e um duplo clique com o botão do meio enquadra tudo.
+- **Ribbon:** a aba *Criar* traz *Selecionar*, *Plano de referência*, *Cota*, *Salvar componente…*, *Concluir* e *Cancelar edição*.
+- **Painel à esquerda:** o tipo cujos valores as vistas mostram, os parâmetros (nome, valor, se os elementos podem sobrepô-lo, × e *+ Parâmetro*) e as propriedades do plano ou da cota selecionados.
+- **Planos de referência:** três planos de origem estão sempre lá: *CenterX* (centro esquerda/direita), *CenterY* (centro frente/fundo) e *Base*. *Plano de referência* leva dois cliques na vista de planta, frente ou lateral; uma linha mais vertical ou mais horizontal define a orientação do plano. A posição de um plano é uma expressão (`Left + Largura`), e seu nome pode ser usado em qualquer expressão do componente, então uma peça que lê `x = Left` acompanha o plano.
+- **Cotas:** *Cota* pega dois planos paralelos e os mede onde você clicou. Nas propriedades, um *Rótulo* (um parâmetro de comprimento, ou um novo digitado em *Novo parâmetro*) faz o parâmetro controlar o segundo plano. Mudar o valor muda o parâmetro, ou move o plano quando a cota não tem rótulo.
+- **Seleção e teclas:** clique na linha de um plano ou no texto de uma cota para selecioná-lo; Delete o remove, e Esc volta passo a passo pelos cliques da ferramenta, pela ferramenta e pela seleção.
+- **Concluir e Cancelar:** toda mudança vale para todos os tipos do componente e se desfaz como qualquer edição. *Concluir* mantém as mudanças, *Cancelar edição* desfaz tudo o que foi feito desde que o ambiente abriu.
+
 ## Preferências
 
 *Arquivo → Preferências* (Ctrl+,, também no pé da tela inicial) reúne as configurações do próprio aplicativo; elas não fazem parte de nenhum projeto e ficam guardadas entre as sessões. Escolha uma página à esquerda. As mudanças aparecem na hora; **OK** as mantém e **Cancelar** (ou Esc) volta aos valores de quando a janela abriu.

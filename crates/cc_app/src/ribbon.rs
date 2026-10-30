@@ -227,6 +227,11 @@ fn icon_button(ui: &mut Ui, (icon, badge): (Icon, Option<Badge>), enabled: bool)
     response
 }
 
+/// A group of the component environment's ribbon.
+pub fn env_group(ui: &mut Ui, state: &mut AppState, caption: String, commands: &[UiCommand]) {
+    group(ui, caption, |ui| command_buttons(ui, state, commands));
+}
+
 /// A captioned group of ribbon buttons followed by a vertical divider.
 fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
     let caption_w =
@@ -583,7 +588,13 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
         command_buttons(
             ui,
             state,
-            &[place(Component), UiCommand::NewComponent, UiCommand::LoadComponent, UiCommand::ComponentLibrary],
+            &[
+                place(Component),
+                UiCommand::NewComponent,
+                UiCommand::EditComponent,
+                UiCommand::LoadComponent,
+                UiCommand::ComponentLibrary,
+            ],
         );
     });
     group(ui, t!("group-datum"), |ui| command_buttons(ui, state, &[place(Grid), UiCommand::AlignGridEnds]));

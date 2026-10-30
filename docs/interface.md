@@ -119,6 +119,18 @@ Two-letter keys work while a view has the focus and no text field is being edite
 - The view's properties (plans, elevations, sections, 3D views, schedules) have a *Phasing* section with its *Phase* and *Phase Filter*; the filter is read-only when the view's template controls it. Elements show *Phase Created* and *Phase Demolished*. New elements are built in the active view's phase.
 - **Modify → Demolish** (DE) demolishes the clicked elements in the active plan's, elevation's or section's phase; their doors and windows go with them.
 
+## Component modeling environment
+
+*Edit Component* (*Architecture → Model*, or *Edit Component…* in a component type's properties) opens a workspace of its own for the selected component, or the one the *Component* tool places. *Quick Edit…* keeps the older one-window editor.
+
+- **Views:** the project's views give way to the component's *Plan*, *Front*, *Side* and *3D* views. The wheel zooms, a middle or right drag pans, and a middle double-click fits the view.
+- **Ribbon:** the *Create* tab holds *Select*, *Reference Plane*, *Dimension*, *Save Component…*, *Finish* and *Cancel Editing*.
+- **Left panel:** the type whose values the views show, the parameters (name, value, whether elements may override it, ×, and *+ Parameter*) and the properties of the selected plane or dimension.
+- **Reference planes:** three origin planes are always there: *CenterX* (center left/right), *CenterY* (center front/back) and *Base*. *Reference Plane* takes two clicks in the plan, front or side view; a mostly vertical or mostly horizontal line sets which way the plane faces. A plane's position is an expression (`Left + Width`), and its name can be used in any expression of the component, so a piece that reads `x = Left` follows the plane.
+- **Dimensions:** *Dimension* takes two parallel planes, then measures them where you clicked. In its properties, a *Label* (a length parameter, or a new one typed under *New parameter*) makes the parameter drive the second plane. Changing the value changes the parameter, or moves the plane when the dimension has no label.
+- **Selection and keys:** click a plane's line or a dimension's text to select it; Delete removes it, and Esc steps back through the tool's picks, the tool and the selection.
+- **Finish and Cancel:** every change applies to every type of the component and undoes like any other edit. *Finish* keeps them, *Cancel Editing* undoes everything done since the environment opened.
+
 ## Preferences
 
 *File → Preferences* (Ctrl+,, also at the bottom of the home screen) holds the settings of the app itself; they are not part of any project and are kept between sessions. Pick a page on the left. Changes show at once; **OK** keeps them and **Cancel** (or Esc) brings back the values the window opened with.

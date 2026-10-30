@@ -10,6 +10,7 @@ mod canvas;
 mod clipboard;
 mod commands;
 mod component_editor;
+mod component_env;
 mod dialog;
 mod dialogs;
 mod dim_edit;

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Component modeling environment, first part. *Edit Component* opens a workspace of its own for a component: plan, front, side and 3D views, a *Create* ribbon tab, and a left panel with the component's types, parameters and the selected plane or dimension. Components gain reference planes (three origin planes, *CenterX*, *CenterY* and *Base*, plus planes drawn with *Reference Plane*) whose positions are expressions and whose names every expression of the component can read. *Dimension* measures two parallel planes, and labeling it with a parameter makes the parameter drive the plane. Every change applies to all types of the component in one undo step; *Finish* keeps the changes, *Cancel Editing* undoes them. The older editor stays as *Quick Edit…*. New engine commands: `component_get`, `component_param_add`/`set`/`delete`, `component_ref_plane_add`/`set`/`delete`, `component_ref_line_add`/`delete` and `component_dimension_add`/`set`/`delete`.
 - Simplified Chinese interface (简体中文, `zh-CN`) (#67). It is picked from the system language for `zh`, `zh-CN`, `zh-SG` and `zh-Hans`; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant` keep Traditional Chinese. The system's CJK fonts now also have to cover a Simplified-only character, so Simplified glyphs never show as boxes.
 
 ## [0.7.0] - 2026-10-28
