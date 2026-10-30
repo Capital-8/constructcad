@@ -11,8 +11,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// Parameter names valid and unique, at least one piece, every piece resolves.
-fn validate(def: &ComponentDef) -> Result<()> {
+/// Parameter names valid and unique, sound reference planes, lines and
+/// dimensions, at least one piece, every piece resolves.
+pub(crate) fn validate(def: &ComponentDef) -> Result<()> {
     for (i, p) in def.params.iter().enumerate() {
         if !expr::is_valid_name(&p.name) {
             return Err(EngineError::invalid(format!("invalid parameter name '{}'", p.name)));
@@ -23,6 +24,9 @@ fn validate(def: &ComponentDef) -> Result<()> {
     }
     if def.items.is_empty() {
         return Err(EngineError::invalid("the component has no pieces"));
+    }
+    if let Some(problem) = def.ref_problems().into_iter().next() {
+        return Err(EngineError::invalid(problem));
     }
     // Doors and windows are checked in a wall 15 cm thick, and need their opening.
     if matches!(def.kind, cc_core::ComponentKind::Door | cc_core::ComponentKind::Window) && def.opening_size().is_none()

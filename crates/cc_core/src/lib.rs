@@ -7,6 +7,7 @@
 pub mod arc;
 pub mod component;
 pub mod component_file;
+pub mod component_ref;
 pub mod dim_line;
 pub mod dim_refs;
 mod document;
@@ -35,6 +36,7 @@ mod view;
 pub mod wall_ops;
 
 pub use component::{ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind};
+pub use component_ref::{PlaneAxis, RefDimension, RefLine, RefPlane};
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{

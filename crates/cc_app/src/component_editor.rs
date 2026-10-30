@@ -83,6 +83,7 @@ impl Editor {
                 void: false,
                 plan_only: false,
             }],
+            ..Default::default()
         };
         Editor {
             type_id: None,
