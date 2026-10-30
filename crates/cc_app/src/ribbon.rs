@@ -60,6 +60,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Split => Icon::Split,
         Tool::Offset => Icon::Offset,
         Tool::Align => Icon::Align,
+        Tool::PushPull => Icon::PushPull,
         Tool::ToggleJoin => Icon::Join,
         Tool::Measure => Icon::Measure,
         Tool::JoinGeometry { unjoin: false } => Icon::JoinGeometry,
@@ -584,7 +585,7 @@ fn place(category: Category) -> UiCommand {
 fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
     use Category::*;
     let buttons = |list: &[Category]| list.iter().map(|c| place(*c)).collect::<Vec<_>>();
-    group(ui, t!("group-massing"), |ui| command_button(ui, state, place(Mass)));
+    group(ui, t!("group-massing"), |ui| command_buttons(ui, state, &[place(Mass), UiCommand::PushPull]));
     group(ui, t!("group-build"), |ui| command_buttons(ui, state, &buttons(&[Wall, Door, Window])));
     group(ui, t!("group-horizontal"), |ui| command_buttons(ui, state, &buttons(&[Floor, Ceiling, Roof])));
     group(ui, t!("group-circulation"), |ui| command_buttons(ui, state, &buttons(&[Stair, Ramp, Railing])));
@@ -1111,6 +1112,10 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Measure => {
                 ui.label(theme::muted(t!("hint-measure")));
+            }
+            Tool::PushPull => {
+                let key = if state.interaction.push.is_some() { "hint-push-pull-drag" } else { "hint-push-pull" };
+                ui.label(theme::muted(crate::i18n::tr(key)));
             }
             Tool::JoinGeometry { unjoin } => {
                 let key = match (state.interaction.targets.is_empty(), unjoin) {

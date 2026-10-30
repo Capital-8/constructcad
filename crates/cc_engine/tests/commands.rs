@@ -2607,3 +2607,52 @@ fn masses_and_mass_floors() {
     }
     assert_eq!(fails(&mut s, "mass_floors", json!({"id": id(&levels[0])})), ErrorCode::NotFound);
 }
+
+/// Push/pull on masses (#71): the top raises the mass (and gains the mass
+/// floors of the levels it now spans), the bottom lowers its base, a side
+/// moves out keeping its neighbors' directions; lofts keep their sides and
+/// a face pushed through the mass is refused.
+#[test]
+fn mass_faces_push_and_pull() {
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    let levels = run(&mut s, "levels_list", json!({}));
+    let first_z = levels[1]["elevation"].as_f64().unwrap();
+    let m = id(&run(
+        &mut s,
+        "mass_create",
+        json!({"outline": [[0, 0], [10, 0], [10, 6], [0, 6]], "height": first_z / 2.0}),
+    ));
+    assert_eq!(run(&mut s, "mass_floors", json!({"id": m}))["floors"].as_array().unwrap().len(), 1);
+    // The top up past the first floor: two floors now.
+    run(&mut s, "mass_face_move", json!({"id": m, "face": "top", "distance": first_z}));
+    let floors = run(&mut s, "mass_floors", json!({"id": m}));
+    assert_eq!(floors["floors"].as_array().unwrap().len(), 2, "{floors}");
+    // The east side out by 2 m: 12 x 6 on both floors.
+    run(&mut s, "mass_face_move", json!({"id": m, "face": "side", "side": 1, "distance": 2.0}));
+    assert!(near(run(&mut s, "mass_floors", json!({"id": m}))["floor_area"].as_f64().unwrap(), 144.0));
+    // The bottom down 1 m.
+    run(&mut s, "mass_face_move", json!({"id": m, "face": "bottom", "distance": 1.0}));
+    let e = run(&mut s, "element_get", json!({"id": m}));
+    assert!(near(e["params"]["base_offset"].as_f64().unwrap(), -1.0), "{e}");
+    // Undo goes back one push at a time.
+    run(&mut s, "undo", json!({}));
+    assert!(near(run(&mut s, "element_get", json!({"id": m}))["params"]["base_offset"].as_f64().unwrap(), 0.0));
+    // Through the mass, a missing side, a loft's side: refused.
+    assert_eq!(fails(&mut s, "mass_face_move", json!({"id": m, "face": "top", "distance": -100})), ErrorCode::Rejected);
+    assert_eq!(
+        fails(&mut s, "mass_face_move", json!({"id": m, "face": "side", "side": 7, "distance": 1})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(
+        fails(&mut s, "mass_face_move", json!({"id": m, "face": "front", "distance": 1})),
+        ErrorCode::InvalidArguments
+    );
+    let loft =
+        id(&run(&mut s, "mass_create", json!({"outline": [[20, 0], [30, 0], [30, 6], [20, 6]], "top_inset": 1.0})));
+    assert_eq!(
+        fails(&mut s, "mass_face_move", json!({"id": loft, "face": "side", "side": 0, "distance": 1})),
+        ErrorCode::Rejected
+    );
+    run(&mut s, "mass_face_move", json!({"id": loft, "face": "top", "distance": 1.0}));
+}

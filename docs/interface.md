@@ -129,6 +129,7 @@ With the Select tool, a click picks the element under the pointer (Ctrl adds or 
 
 - **Properties**: the base offset and the height, and whether the mass is an extrusion or a loft (a top outline different from the base, made with `mass_create` and `top` or `top_inset`).
 - **Mass floors**: one box per level the mass spans, with the area of the floor at that level. Plans draw the floor of their level with its area; the properties and the *Masses* schedule give the gross floor area (the sum of the floors), the number of floors and the volume.
+- **Push/Pull** (*Massing → Push/Pull*, `PP`, in a 3D view): click a face of a mass, then move the pointer along the arrow (or type the distance) and click or press Enter. The top changes the height, the bottom moves down or up, and a side of an extrusion moves out or in, the sides beside it keeping their directions (a loft's sides stay; push its top or bottom). A mass with a floor at every level it spans gets the floors of the levels it reaches. Esc lets go of the face.
 - Moving, rotating, mirroring, copying and pasting work as for other elements. Deleting a level removes its mass floors. IFC export leaves masses out.
 
 ## Imported CAD drawings

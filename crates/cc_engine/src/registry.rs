@@ -170,6 +170,7 @@ registry![
         mass::MassFloorsSet,
         mass::MassFloors,
         mass::MassTypeCreate,
+        mass::MassFaceMove,
         ramp::RampTypeCreate,
         create::RailingCreate,
         create::ComponentPlace,

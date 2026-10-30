@@ -62,3 +62,47 @@ pub fn mass_geom(project: &Project, e: &Element, m: &Mass) -> Option<MassGeom> {
         .collect();
     Some(MassGeom { faces, z_range: (base, top), volume, floors })
 }
+
+/// The face of mass `m` (built as `g`) at `p`, a point on its body: the top
+/// or bottom, or the side over the nearest edge of an extrusion's outline
+/// (a loft's sides are not pushed).
+pub fn face_at(m: &Mass, g: &MassGeom, p: DVec3) -> Option<cc_core::mass::MassFace> {
+    use cc_core::mass::MassFace;
+    let eps = 1e-4 * (1.0 + g.z_range.1.abs());
+    if (p.z - g.z_range.1).abs() < eps {
+        return Some(MassFace::Top);
+    }
+    if (p.z - g.z_range.0).abs() < eps {
+        return Some(MassFace::Bottom);
+    }
+    if m.top.is_some() {
+        return None;
+    }
+    let n = m.outline.len();
+    let q = p.truncate();
+    (0..n)
+        .filter_map(|i| {
+            let (a, b) = (*m.outline.get(i)?, *m.outline.get((i + 1) % n)?);
+            Some((crate::polygon::closest_on_segment(a, b, q).0.distance(q), i))
+        })
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|(_, i)| MassFace::Side(i))
+}
+
+/// The outline of a face of `m` in the world, and its outward normal.
+pub fn face_outline(m: &Mass, g: &MassGeom, face: cc_core::mass::MassFace) -> Option<(Vec<DVec3>, DVec3)> {
+    use cc_core::mass::MassFace;
+    let (base, top) = g.z_range;
+    match face {
+        MassFace::Top => Some((m.section(1.0).iter().map(|p| p.extend(top)).collect(), DVec3::Z)),
+        MassFace::Bottom => Some((m.section(0.0).iter().map(|p| p.extend(base)).collect(), -DVec3::Z)),
+        MassFace::Side(i) => {
+            let n = m.outline.len();
+            let (a, b) = (*m.outline.get(i)?, *m.outline.get((i + 1) % n)?);
+            let u = (b - a).try_normalize()?;
+            let ccw = crate::polygon::signed_area(&m.outline) > 0.0;
+            let out = if ccw { DVec2::new(u.y, -u.x) } else { DVec2::new(-u.y, u.x) };
+            Some((vec![a.extend(base), b.extend(base), b.extend(top), a.extend(top)], out.extend(0.0)))
+        }
+    }
+}

@@ -129,6 +129,7 @@ Com a ferramenta Selecionar, um clique escolhe o elemento sob o cursor (Ctrl som
 
 - **Propriedades**: o deslocamento da base e a altura, e se a massa é uma extrusão ou uma transição (um contorno de topo diferente da base, feito com `mass_create` e `top` ou `top_inset`).
 - **Pisos de massa**: uma caixa por nível que a massa atravessa, com a área do piso naquele nível. As plantas desenham o piso do seu nível com a área; as propriedades e a tabela de *Massas* dão a área bruta de pisos (a soma dos pisos), o número de pisos e o volume.
+- **Empurrar/Puxar** (*Estudo de massa → Empurrar/Puxar*, `PP`, numa vista 3D): clique numa face da massa, mova o cursor ao longo da seta (ou digite a distância) e clique ou aperte Enter. O topo muda a altura, a base desce ou sobe, e um lado de uma extrusão se desloca para fora ou para dentro, os lados vizinhos mantendo a direção (os lados de uma transição ficam; empurre o topo ou a base). Uma massa com piso em todos os níveis que atravessa ganha os pisos dos níveis que passa a alcançar. Esc solta a face.
 - Mover, girar, espelhar, copiar e colar funcionam como nos outros elementos. Excluir um nível remove os pisos de massa dele. A exportação IFC deixa as massas de fora.
 
 ## Desenhos CAD importados

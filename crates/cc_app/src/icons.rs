@@ -139,12 +139,13 @@ pub enum Icon {
     Interface,
     CloseViews,
     Mass,
+    PushPull,
     CadImport,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 129] = [
+    pub const ALL: [Icon; 130] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -273,6 +274,7 @@ impl Icon {
         Icon::Interface,
         Icon::CloseViews,
         Icon::Mass,
+        Icon::PushPull,
         Icon::CadImport,
     ];
 
@@ -408,6 +410,7 @@ impl Icon {
             Icon::Interface => include_str!("../../../assets/icons/ui/interface.svg"),
             Icon::CloseViews => include_str!("../../../assets/icons/ui/close-views.svg"),
             Icon::Mass => include_str!("../../../assets/icons/ui/mass.svg"),
+            Icon::PushPull => include_str!("../../../assets/icons/ui/push-pull.svg"),
         }
     }
 }
