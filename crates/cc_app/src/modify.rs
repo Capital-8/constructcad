@@ -375,6 +375,39 @@ pub(crate) fn alignable(state: &AppState, id: ElementId) -> bool {
     line || !state.session.geom().plan_edges(id).is_empty()
 }
 
+/// The plan line Align uses when element `id` is picked at `at`, as the
+/// engine does: the face or side nearest to the pick, else its location line.
+pub(crate) fn align_edge(state: &AppState, id: ElementId, at: DVec2) -> Option<(DVec2, DVec2)> {
+    match cc_engine::commands::modify::align_line(state.project(), state.session.geom(), id, Some(at)) {
+        Some(cc_core::wall_ops::Path::Line(a, b)) => Some((a, b)),
+        _ => None,
+    }
+}
+
+/// The color of Align's reference line.
+const ALIGN_REFERENCE: egui::Color32 = egui::Color32::from_rgb(220, 38, 38);
+
+/// Align's feedback: the line under the pointer that a click picks, and
+/// once the reference is chosen, its line across the view, dashed in red.
+fn align_feedback(painter: &Painter, xf: &Xf, state: &AppState, hovered: Option<ElementId>, raw: DVec2) {
+    let first = state.interaction.targets.first().copied();
+    let first_pick = state.interaction.points.first().copied();
+    if let (Some(r), Some(rp)) = (first, first_pick)
+        && let Some((a, b)) = align_edge(state, r, rp)
+    {
+        let reach = (painter.clip_rect().size().length() as f64 / xf.scale.max(1e-9)).max(1.0);
+        let d = (b - a).normalize_or_zero() * reach;
+        let line = [xf.to_screen(a - d), xf.to_screen(b + d)];
+        painter.extend(egui::Shape::dashed_line(&line, Stroke::new(1.5, ALIGN_REFERENCE), 8.0, 5.0));
+        painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(3.0, ALIGN_REFERENCE));
+    }
+    if let Some(id) = hovered
+        && let Some((a, b)) = align_edge(state, id, raw)
+    {
+        painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(3.0, PREVIEW));
+    }
+}
+
 /// Align `id` (picked at `pick`) onto `reference` (picked at `reference_pick`), in plan.
 pub(crate) fn align_command(
     id: ElementId,
@@ -454,6 +487,9 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
     let mut lit: BTreeSet<ElementId> = first.into_iter().collect();
     lit.extend(hovered_id);
     paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
+    if *tool == Tool::Align {
+        align_feedback(painter, xf, state, hovered_id, raw);
+    }
     let clicked = resp.clicked();
     // Pinned elements are not edited (offset only copies, so it may pick them).
     let pinned = |state: &AppState, id: ElementId| state.project().is_pinned(id);

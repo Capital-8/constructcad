@@ -1068,14 +1068,14 @@ No parameters.
 
 ### `element_align`
 
-*edit* — Move a linear element parallel onto the line of a reference element, or an arc wall onto the circle of a concentric arc wall (its radius changes). Elements without a location line (columns, components) align by an edge of their plan outline, the one nearest to a picked point. Alignment is in plan, so the elements may be on different levels (a column above onto the face of the column below).
+*edit* — Align an element onto a line of a reference element, in plan: the edge picked on the element (a wall's face, a column's side) moves onto the line picked on the reference (a face or side, or the location line of a grid or of an element picked without a point). When the two are not parallel the element first turns about the picked point of its edge. An arc wall moves onto the circle of a concentric arc wall (its radius changes). Alignment is in plan, so the elements may be on different levels (a column above onto the face of the column below).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `id` | integer | required | Element to move. |
 | `reference` | integer | required | Element whose line it moves onto. |
-| `pick` | [x, y] | optional | Plan point `[x, y]` near the edge of `id` that moves onto the reference line, for an element without a location line (the outline edge nearest to it, parallel to the reference line). Without it such an element moves its insertion point onto the line. |
-| `reference_pick` | [x, y] | optional | Plan point `[x, y]` near the edge of `reference` to align to; needed when the reference has no location line (a column or component: the outline edge nearest to it). |
+| `pick` | [x, y] | optional | Plan point `[x, y]` near the edge of `id` that moves onto the reference line (the edge of its plan outline nearest to it). Without it a linear element moves its location line, and other elements their insertion point, onto the line. |
+| `reference_pick` | [x, y] | optional | Plan point `[x, y]` near the line of `reference` to align to (the edge of its plan outline nearest to it, such as a wall face). Without it the reference's location line is used, which a column or component does not have. |
 
 ### `element_move_end`
 
