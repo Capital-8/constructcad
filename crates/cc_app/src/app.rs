@@ -287,6 +287,16 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
                 state.typed.push(ch);
                 continue;
             }
+            // Feet and inch marks and fractions (`12'6 1/2"`); a space or a
+            // dash only inside a length already started.
+            let started = !state.typed.length.is_empty() && !state.typed.angle_active;
+            if typing_length
+                && cc_views::format::imperial()
+                && (matches!(ch, '\'' | '"' | '/') || (started && matches!(ch, ' ' | '-')))
+            {
+                state.typed.push(ch);
+                continue;
+            }
             if !ch.is_ascii_alphabetic() {
                 continue;
             }

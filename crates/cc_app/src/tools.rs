@@ -278,15 +278,18 @@ pub enum DimensionMode {
     Aligned,
     /// Horizontal or vertical, chosen by where the line is placed.
     Linear,
+    /// Running dimensions from an origin, horizontal or vertical.
+    Ordinate,
     Angular,
     Radial,
     Diameter,
 }
 
 impl DimensionMode {
-    pub const ALL: [DimensionMode; 5] = [
+    pub const ALL: [DimensionMode; 6] = [
         DimensionMode::Aligned,
         DimensionMode::Linear,
+        DimensionMode::Ordinate,
         DimensionMode::Angular,
         DimensionMode::Radial,
         DimensionMode::Diameter,
@@ -296,6 +299,7 @@ impl DimensionMode {
         match self {
             DimensionMode::Aligned => "tool-dimension",
             DimensionMode::Linear => "tool-dim-linear",
+            DimensionMode::Ordinate => "tool-dim-ordinate",
             DimensionMode::Angular => "tool-dim-angular",
             DimensionMode::Radial => "tool-dim-radial",
             DimensionMode::Diameter => "tool-dim-diameter",
@@ -306,6 +310,7 @@ impl DimensionMode {
         match self {
             DimensionMode::Aligned => "hint-dimension",
             DimensionMode::Linear => "hint-dim-linear",
+            DimensionMode::Ordinate => "hint-dim-ordinate",
             DimensionMode::Angular => "hint-dim-angular",
             DimensionMode::Radial | DimensionMode::Diameter => "hint-dim-radial",
         }
@@ -372,7 +377,8 @@ impl Interaction {
 }
 
 /// A chain of dimensions being placed: the next one measures from `last`
-/// along `dir` and sits on the line through `line`.
+/// (the origin of ordinate dimensions, which stays) along `dir` and sits on
+/// the line through `line`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DimChain {
     pub view: ViewId,
@@ -381,6 +387,8 @@ pub struct DimChain {
     pub line: DVec2,
     /// Linear (horizontal or vertical) rather than aligned dimensions.
     pub linear: bool,
+    /// Running dimensions from the origin `last`.
+    pub ordinate: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -765,8 +773,13 @@ pub(crate) fn temp_dimension(
     for q in [da, dp] {
         painter.line_segment([xf.to_screen(q - tick), xf.to_screen(q + tick)], Stroke::new(1.5, TEMP_DIM));
     }
-    let unit = format::current().0.length.unit.symbol();
-    let text = if typed.length.is_empty() { format::length(len) } else { format!("{} {unit} \u{23ce}", typed.length) };
+    let unit = format::current().0.length.unit;
+    let text = match (typed.length.is_empty(), unit.is_fractional()) {
+        (true, _) => format::length(len),
+        // Feet and inches carry their own marks.
+        (false, true) => format!("{} \u{23ce}", typed.length),
+        (false, false) => format!("{} {} \u{23ce}", typed.length, unit.symbol()),
+    };
     let screen_dir = xf.to_screen(dp) - xf.to_screen(da);
     let mid = xf.to_screen((da + dp) * 0.5) + (xf.to_screen(da + n) - xf.to_screen(da)).normalized() * 9.0;
     dim_text(painter, mid, text, screen_dir.y.atan2(screen_dir.x), !typed.angle_active);
@@ -1683,6 +1696,9 @@ fn dimension_tool(
             DimensionKind::Linear { dir } => {
                 ("linear", Some(if dir.x.abs() >= dir.y.abs() { "horizontal" } else { "vertical" }), None)
             }
+            DimensionKind::Ordinate { dir } => {
+                ("ordinate", Some(if dir.x.abs() >= dir.y.abs() { "horizontal" } else { "vertical" }), None)
+            }
             DimensionKind::Angular { vertex, .. } => ("angular", None, Some(vertex.to_array())),
             DimensionKind::Radial => ("radial", None, None),
             DimensionKind::Diameter => ("diameter", None, None),
@@ -1716,7 +1732,7 @@ fn dimension_tool(
         refs: Default::default(),
     };
     match mode {
-        DimensionMode::Aligned | DimensionMode::Linear => {
+        DimensionMode::Aligned | DimensionMode::Linear | DimensionMode::Ordinate => {
             let shift = ui.input(|i| i.modifiers.shift);
             // Snap to the visible linework of the view.
             let ends: Vec<DVec2> = drawing
@@ -1728,10 +1744,16 @@ fn dimension_tool(
                 })
                 .flatten()
                 .collect();
-            let linear = mode == DimensionMode::Linear;
+            let linear = mode != DimensionMode::Aligned;
+            // Ordinate dimensions always continue from their origin.
+            let ordinate = mode == DimensionMode::Ordinate;
+            let continuous = state.dim_continuous || ordinate;
             // A chain of another view or mode, or with Single chosen, ends.
-            if state.interaction.dim_chain.is_some_and(|c| c.view != view.id || c.linear != linear)
-                || !state.dim_continuous
+            if state
+                .interaction
+                .dim_chain
+                .is_some_and(|c| c.view != view.id || c.linear != linear || c.ordinate != ordinate)
+                || !continuous
             {
                 state.interaction.dim_chain = None;
             }
@@ -1744,12 +1766,15 @@ fn dimension_tool(
                 let s = snap_at(state, None, raw, Some(chain.last), &ends, xf.scale, shift);
                 draw_snap(painter, xf, s);
                 let offset = (chain.line - chain.last).dot(chain.dir.perp());
-                let next = cc_core::dim_line::chain(view.id, &[chain.last, s.point], chain.dir, offset, !linear)
-                    .and_then(|dims| dims.into_iter().next());
-                match next {
+                let next = if ordinate {
+                    cc_core::dim_line::ordinate(view.id, &[chain.last, s.point], chain.dir, offset)
+                } else {
+                    cc_core::dim_line::chain(view.id, &[chain.last, s.point], chain.dir, offset, !linear)
+                };
+                match next.and_then(|dims| dims.into_iter().next()) {
                     Some(d) => {
                         paint_dimension(painter, xf, &d, scale);
-                        if resp.clicked() && place_chain(state, type_id, &chain, s.point, offset) {
+                        if resp.clicked() && place_chain(state, type_id, &chain, s.point, offset) && !ordinate {
                             state.interaction.dim_chain = Some(DimChain { last: s.point, ..chain });
                         }
                     }
@@ -1776,10 +1801,10 @@ fn dimension_tool(
                     }
                 }
                 [a, b, ..] => {
-                    let kind = if mode == DimensionMode::Linear {
-                        DimensionKind::Linear { dir: linear_direction(*a, *b, raw) }
-                    } else {
-                        DimensionKind::Aligned
+                    let kind = match mode {
+                        DimensionMode::Linear => DimensionKind::Linear { dir: linear_direction(*a, *b, raw) },
+                        DimensionMode::Ordinate => DimensionKind::Ordinate { dir: linear_direction(*a, *b, raw) },
+                        _ => DimensionKind::Aligned,
                     };
                     let d = dim(*a, *b, 0.0, kind);
                     let dir = d.direction().unwrap_or(DVec2::X);
@@ -1803,12 +1828,13 @@ fn dimension_tool(
                     };
                     paint_dimension(painter, xf, &d, scale);
                     if resp.clicked() {
-                        if d.value() > 1e-6 && state.dim_continuous {
+                        if d.value() > 1e-6 && continuous {
                             // The first dimension of a chain.
                             let line = *a + dir.perp() * d.offset;
-                            let chain = DimChain { view: view.id, last: *a, dir, line, linear };
+                            let chain = DimChain { view: view.id, last: *a, dir, line, linear, ordinate };
                             if place_chain(state, type_id, &chain, *b, d.offset) {
-                                state.interaction.dim_chain = Some(DimChain { last: *b, ..chain });
+                                let last = if ordinate { *a } else { *b };
+                                state.interaction.dim_chain = Some(DimChain { last, ..chain });
                             }
                             state.interaction.points.clear();
                         } else if d.value() > 1e-6 {
@@ -1911,21 +1937,37 @@ pub(crate) fn linear_direction(a: DVec2, b: DVec2, cursor: DVec2) -> DVec2 {
     if horizontal { DVec2::X } else { DVec2::Y }
 }
 
-/// Place the next dimension of `chain`, from its last point to `to`, with
-/// its line at `offset` from the last point (`dimension_chain_create`);
-/// selects it. False (with the error shown) when it was refused.
+/// Place the next dimension of `chain`, from its last point (or origin) to
+/// `to`, with its line at `offset` from that point (`dimension_chain_create`
+/// or `dimension_ordinate_create`); selects it. False (with the error
+/// shown) when it was refused.
 fn place_chain(state: &mut AppState, type_id: ElementTypeId, chain: &DimChain, to: DVec2, offset: f64) -> bool {
     let dir = chain.dir;
-    let command = cc_engine::commands::annotate::DimensionChainCreate {
-        view: Ref::Id(chain.view.0),
-        points: vec![chain.last.to_array(), to.to_array()],
-        kind: Some(if chain.linear { "linear" } else { "aligned" }.to_string()),
-        offset: Some(offset),
-        direction: chain.linear.then(|| if dir.x.abs() >= dir.y.abs() { "horizontal" } else { "vertical" }.to_string()),
-        angle: (!chain.linear).then(|| dir.y.atan2(dir.x).to_degrees()),
-        type_ref: Some(Ref::Id(type_id.0)),
+    let axis = if dir.x.abs() >= dir.y.abs() { "horizontal" } else { "vertical" };
+    let points = vec![chain.last.to_array(), to.to_array()];
+    let view = Ref::Id(chain.view.0);
+    let type_ref = Some(Ref::Id(type_id.0));
+    let result = if chain.ordinate {
+        state.session.run(cc_engine::commands::annotate::DimensionOrdinateCreate {
+            view,
+            points,
+            offset: Some(offset),
+            direction: Some(axis.to_string()),
+            angle: None,
+            type_ref,
+        })
+    } else {
+        state.session.run(cc_engine::commands::annotate::DimensionChainCreate {
+            view,
+            points,
+            kind: Some(if chain.linear { "linear" } else { "aligned" }.to_string()),
+            offset: Some(offset),
+            direction: chain.linear.then(|| axis.to_string()),
+            angle: (!chain.linear).then(|| dir.y.atan2(dir.x).to_degrees()),
+            type_ref,
+        })
     };
-    match state.session.run(command) {
+    match result {
         Ok(out) => {
             let ids = out["ids"].as_array().map(|ids| ids.iter().filter_map(|id| id.as_u64()).map(ElementId));
             state.selection = ids.into_iter().flatten().collect();
@@ -2919,6 +2961,25 @@ mod tests {
     }
 
     #[test]
+    fn ordinate_points_measure_from_the_origin_on_one_line() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        let plan = *state.project().views.iter().find(|(_, v)| v.is_plan()).unwrap().0;
+        let type_id = state.project().default_type(Category::Dimension).unwrap();
+        let origin = DVec2::new(100.0, 100.0);
+        let line = origin - DVec2::Y;
+        let chain = DimChain { view: plan, last: origin, dir: DVec2::X, line, linear: true, ordinate: true };
+        for (x, total) in [(100.6, 0.6), (101.2, 1.2), (102.4, 2.4)] {
+            assert!(place_chain(&mut state, type_id, &chain, DVec2::new(x, 100.2), -1.0));
+            let [id] = state.selection.iter().copied().collect::<Vec<_>>()[..] else { panic!("one selected") };
+            let Some(ElementKind::Dimension(d)) = state.project().element(id).map(|e| &e.kind) else { panic!() };
+            assert!(matches!(d.kind, DimensionKind::Ordinate { .. }), "{d:?}");
+            assert_eq!(d.a, origin);
+            assert!((d.value() - total).abs() < 1e-9, "{d:?}");
+            assert!((d.a.y + d.offset - line.y).abs() < 1e-9);
+        }
+    }
+
+    #[test]
     fn a_continued_chain_stays_on_its_line_and_selects_the_new_dimension() {
         let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
         let plan = *state.project().views.iter().find(|(_, v)| v.is_plan()).unwrap().0;
@@ -2937,7 +2998,7 @@ mod tests {
         let dir = DVec2::new(3.0, 4.0).normalize();
         let first = DVec2::new(100.0, 100.0);
         let line = first + dir.perp() * 1.5;
-        let mut chain = DimChain { view: plan, last: first, dir, line, linear: false };
+        let mut chain = DimChain { view: plan, last: first, dir, line, linear: false, ordinate: false };
         for (to, aligned) in [(first + dir * 5.0, true), (first + DVec2::new(7.0, 6.0), false)] {
             let offset = (chain.line - chain.last).dot(dir.perp());
             assert!(place_chain(&mut state, type_id, &chain, to, offset));

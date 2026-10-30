@@ -210,6 +210,7 @@ registry![
     "Dimensions and text" => [
         annotate::DimensionCreate,
         annotate::DimensionChainCreate,
+        annotate::DimensionOrdinateCreate,
         annotate::DimensionSetValue,
         annotate::TextCreate,
         annotate::TextAddLeader,

@@ -348,13 +348,26 @@ fn dimension_tool_has_a_continuous_mode() {
     assert!(harness.state().dim_continuous);
     // A chain in progress shows how to continue and end it.
     let view = cc_core::ViewId(1);
-    let chain = DimChain { view, last: glam::DVec2::ZERO, dir: glam::DVec2::X, line: glam::DVec2::Y, linear: true };
+    let chain = DimChain {
+        view,
+        last: glam::DVec2::ZERO,
+        dir: glam::DVec2::X,
+        line: glam::DVec2::Y,
+        linear: true,
+        ordinate: false,
+    };
     harness.state_mut().interaction.dim_chain = Some(chain);
     harness.run();
     assert!(harness.query_by_label(&t!("hint-dim-chain")).is_some());
     harness.get_by_label(&t!("dim-single")).click();
     harness.run();
     assert!(!harness.state().dim_continuous);
+    // Ordinate dimensions always continue from their origin.
+    harness.state_mut().tool = Tool::Dimension { type_id, mode: DimensionMode::Ordinate };
+    harness.state_mut().interaction.dim_chain = Some(DimChain { ordinate: true, ..chain });
+    harness.run();
+    assert!(harness.query_by_label(&t!("dim-continuous")).is_none());
+    assert!(harness.query_by_label(&t!("hint-dim-ordinate-next")).is_some());
     // Angular dimensions have no chain.
     harness.state_mut().interaction.dim_chain = None;
     harness.state_mut().tool = Tool::Dimension { type_id, mode: DimensionMode::Angular };

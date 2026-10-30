@@ -640,6 +640,7 @@ pub fn dimension_icon(mode: DimensionMode) -> Icon {
     match mode {
         DimensionMode::Aligned => Icon::Dimension,
         DimensionMode::Linear => Icon::DimLinear,
+        DimensionMode::Ordinate => Icon::DimOrdinate,
         DimensionMode::Angular => Icon::DimAngular,
         DimensionMode::Radial => Icon::DimRadial,
         DimensionMode::Diameter => Icon::DimDiameter,
@@ -983,13 +984,15 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     ui.selectable_value(c, true, t!("dim-continuous")).on_hover_text(t!("dim-continuous-tip"));
                     ui.separator();
                 }
-                let hint = if state.interaction.dim_chain.is_some() {
+                let hint = if state.interaction.dim_chain.is_some_and(|c| c.ordinate) {
+                    t!("hint-dim-ordinate-next")
+                } else if state.interaction.dim_chain.is_some() {
                     t!("hint-dim-chain")
                 } else {
                     crate::i18n::tr(mode.hint_key())
                 };
                 let r = ui.label(theme::muted(hint));
-                if matches!(mode, DimensionMode::Aligned | DimensionMode::Linear) {
+                if matches!(mode, DimensionMode::Aligned | DimensionMode::Linear | DimensionMode::Ordinate) {
                     r.on_hover_text(t!("hint-dim-align"));
                 }
             }

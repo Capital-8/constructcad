@@ -126,7 +126,7 @@ impl Element {
                 match &mut d.kind {
                     crate::DimensionKind::Angular { vertex, .. } => p(vertex),
                     // Directions turn (and mirror) without the translation.
-                    crate::DimensionKind::Linear { dir } => {
+                    crate::DimensionKind::Linear { dir } | crate::DimensionKind::Ordinate { dir } => {
                         *dir = (t.apply(*dir) - t.apply(DVec2::ZERO)).normalize_or(DVec2::X);
                     }
                     _ => {}
@@ -216,6 +216,7 @@ impl crate::EditCtx<'_> {
             .filter_map(|id| project.element(*id).and_then(|e| e.as_wall()).map(|w| (*id, w.length(), w.direction())))
             .collect();
         let mut changed = Vec::new();
+        let mut mirrored = std::collections::BTreeSet::new();
         for id in ids {
             let Some(el) = self.element_mut(*id) else { continue };
             if el.as_hosted().is_some() {
@@ -231,6 +232,7 @@ impl crate::EditCtx<'_> {
                     }
                 }
             }
+            mirrored.insert(*id);
             changed.push(*id);
         }
         for (id, with_wall) in hosted {
@@ -245,12 +247,43 @@ impl crate::EditCtx<'_> {
                 {
                     h.offset = len - h.offset;
                 }
+                mirrored.insert(id);
             } else if let (Some(dir), Some(h)) = (host_dir, el.as_hosted_mut()) {
                 h.offset += t.translation.dot(dir);
             }
             changed.push(id);
         }
+        if t.mirror {
+            self.mirror_dimension_refs(&mirrored);
+        }
         changed
+    }
+
+    /// Point the dimension ends on `mirrored` elements at the mirror images
+    /// of the points they measured, so they keep measuring them.
+    fn mirror_dimension_refs(&mut self, mirrored: &std::collections::BTreeSet<ElementId>) {
+        let project = self.project();
+        let updates: Vec<(ElementId, Box<crate::Dimension>)> = project
+            .elements
+            .values()
+            .filter_map(|e| {
+                let ElementKind::Dimension(d) = &e.kind else { return None };
+                let mut n = d.clone();
+                let mut hit = false;
+                for r in n.all_refs_mut().flatten() {
+                    let Some(target) = r.element().filter(|id| mirrored.contains(id)) else { continue };
+                    let Some(target) = project.element(target) else { continue };
+                    *r = r.mirrored(&target.kind);
+                    hit = true;
+                }
+                hit.then_some((e.id, n))
+            })
+            .collect();
+        for (id, n) in updates {
+            if let Some(ElementKind::Dimension(d)) = self.element_mut(id).map(|e| &mut e.kind) {
+                *d = n;
+            }
+        }
     }
 }
 
@@ -345,6 +378,8 @@ impl crate::EditCtx<'_> {
         let accepted: Vec<&Element> = set.iter().filter(|e| self.project().accepts(e, set)).collect();
         let mut created = Vec::new();
         for t in transforms {
+            // This transform's copies (arrays pass several).
+            let first = created.len();
             let mut remap = std::collections::BTreeMap::new();
             for el in accepted.iter().filter(|el| el.as_hosted().is_none()) {
                 let mut c = (*el).clone();
@@ -361,20 +396,10 @@ impl crate::EditCtx<'_> {
                 created.push(self.add_element(c));
             }
             // Copied railings follow the copies of their stairs, or become free.
-            for id in &created {
+            for id in &created[first..] {
                 let Some(ElementKind::Railing(r)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 if let Some(h) = r.stair {
                     r.stair = remap.get(&h.host).map(|n| crate::StairRailing { host: *n, ..h });
-                }
-            }
-            // Copied dimensions follow the copies of what they measure, or nothing.
-            for id in &created {
-                let Some(ElementKind::Dimension(d)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
-                for r in d.all_refs_mut() {
-                    *r = r.and_then(|r| match r.element() {
-                        Some(e) => remap.get(&e).map(|n| crate::DimRef { target: crate::RefTarget::Element(*n), ..r }),
-                        None => Some(r),
-                    });
                 }
             }
             for el in accepted.iter().filter(|el| el.as_hosted().is_some()) {
@@ -403,6 +428,7 @@ impl crate::EditCtx<'_> {
                                 ch.offset = len - ch.offset;
                             }
                         }
+                        remap.insert(el.id, c.id);
                     }
                     // A lone copy goes into the wall where it lands on the
                     // target level; on its own level it may also slide along its wall.
@@ -429,6 +455,19 @@ impl crate::EditCtx<'_> {
                     _ => continue,
                 }
                 created.push(self.add_element(c));
+            }
+            // Copied dimensions follow the copies of what they measure, or nothing.
+            for id in &created[first..] {
+                let Some(ElementKind::Dimension(d)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                for r in d.all_refs_mut() {
+                    *r = r.and_then(|r| match r.element() {
+                        Some(e) => remap.get(&e).map(|n| crate::DimRef { target: crate::RefTarget::Element(*n), ..r }),
+                        None => Some(r),
+                    });
+                }
+            }
+            if t.mirror {
+                self.mirror_dimension_refs(&remap.values().copied().collect());
             }
         }
         created
