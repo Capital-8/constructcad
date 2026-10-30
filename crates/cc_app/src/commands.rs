@@ -11,6 +11,26 @@ use crate::t;
 use crate::tools::{DimensionMode, Tool};
 use cc_core::{Category, ViewCategory};
 
+/// The user's two-letter keys by command id (empty: no keys), as
+/// Preferences → Shortcuts sets them; `preferences::sync_look` keeps it in
+/// step with the preferences.
+static KEY_OVERRIDES: std::sync::RwLock<std::collections::BTreeMap<String, String>> =
+    std::sync::RwLock::new(std::collections::BTreeMap::new());
+
+/// Use `keys` (command id → two letters, or empty) as the custom shortcuts.
+pub fn set_key_overrides(keys: &std::collections::BTreeMap<String, String>) {
+    if let Ok(mut current) = KEY_OVERRIDES.write()
+        && *current != *keys
+    {
+        current.clone_from(keys);
+    }
+}
+
+/// Two ASCII capital letters, the form of the keys typed in a view.
+pub fn is_letter_keys(keys: &str) -> bool {
+    keys.len() == 2 && keys.chars().all(|c| c.is_ascii_uppercase())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UiCommand {
     Home,
@@ -268,7 +288,12 @@ impl UiCommand {
 
     /// The command a two-letter key sequence runs.
     pub fn from_keys(keys: &str) -> Option<UiCommand> {
-        Self::all().into_iter().find(|c| c.shortcut() == Some(keys))
+        Self::all().into_iter().find(|c| c.shortcut().as_deref() == Some(keys))
+    }
+
+    /// The command named `id` (see [`UiCommand::id`]).
+    pub fn from_id(id: &str) -> Option<UiCommand> {
+        Self::all().into_iter().find(|c| c.id() == id)
     }
 
     pub fn icon(self) -> Icon {
@@ -675,8 +700,35 @@ impl UiCommand {
         }
     }
 
-    /// Keyboard shortcut: a Ctrl chord or a two-letter sequence typed in a view.
-    pub fn shortcut(self) -> Option<&'static str> {
+    /// Keyboard shortcut: a Ctrl chord or a two-letter sequence typed in a
+    /// view; two-letter keys follow the user's choices (Preferences →
+    /// Shortcuts).
+    pub fn shortcut(self) -> Option<String> {
+        let default = self.default_shortcut();
+        if !self.customizable() {
+            return default.map(str::to_string);
+        }
+        let custom = KEY_OVERRIDES.read().ok().and_then(|keys| keys.get(&self.id()).cloned());
+        match custom {
+            Some(keys) if keys.is_empty() => None,
+            Some(keys) => Some(keys),
+            None => default.map(str::to_string),
+        }
+    }
+
+    /// A stable name of the command, under which its custom keys are kept.
+    pub fn id(self) -> String {
+        format!("{self:?}")
+    }
+
+    /// Whether the user may change the keys: two-letter ones and commands
+    /// without keys (Ctrl chords, Delete and Esc are fixed).
+    pub fn customizable(self) -> bool {
+        self.default_shortcut().is_none_or(is_letter_keys)
+    }
+
+    /// The keys the command has before any change by the user.
+    pub fn default_shortcut(self) -> Option<&'static str> {
         use UiCommand::*;
         Some(match self {
             New => "Ctrl+N",
@@ -1372,7 +1424,7 @@ mod tests {
     fn shortcuts_are_unique() {
         let mut seen = HashSet::new();
         for command in UiCommand::all() {
-            if let Some(keys) = command.shortcut() {
+            if let Some(keys) = command.default_shortcut() {
                 assert!(seen.insert(keys), "{keys} is used twice");
                 if keys.len() == 2 {
                     assert_eq!(UiCommand::from_keys(keys), Some(command));

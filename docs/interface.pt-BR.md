@@ -149,12 +149,13 @@ Com a ferramenta Selecionar, um clique escolhe o elemento sob o cursor (Ctrl som
 
 ## Preferências
 
-*Arquivo → Preferências* (Ctrl+,, também no pé da tela inicial) reúne as configurações do próprio aplicativo; elas não fazem parte de nenhum projeto e ficam guardadas entre as sessões. Escolha uma página à esquerda. As mudanças aparecem na hora; **OK** as mantém e **Cancelar** (ou Esc) volta aos valores de quando a janela abriu.
+*Arquivo → Preferências* (Ctrl+,, também no pé da tela inicial) reúne as configurações do próprio aplicativo; elas não fazem parte de nenhum projeto e ficam guardadas entre as sessões. Escolha uma página à esquerda. As mudanças aparecem na hora; **OK** as mantém e **Cancelar** (ou Esc) volta aos valores de quando a janela abriu. **Restaurar padrões** (embaixo, à esquerda) volta as opções da página mostrada aos valores padrão; o idioma e as pastas ficam como estão.
 
 - **Geral**: o idioma da interface, o tema (claro, escuro ou o do sistema) e *Verificar atualizações automaticamente* (veja o aviso de atualização abaixo).
 - **Interface**: a *Escala da interface* (75–200%, tudo cresce: painéis, ícones, texto; Ctrl+Mais e Ctrl+Menos também a mudam), o *Tamanho do texto* (pequeno, normal, grande, muito grande; só o texto, em qualquer escala), *Iniciar com o ribbon recolhido*, *Dicas detalhadas* (desligadas, as dicas dos comandos mostram só o nome, o atalho e por que o comando está indisponível, sem a descrição e o comando do motor) e *Arrastar na vista 3D seleciona* (arrastar com o botão esquerdo desenha uma caixa de seleção e Shift+arrastar orbita; desligado, o contrário).
 - **Locais de arquivos**: a *Pasta de macros* (os diálogos de arquivo de macro começam nela e *Gerenciar → Executar macro* lista as macros dela), a *Pasta de projetos* (onde começam Abrir, Importar IFC, Importar CAD e o primeiro Salvar de um projeto novo; um projeto já salvo é salvo de novo ao lado dele mesmo) e as pastas da biblioteca de componentes (*Adicionar pasta…*, *Remover*). O botão *Gerenciar pastas…* da janela da biblioteca de componentes abre esta página. Uma pasta que não existe mais aparece como *Não encontrada* e é ignorada.
 - **Salvamento**: o intervalo do *Salvamento automático* (desligado, ou a cada 1, 2, 5, 10 ou 15 minutos; veja abaixo) e quantos projetos recentes a tela inicial lista.
+- **Teclas de atalho**: todos os comandos com suas teclas. Clique na caixa de um comando e digite duas letras para dar novas teclas a ele (elas substituem as antigas na hora, nas dicas, na paleta e nas vistas); teclas que já são de outro comando são recusadas e a linha diz de qual. Deixe a caixa vazia para tirar as teclas, e *Padrão* traz de volta as originais. A busca acha um comando pelo nome ou pelas teclas. Atalhos com Ctrl, Delete e Esc são fixos.
 
 ## Aviso de atualização
 

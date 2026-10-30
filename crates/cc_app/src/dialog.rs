@@ -231,8 +231,10 @@ pub fn two_columns(ui: &mut Ui, widths: [f32; 2], mut column: impl FnMut(&mut Ui
     let height = ui.ctx().content_rect().height();
     ui.horizontal_top(|ui| {
         let mut side = |ui: &mut Ui, i: usize| {
-            ui.allocate_ui_with_layout(vec2(widths[i], height), layout, |ui| {
-                ui.set_width(widths[i]);
+            // The last column takes what is left, so the columns never widen the dialog.
+            let width = if i == 1 { widths[i].min(ui.available_width()) } else { widths[i] };
+            ui.allocate_ui_with_layout(vec2(width, height), layout, |ui| {
+                ui.set_width(width);
                 column(ui, i);
             })
             .response

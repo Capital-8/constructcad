@@ -71,7 +71,7 @@ struct Entry {
     action: Action,
     label: String,
     detail: String,
-    shortcut: Option<&'static str>,
+    shortcut: Option<String>,
     icon: Icon,
     badge: Option<Badge>,
     /// Why it cannot run now.
@@ -99,10 +99,10 @@ fn fold(text: &str) -> String {
 /// Words found at the start of the label, or the exact shortcut, rank first.
 fn score(entry: &Entry, words: &[String]) -> Option<u32> {
     let label = fold(&entry.label);
-    let rest = fold(&format!("{} {}", entry.detail, entry.shortcut.unwrap_or_default()));
+    let rest = fold(&format!("{} {}", entry.detail, entry.shortcut.as_deref().unwrap_or_default()));
     let mut total = 0;
     for word in words {
-        if entry.shortcut.is_some_and(|s| fold(s) == *word) {
+        if entry.shortcut.as_deref().is_some_and(|s| fold(s) == *word) {
             total += 8;
         } else if label.starts_with(word.as_str()) {
             total += 4;
@@ -393,7 +393,7 @@ fn entry_row(ui: &mut egui::Ui, entry: &Entry, selected: bool, height: f32) -> e
     painter.galley(egui::pos2(left, rect.center().y - label.size().y / 2.0), label, text_color);
     // The detail (or why it is unavailable) fills the rest of the row, cut to fit.
     let mut right = rect.right() - 8.0;
-    if let Some(keys) = entry.shortcut {
+    if let Some(keys) = entry.shortcut.as_deref() {
         let galley = painter.layout_no_wrap(keys.to_string(), egui::FontId::proportional(11.5), p.text_muted);
         let size = galley.size() + vec2(10.0, 4.0);
         let cap = egui::Rect::from_min_size(egui::pos2(right - size.x, rect.center().y - size.y / 2.0), size);
@@ -477,12 +477,12 @@ fn engine_form(ui: &mut egui::Ui, state: &mut AppState, mut form: Form) -> Optio
 mod tests {
     use super::*;
 
-    fn entry(label: &str, detail: &str, shortcut: Option<&'static str>) -> Entry {
+    fn entry(label: &str, detail: &str, shortcut: Option<&str>) -> Entry {
         Entry {
             action: Action::Command(UiCommand::Select),
             label: label.to_string(),
             detail: detail.to_string(),
-            shortcut,
+            shortcut: shortcut.map(str::to_string),
             icon: Icon::Select,
             badge: None,
             why: None,
@@ -498,7 +498,7 @@ mod tests {
             entry("Planta de piso: Térreo", "Cria uma planta", None),
         ];
         let labels = |query: &str| -> Vec<String> {
-            let list = list.iter().map(|e| entry(&e.label, &e.detail, e.shortcut)).collect::<Vec<_>>();
+            let list = list.iter().map(|e| entry(&e.label, &e.detail, e.shortcut.as_deref())).collect::<Vec<_>>();
             matches(list, query).into_iter().map(|e| e.label).collect()
         };
         assert_eq!(labels("NIVEIS"), ["Níveis"]);
