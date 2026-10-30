@@ -126,7 +126,7 @@ impl Element {
                 match &mut d.kind {
                     crate::DimensionKind::Angular { vertex, .. } => p(vertex),
                     // Directions turn (and mirror) without the translation.
-                    crate::DimensionKind::Linear { dir } => {
+                    crate::DimensionKind::Linear { dir } | crate::DimensionKind::Ordinate { dir } => {
                         *dir = (t.apply(*dir) - t.apply(DVec2::ZERO)).normalize_or(DVec2::X);
                     }
                     _ => {}

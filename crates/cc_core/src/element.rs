@@ -597,6 +597,11 @@ pub enum DimensionKind {
     Radial,
     /// Diameter of the circle centered at `a` through `b`.
     Diameter,
+    /// Distance from the origin `a` to `b` measured along `dir` (a unit
+    /// vector), drawn as a running (ordinate) dimension: the dimensions of
+    /// a set share the origin and the line, and each shows its running
+    /// total from the origin.
+    Ordinate { dir: DVec2 },
 }
 
 impl Dimension {
@@ -607,7 +612,7 @@ impl Dimension {
     /// Direction the dimension measures along (linear kinds), if defined.
     pub fn direction(&self) -> Option<DVec2> {
         match self.kind {
-            DimensionKind::Linear { dir } => dir.try_normalize(),
+            DimensionKind::Linear { dir } | DimensionKind::Ordinate { dir } => dir.try_normalize(),
             DimensionKind::Aligned => (self.b - self.a).try_normalize(),
             _ => None,
         }
@@ -635,7 +640,9 @@ impl Dimension {
     pub fn value(&self) -> f64 {
         match self.kind {
             DimensionKind::Aligned => self.length(),
-            DimensionKind::Linear { dir } => (self.b - self.a).dot(dir.normalize_or_zero()).abs(),
+            DimensionKind::Linear { dir } | DimensionKind::Ordinate { dir } => {
+                (self.b - self.a).dot(dir.normalize_or_zero()).abs()
+            }
             DimensionKind::Angular { vertex, .. } => (self.a - vertex).angle_to(self.b - vertex).abs(),
             DimensionKind::Radial => self.length(),
             DimensionKind::Diameter => 2.0 * self.length(),

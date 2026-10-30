@@ -435,6 +435,86 @@ fn a_dimension_chain_shares_one_line_and_follows_its_elements() {
 }
 
 #[test]
+fn ordinate_dimensions_show_running_totals_and_follow_the_model() {
+    let mut s = Session::default();
+    let sample = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/casa_simples.ccad");
+    run(&mut s, "project_open", json!({"path": sample}));
+    let plan = run(&mut s, "views_list", json!({"category": "floor_plan"}))[0]["id"].clone();
+    // A row of 20 cm studs (columns) far from the house; the origin is the first one's left face.
+    let studs: Vec<Value> =
+        [50.0, 50.6, 51.2, 52.4].iter().map(|x| run(&mut s, "column_create", json!({"position": [x, 50.0]}))).collect();
+    let depth = s.doc.undo_depth();
+    let out = run(
+        &mut s,
+        "dimension_ordinate_create",
+        json!({"view": plan, "points": [[49.9, 50.0], [50.5, 50.0], [51.1, 50.05], [52.3, 50.0]], "offset": -1.0}),
+    );
+    assert_eq!(out["count"], 3);
+    assert_eq!(s.doc.undo_depth(), depth + 1, "one undo step");
+    let f = |v: &Value| v.as_f64().unwrap();
+    let get = |s: &mut Session, id: &Value| run(s, "element_get", json!({"id": id}))["params"].clone();
+    let total = |p: &Value| f(&p["b"][0]) - f(&p["a"][0]);
+    for (id, value) in out["ids"].as_array().unwrap().iter().zip([0.6, 1.2, 2.4]) {
+        let p = get(&mut s, id);
+        assert_eq!(p["kind"]["Ordinate"]["dir"], json!([1.0, 0.0]), "{p}");
+        // One origin and one line for the whole set.
+        assert_eq!(p["a"], json!([49.9, 50.0]), "{p}");
+        assert!((f(&p["offset"]) + 1.0).abs() < 1e-9, "{p}");
+        assert!((total(&p) - value).abs() < 1e-9, "{p}");
+        assert_eq!(p["refs"][0]["target"]["Element"], studs[0]["id"], "{p}");
+    }
+    // Moving the origin's stud moves every total; moving one stud only its own.
+    run(&mut s, "elements_move", json!({"ids": [studs[0]["id"]], "delta": [-0.1, 0.0]}));
+    let p = get(&mut s, &out["ids"][2]);
+    assert!((total(&p) - 2.5).abs() < 1e-9, "{p}");
+    run(&mut s, "elements_move", json!({"ids": [studs[2]["id"]], "delta": [0.2, 0.0]}));
+    assert!((total(&get(&mut s, &out["ids"][1])) - 1.5).abs() < 1e-9);
+    assert!((total(&get(&mut s, &out["ids"][2])) - 2.5).abs() < 1e-9);
+    // A new value moves the stud at the point, never the origin.
+    run(&mut s, "dimension_set_value", json!({"id": out["ids"][1], "value": 1.3}));
+    let x = f(&run(&mut s, "element_get", json!({"id": studs[2]["id"]}))["params"]["position"][0]);
+    assert!((x - 51.2).abs() < 1e-9, "{x}");
+    let x0 = f(&run(&mut s, "element_get", json!({"id": studs[0]["id"]}))["params"]["position"][0]);
+    assert!((x0 - 49.9).abs() < 1e-9, "{x0}");
+    // Mirrored with its studs, the set keeps measuring from the same (mirrored) origin.
+    let mut ids: Vec<Value> = studs.iter().map(|c| c["id"].clone()).collect();
+    ids.extend(out["ids"].as_array().unwrap().iter().cloned());
+    let copy = run(&mut s, "elements_mirror", json!({"ids": ids, "axis": [[60.0, 0.0], [60.0, 1.0]], "copy": true}));
+    let copies: Vec<Value> = copy["created"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| run(&mut s, "element_get", json!({"id": id})))
+        .filter(|e| e["category"] == "dimension")
+        .collect();
+    assert_eq!(copies.len(), 3);
+    for (c, value) in copies.iter().zip([0.7, 1.3, 2.5]) {
+        let p = &c["params"];
+        assert!((f(&p["a"][0]) - 70.2).abs() < 1e-9, "{p}");
+        assert!((total(p) + value).abs() < 1e-9, "{p}");
+        assert!(p["refs"][0].is_object() && p["refs"][1].is_object(), "{p}");
+    }
+    // `dimension_create` places a single one; `angle` measures along any direction.
+    let one = run(&mut s, "dimension_create", json!({"view": plan, "a": [0, 100], "b": [0, 103], "kind": "ordinate"}));
+    assert_eq!(get(&mut s, &one["id"])["kind"]["Ordinate"]["dir"], json!([0.0, 1.0]));
+    let out =
+        run(&mut s, "dimension_ordinate_create", json!({"view": plan, "points": [[200, 0], [201, 2]], "angle": 90.0}));
+    assert_eq!(get(&mut s, &out["ids"][0])["kind"]["Ordinate"]["dir"], json!([0.0, 1.0]));
+
+    // Bad sets are refused and change nothing.
+    let depth = s.doc.undo_depth();
+    for args in [
+        json!({"view": plan, "points": [[0, 0]]}),
+        json!({"view": plan, "points": [[0, 0], [2, 0], [0, 3]], "direction": "horizontal"}),
+        json!({"view": plan, "points": [[0, 0], [2, 0]], "direction": "sideways"}),
+        json!({"view": plan, "points": [[0, 0], [0, 0]]}),
+    ] {
+        assert_eq!(fails(&mut s, "dimension_ordinate_create", args), ErrorCode::InvalidArguments);
+    }
+    assert_eq!(s.doc.undo_depth(), depth);
+}
+
+#[test]
 fn turning_and_pinned_elements() {
     let mut s = Session::default();
     let wall = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [6, 0]}));

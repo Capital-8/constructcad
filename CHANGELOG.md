@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Ordinate (running) dimensions (#83). The new *Ordinate* dimension tool (*Annotate* tab) measures from an origin along one dimension line: click the origin and the first point, place the line (above or below measures horizontally, beside vertically), then each click adds another point, until Enter, Esc or a right-click. Each point shows its running total from the origin, written along its witness line; the origin is marked with a small circle and each point with an arrow. Every point is its own dimension from the shared origin, so the totals follow the elements they were placed on, and giving one a new value moves the element at its point, never the origin. The new `dimension_ordinate_create` command places a whole set (origin first, then the points, with `direction` or `angle` and `offset`) in one undo step, and `dimension_create` takes `kind: "ordinate"`. Project files move to format version 13.
 - Simplified Chinese interface (简体中文, `zh-CN`) (#67). It is picked from the system language for `zh`, `zh-CN`, `zh-SG` and `zh-Hans`; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant` keep Traditional Chinese. The system's CJK fonts now also have to cover a Simplified-only character, so Simplified glyphs never show as boxes.
 
 ## [0.7.0] - 2026-10-28
