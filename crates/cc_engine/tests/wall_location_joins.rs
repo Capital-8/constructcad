@@ -85,3 +85,30 @@ fn an_open_corner_on_the_core_line_is_mitered() {
     let total = volume(&mut s, a["id"].as_u64().unwrap()) + volume(&mut s, b["id"].as_u64().unwrap());
     assert!((total - area * 3.0).abs() < 1e-6, "{total} != {}", area * 3.0);
 }
+
+/// The wall tool previews the body at the type's `location_offset`, so it must
+/// be where the created wall's body ends up (issue 198).
+#[test]
+fn the_type_offset_places_the_body_like_the_wall() {
+    use cc_core::{ElementId, ElementKind, LocationLine};
+    for line in LocationLine::ALL {
+        let mut s = Session::default();
+        let ty = layered_type(&mut s);
+        let name = serde_json::to_value(line).unwrap();
+        let w = run(
+            &mut s,
+            "wall_create",
+            json!({"start": [0, 0], "end": [5, 0], "type": ty, "location_line": name, "height": 3.0}),
+        );
+        let project = s.project();
+        let element = project.element(ElementId(w["id"].as_u64().unwrap())).unwrap();
+        let ElementKind::Wall(wall) = &element.kind else { panic!("not a wall") };
+        let offset = project.element_type(element.type_id).unwrap().location_offset(line);
+        // Drawn along +x, so the centerline is `offset` to the right (−y).
+        let (start, end) = project.wall_axis(element, wall);
+        assert!((start.y + offset).abs() < 1e-9 && (end.y + offset).abs() < 1e-9, "{line:?}: {start} {end}");
+        if line == LocationLine::FinishExterior {
+            assert!((offset - 0.125).abs() < 1e-9, "the exterior face on the line: {offset}");
+        }
+    }
+}

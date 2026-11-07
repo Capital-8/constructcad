@@ -2617,7 +2617,10 @@ fn wall_tool(
     let mut p = s.point;
     draw_snap(painter, xf, s);
 
-    let half = state.project().element_type(type_id).map_or(0.075, |t| t.thickness() * 0.5);
+    let ty = state.project().element_type(type_id);
+    let half = ty.map_or(0.075, |t| t.thickness() * 0.5);
+    // The body's centerline, across from the drawn location line (to its left).
+    let center = -ty.map_or(0.0, |t| t.location_offset(state.wall_location_line));
     // Arc mode: after the start and the end, the third point is on the arc,
     // or a typed radius gives the arc on the cursor's side.
     let arc_end = state.interaction.points.first().copied().filter(|_| state.wall_arc);
@@ -2628,8 +2631,8 @@ fn wall_tool(
             None => cc_core::arc::Arc::bulge_through(a, p, b),
         };
         match bulge {
-            Some(bulge) => arc_preview(painter, xf, a, b, bulge, half),
-            None => paint_wall_preview(painter, xf, a, b, half),
+            Some(bulge) => arc_preview(painter, xf, a, b, bulge, center, half),
+            None => paint_wall_preview(painter, xf, a, b, center, half),
         }
         let unit = format::current().0.length.unit.symbol();
         let arc = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge));
@@ -2672,9 +2675,10 @@ fn wall_tool(
         if state.wall_arc {
             painter.line_segment([xf.to_screen(a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
         } else {
-            paint_wall_preview(painter, xf, a, p, half);
+            paint_wall_preview(painter, xf, a, p, center, half);
         }
-        temp_dimension(painter, xf, a, p, state.interaction.prev_dir, Some(&state.typed), half);
+        let side = (center + half).max(0.0);
+        temp_dimension(painter, xf, a, p, state.interaction.prev_dir, Some(&state.typed), side);
     }
 
     let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.typed.is_empty();
@@ -2734,22 +2738,26 @@ fn create_wall(state: &mut AppState, level: LevelId, type_id: ElementTypeId, a: 
     run_create(state, command);
 }
 
-/// Preview of a straight wall from `a` to `b`: its line and faces.
-fn paint_wall_preview(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2, half: f64) {
-    let n = (b - a).normalize_or_zero().perp() * half;
+/// Preview of a straight wall drawn from `a` to `b`: its location line and
+/// faces, `half` either side of its centerline `center` to the left of the line.
+fn paint_wall_preview(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2, center: f64, half: f64) {
+    let left = (b - a).normalize_or_zero().perp();
     let stroke = Stroke::new(1.5, PREVIEW);
     painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(1.0, PREVIEW));
-    painter.line_segment([xf.to_screen(a + n), xf.to_screen(b + n)], stroke);
-    painter.line_segment([xf.to_screen(a - n), xf.to_screen(b - n)], stroke);
+    for v in [center + half, center - half] {
+        let n = left * v;
+        painter.line_segment([xf.to_screen(a + n), xf.to_screen(b + n)], stroke);
+    }
 }
 
-/// Preview of an arc wall from `a` to `b` with `bulge`: its line and faces.
-pub(crate) fn arc_preview(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2, bulge: f64, half: f64) {
+/// Preview of an arc wall drawn from `a` to `b` with `bulge`: its location
+/// line and faces, as in [`paint_wall_preview`].
+pub(crate) fn arc_preview(painter: &Painter, xf: &Xf, a: DVec2, b: DVec2, bulge: f64, center: f64, half: f64) {
     let Some(arc) = cc_core::arc::Arc::from_bulge(a, b, bulge) else {
-        paint_wall_preview(painter, xf, a, b, half);
+        paint_wall_preview(painter, xf, a, b, center, half);
         return;
     };
-    for (v, width) in [(0.0, 1.0), (half, 1.5), (-half, 1.5)] {
+    for (v, width) in [(0.0, 1.0), (center + half, 1.5), (center - half, 1.5)] {
         if arc.radius_at(v) <= 0.0 {
             continue;
         }
@@ -3160,7 +3168,7 @@ fn select(
         let bulge = state.project().element(id).and_then(|e| e.as_wall()).map_or(0.0, |w| w.bulge);
         if bulge != 0.0 {
             let (a, b) = if at_start { (s.point, fixed) } else { (fixed, s.point) };
-            arc_preview(painter, xf, a, b, bulge, 0.0);
+            arc_preview(painter, xf, a, b, bulge, 0.0, 0.0);
         } else {
             painter.line_segment([xf.to_screen(fixed), xf.to_screen(s.point)], Stroke::new(2.0, PREVIEW));
         }
@@ -3200,7 +3208,7 @@ fn select(
         if let Some((bulge, arc)) = bulge.and_then(|bulge| Some((bulge, cc_core::arc::Arc::from_bulge(a, b, bulge)?))) {
             let mid = arc.point(arc.length() * 0.5);
             ui.ctx().set_cursor_icon(resize_cursor(xf.to_screen(mid) - xf.to_screen(arc.center)));
-            arc_preview(painter, xf, a, b, bulge, 0.0);
+            arc_preview(painter, xf, a, b, bulge, 0.0, 0.0);
             label(
                 painter,
                 xf.to_screen(raw),
