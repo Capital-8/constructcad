@@ -781,18 +781,7 @@ impl Project {
     /// Position of a wall's location line across the wall, measured from the
     /// centerline towards the exterior (left) face.
     fn wall_line_offset(&self, element: &Element, wall: &crate::Wall) -> f64 {
-        use crate::LocationLine as L;
-        let Some(ty) = self.element_type(element.type_id) else { return 0.0 };
-        let half = ty.thickness() * 0.5;
-        let (core_ext, core_int) = ty.core_range();
-        match wall.location_line {
-            L::Centerline => 0.0,
-            L::FinishExterior => half,
-            L::FinishInterior => -half,
-            L::CoreExterior => half - core_ext,
-            L::CoreInterior => half - core_int,
-            L::CoreCenter => half - (core_ext + core_int) * 0.5,
-        }
+        self.element_type(element.type_id).map_or(0.0, |ty| ty.location_offset(wall.location_line))
     }
 
     /// The beam's body centerline: its location line moved across by the
