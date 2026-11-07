@@ -8,7 +8,7 @@ use crate::table::{readonly_row, row};
 use crate::theme::PALETTE;
 use cc_core::{
     LandingBeams, StairBuild, StairConstruction, StairLayout, StairRules, StairShape, Stringers, TreadRule, Turn,
-    stair::{MAX_RISERS, MAX_WINDERS},
+    stair::{MAX_RISERS, MAX_STEP_NUMBER, MAX_WINDERS},
 };
 use egui::{DragValue, Response, RichText, Ui};
 
@@ -130,6 +130,14 @@ pub fn layout_controls(ui: &mut Ui, salt: u64, layout: &mut StairLayout, table: 
     }
     if layout.shape == StairShape::Spiral {
         let r = field(ui, table, &t!("prop-stair-inner-radius"), |ui| length(ui, &mut layout.inner_radius, 10.0));
+        e.add(&r);
+    }
+    let r = field(ui, table, &t!("prop-stair-numbers"), |ui| ui.checkbox(&mut layout.numbers, ""));
+    e.choice(r.changed());
+    if layout.numbers {
+        let r = field(ui, table, &t!("prop-stair-number-start"), |ui| {
+            ui.add(DragValue::new(&mut layout.number_start).range(-MAX_STEP_NUMBER..=MAX_STEP_NUMBER))
+        });
         e.add(&r);
     }
     e
@@ -265,6 +273,8 @@ pub fn create_command(
         gap: Some(layout.gap),
         winders: Some(layout.winders),
         inner_radius: Some(layout.inner_radius),
+        numbers: Some(layout.numbers),
+        number_start: Some(layout.number_start),
         ..Default::default()
     }
 }

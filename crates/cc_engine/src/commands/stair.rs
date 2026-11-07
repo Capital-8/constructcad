@@ -98,6 +98,14 @@ pub struct StairCreate {
     /// reach take a post (see `stair_check`); none by default.
     #[serde(default)]
     pub posts: Option<Vec<Vec<String>>>,
+    /// Number the steps in plans: the treads (winders included, landings
+    /// not) and the floor the stair arrives at (default false).
+    #[serde(default)]
+    pub numbers: Option<bool>,
+    /// Number of the first tread (default 1), from -9999 to 9999: another
+    /// value continues the count of a stair below, for instance.
+    #[serde(default)]
+    pub number_start: Option<i32>,
 }
 
 impl StairCreate {
@@ -154,6 +162,14 @@ impl StairCreate {
                     posts.set(at, true);
                 }
             }
+        }
+        layout.numbers = self.numbers.unwrap_or(false);
+        if let Some(n) = self.number_start {
+            let max = cc_core::stair::MAX_STEP_NUMBER;
+            if !(-max..=max).contains(&n) {
+                return Err(EngineError::invalid(format!("number_start must be from -{max} to {max}")));
+            }
+            layout.number_start = n;
         }
         Ok(layout)
     }

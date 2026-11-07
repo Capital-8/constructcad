@@ -343,9 +343,13 @@ fn draw_structure(
     }
 }
 
+/// Height of the step numbers of a stair, paper millimeters.
+const STAIR_NUMBER_MM: f64 = 2.0;
+
 /// Stair symbol: the treads and landings (dashed beyond the cut), a break
-/// line across the first step above the cut plane and an arrow along the
-/// walking line pointing up, to the cut (or the top).
+/// line across the first step above the cut plane, the step numbers when
+/// the stair asks for them and an arrow along the walking line pointing up,
+/// to the cut (or the top).
 fn draw_stair(d: &mut Drawing2D, g: &cc_geom::StairGeom, cut_z: f64, element: cc_core::ElementId) {
     let id = Some(element);
     let below = |z: f64| z <= cut_z + 1e-9;
@@ -366,6 +370,11 @@ fn draw_stair(d: &mut Drawing2D, g: &cc_geom::StairGeom, cut_z: f64, element: cc
         let m = (a + b) * 0.5;
         let z = inward * 0.08;
         d.polyline(&[a, m - z, m + z, b], false, LineStyle::Projection, id);
+    }
+    if g.layout.numbers {
+        for (at, n) in g.number_spots() {
+            d.tag_text(at, n.to_string(), STAIR_NUMBER_MM, crate::Anchor::Center, 0.0, id);
+        }
     }
     // Arrow along the walking line, to the cut plane or the top.
     let min_z = g.base + g.riser * 1.5;

@@ -2393,6 +2393,40 @@ fn assembled_stair_landings_take_posts_where_asked() {
     assert_eq!(fails(&mut s, "stair_create", bad), ErrorCode::InvalidArguments);
 }
 
+/// Stairs number their steps in plans when asked: the treads from the start
+/// number up to the floor they arrive at; element_set changes the start.
+#[test]
+fn stairs_number_their_steps_in_plans() {
+    let mut s = Session::default();
+    let numbers = |s: &mut Session, sid: u64| -> Vec<String> {
+        let plan = run(s, "views_list", json!({"category": "floor_plan"}))[0]["id"].as_u64().unwrap();
+        let d = s.drawing(cc_core::ViewId(plan)).unwrap();
+        d.prims
+            .iter()
+            .filter_map(|p| match p {
+                cc_views::Prim::Text { text, element: Some(e), .. } if e.0 == sid => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let plain = id(&run(&mut s, "stair_create", json!({"start": [0, 0]})));
+    assert!(numbers(&mut s, plain).is_empty(), "no numbers unless asked");
+    // 17 risers to the level above: treads 1 to 16, 17 on the floor above.
+    let st = run(&mut s, "stair_create", json!({"start": [5, 0], "numbers": true}));
+    let sid = id(&st);
+    assert_eq!(st["params"]["layout"]["number_start"], 1);
+    let expected: Vec<String> = (1..=17).map(|n| n.to_string()).collect();
+    assert_eq!(numbers(&mut s, sid), expected);
+    // Continuing the count of a stair below.
+    run(&mut s, "element_set", json!({"id": sid, "params": {"layout": {"number_start": 18}}}));
+    let expected: Vec<String> = (18..=34).map(|n| n.to_string()).collect();
+    assert_eq!(numbers(&mut s, sid), expected);
+    let bad = json!({"id": sid, "params": {"layout": {"number_start": 100_000}}});
+    assert!(s.execute("element_set", bad).is_err());
+    let bad = json!({"start": [0, 0], "numbers": true, "number_start": -10_000});
+    assert_eq!(fails(&mut s, "stair_create", bad), ErrorCode::InvalidArguments);
+}
+
 #[test]
 fn stairs_take_a_riser_count_and_a_tread() {
     let mut s = Session::default();
