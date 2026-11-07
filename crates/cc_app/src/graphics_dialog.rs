@@ -1247,12 +1247,26 @@ fn readonly_list(ui: &mut Ui, label: &str, items: &[String]) {
 /// The view's template and Visibility/Graphics in its properties.
 pub fn view_rows(ui: &mut Ui, state: &mut AppState, view: ViewId) {
     let Some(v) = state.project().view(view).cloned() else { return };
-    if !cc_core::ViewTemplate::applies_to(&v.kind) {
+    if !v.kind.has_graphics() {
         return;
     }
+    // Drafting views have graphics but no templates.
+    if cc_core::ViewTemplate::applies_to(&v.kind) {
+        template_row(ui, state, view, v.template);
+    }
+    if row(ui, &t!("dlg-visibility-graphics"), |ui| ui.button(t!("vg-edit")).clicked()) {
+        open(state, Target::View(view));
+    }
+    let hidden = v.graphics.hidden.len();
+    if hidden > 0 {
+        readonly_row(ui, &t!("vg-hidden-in-view"), hidden.to_string());
+    }
+}
+
+/// The view's template, chosen from the project's.
+fn template_row(ui: &mut Ui, state: &mut AppState, view: ViewId, current: Option<TemplateId>) {
     let templates: Vec<(TemplateId, String)> =
         state.project().templates.values().map(|t| (t.id, t.name.clone())).collect();
-    let current = v.template;
     let name = |id: Option<TemplateId>| {
         id.and_then(|i| templates.iter().find(|(t, _)| *t == i)).map_or(t!("vg-template-none"), |(_, n)| n.clone())
     };
@@ -1268,13 +1282,6 @@ pub fn view_rows(ui: &mut Ui, state: &mut AppState, view: ViewId) {
     if chosen != current {
         let command = cmd::ViewTemplateAssign { views: vec![Ref::Id(view.0)], template: chosen.map(|t| Ref::Id(t.0)) };
         run(state, None, command);
-    }
-    if row(ui, &t!("dlg-visibility-graphics"), |ui| ui.button(t!("vg-edit")).clicked()) {
-        open(state, Target::View(view));
-    }
-    let hidden = v.graphics.hidden.len();
-    if hidden > 0 {
-        readonly_row(ui, &t!("vg-hidden-in-view"), hidden.to_string());
     }
 }
 

@@ -168,6 +168,7 @@ fn entries(state: &AppState, palette: &Palette) -> Vec<Entry> {
                 ViewCategory::Section => Icon::Section,
                 ViewCategory::ThreeD => Icon::View3D,
                 ViewCategory::Legend => Icon::Legend,
+                ViewCategory::Drafting => Icon::DraftingView,
                 ViewCategory::Schedule => Icon::Schedule,
                 ViewCategory::Diagram => Icon::Systems,
                 ViewCategory::Sheet => Icon::Sheet,

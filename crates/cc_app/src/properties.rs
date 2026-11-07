@@ -15,7 +15,7 @@ use cc_views::format;
 use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
 use std::hash::{Hash, Hasher};
 
-const SCALES: [u32; 9] = [10, 20, 25, 50, 75, 100, 200, 500, 1000];
+const SCALES: [u32; 12] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 500, 1000];
 
 fn key(parts: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -2462,8 +2462,10 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             if scale != view.scale {
                 crate::engine_edit::view(state, id, None, |v| v.scale = scale);
             }
-            // Views of the model draw it at a detail level.
-            if cc_core::ViewTemplate::applies_to(&view.kind) {
+            // Views of the model draw it at a detail level; drafting views
+            // keep one for what is drawn in them.
+            let model_view = cc_core::ViewTemplate::applies_to(&view.kind);
+            if model_view || view.is_drafting() {
                 let mut detail = view.detail;
                 if crate::graphics_dialog::controlled(state, id, "detail") {
                     readonly_row(ui, &t!("prop-detail-level"), tr(detail.key()));
@@ -2482,6 +2484,8 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 if detail != view.detail {
                     crate::engine_edit::view(state, id, None, |v| v.detail = detail);
                 }
+            }
+            if model_view {
                 // And in a visual style.
                 let current = view.style();
                 let mut style = current;
@@ -2632,7 +2636,11 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         ViewKind::Sheet { .. } => {
             section(ui, "sheet", t!("section-graphics"), |ui| crate::sheet_props::rows(ui, state, id));
         }
-        ViewKind::ThreeD { .. } | ViewKind::Legend { .. } | ViewKind::Elevation { .. } | ViewKind::Diagram { .. } => {}
+        ViewKind::ThreeD { .. }
+        | ViewKind::Legend { .. }
+        | ViewKind::Drafting { .. }
+        | ViewKind::Elevation { .. }
+        | ViewKind::Diagram { .. } => {}
     }
     crate::phases_dialog::view_section(ui, state, id);
 

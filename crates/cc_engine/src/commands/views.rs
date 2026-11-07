@@ -23,14 +23,15 @@ pub(crate) fn view_out(s: &Session, id: ViewId) -> Value {
 /// `electrical_plan` (with `level`: the pipes, or the conduits and devices,
 /// over the architecture, tagged), `three_d`, `analytical` (a 3D
 /// view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types),
-/// `schedule` (with `category`), `panel_diagram` (with `panel`: the
+/// `drafting` (a 2D view independent of the model, showing only the text,
+/// dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the
 /// single-line diagram and load schedule of a distribution board; default
 /// the only board) or `sheet` (A3, numbered after the others, with the first title block type).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
     /// `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`,
-    /// `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule`, `panel_diagram` or `sheet`.
+    /// `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `drafting`, `schedule`, `panel_diagram` or `sheet`.
     pub kind: String,
     /// View name (default: by kind).
     #[serde(default)]
@@ -164,6 +165,10 @@ impl Command for ViewCreate {
                 let types = p.types.keys().copied().collect();
                 let n = count(p, ViewCategory::Legend) + 1;
                 (t!("default-legend-name", "n" => n), 50, ViewKind::Legend { types }, t!("tx-new-view"))
+            }
+            "drafting" => {
+                let n = count(p, ViewCategory::Drafting) + 1;
+                (t!("default-drafting-name", "n" => n), 10, ViewKind::Drafting {}, t!("tx-new-view"))
             }
             "schedule" => {
                 let category = refs::category(self.category.as_deref().unwrap_or("wall"))?;

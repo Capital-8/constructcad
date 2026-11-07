@@ -11,6 +11,8 @@ pub enum ViewCategory {
     Elevation,
     Section,
     Legend,
+    /// 2D views drawn by hand, independent of the model.
+    Drafting,
     Schedule,
     /// Single-line diagrams of distribution boards.
     Diagram,
@@ -18,13 +20,14 @@ pub enum ViewCategory {
 }
 
 impl ViewCategory {
-    pub const ALL: [ViewCategory; 9] = [
+    pub const ALL: [ViewCategory; 10] = [
         ViewCategory::FloorPlan,
         ViewCategory::CeilingPlan,
         ViewCategory::ThreeD,
         ViewCategory::Elevation,
         ViewCategory::Section,
         ViewCategory::Legend,
+        ViewCategory::Drafting,
         ViewCategory::Schedule,
         ViewCategory::Diagram,
         ViewCategory::Sheet,
@@ -39,6 +42,7 @@ impl ViewCategory {
             ViewCategory::Elevation => "browser-elevations",
             ViewCategory::Section => "browser-sections",
             ViewCategory::Legend => "browser-legends",
+            ViewCategory::Drafting => "browser-drafting-views",
             ViewCategory::Schedule => "browser-schedules",
             ViewCategory::Diagram => "browser-diagrams",
             ViewCategory::Sheet => "browser-sheets",
@@ -215,6 +219,10 @@ pub enum ViewKind {
     Legend {
         types: Vec<ElementTypeId>,
     },
+    /// A 2D view independent of the model, with its own scale: it shows no
+    /// model geometry, only what is drawn in it (the elements it owns, such
+    /// as text notes, dimensions and imported CAD drawings).
+    Drafting {},
     Schedule {
         category: Category,
         #[serde(default)]
@@ -420,6 +428,12 @@ impl ViewKind {
         true
     }
 
+    /// Whether views of this kind have visibility/graphics settings: the
+    /// views of the model (those that take templates) and drafting views.
+    pub fn has_graphics(&self) -> bool {
+        crate::ViewTemplate::applies_to(self) || matches!(self, ViewKind::Drafting { .. })
+    }
+
     /// Whether views of this kind show the model in a phase (plans,
     /// elevations, sections, 3D views and schedules).
     pub fn is_phased(&self) -> bool {
@@ -511,6 +525,7 @@ impl View {
             ViewKind::Elevation { .. } => ViewCategory::Elevation,
             ViewKind::Section { .. } => ViewCategory::Section,
             ViewKind::Legend { .. } => ViewCategory::Legend,
+            ViewKind::Drafting { .. } => ViewCategory::Drafting,
             ViewKind::Schedule { .. } => ViewCategory::Schedule,
             ViewKind::Sheet { .. } => ViewCategory::Sheet,
             ViewKind::Diagram { .. } => ViewCategory::Diagram,
@@ -523,6 +538,19 @@ impl View {
             ViewKind::FloorPlan { level, .. } | ViewKind::CeilingPlan { level, .. } => Some(level),
             _ => None,
         }
+    }
+
+    /// Whether the view is a drafting view: 2D, drawn by hand, showing no model geometry.
+    pub fn is_drafting(&self) -> bool {
+        matches!(self.kind, ViewKind::Drafting { .. })
+    }
+
+    /// Whether dimensions can be drawn in the view: plans, elevations,
+    /// sections, legends and drafting views.
+    pub fn takes_dimensions(&self) -> bool {
+        self.is_plan()
+            || self.projection().is_some()
+            || matches!(self.kind, ViewKind::Legend { .. } | ViewKind::Drafting { .. })
     }
 
     /// Whether the view can be placed on a sheet.

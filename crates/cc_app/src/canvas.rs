@@ -1,4 +1,4 @@
-//! 2D view canvas: plans, ceilings, elevations, sections and legends.
+//! 2D view canvas: plans, ceilings, elevations, sections, legends and drafting views.
 
 use crate::icons::{self, Icon};
 use crate::paint::{PaintOptions, Xf, paint_drawing};

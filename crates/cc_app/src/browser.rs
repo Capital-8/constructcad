@@ -25,6 +25,7 @@ pub fn category_icon(category: ViewCategory) -> Icon {
         ViewCategory::Elevation => Icon::Elevation,
         ViewCategory::Section => Icon::Section,
         ViewCategory::Legend => Icon::Legend,
+        ViewCategory::Drafting => Icon::DraftingView,
         ViewCategory::Schedule => Icon::Schedule,
         ViewCategory::Diagram => Icon::Systems,
         ViewCategory::Sheet => Icon::Sheet,
@@ -296,6 +297,9 @@ fn add_button(ui: &mut Ui, state: &mut AppState, category: ViewCategory, row: &R
                 }
                 ViewCategory::Legend => {
                     actions::new_legend(state);
+                }
+                ViewCategory::Drafting => {
+                    actions::new_drafting_view(state);
                 }
                 ViewCategory::Sheet => {
                     actions::new_sheet(state);

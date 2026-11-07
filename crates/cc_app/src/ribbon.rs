@@ -786,7 +786,7 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         });
     });
     group(ui, t!("group-documentation"), |ui| {
-        command_button(ui, state, UiCommand::Legend);
+        command_buttons(ui, state, &[UiCommand::Legend, UiCommand::DraftingView]);
         let r = command_menu(ui, state, UiCommand::Schedule);
         egui::Popup::menu(&r).show(|ui| {
             for c in Category::SCHEDULABLE {

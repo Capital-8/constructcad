@@ -189,7 +189,7 @@ No parameters.
 
 ### `cad_import`
 
-*edit* — Import a DWG or DXF file into a 2D view (plan, ceiling plan, elevation, section or legend) as a drawing to trace over, in one undo step. DXF (ASCII or binary, any version) is read entirely by ConstructCraft; DWG (R12 to 2018 and later) through the acadrust library. Blocks are inserted, curves kept as arcs, texts kept; entities that are not drawn (3D solids, images, infinite lines…) are counted in `skipped`. The element starts pinned, with the layers that are off or frozen in the file hidden, and in the view's level. It is drawn in the view only, under the model, and is left out of 3D views and IFC export.
+*edit* — Import a DWG or DXF file into a 2D view (plan, ceiling plan, elevation, section, legend or drafting view) as a drawing to trace over, in one undo step. DXF (ASCII or binary, any version) is read entirely by ConstructCraft; DWG (R12 to 2018 and later) through the acadrust library. Blocks are inserted, curves kept as arcs, texts kept; entities that are not drawn (3D solids, images, infinite lines…) are counted in `skipped`. The element starts pinned, with the layers that are off or frozen in the file hidden, and in the view's level. It is drawn in the view only, under the model, and is left out of 3D views and IFC export.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -205,7 +205,7 @@ No parameters.
 
 ### `image_import`
 
-*edit* — Import a picture (PNG, JPEG, GIF, BMP or WebP) or an SVG drawing into a 2D view (plan, ceiling plan, elevation, section or legend), in one undo step, as an imported drawing under the model: placed, scaled, rotated, pinned, hidden and printed like an imported DWG or DXF. A picture is as large as its resolution makes it on paper (96 dpi when the file declares none), times `scale`, unless `width` sets its width in the view; the file's bytes are kept in the project. An SVG keeps its paths (curves as polylines), fills and embedded pictures in their own colors; its texts are not read.
+*edit* — Import a picture (PNG, JPEG, GIF, BMP or WebP) or an SVG drawing into a 2D view (plan, ceiling plan, elevation, section, legend or drafting view), in one undo step, as an imported drawing under the model: placed, scaled, rotated, pinned, hidden and printed like an imported DWG or DXF. A picture is as large as its resolution makes it on paper (96 dpi when the file declares none), times `scale`, unless `width` sets its width in the view; the file's bytes are kept in the project. An SVG keeps its paths (curves as polylines), fills and embedded pictures in their own colors; its texts are not read.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -304,11 +304,11 @@ No parameters.
 
 ### `views_list`
 
-*query* — Views (plans, ceiling plans, elevations, sections, 3D, legends, schedules, sheets), optionally of one category.
+*query* — Views (plans, ceiling plans, elevations, sections, 3D, legends, drafting views, schedules, sheets), optionally of one category.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `category` | string | optional | `floor_plan`, `ceiling_plan`, `three_d`, `elevation`, `section`, `legend`, `schedule` or `sheet`. |
+| `category` | string | optional | `floor_plan`, `ceiling_plan`, `three_d`, `elevation`, `section`, `legend`, `drafting`, `schedule`, `diagram` or `sheet`. |
 
 ### `view_get`
 
@@ -1971,11 +1971,11 @@ No parameters.
 
 ### `view_create`
 
-*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan` and `electrical_plan` (with `level`: the pipes, or the conduits and devices, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `schedule` (with `category`), `panel_diagram` (with `panel`: the single-line diagram and load schedule of a distribution board; default the only board) or `sheet` (A3, numbered after the others, with the first title block type).
+*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan` and `electrical_plan` (with `level`: the pipes, or the conduits and devices, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `drafting` (a 2D view independent of the model, showing only the text, dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the single-line diagram and load schedule of a distribution board; default the only board) or `sheet` (A3, numbered after the others, with the first title block type).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `schedule`, `panel_diagram` or `sheet`. |
+| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `drafting`, `schedule`, `panel_diagram` or `sheet`. |
 | `category` | string | optional | Schedules: the category scheduled (default `wall`). |
 | `depth` | number | optional | Section depth beyond the cut line, meters (default 8). |
 | `direction` | string | optional | Elevations: `north`, `south` (default), `east` or `west`. |

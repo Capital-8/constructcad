@@ -118,7 +118,7 @@ fn color_arg(code: &str) -> Result<CadColorMode> {
 }
 
 /// Import a DWG or DXF file into a 2D view (plan, ceiling plan, elevation,
-/// section or legend) as a drawing to trace over, in one undo step. DXF
+/// section, legend or drafting view) as a drawing to trace over, in one undo step. DXF
 /// (ASCII or binary, any version) is read entirely by ConstructCraft; DWG
 /// (R12 to 2018 and later) through the acadrust library. Blocks are
 /// inserted, curves kept as arcs, texts kept; entities that are not drawn
@@ -292,7 +292,7 @@ fn align_arg(align: Option<&str>, default: (bool, bool)) -> Result<(bool, bool)>
 const DEFAULT_DPI: f64 = 96.0;
 
 /// Import a picture (PNG, JPEG, GIF, BMP or WebP) or an SVG drawing into a
-/// 2D view (plan, ceiling plan, elevation, section or legend), in one undo
+/// 2D view (plan, ceiling plan, elevation, section, legend or drafting view), in one undo
 /// step, as an imported drawing under the model: placed, scaled, rotated,
 /// pinned, hidden and printed like an imported DWG or DXF. A picture is as
 /// large as its resolution makes it on paper (96 dpi when the file declares

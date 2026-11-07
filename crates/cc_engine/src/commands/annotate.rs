@@ -54,8 +54,10 @@ impl Command for DimensionCreate {
         let p = s.project();
         let view_id = refs::view(p, &self.view)?;
         let view = p.view(view_id).ok_or_else(|| EngineError::not_found("view"))?;
-        if !(view.is_plan() || view.projection().is_some() || matches!(view.kind, cc_core::ViewKind::Legend { .. })) {
-            return Err(EngineError::invalid("dimensions go in plans, elevations, sections and legends"));
+        if !view.takes_dimensions() {
+            return Err(EngineError::invalid(
+                "dimensions go in plans, elevations, sections, legends and drafting views",
+            ));
         }
         let level = view
             .level()
@@ -140,8 +142,10 @@ impl Command for DimensionChainCreate {
         let p = s.project();
         let view_id = refs::view(p, &self.view)?;
         let view = p.view(view_id).ok_or_else(|| EngineError::not_found("view"))?;
-        if !(view.is_plan() || view.projection().is_some() || matches!(view.kind, cc_core::ViewKind::Legend { .. })) {
-            return Err(EngineError::invalid("dimensions go in plans, elevations, sections and legends"));
+        if !view.takes_dimensions() {
+            return Err(EngineError::invalid(
+                "dimensions go in plans, elevations, sections, legends and drafting views",
+            ));
         }
         if self.points.len() < 2 || self.points.len() > MAX_CHAIN_POINTS {
             return Err(EngineError::invalid(format!("a dimension chain needs 2 to {MAX_CHAIN_POINTS} points")));
@@ -223,8 +227,10 @@ impl Command for DimensionOrdinateCreate {
         let p = s.project();
         let view_id = refs::view(p, &self.view)?;
         let view = p.view(view_id).ok_or_else(|| EngineError::not_found("view"))?;
-        if !(view.is_plan() || view.projection().is_some() || matches!(view.kind, cc_core::ViewKind::Legend { .. })) {
-            return Err(EngineError::invalid("dimensions go in plans, elevations, sections and legends"));
+        if !view.takes_dimensions() {
+            return Err(EngineError::invalid(
+                "dimensions go in plans, elevations, sections, legends and drafting views",
+            ));
         }
         if self.points.len() < 2 || self.points.len() > MAX_CHAIN_POINTS {
             return Err(EngineError::invalid(format!("ordinate dimensions need 2 to {MAX_CHAIN_POINTS} points")));
@@ -372,7 +378,9 @@ fn annotation_view(p: &cc_core::Project, r: &Ref) -> Result<(cc_core::ViewId, cc
     let id = refs::view(p, r)?;
     let view = p.view(id).ok_or_else(|| EngineError::not_found("view"))?;
     if matches!(view.kind, cc_core::ViewKind::Schedule { .. } | cc_core::ViewKind::Sheet { .. }) {
-        return Err(EngineError::invalid("text goes in plans, elevations, sections, 3D views and legends"));
+        return Err(EngineError::invalid(
+            "text goes in plans, elevations, sections, 3D views, legends and drafting views",
+        ));
     }
     let level =
         view.level().or_else(|| p.levels.first().map(|l| l.id)).ok_or_else(|| EngineError::rejected("no levels"))?;
