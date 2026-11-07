@@ -219,7 +219,12 @@ impl ScheduleField {
                     F::PhaseDemolished,
                 ];
             }
-            Category::Grid | Category::Dimension | Category::Text | Category::CadImport | Category::TitleBlock => {
+            Category::Grid
+            | Category::Dimension
+            | Category::Text
+            | Category::LevelMark
+            | Category::CadImport
+            | Category::TitleBlock => {
                 return Vec::new();
             }
         };
@@ -263,9 +268,12 @@ impl ScheduleField {
             Category::Shaft => vec![F::Mark, F::Type, F::Level, F::Area, F::Height],
             Category::Topography => vec![F::Mark, F::Type, F::Level, F::Area, F::Volume],
             Category::Pad => vec![F::Mark, F::Type, F::Level, F::Elevation, F::Area, F::CutVolume, F::FillVolume],
-            Category::Grid | Category::Dimension | Category::Text | Category::CadImport | Category::TitleBlock => {
-                Vec::new()
-            }
+            Category::Grid
+            | Category::Dimension
+            | Category::Text
+            | Category::LevelMark
+            | Category::CadImport
+            | Category::TitleBlock => Vec::new(),
         }
     }
 }

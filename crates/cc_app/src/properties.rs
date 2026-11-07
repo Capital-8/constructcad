@@ -17,7 +17,7 @@ use std::hash::{Hash, Hasher};
 
 const SCALES: [u32; 9] = [10, 20, 25, 50, 75, 100, 200, 500, 1000];
 
-fn key(parts: impl Hash) -> u64 {
+pub(crate) fn key(parts: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     parts.hash(&mut h);
     h.finish()
@@ -927,6 +927,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
         }
         ElementKind::Text(note) => text_props(ui, state, id, note),
+        ElementKind::LevelMark(m) => crate::level_mark_ui::props(ui, state, id, m),
         ElementKind::CadImport(c) => crate::cad_ui::props(ui, state, id, c),
         ElementKind::Dimension(d) => {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {

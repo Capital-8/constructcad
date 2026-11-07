@@ -115,6 +115,10 @@ pub enum Tool {
     Text {
         type_id: ElementTypeId,
     },
+    /// Place level marks in plans, elevations and sections.
+    LevelMark {
+        type_id: ElementTypeId,
+    },
     /// Add a leader to the text note `id`.
     AddLeader {
         id: ElementId,
@@ -182,6 +186,7 @@ impl Tool {
             Tool::Demolish => "tool-demolish",
             Tool::CurtainGrid => "tool-curtain-grid",
             Tool::Text { .. } => "tool-text",
+            Tool::LevelMark { .. } => "tool-level-mark",
             Tool::AddLeader { .. } => "tool-add-leader",
             Tool::Opening { floor: false, .. } => "tool-roof-opening",
             Tool::Opening { floor: true, .. } => "tool-floor-opening",
@@ -207,7 +212,8 @@ impl Tool {
             | Tool::Component { type_id }
             | Tool::Pipe { type_id }
             | Tool::Conduit { type_id }
-            | Tool::Text { type_id } => Some(*type_id),
+            | Tool::Text { type_id }
+            | Tool::LevelMark { type_id } => Some(*type_id),
             _ => None,
         }
     }
@@ -231,6 +237,7 @@ impl Tool {
             Tool::Pipe { .. } => Some(Category::Pipe),
             Tool::Conduit { .. } => Some(Category::Conduit),
             Tool::Text { .. } => Some(Category::Text),
+            Tool::LevelMark { .. } => Some(Category::LevelMark),
             _ => None,
         }
     }
@@ -255,6 +262,7 @@ impl Tool {
             Tool::Pipe { .. } => Tool::Pipe { type_id: id },
             Tool::Conduit { .. } => Tool::Conduit { type_id: id },
             Tool::Text { .. } => Tool::Text { type_id: id },
+            Tool::LevelMark { .. } => Tool::LevelMark { type_id: id },
             t => t,
         }
     }
@@ -294,6 +302,7 @@ impl Tool {
             Category::Pipe => Tool::Pipe { type_id },
             Category::Conduit => Tool::Conduit { type_id },
             Category::Text => Tool::Text { type_id },
+            Category::LevelMark => Tool::LevelMark { type_id },
             // Imported, not drawn.
             Category::CadImport | Category::TitleBlock => return None,
         })
@@ -675,6 +684,16 @@ impl Snap {
     /// A snap to `point`, shown as an end point when `on_point`, else free.
     pub(crate) fn plain(point: DVec2, on_point: bool) -> Self {
         Self::at(point, if on_point { SnapKind::Endpoint } else { SnapKind::Free })
+    }
+
+    /// A snap to the nearest point of a line.
+    pub(crate) fn nearest(point: DVec2) -> Self {
+        Self::at(point, SnapKind::Nearest)
+    }
+
+    /// Whether nothing was snapped to.
+    pub(crate) fn is_free(&self) -> bool {
+        self.kind == SnapKind::Free
     }
 }
 
@@ -1276,6 +1295,10 @@ pub fn handle(
             let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
             crate::text_tool::text_tool(ui, resp, painter, state, view, *type_id, xf, px_per_mm)
         }
+        // Level marks go in plans, elevations and sections.
+        (Tool::LevelMark { type_id }, _) => {
+            crate::level_mark_ui::tool(ui, resp, painter, state, view, *type_id, xf, drawing)
+        }
         (Tool::AddLeader { id }, _) => {
             let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
             crate::text_tool::add_leader_tool(ui, resp, painter, state, view, *id, xf, px_per_mm)
@@ -1338,7 +1361,10 @@ pub fn handle(
 }
 
 /// Run a creating command: the new element is selected; a refusal goes to the status bar.
-fn run_create<C: cc_engine::Command + serde::Serialize>(state: &mut AppState, command: C) -> Option<ElementId> {
+pub(crate) fn run_create<C: cc_engine::Command + serde::Serialize>(
+    state: &mut AppState,
+    command: C,
+) -> Option<ElementId> {
     let id = crate::actions::run_command(state, command)?["id"].as_u64().map(ElementId)?;
     state.selection = std::collections::BTreeSet::from([id]);
     Some(id)

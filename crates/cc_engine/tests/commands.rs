@@ -2355,6 +2355,65 @@ fn stairs_shapes_rules_and_railings() {
     assert_eq!(back["risers"], 17);
 }
 
+/// Level marks write the finished level of a floor and the raw level of its
+/// structure, after the type's datum: in plans the floor under the point,
+/// in sections the height of the point.
+#[test]
+fn level_marks_write_finished_and_raw_levels() {
+    let mut s = Session::default();
+    // The template's slab: 3 cm of screed over 12 cm of concrete, its top 15 cm up.
+    let square = json!([[0, 0], [4, 0], [4, 4], [0, 4]]);
+    run(&mut s, "floor_create", json!({"boundary": square, "offset": 0.15}));
+    let plans = run(&mut s, "views_list", json!({"category": "floor_plan"}));
+    let plan = plans[0]["id"].as_u64().unwrap();
+    let mark = run(&mut s, "level_mark_create", json!({"view": plan, "position": [1, 1]}));
+    assert_eq!(mark["category"], "levelmark");
+    let near = |v: &Value, x: f64| v.as_f64().is_some_and(|v| (v - x).abs() < 1e-9);
+    assert!(near(&mark["derived"]["finished"], 0.15) && near(&mark["derived"]["raw"], 0.12), "{mark}");
+    // The project's zero written as 100.00.
+    let ty = mark["type"]["id"].clone();
+    run(&mut s, "type_set", json!({"type": ty, "params": {"datum": 100.0}}));
+    let texts = run(&mut s, "element_get", json!({"id": id(&mark)}))["derived"]["texts"].clone();
+    let texts: Vec<&str> = texts.as_array().unwrap().iter().map(|t| t.as_str().unwrap()).collect();
+    assert_eq!(texts.len(), 2, "{texts:?}");
+    assert!(texts[0].starts_with("+ 100") && texts[0].contains("15") && texts[0].ends_with("(N.A.)"), "{texts:?}");
+    assert!(texts[1].contains("12") && texts[1].ends_with("(N.O.)"), "{texts:?}");
+    // Drawn in the plan: the two values, belonging to the mark.
+    let d = s.drawing(cc_core::ViewId(plan)).unwrap();
+    let drawn: Vec<&str> = d
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            cc_views::Prim::Text { text, element: Some(e), .. } if e.0 == id(&mark) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drawn, texts);
+    // Set values win; without the raw level only one line is written.
+    let params = json!({"finished": 3.0, "show_raw": false});
+    run(&mut s, "element_set", json!({"id": id(&mark), "params": params}));
+    let got = run(&mut s, "element_get", json!({"id": id(&mark)}));
+    assert!(near(&got["derived"]["finished"], 3.0) && got["derived"]["raw"].is_null(), "{got}");
+
+    // In a section across the floor, on its top: its height and the raw level.
+    let section = run(&mut s, "view_create", json!({"kind": "section", "start": [-1, 2], "end": [6, 2]}));
+    let sid = cc_core::ViewId(id(&section));
+    let x = s.project().view(sid).unwrap().projection().unwrap().project(cc_core::DVec2::new(1.0, 2.0), 0.0).x;
+    let cut = run(&mut s, "level_mark_create", json!({"view": sid.0, "position": [x, 0.15]}));
+    assert!(near(&cut["derived"]["finished"], 0.15) && near(&cut["derived"]["raw"], 0.12), "{cut}");
+    assert!(s.drawing(sid).unwrap().prims.iter().any(|p| p.element().is_some_and(|e| e.0 == id(&cut))));
+
+    // Not in schedules; bad levels are refused.
+    let schedule = run(&mut s, "view_create", json!({"kind": "schedule", "category": "wall"}));
+    let bad = json!({"view": id(&schedule), "position": [0, 0]});
+    assert_eq!(fails(&mut s, "level_mark_create", bad), ErrorCode::InvalidArguments);
+    let bad = json!({"view": plan, "position": [0, 0], "finished": 1e9});
+    assert_eq!(fails(&mut s, "level_mark_create", bad), ErrorCode::InvalidArguments);
+    // Deleting the view deletes its marks.
+    run(&mut s, "view_delete", json!({"view": sid.0}));
+    assert_eq!(fails(&mut s, "element_get", json!({"id": id(&cut)})), ErrorCode::NotFound);
+}
+
 /// A stair given its riser count and tread: the riser height is the height
 /// over the risers, the run follows the tread; element_set changes them and
 /// a three-flight stair splits them between its flights.
