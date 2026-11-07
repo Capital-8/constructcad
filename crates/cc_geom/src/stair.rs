@@ -285,10 +285,48 @@ const SPIRAL_TURN_RISE: f64 = 2.2;
 /// Segments per radian on arcs.
 const ARC_STEPS: f64 = 8.0;
 
+/// The point of a step where its number goes and the unit vector up the
+/// stair (square to its front, into the step); none for a degenerate step.
+fn number_spot(st: &StairStep) -> Option<(DVec2, DVec2)> {
+    if st.outline.len() < 3 {
+        return None;
+    }
+    let center = st.outline.iter().copied().sum::<DVec2>() / st.outline.len() as f64;
+    let [a, b] = st.front;
+    let mut up = (b - a).perp().try_normalize()?;
+    if up.dot(center - (a + b) * 0.5) < 0.0 {
+        up = -up;
+    }
+    let side = up.perp() * (a.distance(b) * 0.25);
+    [center + side, center - side, center].into_iter().find(|p| polygon::contains(&st.outline, *p)).map(|p| (p, up))
+}
+
 impl StairGeom {
     /// Plan length of the walking line.
     pub fn run(&self) -> f64 {
         self.walkline.windows(2).map(|w| w[0].truncate().distance(w[1].truncate())).sum()
+    }
+
+    /// Where the step numbers go in plan, with each number: one in every
+    /// tread and winder up the stair (landings are not numbered) from
+    /// `layout.number_start`, then one on the floor the stair arrives at, a
+    /// tread beyond its last riser. Each sits a quarter of the step's width
+    /// to the left of its middle, walking up (to the right, or in the middle,
+    /// when that falls outside the step), clear of the walking line's arrow.
+    pub fn number_spots(&self) -> Vec<(DVec2, i32)> {
+        let mut spots = Vec::new();
+        let mut n = self.layout.number_start;
+        let mut last = None;
+        for st in self.steps.iter().filter(|st| st.kind != StepKind::Landing) {
+            let Some((spot, up)) = number_spot(st) else { continue };
+            spots.push((spot, n));
+            n = n.saturating_add(1);
+            last = Some((spot, up));
+        }
+        if let Some((spot, up)) = last {
+            spots.push((spot + up * self.tread, n));
+        }
+        spots
     }
 
     fn sign(&self) -> f64 {
@@ -1453,6 +1491,36 @@ mod tests {
         assert!(v < 15.0 * full + 1e-9 && v > 13.0 * full, "{v} vs {}", 15.0 * full);
         // Much less concrete than the solid block.
         assert!(v < 0.3 * volume(&g, &StairBuild::default()));
+    }
+
+    #[test]
+    fn step_numbers_count_the_treads_up_to_the_floor_above() {
+        // 16 risers: treads 1 to 15, then 16 on the floor it arrives at.
+        let g = geom(StairLayout::default(), 2.88);
+        let spots = g.number_spots();
+        let numbers: Vec<i32> = spots.iter().map(|s| s.1).collect();
+        assert_eq!(numbers, (1..=16).collect::<Vec<_>>());
+        // Inside each tread, a quarter of the width to the left of the walking line.
+        for ((p, _), st) in spots.iter().zip(&g.steps) {
+            assert!(polygon::contains(&st.outline, *p), "{p} outside its tread");
+            assert!((p.y - 0.25).abs() < 1e-9, "{p}");
+        }
+        // The last one a tread past the last riser (at 15 × 0.28).
+        let (top, _) = spots[15];
+        assert!((top - DVec2::new(15.0 * 0.28 + 0.14, 0.25)).length() < 1e-9, "{top}");
+        // Landings are skipped, and the count may start elsewhere.
+        let layout = StairLayout { shape: StairShape::StraightLanding, number_start: 17, ..Default::default() };
+        let numbers: Vec<i32> = geom(layout, 2.88).number_spots().iter().map(|s| s.1).collect();
+        assert_eq!(numbers, (17..=31).collect::<Vec<_>>());
+        // Winders and spiral treads are numbered too.
+        for layout in [
+            StairLayout { shape: StairShape::LShaped, winders: 3, ..Default::default() },
+            StairLayout { shape: StairShape::Spiral, ..Default::default() },
+        ] {
+            let g = geom(layout, 2.88);
+            let treads = g.steps.iter().filter(|s| s.kind != StepKind::Landing).count();
+            assert_eq!(g.number_spots().len(), treads + 1, "{:?}", layout.shape);
+        }
     }
 
     #[test]

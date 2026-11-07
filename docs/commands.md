@@ -763,6 +763,8 @@ No parameters.
 | `inner_radius` | number | optional | Radius of the inner edge of a spiral stair, meters (default 0.15). |
 | `landing` | number | optional | Landing depth along the first flight, meters (default: the stair width). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `number_start` | integer | optional | Number of the first tread (default 1), from -9999 to 9999: another value continues the count of a stair below, for instance. |
+| `numbers` | boolean | optional | Number the steps in plans: the treads (winders included, landings not) and the floor the stair arrives at (default false). |
 | `posts` | [[string, …], …] | optional | Posts under the landings of an assembled stair, down to its base: a list per landing (up the stair) of places round its edge, named walking onto it (front: where the stair arrives; inner: the side it turns to): `front_outer`, `front`, `front_inner`, `inner`, `back_inner`, `back`, `back_outer`, `outer`. Only places its beams reach take a post (see `stair_check`); none by default. |
 | `risers` | integer | optional | Riser count (default: the fewest within the type's maximum riser). |
 | `shape` | string | optional | Plan shape: `straight` (default), `straight_landing`, `l_shaped`, `u_shaped`, `three_flight` (up, across and back, with a landing at each corner) or `spiral`. |

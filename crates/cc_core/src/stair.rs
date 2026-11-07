@@ -123,7 +123,16 @@ pub struct StairLayout {
     /// Posts under the landings of an assembled stair, down to its base: one
     /// set per landing, in order up the stair.
     pub posts: [LandingPosts; 2],
+    /// Number the steps in plans: the treads (winders included, landings
+    /// not) from `number_start` up, and the floor the stair arrives at.
+    pub numbers: bool,
+    /// Number of the first tread (another value continues a count from a
+    /// stair below, for instance).
+    pub number_start: i32,
 }
+
+/// Largest step number, either way from zero.
+pub const MAX_STEP_NUMBER: i32 = 9999;
 
 impl Default for StairLayout {
     fn default() -> Self {
@@ -139,6 +148,8 @@ impl Default for StairLayout {
             winders: 0,
             inner_radius: 0.15,
             posts: [LandingPosts::default(); 2],
+            numbers: false,
+            number_start: 1,
         }
     }
 }
@@ -171,6 +182,10 @@ impl StairLayout {
         }
         if !self.tread.is_finite() || !(0.0..=2.0).contains(&self.tread) {
             self.tread = 0.0;
+            n += 1;
+        }
+        if !(-MAX_STEP_NUMBER..=MAX_STEP_NUMBER).contains(&self.number_start) {
+            self.number_start = 1;
             n += 1;
         }
         n
@@ -664,9 +679,10 @@ mod tests {
         assert!((riser - 0.16).abs() < 1e-12 && (tread - 0.3).abs() < 1e-12);
         // Bad heights give flat steps, not NaN.
         assert_eq!(set.steps(f64::NAN, 0.18, 0.28, &rules).1, 0.0);
-        let mut bad = StairLayout { risers: 900, split2: 900, tread: f64::NAN, ..Default::default() };
-        assert_eq!(bad.repair(), 3);
-        assert_eq!((bad.risers, bad.split2, bad.tread), (0, 0, 0.0));
+        let mut bad =
+            StairLayout { risers: 900, split2: 900, tread: f64::NAN, number_start: i32::MIN, ..Default::default() };
+        assert_eq!(bad.repair(), 4);
+        assert_eq!((bad.risers, bad.split2, bad.tread, bad.number_start), (0, 0, 0.0, 1));
     }
 
     #[test]
