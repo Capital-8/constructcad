@@ -565,7 +565,7 @@ impl View {
 
     /// Whether the view can be placed on a sheet.
     pub fn placeable(&self) -> bool {
-        !matches!(self.kind, ViewKind::Sheet { .. } | ViewKind::Schedule { .. })
+        !matches!(self.kind, ViewKind::Sheet { .. })
     }
 }
 

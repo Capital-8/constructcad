@@ -252,16 +252,14 @@ fn a_house_through_commands() {
     run(&mut s, "view_export", json!({"view": id_of("floor_plan"), "path": b, "dpi": 80}));
     let (wa, wb) = (png_size(&std::fs::read(&a).unwrap()).0, png_size(&std::fs::read(&b).unwrap()).0);
     assert!((wb as i64 - 2 * wa as i64).abs() <= 1, "{wa} {wb}");
-    // Schedules have no drawing; absurd resolutions and unknown formats are refused.
+    // Schedules export as their table; absurd resolutions and unknown formats are refused.
     let bad = |file: &str, extra: Value| {
         let mut args = json!({"view": id_of("floor_plan"), "path": scratch(file)});
         args.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
         args
     };
-    assert_eq!(
-        fails(&mut s, "view_export", json!({"view": schedule["id"], "path": scratch("x.png")})),
-        ErrorCode::InvalidArguments
-    );
+    let table = run(&mut s, "view_export", json!({"view": schedule["id"], "path": scratch("x.png"), "dpi": 50}));
+    assert_eq!(table["format"], "png");
     assert_eq!(fails(&mut s, "view_export", bad("x.png", json!({"dpi": 1e6}))), ErrorCode::InvalidArguments);
     assert_eq!(fails(&mut s, "view_export", bad("x.png", json!({"dpi": 0}))), ErrorCode::InvalidArguments);
     assert_eq!(fails(&mut s, "view_export", bad("x.bmp", json!({}))), ErrorCode::InvalidArguments);
@@ -1712,6 +1710,54 @@ fn panel_diagrams_follow_their_board() {
     assert_eq!(fails(&mut s, "view_get", json!({"view": id(&diagram)})), ErrorCode::NotFound);
     run(&mut s, "undo", json!({}));
     assert_eq!(run(&mut s, "view_get", json!({"view": id(&diagram)}))["params"]["panel"], json!(panel));
+}
+
+/// Schedules go on sheets: drawn as a ruled table at their printed size,
+/// titled in their first row (no viewport title or scale), following the
+/// model; exported with the sheet.
+#[test]
+fn schedules_go_on_sheets() {
+    let mut s = Session::default();
+    for (a, b) in [([0.0, 0.0], [6.0, 0.0]), ([6.0, 0.0], [6.0, 4.0])] {
+        run(&mut s, "wall_create", json!({"start": a, "end": b}));
+    }
+    let schedule = run(&mut s, "view_create", json!({"kind": "schedule", "category": "wall", "name": "Wall Schedule"}));
+    let sheet = id(&run(&mut s, "view_create", json!({"kind": "sheet"})));
+    run(&mut s, "sheet_place_view", json!({"sheet": sheet, "view": id(&schedule), "center": [150.0, 150.0]}));
+    let texts = |s: &mut Session| -> Vec<String> {
+        let composed = s.sheet(cc_core::ViewId(sheet)).unwrap();
+        composed
+            .drawing
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                cc_views::Prim::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let shown = texts(&mut s);
+    assert_eq!(shown.iter().filter(|t| *t == "Wall Schedule").count(), 1, "titled once: {shown:?}");
+    assert!(!shown.iter().any(|t| t == "1:1"), "no scale under a schedule");
+    // Title, headers, two walls and the totals: five rows of 6 mm.
+    let composed = s.sheet(cc_core::ViewId(sheet)).unwrap();
+    let vp = composed.viewports.iter().find(|v| v.view.0 == id(&schedule)).unwrap();
+    assert!((vp.half.y * 2.0 - 30.0).abs() < 1e-6, "{:?}", vp.half);
+    // A third wall adds a row on the sheet.
+    run(&mut s, "wall_create", json!({"start": [6.0, 4.0], "end": [0.0, 4.0]}));
+    let composed = s.sheet(cc_core::ViewId(sheet)).unwrap();
+    let vp = composed.viewports.iter().find(|v| v.view.0 == id(&schedule)).unwrap();
+    assert!((vp.half.y * 2.0 - 36.0).abs() < 1e-6, "{:?}", vp.half);
+    // Once per project, like any view; sheets themselves still cannot be placed.
+    let other = id(&run(&mut s, "view_create", json!({"kind": "sheet"})));
+    assert_eq!(fails(&mut s, "sheet_place_view", json!({"sheet": other, "view": id(&schedule)})), ErrorCode::Rejected);
+    assert_eq!(fails(&mut s, "sheet_place_view", json!({"sheet": other, "view": sheet})), ErrorCode::InvalidArguments);
+    // The sheet's export carries the table.
+    let out = std::env::temp_dir().join(format!("ccad-schedule-sheet-{}.svg", std::process::id()));
+    run(&mut s, "sheet_export", json!({"sheet": sheet, "path": out}));
+    let svg = std::fs::read_to_string(&out).unwrap();
+    assert!(svg.contains("Wall Schedule"));
+    let _ = std::fs::remove_file(out);
 }
 
 /// Arc walls: three points or a bulge; quantities along the arc; doors on
