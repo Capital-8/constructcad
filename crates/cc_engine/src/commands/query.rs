@@ -172,6 +172,10 @@ impl Command for ElementsList {
         let shown: Option<std::collections::BTreeSet<ElementId>> = match &self.view {
             Some(v) => {
                 let view = refs::view(p, v)?;
+                // A schedule draws as a table (for sheets) that shows no element: `schedule_table` lists them.
+                if matches!(p.view(view).map(|v| &v.kind), Some(cc_core::ViewKind::Schedule { .. })) {
+                    return Err(EngineError::invalid(t!("msg-view-not-graphical")));
+                }
                 let drawing = s.drawing(view).ok_or_else(|| EngineError::invalid(t!("msg-view-not-graphical")))?;
                 Some(drawing.prims.iter().filter_map(cc_views::Prim::element).collect())
             }

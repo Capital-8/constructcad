@@ -120,7 +120,15 @@ pub fn generate_temporary(
         // No model geometry: only what the view owns, added below.
         ViewKind::Drafting { .. } => Drawing2D::default(),
         ViewKind::Diagram { panel } => diagram::panel_diagram(project, geom, *panel, view.scale, label),
-        ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
+        // A schedule draws as a table, for sheets: the elements its phase shows.
+        ViewKind::Schedule { category, def } => {
+            let phase = graphics::PhaseView::of(project, view);
+            let table = schedule::schedule_where(project, geom, *category, def, &mut |e| {
+                phase.as_ref().is_none_or(|ph| ph.shows(project, e))
+            });
+            schedule::drawing(&table, &view.name, view.scale, label)
+        }
+        ViewKind::Sheet { .. } => return None,
     };
     // Imported CAD drawings, under everything (not in 3D views or diagrams).
     if hosts_cad(&view.kind) {
