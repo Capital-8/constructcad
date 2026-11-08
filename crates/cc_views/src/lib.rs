@@ -109,6 +109,8 @@ pub fn generate_temporary(
         ViewKind::ThreeD { camera, rebar: true, .. } => projected::rebar(geom, camera),
         ViewKind::ThreeD { camera, .. } => axonometric(project, geom, camera, Look::of(view)),
         ViewKind::Legend { types } => legend(project, types, view.scale),
+        // No model geometry: only what the view owns, added below.
+        ViewKind::Drafting { .. } => Drawing2D::default(),
         ViewKind::Diagram { panel } => diagram::panel_diagram(project, geom, *panel, view.scale, label),
         ViewKind::Schedule { .. } | ViewKind::Sheet { .. } => return None,
     };
@@ -165,7 +167,7 @@ fn underlay_prim(prim: Prim) -> Option<Prim> {
 }
 
 /// Whether a view can hold imported CAD drawings: plans, ceiling plans,
-/// elevations, sections and legends (2D views with a drawing plane).
+/// elevations, sections, legends and drafting views (2D views with a drawing plane).
 pub fn hosts_cad(kind: &ViewKind) -> bool {
     matches!(
         kind,
@@ -174,6 +176,7 @@ pub fn hosts_cad(kind: &ViewKind) -> bool {
             | ViewKind::Elevation { .. }
             | ViewKind::Section { .. }
             | ViewKind::Legend { .. }
+            | ViewKind::Drafting { .. }
     )
 }
 

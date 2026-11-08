@@ -175,6 +175,7 @@ pub enum UiCommand {
     Section,
     Elevations,
     Legend,
+    DraftingView,
     Schedule,
     Sheet,
     ZoomFit,
@@ -344,6 +345,7 @@ impl UiCommand {
             Section,
             Elevations,
             Legend,
+            DraftingView,
             Schedule,
             Sheet,
             ZoomFit,
@@ -506,6 +508,7 @@ impl UiCommand {
             Section => Icon::Section,
             Elevations => Icon::Elevation,
             Legend => Icon::Legend,
+            DraftingView => Icon::DraftingView,
             Schedule => Icon::Schedule,
             ZoomFit => Icon::ZoomFit,
             CloseInactiveViews => Icon::CloseViews,
@@ -536,8 +539,8 @@ impl UiCommand {
     pub fn badge(self) -> Option<Badge> {
         use UiCommand::*;
         match self {
-            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | Schedule | StructuralSchedules | Sheet
-            | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules | PanelDiagram
+            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | DraftingView | Schedule | StructuralSchedules
+            | Sheet | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules | PanelDiagram
             | NewTitleBlock => Some(Badge::New),
             ImportIfc | ImportCad | ImportImage | ImportSkp | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | ExportImage | ExportDxf | AnalyticalExport => Some(Badge::Export),
@@ -676,6 +679,7 @@ impl UiCommand {
             Section => t!("tool-section"),
             Elevations => t!("view-elevations"),
             Legend => t!("view-new-legend"),
+            DraftingView => t!("view-new-drafting"),
             Schedule => t!("view-new-schedule"),
             Sheet => t!("view-new-sheet"),
             ZoomFit => t!("action-zoom-fit"),
@@ -859,6 +863,7 @@ impl UiCommand {
             Section => t!("cmd-desc-section"),
             Elevations => t!("cmd-desc-elevations"),
             Legend => t!("cmd-desc-legend"),
+            DraftingView => t!("cmd-desc-drafting"),
             Schedule => t!("cmd-desc-schedule"),
             Sheet => t!("cmd-desc-sheet"),
             ZoomFit => t!("cmd-desc-zoom-fit"),
@@ -1099,7 +1104,7 @@ impl UiCommand {
             Paste => "elements_paste",
             ClipboardCopy => "elements_export",
             MatchType => "elements_set_type",
-            FloorPlan | CeilingPlan | New3D | Section | Legend | Schedule | Sheet => "view_create",
+            FloorPlan | CeilingPlan | New3D | Section | Legend | DraftingView | Schedule | Sheet => "view_create",
             ProjectInfo => "project_info_set",
             VisibilityGraphics => "view_graphics_set",
             ViewFilters => "filter_set",
@@ -1391,9 +1396,9 @@ pub fn phase_view(state: &AppState) -> Option<cc_core::ViewId> {
     })
 }
 
-/// The active view when it has visibility/graphics (plans, elevations, sections, 3D).
+/// The active view when it has visibility/graphics (plans, elevations, sections, 3D, drafting views).
 pub fn graphics_view(state: &AppState) -> Option<cc_core::ViewId> {
-    state.active_view.filter(|v| state.project().view(*v).is_some_and(|v| cc_core::ViewTemplate::applies_to(&v.kind)))
+    state.active_view.filter(|v| state.project().view(*v).is_some_and(|v| v.kind.has_graphics()))
 }
 
 /// Whether a component type is an electrical device (`Some(true)`), a plumbing fixture or neither.
@@ -1747,6 +1752,9 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Legend => {
             actions::new_legend(state);
         }
+        DraftingView => {
+            actions::new_drafting_view(state);
+        }
         Schedule => {
             actions::new_schedule(state, Category::Wall);
         }
@@ -1871,6 +1879,28 @@ mod tests {
         assert_eq!(state.tool, Tool::Align);
         assert_eq!(state.message, t!("hint-align-3d"));
         assert!(crate::modify3d::works_in_3d(&state.tool));
+    }
+
+    /// Issue #148: *Drafting View* creates and opens a drafting view, which
+    /// takes text, dimensions and imported drawings and has visibility/graphics.
+    #[test]
+    fn drafting_view_entry() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        assert_eq!(UiCommand::DraftingView.unavailable(&state), None);
+        let ctx = egui::Context::default();
+        invoke(&mut state, &ctx, UiCommand::DraftingView);
+        let views: Vec<_> = state.project().views_of(ViewCategory::Drafting).cloned().collect();
+        let [view] = views.as_slice() else { panic!("one drafting view: {views:?}") };
+        let view = view.clone();
+        state.active_view = Some(view.id);
+        assert_eq!(UiCommand::Text.unavailable(&state), None);
+        assert_eq!(UiCommand::Dimension(DimensionMode::Aligned).unavailable(&state), None);
+        assert_eq!(UiCommand::ImportCad.unavailable(&state), None);
+        assert_eq!(graphics_view(&state), Some(view.id));
+        let drawing = state.session.drawing(view.id).unwrap();
+        assert!(drawing.prims.is_empty(), "no model in it");
     }
 
     #[test]

@@ -48,7 +48,7 @@ fn target(p: &Project, view: Option<&Ref>, template: Option<&Ref>) -> Result<Tar
 /// Refuse to edit graphics of a view that its template controls.
 fn check_free(p: &Project, target: Target, filters: bool) -> Result<()> {
     if let Target::View(v) = target {
-        if !p.view(v).is_some_and(|v| ViewTemplate::applies_to(&v.kind)) {
+        if !p.view(v).is_some_and(|v| v.kind.has_graphics()) {
             return Err(EngineError::invalid("this view has no visibility/graphics"));
         }
         if let Some((t, inc)) = controlled(p, v)
@@ -229,7 +229,7 @@ fn element_ids(p: &Project, ids: &[u64]) -> Result<Vec<ElementId>> {
 
 fn graphical_view(p: &Project, r: &Ref) -> Result<ViewId> {
     let v = refs::view(p, r)?;
-    if !p.view(v).is_some_and(|v| ViewTemplate::applies_to(&v.kind)) {
+    if !p.view(v).is_some_and(|v| v.kind.has_graphics()) {
         return Err(EngineError::invalid("this view has no visibility/graphics"));
     }
     Ok(v)
