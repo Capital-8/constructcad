@@ -582,6 +582,97 @@ fn roof_covering<'a>(
     Some((kind.spec(), geom.roof_framing.get(&e.id)?))
 }
 
+/// Text height of a schedule's cells on paper, millimeters.
+const TEXT: f64 = 2.2;
+/// Text height of its title, millimeters.
+const TITLE_TEXT: f64 = 3.0;
+/// Row height, millimeters.
+const ROW: f64 = 6.0;
+/// Narrowest and widest column, millimeters.
+const MIN_COLUMN: f64 = 14.0;
+const MAX_COLUMN: f64 = 90.0;
+/// Cell padding, millimeters.
+const PAD: f64 = 1.5;
+/// Most element rows drawn; the rest are counted in a last row.
+pub const MAX_DRAWN_ROWS: usize = 2000;
+
+/// A schedule as a drawing, for sheets: a title row, the headers, one row
+/// per element and the totals, ruled like a table. Sizes are paper
+/// millimeters at the view's `scale` (as the panel diagrams), so a sheet
+/// places it at its printed size; numbers are right-aligned, and `label`
+/// translates the headers and the key cells.
+pub fn drawing(table: &Table, title: &str, scale: u32, label: &dyn Fn(&str) -> String) -> crate::Drawing2D {
+    use crate::{Anchor, LineStyle};
+    let mut d = crate::Drawing2D::default();
+    let k = scale.max(1) as f64 / 1000.0;
+    let at = |x: f64, y: f64| glam::DVec2::new(x, y) * k;
+    let headers: Vec<String> = table.headers.iter().map(|h| label(h)).collect();
+    let cell_text = |c: &Cell| match c {
+        Cell::Text(t) => t.clone(),
+        Cell::Key(key) => label(key),
+    };
+    let mut rows: Vec<Vec<String>> =
+        table.rows.iter().take(MAX_DRAWN_ROWS).map(|r| r.cells.iter().map(&cell_text).collect()).collect();
+    if table.rows.len() > MAX_DRAWN_ROWS {
+        let more = (table.rows.len() - MAX_DRAWN_ROWS).to_string();
+        rows.push(vec![format!("… +{more}")]);
+    }
+    let totals = (!table.totals.is_empty()).then(|| table.totals.clone());
+    let columns = headers.len().max(1);
+    // Each column as wide as its longest text (an estimate from the
+    // character count; texts are proportional), within the limits.
+    let widths: Vec<f64> = (0..columns)
+        .map(|c| {
+            let longest = std::iter::once(headers.get(c))
+                .chain(rows.iter().map(|r| r.get(c)))
+                .chain(totals.iter().map(|t| t.get(c)))
+                .flatten()
+                .map(|t| t.chars().count())
+                .max()
+                .unwrap_or(0);
+            (longest as f64 * TEXT * 0.6 + 2.0 * PAD).clamp(MIN_COLUMN, MAX_COLUMN)
+        })
+        .collect();
+    let width: f64 = widths.iter().sum();
+    let lines = 2 + rows.len() + usize::from(totals.is_some());
+    let height = ROW * lines as f64;
+
+    // The title, centered in its row.
+    d.text_at(at(width / 2.0, -ROW + (ROW - TITLE_TEXT) / 2.0), title, TITLE_TEXT, Anchor::CenterBottom, 0.0);
+    // Rules: the frame and the lines under the title, the headers and above
+    // the totals stronger than those between rows.
+    for r in 0..=lines {
+        let y = -ROW * r as f64;
+        let strong = r <= 2 || r == lines || (totals.is_some() && r == lines - 1);
+        let style = if strong { LineStyle::Projection } else { LineStyle::Thin };
+        d.line(at(0.0, y), at(width, y), style, None);
+    }
+    d.line(at(0.0, 0.0), at(0.0, -height), LineStyle::Projection, None);
+    d.line(at(width, 0.0), at(width, -height), LineStyle::Projection, None);
+    let mut x = 0.0;
+    for w in widths.iter().take(columns - 1) {
+        x += w;
+        d.line(at(x, -ROW), at(x, -height), LineStyle::Thin, None);
+    }
+    // The texts, a row at a time from the headers down.
+    let body = std::iter::once(&headers).chain(rows.iter()).chain(totals.iter());
+    for (r, row) in body.enumerate() {
+        let baseline = -ROW * (r as f64 + 2.0) + (ROW - TEXT) / 2.0;
+        let mut x = 0.0;
+        for (c, text) in row.iter().enumerate() {
+            let w = widths.get(c).copied().unwrap_or(MIN_COLUMN);
+            let numeric = r > 0 && text.trim_start().starts_with(|ch: char| ch.is_ascii_digit() || ch == '-');
+            if numeric {
+                d.text_at(at(x + w - PAD, baseline), text.clone(), TEXT, Anchor::RightBottom, 0.0);
+            } else if !text.is_empty() {
+                d.text_at(at(x + PAD, baseline), text.clone(), TEXT, Anchor::LeftBottom, 0.0);
+            }
+            x += w;
+        }
+    }
+    d
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -678,5 +769,35 @@ mod tests {
         };
         let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
         assert_eq!(csv, "A;B\r\n\"x;y\";k\r\n1;\r\n");
+    }
+
+    /// A schedule drawn for a sheet: title, headers, a row per element and
+    /// the totals, ruled at its printed size (paper millimeters at 1:1).
+    #[test]
+    fn schedules_draw_as_ruled_tables() {
+        let (project, geom) = sample();
+        let def = ScheduleDef { fields: vec![ScheduleField::Mark, ScheduleField::Area], ..ScheduleDef::default() };
+        let t = schedule(&project, &geom, Category::Window, &def);
+        assert!(!t.rows.is_empty());
+        let d = drawing(&t, "Windows", 1, &|key| format!("<{key}>"));
+        let texts: Vec<&str> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                crate::Prim::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts.first(), Some(&"Windows"));
+        assert!(texts.iter().any(|t| t.starts_with('<')), "headers go through the label: {texts:?}");
+        assert!(texts.contains(&t.totals[0].as_str()), "the totals row");
+        // Title, headers, rows and totals: as many rows of 6 mm.
+        let (lo, hi) = d.bounds().unwrap();
+        let rows = 2 + t.rows.len() + 1;
+        assert!(((hi.y - lo.y) * 1000.0 - 6.0 * rows as f64).abs() < 1e-6, "{lo} {hi}");
+        // At 1:50 the same table is 50 times larger in view units.
+        let big = drawing(&t, "Windows", 50, &|key| key.to_string());
+        let (blo, bhi) = big.bounds().unwrap();
+        assert!(((bhi.y - blo.y) - (hi.y - lo.y) * 50.0).abs() < 1e-9);
     }
 }

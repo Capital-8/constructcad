@@ -81,6 +81,11 @@ pub fn compose(
         let map = |p: DVec2| vp.center + (p - anchor) * k;
         d.prims.extend(drawing.prims.iter().map(|prim| prim.mapped(map)));
         let half = (hi - lo) * 0.5 * k;
+        placed.push(PlacedViewport { index, view: vp.view, center: vp.center, half });
+        // A schedule's title is in its first row.
+        if matches!(view.kind, ViewKind::Schedule { .. }) {
+            continue;
+        }
         // Viewport title: name, scale (not for 3D views) and an underline.
         let title = vp.center + DVec2::new(-half.x, -half.y - 7.0);
         d.text(title, &view.name, 3.0);
@@ -88,7 +93,6 @@ pub fn compose(
             d.text(title - DVec2::new(0.0, 4.0), format!("1:{}", view.scale), 2.2);
         }
         d.line(title + DVec2::new(0.0, -0.8), title + DVec2::new(half.x.min(60.0), -0.8), LineStyle::Cut, None);
-        placed.push(PlacedViewport { index, view: vp.view, center: vp.center, half });
     }
     Some(Sheet { paper, drawing: d, viewports: placed })
 }
