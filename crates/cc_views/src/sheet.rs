@@ -178,6 +178,8 @@ mod tests {
                         weight: "0.7".into(),
                         color: None,
                         fill: None,
+                        pattern: Default::default(),
+                        hatch: None,
                     },
                 },
                 SheetItem {

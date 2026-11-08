@@ -39,7 +39,15 @@ pub fn standard(n: &dyn Fn(&str) -> String) -> ComponentDef {
     let p = |u: &str, v: &str| ProfilePoint::new(u, v);
     let stroke = |name: &str, points: Vec<ProfilePoint>, closed: bool, weight: &str| SheetItem {
         name: name.into(),
-        shape: SheetShape::Stroke { points, closed, weight: weight.into(), color: None, fill: None },
+        shape: SheetShape::Stroke {
+            points,
+            closed,
+            weight: weight.into(),
+            color: None,
+            fill: None,
+            pattern: crate::LinePattern::Solid,
+            hatch: None,
+        },
     };
     let text = |name: &str, x: &str, y: &str, text: String, size: &str| SheetItem {
         name: name.into(),
@@ -121,6 +129,13 @@ pub enum SheetShape {
         /// Fill of a closed stroke.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fill: Option<[u8; 3]>,
+        /// Dash pattern of the lines (detail components; title blocks draw them solid).
+        #[serde(default, skip_serializing_if = "is_solid")]
+        pattern: crate::LinePattern,
+        /// Pattern fill of a closed stroke, drawn as a filled region's
+        /// (detail components; title blocks leave it out).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hatch: Option<crate::PatternFill>,
     },
     /// Fixed words and `{fields}`; line breaks start new lines.
     Text {
@@ -137,7 +152,30 @@ pub enum SheetShape {
     },
     /// A picture filling the rectangle from (`x`, `y`) (its bottom-left corner).
     Image { x: String, y: String, width: String, height: String, image: Arc<RasterImage> },
+    /// Another detail component placed inside this one (detail components
+    /// only): the component named `component` (with the parameter values
+    /// of its first type), its origin at (`x`, `y`), turned `rotation`
+    /// degrees counter-clockwise, sized by `scale` (empty for 1) and, when
+    /// `mirrored`, flipped across its own X axis first.
+    Nested {
+        component: String,
+        x: String,
+        y: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        rotation: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        scale: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        mirrored: bool,
+    },
 }
+
+fn is_solid(p: &crate::LinePattern) -> bool {
+    *p == crate::LinePattern::Solid
+}
+
+/// Most characters of a nested component's name.
+pub const MAX_NAME: usize = 200;
 
 impl SheetShape {
     /// Every expression of the piece, for renaming parameters.
@@ -150,6 +188,20 @@ impl SheetShape {
             }
             SheetShape::Text { x, y, size, rotation, .. } => vec![x, y, size, rotation],
             SheetShape::Image { x, y, width, height, .. } => vec![x, y, width, height],
+            SheetShape::Nested { x, y, rotation, scale, .. } => vec![x, y, rotation, scale],
+        }
+    }
+
+    /// A stroke through `points` with the default pen.
+    pub fn stroke(points: Vec<ProfilePoint>, closed: bool) -> SheetShape {
+        SheetShape::Stroke {
+            points,
+            closed,
+            weight: String::new(),
+            color: None,
+            fill: None,
+            pattern: crate::LinePattern::Solid,
+            hatch: None,
         }
     }
 }
@@ -162,6 +214,8 @@ pub struct SheetStroke {
     pub weight: f64,
     pub color: [u8; 3],
     pub fill: Option<[u8; 3]>,
+    pub pattern: crate::LinePattern,
+    pub hatch: Option<crate::PatternFill>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -189,7 +243,20 @@ pub struct SheetPieces {
     pub strokes: Vec<SheetStroke>,
     pub texts: Vec<SheetText>,
     pub images: Vec<SheetImage>,
+    /// Nested detail components (detail components only).
+    pub nested: Vec<SheetNested>,
     pub errors: Vec<(usize, PartError)>,
+}
+
+/// A nested detail component, resolved: where its frame goes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SheetNested {
+    pub item: usize,
+    pub component: String,
+    pub position: DVec2,
+    pub rotation_deg: f64,
+    pub scale: f64,
+    pub mirrored: bool,
 }
 
 fn profile_error(e: ProfileError) -> PartError {
@@ -204,12 +271,22 @@ impl ComponentDef {
     /// reported with their index and left out.
     pub fn resolve_sheet(&self, paper: DVec2) -> SheetPieces {
         let scope = self.scope(&Default::default(), &[(SHEET_WIDTH, paper.x), (SHEET_HEIGHT, paper.y)]);
-        let lookup = |name: &str| scope.get(name);
+        let mut out = self.resolve_2d(&|name: &str| scope.get(name));
+        // Title blocks nest nothing.
+        for n in std::mem::take(&mut out.nested) {
+            out.errors.push((n.item, PartError::Degenerate));
+        }
+        out
+    }
+
+    /// The 2D pieces resolved with `lookup` (title blocks and detail
+    /// components); pieces that fail are reported with their index and left out.
+    pub fn resolve_2d(&self, lookup: &dyn Fn(&str) -> Option<f64>) -> SheetPieces {
         let mut out = SheetPieces::default();
         let mut points = 0;
         for (i, item) in self.sheet.iter().enumerate().take(MAX_SHEET_PIECES) {
             let strokes = out.strokes.len();
-            if let Err(e) = resolve_piece(i, &item.shape, &lookup, &mut out) {
+            if let Err(e) = resolve_piece(i, &item.shape, lookup, &mut out) {
                 out.errors.push((i, e));
             } else if out.strokes.len() > strokes {
                 // Strokes past the budget of flattened points are left out.
@@ -238,7 +315,7 @@ fn resolve_piece(
         if text.trim().is_empty() { Ok(default) } else { ev(field, text) }
     };
     match shape {
-        SheetShape::Stroke { points, closed, weight, color, fill } => {
+        SheetShape::Stroke { points, closed, weight, color, fill, pattern, hatch } => {
             if points.len() < 2 || points.len() > MAX_STROKE_POINTS {
                 return Err(PartError::Degenerate);
             }
@@ -267,6 +344,8 @@ fn resolve_piece(
                 weight: weight.min(10.0),
                 color: color.unwrap_or([0, 0, 0]),
                 fill: if *closed { *fill } else { None },
+                pattern: *pattern,
+                hatch: if *closed { *hatch } else { None },
             });
         }
         SheetShape::Text { x, y, text, size, anchor, rotation } => {
@@ -293,6 +372,26 @@ fn resolve_piece(
             }
             out.images.push(SheetImage { item: i, corner, size, image: image.clone() });
         }
+        SheetShape::Nested { component, x, y, rotation, scale, mirrored } => {
+            let position = DVec2::new(ev("x", x)?, ev("y", y)?);
+            let rotation_deg = ev_or("rotation", rotation, 0.0)?;
+            let scale = ev_or("scale", scale, 1.0)?;
+            if !(position.is_finite()
+                && rotation_deg.is_finite()
+                && crate::detail_component::scale_ok(scale)
+                && !component.trim().is_empty())
+            {
+                return Err(PartError::Degenerate);
+            }
+            out.nested.push(SheetNested {
+                item: i,
+                component: component.clone(),
+                position,
+                rotation_deg,
+                scale,
+                mirrored: *mirrored,
+            });
+        }
     }
     Ok(())
 }
@@ -301,7 +400,8 @@ fn resolve_piece(
 /// blocks keep only sheet pieces, other kinds none. Returns the fixes.
 pub fn repair_def(def: &mut ComponentDef) -> usize {
     let mut fixes = 0;
-    if def.kind == ComponentKind::TitleBlock {
+    if def.kind.is_2d() {
+        let title_block = def.kind == ComponentKind::TitleBlock;
         fixes += def.items.len();
         def.items.clear();
         // No IFC class, MEP data, opening or connectors: a title block has no elements.
@@ -311,9 +411,11 @@ pub fn repair_def(def: &mut ComponentDef) -> usize {
             + def.connectors.len();
         def.connectors.clear();
         // Parameters may not hide the paper's size.
-        let before = def.params.len();
-        def.params.retain(|p| p.name != SHEET_WIDTH && p.name != SHEET_HEIGHT);
-        fixes += before - def.params.len();
+        if title_block {
+            let before = def.params.len();
+            def.params.retain(|p| p.name != SHEET_WIDTH && p.name != SHEET_HEIGHT);
+            fixes += before - def.params.len();
+        }
         if def.sheet.len() > MAX_SHEET_PIECES {
             fixes += def.sheet.len() - MAX_SHEET_PIECES;
             def.sheet.truncate(MAX_SHEET_PIECES);
@@ -324,6 +426,10 @@ pub fn repair_def(def: &mut ComponentDef) -> usize {
                 SheetShape::Stroke { points, .. } => (2..=MAX_STROKE_POINTS).contains(&points.len()),
                 SheetShape::Text { text, .. } => text.chars().count() <= MAX_SHEET_TEXT,
                 SheetShape::Image { image, .. } => image.is_valid(),
+                // Only detail components nest others.
+                SheetShape::Nested { component, .. } => {
+                    !title_block && !component.trim().is_empty() && component.chars().count() <= MAX_NAME
+                }
             };
             fits && item.shape.expressions_mut().iter().all(|e| e.len() <= crate::expr::MAX_LEN)
         });
@@ -489,7 +595,7 @@ mod tests {
     fn the_flattened_points_are_bounded() {
         let long = || {
             let points = (0..MAX_STROKE_POINTS).map(|k| ProfilePoint::new(k.to_string(), "0")).collect();
-            let shape = SheetShape::Stroke { points, closed: false, weight: String::new(), color: None, fill: None };
+            let shape = SheetShape::stroke(points, false);
             SheetItem { name: "L".into(), shape }
         };
         let def = block((0..300).map(|_| long()).collect());
@@ -530,6 +636,8 @@ mod tests {
                 weight: String::new(),
                 color: None,
                 fill: None,
+                pattern: crate::LinePattern::Solid,
+                hatch: None,
             },
         }
     }
@@ -573,6 +681,8 @@ mod tests {
                     weight: "0.5".into(),
                     color: Some([200, 0, 0]),
                     fill: None,
+                    pattern: crate::LinePattern::Solid,
+                    hatch: None,
                 },
             },
             line(("Nope", "0"), ("1", "1")),

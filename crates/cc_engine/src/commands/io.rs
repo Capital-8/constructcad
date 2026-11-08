@@ -79,23 +79,30 @@ pub struct SheetExport {
 /// A view's drawing as DXF: a sheet in paper millimeters, any other view at
 /// full size in millimeters (texts at their printed size times the scale),
 /// without temporary hiding; each element on the layer of its category
-/// (detail lines, and regions with a boundary, on the layer of their line style).
+/// (detail lines, and regions with a boundary, on the layer of their line
+/// style); a view's detail components as blocks and inserts.
 fn view_dxf(s: &mut Session, id: cc_core::ViewId) -> Result<Vec<u8>> {
-    use cc_views::dxf::{DxfScale, default_layer, to_dxf};
+    use cc_views::dxf::{DxfBlocks, DxfScale, default_layer, to_dxf_with};
     let kind = s.project().view(id).map(|v| (matches!(v.kind, ViewKind::Sheet { .. }), v.scale));
-    let (drawing, scale) = match kind {
+    let (drawing, scale, view_scale) = match kind {
         Some((true, _)) => {
             let sheet = s.sheet(id).ok_or_else(|| EngineError::invalid("the sheet cannot be composed"))?;
-            (sheet.drawing.clone(), DxfScale::PAPER)
+            (sheet.drawing.clone(), DxfScale::PAPER, None)
         }
         Some((false, scale)) => {
             let drawing =
                 s.printed_drawing(id).ok_or_else(|| EngineError::invalid("the view has no drawing to export"))?;
-            ((*drawing).clone(), DxfScale::model(scale))
+            ((*drawing).clone(), DxfScale::model(scale), Some(scale))
         }
         None => return Err(EngineError::not_found("view")),
     };
     let project = s.project();
+    let blocks = match view_scale {
+        Some(scale) => {
+            cc_views::detail_component::dxf_blocks(project, id, &drawing, scale, &|e| format!("{:?}", e.category()))
+        }
+        None => DxfBlocks::default(),
+    };
     let layer = |prim: &cc_views::Prim| match prim.element().and_then(|e| project.element(e)) {
         // Detail lines go on the layer of their line style.
         Some(cc_core::Element { kind: cc_core::ElementKind::DetailLine(l), .. }) => l.style.code(&project.line_styles),
@@ -107,7 +114,7 @@ fn view_dxf(s: &mut Session, id: cc_core::ViewId) -> Result<Vec<u8>> {
         Some(e) => format!("{:?}", e.category()),
         None => default_layer(prim).to_string(),
     };
-    guard(|| to_dxf(&drawing, scale, &layer))
+    guard(|| to_dxf_with(&drawing, scale, &layer, &blocks))
 }
 
 impl Command for SheetExport {
@@ -257,7 +264,8 @@ impl Command for ComponentLoad {
     fn run(self, s: &mut Session) -> Result<Value> {
         let file = guard(|| cc_core::component_file::load(&self.path))??;
         let ids = edit(s, t!("tx-load-component"), |e| {
-            let mut ids: Vec<u64> = (0..file.types.len()).map(|_| e.alloc_id()).collect();
+            let wanted = file.types.len() + file.nested.len();
+            let mut ids: Vec<u64> = (0..wanted).map(|_| e.alloc_id()).collect();
             ids.reverse();
             let (types, materials) = cc_core::component_file::types_for(e.project(), &file, || ids.pop().unwrap_or(0));
             e.materials_mut().extend(materials);

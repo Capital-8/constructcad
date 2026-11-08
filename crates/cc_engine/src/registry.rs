@@ -259,6 +259,8 @@ registry![
         annotate::DimensionSetValue,
         annotate::TextCreate,
         detail::DetailLineCreate,
+        detail_component::DetailComponentCreate,
+        detail_component::DetailComponentPlace,
         line_style::LineStylesList,
         line_style::LineStyleCreate,
         line_style::LineStyleSet,

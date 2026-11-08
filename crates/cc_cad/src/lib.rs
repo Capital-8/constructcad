@@ -38,6 +38,9 @@ pub enum CadError {
     Io(String),
 }
 
+/// Most block references one read keeps ([`Limits::keep_blocks`]).
+pub const MAX_INSERTS: usize = 50_000;
+
 /// Bounds on what one read may do.
 #[derive(Debug, Clone)]
 pub struct Limits {
@@ -53,6 +56,13 @@ pub struct Limits {
     pub max_depth: usize,
     /// Most entities kept in block definitions.
     pub max_block_entities: usize,
+    /// Keep block inserts as references ([`CadRead::inserts`]) and the
+    /// blocks they use as their own drawings ([`CadRead::kept`]) instead of
+    /// flattening them into the drawing, wherever an insert places its
+    /// block by a similarity of the plan (move, turn, uniform scale,
+    /// mirror); other inserts, anonymous blocks and dimensions are still
+    /// flattened. DXF and DWG only.
+    pub keep_blocks: bool,
 }
 
 impl Default for Limits {
@@ -64,6 +74,7 @@ impl Default for Limits {
             max_work: 20_000_000,
             max_depth: 32,
             max_block_entities: 5_000_000,
+            keep_blocks: false,
         }
     }
 }
@@ -94,6 +105,36 @@ pub struct CadRead {
     pub skipped: BTreeMap<String, usize>,
     /// A limit stopped the reader; the drawing is incomplete.
     pub truncated: bool,
+    /// Blocks kept (with [`Limits::keep_blocks`]): those the drawing uses.
+    pub kept: Vec<CadBlock>,
+    /// Where the drawing inserts kept blocks.
+    pub inserts: Vec<CadInsert>,
+}
+
+/// A block kept as its own drawing: primitives in its frame (drawing
+/// units, its base point at the origin, on the drawing's layers) and the
+/// kept blocks it inserts.
+#[derive(Debug, Clone, Default)]
+pub struct CadBlock {
+    /// The block's name, upper case (as DXF compares them).
+    pub name: String,
+    pub prims: Vec<cc_core::cad::CadPrim>,
+    pub inserts: Vec<CadInsert>,
+}
+
+/// An insert of a kept block: its frame scaled by `scale`, flipped across
+/// its X axis first when `mirrored`, turned `rotation` radians and moved
+/// to `position` (drawing units, in the frame of what holds it).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CadInsert {
+    pub block: String,
+    pub position: glam::DVec2,
+    pub rotation: f64,
+    pub scale: f64,
+    pub mirrored: bool,
+    /// The insert's own layer and color.
+    pub layer: u32,
+    pub color: Option<[u8; 3]>,
 }
 
 impl CadRead {

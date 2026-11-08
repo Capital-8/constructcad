@@ -7,6 +7,7 @@ use crate::Limits;
 use crate::dxf::{Entity, rgb};
 use crate::geom::{self, Affine2};
 use crate::text;
+use crate::{CadBlock, CadInsert};
 use cc_core::cad::{CadHAlign, CadLayer, CadPrim, CadVAlign, MAX_POLY_POINTS, aci_color};
 use glam::{DAffine3, DVec2, DVec3};
 use std::collections::HashMap;
@@ -36,8 +37,17 @@ pub struct Flattener {
     layers: Vec<CadLayer>,
     index: HashMap<String, u32>,
     out: Vec<CadPrim>,
+    /// Primitives emitted in all (the drawing's and the kept blocks').
+    emitted: usize,
     work: usize,
     stopped: bool,
+    /// Where block references go when blocks are kept ([`Limits::keep_blocks`]):
+    /// the drawing's, then each kept block's in turn.
+    refs: Vec<CadInsert>,
+    /// Blocks referenced and not yet kept.
+    wanted: Vec<String>,
+    /// Block references recorded in all.
+    kept_refs: usize,
 }
 
 impl Flattener {
@@ -47,9 +57,53 @@ impl Flattener {
             layers: Vec::new(),
             index: HashMap::new(),
             out: Vec::new(),
+            emitted: 0,
             work: 0,
             stopped: false,
+            refs: Vec::new(),
+            wanted: Vec::new(),
+            kept_refs: 0,
         }
+    }
+
+    /// The block references of the drawing's entities (blocks kept).
+    pub fn take_inserts(&mut self) -> Vec<CadInsert> {
+        std::mem::take(&mut self.refs)
+    }
+
+    /// The blocks the drawing references, each read on its own (base point
+    /// at the origin, layer 0 and BYBLOCK left as they are), with the
+    /// references they make to others; a reference that would close a
+    /// cycle is dropped. Call after the entities and [`Self::take_inserts`].
+    pub fn kept_blocks(&mut self, blocks: &HashMap<String, Block>) -> Vec<CadBlock> {
+        let mut out: Vec<CadBlock> = Vec::new();
+        let mut done = std::collections::HashSet::new();
+        let saved = std::mem::take(&mut self.out);
+        let mut queue = std::mem::take(&mut self.wanted);
+        while let Some(name) = queue.pop() {
+            if self.stopped || !done.insert(name.clone()) {
+                continue;
+            }
+            let Some(block) = blocks.get(&name) else { continue };
+            let ctx = Ctx {
+                t: DAffine3::from_translation(-block.base),
+                layer0: None,
+                byblock: None,
+                depth: 1,
+                stack: vec![name.clone()],
+            };
+            for e in &block.entities {
+                if self.stopped {
+                    break;
+                }
+                self.entity(e, blocks, &ctx);
+            }
+            queue.append(&mut self.wanted);
+            out.push(CadBlock { name, prims: std::mem::take(&mut self.out), inserts: std::mem::take(&mut self.refs) });
+        }
+        self.out = saved;
+        drop_cycles(&mut out);
+        out
     }
 
     /// Register the layers of the LAYER table (kept in file order).
@@ -86,11 +140,12 @@ impl Flattener {
     }
 
     fn emit(&mut self, prim: CadPrim) {
-        if self.out.len() >= self.limits.max_prims {
+        if self.emitted >= self.limits.max_prims {
             self.stopped = true;
             return;
         }
         if prim.is_valid() {
+            self.emitted += 1;
             self.out.push(prim);
         }
     }
@@ -543,11 +598,12 @@ impl Flattener {
                 if self.stopped {
                     break 'arrays;
                 }
-                let t = placed
+                let at = placed
                     * DAffine3::from_translation(DVec3::new(c as f64 * cs, r as f64 * rs, 0.0))
-                    * DAffine3::from_scale(s)
-                    * DAffine3::from_translation(-base);
-                self.block(&name, blocks, ctx, t, layer, block_color);
+                    * DAffine3::from_scale(s);
+                if !(self.limits.keep_blocks && self.keep(&name, blocks, ctx, &at, layer, color)) {
+                    self.block(&name, blocks, ctx, at * DAffine3::from_translation(-base), layer, block_color);
+                }
                 // An array of a missing block still costs work.
                 self.work += 1;
                 if self.work > self.limits.max_work {
@@ -561,6 +617,49 @@ impl Flattener {
                 self.entity(attrib, blocks, ctx);
             }
         }
+    }
+
+    /// Keep an insert of block `name` placed by `at` (block frame, base at
+    /// its origin) as a reference, when the block is named, exists, is not
+    /// being inserted already and `at` is a similarity of the plan.
+    fn keep(
+        &mut self,
+        name: &str,
+        blocks: &HashMap<String, Block>,
+        ctx: &Ctx,
+        at: &DAffine3,
+        layer: u32,
+        color: Option<[u8; 3]>,
+    ) -> bool {
+        let anonymous = name.starts_with('*');
+        if name.is_empty() || anonymous || !blocks.contains_key(name) || ctx.stack.iter().any(|s| s == name) {
+            return false;
+        }
+        let t = ctx.t * *at;
+        // The plan must stay the plan: X and Y map into it.
+        if t.matrix3.x_axis.z.abs() > 1e-9 || t.matrix3.y_axis.z.abs() > 1e-9 || !t.is_finite() {
+            return false;
+        }
+        let a = Affine2::of_plane(&t, 0.0);
+        let Some(scale) = a.similarity().filter(|s| s.is_finite() && *s > 1e-12) else { return false };
+        self.kept_refs += 1;
+        if self.kept_refs > crate::MAX_INSERTS {
+            // Kept, but not recorded: the drawing is incomplete.
+            self.stopped = true;
+            return true;
+        }
+        let x = a.m.x_axis;
+        self.refs.push(CadInsert {
+            block: name.to_string(),
+            position: a.t,
+            rotation: x.y.atan2(x.x),
+            scale,
+            mirrored: a.det() < 0.0,
+            layer,
+            color,
+        });
+        self.wanted.push(name.to_string());
+        true
     }
 
     /// The entities of block `name` through `t`.
@@ -603,6 +702,38 @@ impl Flattener {
             }
             self.emit(CadPrim::Polyline { layer, color, closed: true, pts, bulges: Vec::new() });
         }
+    }
+}
+
+/// Drop the references between kept blocks that close a cycle (a block
+/// reaching itself through others), so the blocks nest as a tree.
+fn drop_cycles(blocks: &mut [CadBlock]) {
+    let index: HashMap<String, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name.clone(), i)).collect();
+    for i in 0..blocks.len() {
+        let Some(name) = blocks.get(i).map(|b| b.name.clone()) else { continue };
+        let refs: Vec<String> = blocks[i].inserts.iter().map(|r| r.block.clone()).collect();
+        let keep: Vec<bool> = refs
+            .iter()
+            .map(|r| {
+                // Does `r` reach `name`?
+                let mut seen = std::collections::HashSet::new();
+                let mut pending = vec![r.clone()];
+                while let Some(n) = pending.pop() {
+                    if n == name {
+                        return false;
+                    }
+                    if !seen.insert(n.clone()) {
+                        continue;
+                    }
+                    if let Some(b) = index.get(&n).and_then(|k| blocks.get(*k)) {
+                        pending.extend(b.inserts.iter().map(|x| x.block.clone()));
+                    }
+                }
+                true
+            })
+            .collect();
+        let mut k = keep.into_iter();
+        blocks[i].inserts.retain(|_| k.next().unwrap_or(false));
     }
 }
 

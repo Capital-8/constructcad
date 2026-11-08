@@ -464,32 +464,32 @@ pub fn to_curves(vertices: &[(DVec2, Segment)], closed: bool) -> Vec<SketchCurve
         .collect()
 }
 
+/// Profile points that write `vertices` as plain numbers.
+pub fn written(vertices: &[(DVec2, Segment)]) -> Vec<ProfilePoint> {
+    let n = |v: f64| format!("{v}");
+    vertices
+        .iter()
+        .map(|(p, s)| match *s {
+            Segment::Line => ProfilePoint::new(n(p.x), n(p.y)),
+            Segment::Arc { radius } => ProfilePoint::arc(n(p.x), n(p.y), n(radius)),
+            Segment::Ellipse { center, radii, rotation_deg, clockwise } => ProfilePoint {
+                ellipse: Some(ProfileEllipse {
+                    u: n(center.x),
+                    v: n(center.y),
+                    rx: n(radii.x),
+                    ry: n(radii.y),
+                    rotation: n(rotation_deg),
+                    clockwise,
+                }),
+                ..ProfilePoint::new(n(p.x), n(p.y))
+            },
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Profile points that write `vertices` as plain numbers.
-    fn written(vertices: &[(DVec2, Segment)]) -> Vec<ProfilePoint> {
-        let n = |v: f64| format!("{v}");
-        vertices
-            .iter()
-            .map(|(p, s)| match *s {
-                Segment::Line => ProfilePoint::new(n(p.x), n(p.y)),
-                Segment::Arc { radius } => ProfilePoint::arc(n(p.x), n(p.y), n(radius)),
-                Segment::Ellipse { center, radii, rotation_deg, clockwise } => ProfilePoint {
-                    ellipse: Some(ProfileEllipse {
-                        u: n(center.x),
-                        v: n(center.y),
-                        rx: n(radii.x),
-                        ry: n(radii.y),
-                        rotation: n(rotation_deg),
-                        clockwise,
-                    }),
-                    ..ProfilePoint::new(n(p.x), n(p.y))
-                },
-            })
-            .collect()
-    }
 
     fn area_of(points: &[ProfilePoint]) -> f64 {
         signed_area(&outline(points, &none).unwrap())

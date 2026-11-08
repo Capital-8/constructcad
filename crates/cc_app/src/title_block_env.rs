@@ -1423,6 +1423,7 @@ pub fn finish_stroke(state: &mut AppState) {
         weight: None,
         color: None,
         fill: None,
+        pattern: None,
     };
     let indices = |out: &serde_json::Value, key: &str| -> Vec<usize> {
         out[key].as_array().into_iter().flatten().filter_map(|i| i.as_u64()?.try_into().ok()).collect()
@@ -1996,6 +1997,8 @@ mod tests {
                 weight: 0.25,
                 color: [0, 0, 0],
                 fill: None,
+                pattern: Default::default(),
+                hatch: None,
             }],
             texts: vec![SheetText {
                 item: 1,

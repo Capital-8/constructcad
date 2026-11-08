@@ -25,17 +25,20 @@ pub(crate) fn validate(def: &ComponentDef) -> Result<()> {
         }
     }
     let title_block = def.kind == cc_core::ComponentKind::TitleBlock;
-    if def.items.is_empty() && !title_block {
+    let two_d = def.kind.is_2d();
+    let detail = def.kind == cc_core::ComponentKind::Detail;
+    if (def.items.is_empty() && !two_d) || (detail && def.sheet.is_empty()) {
         return Err(EngineError::invalid("the component has no pieces"));
     }
-    if title_block && !def.items.is_empty() {
-        return Err(EngineError::invalid("a title block has only sheet pieces"));
+    if two_d && !def.items.is_empty() {
+        return Err(EngineError::invalid("a title block or detail component has only 2D pieces"));
     }
-    if !title_block && !def.sheet.is_empty() {
-        return Err(EngineError::invalid("sheet pieces go into title blocks only"));
+    if !two_d && !def.sheet.is_empty() {
+        return Err(EngineError::invalid("2D pieces go into title blocks and detail components only"));
     }
-    if title_block && cc_core::title_block::repair_def(&mut def.clone()) > 0 {
-        return Err(EngineError::invalid("a sheet piece is out of bounds (points, text length or picture)"));
+    if two_d && cc_core::title_block::repair_def(&mut def.clone()) > 0 {
+        let what = if title_block { "a sheet piece" } else { "a 2D piece" };
+        return Err(EngineError::invalid(format!("{what} is out of bounds (points, text length or picture)")));
     }
     if let Some(problem) = def.ref_problems().into_iter().next() {
         return Err(EngineError::invalid(problem));

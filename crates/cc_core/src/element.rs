@@ -67,6 +67,8 @@ pub enum ElementKind {
     MaskingRegion(crate::region::Region),
     /// The elevation of a point, written in one view.
     LevelMark(Box<crate::level_mark::LevelMark>),
+    /// A 2D component placed in one view (construction details).
+    DetailComponent(Box<crate::detail_component::DetailComponent>),
 }
 
 impl Element {
@@ -102,6 +104,7 @@ impl Element {
             ElementKind::FilledRegion(_) => Category::FilledRegion,
             ElementKind::MaskingRegion(_) => Category::MaskingRegion,
             ElementKind::LevelMark(_) => Category::LevelMark,
+            ElementKind::DetailComponent(_) => Category::DetailComponent,
         }
     }
 
@@ -115,6 +118,7 @@ impl Element {
             ElementKind::DetailLine(l) => Some(l.view),
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some(r.view),
             ElementKind::LevelMark(m) => Some(m.view),
+            ElementKind::DetailComponent(c) => Some(c.view),
             _ => None,
         }
     }
@@ -265,6 +269,7 @@ impl Element {
                 }
             }
             ElementKind::LevelMark(m) => m.position += delta,
+            ElementKind::DetailComponent(c) => c.position += delta,
             ElementKind::Text(t) => {
                 t.position += delta;
                 for l in &mut t.leaders {

@@ -9,6 +9,7 @@ pub mod cad;
 pub mod component_view;
 mod cut;
 pub mod detail;
+pub mod detail_component;
 mod diagram;
 mod drawing;
 pub mod dxf;
@@ -95,6 +96,7 @@ pub fn generate_temporary(
             }
             // Regions over the model, under the plan's marks, tags and grids.
             region::regions(&mut d, project, view.id, view.scale);
+            detail_component::components(&mut d, project, view.id, view.scale);
             if !ceiling {
                 plan::section_marks(&mut d, project, view.scale);
             }
@@ -125,6 +127,7 @@ pub fn generate_temporary(
         // Regions over the model (plans drew theirs under their annotations).
         if view.level().is_none() {
             region::regions(&mut d, project, view.id, view.scale);
+            detail_component::components(&mut d, project, view.id, view.scale);
         }
         // Detail lines, on top of the model and the regions.
         detail::lines(&mut d, project, view.id);

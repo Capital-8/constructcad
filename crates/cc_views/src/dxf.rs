@@ -146,10 +146,53 @@ impl Writer {
     }
 }
 
+/// A block definition: primitives in its own frame (drawing units, as the
+/// drawing's), on layer 0, and the blocks it inserts.
+#[derive(Debug, Clone, Default)]
+pub struct DxfBlock {
+    pub name: String,
+    pub prims: Vec<Prim>,
+    pub inserts: Vec<DxfInsert>,
+}
+
+/// A block placed: its origin at `position` (drawing units), scaled by
+/// `scale` along its own axes (a negative one mirrors), then turned
+/// `rotation_deg` counter-clockwise.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DxfInsert {
+    pub block: String,
+    pub position: DVec2,
+    pub rotation_deg: f64,
+    pub scale: DVec2,
+    pub layer: String,
+}
+
+/// Blocks written with a drawing: their definitions, where the drawing
+/// inserts them, and the elements they stand for (left out of the
+/// drawing's own entities).
+#[derive(Debug, Clone, Default)]
+pub struct DxfBlocks {
+    pub blocks: Vec<DxfBlock>,
+    pub inserts: Vec<DxfInsert>,
+    pub skip: std::collections::BTreeSet<cc_core::ElementId>,
+}
+
 /// The DXF R12 document of `drawing` (in code page 1252), scaled by
 /// `scale`, each primitive on the layer `layer` names (sanitized with
 /// [`layer_name`]).
 pub fn to_dxf(drawing: &Drawing2D, scale: DxfScale, layer: &dyn Fn(&Prim) -> String) -> Vec<u8> {
+    to_dxf_with(drawing, scale, layer, &DxfBlocks::default())
+}
+
+/// [`to_dxf`] with `blocks`: their definitions in the BLOCKS section and
+/// their inserts in the entities, in place of the primitives of the
+/// elements in `blocks.skip`. Block names are sanitized like layer names.
+pub fn to_dxf_with(
+    drawing: &Drawing2D,
+    scale: DxfScale,
+    layer: &dyn Fn(&Prim) -> String,
+    blocks: &DxfBlocks,
+) -> Vec<u8> {
     let unit = if scale.unit.is_finite() && scale.unit > 0.0 { scale.unit } else { 1.0 };
     let paper = if scale.paper.is_finite() && scale.paper > 0.0 { scale.paper } else { 1.0 };
     let at = |p: DVec2| p * unit;
@@ -168,17 +211,31 @@ pub fn to_dxf(drawing: &Drawing2D, scale: DxfScale, layer: &dyn Fn(&Prim) -> Str
         let parts: Vec<String> = dashes.iter().map(|d| num(d * paper).replace('.', "_")).collect();
         layer_name(&format!("CC_{}", parts.join("-")))
     };
-    for prim in &drawing.prims {
-        layers.insert(layer_name(&layer(prim)), ());
+    let skipped = |prim: &Prim| prim.element().is_some_and(|e| blocks.skip.contains(&e));
+    let own = drawing.prims.iter().filter(|p| !skipped(p));
+    let in_blocks = blocks.blocks.iter().flat_map(|b| b.prims.iter());
+    for insert in blocks.inserts.iter().chain(blocks.blocks.iter().flat_map(|b| b.inserts.iter())) {
+        layers.insert(layer_name(&insert.layer), ());
+    }
+    for i in &blocks.inserts {
+        grow(at(i.position));
+    }
+    for (prim, mine) in own.map(|p| (p, true)).chain(in_blocks.map(|p| (p, false))) {
+        if mine {
+            layers.insert(layer_name(&layer(prim)), ());
+        }
         match prim {
             Prim::Line { a, b, style, pen, .. } => {
-                grow(at(*a));
-                grow(at(*b));
+                if mine {
+                    grow(at(*a));
+                    grow(at(*b));
+                }
                 let dashes = style.resolve(pen.as_ref()).dashes;
                 if !dashes.is_empty() {
                     line_types.entry(dash_name(dashes)).or_insert_with(|| dashes.iter().map(|d| d * paper).collect());
                 }
             }
+            _ if !mine => {}
             Prim::Fill { pts, .. } => pts.iter().for_each(|p| grow(at(*p))),
             Prim::Text { pos, .. } => grow(at(*pos)),
             Prim::Image { origin, u, v, .. } => image_frame(*origin, *u, *v).iter().for_each(|p| grow(at(*p))),
@@ -261,95 +318,139 @@ pub fn to_dxf(drawing: &Drawing2D, scale: DxfScale, layer: &dyn Fn(&Prim) -> Str
     w.pair(0, "ENDSEC");
     w.pair(0, "SECTION");
     w.pair(2, "BLOCKS");
+    for b in &blocks.blocks {
+        let name = layer_name(&b.name);
+        w.pair(0, "BLOCK");
+        w.pair(8, "0");
+        w.pair(2, &name);
+        w.pair(70, 0);
+        w.point(10, DVec2::ZERO);
+        w.pair(3, &name);
+        for prim in &b.prims {
+            entity(&mut w, prim, "0", unit, paper, &dash_name);
+        }
+        for i in &b.inserts {
+            insert(&mut w, i, unit);
+        }
+        w.pair(0, "ENDBLK");
+        w.pair(8, "0");
+    }
     w.pair(0, "ENDSEC");
-    // Entities, in drawing order.
+    // Entities, in drawing order; the blocks' elements as their inserts.
     w.pair(0, "SECTION");
     w.pair(2, "ENTITIES");
-    for prim in &drawing.prims {
-        let layer = layer_name(&layer(prim));
-        match prim {
-            Prim::Line { a, b, style, pen, .. } => {
-                let (a, b) = (at(*a), at(*b));
-                if !(a.is_finite() && b.is_finite()) {
-                    continue;
-                }
-                let resolved = style.resolve(pen.as_ref());
-                w.pair(0, "LINE");
-                w.pair(8, &layer);
-                if !resolved.dashes.is_empty() {
-                    w.pair(6, dash_name(resolved.dashes));
-                }
-                w.pair(62, aci(resolved.color));
-                w.point(10, a);
-                w.point(11, b);
-            }
-            Prim::Fill { pts, color, .. } => {
-                let [r, g, b, alpha] = *color;
-                if alpha < MIN_FILL_ALPHA || pts.len() < 3 {
-                    continue;
-                }
-                let pts: Vec<DVec2> = pts.iter().map(|p| at(*p)).collect();
-                if !pts.iter().all(|p| p.is_finite()) {
-                    continue;
-                }
-                for [i, j, k] in cc_geom::polygon::triangulate(&pts) {
-                    let (Some(p), Some(q), Some(s)) = (pts.get(i), pts.get(j), pts.get(k)) else { continue };
-                    w.pair(0, "SOLID");
-                    w.pair(8, &layer);
-                    w.pair(62, aci([r, g, b]));
-                    // A triangle repeats its last corner as the fourth.
-                    w.point(10, *p);
-                    w.point(11, *q);
-                    w.point(12, *s);
-                    w.point(13, *s);
-                }
-            }
-            // R12 has no images: a picture is written as its frame.
-            Prim::Image { origin, u, v, .. } => {
-                let corners = image_frame(*origin, *u, *v).map(at);
-                if !corners.iter().all(|p| p.is_finite()) {
-                    continue;
-                }
-                for i in 0..4 {
-                    w.pair(0, "LINE");
-                    w.pair(8, &layer);
-                    w.pair(62, 8);
-                    w.point(10, corners[i]);
-                    w.point(11, corners[(i + 1) % 4]);
-                }
-            }
-            Prim::Text { pos, text, size, anchor, angle, .. } => {
-                let value = text_value(text);
-                let p = at(*pos);
-                if value.trim().is_empty() || !p.is_finite() || !(size.is_finite() && *size > 0.0) {
-                    continue;
-                }
-                // Horizontal (left, center, right) and vertical (bottom, middle) alignment.
-                let (h, v) = match anchor {
-                    Anchor::LeftBottom => (0, 1),
-                    Anchor::CenterBottom => (1, 1),
-                    Anchor::RightBottom => (2, 1),
-                    Anchor::Center => (1, 2),
-                };
-                w.pair(0, "TEXT");
-                w.pair(8, &layer);
-                w.pair(62, 7);
-                w.point(10, p);
-                w.pair(40, num(size * paper));
-                w.pair(1, value);
-                let angle = if angle.is_finite() { angle.to_degrees() } else { 0.0 };
-                if angle.abs() > 1e-9 {
-                    w.pair(50, num(angle));
-                }
-                w.pair(72, h);
-                w.point(11, p);
-                w.pair(73, v);
-            }
-        }
+    for prim in drawing.prims.iter().filter(|p| !skipped(p)) {
+        entity(&mut w, prim, &layer_name(&layer(prim)), unit, paper, &dash_name);
+    }
+    for i in &blocks.inserts {
+        insert(&mut w, i, unit);
     }
     w.pair(0, "ENDSEC");
     w.pair(0, "EOF");
     encode(&w.out)
+}
+
+/// An INSERT of a block.
+fn insert(w: &mut Writer, i: &DxfInsert, unit: f64) {
+    let p = i.position * unit;
+    if !(p.is_finite() && i.scale.is_finite() && i.rotation_deg.is_finite()) {
+        return;
+    }
+    w.pair(0, "INSERT");
+    w.pair(8, layer_name(&i.layer));
+    w.pair(2, layer_name(&i.block));
+    w.point(10, p);
+    w.pair(41, num(i.scale.x));
+    w.pair(42, num(i.scale.y));
+    w.pair(43, "1.0");
+    if i.rotation_deg.abs() > 1e-9 {
+        w.pair(50, num(i.rotation_deg));
+    }
+}
+
+/// One primitive as entities on `layer`.
+fn entity(w: &mut Writer, prim: &Prim, layer: &str, unit: f64, paper: f64, dash_name: &dyn Fn(&[f64]) -> String) {
+    let at = |p: DVec2| p * unit;
+    let layer = layer.to_string();
+    match prim {
+        Prim::Line { a, b, style, pen, .. } => {
+            let (a, b) = (at(*a), at(*b));
+            if !(a.is_finite() && b.is_finite()) {
+                return;
+            }
+            let resolved = style.resolve(pen.as_ref());
+            w.pair(0, "LINE");
+            w.pair(8, &layer);
+            if !resolved.dashes.is_empty() {
+                w.pair(6, dash_name(resolved.dashes));
+            }
+            w.pair(62, aci(resolved.color));
+            w.point(10, a);
+            w.point(11, b);
+        }
+        Prim::Fill { pts, color, .. } => {
+            let [r, g, b, alpha] = *color;
+            if alpha < MIN_FILL_ALPHA || pts.len() < 3 {
+                return;
+            }
+            let pts: Vec<DVec2> = pts.iter().map(|p| at(*p)).collect();
+            if !pts.iter().all(|p| p.is_finite()) {
+                return;
+            }
+            for [i, j, k] in cc_geom::polygon::triangulate(&pts) {
+                let (Some(p), Some(q), Some(s)) = (pts.get(i), pts.get(j), pts.get(k)) else { continue };
+                w.pair(0, "SOLID");
+                w.pair(8, &layer);
+                w.pair(62, aci([r, g, b]));
+                // A triangle repeats its last corner as the fourth.
+                w.point(10, *p);
+                w.point(11, *q);
+                w.point(12, *s);
+                w.point(13, *s);
+            }
+        }
+        // R12 has no images: a picture is written as its frame.
+        Prim::Image { origin, u, v, .. } => {
+            let corners = image_frame(*origin, *u, *v).map(at);
+            if !corners.iter().all(|p| p.is_finite()) {
+                return;
+            }
+            for i in 0..4 {
+                w.pair(0, "LINE");
+                w.pair(8, &layer);
+                w.pair(62, 8);
+                w.point(10, corners[i]);
+                w.point(11, corners[(i + 1) % 4]);
+            }
+        }
+        Prim::Text { pos, text, size, anchor, angle, .. } => {
+            let value = text_value(text);
+            let p = at(*pos);
+            if value.trim().is_empty() || !p.is_finite() || !(size.is_finite() && *size > 0.0) {
+                return;
+            }
+            // Horizontal (left, center, right) and vertical (bottom, middle) alignment.
+            let (h, v) = match anchor {
+                Anchor::LeftBottom => (0, 1),
+                Anchor::CenterBottom => (1, 1),
+                Anchor::RightBottom => (2, 1),
+                Anchor::Center => (1, 2),
+            };
+            w.pair(0, "TEXT");
+            w.pair(8, &layer);
+            w.pair(62, 7);
+            w.point(10, p);
+            w.pair(40, num(size * paper));
+            w.pair(1, value);
+            let angle = if angle.is_finite() { angle.to_degrees() } else { 0.0 };
+            if angle.abs() > 1e-9 {
+                w.pair(50, num(angle));
+            }
+            w.pair(72, h);
+            w.point(11, p);
+            w.pair(73, v);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -425,5 +526,37 @@ mod tests {
         let p = pairs(&to_dxf(&d, DxfScale::PAPER, &|p| default_layer(p).into()));
         assert_eq!(p.iter().filter(|(c, v)| *c == 0 && v == "LINE").count(), 4);
         assert_eq!(layer_name("Sala de estar/1"), "SALA_DE_ESTAR_1");
+    }
+
+    #[test]
+    fn blocks_are_defined_and_inserted_in_place_of_their_elements() {
+        let id = cc_core::ElementId(5);
+        let line = |a: DVec2, b: DVec2, element| Prim::Line { a, b, style: LineStyle::Thin, element, pen: None };
+        let mut d = Drawing2D::default();
+        d.prims.push(line(DVec2::ZERO, DVec2::X, None));
+        d.prims.push(line(DVec2::new(5.0, 0.0), DVec2::new(5.0, 1.0), Some(id)));
+        let mut blocks = DxfBlocks::default();
+        blocks.blocks.push(DxfBlock {
+            name: "Brick wall".into(),
+            prims: vec![line(DVec2::ZERO, DVec2::new(0.0, 1.0), None)],
+            inserts: vec![],
+        });
+        blocks.inserts.push(DxfInsert {
+            block: "Brick wall".into(),
+            position: DVec2::new(5.0, 0.0),
+            rotation_deg: 90.0,
+            scale: DVec2::new(2.0, -2.0),
+            layer: "DetailComponent".into(),
+        });
+        blocks.skip.insert(id);
+        let p = pairs(&to_dxf_with(&d, DxfScale::model(20), &|p| default_layer(p).into(), &blocks));
+        let count = |name: &str| p.iter().filter(|(c, v)| *c == 0 && v == name).count();
+        assert_eq!((count("BLOCK"), count("ENDBLK"), count("INSERT"), count("LINE")), (1, 1, 1, 2));
+        let at = p.iter().position(|e| *e == (0, "INSERT".into())).unwrap();
+        let insert = &p[at..at + 10];
+        for pair in [(2, "BRICK_WALL"), (8, "DETAILCOMPONENT"), (10, "5000"), (41, "2"), (42, "-2"), (50, "90")] {
+            assert!(insert.contains(&(pair.0, pair.1.to_string())), "{pair:?} in {insert:?}");
+        }
+        assert!(p.contains(&(2, "DETAILCOMPONENT".into())), "the insert's layer is defined");
     }
 }

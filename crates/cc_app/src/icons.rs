@@ -51,6 +51,7 @@ pub enum Icon {
     MacroRun,
     Text,
     DetailLine,
+    DetailComponent,
     FilledRegion,
     MaskingRegion,
     LineStyles,
@@ -173,7 +174,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 158] = [
+    pub const ALL: [Icon; 159] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -214,6 +215,7 @@ impl Icon {
         Icon::MacroRun,
         Icon::Text,
         Icon::DetailLine,
+        Icon::DetailComponent,
         Icon::FilledRegion,
         Icon::MaskingRegion,
         Icon::LineStyles,
@@ -377,6 +379,7 @@ impl Icon {
             Icon::MacroRun => include_str!("../../../assets/icons/ui/macro-run.svg"),
             Icon::Text => include_str!("../../../assets/icons/ui/text.svg"),
             Icon::DetailLine => include_str!("../../../assets/icons/ui/detail-line.svg"),
+            Icon::DetailComponent => include_str!("../../../assets/icons/ui/detail-component.svg"),
             Icon::FilledRegion => include_str!("../../../assets/icons/ui/filled-region.svg"),
             Icon::MaskingRegion => include_str!("../../../assets/icons/ui/masking-region.svg"),
             Icon::LineStyles => include_str!("../../../assets/icons/ui/line-styles.svg"),
