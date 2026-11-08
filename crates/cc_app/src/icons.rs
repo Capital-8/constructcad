@@ -28,6 +28,7 @@ pub enum Icon {
     Measure,
     Group,
     Ungroup,
+    Explode,
     SelectInstances,
     Copy,
     Delete,
@@ -175,7 +176,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 160] = [
+    pub const ALL: [Icon; 161] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -193,6 +194,7 @@ impl Icon {
         Icon::Measure,
         Icon::Group,
         Icon::Ungroup,
+        Icon::Explode,
         Icon::SelectInstances,
         Icon::Copy,
         Icon::Delete,
@@ -358,6 +360,7 @@ impl Icon {
             Icon::Measure => include_str!("../../../assets/icons/ui/measure.svg"),
             Icon::Group => include_str!("../../../assets/icons/ui/group.svg"),
             Icon::Ungroup => include_str!("../../../assets/icons/ui/ungroup.svg"),
+            Icon::Explode => include_str!("../../../assets/icons/ui/explode.svg"),
             Icon::SelectInstances => include_str!("../../../assets/icons/ui/select-instances.svg"),
             Icon::Copy => include_str!("../../../assets/icons/ui/copy.svg"),
             Icon::Delete => include_str!("../../../assets/icons/ui/delete.svg"),

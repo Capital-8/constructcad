@@ -126,6 +126,7 @@ registry![
         cad::ImageImport,
         cad::CadLayers,
         cad::CadLayersSet,
+        cad_explode::CadExplode,
     ],
     "Queries" => [
         query::CategoriesList,

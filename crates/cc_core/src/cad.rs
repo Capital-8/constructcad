@@ -339,6 +339,13 @@ impl CadPrim {
     }
 }
 
+/// A file color as drawn on white paper: colors meant for a dark screen
+/// (white, yellow, cyan) darkened.
+pub fn on_paper(rgb: [u8; 3]) -> [u8; 3] {
+    let luma = 0.299 * f64::from(rgb[0]) + 0.587 * f64::from(rgb[1]) + 0.114 * f64::from(rgb[2]);
+    if luma > 190.0 { rgb.map(|v| (f64::from(v) * 0.55).round() as u8) } else { rgb }
+}
+
 /// Approximate width of a text line (the proportion used for notes).
 pub fn text_width(text: &str, height: f64) -> f64 {
     text.chars().count() as f64 * height * 0.6

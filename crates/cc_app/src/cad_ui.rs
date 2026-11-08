@@ -1,7 +1,8 @@
 //! Imported CAD drawings in the app: the Import CAD and Import Image
 //! commands (file dialog or files dropped on the window), and their
-//! properties and layers. Every change runs an engine command
-//! (`cad_import`, `image_import`, `element_set`, `cad_layers_set`).
+//! properties and layers, and Explode. Every change runs an engine command
+//! (`cad_import`, `image_import`, `element_set`, `cad_layers_set`,
+//! `cad_explode`).
 
 use crate::state::AppState;
 use crate::t;
@@ -19,6 +20,33 @@ pub const EXTENSIONS: [&str; 2] = ["dwg", "dxf"];
 pub fn cad_view(state: &AppState) -> Option<ViewId> {
     let id = state.active_view?;
     cc_views::hosts_cad(&state.project().view(id)?.kind).then_some(id)
+}
+
+/// The imported drawing selected alone, if any.
+pub fn selected_import(state: &AppState) -> Option<ElementId> {
+    let [id] = state.selection.iter().copied().collect::<Vec<_>>()[..] else { return None };
+    matches!(state.project().element(id)?.kind, ElementKind::CadImport(_)).then_some(id)
+}
+
+/// Explode the selected imported drawing into detail lines, filled regions
+/// and text notes of its view (`cad_explode`), selecting what it made.
+pub fn explode_selected(state: &mut AppState) {
+    let Some(id) = selected_import(state) else {
+        state.message = t!("why-select-cad");
+        return;
+    };
+    explode(state, id);
+}
+
+fn explode(state: &mut AppState, id: ElementId) {
+    let Some(out) = crate::actions::run_command(state, cc_engine::commands::cad_explode::CadExplode { id: id.0 })
+    else {
+        return;
+    };
+    let created: std::collections::BTreeSet<ElementId> =
+        out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64()).map(ElementId).collect();
+    state.message = t!("msg-cad-exploded", "count" => created.len());
+    state.selection = created;
 }
 
 /// Pick a DWG or DXF file and import it into the active view.
@@ -238,6 +266,12 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, c: &CadImport) {
             set(state, id, "halftone", |x| x.halftone = halftone);
         }
         readonly_row(ui, &t!("prop-cad-primitives"), c.drawing.prims.len().to_string());
+        if !c.drawing.prims.is_empty() {
+            let r = row(ui, "", |ui| ui.button(t!("action-explode")).on_hover_text(t!("cmd-desc-explode")));
+            if r.clicked() {
+                explode(state, id);
+            }
+        }
     });
     section(ui, "cad-layers", t!("section-cad-layers"), |ui| {
         if c.drawing.layers.len() > 1 {
