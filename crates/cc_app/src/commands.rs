@@ -170,6 +170,8 @@ pub enum UiCommand {
     DetachTop,
     Group,
     Ungroup,
+    /// Explode the selected imported drawing into native 2D elements.
+    Explode,
     Pin,
     Unpin,
     Delete,
@@ -350,6 +352,7 @@ impl UiCommand {
             DetachTop,
             Group,
             Ungroup,
+            Explode,
             Pin,
             Unpin,
             Delete,
@@ -521,6 +524,7 @@ impl UiCommand {
             JoinGeometry => Icon::JoinGeometry,
             Group => Icon::Group,
             Ungroup => Icon::Ungroup,
+            Explode => Icon::Explode,
             UnjoinGeometry => Icon::UnjoinGeometry,
             AttachTop | DetachTop => Icon::AttachTop,
             Pin => Icon::Pin,
@@ -712,6 +716,7 @@ impl UiCommand {
             JoinGeometry => t!("tool-join-geometry"),
             Group => t!("action-group"),
             Ungroup => t!("action-ungroup"),
+            Explode => t!("action-explode"),
             UnjoinGeometry => t!("tool-unjoin-geometry"),
             AttachTop => t!("tool-attach-top"),
             DetachTop => t!("tool-detach-top"),
@@ -905,6 +910,7 @@ impl UiCommand {
             JoinGeometry => t!("cmd-desc-join-geometry"),
             Group => t!("cmd-desc-group"),
             Ungroup => t!("cmd-desc-ungroup"),
+            Explode => t!("cmd-desc-explode"),
             UnjoinGeometry => t!("cmd-desc-unjoin-geometry"),
             AttachTop => t!("cmd-desc-attach-top"),
             DetachTop => t!("cmd-desc-detach-top"),
@@ -1166,6 +1172,7 @@ impl UiCommand {
             Measure => "measure",
             Group => "group_create",
             Ungroup => "group_ungroup",
+            Explode => "cad_explode",
             UnjoinGeometry => "geometry_unjoin",
             AttachTop | DetachTop => "wall_attach",
             Pin | Unpin => "elements_pin",
@@ -1334,6 +1341,7 @@ impl UiCommand {
                 Some(t!("why-select-mass"))
             }
             Ungroup if !state.selection.iter().any(|id| project.group_of(*id).is_some()) => Some(t!("why-no-group")),
+            Explode if crate::cad_ui::selected_import(state).is_none() => Some(t!("why-select-cad")),
             Paste if state.clipboard.is_empty() => Some(t!("why-clipboard-empty")),
             FloorPlan | CeilingPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
             Elevations if project.views_of(ViewCategory::Elevation).next().is_none() => Some(t!("why-no-elevations")),
@@ -1775,6 +1783,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             actions::new_schedule(state, Category::Beam);
         }
         Ungroup => crate::actions::ungroup_selection(state),
+        Explode => crate::cad_ui::explode_selected(state),
         Dimension(mode) => {
             if let Some(Tool::Dimension { type_id, .. }) = Tool::for_category(state.project(), Category::Dimension) {
                 state.set_tool(Tool::Dimension { type_id, mode });
@@ -2081,6 +2090,52 @@ mod tests {
         assert!(
             state.dialogs.graphics.as_ref().is_some_and(|d| d.target == crate::graphics_dialog::Target::View(plan))
         );
+    }
+
+    #[test]
+    fn explode_turns_the_selected_import_into_detail_lines() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let view = state.project().views.values().find(|v| v.is_plan()).map(|v| v.id).unwrap();
+        let dir = std::env::temp_dir().join(format!("ccad-app-explode-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("lines.dxf");
+        let groups = [
+            ("0", "SECTION"),
+            ("2", "ENTITIES"),
+            ("0", "LINE"),
+            ("8", "Walls"),
+            ("10", "0"),
+            ("20", "0"),
+            ("11", "1"),
+            ("21", "0"),
+            ("0", "ENDSEC"),
+            ("0", "EOF"),
+        ];
+        std::fs::write(&path, groups.iter().map(|(c, v)| format!("{c}\n{v}\n")).collect::<String>()).unwrap();
+        let command = cc_engine::commands::cad::CadImportFile {
+            path,
+            view: cc_engine::Ref::Id(view.0),
+            position: None,
+            align: None,
+            units: Some("m".into()),
+            rotation: None,
+            scale: None,
+            color_mode: None,
+            halftone: None,
+            blocks: None,
+        };
+        let id = state.session.run(command).unwrap()["id"].as_u64().map(cc_core::ElementId).unwrap();
+        let ctx = egui::Context::default();
+        assert_eq!(UiCommand::Explode.unavailable(&state), Some(t!("why-select-cad")));
+        state.selection = [id].into_iter().collect();
+        assert_eq!(UiCommand::Explode.unavailable(&state), None);
+        invoke(&mut state, &ctx, UiCommand::Explode);
+        assert!(state.project().element(id).is_none());
+        assert_eq!(state.selection.len(), 1);
+        let line = state.selection.iter().next().and_then(|i| state.project().element(*i)).unwrap();
+        assert!(matches!(line.kind, cc_core::ElementKind::DetailLine(_)));
     }
 
     #[test]
