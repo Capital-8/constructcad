@@ -22,6 +22,7 @@ fn done(state: &mut AppState, r: &egui::Response) {
 
 pub fn show(ctx: &Context, state: &mut AppState) {
     project_info(ctx, state);
+    crate::site_ui::show(ctx, state);
     crate::units_dialog::show(ctx, state);
     levels(ctx, state);
     crate::material_browser::show(ctx, state);

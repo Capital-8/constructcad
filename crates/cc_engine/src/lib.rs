@@ -19,6 +19,7 @@ mod error;
 pub mod extension;
 pub mod graph;
 pub mod i18n;
+pub mod osm;
 pub mod reference;
 mod refs;
 mod registry;

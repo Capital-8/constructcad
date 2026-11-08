@@ -758,3 +758,32 @@ fn foreign_curtain_walls_rebuild_from_their_parts() {
     assert_eq!(b.len(), 1, "{b:?}");
     assert!(report.generic.values().sum::<usize>() > 0, "{:?}", report.generic);
 }
+
+#[test]
+fn site_location_round_trips() {
+    let mut p = Project::from_template();
+    let mut site = cc_core::site::SiteLocation::at(-3.731_862_5, -38.526_670_1);
+    site.elevation = 21.25;
+    site.true_north = 12.5;
+    site.place = "Praça do Ferreira".into();
+    site.address.city = "Fortaleza".into();
+    site.address.region = "CE".into();
+    site.address.postcode = "60025-000".into();
+    site.address.country = "Brasil".into();
+    p.info.address = "Rua Floriano Peixoto, 10".into();
+    p.info.site = Some(site.clone());
+    let (imported, _) = round_trip(&p);
+    let got = imported.info.site.expect("the site location comes back");
+    // Compound angles keep millionths of a second (about 3 cm).
+    close(got.latitude, site.latitude, 1e-9, "latitude");
+    close(got.longitude, site.longitude, 1e-9, "longitude");
+    close(got.elevation, site.elevation, 1e-9, "elevation");
+    close(got.true_north, site.true_north, 1e-6, "true north");
+    assert_eq!(got.place, site.place);
+    assert_eq!(got.address.city, "Fortaleza");
+    assert_eq!(got.address.postcode, "60025-000");
+    assert_eq!(imported.info.address, "Rua Floriano Peixoto, 10");
+    // Without a location, none comes back.
+    let (imported, _) = round_trip(&Project::from_template());
+    assert!(imported.info.site.is_none());
+}

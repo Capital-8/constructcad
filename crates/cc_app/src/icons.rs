@@ -47,6 +47,7 @@ pub enum Icon {
     TitleBlock,
     ZoomFit,
     ProjectInfo,
+    SiteLocation,
     Levels,
     Materials,
     MacroRecord,
@@ -176,7 +177,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 161] = [
+    pub const ALL: [Icon; 162] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -213,6 +214,7 @@ impl Icon {
         Icon::TitleBlock,
         Icon::ZoomFit,
         Icon::ProjectInfo,
+        Icon::SiteLocation,
         Icon::Levels,
         Icon::Materials,
         Icon::MacroRecord,
@@ -379,6 +381,7 @@ impl Icon {
             Icon::TitleBlock => include_str!("../../../assets/icons/ui/title-block.svg"),
             Icon::ZoomFit => include_str!("../../../assets/icons/ui/zoom-fit.svg"),
             Icon::ProjectInfo => include_str!("../../../assets/icons/ui/project-info.svg"),
+            Icon::SiteLocation => include_str!("../../../assets/icons/ui/site-location.svg"),
             Icon::Levels => include_str!("../../../assets/icons/ui/levels.svg"),
             Icon::Materials => include_str!("../../../assets/icons/ui/materials.svg"),
             Icon::MacroRecord => include_str!("../../../assets/icons/ui/macro-record.svg"),

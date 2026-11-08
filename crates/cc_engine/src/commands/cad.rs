@@ -93,7 +93,7 @@ fn guess_units(d: &CadDrawing) -> CadUnit {
 }
 
 /// The imported drawing type, creating one if the project has none.
-fn cad_type(e: &mut cc_core::EditCtx) -> ElementTypeId {
+pub(crate) fn cad_type(e: &mut cc_core::EditCtx) -> ElementTypeId {
     if let Some(t) = e.project().default_type(Category::CadImport) {
         return t;
     }
