@@ -86,7 +86,14 @@ pub fn import_cad_path(state: &mut AppState, path: PathBuf) {
         halftone: None,
         blocks: Some(state.cad_blocks),
     };
-    match state.session.run(command) {
+    let run = move |s: &mut cc_engine::Session| s.run(command);
+    let finish: crate::jobs::Finish = Box::new(|state, result, _| cad_imported(state, result));
+    crate::jobs::start(state, t!("job-importing-cad"), path, crate::jobs::Base::Current, run, finish);
+}
+
+/// Select what [`import_cad_path`] imported and report what was read.
+fn cad_imported(state: &mut AppState, result: cc_engine::Result<serde_json::Value>) {
+    match result {
         Ok(out) => {
             if let Some(id) = out["id"].as_u64() {
                 state.selection = std::collections::BTreeSet::from([ElementId(id)]);
@@ -153,7 +160,7 @@ pub fn import_image_path(state: &mut AppState, path: PathBuf) {
         return;
     };
     let command = cad::ImageImport {
-        path,
+        path: path.clone(),
         view: cc_engine::Ref::Id(view.0),
         position: None,
         align: None,
@@ -162,7 +169,8 @@ pub fn import_image_path(state: &mut AppState, path: PathBuf) {
         rotation: None,
         halftone: None,
     };
-    match state.session.run(command) {
+    let run = move |s: &mut cc_engine::Session| s.run(command);
+    let finish: crate::jobs::Finish = Box::new(|state, result, _| match result {
         Ok(out) => {
             if let Some(id) = out["id"].as_u64() {
                 state.selection = std::collections::BTreeSet::from([ElementId(id)]);
@@ -171,12 +179,13 @@ pub fn import_image_path(state: &mut AppState, path: PathBuf) {
             state.message = t!("msg-image-imported", "name" => name);
         }
         Err(e) => state.dialogs.error = Some(t!("msg-cad-import-failed", "error" => e.message)),
-    }
+    });
+    crate::jobs::start(state, t!("job-importing-image"), path, crate::jobs::Base::Current, run, finish);
 }
 
 /// DWG and DXF drawings, pictures and SVG files dropped on the window go into the active view.
 pub fn dropped_files(ctx: &egui::Context, state: &mut AppState) {
-    if !state.project_open || state.show_home {
+    if !state.project_open || state.show_home || crate::jobs::busy(state) {
         return;
     }
     let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());

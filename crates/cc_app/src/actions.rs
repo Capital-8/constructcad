@@ -288,12 +288,25 @@ pub fn open(state: &mut AppState) {
     open_path(state, path);
 }
 
+/// Open the project at `path`, read on a worker thread behind the progress dialog.
 pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
-    let mut session = cc_engine::Session::default();
-    match session.run(project::ProjectOpen { path: path.clone() }) {
+    let (file, shown) = (path.clone(), path.clone());
+    let run = move |s: &mut cc_engine::Session| s.run(project::ProjectOpen { path: file });
+    let finish: crate::jobs::Finish = Box::new(move |state, result, doc| opened(state, path, result, doc));
+    crate::jobs::start(state, t!("job-opening"), shown, crate::jobs::Base::Fresh, run, finish);
+}
+
+fn opened(
+    state: &mut AppState,
+    path: std::path::PathBuf,
+    result: cc_engine::Result<serde_json::Value>,
+    doc: Option<Document>,
+) {
+    match result {
         Ok(out) => {
+            let Some(doc) = doc else { return };
             let repairs = out["repairs"].as_u64().unwrap_or(0);
-            state.replace_document(session.doc);
+            state.replace_document(doc);
             state.message = if repairs > 0 {
                 t!("msg-opened-repaired", "path" => path.display(), "count" => repairs)
             } else {
@@ -336,11 +349,15 @@ pub fn load_component(state: &mut AppState) {
 /// Load the component file at `path` (see [`load_component`]).
 pub fn load_component_path(state: &mut AppState, path: std::path::PathBuf) {
     let skp = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("skp"));
-    let result = if skp {
-        state.session.run(io::SkpComponentLoad { path })
-    } else {
-        state.session.run(io::ComponentLoad { path })
+    let file = path.clone();
+    let run = move |s: &mut cc_engine::Session| {
+        if skp { s.run(io::SkpComponentLoad { path: file }) } else { s.run(io::ComponentLoad { path: file }) }
     };
+    let finish: crate::jobs::Finish = Box::new(|state, result, _| component_loaded(state, result));
+    crate::jobs::start(state, t!("job-loading-component"), path, crate::jobs::Base::Current, run, finish);
+}
+
+fn component_loaded(state: &mut AppState, result: cc_engine::Result<serde_json::Value>) {
     match result {
         Ok(out) => {
             if let Some(first) = out["types"].get(0).and_then(serde_json::Value::as_u64) {
@@ -376,13 +393,17 @@ pub fn import_skp(state: &mut AppState) {
     }
     let Some(path) = dialog.pick_file() else { return };
     let level = state.active_level().map(|l| cc_engine::Ref::Id(l.0));
-    match state.session.run(io::SkpImport { path: path.clone(), level, position: None, rotation: None }) {
+    let command = io::SkpImport { path: path.clone(), level, position: None, rotation: None };
+    let shown = path.clone();
+    let finish: crate::jobs::Finish = Box::new(move |state, result, _| match result {
         Ok(out) => {
             let count = out["elements"].as_array().map_or(0, Vec::len);
             state.message = t!("msg-skp-imported", "path" => path.display(), "count" => count);
         }
         Err(e) => state.dialogs.error = Some(t!("msg-import-failed", "error" => e.message)),
-    }
+    });
+    let run = move |s: &mut cc_engine::Session| s.run(command);
+    crate::jobs::start(state, t!("job-importing-skp"), shown, crate::jobs::Base::Current, run, finish);
 }
 
 /// Replace the document with a project imported from an IFC file. The
@@ -393,10 +414,22 @@ fn import_ifc(state: &mut AppState) {
         dialog = dialog.set_directory(dir);
     }
     let Some(path) = dialog.pick_file() else { return };
-    let mut session = cc_engine::Session::default();
-    match session.run(io::IfcImport { path: path.clone() }) {
+    let (file, shown) = (path.clone(), path.clone());
+    let run = move |s: &mut cc_engine::Session| s.run(io::IfcImport { path: file });
+    let finish: crate::jobs::Finish = Box::new(move |state, result, doc| ifc_imported(state, path, result, doc));
+    crate::jobs::start(state, t!("job-importing-ifc"), shown, crate::jobs::Base::Fresh, run, finish);
+}
+
+fn ifc_imported(
+    state: &mut AppState,
+    path: std::path::PathBuf,
+    result: cc_engine::Result<serde_json::Value>,
+    doc: Option<Document>,
+) {
+    match result {
         Ok(report) => {
-            state.replace_document(session.doc);
+            let Some(doc) = doc else { return };
+            state.replace_document(doc);
             let count =
                 |v: &serde_json::Value| v.as_object().map_or(0, |o| o.values().filter_map(|n| n.as_u64()).sum());
             let (imported, skipped, generic) =

@@ -171,6 +171,8 @@ pub struct AppState {
     /// The open Site Location window.
     pub site: Option<crate::site_ui::SiteDialog>,
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
+    /// The file being opened or imported on a worker thread (see `jobs.rs`).
+    pub job: Option<crate::jobs::Job>,
     /// Samples whose thumbnail was already requested this session.
     pub requested_samples: std::collections::BTreeSet<&'static str>,
     /// Cut or copied elements of this document.
@@ -254,6 +256,7 @@ impl AppState {
             plugins: Default::default(),
             site: None,
             thumbnail_jobs: Vec::new(),
+            job: None,
             requested_samples: Default::default(),
             clipboard: Default::default(),
             zoom_default: Default::default(),

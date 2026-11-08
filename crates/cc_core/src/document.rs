@@ -735,7 +735,9 @@ impl<'a> EditCtx<'a> {
     }
 }
 
-/// An open project plus its undo history and file state.
+/// An open project plus its undo history and file state. Cloned to run a
+/// long command (an import) on another thread while the app keeps drawing.
+#[derive(Clone)]
 pub struct Document {
     pub project: Project,
     pub path: Option<PathBuf>,
