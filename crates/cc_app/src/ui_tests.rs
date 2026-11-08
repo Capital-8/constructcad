@@ -749,6 +749,7 @@ fn component_library_loads_a_component() {
     harness.run();
     harness.get_by_label(&t!("lib-load")).click();
     harness.run();
+    crate::jobs::wait(harness.state_mut());
     assert!(harness.state().dialogs.library.is_none());
     assert!(harness.state().project().types.len() > before, "the door's types joined the project");
     assert!(matches!(harness.state().tool, crate::tools::Tool::Hosted { .. }), "doors are placed in walls");
@@ -2592,6 +2593,67 @@ fn callouts_are_drawn_resized_and_opened() {
         press(&mut harness, side, false);
     }
     assert_eq!(harness.state().open_requests.last(), Some(&detail));
+}
+
+/// While a file is read on the worker thread, a dialog shows what is read
+/// and blocks the interface; Cancel leaves the project as it was.
+#[test]
+fn reading_a_file_shows_the_progress_dialog() {
+    let mut state = sample_state();
+    let path = std::env::temp_dir().join("cc_progress_dialog.dwg");
+    std::fs::write(&path, vec![0u8; 3000]).unwrap();
+    let (release, wait) = std::sync::mpsc::channel::<()>();
+    let run = move |_: &mut cc_engine::Session| {
+        let _ = wait.recv();
+        Ok(serde_json::Value::Null)
+    };
+    let finish: crate::jobs::Finish = Box::new(|state, _, _| state.message = "finished".into());
+    let title = t!("job-importing-cad");
+    crate::jobs::start(&mut state, title.clone(), path.clone(), crate::jobs::Base::Current, run, finish);
+    // The spinner keeps asking for frames, so the harness steps by hand.
+    let mut themed = false;
+    let mut harness = Harness::builder().with_size(egui::vec2(800.0, 500.0)).build_ui_state(
+        move |ui, state: &mut AppState| {
+            if !themed {
+                crate::theme::apply(ui.ctx());
+                themed = true;
+                return;
+            }
+            crate::theme::sync(ui.ctx());
+            crate::jobs::poll(state);
+            crate::jobs::show(ui.ctx(), state);
+        },
+        state,
+    );
+    harness.run_steps(3);
+    harness.get_by_label(&title);
+    harness.get_by_label(&t!("job-reading", "name" => "cc_progress_dialog.dwg"));
+    assert!(crate::jobs::busy(harness.state()));
+    // Cancel: the job's answer is dropped when it comes.
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run_steps(2);
+    assert!(!crate::jobs::busy(harness.state()));
+    let _ = release.send(());
+    harness.run_steps(2);
+    assert_ne!(harness.state().message, "finished");
+    let _ = std::fs::remove_file(path);
+}
+
+/// Opening a project reads it on the worker thread and then replaces the document.
+#[test]
+fn opening_a_project_runs_as_a_job() {
+    let path = std::env::temp_dir().join("cc_job_open.ccad");
+    let mut session =
+        cc_engine::Session::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+    session.run(cc_engine::commands::project::ProjectSave { path: Some(path.clone()) }).unwrap();
+    let walls = session.doc.project.elements.len();
+    let mut state = AppState::new(cc_core::Document::new(crate::actions::new_project()));
+    crate::actions::open_path(&mut state, path.clone());
+    assert!(crate::jobs::busy(&state));
+    crate::jobs::wait(&mut state);
+    assert_eq!(state.project().elements.len(), walls);
+    assert_eq!(state.session.doc.path.as_deref(), Some(path.as_path()));
+    let _ = std::fs::remove_file(path);
 }
 
 /// The Project Browser and Properties dock on either side, stacked or in

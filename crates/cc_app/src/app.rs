@@ -85,7 +85,11 @@ impl ConstructApp {
             crate::update_install::remove_old_executables(&exe);
         }
         match path {
-            Some(path) => actions::open_path(&mut state, path),
+            Some(path) => {
+                actions::open_path(&mut state, path);
+                // Before the window shows, so the named views can be found.
+                crate::jobs::wait(&mut state);
+            }
             None => {
                 state.project_open = false;
                 state.show_home = true;
@@ -222,6 +226,10 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
         let close = cmd(i, Key::W);
         (cmd(i, Key::Z), redo, cmd(i, Key::S), cmd_shift(i, Key::S), cmd(i, Key::O), cmd(i, Key::N), close)
     });
+    // A file being read: the document must stay as it is until it is installed.
+    if crate::jobs::busy(state) {
+        return;
+    }
     if open {
         actions::guarded(state, PendingAction::Open);
     }
@@ -455,6 +463,7 @@ impl ConstructApp {
         self.recovery.set_interval(self.state.prefs.autosave_interval());
         self.recovery.tick(&self.state);
         self.state.updates.poll();
+        crate::jobs::poll(&mut self.state);
         self.state.follow_selection();
         if !self.state.textures_to_free.is_empty()
             && let Some(rs) = frame.wgpu_render_state()
@@ -489,6 +498,7 @@ impl ConstructApp {
             dialogs::show(&ctx, &mut self.state);
             self.recovery.dialog(&ctx, &mut self.state);
             crate::palette::show(&ctx, &mut self.state);
+            crate::jobs::show(&ctx, &mut self.state);
             return;
         }
         let state = &mut self.state;
@@ -562,6 +572,7 @@ impl ConstructApp {
         dialogs::show(&ctx, &mut self.state);
         self.recovery.dialog(&ctx, &mut self.state);
         crate::palette::show(&ctx, &mut self.state);
+        crate::jobs::show(&ctx, &mut self.state);
     }
 }
 

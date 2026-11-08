@@ -1642,6 +1642,7 @@ mod tests {
         state.component_env = None;
         assert_eq!(state.active_view, Some(sheet), "a sheet is active");
         crate::actions::load_component_path(&mut state, path);
+        crate::jobs::wait(&mut state);
         std::fs::remove_dir_all(&dir).ok();
         let ed = state.component_env.as_ref().and_then(|e| e.sheet.clone()).expect("the Sheet view");
         assert_eq!(ed.sheet, None);
@@ -1805,6 +1806,7 @@ mod tests {
 
         let mut other = AppState::new(Document::new(crate::actions::new_project()));
         crate::actions::load_component_path(&mut other, path.clone());
+        crate::jobs::wait(&mut other);
         let _ = std::fs::remove_file(&path);
         assert!(is_open(&other), "opened in the editor, not placed");
         assert!(matches!(other.tool, crate::tools::Tool::Select));

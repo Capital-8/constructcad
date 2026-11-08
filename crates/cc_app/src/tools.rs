@@ -3704,6 +3704,7 @@ mod tests {
         let plan = state.project().views.values().find(|v| v.level() == Some(level)).map(|v| v.id).unwrap();
         state.active_view = Some(plan);
         crate::cad_ui::import_cad_path(&mut state, path);
+        crate::jobs::wait(&mut state);
         assert_eq!(state.selection.len(), 1, "{}", state.message);
         state.sync();
         let s = snap_at(&mut state, Some(level), DVec2::new(3.04, 0.03), None, &[], SCALE, false);
