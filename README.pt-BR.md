@@ -21,6 +21,14 @@ O ConstructCraft segue as convenções comuns às ferramentas CAD e BIM de deskt
 
 A dica de cada botão mostra o atalho, o que ele faz, por que está indisponível quando aparece acinzentado e o comando do motor por trás dele. **Ctrl+Shift+P** abre uma paleta que encontra qualquer comando, vista ou comando do motor pelo nome; **Ctrl+F1** recolhe o ribbon até as abas. Veja o [guia da interface](docs/interface.pt-BR.md).
 
+## O nome
+
+O projeto começou como **ConstructCAD** e agora se chama **ConstructCraft**. O "CAD" fazia algumas pessoas esperarem um programa de desenho ou de modelagem 3D genérico, uma ferramenta para traçar linhas e esculpir sólidos, e não um software BIM, em que paredes, pisos, portas e ambientes são elementos da construção com seus próprios dados, e plantas, cortes e tabelas saem de um único modelo. O novo nome diz do que o projeto trata: construir um modelo da edificação com cuidado.
+
+*Craft* (ofício, feito com as mãos) representa esse cuidado, e a onda de programas que se dizem *craft*: ferramentas feitas com atenção aos detalhes, que respeitam quem as usa e o trabalho que fazem com elas. O ConstructCraft mantém o seu lema, **familiar por design**: o novo nome não muda nada em como ele funciona nem em onde as coisas ficam.
+
+Só o nome mudou. A linha de comando `ccad`, os arquivos `.ccad`, `.ccomp`, `.ccmacro` e `.ccgraph`, a tabela `ccad` do Lua, o servidor MCP e os conjuntos de propriedades IFC `ConstructCAD_*` continuam com os mesmos nomes, então projetos, scripts e modelos exportados antes continuam funcionando (veja o [changelog](CHANGELOG.md)).
+
 ## Capturas de tela
 
 ![Planta e vista 3D da casa de exemplo: planta em L com uma parede em arco sob um telhado de quatro águas](docs/screenshots/pt-BR/hero.png)
