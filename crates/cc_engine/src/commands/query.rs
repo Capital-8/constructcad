@@ -407,12 +407,13 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
     }))
 }
 
-/// Views (plans, ceiling plans, elevations, sections, 3D, legends, schedules, sheets),
+/// Views (plans, ceiling plans, elevations, sections, 3D, legends, drafting views, schedules, sheets),
 /// optionally of one category.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewsList {
-    /// `floor_plan`, `ceiling_plan`, `three_d`, `elevation`, `section`, `legend`, `schedule` or `sheet`.
+    /// `floor_plan`, `ceiling_plan`, `three_d`, `elevation`, `section`, `legend`, `drafting`, `schedule`,
+    /// `diagram` or `sheet`.
     #[serde(default)]
     pub category: Option<String>,
 }

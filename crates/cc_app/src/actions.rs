@@ -59,6 +59,10 @@ pub fn new_legend(state: &mut AppState) -> Option<ViewId> {
     new_view(state, "legend", None, None)
 }
 
+pub fn new_drafting_view(state: &mut AppState) -> Option<ViewId> {
+    new_view(state, "drafting", None, None)
+}
+
 pub fn new_schedule(state: &mut AppState, category: Category) -> Option<ViewId> {
     new_view(state, "schedule", None, Some(category))
 }

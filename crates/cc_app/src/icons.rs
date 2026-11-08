@@ -39,6 +39,7 @@ pub enum Icon {
     Section,
     Elevation,
     Legend,
+    DraftingView,
     Schedule,
     Sheet,
     TitleBlock,
@@ -168,7 +169,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 153] = [
+    pub const ALL: [Icon; 154] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -197,6 +198,7 @@ impl Icon {
         Icon::Section,
         Icon::Elevation,
         Icon::Legend,
+        Icon::DraftingView,
         Icon::Schedule,
         Icon::Sheet,
         Icon::TitleBlock,
@@ -355,6 +357,7 @@ impl Icon {
             Icon::Section => include_str!("../../../assets/icons/ui/section.svg"),
             Icon::Elevation => include_str!("../../../assets/icons/ui/elevation.svg"),
             Icon::Legend => include_str!("../../../assets/icons/ui/legend.svg"),
+            Icon::DraftingView => include_str!("../../../assets/icons/ui/drafting-view.svg"),
             Icon::Schedule => include_str!("../../../assets/icons/ui/schedule.svg"),
             Icon::Sheet => include_str!("../../../assets/icons/ui/sheet.svg"),
             Icon::TitleBlock => include_str!("../../../assets/icons/ui/title-block.svg"),

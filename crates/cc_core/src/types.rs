@@ -781,6 +781,22 @@ impl ElementType {
         }
     }
 
+    /// Position of a wall's location line `line` across a wall of this type,
+    /// measured from the centerline towards the exterior (left) face.
+    pub fn location_offset(&self, line: crate::LocationLine) -> f64 {
+        use crate::LocationLine as L;
+        let half = self.thickness() * 0.5;
+        let (core_ext, core_int) = self.core_range();
+        match line {
+            L::Centerline => 0.0,
+            L::FinishExterior => half,
+            L::FinishInterior => -half,
+            L::CoreExterior => half - core_ext,
+            L::CoreInterior => half - core_int,
+            L::CoreCenter => half - (core_ext + core_int) * 0.5,
+        }
+    }
+
     /// Width/height of an opening type (doors, windows).
     pub fn opening_size(&self) -> Option<(f64, f64)> {
         match &self.data {
