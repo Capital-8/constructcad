@@ -4,7 +4,7 @@
 //! and picked only when nothing of the model is under the pointer.
 
 use crate::drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, halftone};
-use cc_core::cad::{CadColorMode, CadHAlign, CadImport, CadPrim, CadVAlign, text_width};
+use cc_core::cad::{CadColorMode, CadHAlign, CadImport, CadPrim, CadVAlign, on_paper, text_width};
 use cc_core::{ElementId, ElementKind, Project, ViewId};
 use glam::DVec2;
 
@@ -36,9 +36,7 @@ fn color_of(c: &CadImport, prim: &CadPrim) -> [u8; 3] {
         CadColorMode::Black => [0, 0, 0],
         CadColorMode::Layers => {
             let rgb = prim.color().or_else(|| c.drawing.layer_of(prim).map(|l| l.color)).unwrap_or([0, 0, 0]);
-            // Colors meant for a dark screen (white, yellow, cyan) darkened for white paper.
-            let luma = 0.299 * f64::from(rgb[0]) + 0.587 * f64::from(rgb[1]) + 0.114 * f64::from(rgb[2]);
-            if luma > 190.0 { rgb.map(|v| (f64::from(v) * 0.55).round() as u8) } else { rgb }
+            on_paper(rgb)
         }
     };
     if c.halftone { halftone(base) } else { base }

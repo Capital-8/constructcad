@@ -552,7 +552,7 @@ impl Command for ImageImport {
     }
 }
 
-fn cad_of(s: &Session, id: u64) -> Result<(ElementId, CadImport)> {
+pub(super) fn cad_of(s: &Session, id: u64) -> Result<(ElementId, CadImport)> {
     let id = refs::element(s.project(), id)?;
     match s.project().element(id).map(|e| &e.kind) {
         Some(ElementKind::CadImport(c)) => Ok((id, (**c).clone())),
