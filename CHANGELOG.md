@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-08
+
 ### Changed
 
 - ConstructCAD is now ConstructCraft. The application, its window, installers, packages and documentation carry the new name, and the desktop program is `constructcraft` (the repository moves to `francisreboucas/constructcraft`). Nothing else changes: the `ccad` command line, the Lua `ccad` table, the MCP server, the `.ccad`, `.ccomp`, `.ccmacro` and `.ccgraph` files and the `ConstructCAD_*` IFC property sets keep their names, preferences and recovery copies stay where they were, and installing the new version replaces the old one (the Windows installer upgrades it in place, the Debian package replaces `constructcad`). Copies older than this one find the update but cannot install it themselves; download it from the release page once.
@@ -426,7 +428,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcad/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcraft/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/francisreboucas/constructcraft/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/francisreboucas/constructcad/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/francisreboucas/constructcad/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/francisreboucas/constructcad/compare/v0.7.0...v0.8.0
