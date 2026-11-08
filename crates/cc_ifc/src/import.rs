@@ -551,6 +551,45 @@ impl<'a> Importer<'a> {
             let lines: Vec<&str> = lines.iter().filter_map(Param::as_str).collect();
             self.p.info.address = lines.join(", ");
         }
+        self.p.info.site = self.read_site();
+    }
+
+    /// The site location: the IfcSite's reference latitude, longitude and
+    /// elevation, its long name and postal address (else the building's),
+    /// and true north from the model context.
+    fn read_site(&self) -> Option<cc_core::site::SiteLocation> {
+        let (_, site) = self.f.of_type("IFCSITE").next()?;
+        let angle = |i: usize| {
+            let parts: Vec<i64> = site.arg(i).as_list().iter().filter_map(|p| p.as_f64()).map(|v| v as i64).collect();
+            cc_core::site::from_dms(&parts)
+        };
+        let mut location = cc_core::site::SiteLocation::at(angle(9)?, angle(10)?);
+        location.elevation = site.arg(11).as_f64().map_or(0.0, |z| z * self.unit("LENGTHUNIT"));
+        location.place = site.arg(7).as_str().unwrap_or_default().to_string();
+        let address = self
+            .f
+            .deref(site.arg(13))
+            .or_else(|| self.f.of_type("IFCBUILDING").find_map(|(_, b)| self.f.deref(b.arg(11))));
+        if let Some(a) = address.filter(|a| a.name == "IFCPOSTALADDRESS") {
+            let text = |i: usize| a.arg(i).as_str().unwrap_or_default().to_string();
+            location.address.city = text(6);
+            location.address.region = text(7);
+            location.address.postcode = text(8);
+            location.address.country = text(9);
+        }
+        let north = self
+            .f
+            .of_type("IFCGEOMETRICREPRESENTATIONCONTEXT")
+            .find(|(_, c)| c.arg(1).as_str() == Some("Model"))
+            .and_then(|(_, c)| self.f.deref(c.arg(5)))
+            .map(|d| d.arg(0).as_list().iter().filter_map(|p| p.as_f64()).collect::<Vec<_>>());
+        if let Some([x, y, ..]) = north.as_deref()
+            && (x * x + y * y) > 1e-12
+        {
+            location.true_north = (-x).atan2(*y).to_degrees();
+        }
+        let (valid, _) = location.repair();
+        valid.then_some(location)
     }
 
     /// SI value of one file unit of `kind` (`LENGTHUNIT`: meters; `PLANEANGLEUNIT`: radians), 1 if unset.

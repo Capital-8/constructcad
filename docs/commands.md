@@ -6,7 +6,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 
 ## Contents
 
-- **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set)
+- **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`site_get`](#site_get), [`site_set`](#site_set), [`site_context_import`](#site_context_import), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
@@ -60,6 +60,42 @@ No parameters.
 | `fields` | object | optional | Project fields by name: a text sets the field (adding it; a new name holds no braces and at most 192 bytes), `null` removes it. |
 | `name` | string | optional | Project name. |
 | `number` | string | optional | Project number. |
+
+### `site_get`
+
+*query* — The project's site location: latitude and longitude of the project origin (degrees, WGS 84), its elevation above sea level (meters), the angle from project north to true north (degrees counter-clockwise), the place name and the parts of the postal address; `site` is null when no location is set. `address` is the project address line.
+
+No parameters.
+
+### `site_set`
+
+*edit* — Set the project's site location, in one undo step: the latitude and longitude of the project origin (both needed when the project has no location yet), its elevation above sea level, true north and the place and address found by a map search. Fields left out keep their values. When address parts are given the project address (title blocks, IFC) is rewritten from them unless `project_address` is false. `clear` removes the location.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `address` | object | optional | Address parts by key (`street`, `number`, `district`, `city`, `region`, `postcode`, `country`); others are refused. |
+| `clear` | boolean | optional | Remove the site location (nothing else may be given). |
+| `elevation` | number | optional | Height of the project's elevation 0 above sea level, meters (-500 to 9000). |
+| `latitude` | number | optional | Latitude of the project origin, degrees (WGS 84, -90 to 90, north positive). |
+| `longitude` | number | optional | Longitude of the project origin, degrees (WGS 84, -180 to 180, east positive). |
+| `place` | string | optional | The place as the map search named it. |
+| `project_address` | boolean | optional | Rewrite the project address from the address parts (default true when `address` is given). |
+| `true_north` | number | optional | Angle from project north (+Y) to true north, degrees counter-clockwise. |
+
+### `site_context_import`
+
+*edit* — Bring OpenStreetMap data around the site into a floor plan, in one undo step: a site drawing (an imported drawing in meters, pinned, under the model: layers for buildings, streets, paths, railways, water, green areas, trees and street names) and, unless `masses` is false, a context mass per building footprint (height from the map's `height` or `building:levels`, else `default_levels` storeys; no mass floors) of the "Context" mass type. `data` is the JSON an Overpass query answers (`[out:json]`, `out geom` or ways with their nodes; the program builds the query for the square it shows); points are placed with the site location, which must be set. Map data © OpenStreetMap contributors (ODbL).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `data` | string | optional | Overpass JSON text (or `path`). |
+| `default_levels` | number | optional | Storeys of a building whose height the map does not give (default 2). |
+| `extent` | number | optional | Half the side of the square kept around the project origin, meters (default: everything given). |
+| `level_height` | number | optional | Height of a storey, meters, for `building:levels` (default 3). |
+| `masses` | boolean | optional | Make context masses from the building footprints (default true). |
+| `path` | string | optional | Path of a file holding Overpass JSON (or `data`). |
+| `text_height` | number | optional | Height of street names, meters (default 2). |
+| `view` | id or name | optional | Floor plan id or name (default: the first floor plan of the lowest level). |
 
 ### `undo`
 
