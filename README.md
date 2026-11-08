@@ -21,6 +21,14 @@ ConstructCraft follows the conventions shared by desktop CAD and BIM tools: the 
 
 Every button's tooltip shows its shortcut, what it does, why it is unavailable when it is greyed out, and the engine command behind it. **Ctrl+Shift+P** opens a command palette that finds any command, view or engine command by name; **Ctrl+F1** collapses the ribbon to its tabs. See the [interface guide](docs/interface.md).
 
+## The name
+
+The project started as **ConstructCAD** and is now **ConstructCraft**. "CAD" made some people expect a general drawing or 3D modeling program, a tool for drawing lines and shaping solids, rather than BIM software, where walls, floors, doors and rooms are building elements with their own data, and plans, sections and schedules come from one model. The new name says what the project is about: building a construction model with care.
+
+*Craft* stands for that care, and for the wave of software that calls itself craft: tools made with attention to detail, that respect the people who use them and the work they make with them. ConstructCraft keeps its motto, **familiar by design**: the new name changes nothing in how it works or where things are.
+
+Only the name changed. The `ccad` command line, the `.ccad`, `.ccomp`, `.ccmacro` and `.ccgraph` files, the Lua `ccad` table, the MCP server and the `ConstructCAD_*` IFC property sets keep their names, so projects, scripts and exported models from before keep working (see the [changelog](CHANGELOG.md)).
+
 ## Screenshots
 
 ![Floor plan and 3D view of the showcase house: an L-shaped plan with an arc wall under a hip roof](docs/screenshots/en/hero.png)
