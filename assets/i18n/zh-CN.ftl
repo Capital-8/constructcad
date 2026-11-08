@@ -2533,6 +2533,7 @@ hint-level-mark = 单击要标注标高的点。Esc 结束。
 msg-level-mark-view = 标高可放在平面、立面和剖面中。
 why-open-section = 请打开剖面或立面。
 tx-create-level-mark = 创建标高
+tx-create-level-mark-type = 创建标高类型
 section-level-mark = 标高
 prop-level-mark-flip = 数值在左侧
 prop-level-mark-finished = 建筑标高

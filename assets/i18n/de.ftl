@@ -2533,6 +2533,7 @@ hint-level-mark = Klicken Sie auf den Punkt, dessen Höhe geschrieben wird. Esc 
 msg-level-mark-view = Höhenkoten gehören in Grundrisse, Ansichten und Schnitte.
 why-open-section = Öffnen Sie einen Schnitt oder eine Ansicht.
 tx-create-level-mark = Höhenkote erstellen
+tx-create-level-mark-type = Höhenkotentyp erstellen
 section-level-mark = Höhenkote
 prop-level-mark-flip = Werte links
 prop-level-mark-finished = Fertighöhe

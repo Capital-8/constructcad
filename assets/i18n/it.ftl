@@ -2533,6 +2533,7 @@ hint-level-mark = Fare clic sul punto di cui scrivere il livello. Esc termina.
 msg-level-mark-view = Le quote di livello vanno in piante, prospetti e sezioni.
 why-open-section = Aprire una sezione o un prospetto.
 tx-create-level-mark = Crea quota di livello
+tx-create-level-mark-type = Crea tipo di quota di livello
 section-level-mark = Quota di livello
 prop-level-mark-flip = Valori a sinistra
 prop-level-mark-finished = Quota finita

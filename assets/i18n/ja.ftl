@@ -2533,6 +2533,7 @@ hint-level-mark = レベルを記入する点をクリックします。Esc で�
 msg-level-mark-view = レベル記号は平面図、立面図、断面図に配置します。
 why-open-section = 断面図または立面図を開いてください。
 tx-create-level-mark = レベル記号を作成
+tx-create-level-mark-type = レベル記号タイプを作成
 section-level-mark = レベル記号
 prop-level-mark-flip = 値を左側に
 prop-level-mark-finished = 仕上レベル

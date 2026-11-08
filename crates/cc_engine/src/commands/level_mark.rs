@@ -8,7 +8,7 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::level_mark::{LevelMark, MAX_LEVEL};
-use cc_core::{Category, ElementKind, ViewKind};
+use cc_core::{Category, ElementKind, ElementType, ElementTypeId, TypeData, ViewKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -79,7 +79,11 @@ impl Command for LevelMarkCreate {
             .level()
             .or_else(|| p.levels.first().map(|l| l.id))
             .ok_or_else(|| EngineError::rejected("no levels"))?;
-        let type_id = refs::type_of(p, Category::LevelMark, self.type_ref.as_ref())?;
+        // A project gets its level mark type with its first mark.
+        let ty = match (&self.type_ref, p.default_type(Category::LevelMark)) {
+            (None, None) => None,
+            (r, _) => Some(refs::type_of(p, Category::LevelMark, r.as_ref())?),
+        };
         let mark = LevelMark {
             flip: self.flip.unwrap_or(false),
             finished: level_value(self.finished, "finished")?,
@@ -88,7 +92,86 @@ impl Command for LevelMarkCreate {
             ..LevelMark::new(view_id, point(self.position)?)
         };
         let kind = ElementKind::LevelMark(Box::new(mark));
-        let id = edit(s, t!("tx-create-level-mark"), |e| Ok(add_element(e, level, type_id, kind)))?;
+        let id = edit(s, t!("tx-create-level-mark"), |e| {
+            let type_id = match ty {
+                Some(t) => t,
+                None => {
+                    let id = ElementTypeId(e.alloc_id());
+                    e.add_type(new_type(id, None))
+                }
+            };
+            Ok(add_element(e, level, type_id, kind))
+        })?;
         Ok(created(s, id))
+    }
+}
+
+/// A level mark type in the interface language: text 2.5 mm, the project's
+/// zero written as `datum` (0 by default).
+fn new_type(id: ElementTypeId, name: Option<String>) -> ElementType {
+    ElementType {
+        id,
+        name: name.unwrap_or_else(|| t!("tpl-type-level-mark")),
+        data: cc_core::level_mark::default_type(&crate::i18n::tr),
+        info: Default::default(),
+        uid: Default::default(),
+    }
+}
+
+/// Create a level mark type: the text size, the datum (the value written
+/// for the project's zero, e.g. 100 when the ground floor is +100.00) and
+/// the suffixes after the finished and raw levels. A project gets one with
+/// its first level mark; `type_set` changes them.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LevelMarkTypeCreate {
+    /// Type name (default: the language's).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Text size, paper millimeters (default 2.5).
+    #[serde(default)]
+    pub text_size: Option<f64>,
+    /// Value written for the project's zero, meters (default 0).
+    #[serde(default)]
+    pub datum: Option<f64>,
+    /// Text after the finished level (default: the language's, e.g. "(N.A.)").
+    #[serde(default)]
+    pub finished_suffix: Option<String>,
+    /// Text after the raw level (default: the language's, e.g. "(N.O.)").
+    #[serde(default)]
+    pub raw_suffix: Option<String>,
+}
+
+impl Command for LevelMarkTypeCreate {
+    const NAME: &'static str = "level_mark_type_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let size = match self.text_size {
+            Some(v) => {
+                let v = finite(v, "text_size")?;
+                if !(0.5..=50.0).contains(&v) {
+                    return Err(EngineError::invalid("text_size must be from 0.5 to 50 mm"));
+                }
+                Some(v)
+            }
+            None => None,
+        };
+        let datum = level_value(self.datum, "datum")?;
+        let id = edit(s, t!("tx-create-level-mark-type"), |e| {
+            let id = ElementTypeId(e.alloc_id());
+            let mut ty = new_type(id, self.name.clone());
+            if let TypeData::LevelMark { text_size, datum: d, finished_suffix, raw_suffix } = &mut ty.data {
+                *text_size = size.unwrap_or(*text_size);
+                *d = datum.unwrap_or(*d);
+                if let Some(text) = &self.finished_suffix {
+                    finished_suffix.clone_from(text);
+                }
+                if let Some(text) = &self.raw_suffix {
+                    raw_suffix.clone_from(text);
+                }
+            }
+            Ok(e.add_type(ty))
+        })?;
+        Ok(serde_json::json!({ "id": id.0 }))
     }
 }

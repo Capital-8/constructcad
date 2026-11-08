@@ -2533,6 +2533,7 @@ hint-level-mark = Haga clic en el punto cuyo nivel se escribirá. Esc termina.
 msg-level-mark-view = Las cotas de nivel van en plantas, alzados y cortes.
 why-open-section = Abra un corte o un alzado.
 tx-create-level-mark = Crear cota de nivel
+tx-create-level-mark-type = Crear tipo de cota de nivel
 section-level-mark = Cota de nivel
 prop-level-mark-flip = Valores a la izquierda
 prop-level-mark-finished = Nivel terminado

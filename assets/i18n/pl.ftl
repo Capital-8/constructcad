@@ -2533,6 +2533,7 @@ hint-level-mark = Kliknij punkt, którego poziom ma zostać zapisany. Esc kończ
 msg-level-mark-view = Rzędne poziomu umieszcza się w rzutach, elewacjach i przekrojach.
 why-open-section = Otwórz przekrój lub elewację.
 tx-create-level-mark = Utwórz rzędną poziomu
+tx-create-level-mark-type = Utwórz typ rzędnej poziomu
 section-level-mark = Rzędna poziomu
 prop-level-mark-flip = Wartości po lewej
 prop-level-mark-finished = Poziom wykończenia

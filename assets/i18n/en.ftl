@@ -2533,6 +2533,7 @@ hint-level-mark = Click the point whose level to write. Esc ends.
 msg-level-mark-view = Level marks go in plans, elevations and sections.
 why-open-section = Open a section or an elevation.
 tx-create-level-mark = Create level mark
+tx-create-level-mark-type = Create level mark type
 section-level-mark = Level mark
 prop-level-mark-flip = Values on the left
 prop-level-mark-finished = Finished level

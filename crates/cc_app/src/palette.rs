@@ -197,11 +197,17 @@ fn entries(state: &AppState, palette: &Palette) -> Vec<Entry> {
     list
 }
 
+/// Bonus of an entry whose whole label is the query (an engine command typed
+/// in full beats the longer names that share its words).
+const EXACT: u32 = 100;
+
 /// The matches of the query, best first (all entries in their order when it is empty).
 fn matches(entries: Vec<Entry>, query: &str) -> Vec<Entry> {
-    let words: Vec<String> = fold(query).split_whitespace().map(String::from).collect();
+    let folded = fold(query);
+    let words: Vec<String> = folded.split_whitespace().map(String::from).collect();
+    let exact = |e: &Entry| if !words.is_empty() && fold(&e.label).trim() == folded.trim() { EXACT } else { 0 };
     let mut scored: Vec<(u32, usize, Entry)> =
-        entries.into_iter().enumerate().filter_map(|(i, e)| score(&e, &words).map(|s| (s, i, e))).collect();
+        entries.into_iter().enumerate().filter_map(|(i, e)| score(&e, &words).map(|s| (s + exact(&e), i, e))).collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     scored.into_iter().map(|(_, _, e)| e).collect()
 }

@@ -1212,9 +1212,6 @@ impl UiCommand {
             }
             Dimension(_) if Tool::for_category(project, Category::Dimension).is_none() => Some(t!("msg-no-type")),
             Text if Tool::for_category(project, Category::Text).is_none() => Some(t!("msg-no-type")),
-            LevelMarkPlan | LevelMarkSection if Tool::for_category(project, Category::LevelMark).is_none() => {
-                Some(t!("msg-no-type"))
-            }
             LevelMarkPlan if !active_view_is(state, cc_core::View::is_plan) => Some(t!("msg-open-plan")),
             LevelMarkSection if !active_view_is(state, |v| v.projection().is_some()) => Some(t!("why-open-section")),
             AddLeader if crate::ribbon::selected_text(state).is_none() && !self.selected(state) => {
@@ -1703,6 +1700,11 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             }
         }
         LevelMarkPlan | LevelMarkSection => {
+            // A project gets its level mark type with its first mark.
+            if Tool::for_category(state.project(), Category::LevelMark).is_none() {
+                let command = cc_engine::commands::level_mark::LevelMarkTypeCreate::default();
+                crate::actions::run_command(state, command);
+            }
             if let Some(tool) = Tool::for_category(state.project(), Category::LevelMark) {
                 state.set_tool(tool);
                 state.message = t!("hint-level-mark");

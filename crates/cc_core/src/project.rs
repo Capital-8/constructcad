@@ -361,7 +361,6 @@ impl Project {
             (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
             (&n("tpl-type-text"), TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
             (&n("tpl-type-text-large"), TypeData::Text { size: 3.5, symbol: crate::LeaderSymbol::Arrow }),
-            (&n("tpl-type-level-mark"), crate::level_mark::default_type(&n)),
             (
                 &n("tpl-type-roof-tile"),
                 TypeData::Roof {
@@ -526,11 +525,6 @@ impl Project {
             (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
             (Category::Dimension, "tpl-type-dimension", TypeData::Dimension { text_size: 2.5 }),
             (Category::Text, "tpl-type-text", TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
-            (
-                Category::LevelMark,
-                "tpl-type-level-mark",
-                crate::level_mark::default_type(&|key| template_default(key).to_string()),
-            ),
         ];
         for (category, key, data) in defaults {
             if self.default_type(category).is_none() {
@@ -1169,9 +1163,6 @@ pub fn template_default(key: &str) -> &'static str {
         "tpl-type-dimension" => "Cota linear 2,5 mm",
         "tpl-type-text" => "Texto 2,5 mm",
         "tpl-type-text-large" => "Texto 3,5 mm",
-        "tpl-type-level-mark" => "Cota de nível 2,5 mm",
-        "tpl-level-mark-finished" => "(N.A.)",
-        "tpl-level-mark-raw" => "(N.O.)",
         "tpl-schedule-rooms" => "Tabela de ambientes",
         "tpl-room-name" => "Ambiente",
         "tpl-mat-fabric" => "Tecido",

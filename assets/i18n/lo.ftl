@@ -2535,6 +2535,7 @@ hint-level-mark = ຄລິກຈຸດທີ່ຈະຂຽນລະດັບ. 
 msg-level-mark-view = ເຄື່ອງໝາຍລະດັບໃຊ້ໃນແຜນຜັງ, ໜ້າດ້ານ ແລະ ໜ້າຕັດ.
 why-open-section = ເປີດໜ້າຕັດ ຫຼື ໜ້າດ້ານ.
 tx-create-level-mark = ສ້າງເຄື່ອງໝາຍລະດັບ
+tx-create-level-mark-type = ສ້າງປະເພດເຄື່ອງໝາຍລະດັບ
 section-level-mark = ເຄື່ອງໝາຍລະດັບ
 prop-level-mark-flip = ຄ່າຢູ່ເບື້ອງຊ້າຍ
 prop-level-mark-finished = ລະດັບສຳເລັດ

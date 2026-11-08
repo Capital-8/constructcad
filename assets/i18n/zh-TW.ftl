@@ -2533,6 +2533,7 @@ hint-level-mark = 點選要標註高程的點。Esc 結束。
 msg-level-mark-view = 標高可放在平面、立面及剖面中。
 why-open-section = 請開啟剖面或立面。
 tx-create-level-mark = 建立標高
+tx-create-level-mark-type = 建立標高類型
 section-level-mark = 標高
 prop-level-mark-flip = 數值在左側
 prop-level-mark-finished = 完成面高程

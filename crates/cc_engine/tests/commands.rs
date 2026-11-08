@@ -2412,6 +2412,16 @@ fn level_marks_write_finished_and_raw_levels() {
     // Deleting the view deletes its marks.
     run(&mut s, "view_delete", json!({"view": sid.0}));
     assert_eq!(fails(&mut s, "element_get", json!({"id": id(&cut)})), ErrorCode::NotFound);
+
+    // The first mark gave the project its type; others can be made.
+    assert!(Session::default().project().default_type(cc_core::Category::LevelMark).is_none());
+    let args = json!({"name": "Site", "datum": 742.5, "finished_suffix": "FFL", "raw_suffix": "SSL"});
+    let site = run(&mut s, "level_mark_type_create", args);
+    let mark = run(&mut s, "level_mark_create", json!({"view": plan, "position": [1, 1], "type": site["id"]}));
+    let texts = mark["derived"]["texts"].as_array().unwrap();
+    assert!(texts[0].as_str().is_some_and(|t| t.starts_with("+ 742") && t.ends_with(" FFL")), "{mark}");
+    let bad = json!({"text_size": 0.0});
+    assert_eq!(fails(&mut s, "level_mark_type_create", bad), ErrorCode::InvalidArguments);
 }
 
 /// A stair given its riser count and tread: the riser height is the height

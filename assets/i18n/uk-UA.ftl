@@ -2534,6 +2534,7 @@ hint-level-mark = Клацніть точку, рівень якої запис�
 msg-level-mark-view = Позначки рівня розміщують на планах, фасадах і розрізах.
 why-open-section = Відкрийте розріз або фасад.
 tx-create-level-mark = Створити позначку рівня
+tx-create-level-mark-type = Створити тип позначки рівня
 section-level-mark = Позначка рівня
 prop-level-mark-flip = Значення ліворуч
 prop-level-mark-finished = Чистовий рівень

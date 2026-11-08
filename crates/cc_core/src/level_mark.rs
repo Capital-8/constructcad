@@ -70,9 +70,9 @@ pub const MAX_LEVEL: f64 = 1e5;
 /// Text size of the default type, paper millimeters.
 pub const DEFAULT_TEXT_SIZE: f64 = 2.5;
 
-/// The default type, with the suffixes `name` gives the template keys
-/// `tpl-level-mark-finished` and `tpl-level-mark-raw` (in the language of
-/// a new project).
+/// The type a project gets with its first level mark, with the suffixes
+/// `name` gives the keys `tpl-level-mark-finished` and `tpl-level-mark-raw`
+/// (in the interface language).
 pub fn default_type(name: &dyn Fn(&str) -> String) -> crate::TypeData {
     crate::TypeData::LevelMark {
         text_size: DEFAULT_TEXT_SIZE,
