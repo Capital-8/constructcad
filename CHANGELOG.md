@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Site location (#209). *Manage → Project → Site Location* opens a map (OpenStreetMap) to search an address or place, or move the map under the marker, and sets the project origin's latitude, longitude, elevation (looked up from Open-Meteo), true north and address. It can bring in the surroundings from OpenStreetMap: streets with their names, paths, water, green areas and trees as a pinned imported drawing, and the buildings as context masses with their heights. New commands `site_get`, `site_set` and `site_context_import`. IFC export writes the site's location, elevation, address and true north, and import reads them back.
 - The project browser and properties dock on either side of the window, stacked in one column or each in a column of its own (#210). Drag a panel's header onto a side of the window or onto the other panel, or right-click it for *Dock on the left*, *Dock on the right*, *Stack with…* and *Separate from…*. The layout is kept between sessions, and *Preferences → Interface* restores the default.
 - A progress dialog while opening a project or importing IFC, DWG/DXF, SketchUp, pictures and component files (#211). The file is read in the background while the dialog shows its name, folder and size and the time elapsed. The project stays as it was until the file has been read, and *Cancel* stops waiting and changes nothing.
+- Trackpad navigation (#174). Two fingers on a trackpad pan the views and a pinch zooms, while a mouse wheel still zooms around the cursor; on a Mac, Cmd and two fingers zoom too. This works in 2D and 3D views, the component, profile and title block editors, the visual programming editor and the site map. *Preferences → Interface → Navigation → Trackpad scrolling pans* turns it off, for a mouse that reports its wheel like a trackpad.
 
 ### Fixed
 
@@ -46,6 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - *Attach Top* did not pick its roof, ceiling or floor in 3D views; a click there only selected it.
 - Thin faces, such as graded terrain seen edge-on in a section, painted long fading bands across the view and past viewports on sheets (#160). Exports were not affected.
 - A project file whose id counter pointed at an element or type in use could lose that type on load and then refuse edits. Ids now stay unique, and title blocks read from files are cleared of what they cannot hold.
+- Pressing Enter in a dialog's text field also pressed OK and closed the dialog: the Site Location search closed the window. Enter now confirms the field, and presses the main action only when no field has the focus.
+- *Import Surroundings* failed with a bare "http status: 500" whenever the public OpenStreetMap (Overpass) server was busy. The download is now tried again, up to four times with growing waits, and if the server stays busy the message says so and suggests trying later or with a smaller square.
 
 ## [0.9.1] - 2026-11-04
 
