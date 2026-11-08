@@ -2710,3 +2710,53 @@ fn side_panels_dock_by_dragging_their_headers() {
     menu.run();
     assert_eq!(menu.state().prefs.panels, PanelLayout::default());
 }
+
+/// Enter in a dialog's text field confirms the field, not the dialog: a
+/// single-line field gives up the focus in the frame Enter is pressed in,
+/// and the Site Location search closed the window. With no field focused,
+/// Enter still presses the main action.
+#[test]
+fn enter_in_a_dialog_text_field_does_not_press_ok() {
+    #[derive(Default)]
+    struct Probe {
+        text: String,
+        ok: usize,
+        themed: bool,
+    }
+    let mut harness = Harness::builder().with_size(egui::vec2(600.0, 400.0)).build_ui_state(
+        |ui, p: &mut Probe| {
+            let ctx = &ui.ctx().clone();
+            if !p.themed {
+                crate::theme::apply(ctx);
+                p.themed = true;
+                return;
+            }
+            crate::theme::sync(ctx);
+            let mut ok = 0;
+            let text = &mut p.text;
+            let r = crate::dialog::Dialog::new("enter-probe", "Probe").show(
+                ctx,
+                |ui| {
+                    ui.add(egui::TextEdit::singleline(text).hint_text("search"));
+                },
+                |f| ok = f.primary("OK"),
+            );
+            if r.clicked == Some(ok) {
+                p.ok += 1;
+            }
+        },
+        Probe::default(),
+    );
+    harness.run();
+    harness.get_by_role(Role::TextInput).click();
+    harness.run();
+    harness.get_by_role(Role::TextInput).type_text("Fortaleza");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert_eq!(harness.state().text, "Fortaleza");
+    assert_eq!(harness.state().ok, 0, "Enter in the field did not press OK");
+    // The field has let go of the focus: Enter now presses OK.
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert_eq!(harness.state().ok, 1);
+}

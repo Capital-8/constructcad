@@ -125,6 +125,10 @@ impl Dialog {
     }
 
     pub fn show(self, ctx: &Context, body: impl FnOnce(&mut Ui), footer: impl FnOnce(&mut Footer)) -> DialogResponse {
+        // A single-line text field gives up the focus in the frame Enter is
+        // pressed in, so the focus is read before the body: an Enter that
+        // confirms a field (a search, a name) must not also press OK.
+        let focus_before = ctx.memory(|m| m.focused().is_some());
         let mut buttons = Footer::default();
         footer(&mut buttons);
         let frame = egui::Frame::popup(&ctx.style_of(egui::Theme::Light))
@@ -212,7 +216,7 @@ impl Dialog {
 
         // Keyboard shortcuts act on the topmost dialog only (one may open over another).
         let top = modal.is_top_modal;
-        let no_text_focus = ctx.memory(|m| m.focused().is_none());
+        let no_text_focus = !focus_before && ctx.memory(|m| m.focused().is_none());
         if top && clicked.is_none() && no_text_focus && ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
             clicked = buttons.actions.iter().position(|(_, s)| *s == Style::Primary);
         }
