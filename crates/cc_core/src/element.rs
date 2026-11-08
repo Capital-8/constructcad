@@ -59,6 +59,8 @@ pub enum ElementKind {
     Topography(crate::topography::Topography),
     /// A building pad graded into its terrain.
     Pad(crate::pad::Pad),
+    /// A 2D line, arc, circle or ellipse drawn in one view.
+    DetailLine(crate::detail::DetailLine),
     /// The elevation of a point, written in one view.
     LevelMark(Box<crate::level_mark::LevelMark>),
 }
@@ -92,17 +94,19 @@ impl Element {
             ElementKind::Shaft(_) => Category::Shaft,
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
+            ElementKind::DetailLine(_) => Category::DetailLine,
             ElementKind::LevelMark(_) => Category::LevelMark,
         }
     }
 
-    /// The view that owns the element (dimensions, text notes and imported
-    /// drawings live in one view and go with it).
+    /// The view that owns the element (dimensions, text notes, detail lines
+    /// and imported drawings live in one view and go with it).
     pub fn owner_view(&self) -> Option<ViewId> {
         match &self.kind {
             ElementKind::Dimension(d) => Some(d.view),
             ElementKind::Text(t) => Some(t.view),
             ElementKind::CadImport(c) => Some(c.view),
+            ElementKind::DetailLine(l) => Some(l.view),
             ElementKind::LevelMark(m) => Some(m.view),
             _ => None,
         }
@@ -282,6 +286,7 @@ impl Element {
             }
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
             ElementKind::CadImport(c) => c.position += delta,
+            ElementKind::DetailLine(l) => l.curve.transform(&t),
             ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
             // Placed by their hosts.
             ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}

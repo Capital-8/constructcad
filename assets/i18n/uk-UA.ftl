@@ -2523,6 +2523,34 @@ tb-field-author = Автор
 tb-field-date = Сьогоднішня дата
 tb-field-issue-date = Дата випуску
 
+# Detail lines
+category-detail-line = Лінія деталі
+tpl-type-detail-line = Лінія деталі
+tx-create-detail-lines = Створити лінії деталі
+line-style-thin = Тонка
+line-style-medium = Середня
+line-style-wide = Товста
+line-style-hidden = Невидима
+line-style-dashed = Штрихова
+line-style-center = Осьова
+line-style-dotted = Пунктирна
+tool-detail-line = Лінія деталі
+cmd-desc-detail-line = Креслить 2D лінії, дуги, кола, полілінії та еліпси лише в цьому виді, зі стилем лінії.
+group-detail = Деталь
+label-line-style = Стиль лінії
+prop-shape = Форма
+detail-mode-line = Лінія
+detail-mode-polyline = Полілінія
+detail-mode-arc3 = Дуга за 3 точками
+detail-mode-arc-center = Дуга від центру
+detail-mode-circle = Коло
+detail-mode-ellipse = Еліпс
+detail-mode-rectangle = Прямокутник
+hint-detail-line = Клацніть точки кривої (коло: центр і радіус; прямокутник: два кути); Esc скасовує криву
+hint-detail-polyline = Клацніть кожну вершину; полілінія триває, доки не замкнеться або Esc
+hint-detail-arc3 = Клацніть два кінці, потім точку на дузі
+hint-detail-arc-center = Клацніть центр, початок і кінець дуги
+hint-detail-ellipse = Клацніть центр, кінець однієї осі, потім половину іншої осі
 ## Level marks
 category-level-mark = Позначки рівня
 tpl-type-level-mark = Позначка рівня 2,5 мм

@@ -10,6 +10,7 @@ pub mod component_piece;
 pub mod component_script;
 pub mod create;
 pub mod curtain;
+pub mod detail;
 pub mod edit;
 pub mod foundation;
 pub mod framing;

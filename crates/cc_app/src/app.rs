@@ -313,6 +313,8 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
     if escape {
         if !state.typed.is_empty() || state.typed.angle_active {
             state.typed.clear();
+        } else if crate::detail_ui::escape(state) {
+            // The curve being drawn was dropped; the tool stays.
         } else if !state.interaction.is_idle() {
             state.interaction = Default::default();
         } else if state.tool != Tool::Select {

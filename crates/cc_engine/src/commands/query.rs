@@ -270,6 +270,11 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             derived.insert("systems".into(), json!(systems));
         }
         ElementKind::CadImport(c) => super::cad::derived(c, &mut derived),
+        ElementKind::DetailLine(l) => {
+            let length: f64 = l.curve.points().windows(2).map(|w| w[0].distance(w[1])).sum();
+            derived.insert("length".into(), json!(length));
+            derived.insert("style_name".into(), json!(l.style.code()));
+        }
         ElementKind::Component(c) => {
             if let Some(mep) = p.mep_data(&e) {
                 derived.insert("mep".into(), to_json(&mep));

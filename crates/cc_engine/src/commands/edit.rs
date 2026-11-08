@@ -87,6 +87,8 @@ fn patched(
     let kind = match &element.kind {
         // The drawing read from the file is not a parameter.
         cc_core::ElementKind::CadImport(c) => super::cad::patch(c, patch)?,
+        // A style may be given by its code.
+        kind @ cc_core::ElementKind::DetailLine(_) => patch_variant(kind, &super::detail::normalize_patch(patch)?)?,
         kind => patch_variant(kind, patch)?,
     };
     if std::mem::discriminant(&kind) != std::mem::discriminant(&element.kind) {
@@ -101,6 +103,11 @@ fn patched(
         }
         cc_core::ElementKind::Roof(r) => super::create::check_roof_holes(r)?,
         cc_core::ElementKind::Floor(f) => super::create::check_openings(&f.boundary, &f.openings)?,
+        cc_core::ElementKind::DetailLine(l) => {
+            if let cc_core::ElementKind::DetailLine(old) = &element.kind {
+                super::detail::check(old, l)?;
+            }
+        }
         _ => {}
     }
     Ok(kind)

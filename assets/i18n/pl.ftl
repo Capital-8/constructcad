@@ -2522,6 +2522,34 @@ tb-field-author = Autor
 tb-field-date = Dzisiejsza data
 tb-field-issue-date = Data wydania
 
+# Detail lines
+category-detail-line = Linia szczegółu
+tpl-type-detail-line = Linia szczegółu
+tx-create-detail-lines = Utwórz linie szczegółu
+line-style-thin = Cienka
+line-style-medium = Średnia
+line-style-wide = Gruba
+line-style-hidden = Ukryta
+line-style-dashed = Kreskowa
+line-style-center = Osiowa
+line-style-dotted = Kropkowa
+tool-detail-line = Linia szczegółu
+cmd-desc-detail-line = Rysuje linie, łuki, okręgi, polilinie i elipsy 2D tylko w tym widoku, ze stylem linii.
+group-detail = Szczegół
+label-line-style = Styl linii
+prop-shape = Kształt
+detail-mode-line = Linia
+detail-mode-polyline = Polilinia
+detail-mode-arc3 = Łuk przez 3 punkty
+detail-mode-arc-center = Łuk od środka
+detail-mode-circle = Okrąg
+detail-mode-ellipse = Elipsa
+detail-mode-rectangle = Prostokąt
+hint-detail-line = Kliknij punkty krzywej (okrąg: środek i promień; prostokąt: dwa narożniki); Esc porzuca krzywą
+hint-detail-polyline = Kliknij każdy wierzchołek; polilinia trwa, aż się zamknie lub Esc
+hint-detail-arc3 = Kliknij dwa końce, potem punkt na łuku
+hint-detail-arc-center = Kliknij środek, początek i koniec łuku
+hint-detail-ellipse = Kliknij środek, koniec jednej osi, potem połowę drugiej osi
 ## Level marks
 category-level-mark = Rzędne poziomu
 tpl-type-level-mark = Rzędna poziomu 2,5 mm

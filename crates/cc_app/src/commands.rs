@@ -140,6 +140,7 @@ pub enum UiCommand {
     LevelMarkPlan,
     LevelMarkSection,
     AddLeader,
+    DetailLine,
     Move,
     CopyElements,
     Rotate,
@@ -313,6 +314,7 @@ impl UiCommand {
             LevelMarkPlan,
             LevelMarkSection,
             AddLeader,
+            DetailLine,
             Move,
             CopyElements,
             Rotate,
@@ -478,6 +480,7 @@ impl UiCommand {
             PanelDiagram => Icon::Systems,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
+            DetailLine => Icon::DetailLine,
             LevelMarkPlan => Icon::LevelMarkPlan,
             LevelMarkSection => Icon::LevelMarkSection,
             AddLeader => Icon::Leader,
@@ -648,6 +651,7 @@ impl UiCommand {
             PanelDiagram => t!("action-panel-diagram"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
+            DetailLine => t!("tool-detail-line"),
             LevelMarkPlan => t!("tool-level-mark-plan"),
             LevelMarkSection => t!("tool-level-mark-section"),
             AddLeader => t!("tool-add-leader"),
@@ -834,6 +838,7 @@ impl UiCommand {
             Dimension(DimensionMode::Radial) => t!("cmd-desc-dim-radial"),
             Dimension(DimensionMode::Diameter) => t!("cmd-desc-dim-diameter"),
             Text => t!("cmd-desc-text"),
+            DetailLine => t!("cmd-desc-detail-line"),
             LevelMarkPlan => t!("cmd-desc-level-mark-plan"),
             LevelMarkSection => t!("cmd-desc-level-mark-section"),
             AddLeader => t!("hint-add-leader-button"),
@@ -973,6 +978,7 @@ impl UiCommand {
             Ungroup => "UG",
             Dimension(DimensionMode::Aligned) => "DI",
             Text => "TT",
+            DetailLine => "DL",
             Move => "MV",
             CopyElements => "CO",
             Rotate => "RO",
@@ -1088,6 +1094,7 @@ impl UiCommand {
             ComponentLibrary => "component_library_list",
             Dimension(_) => "dimension_create",
             Text => "text_create",
+            DetailLine => "detail_line_create",
             LevelMarkPlan | LevelMarkSection => "level_mark_create",
             AddLeader => "text_add_leader",
             Move => "elements_move",
@@ -1198,7 +1205,9 @@ impl UiCommand {
             ExportPdf | ExportSvg if actions::active_sheet(state).is_none() => Some(t!("hint-export-sheet")),
             ExportImage if actions::image_view(state).is_none() => Some(t!("hint-export-image")),
             ExportDxf if actions::image_view(state).is_none() => Some(t!("hint-export-dxf")),
-            ImportCad | ImportImage if crate::cad_ui::cad_view(state).is_none() => Some(t!("why-cad-view")),
+            ImportCad | ImportImage | DetailLine if crate::cad_ui::cad_view(state).is_none() => {
+                Some(t!("why-cad-view"))
+            }
             // Pads grade a terrain of the plan's level.
             Place(Category::Pad) if !actions::terrain_on_level(state) => Some(t!("why-no-terrain")),
             // A project without a ramp, mass, sweep, shaft, terrain or pad type gets one when the tool starts.
@@ -1361,6 +1370,7 @@ impl UiCommand {
                 .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::Dimension { .. })),
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
+            DetailLine => *tool == Tool::DetailLine,
             LevelMarkPlan | LevelMarkSection => matches!(tool, Tool::LevelMark { .. }),
             AddLeader => matches!(tool, Tool::AddLeader { .. }),
             Move => *tool == Tool::Move,
@@ -1450,6 +1460,7 @@ fn place_label(category: Category) -> String {
         Category::Conduit => t!("tool-conduit"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
+        Category::DetailLine => t!("tool-detail-line"),
         Category::LevelMark => t!("tool-level-mark"),
         Category::TitleBlock => t!("category-title-block"),
         Category::Component => t!("tool-component"),
@@ -1483,6 +1494,7 @@ fn place_description(category: Category) -> String {
         Category::Conduit => t!("cmd-desc-conduit"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
+        Category::DetailLine => t!("cmd-desc-detail-line"),
         Category::LevelMark => t!("cmd-desc-level-mark-plan"),
         Category::TitleBlock => t!("category-title-block"),
         Category::Component => t!("cmd-desc-component"),
@@ -1703,6 +1715,10 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
                 state.set_tool(tool);
                 state.message = t!("hint-text");
             }
+        }
+        DetailLine => {
+            state.set_tool(Tool::DetailLine);
+            state.message = t!("hint-detail-line");
         }
         LevelMarkPlan | LevelMarkSection => {
             // A project gets its level mark type with its first mark.

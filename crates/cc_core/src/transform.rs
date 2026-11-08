@@ -165,6 +165,7 @@ impl Element {
                 c.rotation_deg = t.apply_angle_deg(c.rotation_deg);
             }
             ElementKind::CadImport(c) => c.transform(t),
+            ElementKind::DetailLine(l) => l.curve.transform(t),
             ElementKind::Mass(m) => {
                 m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(p);
             }
@@ -405,6 +406,7 @@ impl crate::Project {
             ElementKind::Text(t) => self.view(t.view).is_some(),
             ElementKind::LevelMark(m) => self.view(m.view).is_some(),
             ElementKind::CadImport(c) => self.view(c.view).is_some(),
+            ElementKind::DetailLine(l) => self.view(l.view).is_some(),
             ElementKind::Pad(p) => set
                 .iter()
                 .find(|t| t.id == p.host)

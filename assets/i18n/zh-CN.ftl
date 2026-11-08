@@ -2522,6 +2522,34 @@ tb-field-author = 作者
 tb-field-date = 今天日期
 tb-field-issue-date = 发布日期
 
+# Detail lines
+category-detail-line = 详图线
+tpl-type-detail-line = 详图线
+tx-create-detail-lines = 创建详图线
+line-style-thin = 细
+line-style-medium = 中
+line-style-wide = 粗
+line-style-hidden = 隐藏
+line-style-dashed = 虚线
+line-style-center = 中心线
+line-style-dotted = 点线
+tool-detail-line = 详图线
+cmd-desc-detail-line = 以线型在此视图中绘制 2D 直线、圆弧、圆、多段线和椭圆，只显示于此视图。
+group-detail = 详图
+label-line-style = 线型
+prop-shape = 形状
+detail-mode-line = 直线
+detail-mode-polyline = 多段线
+detail-mode-arc3 = 三点圆弧
+detail-mode-arc-center = 圆心圆弧
+detail-mode-circle = 圆
+detail-mode-ellipse = 椭圆
+detail-mode-rectangle = 矩形
+hint-detail-line = 单击曲线的点（圆：圆心和半径；矩形：两个角点）；Esc 放弃曲线
+hint-detail-polyline = 单击每个顶点；多段线持续到闭合或按 Esc
+hint-detail-arc3 = 单击两端，再单击圆弧上一点
+hint-detail-arc-center = 单击圆弧的圆心、起点和终点
+hint-detail-ellipse = 单击中心、一轴的端点，再单击另一轴的一半
 ## Level marks
 category-level-mark = 标高符号
 tpl-type-level-mark = 标高 2.5 mm

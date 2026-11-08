@@ -2522,6 +2522,34 @@ tb-field-author = Autor
 tb-field-date = Fecha de hoy
 tb-field-issue-date = Fecha de emisión
 
+# Detail lines
+category-detail-line = Línea de detalle
+tpl-type-detail-line = Línea de detalle
+tx-create-detail-lines = Crear líneas de detalle
+line-style-thin = Fina
+line-style-medium = Media
+line-style-wide = Gruesa
+line-style-hidden = Oculta
+line-style-dashed = Discontinua
+line-style-center = Eje
+line-style-dotted = Punteada
+tool-detail-line = Línea de detalle
+cmd-desc-detail-line = Dibuja líneas, arcos, círculos, polilíneas y elipses 2D solo en esta vista, con un estilo de línea.
+group-detail = Detalle
+label-line-style = Estilo de línea
+prop-shape = Forma
+detail-mode-line = Línea
+detail-mode-polyline = Polilínea
+detail-mode-arc3 = Arco por 3 puntos
+detail-mode-arc-center = Arco por centro
+detail-mode-circle = Círculo
+detail-mode-ellipse = Elipse
+detail-mode-rectangle = Rectángulo
+hint-detail-line = Haga clic en los puntos de la curva (círculo: centro y radio; rectángulo: dos esquinas); Esc descarta la curva
+hint-detail-polyline = Haga clic en cada vértice; la polilínea sigue hasta cerrarse o Esc
+hint-detail-arc3 = Haga clic en los dos extremos y luego en un punto del arco
+hint-detail-arc-center = Haga clic en el centro, el inicio y el fin del arco
+hint-detail-ellipse = Haga clic en el centro, el extremo de un eje y luego la mitad del otro eje
 ## Level marks
 category-level-mark = Cotas de nivel
 tpl-type-level-mark = Cota de nivel 2,5 mm

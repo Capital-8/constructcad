@@ -91,6 +91,7 @@ fn element_is_valid(e: &Element) -> bool {
                 && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
         }
         ElementKind::CadImport(c) => c.is_valid(),
+        ElementKind::DetailLine(l) => l.is_valid(),
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
@@ -177,7 +178,11 @@ impl Project {
                 TypeData::LevelMark { text_size, datum, .. } => {
                     repairs += crate::level_mark::repair_type(text_size, datum)
                 }
-                TypeData::Room {} | TypeData::CadImport {} | TypeData::Mass { .. } | TypeData::Shaft {} => {}
+                TypeData::Room {}
+                | TypeData::CadImport {}
+                | TypeData::DetailLine {}
+                | TypeData::Mass { .. }
+                | TypeData::Shaft {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
                     for (r, d) in
                         [(cut_slope, crate::pad::DEFAULT_CUT_SLOPE), (fill_slope, crate::pad::DEFAULT_FILL_SLOPE)]
@@ -327,6 +332,7 @@ impl Project {
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),
                         ElementKind::CadImport(c) => self.view(c.view).is_some(),
+                        ElementKind::DetailLine(l) => self.view(l.view).is_some(),
                         ElementKind::Pad(p) => {
                             self.element(p.host).is_some_and(|t| matches!(t.kind, ElementKind::Topography(_)))
                         }

@@ -2418,3 +2418,42 @@ fn section_marks_are_picked_flipped_and_moved() {
     let shift = glam::DVec2::new(2.0, 0.0);
     assert!(s.distance(end + shift) < 1e-6 && e.distance(start + shift) < 1e-6, "{s} {e}");
 }
+
+/// Issue #149: the Detail Line tool works in views that hold drawings; its
+/// curves become selected elements of the view, the style is changed in
+/// the properties and the Modify tools take them outside plans.
+#[test]
+fn detail_lines_are_drawn_in_a_drafting_view() {
+    use crate::commands::UiCommand;
+    use cc_core::sketch::SketchCurve;
+    use glam::DVec2;
+    let mut state = sample_state();
+    let three_d = state.project().views.values().find(|v| v.category() == cc_core::ViewCategory::ThreeD);
+    state.active_view = three_d.map(|v| v.id);
+    assert_eq!(UiCommand::DetailLine.unavailable(&state), Some(t!("why-cad-view")));
+    let made = crate::actions::run_command(
+        &mut state,
+        cc_engine::commands::views::ViewCreate { kind: "drafting".into(), ..Default::default() },
+    );
+    let view = cc_core::ViewId(made.unwrap()["id"].as_u64().unwrap());
+    state.active_view = Some(view);
+    assert_eq!(UiCommand::DetailLine.unavailable(&state), None);
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::DetailLine);
+    assert_eq!(state.tool, crate::tools::Tool::DetailLine);
+
+    let curves = [
+        SketchCurve::Line { a: DVec2::ZERO, b: DVec2::new(1.0, 0.0) },
+        SketchCurve::Circle { center: DVec2::new(3.0, 0.0), radius: 0.5 },
+    ];
+    crate::detail_ui::create(&mut state, view, cc_core::DetailStyle::Dashed, &curves);
+    assert_eq!(state.selection.len(), 2, "{}", state.message);
+    let first = *state.selection.iter().next().unwrap();
+    let Some(cc_core::ElementKind::DetailLine(l)) = state.project().element(first).map(|e| &e.kind) else {
+        panic!("a detail line")
+    };
+    assert_eq!((l.view, l.style), (view, cc_core::LineStyleRef::BuiltIn(cc_core::DetailStyle::Dashed)));
+
+    // Moving them is allowed in the drafting view: they belong to it.
+    crate::modify::start(&mut state, crate::tools::Tool::Move);
+    assert!(crate::detail_ui::view_owned(&state, &crate::tools::Tool::Move));
+}

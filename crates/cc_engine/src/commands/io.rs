@@ -78,7 +78,8 @@ pub struct SheetExport {
 
 /// A view's drawing as DXF: a sheet in paper millimeters, any other view at
 /// full size in millimeters (texts at their printed size times the scale),
-/// without temporary hiding; each element on the layer of its category.
+/// without temporary hiding; each element on the layer of its category
+/// (detail lines on the layer of their line style).
 fn view_dxf(s: &mut Session, id: cc_core::ViewId) -> Result<Vec<u8>> {
     use cc_views::dxf::{DxfScale, default_layer, to_dxf};
     let kind = s.project().view(id).map(|v| (matches!(v.kind, ViewKind::Sheet { .. }), v.scale));
@@ -96,6 +97,8 @@ fn view_dxf(s: &mut Session, id: cc_core::ViewId) -> Result<Vec<u8>> {
     };
     let project = s.project();
     let layer = |prim: &cc_views::Prim| match prim.element().and_then(|e| project.element(e)) {
+        // Detail lines go on the layer of their line style.
+        Some(cc_core::Element { kind: cc_core::ElementKind::DetailLine(l), .. }) => l.style.code().to_string(),
         Some(e) => format!("{:?}", e.category()),
         None => default_layer(prim).to_string(),
     };
@@ -133,8 +136,8 @@ impl Command for SheetExport {
 /// `format`, else by the file extension). The view is drawn at its scale as
 /// printed, without temporary hiding, on a page that fits it; sheets keep
 /// their paper size. A DXF holds the view at full size in millimeters (a
-/// sheet in paper millimeters), each element on the layer of its category,
-/// colors as the nearest color index and line patterns as line types.
+/// sheet in paper millimeters), each element on the layer of its category
+/// (detail lines on the layer named after their line style), colors as the nearest color index and line patterns as line types.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewExport {

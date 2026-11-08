@@ -182,6 +182,10 @@ pub struct AppState {
     pub text_edit: Option<crate::text_tool::TextEditor>,
     /// Options of the text tools.
     pub text_options: crate::text_tool::TextOptions,
+    /// Options of the Detail Line tool (mode and line style).
+    pub detail: crate::detail_ui::DetailOptions,
+    /// Detail lines being drawn (the picks of the curve in progress).
+    pub detail_draw: Option<crate::detail_ui::DetailDraw>,
     /// The visual programming editor (see [`crate::graph_ui`]).
     pub graph: crate::graph_ui::GraphEditor,
     /// Selection seen last frame (see [`AppState::follow_selection`]).
@@ -248,6 +252,8 @@ impl AppState {
             sketch: None,
             text_edit: None,
             text_options: Default::default(),
+            detail: Default::default(),
+            detail_draw: None,
         }
     }
 
@@ -375,6 +381,7 @@ impl AppState {
             }
             _ => self.sketch = None,
         }
+        self.detail_draw = None;
         self.tool = tool;
         self.interaction = Interaction::default();
         self.typed.clear();

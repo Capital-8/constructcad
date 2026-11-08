@@ -258,6 +258,7 @@ registry![
         annotate::DimensionOrdinateCreate,
         annotate::DimensionSetValue,
         annotate::TextCreate,
+        detail::DetailLineCreate,
         level_mark::LevelMarkCreate,
         level_mark::LevelMarkTypeCreate,
         annotate::TextAddLeader,

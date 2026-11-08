@@ -280,7 +280,7 @@ fn side(c: &SketchCurve, p: DVec2) -> f64 {
 
 /// Curve `c` moved `v` to its left (to its right when negative); `None`
 /// for ellipses and when an arc's or a circle's radius would vanish.
-fn offset_left(c: &SketchCurve, v: f64) -> Option<SketchCurve> {
+pub fn offset_left(c: &SketchCurve, v: f64) -> Option<SketchCurve> {
     let out = match *c {
         SketchCurve::Line { a, b } => {
             let n = (b - a).try_normalize()?.perp() * v;
