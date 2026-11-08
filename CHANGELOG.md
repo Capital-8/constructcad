@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Schedules on sheets. A schedule is placed on a sheet like any view (dragged from the project browser, *Place on active sheet* or `sheet_place_view`) and drawn as a ruled table at its printed size: its name in the first row, the headers, a row per element its phase shows and the totals, right-aligned numbers. It follows the model, and the sheet's PDF, SVG, PNG and DXF carry it. *Export Image*, *Export DXF* and `view_export` also write a schedule alone as its table.
+
 ## [0.10.0] - 2026-11-08
 
 ### Changed

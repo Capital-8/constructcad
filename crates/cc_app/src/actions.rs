@@ -504,12 +504,11 @@ pub fn export_sheet(state: &mut AppState, format: SheetFormat) {
 /// Resolution of exported images, dots per inch.
 pub const IMAGE_DPI: f64 = 150.0;
 
-/// The active view when it has a drawing to export as an image (any view
-/// but a schedule).
+/// The active view, to export as an image or DXF: every view has a drawing
+/// (a schedule draws as its table).
 pub fn image_view(state: &AppState) -> Option<ViewId> {
     let id = state.active_view?;
-    let kind = &state.project().view(id)?.kind;
-    (!matches!(kind, ViewKind::Schedule { .. })).then_some(id)
+    state.project().view(id).map(|v| v.id)
 }
 
 /// Export the active view as a PNG image, as printed (no temporary hiding).
