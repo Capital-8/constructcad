@@ -666,12 +666,14 @@ fn canvas(ui: &mut Ui, state: &mut AppState) {
     if resp.hovered()
         && let Some(p) = pointer
     {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-        if scroll != 0.0 {
-            let g = &mut state.graph;
+        let gesture = crate::gestures::read(ui);
+        let g = &mut state.graph;
+        g.pan += gesture.pan / g.zoom;
+        let factor = gesture.zoom(0.0015) as f32;
+        if (factor - 1.0).abs() > 1e-6 {
             let view = View { origin: rect.min, pan: g.pan, zoom: g.zoom };
             let at = view.graph(p);
-            g.zoom = (g.zoom * (scroll * 0.0015).exp()).clamp(0.25, 2.5);
+            g.zoom = (g.zoom * factor).clamp(0.25, 2.5);
             g.pan = (p - rect.min) / g.zoom - at.to_vec2();
         }
     }

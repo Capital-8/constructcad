@@ -442,10 +442,13 @@ fn canvas(ui: &mut Ui, state: &mut AppState, kind: ComponentViewKind) {
         cam.center -= DVec2::new(d.x as f64, -d.y as f64) / cam.scale;
     }
     if let Some(hover) = resp.hover_pos() {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-        if scroll != 0.0 {
+        let gesture = crate::gestures::read(ui);
+        let d = gesture.pan;
+        cam.center -= DVec2::new(d.x as f64, -d.y as f64) / cam.scale;
+        let factor = gesture.zoom(0.002);
+        if (factor - 1.0).abs() > 1e-6 {
             let before = to_world(cam, rect, hover);
-            cam.scale = (cam.scale * (1.0 + scroll as f64 * 0.002)).clamp(5.0, 50_000.0);
+            cam.scale = (cam.scale * factor).clamp(5.0, 50_000.0);
             cam.center += before - to_world(cam, rect, hover);
         }
     }

@@ -185,11 +185,21 @@ impl View2DState {
             || self.auto_fit.is_some_and(|(c, ppm, size)| c == self.center && ppm == self.ppm && size != rect.size())
     }
 
-    /// Scroll-wheel zoom around the cursor and middle-button pan.
+    /// Wheel or pinch zoom around the cursor, two-finger (trackpad) and
+    /// middle-button pan (see [`crate::gestures`]).
     pub fn navigate(&mut self, ui: &Ui, resp: &Response, rect: Rect) {
         if resp.hovered() {
-            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
-            let factor = (scroll as f64 * 0.0025).exp() * pinch as f64;
+            let gesture = crate::gestures::read(ui);
+            if gesture.pan != egui::Vec2::ZERO {
+                let now = ui.input(|i| i.time);
+                if now - self.last_wheel > 0.6 {
+                    self.remember();
+                }
+                self.last_wheel = now;
+                let d = gesture.pan;
+                self.center += DVec2::new(-d.x as f64, d.y as f64) / self.ppm;
+            }
+            let factor = gesture.zoom(0.0025);
             if (factor - 1.0).abs() > 1e-6
                 && let Some(cursor) = resp.hover_pos()
             {

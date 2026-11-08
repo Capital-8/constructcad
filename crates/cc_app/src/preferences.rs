@@ -44,6 +44,8 @@ const FONT_SIZE_KEY: &str = "font_size";
 const TOOLTIPS_KEY: &str = "detailed_tooltips";
 /// eframe storage key of the 3D left-drag preference ("1" when it selects).
 const SELECT_3D_KEY: &str = "select_drag_3d";
+/// eframe storage key of the trackpad preference ("0" when two-finger scrolling zooms).
+const TRACKPAD_KEY: &str = "trackpad_pans";
 /// eframe storage key of the custom two-letter shortcuts (`CommandId=KEYS` per line).
 const SHORTCUTS_KEY: &str = "shortcut_keys";
 /// eframe storage key of the macros folder.
@@ -103,6 +105,9 @@ pub struct Preferences {
     /// A left drag in 3D views draws a selection box (Shift+drag orbits);
     /// otherwise it orbits and Shift+drag selects.
     pub select_drag_3d: bool,
+    /// Two fingers on a trackpad pan the views and a pinch zooms; otherwise
+    /// any scroll zooms, as a mouse wheel does (see `gestures.rs`).
+    pub trackpad_pans: bool,
     /// Custom two-letter keys by command id (`UiCommand::id`); empty keys
     /// take a command's keys away.
     pub shortcut_keys: BTreeMap<String, String>,
@@ -137,6 +142,7 @@ impl Default for Preferences {
             ribbon_collapsed: false,
             detailed_tooltips: true,
             select_drag_3d: false,
+            trackpad_pans: true,
             shortcut_keys: BTreeMap::new(),
             library_folders: Vec::new(),
             macro_folder: None,
@@ -234,6 +240,7 @@ impl Preferences {
             ribbon_collapsed: on(RIBBON_KEY, d.ribbon_collapsed),
             detailed_tooltips: on(TOOLTIPS_KEY, d.detailed_tooltips),
             select_drag_3d: on(SELECT_3D_KEY, d.select_drag_3d),
+            trackpad_pans: on(TRACKPAD_KEY, d.trackpad_pans),
             shortcut_keys: get(SHORTCUTS_KEY).map(|v| shortcut_lines(&v)).unwrap_or_default(),
             library_folders: get(LIBRARY_KEY).map(|v| path_lines(&v, MAX_LIBRARY_FOLDERS)).unwrap_or_default(),
             macro_folder: folder(get(MACRO_FOLDER_KEY)),
@@ -256,6 +263,7 @@ impl Preferences {
         set(RIBBON_KEY, flag(self.ribbon_collapsed));
         set(TOOLTIPS_KEY, flag(self.detailed_tooltips));
         set(SELECT_3D_KEY, flag(self.select_drag_3d));
+        set(TRACKPAD_KEY, flag(self.trackpad_pans));
         let keys = self.shortcut_keys.iter().map(|(id, keys)| format!("{id}={keys}")).collect::<Vec<_>>();
         set(SHORTCUTS_KEY, keys.join("\n"));
         set(LIBRARY_KEY, join_paths(&self.library_folders));
@@ -352,6 +360,7 @@ impl Look {
 /// becomes the scale preference.
 pub fn sync_look(ctx: &Context, prefs: &mut Preferences, look: &mut Look) {
     crate::commands::set_key_overrides(&prefs.shortcut_keys);
+    crate::gestures::set_trackpad_pans(prefs.trackpad_pans);
     let zoom = ctx.zoom_factor();
     if (zoom - look.zoom).abs() > 1e-3 {
         prefs.ui_scale = scale_of_zoom(zoom);
@@ -724,6 +733,9 @@ fn interface(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("pref-group-3d"), false);
     let label = t!("pref-select-drag-3d");
     check_row(ui, &label, &mut state.prefs.select_drag_3d, Some(t!("pref-select-drag-3d-hint")));
+    group(ui, t!("pref-group-navigation"), false);
+    let label = t!("pref-trackpad-pans");
+    check_row(ui, &label, &mut state.prefs.trackpad_pans, Some(t!("pref-trackpad-pans-hint")));
 }
 
 /// `text` shortened in the middle to at most `max` characters.
@@ -1057,6 +1069,7 @@ mod tests {
             ribbon_collapsed: true,
             detailed_tooltips: false,
             select_drag_3d: true,
+            trackpad_pans: false,
             shortcut_keys: BTreeMap::from([("Move".to_string(), "MO".to_string()), ("Pin".to_string(), String::new())]),
             library_folders: vec![PathBuf::from("/lib/a"), PathBuf::from("C:\\lib b")],
             macro_folder: Some(PathBuf::from("/macros")),
