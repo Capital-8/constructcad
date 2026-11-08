@@ -4,6 +4,8 @@
 
 A janela do ConstructCraft segue a disposição que usuários de CAD e BIM de desktop esperam. A **barra de acesso rápido** fica no canto superior esquerdo. Abaixo dela está o **ribbon**, uma fileira de abas com grupos de botões. Em seguida vem a **barra de opções** da ferramenta ativa. O **navegador de projeto** e as **propriedades** ficam encaixados à esquerda, as **vistas** ocupam as abas no centro e a **barra de status** fica embaixo. Com muitas vistas abertas, **Fechar vistas inativas** (na barra de acesso rápido e em *Vista → Janelas*) fecha todas as abas menos a ativa, e o clique direito numa aba oferece *Fechar as outras vistas*.
 
+Abrir um projeto e importar um arquivo (IFC, DWG/DXF, SketchUp, imagens e SVG, arquivos de componente) faz a leitura em segundo plano: um diálogo mostra a operação, o nome, a pasta e o tamanho do arquivo e o tempo decorrido, com um indicador animado, e impede o uso do resto da janela. O projeto aberto continua como estava até o arquivo ser lido; *Cancelar* (ou Esc) deixa de esperar e não altera nada.
+
 ## Comandos e suas dicas
 
 Todo botão do ribbon e da barra de acesso rápido executa um *comando da interface*. O mesmo vale para cada atalho de duas letras e cada item da paleta de comandos. Cada comando define, num só lugar:

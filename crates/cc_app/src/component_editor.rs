@@ -1050,6 +1050,7 @@ mod file_tests {
         let before = state.project().types_of(Category::Component).count();
         let depth = state.session.doc.undo_depth();
         crate::actions::load_component_path(&mut state, path);
+        crate::jobs::wait(&mut state);
         let crate::tools::Tool::Component { type_id: first } = state.tool.clone() else { panic!("tool") };
         assert_eq!(state.session.doc.undo_depth(), depth + 1);
         assert_eq!(state.project().types_of(Category::Component).count(), before + 1);
