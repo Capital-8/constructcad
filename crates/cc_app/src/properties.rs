@@ -2437,6 +2437,7 @@ fn view_props(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         let category_name = tr(view.category().key());
         header_block(ui, crate::browser::category_icon(view.category()), &view.name, &category_name);
     });
+    crate::callout_ui::view_rows(ui, state, id);
     view_sections(ui, state, id);
 }
 

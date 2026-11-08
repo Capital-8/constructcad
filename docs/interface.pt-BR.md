@@ -213,6 +213,11 @@ Cortinas de vidro são paredes de um tipo cortina (um projeto sem tipo cortina g
 - As ferramentas *Texto*, *Cota*, *Importar CAD* e *Importar imagem* funcionam nela como nas outras vistas 2D; as cotas nela medem só o que está desenhado.
 - Arraste-a do navegador para uma folha como qualquer outra vista, e exporte-a com *Exportar imagem*, *Exportar PDF*, *Exportar SVG* ou *Exportar DXF*. Excluí-la exclui o que foi desenhado nela.
 
+## Chamadas de detalhe e vistas de detalhe
+
+- **Vista → Chamada de detalhe** desenha uma chamada na planta, planta de forro, corte ou elevação ativa (desabilitado em outras vistas, dizendo por quê): clique em dois cantos opostos da região a detalhar. Ela cria uma vista de detalhe dessa região em escala maior, listada no navegador de projeto sob o tipo da vista mãe (*Plantas*, *Cortes*…), que continua ligada ao modelo e é recortada pelo retângulo; desenhe nela linhas de detalhe, regiões, componentes de detalhe, textos e cotas como em qualquer vista. A barra de opções escolhe a escala (*Automática*: cerca de cinco vezes maior que a da vista mãe) ou, em *Mostra*, uma vista de desenho existente para a qual a chamada aponta em vez de uma nova vista de detalhe.
+- A vista mãe desenha a chamada como um retângulo de cantos arredondados e uma marca com o número do detalhe sobre o número da folha, depois que o detalhe é colocado numa folha. Com a ferramenta Selecionar, clique na chamada para selecioná-la (as propriedades da sua vista aparecem, com *Abrir vista* e *Remover chamada*), arraste-a para movê-la ou arraste um canto para redimensioná-la — o recorte da vista de detalhe acompanha — e clique duas vezes para abrir sua vista. *Excluir* exclui a vista de detalhe, o que remove a chamada.
+
 ## Linhas de detalhe
 
 - **Anotar → Linha de detalhe** (`DL`) desenha linhas 2D que pertencem só à vista ativa: uma planta, planta de forro, elevação, corte, legenda ou vista de desenho (nas outras vistas o botão fica cinza e diz por quê). Elas ficam por cima do modelo e não aparecem em nenhuma outra vista.

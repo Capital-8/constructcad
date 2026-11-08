@@ -111,6 +111,8 @@ pub fn view(state: &mut AppState, id: ViewId, key: Option<u64>, f: impl FnOnce(&
     if new == old {
         return false;
     }
+    let crop = (new.callout_rect() != old.callout_rect() || new.crop != old.crop)
+        .then(|| new.callout_rect().or(new.crop).map(|r| [[r.min.x, r.min.y], [r.max.x, r.max.y]]));
     let command = views::ViewSet {
         view: Ref::Id(id.0),
         name: (new.name != old.name).then_some(new.name),
@@ -121,6 +123,7 @@ pub fn view(state: &mut AppState, id: ViewId, key: Option<u64>, f: impl FnOnce(&
         visual_style: (new.visual_style != old.visual_style)
             .then(|| new.visual_style.map_or("default", |s| s.name()).to_string()),
         phase_filter: (new.phase_filter != old.phase_filter).then(|| new.phase_filter.map(|f| Ref::Id(f.0))),
+        crop,
     };
     run(state, key, command)
 }

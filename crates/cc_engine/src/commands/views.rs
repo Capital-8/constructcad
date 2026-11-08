@@ -234,7 +234,7 @@ fn capitalized(s: &str) -> String {
 /// Change a view: name, scale, phase and phase filter, and its `params` as
 /// `view_get` shows them (merged: cut height, section depth, legend types,
 /// schedule fields, sort, filter and totals, sheet number and size,
-/// viewport positions…).
+/// viewport positions…) and the crop.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
@@ -264,6 +264,13 @@ pub struct ViewSet {
     /// Phase filter (id or name), or `null` for none (every status by category).
     #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
     pub phase_filter: Option<Option<Ref>>,
+    /// Crop rectangle: two opposite corners in the view's drawing
+    /// coordinates (plans, sections and elevations draw nothing of the model
+    /// outside it), or `null` to show everything. For a detail view this is
+    /// its callout in the parent; for a drafting view a callout points to,
+    /// it moves that callout.
+    #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
+    pub crop: Option<Option<[Point; 2]>>,
 }
 
 impl Command for ViewSet {
@@ -301,6 +308,18 @@ impl Command for ViewSet {
         };
         if (phase.is_some() || phase_filter.is_some()) && !view.kind.is_phased() {
             return Err(EngineError::invalid("this view has no phase"));
+        }
+        let crop = match self.crop {
+            Some(Some(c)) => Some(Some(super::callout::crop_box(c)?)),
+            Some(None) => Some(None),
+            None => None,
+        };
+        let callout_of_drafting = view.is_drafting() && view.callout.is_some();
+        if crop.is_some() && !view.kind.croppable() && !callout_of_drafting {
+            return Err(EngineError::invalid("this view cannot be cropped"));
+        }
+        if crop == Some(None) && view.callout.is_some() {
+            return Err(EngineError::invalid(t!("msg-callout-needs-rect")));
         }
         // Properties the view's template controls stay as the template has them.
         if let Some(t) = view.template.and_then(|t| p.template(t)) {
@@ -349,6 +368,13 @@ impl Command for ViewSet {
             if let Some(f) = phase_filter {
                 v.phase_filter = f;
             }
+            match crop {
+                Some(Some(rect)) if callout_of_drafting => {
+                    v.set_callout_rect(rect);
+                }
+                Some(c) => v.crop = c,
+                None => {}
+            }
             Ok(())
         })?;
         Ok(view_out(s, id))
@@ -370,6 +396,8 @@ impl Command for ViewDuplicate {
         let id = refs::view(p, &self.view)?;
         let mut v = p.view(id).cloned().ok_or_else(|| EngineError::not_found("view"))?;
         v.name = t!("copy-of", "name" => v.name);
+        // A callout stands for one view: the copy keeps the crop only.
+        v.callout = None;
         if let ViewKind::Sheet { viewports, number, .. } = &mut v.kind {
             // A view can be placed on only one sheet.
             viewports.clear();

@@ -122,7 +122,8 @@ pub struct AppState {
     pub rename: Option<(ViewId, String)>,
     /// Selected viewport on a sheet: (sheet, viewport index).
     pub sheet_selection: Option<(ViewId, usize)>,
-    /// Section whose mark is selected in a plan (see [`crate::section_mark`]).
+    /// View whose mark is selected: a section's in a plan (see
+    /// [`crate::section_mark`]) or a callout's (see [`crate::callout_ui`]).
     pub section_selection: Option<ViewId>,
     /// Status bar message.
     pub message: String,
@@ -190,6 +191,8 @@ pub struct AppState {
     pub detail_draw: Option<crate::detail_ui::DetailDraw>,
     /// Options of the Detail Component tool (rotation, scale, mirror).
     pub detail_component: crate::detail_component_ui::PlaceOptions,
+    /// Options of the Callout tool (scale, drafting view pointed to).
+    pub callout: crate::callout_ui::CalloutOptions,
     /// Import CAD brings a drawing's blocks in as detail components.
     pub cad_blocks: bool,
     /// The visual programming editor (see [`crate::graph_ui`]).
@@ -261,6 +264,7 @@ impl AppState {
             detail: Default::default(),
             detail_draw: None,
             detail_component: Default::default(),
+            callout: Default::default(),
             cad_blocks: false,
         }
     }

@@ -2528,3 +2528,68 @@ fn regions_are_sketched_and_line_styles_edited() {
     assert!(matches!(&state.project().element(line).unwrap().kind,
         cc_core::ElementKind::DetailLine(l) if l.style == cc_core::LineStyleRef::Project(style)));
 }
+
+/// The Callout tool makes a detail view from two clicks in a plan; the
+/// callout's mark is picked, resized by a corner (the detail's crop) and
+/// opens its view on a double-click.
+#[test]
+fn callouts_are_drawn_resized_and_opened() {
+    let mut state = sample_state();
+    let plan = state.project().views.values().find(|v| v.level().is_some()).map(|v| v.id).unwrap();
+    state.active_view = Some(plan);
+    state.set_tool(crate::tools::Tool::Callout);
+    let mut harness = themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, |ui, state| {
+        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin: glam::DVec2::ZERO, scale: 20.0 };
+        let Some(view) = state.active_view.and_then(|v| state.project().view(v).cloned()) else { return };
+        if state.tool == crate::tools::Tool::Callout {
+            crate::callout_ui::tool(ui, &resp, &painter, state, &view, &xf);
+        } else if let Some(drawing) = state.drawing(view.id) {
+            crate::callout_ui::select(ui, &resp, &painter, state, &xf, &drawing);
+        }
+    });
+    harness.run();
+    let screen = |p: glam::DVec2| egui::pos2(300.0 + p.x as f32 * 20.0, 200.0 - p.y as f32 * 20.0);
+    let press = |h: &mut Harness<'static, AppState>, pos: egui::Pos2, pressed: bool| {
+        h.input_mut().events.push(egui::Event::PointerMoved(pos));
+        let (button, modifiers) = (egui::PointerButton::Primary, egui::Modifiers::NONE);
+        h.input_mut().events.push(egui::Event::PointerButton { pos, button, pressed, modifiers });
+        h.run();
+    };
+    let click = |h: &mut Harness<'static, AppState>, p: glam::DVec2| {
+        press(h, screen(p), true);
+        press(h, screen(p), false);
+    };
+    // Far from the model so nothing snaps: corners (-12, -8) and (-8, -5).
+    click(&mut harness, glam::DVec2::new(-12.0, -8.0));
+    click(&mut harness, glam::DVec2::new(-8.0, -5.0));
+    let detail = harness.state().section_selection.expect("the new detail's callout, selected");
+    let crop = |state: &AppState| state.project().view(detail).and_then(|v| v.crop).unwrap();
+    assert_eq!(
+        crop(harness.state()),
+        cc_core::CropBox::new(glam::DVec2::new(-12.0, -8.0), glam::DVec2::new(-8.0, -5.0))
+    );
+    assert_eq!(harness.state().project().view(detail).unwrap().category(), cc_core::ViewCategory::FloorPlan);
+
+    // Drag the upper right corner 1 m right and 1 m up.
+    harness.state_mut().set_tool(crate::tools::Tool::Select);
+    harness.run();
+    let corner = screen(glam::DVec2::new(-8.0, -5.0));
+    press(&mut harness, corner, true);
+    for step in 1..=4 {
+        harness.input_mut().events.push(egui::Event::PointerMoved(corner + egui::vec2(5.0, -5.0) * step as f32));
+        harness.run();
+    }
+    press(&mut harness, corner + egui::vec2(20.0, -20.0), false);
+    assert_eq!(crop(harness.state()).max, glam::DVec2::new(-7.0, -4.0));
+
+    // A double-click on a side opens the detail view (the harness clock
+    // runs faster than a hand, so allow a slow double click).
+    harness.ctx.options_mut(|o| o.input_options.max_double_click_delay = 60.0);
+    let side = screen(glam::DVec2::new(-12.0, -6.0));
+    for _ in 0..2 {
+        press(&mut harness, side, true);
+        press(&mut harness, side, false);
+    }
+    assert_eq!(harness.state().open_requests.last(), Some(&detail));
+}

@@ -214,6 +214,8 @@ pub struct Drawing2D {
     pub underlay: usize,
     /// The marks of sections in a plan: picked, moved and flipped there.
     pub sections: Vec<SectionHandle>,
+    /// The marks of callouts drawn in the view: picked, moved and resized there.
+    pub callouts: Vec<crate::callout::CalloutHandle>,
 }
 
 /// A section's mark in a plan, as drawn (meters on the plan).
@@ -273,6 +275,11 @@ impl Drawing2D {
     /// The section mark at `p` (the last drawn on top), if any.
     pub fn section_at(&self, p: DVec2, tol: f64) -> Option<&SectionHandle> {
         self.sections.iter().rev().find(|s| s.hits(p, tol))
+    }
+
+    /// The callout mark at `p` (the last drawn on top), if any.
+    pub fn callout_at(&self, p: DVec2, tol: f64) -> Option<&crate::callout::CalloutHandle> {
+        self.callouts.iter().rev().find(|c| c.hits(p, tol))
     }
 
     /// The tag at `p` (the last drawn on top), if any.

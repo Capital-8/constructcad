@@ -207,6 +207,10 @@ fn set(state: &mut AppState, view: ViewId, a: DVec2, b: DVec2, new_segments: Opt
 /// Turn the selected section to look the other way (Space).
 pub fn flip(state: &mut AppState) -> bool {
     let Some(view) = state.section_selection else { return false };
+    // A callout's detail view follows its parent section.
+    if state.project().view(view).is_none_or(|v| v.is_detail()) {
+        return false;
+    }
     let done = crate::engine_edit::view(state, view, None, |x| {
         x.kind.flip_section();
     });

@@ -6,6 +6,7 @@
 
 pub mod arc;
 pub mod cad;
+pub mod callout;
 pub mod component;
 pub mod component_file;
 pub mod component_ref;
@@ -55,6 +56,7 @@ mod view;
 pub mod wall_ops;
 
 pub use cad::{CadColorMode, CadDrawing, CadImport, CadLayer, CadPrim, CadUnit};
+pub use callout::{Callout, CropBox};
 pub use component::{
     ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind, ResolveCtx,
 };

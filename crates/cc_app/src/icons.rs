@@ -37,6 +37,7 @@ pub enum Icon {
     CeilingPlan,
     View3D,
     Section,
+    Callout,
     Elevation,
     Legend,
     DraftingView,
@@ -174,7 +175,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 159] = [
+    pub const ALL: [Icon; 160] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -201,6 +202,7 @@ impl Icon {
         Icon::CeilingPlan,
         Icon::View3D,
         Icon::Section,
+        Icon::Callout,
         Icon::Elevation,
         Icon::Legend,
         Icon::DraftingView,
@@ -365,6 +367,7 @@ impl Icon {
             Icon::CeilingPlan => include_str!("../../../assets/icons/ui/ceiling-plan.svg"),
             Icon::View3D => include_str!("../../../assets/icons/ui/view-3d.svg"),
             Icon::Section => include_str!("../../../assets/icons/ui/section.svg"),
+            Icon::Callout => include_str!("../../../assets/icons/ui/callout.svg"),
             Icon::Elevation => include_str!("../../../assets/icons/ui/elevation.svg"),
             Icon::Legend => include_str!("../../../assets/icons/ui/legend.svg"),
             Icon::DraftingView => include_str!("../../../assets/icons/ui/drafting-view.svg"),
