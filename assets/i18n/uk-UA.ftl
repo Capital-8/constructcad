@@ -2698,6 +2698,7 @@ site-search-hint = Адреса, місце або координати
 site-search = Шукати
 site-search-none = Нічого не знайдено.
 site-request-failed = Запит не вдався: { $error }
+site-server-busy = Сервер картографічних даних (OpenStreetMap Overpass) перевантажений (помилка { $status }), навіть після кількох спроб. Спробуйте ще раз за кілька хвилин або з меншим квадратом.
 site-latitude = Широта
 site-longitude = Довгота
 site-elevation = Висота

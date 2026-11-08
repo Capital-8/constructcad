@@ -549,18 +549,55 @@ fn get_text(url: &str, limit: usize) -> Result<String, String> {
     String::from_utf8(get(url, limit)?).map_err(|e| e.to_string())
 }
 
-/// POST an Overpass query, the answer as text.
+/// How many times an Overpass query is sent while the server is busy.
+const OVERPASS_TRIES: u32 = 4;
+/// The wait before the first retry; it doubles after each one.
+const OVERPASS_FIRST_WAIT: Duration = Duration::from_secs(3);
+
+/// POST an Overpass query, the answer as text (on a worker thread: it
+/// waits between retries).
 fn overpass(query: &str) -> Result<String, String> {
     if offline() {
         return Err("offline".into());
     }
     let body = format!("data={}", encode(query));
-    let mut response = agent()
-        .post(OVERPASS_URL)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .send(body.as_bytes())
-        .map_err(|e| e.to_string())?;
-    response.body_mut().with_config().limit(osm::MAX_JSON as u64).read_to_string().map_err(|e| e.to_string())
+    let send = || -> Result<String, ureq::Error> {
+        let mut response = agent()
+            .post(OVERPASS_URL)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .send(body.as_bytes())?;
+        response.body_mut().with_config().limit(osm::MAX_JSON as u64).read_to_string()
+    };
+    with_retries(send, std::thread::sleep)
+}
+
+/// Statuses with which the public Overpass server says it is busy (at
+/// capacity, rate limited, timed out), asking clients to retry later.
+fn server_busy(status: u16) -> bool {
+    matches!(status, 429 | 500 | 502 | 503 | 504)
+}
+
+/// Send with `send` until it succeeds, retrying while the server is busy
+/// with waits that double (`wait` sleeps), at most [`OVERPASS_TRIES`] times.
+fn with_retries(
+    mut send: impl FnMut() -> Result<String, ureq::Error>,
+    mut wait: impl FnMut(Duration),
+) -> Result<String, String> {
+    let mut pause = OVERPASS_FIRST_WAIT;
+    for attempt in 1..=OVERPASS_TRIES {
+        match send() {
+            Ok(text) => return Ok(text),
+            Err(ureq::Error::StatusCode(status)) if server_busy(status) => {
+                if attempt == OVERPASS_TRIES {
+                    return Err(t!("site-server-busy", "status" => status));
+                }
+                wait(pause);
+                pause *= 2;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Err(t!("site-server-busy", "status" => 0))
 }
 
 /// Percent-encode a query value.
@@ -782,5 +819,36 @@ mod tests {
     fn tests_never_reach_the_network() {
         assert_eq!(get("https://tile.openstreetmap.org/0/0/0.png", 10), Err("offline".into()));
         assert_eq!(overpass("[out:json];"), Err("offline".into()));
+    }
+
+    /// The public Overpass server answers 500, 502 or 504 when it is at
+    /// capacity; the query is sent again with doubling waits, and other
+    /// errors are not retried.
+    #[test]
+    fn a_busy_map_server_is_asked_again() {
+        let answers = |codes: Vec<Option<u16>>| {
+            let mut codes = codes.into_iter();
+            let mut waits = Vec::new();
+            let mut sent = 0;
+            let result = with_retries(
+                || {
+                    sent += 1;
+                    match codes.next().flatten() {
+                        Some(code) => Err(ureq::Error::StatusCode(code)),
+                        None => Ok("{}".to_string()),
+                    }
+                },
+                |d| waits.push(d.as_secs()),
+            );
+            (result, sent, waits)
+        };
+        // Busy twice, then the data.
+        assert_eq!(answers(vec![Some(502), Some(500), None]), (Ok("{}".into()), 3, vec![3, 6]));
+        // Busy every time: a message that says so, after every try.
+        let (result, sent, waits) = answers(vec![Some(504); 4]);
+        assert_eq!((sent, waits), (OVERPASS_TRIES, vec![3, 6, 12]));
+        assert_eq!(result, Err(t!("site-server-busy", "status" => 504)));
+        // A bad query is not retried.
+        assert_eq!(answers(vec![Some(400)]), (Err("http status: 400".into()), 1, vec![]));
     }
 }

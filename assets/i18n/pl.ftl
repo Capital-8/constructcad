@@ -2697,6 +2697,7 @@ site-search-hint = Adres, miejsce lub współrzędne
 site-search = Szukaj
 site-search-none = Nic nie znaleziono.
 site-request-failed = Zapytanie nie powiodło się: { $error }
+site-server-busy = Serwer danych mapy (OpenStreetMap Overpass) jest przeciążony (błąd { $status }), nawet po kilku próbach. Spróbuj ponownie za kilka minut lub z mniejszym kwadratem.
 site-latitude = Szerokość geograficzna
 site-longitude = Długość geograficzna
 site-elevation = Wysokość

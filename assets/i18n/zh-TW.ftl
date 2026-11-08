@@ -2697,6 +2697,7 @@ site-search-hint = 地址、地點或座標
 site-search = 搜尋
 site-search-none = 找不到結果。
 site-request-failed = 請求失敗：{ $error }
+site-server-busy = 地圖資料伺服器（OpenStreetMap Overpass）忙碌中（錯誤 { $status }），多次嘗試後仍然如此。請幾分鐘後再試，或使用較小的方框。
 site-latitude = 緯度
 site-longitude = 經度
 site-elevation = 高程
