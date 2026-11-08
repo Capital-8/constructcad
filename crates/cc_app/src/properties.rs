@@ -9,7 +9,7 @@ use crate::icons::{self, Icon};
 use crate::state::AppState;
 use crate::t;
 use crate::table::{header_block, padded, readonly_row, row, section};
-use crate::theme::{self, PALETTE};
+use crate::theme::PALETTE;
 use cc_core::{Category, Element, ElementId, ElementKind, RoofShape, ViewId, ViewKind};
 use cc_views::format;
 use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
@@ -107,9 +107,15 @@ fn text_row(ui: &mut Ui, label: &str, value: String) -> (Response, String) {
     (r, text)
 }
 
-/// Panel entry point.
+/// The properties palette with its header (the app docks it with `side_panels`).
+#[cfg(test)]
 pub fn show(ui: &mut Ui, state: &mut AppState) {
-    theme::panel_header(ui, &t!("props-title"), None);
+    crate::theme::panel_header(ui, &t!("props-title"), None);
+    body(ui, state);
+}
+
+/// The properties of the selection (or the active view), under a header drawn by the caller.
+pub fn body(ui: &mut Ui, state: &mut AppState) {
     egui::ScrollArea::vertical().id_salt("props").auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         // An open sketch shows its selected curve.
