@@ -621,6 +621,8 @@ impl Project {
             }
         }
 
+        repairs += self.repair_callouts();
+
         // View graphics: filters, templates and the elements they refer to.
         for f in self.filters.values_mut() {
             let before = f.rules.len();

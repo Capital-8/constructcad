@@ -213,6 +213,11 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - The *Text*, *Dimension*, *Import CAD* and *Import Image* tools work in it as in other 2D views; dimensions in it measure only what they are drawn on.
 - Drag it from the browser onto a sheet like any other view, and export it with *Export Image*, *Export PDF*, *Export SVG* or *Export DXF*. Deleting it deletes what was drawn in it.
 
+## Callouts and detail views
+
+- **View → Callout** draws a callout in the active floor plan, ceiling plan, section or elevation (greyed out in other views, saying why): click two opposite corners of the region to detail. It makes a detail view of that region at a larger scale, listed in the project browser under the parent's kind (*Floor Plans*, *Sections*…), that stays live with the model and is cropped to the rectangle; draw detail lines, regions, detail components, texts and dimensions in it as in any view. The options bar picks the scale (*Automatic*: about five times larger than the parent's) or, under *Shows*, an existing drafting view the callout points to instead of a new detail view.
+- The parent draws the callout as a rectangle with rounded corners and a tag with the detail's number over the sheet's number once the detail is placed on a sheet. With the Select tool, click the callout to select it (its view's properties show, with *Open View* and *Remove Callout*), drag it to move it or drag a corner to resize it — the detail view's crop follows — and double-click it to open its view. *Delete* deletes the detail view, which removes the callout.
+
 ## Detail lines
 
 - **Annotate → Detail Line** (`DL`) draws 2D lines that belong to the active view only: a floor plan, ceiling plan, elevation, section, legend or drafting view (the button is greyed out in other views, and says why). They are drawn on top of the model and show nowhere else.

@@ -33,6 +33,8 @@ pub enum Tool {
         type_id: ElementTypeId,
     },
     Section,
+    /// Draw a callout's rectangle in a plan, section or elevation.
+    Callout,
     /// Draw detail lines in the active 2D view (mode and style in
     /// `AppState::detail`, see [`crate::detail_ui`]).
     DetailLine,
@@ -159,6 +161,7 @@ impl Tool {
             Tool::Sketch { category: Category::MaskingRegion, .. } => "tool-masking-region",
             Tool::Sketch { .. } => "tool-floor",
             Tool::Section => "tool-section",
+            Tool::Callout => "tool-callout",
             Tool::Room { .. } => "tool-room",
             Tool::Grid { .. } => "tool-grid",
             Tool::Dimension { mode, .. } => mode.key(),
@@ -411,6 +414,12 @@ pub enum Drag {
     Section {
         view: ViewId,
         part: crate::section_mark::Part,
+        start: DVec2,
+    },
+    /// A callout's mark: the whole mark or a corner, grabbed at `start`.
+    Callout {
+        view: ViewId,
+        part: crate::callout_ui::Part,
         start: DVec2,
     },
     /// A hotspot of a scripted component, at elevation `z` (absolute).
@@ -1335,6 +1344,8 @@ pub fn handle(
             let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
             crate::text_tool::add_leader_tool(ui, resp, painter, state, view, *id, xf, px_per_mm)
         }
+        // Callouts go in plans, ceiling plans, sections and elevations.
+        (Tool::Callout, _) if view.kind.croppable() => crate::callout_ui::tool(ui, resp, painter, state, view, xf),
         // Regions are sketched in any view that holds drawings, in its coordinates.
         (Tool::Sketch { category: Category::FilledRegion | Category::MaskingRegion, .. }, level)
             if cc_views::hosts_cad(&view.kind) =>
@@ -3125,7 +3136,10 @@ fn select(
     xf: &Xf,
     drawing: &Drawing2D,
 ) {
-    // Section marks first: they lie over the model.
+    // Callout and section marks first: they lie over the model.
+    if crate::callout_ui::select(ui, resp, painter, state, xf, drawing) {
+        return;
+    }
     if movable && crate::section_mark::select(ui, resp, painter, state, xf, drawing) {
         return;
     }
@@ -3377,7 +3391,8 @@ fn select(
                 | Drag::DetailGrip { .. }
                 | Drag::Bend { .. }
                 | Drag::Hotspot { .. }
-                | Drag::Section { .. },
+                | Drag::Section { .. }
+                | Drag::Callout { .. },
             ) => {}
             Some(Drag::Tag { tag, start }) => {
                 if let (Some(raw), Some(view)) = (raw.or(state.cursor), state.active_view)

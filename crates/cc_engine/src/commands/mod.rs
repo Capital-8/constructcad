@@ -4,6 +4,7 @@
 pub mod analytical;
 pub mod annotate;
 pub mod cad;
+pub mod callout;
 pub mod component;
 pub mod component_connector;
 pub mod component_piece;

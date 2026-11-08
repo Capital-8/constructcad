@@ -282,6 +282,14 @@ pub struct View {
     /// its kind, see [`View::style`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visual_style: Option<VisualStyle>,
+    /// The rectangle of the view's drawing outside which the model is not
+    /// drawn (plans, sections and elevations; see [`crate::callout`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<crate::callout::CropBox>,
+    /// The callout standing for this view in another one: a detail view
+    /// of the model (cropped to it) or a drafting view it points to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callout: Option<crate::callout::Callout>,
 }
 
 /// How a view shows the model's surfaces.
@@ -514,6 +522,8 @@ impl View {
             tag_offsets: Default::default(),
             detail: DetailLevel::Medium,
             visual_style: None,
+            crop: None,
+            callout: None,
         }
     }
 

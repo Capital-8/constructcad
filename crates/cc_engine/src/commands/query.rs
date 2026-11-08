@@ -404,6 +404,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
     let v = s.project().view(id)?;
     let (_, params) = variant(to_json(&v.kind));
     let (phase, phase_filter) = super::phases::view_phase_json(s.project(), v);
+    let (crop, callout) = super::callout::view_callout_json(s.project(), v);
     Some(json!({
         "id": v.id.0,
         "name": v.name,
@@ -415,6 +416,8 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "template": v.template.map(|t| t.0),
         "phase": phase,
         "phase_filter": phase_filter,
+        "crop": crop,
+        "callout": callout,
     }))
 }
 

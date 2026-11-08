@@ -145,7 +145,10 @@ pub fn plan_of(
             .flatten()
             .fold((DVec2::new(lo.x, lo.y), DVec2::new(hi.x, hi.y)), |(lo, hi), p| (lo.min(p), hi.max(p)));
         for v in project.views.values() {
-            if let ViewKind::Elevation { direction } = v.kind {
+            // A detail view of an elevation is drawn as a callout in it, not here.
+            if let ViewKind::Elevation { direction } = v.kind
+                && !v.is_detail()
+            {
                 elevation_mark(&mut d, lo, hi, direction.look(), &v.name);
             }
         }
@@ -738,7 +741,10 @@ const SECTION_SHEET_MM: f64 = 2.5;
 /// `d.sections` to be picked, moved and flipped.
 pub(crate) fn section_marks(d: &mut Drawing2D, project: &Project, scale: u32) {
     for v in project.views.values() {
-        if let ViewKind::Section { start, end, depth, segments } = v.kind {
+        // A detail view of a section is drawn as a callout in it, not here.
+        if let ViewKind::Section { start, end, depth, segments } = v.kind
+            && !v.is_detail()
+        {
             let (number, sheet) = section_labels(project, v);
             let handle = section_mark(d, (start, end), depth, segments, scale, (&number, &sheet));
             d.sections.push(crate::SectionHandle { view: v.id, ..handle });
@@ -749,7 +755,7 @@ pub(crate) fn section_marks(d: &mut Drawing2D, project: &Project, scale: u32) {
 /// What a section head shows: the drawing's number on its sheet and the
 /// sheet's number, or, while the section is on no sheet, the last word of
 /// its name (its letter, as in "Section A") over a dash.
-fn section_labels(project: &Project, view: &cc_core::View) -> (String, String) {
+pub(crate) fn section_labels(project: &Project, view: &cc_core::View) -> (String, String) {
     for sheet in project.views.values() {
         if let ViewKind::Sheet { number, viewports, .. } = &sheet.kind
             && let Some(i) = viewports.iter().position(|vp| vp.view == view.id)

@@ -58,6 +58,7 @@ fn tool_icon(tool: &Tool) -> Icon {
     match tool {
         Tool::Select => Icon::Select,
         Tool::Section => Icon::Section,
+        Tool::Callout => Icon::Callout,
         Tool::Move => Icon::Move,
         Tool::Copy => Icon::Copy,
         Tool::Rotate => Icon::Rotate,
@@ -794,7 +795,7 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
                 }
             });
         }
-        command_buttons(ui, state, &[UiCommand::New3D, UiCommand::Section]);
+        command_buttons(ui, state, &[UiCommand::New3D, UiCommand::Section, UiCommand::Callout]);
         let r = command_menu(ui, state, UiCommand::Elevations);
         egui::Popup::menu(&r).show(|ui| {
             let elevations: Vec<_> =
@@ -1063,6 +1064,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Section => {
                 ui.label(theme::muted(t!("msg-section-hint")));
             }
+            Tool::Callout => crate::callout_ui::options(ui, state),
             Tool::Opening { host, floor } => {
                 let n = state.interaction.points.len();
                 if ui.add_enabled(n >= 3, Button::new(t!("sketch-finish"))).clicked() {

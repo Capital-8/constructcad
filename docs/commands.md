@@ -13,7 +13,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
-- **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
+- **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
 - **Visual programming**: [`graph_run`](#graph_run), [`graph_check`](#graph_check), [`graph_nodes`](#graph_nodes), [`graph_elements`](#graph_elements), [`graph_release`](#graph_release)
@@ -2123,11 +2123,12 @@ No parameters.
 
 ### `view_set`
 
-*edit* — Change a view: name, scale, phase and phase filter, and its `params` as `view_get` shows them (merged: cut height, section depth, legend types, schedule fields, sort, filter and totals, sheet number and size, viewport positions…).
+*edit* — Change a view: name, scale, phase and phase filter, and its `params` as `view_get` shows them (merged: cut height, section depth, legend types, schedule fields, sort, filter and totals, sheet number and size, viewport positions…) and the crop.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
+| `crop` | [[x, y], [x, y]] | optional | Crop rectangle: two opposite corners in the view's drawing coordinates (plans, sections and elevations draw nothing of the model outside it), or `null` to show everything. For a detail view this is its callout in the parent; for a drafting view a callout points to, it moves that callout. |
 | `detail` | string | optional | Detail level: `coarse` (layered elements cut as one plain region; component pieces set for it), `medium` or `fine`. |
 | `name` | string | optional | New name. |
 | `params` | JSON | optional | Fields of the view's parameters to change, shaped like `params` in `view_get`. |
@@ -2151,6 +2152,34 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
+
+### `callout_create`
+
+*edit* — Draw a callout in a plan, ceiling plan, section or elevation: a rectangle (two opposite corners in the view's drawing coordinates) standing for a detail view of that region. By default a new detail view is made: of the parent's kind (it stays live with the model, following the parent's level, section line or direction), cropped to the rectangle, at a larger scale, with its own detail lines, regions, detail components, text and dimensions. With `drafting`, the callout points to that existing drafting view instead (no crop). The parent draws the rectangle with rounded corners and a tag with the detail number and the sheet number once the view is placed on a sheet. Moving the callout is changing the detail view's `crop` (`view_set`); deleting the detail view removes it (`callout_remove` keeps the view).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `parent` | id or name | required | The view the callout is drawn in (id or name): a floor or ceiling plan, a section or an elevation. |
+| `rect` | [[x, y], [x, y]] | required | Two opposite corners of the rectangle, in the parent's drawing coordinates (meters; in sections and elevations `y` is the height). |
+| `drafting` | id or name | optional | An existing drafting view (id or name) the callout points to instead of a new detail view. |
+| `name` | string | optional | Name of the detail view (default "Detail N"). |
+| `scale` | integer | optional | Scale denominator of the detail view (default: a standard scale about five times larger than the parent's, 1:10 under 1:50). |
+
+### `callout_remove`
+
+*edit* — Remove a view's callout from its parent; the view stays (a detail view keeps its crop and becomes an ordinary view of its kind).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `view` | id or name | required | The detail or drafting view the callout stands for (id or name). |
+
+### `callouts_list`
+
+*query* — The callouts drawn in a view: the detail or drafting view each stands for and its rectangle.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `view` | id or name | required | The parent view (id or name). |
 
 ### `sheet_place_view`
 

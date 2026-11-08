@@ -305,6 +305,13 @@ impl<'a> EditCtx<'a> {
                 viewports.retain(|vp| vp.view != id);
             }
         }
+        // Callouts drawn in it go; their views stay (a detail view keeps its crop).
+        let details: Vec<ViewId> = self.project.callouts_in(id).map(|v| v.id).collect();
+        for d in details {
+            if let Some(v) = self.view_mut(d) {
+                v.callout = None;
+            }
+        }
         self.touch_view(id);
         self.project.views.remove(&id);
     }
@@ -460,6 +467,24 @@ impl<'a> EditCtx<'a> {
     pub fn templates_mut(&mut self) -> &mut BTreeMap<crate::TemplateId, crate::ViewTemplate> {
         self.touch_settings();
         &mut self.project.templates
+    }
+
+    /// Detail views follow their parents (see [`Project::detail_kind`]),
+    /// details of details too, up to [`crate::callout::MAX_CHAIN`] links.
+    fn sync_callouts(&mut self) {
+        for _ in 0..crate::callout::MAX_CHAIN {
+            let p = &*self.project;
+            let changed: Vec<(ViewId, ViewKind)> =
+                p.views.values().filter_map(|v| Some((v.id, p.detail_kind(v)?))).collect();
+            if changed.is_empty() {
+                break;
+            }
+            for (id, kind) in changed {
+                if let Some(v) = self.view_mut(id) {
+                    v.kind = kind;
+                }
+            }
+        }
     }
 
     /// Keep view graphics consistent with the model: drop overrides of
@@ -685,6 +710,7 @@ impl<'a> EditCtx<'a> {
         self.sync_dimensions();
         self.sync_phases();
         self.sync_sketches();
+        self.sync_callouts();
         self.sync_views();
         let p = &*self.project;
         self.tx.elements.retain(|id, c| {

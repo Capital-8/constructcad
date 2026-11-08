@@ -181,6 +181,8 @@ pub enum UiCommand {
     CeilingPlan,
     New3D,
     Section,
+    /// Draw a callout: a detail view of a region of the active view.
+    Callout,
     Elevations,
     Legend,
     DraftingView,
@@ -359,6 +361,7 @@ impl UiCommand {
             CeilingPlan,
             New3D,
             Section,
+            Callout,
             Elevations,
             Legend,
             DraftingView,
@@ -529,6 +532,7 @@ impl UiCommand {
             FloorPlan => Icon::FloorPlan,
             CeilingPlan => Icon::CeilingPlan,
             Section => Icon::Section,
+            Callout => Icon::Callout,
             Elevations => Icon::Elevation,
             Legend => Icon::Legend,
             DraftingView => Icon::DraftingView,
@@ -722,6 +726,7 @@ impl UiCommand {
             CeilingPlan => t!("view-new-ceiling-plan"),
             New3D => t!("view-new-3d"),
             Section => t!("tool-section"),
+            Callout => t!("tool-callout"),
             Elevations => t!("view-elevations"),
             Legend => t!("view-new-legend"),
             DraftingView => t!("view-new-drafting"),
@@ -914,6 +919,7 @@ impl UiCommand {
             CeilingPlan => t!("cmd-desc-ceiling-plan"),
             New3D => t!("cmd-desc-new-3d"),
             Section => t!("cmd-desc-section"),
+            Callout => t!("cmd-desc-callout"),
             Elevations => t!("cmd-desc-elevations"),
             Legend => t!("cmd-desc-legend"),
             DraftingView => t!("cmd-desc-drafting"),
@@ -1168,6 +1174,7 @@ impl UiCommand {
             ClipboardCopy => "elements_export",
             MatchType => "elements_set_type",
             FloorPlan | CeilingPlan | New3D | Section | Legend | DraftingView | Schedule | Sheet => "view_create",
+            Callout => "callout_create",
             ProjectInfo => "project_info_set",
             VisibilityGraphics => "view_graphics_set",
             ViewFilters => "filter_set",
@@ -1280,6 +1287,7 @@ impl UiCommand {
             Dimension(_) if Tool::for_category(project, Category::Dimension).is_none() => Some(t!("msg-no-type")),
             Text if Tool::for_category(project, Category::Text).is_none() => Some(t!("msg-no-type")),
             LevelMarkPlan if !active_view_is(state, cc_core::View::is_plan) => Some(t!("msg-open-plan")),
+            Callout if !active_view_is(state, |v| v.kind.croppable()) => Some(t!("why-callout-view")),
             LevelMarkSection if !active_view_is(state, |v| v.projection().is_some()) => Some(t!("why-open-section")),
             AddLeader if crate::ribbon::selected_text(state).is_none() && !self.selected(state) => {
                 Some(t!("why-select-text"))
@@ -1451,6 +1459,7 @@ impl UiCommand {
             Demolish => *tool == Tool::Demolish,
             CurtainGrid => *tool == Tool::CurtainGrid,
             Section => *tool == Tool::Section,
+            Callout => *tool == Tool::Callout,
             FoundationSlab => matches!(tool, Tool::Sketch { category: Category::Foundation, .. }),
             MacroRecord => state.session.is_recording(),
             VisualProgramming => state.graph.open,
@@ -1862,6 +1871,10 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Section => {
             state.set_tool(Tool::Section);
             state.message = t!("msg-section-hint");
+        }
+        Callout => {
+            state.set_tool(Tool::Callout);
+            state.message = t!("msg-callout-hint");
         }
         Elevations => {
             let first = state.project().views_of(ViewCategory::Elevation).next().map(|v| v.id);

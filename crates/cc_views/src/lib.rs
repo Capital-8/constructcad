@@ -6,6 +6,7 @@
 
 mod annotate;
 pub mod cad;
+pub mod callout;
 pub mod component_view;
 mod cut;
 pub mod detail;
@@ -135,8 +136,12 @@ pub fn generate_temporary(
     annotate::dimensions(&mut d, project, view.id, view.scale);
     notes::notes(&mut d, project, view.id, view.scale);
     level_marks::level_marks(&mut d, project, view);
+    callout::marks(&mut d, project, view);
     graphics::apply(&mut d, &mut graphics::Resolver::new(project, geom, view, temporary), view.scale);
     underlay(&mut d, project, geom, view);
+    if let Some(rect) = view.crop.filter(|r| r.is_valid() && view.kind.croppable()) {
+        callout::crop(&mut d, project, view.id, rect);
+    }
     Some(d)
 }
 
