@@ -36,6 +36,19 @@ fn varint_all(p: &[u8]) -> Result<u64> {
     parse_varint(p, 0, p.len())
 }
 
+/// A guide's layer id (as text, `""` when absent) and hidden flag. Guides
+/// (6942 / 6C42) wrap the usual drawing-element base in 6842: its D007
+/// container holds D307 (display flags, base 0x06, +0x01 hidden) and D207
+/// (layer entity id), the same leaves edges/faces/instances carry.
+fn guide_drawbase(e: &TlvNode) -> Result<(String, bool)> {
+    let hidden = find_node(&e.children, "D307").and_then(|f| f.payload.first()).is_some_and(|&flags| flags & 0x01 != 0);
+    let layer = match find_node(&e.children, "D207") {
+        Some(l) if !l.payload.is_empty() => varint_all(&l.payload)?.to_string(),
+        _ => String::new(),
+    };
+    Ok((layer, hidden))
+}
+
 /// The node's entity id: a direct DE05 child, a DC05 child wrapping a DE05,
 /// or (failing both) the first one found deeper down.
 pub(crate) fn entity_id(n: &TlvNode) -> Result<Option<EntityId>> {
@@ -133,7 +146,10 @@ fn is_prop_container_tag(t: &Tag) -> bool {
 // array, AA38 a one-byte boolean - what a SketchUp 2024 file stores for
 // `set_attribute(..., true)`). An A438 with no children or an unrecognized
 // value tag is Null - a real, present key, not a missing key.
-fn decode_a438_value(p: &[u8], a: usize, z: usize) -> ParsedAttribute {
+fn decode_a438_value(p: &[u8], a: usize, z: usize, depth: usize) -> ParsedAttribute {
+    if depth > super::bytes::MAX_TLV_DEPTH {
+        return ParsedAttribute::Null;
+    }
     let spans = parse_flat_spans(p, a, z);
     let Some(&(tag, sa, sz)) = spans.first() else {
         return ParsedAttribute::Null;
@@ -165,38 +181,44 @@ fn decode_a438_value(p: &[u8], a: usize, z: usize) -> ParsedAttribute {
         let items = parse_flat_spans(p, sa, sz)
             .into_iter()
             .filter(|(t, _, _)| *t == "A438")
-            .map(|(_, ca, cz)| decode_a438_value(p, ca, cz))
+            .map(|(_, ca, cz)| decode_a438_value(p, ca, cz, depth + 1))
             .collect();
         return ParsedAttribute::Array(items);
     }
     ParsedAttribute::Null
 }
 
-fn extract_entries(p: &[u8], a: usize, z: usize, entries: &mut ParsedAttrDict) {
+fn extract_entries(p: &[u8], a: usize, z: usize, entries: &mut ParsedAttrDict, depth: usize) {
+    if depth > super::bytes::MAX_TLV_DEPTH {
+        return;
+    }
     let mut key = String::new();
     for (tag, sa, sz) in parse_flat_spans(p, a, z) {
         if tag == "B636" {
             key = text(&p[sa..sz]);
         } else if tag == "A438" && !key.is_empty() {
-            entries.insert(std::mem::take(&mut key), decode_a438_value(p, sa, sz));
+            entries.insert(std::mem::take(&mut key), decode_a438_value(p, sa, sz, depth + 1));
         } else if is_prop_container_tag(&tag) {
-            extract_entries(p, sa, sz, entries);
+            extract_entries(p, sa, sz, entries, depth + 1);
         }
     }
 }
 
-fn walk_dicts(p: &[u8], a: usize, z: usize, out: &mut ParsedAttrDictionaries) {
+fn walk_dicts(p: &[u8], a: usize, z: usize, out: &mut ParsedAttrDictionaries, depth: usize) {
+    if depth > super::bytes::MAX_TLV_DEPTH {
+        return;
+    }
     let here = parse_flat_spans(p, a, z);
     for (i, &(tag, sa, sz)) in here.iter().enumerate() {
         if tag == "B436" {
             let name = text(&p[sa..sz]);
             let mut entries = ParsedAttrDict::new();
             if let Some(&(_, ea, ez)) = here.get(i + 1) {
-                extract_entries(p, ea, ez, &mut entries);
+                extract_entries(p, ea, ez, &mut entries, depth + 1);
             }
             out.insert(name, entries);
         } else if is_prop_container_tag(&tag) {
-            walk_dicts(p, sa, sz, out);
+            walk_dicts(p, sa, sz, out, depth + 1);
         }
     }
 }
@@ -207,7 +229,7 @@ fn walk_dicts(p: &[u8], a: usize, z: usize, out: &mut ParsedAttrDictionaries) {
 /// A438 value pairs; B436 can occur at any depth reachable through container
 /// tags, so both walks recurse into every container-tagged node.
 pub fn extract_attribute_dictionaries(p: &[u8], out: &mut ParsedAttrDictionaries) {
-    walk_dicts(p, 0, p.len(), out);
+    walk_dicts(p, 0, p.len(), out, 0);
 }
 
 fn vec3_at(p: &[u8], o: usize) -> Result<[f64; 3]> {
@@ -340,8 +362,7 @@ pub fn collect_geometry(es: &[TlvNode], b: &mut GeometryBuilder) -> Result<()> {
             }
             b.faces.insert(id, f);
         } else if tag == "6419" {
-            let mut i =
-                RawInstance { offset: e.offset, id: entity_id(e)?, children: e.children.clone(), ..Default::default() };
+            let mut i = RawInstance { offset: e.offset, id: entity_id(e)?, ..Default::default() };
             if let Some(g) = find_node(&e.children, "6819")
                 && g.payload.len() == 16
             {
@@ -398,20 +419,24 @@ pub fn collect_geometry(es: &[TlvNode], b: &mut GeometryBuilder) -> Result<()> {
                 let end_param = read_f64(&p.payload, 56)?;
                 let at =
                     |t: f64| [point[0] + direction[0] * t, point[1] + direction[1] * t, point[2] + direction[2] * t];
+                let (layer, hidden) = guide_drawbase(e)?;
                 b.construction_lines.push(ConstructionLine {
                     point,
                     direction,
                     start: (start_param.abs() < HUGE_PARAM).then(|| at(start_param)),
                     end: (end_param.abs() < HUGE_PARAM).then(|| at(end_param)),
+                    layer,
+                    hidden,
                 });
             }
         } else if tag == "6C42" {
-            // VFF CConstructionPoint (list 9213): 6D42 position, 6E42 unused
-            // zeros, 6F42 u8.
+            // VFF CConstructionPoint (list 9213): 6D42 position, 6E42 a second
+            // 3xf64 block (often zeros, not decoded), 6F42 u8.
             if let Some(p) = find_node(&e.children, "6D42")
                 && p.payload.len() >= 24
             {
-                b.construction_points.push(ConstructionPoint { position: vec3_at(&p.payload, 0)? });
+                let (layer, hidden) = guide_drawbase(e)?;
+                b.construction_points.push(ConstructionPoint { position: vec3_at(&p.payload, 0)?, layer, hidden });
             }
         } else if !e.children.is_empty() {
             collect_geometry(&e.children, b)?;

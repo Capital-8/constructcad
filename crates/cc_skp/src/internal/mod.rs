@@ -37,9 +37,10 @@ pub use self::pages_dimensions::{
 pub use self::transforms::{fold_scale, multiply_matrices, transform_determinant, transform_normal, transform_point};
 pub use self::vff::{extract_version, is_legacy, read_meta_units, valid_header};
 pub use crate::legacy::{
-    LegacyKind, LegacyObject, LegacyPathResult, LegacySlotEntry, LegacySlotTable, LegacyValue, V20FillerHit,
-    find_count_after_v20_filler, legacy_connection_paths, legacy_instance_has_guid, parse_legacy,
-    read_legacy_attribute_value, scan_pages_for_layers,
+    LegacyEntityListResult, LegacyKind, LegacyObject, LegacyPathResult, LegacySlotEntry, LegacySlotTable, LegacyValue,
+    V20FillerHit, find_count_after_v20_filler, find_empty_root_after_v20_filler, legacy_connection_paths,
+    legacy_instance_has_guid, parse_legacy, read_legacy_attribute_value, read_legacy_entity_list,
+    scan_pages_for_layers,
 };
 pub use crate::observability::{emit_log, emit_progress};
 
@@ -227,7 +228,6 @@ pub struct RawInstance {
     pub ref_idx: Option<EntityId>,
     pub material_id: Option<EntityId>,
     pub matrix: Vec<f64>,
-    pub children: Vec<TlvNode>,
     pub layer: String,
     /// The "dynamic_attributes" dictionary only, stringified.
     pub properties: BTreeMap<String, String>,
@@ -372,6 +372,7 @@ pub struct RawDimension {
     pub offset: f64,
     pub plane_x: Option<Vec3>,
     pub normal: Option<Vec3>,
+    pub offset_vector: Option<Vec3>,
     pub text: String,
 }
 

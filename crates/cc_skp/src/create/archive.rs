@@ -7,9 +7,9 @@ use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::geometry::{plane_from_polygon, plane_tolerance, uv_matrix_for_face};
+use super::geometry::{cross3, normalize3, plane_from_polygon, plane_tolerance, uv_matrix_for_face};
 use super::scaffold_blank_v17::{ATTR_CONTAINER_SLOT, ATTRIBUTE_NAMED_SLOT, CCAMERA_SLOT};
-use super::{AttributeDict, AttributeValue, Color4, Matrix3x3, Point3, SkpWriteError, UvPoint};
+use super::{AttributeDict, AttributeValue, Color4, GuideOptions, Matrix3x3, Point3, SkpWriteError, UvPoint};
 
 // ---------------------------------------------------------------------------------------------
 // Class schema versions (ground truth from real SketchUp files unless noted).
@@ -318,8 +318,8 @@ pub(super) struct ArchiveWriter {
 }
 
 impl ArchiveWriter {
-    pub fn new(next_slot: i32, class_slot: HashMap<&'static str, i32>) -> Self {
-        ArchiveWriter { next_slot, class_slot, next_pid: 1, buf: Vec::new(), dim_font_slot: None }
+    pub fn new(next_slot: i32, class_slot: HashMap<&'static str, i32>, next_pid: u64) -> Self {
+        ArchiveWriter { next_slot, class_slot, next_pid, buf: Vec::new(), dim_font_slot: None }
     }
 
     fn alloc(&mut self) -> i32 {
@@ -493,6 +493,11 @@ impl ArchiveWriter {
         self.drawbase(0, 0, false, EdgeFlags::default());
     }
 
+    /// A guide's drawbase: default material, the guide's layer and hidden flag.
+    fn guide_drawbase(&mut self, options: &GuideOptions) {
+        self.drawbase(0, options.layer.unwrap_or(0), options.hidden, EdgeFlags::default());
+    }
+
     fn write_vertex(&mut self, point: Point3) -> i32 {
         let slot = self.new_of_known_class("CVertex", 0);
         self.preamble(None, false);
@@ -571,9 +576,42 @@ impl ArchiveWriter {
     /// A FREE linear dimension between two explicit points. The layout is the byte-exact one the
     /// real SDK writes for free dimensions (docs/dimension-record-notes.md): connection type 1
     /// with the point stored inline in each connection block and null object refs.
-    pub fn write_dimension(&mut self, p1: Point3, p2: Point3, offset: f64) -> Result<(), SkpWriteError> {
+    pub fn write_dimension(
+        &mut self,
+        p1: Point3,
+        p2: Point3,
+        offset: f64,
+        offset_vector: Option<Point3>,
+    ) -> Result<(), SkpWriteError> {
         if p1 == p2 {
             return Err(SkpWriteError::new("add_dimension endpoints coincide"));
+        }
+        let mut offset = offset;
+        let mut normal = [0.0, 0.0, 1.0];
+        let mut xaxis = [1.0, 0.0, 0.0];
+        if let Some(v) = offset_vector {
+            if p1.iter().chain(&p2).chain(&v).any(|c| !c.is_finite()) {
+                return Err(SkpWriteError::new("add_dimension coordinates must be finite"));
+            }
+            xaxis = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+            let length = xaxis[0].hypot(xaxis[1]).hypot(xaxis[2]);
+            if !length.is_finite() || length == 0.0 {
+                return Err(SkpWriteError::new("add_dimension segment length must be finite and nonzero"));
+            }
+            xaxis = [xaxis[0] / length, xaxis[1] / length, xaxis[2] / length];
+            // Only the component perpendicular to the measured segment places the line.
+            normal = cross3(xaxis, v);
+            offset = normal[0].hypot(normal[1]).hypot(normal[2]);
+            if !offset.is_finite() {
+                return Err(SkpWriteError::new("add_dimension offset must be finite"));
+            }
+            if offset > 0.0 {
+                normal = [normal[0] / offset, normal[1] / offset, normal[2] / offset];
+            } else {
+                // A stable plane is still needed when the dimension line has zero offset.
+                let seed = if xaxis[2].abs() < 0.9 { [0.0, 0.0, 1.0] } else { [0.0, 1.0, 0.0] };
+                normal = normalize3(cross3(xaxis, seed))?;
+            }
         }
         self.new_of_known_class("CDimensionLinear", DIMENSION_LINEAR_SCHEMA);
         self.preamble(None, false);
@@ -596,12 +634,15 @@ impl ArchiveWriter {
             self.buf.put_f64(v);
         }
         self.buf.put_u16(0);
-        // placement block: SDK free-dimension defaults + our offset
+        // placement block: the plane normal and X axis (SDK free-dimension defaults unless an
+        // offset vector placed the line), the constrained axis, and the offset
         self.buf.put_zeros(2);
-        for v in [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0] {
+        self.buf.put_f64(0.0);
+        for v in normal.into_iter().chain(xaxis) {
             self.buf.put_f64(v);
         }
-        self.buf.put_u32(0);
+        // Constrain to the plane X axis: the signed side is encoded by its normal.
+        self.buf.put_u32(u32::from(offset_vector.is_some()));
         self.buf.put_f64(offset);
         self.buf.put_f64(0.0);
         self.buf.put_u32(1);
@@ -646,6 +687,7 @@ impl ArchiveWriter {
         point: Point3,
         point2: Option<Point3>,
         direction: Option<Point3>,
+        options: &GuideOptions,
     ) -> Result<(), SkpWriteError> {
         let (dir, start_param, end_param) = match (point2, direction) {
             (Some(p2), None) => {
@@ -667,7 +709,7 @@ impl ArchiveWriter {
         };
         self.new_of_known_class("CConstructionLine", CONSTRUCTION_LINE_SCHEMA);
         self.preamble(None, false);
-        self.plain_drawbase();
+        self.guide_drawbase(options);
         for v in [point[0], point[1], point[2], dir[0], dir[1], dir[2], start_param, end_param] {
             self.buf.put_f64(v);
         }
@@ -677,10 +719,10 @@ impl ArchiveWriter {
 
     /// A construction point. A second, always-zero 3-double block and a trailing zero byte follow
     /// the position - reserved, written as zero to match every real sample.
-    pub fn write_construction_point(&mut self, position: Point3) {
+    pub fn write_construction_point(&mut self, position: Point3, options: &GuideOptions) {
         self.new_of_known_class("CConstructionPoint", CONSTRUCTION_POINT_SCHEMA);
         self.preamble(None, false);
-        self.plain_drawbase();
+        self.guide_drawbase(options);
         for v in [position[0], position[1], position[2], 0.0, 0.0, 0.0] {
             self.buf.put_f64(v);
         }
@@ -752,12 +794,11 @@ impl ArchiveWriter {
         self.buf.put_f64(applied_width.unwrap_or(1.0));
         self.buf.put_f64(applied_height.unwrap_or(1.0));
         self.write_str(image.path)?;
-        // Avg color: neutral near-opaque white. Alpha 254, not 255 - the reader treats alpha=255
-        // here as a "this material is colorized" signal, which a plain texture must not trip.
-        self.buf.extend_from_slice(&[255, 255, 255, 254, 0, 255, 255, 255, 254]);
-        self.write_str("")?; // second name field - empty in ground truth
-        self.buf.put_u32(1);
-        self.buf.put_u32(0); // colorize-related blob, ground truth 1, 0
+        // Image average and paint colour are separate fields. Neither alpha is a colorize flag.
+        self.buf.extend_from_slice(&[255, 255, 255, 255, 0, 255, 255, 255, 255]);
+        self.write_str("")?;
+        self.buf.put_u32(1); // material type: plain texture (2 = colorized texture)
+        self.buf.put_u32(0); // colorize mode: shift (1 = tint)
         // Opacity and the u8 that GATES it. The stored f64 is TRANSPARENCY (0 = opaque); the
         // reader exposes `1.0 - stored` only when the flag is set, so an `opacity` is written
         // inverted and round-trips as itself.
@@ -1046,7 +1087,8 @@ impl ArchiveWriter {
             self.preamble(None, false);
         }
         self.drawbase(spec.material, spec.layer, spec.hidden, EdgeFlags::default());
-        for v in [plane.nx, plane.ny, plane.nz, plane.d] {
+        // The fit uses n.p = d; SketchUp's CFace stores ax + by + cz + d = 0.
+        for v in [plane.nx, plane.ny, plane.nz, -plane.d] {
             self.buf.put_f64(v);
         }
         self.buf.put_u32(1 + spec.holes.len() as u32); // nloops
@@ -1100,7 +1142,7 @@ mod tests {
 
     #[test]
     fn pids_are_written_as_a_mask_of_their_nonzero_bytes() {
-        let mut w = ArchiveWriter::new(0, HashMap::new());
+        let mut w = ArchiveWriter::new(0, HashMap::new(), 1);
         w.write_pid(0);
         w.write_pid(0x0102);
         w.write_pid(0x03_0000_0000);
@@ -1109,7 +1151,7 @@ mod tests {
 
     #[test]
     fn class_refs_and_backrefs_use_the_escape_form_from_0x7fff() {
-        let mut w = ArchiveWriter::new(0x7FFE, HashMap::new());
+        let mut w = ArchiveWriter::new(0x7FFE, HashMap::new(), 1);
         assert_eq!(w.new_of_known_class("CX", 2), 0x7FFF); // the class itself takes 0x7FFE
         w.buf.clear();
         w.new_of_known_class("CX", 2);
@@ -1126,7 +1168,7 @@ mod tests {
 
     #[test]
     fn strings_are_mfc_cstrings_in_utf16() {
-        let mut w = ArchiveWriter::new(0, HashMap::new());
+        let mut w = ArchiveWriter::new(0, HashMap::new(), 1);
         w.write_str("A\u{e9}\u{1F600}").unwrap();
         assert_eq!(w.buf, [0xFF, 0xFE, 0xFF, 4, 0x41, 0, 0xE9, 0, 0x3D, 0xD8, 0x00, 0xDE]);
     }

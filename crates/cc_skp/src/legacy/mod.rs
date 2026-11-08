@@ -35,7 +35,7 @@ use crate::observability::{LogLevel, ParseOptions, ParseStage, emit_log, emit_pr
 
 pub use self::pages::scan_pages_for_layers;
 
-use self::archive::{WalkResult, bootstrap_two_materials, probe_layer_anchor_bases, walk_with_bases};
+use self::archive::{Archive, WalkResult, bootstrap_two_materials, probe_layer_anchor_bases, walk_with_bases};
 use self::reader::{R, header_major};
 
 // The trailing GUID looked plausible as a class-schema gate at first
@@ -109,12 +109,23 @@ pub enum LegacyKind {
 /// One decoded entity of the MFC object graph (C++ `V`): material, layer,
 /// component, edge, face, ... - `k` says which, and only the fields that kind
 /// uses are filled.
+/// A legacy dimension's decoded geometry, and the raw refs of its connection
+/// points, resolved to vertex positions once the whole archive is read.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LegacyDimension {
+    pub geometry: Dimension,
+    pub connect1: Option<u64>,
+    pub connect2: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LegacyValue {
     pub k: LegacyKind,
     pub name: String,
     pub label: String,
     pub text: String,
+    /// Dimension only (boxed, so mesh vertices do not carry it).
+    pub dimension: Option<Box<LegacyDimension>>,
     pub guid: String,
     pub xyz: Vec3,
     /// Construction line only: its normalized direction, and its bounded
@@ -153,6 +164,7 @@ pub struct LegacyValue {
     pub shadows_face_sun: bool,
     pub is_group: bool,
     pub colorized: bool,
+    pub colorize_type: i32,
     pub mat: i32,
     pub back_mat: i32,
     pub layer: i32,
@@ -180,6 +192,7 @@ impl Default for LegacyValue {
             name: String::new(),
             label: String::new(),
             text: String::new(),
+            dimension: None,
             guid: String::new(),
             xyz: [0.0; 3],
             direction: [0.0; 3],
@@ -207,6 +220,7 @@ impl Default for LegacyValue {
             shadows_face_sun: false,
             is_group: false,
             colorized: false,
+            colorize_type: 0,
             mat: 0,
             back_mat: 0,
             layer: 0,
@@ -322,7 +336,55 @@ pub struct LegacyPathResult {
     pub extra: Option<u64>,
     pub first: Vec<Option<u64>>,
     pub second: Vec<Option<u64>>,
+    /// Whether each entry of `first` / `second` was an object written in full.
+    pub first_new: Vec<bool>,
+    pub second_new: Vec<bool>,
     pub next: usize,
+}
+
+/// Whether the text whose font ends at `pos` is anchored to an entity: after
+/// the two screen-fraction f64s comes the connection block, `[u32 type][u32 4]
+/// [point3d]`, and a type other than 0 or 1 (2, 4, 5 and 7 seen; see
+/// docs/dimension-record-notes.md) anchors the label. Matches Python's
+/// `_anchored_connection`.
+pub(crate) fn anchored_text_connection(d: &[u8], pos: usize) -> bool {
+    if pos + 24 > d.len() || read_u32(d, pos + 20).ok() != Some(4) {
+        return false;
+    }
+    read_u32(d, pos + 16).is_ok_and(|t| (2..=15).contains(&t))
+}
+
+/// A legacy definition's entity list, read by [`read_legacy_entity_list`]:
+/// each item's slot and class name, and the offset just past the list.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LegacyEntityListResult {
+    pub items: Vec<(u64, String)>,
+    pub next: usize,
+}
+
+/// Reads a legacy definition's entity list of `count` items at `pos`, with an
+/// archive of SketchUp version `ver` over `slots`. Exposed, like
+/// [`scan_pages_for_layers`], so the list's bookkeeping is unit-testable: an
+/// instance a text label's connection path writes in full is one of the
+/// list's items whether or not the list names it again.
+pub fn read_legacy_entity_list(
+    data: &[u8],
+    pos: usize,
+    ver: i32,
+    count: u32,
+    table: LegacySlotTable,
+) -> Result<LegacyEntityListResult> {
+    let mut ar = Archive::new(data, ver);
+    ar.r.p = pos;
+    ar.slots = std::mem::take(table.slots);
+    ar.class_slot = std::mem::take(table.class_slot);
+    ar.next = *table.next;
+    let res = ar.entity_list(count, false);
+    *table.slots = std::mem::take(&mut ar.slots);
+    *table.class_slot = std::mem::take(&mut ar.class_slot);
+    *table.next = ar.next;
+    let items = res?.into_iter().map(|o| (o.slot, o.name.to_string())).collect();
+    Ok(LegacyEntityListResult { items, next: ar.r.p })
 }
 
 /// Reads a dimension connection's instance paths from `pos`.
@@ -353,7 +415,8 @@ where
         if count > 1000 {
             return Err(Error::runtime("implausible dimension path length"));
         }
-        let refs = if list == 0 { &mut out.first } else { &mut out.second };
+        let (refs, written) =
+            if list == 0 { (&mut out.first, &mut out.first_new) } else { (&mut out.second, &mut out.second_new) };
         for _ in 0..count {
             if q + 2 > data.len() {
                 return Err(Error::runtime("legacy archive truncated"));
@@ -377,6 +440,7 @@ where
             } else {
                 refs.push(read_plain_entity_ref(data, &mut q)?);
             }
+            written.push(is_new);
         }
     }
     out.next = q;
@@ -441,6 +505,24 @@ pub fn find_count_after_v20_filler(d: &[u8], count_pos: usize, limit: u32) -> Op
         }
     }
     None
+}
+
+/// The SketchUp 2020 layout of a model with NO component definitions AND no
+/// root entities. [`find_count_after_v20_filler`] cannot see it: behind the
+/// filler (an empty string record, then 13 bytes of padding) the only count is
+/// the ROOT entity count, and it is 0, which that search skips as "no count".
+///
+/// Returns the offset of that root count (so the caller can put the cursor
+/// there and read the zero), or `None` when the bytes are not that layout: the
+/// empty string record has to sit within 12 bytes of `count_pos`, and the 13
+/// padding bytes and the count behind it have to be all zero.
+pub fn find_empty_root_after_v20_filler(d: &[u8], count_pos: usize) -> Option<usize> {
+    let marker_at = find_v20_filler_marker(d, count_pos)?;
+    let root_count_at = marker_at + 4 + 13;
+    if root_count_at + 4 > d.len() {
+        return None;
+    }
+    d[marker_at + 3..root_count_at + 4].iter().all(|&b| b == 0).then_some(root_count_at)
 }
 
 /// The empty-string filler marker in the 12 bytes from `count_pos`, or `None`
@@ -522,6 +604,12 @@ fn extract_legacy_attribute_dictionaries(
         out.insert(ev.name.clone(), ev.entries.clone());
     }
     out
+}
+
+/// A guide's layer slot as text, resolved to the name later like a face's;
+/// `""` for the default layer (slot 0).
+fn guide_layer(layer: i32) -> String {
+    if layer == 0 { String::new() } else { layer.to_string() }
 }
 
 fn fill(b: &mut GeometryBuilder, ents: &[LegacyObject], slots: &HashMap<u64, LegacySlotEntry>) {
@@ -618,7 +706,25 @@ fn fill(b: &mut GeometryBuilder, ents: &[LegacyObject], slots: &HashMap<u64, Leg
                 b.texts.push(TextEntity { text: v.text.clone(), hidden: v.hidden != 0, ..Default::default() });
             }
             LegacyKind::Dimension => {
-                b.dimensions.push(Dimension { text: v.text.clone(), hidden: v.hidden != 0, ..Default::default() });
+                let decoded = v.dimension.as_deref().cloned().unwrap_or_default();
+                let mut dim = decoded.geometry;
+                // A connection point stored as a vertex ref (possibly forward)
+                // resolves now that the whole archive is read.
+                let resolve = |point: &mut Option<Vec3>, r: Option<u64>| {
+                    if point.is_some() {
+                        return;
+                    }
+                    if let Some(LegacySlotEntry { v: Some(pv), .. }) = r.and_then(|r| slots.get(&r))
+                        && pv.k == LegacyKind::Vertex
+                    {
+                        *point = Some(pv.xyz);
+                    }
+                };
+                resolve(&mut dim.a, decoded.connect1);
+                resolve(&mut dim.b, decoded.connect2);
+                dim.text = v.text.clone();
+                dim.hidden = v.hidden != 0;
+                b.dimensions.push(dim);
             }
             LegacyKind::ConstructionLine => {
                 b.construction_lines.push(ConstructionLine {
@@ -626,10 +732,16 @@ fn fill(b: &mut GeometryBuilder, ents: &[LegacyObject], slots: &HashMap<u64, Leg
                     direction: v.direction,
                     start: v.start,
                     end: v.end,
+                    layer: guide_layer(v.layer),
+                    hidden: v.hidden != 0,
                 });
             }
             LegacyKind::ConstructionPoint => {
-                b.construction_points.push(ConstructionPoint { position: v.xyz });
+                b.construction_points.push(ConstructionPoint {
+                    position: v.xyz,
+                    layer: guide_layer(v.layer),
+                    hidden: v.hidden != 0,
+                });
             }
             _ => {}
         }
@@ -645,7 +757,7 @@ fn material(v: &LegacyValue, slots: &HashMap<u64, LegacySlotEntry>) -> RawMateri
         a: v.a,
         transparency: (1.0 - v.opacity).clamp(0.0, 1.0),
         colorized: v.colorized,
-        colorize_type: i32::from(v.colorized),
+        colorize_type: v.colorize_type,
         texture: None,
     };
     if v.tex_dib != 0 || v.inline_tex {

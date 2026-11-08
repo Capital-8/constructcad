@@ -104,8 +104,18 @@ fn is_container(b0: u8, b1: u8) -> bool {
     )
 }
 
+/// Maximum allowed nesting depth for recursive container TLV nodes.
+pub const MAX_TLV_DEPTH: usize = 64;
+
 /// Parses `d[start..end]` into TLV nodes, recursing into container tags.
 pub fn parse_tlv_recursive(d: &[u8], start: usize, end: usize) -> Result<Vec<TlvNode>> {
+    parse_tlv_recursive_depth(d, start, end, 0)
+}
+
+fn parse_tlv_recursive_depth(d: &[u8], start: usize, end: usize, depth: usize) -> Result<Vec<TlvNode>> {
+    if depth > MAX_TLV_DEPTH {
+        return Err(Error::out_of_range("TLV nesting depth exceeds maximum allowed limit (64)"));
+    }
     if end > d.len() || start > end {
         return Err(Error::out_of_range("invalid TLV range"));
     }
@@ -119,7 +129,7 @@ pub fn parse_tlv_recursive(d: &[u8], start: usize, end: usize) -> Result<Vec<Tlv
         }
         let mut n = TlvNode { offset: p as u64, size: size as u64, tag: Tag::from_bytes(b0, b1), ..Default::default() };
         if size != 0 && is_container(b0, b1) {
-            n.children = parse_tlv_recursive(d, p + 6, p + 6 + size)?;
+            n.children = parse_tlv_recursive_depth(d, p + 6, p + 6 + size, depth + 1)?;
         }
         if n.children.is_empty() && size != 0 {
             n.payload = d[p + 6..p + 6 + size].to_vec();

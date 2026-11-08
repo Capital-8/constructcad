@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- SketchUp import follows OpenSKP 1.5.0: a concave four-sided face is no longer triangulated across its outside, classic textured materials are no longer all read as colorized, an empty SketchUp 2020 model opens, legacy dimensions keep their endpoints and placement, texts anchored to an entity read, guides keep their layer and hidden flag, and crafted files meet tighter bounds (archive entry sizes, object nesting, component hierarchies).
+
 ## [0.10.0] - 2026-11-08
 
 ### Changed

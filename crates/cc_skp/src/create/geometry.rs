@@ -223,7 +223,7 @@ impl Plane {
 /// Newell's method: sums a cross-product-like term over every edge rather than reading the
 /// normal off the first 3 points - correct for concave polygons too, as long as the polygon is
 /// planar and simple.
-fn newell_plane(points: &[Point3]) -> Result<Plane, SkpWriteError> {
+pub(super) fn newell_plane(points: &[Point3]) -> Result<Plane, SkpWriteError> {
     let n = points.len();
     let (mut nx, mut ny, mut nz) = (0.0, 0.0, 0.0);
     for i in 0..n {

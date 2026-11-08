@@ -50,9 +50,12 @@ pub(super) const TAIL_POS: usize = 3515;
 /// region - `_scaffold_next_slot`.
 pub(super) const SCAFFOLD_NEXT_SLOT: i32 = 11;
 
-/// Offset (before the material insertion point, so only its value changes) of a u16 "next
-/// available pid" counter. Grows by exactly the number of pids the inserted objects consume.
+/// Offset of the u64 next persistent entity id. Ids are document-wide, not per archive section;
+/// the scaffold has already consumed the ids below [`FIRST_NEW_PID`].
 pub(super) const PID_COUNTER_POS: usize = 1987;
+
+/// The first persistent id free for new objects in the scaffold.
+pub(super) const FIRST_NEW_PID: u64 = 18;
 
 /// Offsets, relative to the tail start, of internal slot references that must be renumbered by
 /// the number of archive slots inserted before them.

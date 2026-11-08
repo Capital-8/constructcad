@@ -113,8 +113,80 @@ pub(crate) fn build_error(e: Error) -> SkpParseError {
     SkpParseError::at_stage(e.message.to_string(), ParseStage::BuildScene).with_cause(e)
 }
 
+/// Maximum component nesting depth before rejecting the hierarchy.
+pub(crate) const MAX_COMPONENT_DEPTH: usize = 256;
+
+/// Maximum total expanded component instances in a scene build (guards against
+/// exponential DAG expansion / "billion laughs" component graphs).
+pub(crate) const MAX_EXPANDED_INSTANCES: u64 = 50_000_000;
+
+/// Validates component hierarchy depth, cycles, and expanded instance bounds
+/// before initiating expensive scene allocation. Uses memoization so DAGs with
+/// exponential expansions are detected in linear time O(V + E) without allocating.
+pub(crate) fn validate_hierarchy(p: &RawParsed) -> Result<(), SkpParseError> {
+    fn check_def(
+        builder: &crate::internal::GeometryBuilder,
+        p: &RawParsed,
+        active: &mut Vec<EntityId>,
+        memo: &mut HashMap<EntityId, u64>,
+    ) -> Result<u64, SkpParseError> {
+        let mut total = 0u64;
+        for i in &builder.instances {
+            let Some(child_r) = i.ref_idx else { continue };
+            if child_r != 0 {
+                if active.contains(&child_r) {
+                    return Err(recursive_definition(child_r));
+                }
+                if active.len() >= MAX_COMPONENT_DEPTH {
+                    return Err(max_depth_exceeded(child_r));
+                }
+                let child_count = if let Some(&cached) = memo.get(&child_r) {
+                    cached
+                } else if let Some(d) = p.definitions.get(&child_r) {
+                    active.push(child_r);
+                    let res = check_def(&d.builder, p, active, memo);
+                    active.pop();
+                    let count = res?;
+                    memo.insert(child_r, count);
+                    count
+                } else {
+                    0
+                };
+                total = total
+                    .checked_add(1)
+                    .and_then(|t| t.checked_add(child_count))
+                    .ok_or_else(|| max_instances_exceeded(child_r))?;
+                if total > MAX_EXPANDED_INSTANCES {
+                    return Err(max_instances_exceeded(child_r));
+                }
+            } else {
+                total = total.checked_add(1).ok_or_else(|| max_instances_exceeded(0))?;
+                if total > MAX_EXPANDED_INSTANCES {
+                    return Err(max_instances_exceeded(0));
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    let mut active = Vec::new();
+    let mut memo = HashMap::new();
+    check_def(&p.root.builder, p, &mut active, &mut memo)?;
+    Ok(())
+}
+
 pub(crate) fn recursive_definition(id: EntityId) -> SkpParseError {
     SkpParseError::at_stage("Recursive component definition", ParseStage::BuildScene).with_definition_id(id)
+}
+
+pub(crate) fn max_depth_exceeded(id: EntityId) -> SkpParseError {
+    SkpParseError::at_stage("Component nesting depth exceeds maximum allowed limit", ParseStage::BuildScene)
+        .with_definition_id(id)
+}
+
+pub(crate) fn max_instances_exceeded(id: EntityId) -> SkpParseError {
+    SkpParseError::at_stage("Expanded component instance count exceeds maximum allowed limit", ParseStage::BuildScene)
+        .with_definition_id(id)
 }
 
 fn position_mm(m: &[f64]) -> [f64; 3] {
@@ -226,7 +298,7 @@ impl<'a> Baker<'a> {
                 prim.uvs[i * 2 + 1] = g.uvs[i][1];
                 let mut n = g.normals[i];
                 let mut l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-                if l < 1e-6 {
+                if !l.is_finite() || l < 1e-6 {
                     n = [0.0, 0.0, 1.0];
                 } else {
                     for x in &mut n {
@@ -235,7 +307,7 @@ impl<'a> Baker<'a> {
                 }
                 let mut w = transform_normal(matrix, n);
                 l = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
-                if l < 1e-6 {
+                if !l.is_finite() || l < 1e-6 {
                     w = n;
                     l = 1.0;
                 }
@@ -290,6 +362,12 @@ impl<'a> Baker<'a> {
             if let Some(r) = i.ref_idx {
                 if self.active.contains(&r) {
                     return Err(recursive_definition(r));
+                }
+                if self.active.len() >= MAX_COMPONENT_DEPTH {
+                    return Err(max_depth_exceeded(r));
+                }
+                if self.instance_counter >= MAX_EXPANDED_INSTANCES {
+                    return Err(max_instances_exceeded(r));
                 }
                 if let Some(d) = p.definitions.get(&r) {
                     self.active.insert(r);
@@ -368,6 +446,7 @@ impl<'a> Baker<'a> {
 pub fn build_scene_raw(mut p: RawParsed, o: &ParseOptions) -> Result<Scene, SkpParseError> {
     let layer_hidden = std::mem::take(&mut p.layer_hidden);
     emit_log(o, LogLevel::Information, &format!("Building scene: {} definitions available", p.definitions.len()));
+    validate_hierarchy(&p)?;
     let mut baker = Baker {
         p: &p,
         o,

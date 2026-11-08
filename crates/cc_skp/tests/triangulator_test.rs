@@ -52,6 +52,16 @@ fn concave() {
     assert_near(tri_area(&t, &v), 12.0, 1e-6);
 }
 
+// Ported from the C++ triangulator_test.cpp (openskp#495).
+#[test]
+fn concave_quad_splits_along_inside_diagonal() {
+    // A dart of area 4 whose reflex corner is vertex 1: the 0-2 diagonal runs outside it.
+    let v = vertices(&[(0, 4.0, 0.0, 0.0), (1, 1.0, 1.0, 0.0), (2, 0.0, 4.0, 0.0), (3, 0.0, 0.0, 0.0)]);
+    let t = triangulate_face_3d(&v, &[vec![0, 1, 2, 3]], [0.0, 0.0, 1.0]);
+    assert_eq!(t.len(), 2);
+    assert_near(tri_area(&t, &v), 4.0, 1e-9);
+}
+
 #[test]
 fn hole() {
     let v = vertices(&[

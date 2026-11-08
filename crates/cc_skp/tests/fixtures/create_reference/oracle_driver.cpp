@@ -4,19 +4,25 @@
 // src/create.cpp) and dumps each result to <outdir>/<name>.skp. tests/create_reference_test.rs
 // replays the same scenarios through the Rust port and asserts byte equality.
 //
-// To regenerate: copy create.cpp/create.hpp/model.hpp/observability.hpp/scaffold_blank_v17.hpp,
-// add an `export.hpp` defining an empty OPENSKP_EXPORT, and patch create.cpp so it is
-// reproducible - `random_uuid_bytes()` returns GUID n (a global counter `oracle_guid_counter`,
-// reset per scenario) as bytes (n*16 + i) & 0xFF with the v4 version/variant bits applied, and
-// `std::time(nullptr)` becomes 1700000000 - which is exactly what
-// `SkpBuilder::use_deterministic_ids(1700000000)` does on the Rust side. Build (MSVC:
-// `cl /std:c++17 /EHsc /O2 /I include create.cpp oracle_driver.cpp`) and run it from the crate
-// root (texture paths are relative and embedded verbatim in the files).
+// To regenerate, from the repository root:
 //
-// single_face, multi_face_shared_edge, materials_and_layers, holes, auto_triangulate, circle, arc,
-// polyline and slot_boundary are also byte-identical to the Python writer's references
-// (packages/dart/test/fixtures/create_reference). attributes.skp differs from Python's only in
-// key order: C++ (and Rust) write attribute keys sorted, Python in insertion order.
+//   python packages/rust/tests/fixtures/create_reference/regenerate.py
+//
+// It builds this driver against a copy of packages/cpp/src/create.cpp patched to be reproducible
+// - `random_uuid_bytes()` returns GUID n (a global counter `oracle_guid_counter`, reset per
+// scenario) as bytes (n*16 + i) & 0xFF with the v4 version/variant bits applied, and
+// `std::time(nullptr)` becomes 1700000000, which is exactly what
+// `SkpBuilder::use_deterministic_ids(1700000000)` does on the Rust side - then runs it from the
+// crate root (texture paths are relative and embedded verbatim in the files).
+//
+// The files are generated with the C++ writer of openskp v1.5.0. (Run against v1.4.0, this same
+// driver reproduces the earlier files byte for byte, minus the 1.5.0-only scenarios at the end.)
+//
+// Up to 1.4.0, single_face, multi_face_shared_edge, materials_and_layers, holes,
+// auto_triangulate, circle, arc, polyline and slot_boundary were also byte-identical to the Python
+// writer's references (packages/dart/test/fixtures/create_reference), and attributes.skp differed
+// from Python's only in key order. 1.5.0 changed the C++ writer's persistent ids, which Python
+// does not share, so that no longer holds.
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -405,6 +411,47 @@ int main(int argc, char** argv) {
     ImageOptions o;
     o.matrix3x3 = Matrix3x3{1, 0, 0, 0, 0, -1, 0, 1, 0};
     b.add_image(kJpg, 10, 5, o);
+  });
+
+  // ---- openskp 1.5.0 writer features ----
+
+  run("guide_options", [](SkpBuilder& b) {
+    const int guides = b.add_layer("Guides");
+    auto& d = b.add_component_definition("GuideDef");
+    d.add_face(sq(5));
+    d.add_construction_point({1, 1, 1}, GuideOptions{guides, true});
+    d.add_construction_line({0, 0, 0}, Point3{5, 0, 0}, std::nullopt, GuideOptions{std::nullopt, true});
+    d.close();
+    b.add_instance(d);
+    b.add_face(sq(10));
+    b.add_construction_point({1, 2, 3}, GuideOptions{std::nullopt, true});
+    b.add_construction_point({4, 5, 6}, GuideOptions{guides, false});
+    b.add_construction_line({0, 0, 0}, Point3{10, 0, 0}, std::nullopt, GuideOptions{guides, true});
+    b.add_construction_line({0, 0, 4}, std::nullopt, Point3{0, 0, 1});
+  });
+
+  run("document_options", [](SkpBuilder& b) {
+    DocumentOptions o;
+    o.length_unit = 2;
+    o.length_precision = 1;
+    o.style_items = {{4000, 0xff563412u}, {1006, 0}, {1007, 5}, {1000, 3}, {2004, 1}};
+    b.set_document_options(o);
+    b.add_face(sq(10));
+  });
+
+  run("dimension_vectors", [](SkpBuilder& b) {
+    auto& d = b.add_component_definition("Dims");
+    d.add_face(sq(5));
+    d.add_dimension({0, 0, 0}, {5, 0, 0}, 2.5);
+    d.add_dimension({0, 0, 0}, {5, 0, 0}, Point3{0, 0, 4});
+    d.close();
+    b.add_instance(d);
+    b.add_face(sq(10));
+    b.add_dimension({1, 2, 3}, {11, 2, 3}, Point3{0, 0, 4});
+    b.add_dimension({11, 2, 3}, {1, 2, 3}, Point3{0, 0, -4});
+    b.add_dimension({1, 2, 3}, {1, 2, 13}, Point3{-4, 0, 0});
+    b.add_dimension({1, 2, 3}, {1, 2, 13}, Point3{0, 0, 0});
+    b.add_dimension({1, 2, 3}, {11, 2, 3}, Point3{7, -4, 0});
   });
 
   return 0;
