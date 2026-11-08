@@ -2760,3 +2760,88 @@ fn enter_in_a_dialog_text_field_does_not_press_ok() {
     harness.run();
     assert_eq!(harness.state().ok, 1);
 }
+
+/// Issue #159: the Detail Line tool takes typed values after the first
+/// point, like the sketches: a circle's radius, a line's length; Enter
+/// places them and Esc drops the value first.
+#[test]
+fn detail_lines_take_typed_lengths() {
+    use crate::detail_ui::DetailMode;
+    use cc_core::sketch::SketchCurve;
+    let mut state = sample_state();
+    let made = crate::actions::run_command(
+        &mut state,
+        cc_engine::commands::views::ViewCreate { kind: "drafting".into(), ..Default::default() },
+    );
+    let view = cc_core::ViewId(made.unwrap()["id"].as_u64().unwrap());
+    state.active_view = Some(view);
+    state.set_tool(crate::tools::Tool::DetailLine);
+    state.detail.mode = DetailMode::Circle;
+    // The app's keys and the tool on a canvas, 20 points per meter around the origin.
+    let mut harness = themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, |ui, state| {
+        crate::app::shortcuts(ui.ctx(), state);
+        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click());
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin: glam::DVec2::ZERO, scale: 20.0 };
+        let Some(view) = state.active_view.and_then(|v| state.project().view(v).cloned()) else { return };
+        crate::detail_ui::tool(ui, &resp, &painter, state, &view, &xf);
+    });
+    harness.run();
+    let pointer = |h: &mut Harness<'static, AppState>, pos: egui::Pos2, click: bool| {
+        h.input_mut().events.push(egui::Event::PointerMoved(pos));
+        h.run();
+        if click {
+            for pressed in [true, false] {
+                let (button, modifiers) = (egui::PointerButton::Primary, egui::Modifiers::NONE);
+                h.input_mut().events.push(egui::Event::PointerButton { pos, button, pressed, modifiers });
+                h.run();
+            }
+        }
+    };
+    let typed = |h: &mut Harness<'static, AppState>, text: &str| {
+        h.input_mut().events.push(egui::Event::Text(text.into()));
+        h.run();
+    };
+    let lines = |h: &Harness<'static, AppState>| -> Vec<SketchCurve> {
+        h.state()
+            .project()
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                cc_core::ElementKind::DetailLine(l) if l.view == view => Some(l.curve),
+                _ => None,
+            })
+            .collect()
+    };
+    let center = egui::pos2(300.0, 200.0);
+
+    // A circle: its center, the cursor away from it, 2, Enter.
+    pointer(&mut harness, center, true);
+    assert!(crate::detail_ui::typing(harness.state()));
+    pointer(&mut harness, center + egui::vec2(30.0, 10.0), false);
+    typed(&mut harness, "2");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    let made = lines(&harness);
+    assert_eq!(made.len(), 1, "{}", harness.state().message);
+    let SketchCurve::Circle { radius, .. } = made[0] else { panic!("a circle: {:?}", made[0]) };
+    assert!((radius - 2.0).abs() < 1e-9, "{radius}");
+
+    // Esc drops the typed value before the first point.
+    harness.state_mut().detail.mode = DetailMode::Line;
+    let start = center + egui::vec2(0.0, 100.0);
+    pointer(&mut harness, start, true);
+    pointer(&mut harness, start + egui::vec2(40.0, 0.0), false);
+    typed(&mut harness, "9");
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert!(crate::detail_ui::typing(harness.state()), "the first point stays");
+    // A line 3 m towards the cursor.
+    typed(&mut harness, "3");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    let line = lines(&harness).into_iter().find_map(|c| match c {
+        SketchCurve::Line { a, b } => Some(a.distance(b)),
+        _ => None,
+    });
+    assert!(line.is_some_and(|l| (l - 3.0).abs() < 1e-9), "{line:?}");
+}

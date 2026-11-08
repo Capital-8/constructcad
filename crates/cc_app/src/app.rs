@@ -348,11 +348,12 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
             _ => state.delete_selection(),
         }
     }
-    let typing_length = state.typing_segment();
+    // The tools that take a typed length, and the detail line being drawn (issue #159).
+    let typing_length = state.typing_segment() || crate::detail_ui::typing(state);
     // Backspace edits a typed length, or else steps a chain back one segment.
     if backspace {
-        if typing_length && !state.typed.is_empty() {
-            state.typed.pop();
+        if typing_length && !crate::detail_ui::typed_target(state).is_empty() {
+            crate::detail_ui::typed_target(state).pop();
         } else {
             crate::tools::chain_back(state);
         }
@@ -370,7 +371,7 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
     for event in events {
         let Event::Text(text) = event else { continue };
         for ch in text.chars() {
-            if typing_length && state.typed.type_char(ch, false) {
+            if typing_length && crate::detail_ui::typed_target(state).type_char(ch, false) {
                 continue;
             }
             if !ch.is_ascii_alphabetic() {
@@ -412,7 +413,8 @@ impl eframe::App for ConstructApp {
     /// angle) instead of moving keyboard focus between widgets.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         let sketch = self.state.sketch.as_ref().is_some_and(|s| s.typing());
-        if !(sketch || self.state.typing_segment()) || ctx.memory(|m| m.focused().is_some()) {
+        let detail = crate::detail_ui::typing(&self.state);
+        if !(sketch || detail || self.state.typing_segment()) || ctx.memory(|m| m.focused().is_some()) {
             return;
         }
         let is_tab = |e: &Event| matches!(e, Event::Key { key: Key::Tab, .. });
@@ -422,7 +424,7 @@ impl eframe::App for ConstructApp {
         if presses % 2 == 1 {
             let typed = match self.state.sketch.as_mut() {
                 Some(s) => &mut s.typed,
-                None => &mut self.state.typed,
+                None => crate::detail_ui::typed_target(&mut self.state),
             };
             typed.angle_active = !typed.angle_active;
         }

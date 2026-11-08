@@ -12,7 +12,7 @@ use crate::sketch_mode::{self, Draw, Session, Target};
 use crate::state::AppState;
 use crate::t;
 use crate::table::{readonly_row, row, section};
-use crate::tools::{Drag, Tool, draw_snap, snap_at};
+use crate::tools::{Drag, Tool, TypedInput, draw_snap, snap_at};
 use cc_core::detail::{DetailLine, DetailStyle, LineStyleRef, LineStyles};
 use cc_core::sketch::SketchCurve;
 use cc_core::{ElementId, ElementKind, ViewId};
@@ -126,8 +126,20 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         let anchor = s.picks.last().copied();
         let sn = snap_at(state, view.level(), raw, anchor, &extra, xf.scale, shift);
         draw_snap(painter, xf, sn);
+        // After the first point, a typed length (Tab: angle) or radius places
+        // the next one, and Enter places it as a click would (issue #159).
+        if !s.typing() {
+            s.typed.clear();
+        }
+        let enter = !s.typed.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let click = resp.clicked() || enter;
+        let had_typed = !s.typed.is_empty();
+        let p = s.typed_point(sn.point);
         let before = s.curves.len();
-        sketch_mode::draw(resp.clicked(), painter, s, sn.point, xf, PICK_PX / xf.scale);
+        sketch_mode::draw(click, painter, s, p, xf, PICK_PX / xf.scale);
+        if click && had_typed {
+            s.typed.clear();
+        }
         let new: Vec<SketchCurve> = s.curves.get(before..).map(<[SketchCurve]>::to_vec).unwrap_or_default();
         if s.curves.len() > MAX_KEPT {
             let extra = s.curves.len() - MAX_KEPT;
@@ -155,9 +167,30 @@ pub(crate) fn create(state: &mut AppState, view: ViewId, style: LineStyleRef, cu
     }
 }
 
-/// Esc while a curve is being drawn: drop its picks. Returns whether it did.
+/// The Detail Line tool takes typed values now: it has the first point of
+/// a line, arc, circle, ellipse or rectangle.
+pub fn typing(state: &AppState) -> bool {
+    state.tool == Tool::DetailLine && state.detail_draw.as_ref().is_some_and(|d| d.session.typing())
+}
+
+/// Where typed values go: the detail line being drawn (see [`typing`]),
+/// else the other tools' lengths.
+pub fn typed_target(state: &mut AppState) -> &mut TypedInput {
+    let detail = typing(state);
+    match (detail, state.detail_draw.as_mut()) {
+        (true, Some(d)) => &mut d.session.typed,
+        _ => &mut state.typed,
+    }
+}
+
+/// Esc while a curve is being drawn: drop the typed value, else its picks.
+/// Returns whether it did.
 pub fn escape(state: &mut AppState) -> bool {
     match state.detail_draw.as_mut() {
+        Some(d) if !d.session.typed.is_empty() || d.session.typed.angle_active => {
+            d.session.typed.clear();
+            true
+        }
         Some(d) if !d.session.picks.is_empty() => {
             d.session.picks.clear();
             true
