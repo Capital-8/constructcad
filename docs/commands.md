@@ -11,7 +11,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
-- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
+- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
@@ -196,6 +196,7 @@ No parameters.
 | `path` | string | required | Path of the .dwg or .dxf file. |
 | `view` | id or name | required | View id or name. |
 | `align` | string | optional | `origin` (the drawing's origin at `position`), `center`, or `auto`: the origin, unless that leaves the drawing more than 1 km from what the view shows (a drawing in survey coordinates), then the center. |
+| `blocks` | boolean | optional | Bring the file's blocks in as detail components (DWG and DXF): each block inserted by a move, turn, uniform scale or mirror becomes a detail component type named after it (its nested blocks as nested pieces), and each such insert a detail component placed in the view; everything else stays in the imported drawing (default false: blocks are flattened into it). |
 | `color_mode` | string | optional | `grey` (default), `layers` (the file's colors) or `black`. |
 | `halftone` | boolean | optional | Draw it faded (default false). |
 | `position` | [x, y] | optional | Where the drawing goes, view coordinates in meters: its origin (`align` "origin", the default; [0, 0] if not given) or the center of its extents (`align` "center"; the center of what the view shows if not given). |
@@ -1559,6 +1560,33 @@ No parameters.
 | `view` | id or name | required | View id or name. |
 | `style` | string | optional | Line style: thin (default), medium, wide, hidden, dashed, center or dotted, or the name of one of the project's line styles (`line_styles_list`). |
 
+### `detail_component_create`
+
+*edit* — Make a detail component (a reusable 2D component for construction details) as a new type named `name`, in one undo step: from `pieces` (meters in its frame), or from `elements` of `view` (detail lines, filled and masking regions, text notes and other detail components), whose point `origin` (default: the lower left corner of their extents) becomes the component's origin. With `replace` (the default when elements are given) those elements are deleted and the new component is placed where they were. Detail lines keep their pen, regions their fill (solid or pattern; openings as outlines), text notes their text at its printed height, and detail components become nested pieces.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name of the component and of its type. |
+| `description` | string | optional | Description of the type. |
+| `elements` | [id, …] | optional | Ids of the view's elements to make the component from. |
+| `origin` | [x, y] | optional | The point of the view that becomes the component's origin. |
+| `pieces` | [JSON, …] | optional | Pieces, as `component_sheet_piece_add` takes them (meters). |
+| `replace` | boolean | optional | Replace `elements` by the new component (default true). |
+| `view` | id or name | optional | View id or name of `elements`. |
+
+### `detail_component_place`
+
+*edit* — Place a detail component in a 2D view (plan, ceiling plan, elevation, section, legend or drafting view): its origin at `position` (view coordinates, meters), turned `rotation` degrees, sized by `scale` and flipped across its own X axis first when `mirrored`. It is drawn only in that view, over the model and its regions, and goes with the view.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Where its origin goes, [x, y] in meters. |
+| `type` | id or name | required | A detail component type: id or name. |
+| `view` | id or name | required | View id or name. |
+| `mirrored` | boolean | optional | Flipped across its own X axis before turning (default false). |
+| `rotation` | number | optional | Degrees counter-clockwise (default 0). |
+| `scale` | number | optional | Size factor (default 1). |
+
 ### `line_styles_list`
 
 *query* — The line styles detail lines and region boundaries can use: the built-in ones (by code) and the project's (by name), each with its weight on paper (mm), color, dash pattern and how many elements use it.
@@ -2176,18 +2204,18 @@ No parameters.
 
 ### `component_sheet_piece_add`
 
-*edit* — Add 2D pieces to a title block component (every type of it), in one step.
+*edit* — Add 2D pieces to a title block or detail component (every type of it), in one step.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `type` | id or name | required | A type of the title block: id or name. |
+| `type` | id or name | required | A type of the title block or detail component: id or name. |
 | `name` | string | optional | Name of the first piece added (default `Piece1`, `Piece2`…). |
-| `piece` | JSON | optional | The piece, by `kind`: `stroke` (`points` as [{u, v, radius}], `closed`, `weight`, `color`, `fill`), `text` (`x`, `y`, `text` with `{fields}`, `size`, `anchor`: left, center, right or middle, `rotation`) or `image` (`x`, `y`, `width`, `height`, and `image_path` or base64 `image`). Millimeters from the paper's bottom-left corner, as numbers or expressions over the parameters, `SheetWidth` and `SheetHeight`. |
+| `piece` | JSON | optional | The piece, by `kind`: `stroke` (`points` as [{u, v, radius}], `closed`, `weight`, `color`, `fill`, `pattern`), `text` (`x`, `y`, `text` with `{fields}`, `size`, `anchor`: left, center, right or middle, `rotation`), `image` (`x`, `y`, `width`, `height`, and `image_path` or base64 `image`) or, in a detail component, `nested` (`component`, `x`, `y`, `rotation`, `scale`, `mirrored`). A title block's are millimeters from the paper's bottom-left corner, as numbers or expressions over the parameters, `SheetWidth` and `SheetHeight`; a detail component's are meters in its frame. |
 | `pieces` | [JSON, …] | optional | More pieces (each as `piece`), added after it in the same step: all of them or, when one is refused, none. |
 
 ### `component_sheet_piece_set`
 
-*edit* — Change a 2D piece of a title block: `piece` is a merge patch over its form in `component_get` `def.sheet` (e.g. `{"Text": {"size": "4"}}`); an image piece's picture is replaced with `image_path` or `image`, not by the patch.
+*edit* — Change a 2D piece of a title block or detail component: `piece` is a merge patch over its form in `component_get` `def.sheet` (e.g. `{"Text": {"size": "4"}}`); an image piece's picture is replaced with `image_path` or `image`, not by the patch.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2201,7 +2229,7 @@ No parameters.
 
 ### `component_sheet_piece_delete`
 
-*edit* — Delete 2D pieces of a title block, in one step.
+*edit* — Delete 2D pieces of a title block or detail component, in one step.
 
 | Parameter | Type | | Description |
 |---|---|---|---|

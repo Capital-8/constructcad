@@ -284,7 +284,7 @@ fn section(ui: &mut Ui, title: String) {
 
 /// The kinds *Quick Edit* offers: title blocks are drawn in their own editor.
 pub(crate) fn kinds() -> Vec<ComponentKind> {
-    ComponentKind::ALL.into_iter().filter(|k| *k != ComponentKind::TitleBlock).collect()
+    ComponentKind::ALL.into_iter().filter(|k| !k.is_2d()).collect()
 }
 
 fn body(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {

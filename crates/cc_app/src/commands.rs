@@ -144,6 +144,8 @@ pub enum UiCommand {
     FilledRegion,
     MaskingRegion,
     LineStyles,
+    DetailComponent,
+    CreateDetailComponent,
     Move,
     CopyElements,
     Rotate,
@@ -321,6 +323,8 @@ impl UiCommand {
             FilledRegion,
             MaskingRegion,
             LineStyles,
+            DetailComponent,
+            CreateDetailComponent,
             Move,
             CopyElements,
             Rotate,
@@ -487,6 +491,7 @@ impl UiCommand {
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             DetailLine => Icon::DetailLine,
+            DetailComponent | CreateDetailComponent => Icon::DetailComponent,
             FilledRegion => Icon::FilledRegion,
             MaskingRegion => Icon::MaskingRegion,
             LineStyles => Icon::LineStyles,
@@ -557,9 +562,23 @@ impl UiCommand {
     pub fn badge(self) -> Option<Badge> {
         use UiCommand::*;
         match self {
-            NewComponent | FloorPlan | CeilingPlan | New3D | Legend | DraftingView | Schedule | StructuralSchedules
-            | Sheet | SteelSchedule | StructuralPlan | PlumbingPlan | ElectricalPlan | MepSchedules | PanelDiagram
-            | NewTitleBlock => Some(Badge::New),
+            NewComponent
+            | FloorPlan
+            | CeilingPlan
+            | New3D
+            | Legend
+            | DraftingView
+            | Schedule
+            | StructuralSchedules
+            | Sheet
+            | SteelSchedule
+            | StructuralPlan
+            | PlumbingPlan
+            | ElectricalPlan
+            | MepSchedules
+            | PanelDiagram
+            | NewTitleBlock
+            | CreateDetailComponent => Some(Badge::New),
             ImportIfc | ImportCad | ImportImage | ImportSkp | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | ExportImage | ExportDxf | AnalyticalExport => Some(Badge::Export),
             Delete | DetachTop => Some(Badge::Remove),
@@ -661,6 +680,8 @@ impl UiCommand {
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             DetailLine => t!("tool-detail-line"),
+            DetailComponent => t!("tool-detail-component"),
+            CreateDetailComponent => t!("action-create-detail-component"),
             FilledRegion => t!("tool-filled-region"),
             MaskingRegion => t!("tool-masking-region"),
             LineStyles => t!("action-line-styles"),
@@ -851,6 +872,8 @@ impl UiCommand {
             Dimension(DimensionMode::Diameter) => t!("cmd-desc-dim-diameter"),
             Text => t!("cmd-desc-text"),
             DetailLine => t!("cmd-desc-detail-line"),
+            DetailComponent => t!("cmd-desc-detail-component"),
+            CreateDetailComponent => t!("cmd-desc-create-detail-component"),
             FilledRegion => t!("cmd-desc-filled-region"),
             MaskingRegion => t!("cmd-desc-masking-region"),
             LineStyles => t!("cmd-desc-line-styles"),
@@ -994,6 +1017,7 @@ impl UiCommand {
             Dimension(DimensionMode::Aligned) => "DI",
             Text => "TT",
             DetailLine => "DL",
+            DetailComponent => "DC",
             FilledRegion => "FR",
             Move => "MV",
             CopyElements => "CO",
@@ -1111,6 +1135,8 @@ impl UiCommand {
             Dimension(_) => "dimension_create",
             Text => "text_create",
             DetailLine => "detail_line_create",
+            DetailComponent => "detail_component_place",
+            CreateDetailComponent => "detail_component_create",
             FilledRegion => "filled_region_create",
             MaskingRegion => "masking_region_create",
             LineStyles => "line_styles_list",
@@ -1224,10 +1250,16 @@ impl UiCommand {
             ExportPdf | ExportSvg if actions::active_sheet(state).is_none() => Some(t!("hint-export-sheet")),
             ExportImage if actions::image_view(state).is_none() => Some(t!("hint-export-image")),
             ExportDxf if actions::image_view(state).is_none() => Some(t!("hint-export-dxf")),
-            ImportCad | ImportImage | DetailLine | FilledRegion | MaskingRegion
+            ImportCad | ImportImage | DetailLine | FilledRegion | MaskingRegion | DetailComponent
                 if crate::cad_ui::cad_view(state).is_none() =>
             {
                 Some(t!("why-cad-view"))
+            }
+            DetailComponent if Tool::for_category(project, Category::DetailComponent).is_none() => {
+                Some(t!("why-no-detail-component"))
+            }
+            CreateDetailComponent if crate::detail_component_ui::selection(state).is_none() => {
+                Some(t!("why-select-detail"))
             }
             // Pads grade a terrain of the plan's level.
             Place(Category::Pad) if !actions::terrain_on_level(state) => Some(t!("why-no-terrain")),
@@ -1392,6 +1424,7 @@ impl UiCommand {
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
             DetailLine => *tool == Tool::DetailLine,
+            DetailComponent => matches!(tool, Tool::DetailComponent { .. }),
             FilledRegion => matches!(tool, Tool::Sketch { category: Category::FilledRegion, .. }),
             MaskingRegion => matches!(tool, Tool::Sketch { category: Category::MaskingRegion, .. }),
             LevelMarkPlan | LevelMarkSection => matches!(tool, Tool::LevelMark { .. }),
@@ -1484,6 +1517,7 @@ fn place_label(category: Category) -> String {
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::DetailLine => t!("tool-detail-line"),
+        Category::DetailComponent => t!("tool-detail-component"),
         Category::FilledRegion => t!("tool-filled-region"),
         Category::MaskingRegion => t!("tool-masking-region"),
         Category::LevelMark => t!("tool-level-mark"),
@@ -1520,6 +1554,7 @@ fn place_description(category: Category) -> String {
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::DetailLine => t!("cmd-desc-detail-line"),
+        Category::DetailComponent => t!("cmd-desc-detail-component"),
         Category::FilledRegion => t!("cmd-desc-filled-region"),
         Category::MaskingRegion => t!("cmd-desc-masking-region"),
         Category::LevelMark => t!("cmd-desc-level-mark-plan"),
@@ -1747,6 +1782,13 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             state.set_tool(Tool::DetailLine);
             state.message = t!("hint-detail-line");
         }
+        DetailComponent => {
+            if let Some(tool) = Tool::for_category(state.project(), Category::DetailComponent) {
+                state.set_tool(tool);
+                state.message = t!("hint-detail-component");
+            }
+        }
+        CreateDetailComponent => crate::detail_component_ui::create_from_selection(state),
         FilledRegion => crate::region_ui::start(state, Category::FilledRegion),
         MaskingRegion => crate::region_ui::start(state, Category::MaskingRegion),
         LineStyles => crate::line_styles_dialog::open(state),

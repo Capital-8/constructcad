@@ -92,6 +92,7 @@ fn element_is_valid(e: &Element) -> bool {
         }
         ElementKind::CadImport(c) => c.is_valid(),
         ElementKind::DetailLine(l) => l.is_valid(),
+        ElementKind::DetailComponent(c) => c.is_valid(),
         ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.is_valid(),
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
@@ -341,6 +342,7 @@ impl Project {
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),
                         ElementKind::CadImport(c) => self.view(c.view).is_some(),
                         ElementKind::DetailLine(l) => self.view(l.view).is_some(),
+                        ElementKind::DetailComponent(c) => self.view(c.view).is_some(),
                         ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => self.view(r.view).is_some(),
                         ElementKind::Pad(p) => {
                             self.element(p.host).is_some_and(|t| matches!(t.kind, ElementKind::Topography(_)))

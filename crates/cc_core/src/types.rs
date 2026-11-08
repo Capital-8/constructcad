@@ -48,10 +48,12 @@ pub enum Category {
     MaskingRegion,
     /// Level marks: the elevation of a point in a plan, elevation or section.
     LevelMark,
+    /// Detail components: reusable 2D components placed in one view.
+    DetailComponent,
 }
 
 impl Category {
-    pub const ALL: [Category; 30] = [
+    pub const ALL: [Category; 31] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -76,6 +78,7 @@ impl Category {
         Category::DetailLine,
         Category::FilledRegion,
         Category::MaskingRegion,
+        Category::DetailComponent,
         Category::LevelMark,
         Category::CadImport,
         Category::Mass,
@@ -181,6 +184,7 @@ impl Category {
             Category::DetailLine => "category-detail-line",
             Category::FilledRegion => "category-filled-region",
             Category::MaskingRegion => "category-masking-region",
+            Category::DetailComponent => "category-detail-component",
         }
     }
 

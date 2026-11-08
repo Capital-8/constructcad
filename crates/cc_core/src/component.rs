@@ -43,10 +43,12 @@ pub enum ComponentKind {
     Window,
     /// A sheet layout (border, title block): 2D pieces in paper millimeters, see [`crate::title_block`].
     TitleBlock,
+    /// A detail component: 2D pieces in meters placed in one view, see [`crate::detail_component`].
+    Detail,
 }
 
 impl ComponentKind {
-    pub const ALL: [ComponentKind; 9] = [
+    pub const ALL: [ComponentKind; 10] = [
         ComponentKind::Furniture,
         ComponentKind::Casework,
         ComponentKind::Plumbing,
@@ -56,6 +58,7 @@ impl ComponentKind {
         ComponentKind::Door,
         ComponentKind::Window,
         ComponentKind::TitleBlock,
+        ComponentKind::Detail,
     ];
 
     pub fn key(self) -> &'static str {
@@ -69,7 +72,13 @@ impl ComponentKind {
             ComponentKind::Door => "comp-kind-door",
             ComponentKind::Window => "comp-kind-window",
             ComponentKind::TitleBlock => "comp-kind-title-block",
+            ComponentKind::Detail => "comp-kind-detail",
         }
+    }
+
+    /// Kinds whose definitions hold only 2D pieces ([`ComponentDef::sheet`]).
+    pub fn is_2d(self) -> bool {
+        matches!(self, ComponentKind::TitleBlock | ComponentKind::Detail)
     }
 }
 
@@ -544,7 +553,8 @@ pub struct ComponentDef {
     /// Points elements move with grips, declared by script pieces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hotspots: Vec<crate::component_script::Hotspot>,
-    /// The 2D pieces of a title block (see [`crate::title_block`]).
+    /// The 2D pieces of a title block (see [`crate::title_block`]) or of a
+    /// detail component (see [`crate::detail_component`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheet: Vec<crate::title_block::SheetItem>,
 }
@@ -710,6 +720,7 @@ impl ComponentDef {
     pub fn category(&self) -> crate::Category {
         match (self.kind, &self.opening) {
             (ComponentKind::TitleBlock, _) => crate::Category::TitleBlock,
+            (ComponentKind::Detail, _) => crate::Category::DetailComponent,
             (ComponentKind::Door, Some(_)) => crate::Category::Door,
             (ComponentKind::Window, Some(_)) => crate::Category::Window,
             _ => crate::Category::Component,

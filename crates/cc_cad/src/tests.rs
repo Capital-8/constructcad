@@ -209,6 +209,53 @@ fn nested_inserts_with_rotation_scale_layers_and_colors() {
 }
 
 #[test]
+fn kept_blocks_become_references_and_others_stay_flat() {
+    let mut b = nested_blocks();
+    // A block that inserts itself through another one.
+    b += &pairs(&[(0, "BLOCK"), (2, "P"), (10, "0"), (20, "0"), (30, "0")]);
+    b += &line("0", (0.0, 0.0), (1.0, 0.0));
+    b += &pairs(&[(0, "INSERT"), (8, "0"), (2, "Q"), (10, "0"), (20, "0"), (30, "0")]);
+    b += &pairs(&[(0, "ENDBLK")]);
+    b += &pairs(&[(0, "BLOCK"), (2, "Q"), (10, "0"), (20, "0"), (30, "0")]);
+    b += &line("0", (0.0, 0.0), (0.0, 1.0));
+    b += &pairs(&[(0, "INSERT"), (8, "0"), (2, "P"), (10, "0"), (20, "0"), (30, "0")]);
+    b += &pairs(&[(0, "ENDBLK")]);
+    let mut ents = pairs(&[(0, "INSERT"), (8, "Doors"), (2, "TWO"), (10, "100"), (20, "0"), (30, "0")]);
+    ents += &pairs(&[(41, "2"), (42, "-2"), (43, "1"), (50, "90")]);
+    // Stretched: flattened as before.
+    ents += &pairs(&[(0, "INSERT"), (8, "0"), (2, "DOOR"), (10, "0"), (20, "0"), (30, "0"), (41, "2"), (42, "1")]);
+    ents += &pairs(&[(0, "INSERT"), (8, "0"), (2, "P"), (10, "0"), (20, "50"), (30, "0")]);
+    ents += &line("0", (0.0, 0.0), (3.0, 0.0));
+    let text = file(None, &[("0", 7), ("Doors", 1), ("Detail", 2)], &b, &ents);
+    let r = read(text.as_bytes(), &Limits { keep_blocks: true, ..Default::default() }).unwrap();
+    assert_eq!(r.inserts.len(), 2, "{:?}", r.inserts);
+    let two = &r.inserts[0];
+    assert_eq!(two.block, "TWO");
+    assert!(close(two.position, DVec2::new(100.0, 0.0)) && (two.scale - 2.0).abs() < 1e-12 && two.mirrored);
+    assert!((two.rotation - FRAC_PI_2).abs() < 1e-12);
+    // The stretched door (line and arc) and the loose line stay in the drawing.
+    assert_eq!(r.drawing.prims.len(), 3);
+    let names: Vec<&str> = r.kept.iter().map(|b| b.name.as_str()).collect();
+    for n in ["TWO", "DOOR", "P", "Q"] {
+        assert!(names.contains(&n), "{n} in {names:?}");
+    }
+    let block = |n: &str| r.kept.iter().find(|b| b.name == n).unwrap();
+    // TWO holds two DOOR references, one 5 along its X; DOOR its line from its base.
+    assert_eq!(block("TWO").inserts.len(), 2);
+    assert!(close(block("TWO").inserts[1].position, DVec2::new(5.0, 0.0)));
+    assert!(block("TWO").prims.is_empty());
+    match &block("DOOR").prims[0] {
+        CadPrim::Polyline { pts, .. } => assert!(close(pts[0], DVec2::ZERO) && close(pts[1], DVec2::X), "{pts:?}"),
+        p => panic!("{p:?}"),
+    }
+    // P and Q insert each other: one of the two references is dropped.
+    assert_eq!(block("P").inserts.len() + block("Q").inserts.len(), 1);
+    // Without the option nothing changes.
+    let flat = read_str(&text);
+    assert!(flat.kept.is_empty() && flat.inserts.is_empty() && flat.drawing.prims.len() > 3);
+}
+
+#[test]
 fn stretched_blocks_tessellate_arcs_and_mirrors_flip_them() {
     let mut b = pairs(&[(0, "BLOCK"), (2, "C"), (10, "0"), (20, "0"), (30, "0")]);
     b += &pairs(&[(0, "CIRCLE"), (8, "0"), (10, "0"), (20, "0"), (30, "0"), (40, "1")]);

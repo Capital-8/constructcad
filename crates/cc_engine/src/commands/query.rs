@@ -275,6 +275,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             derived.insert("length".into(), json!(length));
             derived.insert("style_name".into(), json!(l.style.code(&p.line_styles)));
         }
+        ElementKind::DetailComponent(_) => super::detail_component::derived(p, &e, &mut derived),
         ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => {
             derived.insert("area".into(), json!(r.area()));
             derived.insert("perimeter".into(), json!(r.perimeter()));

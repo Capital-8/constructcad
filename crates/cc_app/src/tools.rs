@@ -122,6 +122,10 @@ pub enum Tool {
     LevelMark {
         type_id: ElementTypeId,
     },
+    /// Place detail components in 2D views (options in `AppState::detail_component`).
+    DetailComponent {
+        type_id: ElementTypeId,
+    },
     /// Add a leader to the text note `id`.
     AddLeader {
         id: ElementId,
@@ -193,6 +197,7 @@ impl Tool {
             Tool::Text { .. } => "tool-text",
             Tool::DetailLine => "tool-detail-line",
             Tool::LevelMark { .. } => "tool-level-mark",
+            Tool::DetailComponent { .. } => "tool-detail-component",
             Tool::AddLeader { .. } => "tool-add-leader",
             Tool::Opening { floor: false, .. } => "tool-roof-opening",
             Tool::Opening { floor: true, .. } => "tool-floor-opening",
@@ -219,7 +224,8 @@ impl Tool {
             | Tool::Pipe { type_id }
             | Tool::Conduit { type_id }
             | Tool::Text { type_id }
-            | Tool::LevelMark { type_id } => Some(*type_id),
+            | Tool::LevelMark { type_id }
+            | Tool::DetailComponent { type_id } => Some(*type_id),
             _ => None,
         }
     }
@@ -245,6 +251,7 @@ impl Tool {
             Tool::Text { .. } => Some(Category::Text),
             Tool::DetailLine => Some(Category::DetailLine),
             Tool::LevelMark { .. } => Some(Category::LevelMark),
+            Tool::DetailComponent { .. } => Some(Category::DetailComponent),
             _ => None,
         }
     }
@@ -270,6 +277,7 @@ impl Tool {
             Tool::Conduit { .. } => Tool::Conduit { type_id: id },
             Tool::Text { .. } => Tool::Text { type_id: id },
             Tool::LevelMark { .. } => Tool::LevelMark { type_id: id },
+            Tool::DetailComponent { .. } => Tool::DetailComponent { type_id: id },
             t => t,
         }
     }
@@ -313,6 +321,7 @@ impl Tool {
             Category::Text => Tool::Text { type_id },
             Category::DetailLine => Tool::DetailLine,
             Category::LevelMark => Tool::LevelMark { type_id },
+            Category::DetailComponent => Tool::DetailComponent { type_id },
             // Imported, not drawn.
             Category::CadImport | Category::TitleBlock => return None,
         })
@@ -1335,6 +1344,10 @@ pub fn handle(
         // Detail lines go in any view that holds drawings.
         (Tool::DetailLine, _) if cc_views::hosts_cad(&view.kind) => {
             crate::detail_ui::tool(ui, resp, painter, state, view, xf);
+        }
+        // Detail components too.
+        (Tool::DetailComponent { type_id }, _) if cc_views::hosts_cad(&view.kind) => {
+            crate::detail_component_ui::tool(ui, resp, painter, state, view, *type_id, xf);
         }
         // Outside plans the modify tools edit what the view owns (detail
         // lines, texts, dimensions), in its drawing coordinates.

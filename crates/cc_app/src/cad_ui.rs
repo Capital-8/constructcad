@@ -56,11 +56,21 @@ pub fn import_cad_path(state: &mut AppState, path: PathBuf) {
         scale: None,
         color_mode: None,
         halftone: None,
+        blocks: Some(state.cad_blocks),
     };
     match state.session.run(command) {
         Ok(out) => {
             if let Some(id) = out["id"].as_u64() {
                 state.selection = std::collections::BTreeSet::from([ElementId(id)]);
+            }
+            let placed: Vec<ElementId> = out["components"]["elements"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_u64().map(ElementId))
+                .collect();
+            if out["id"].is_null() && !placed.is_empty() {
+                state.selection = placed.iter().copied().collect();
             }
             let name = out["name"].as_str().unwrap_or_default().to_string();
             let count = out["primitives"].as_u64().unwrap_or(0);
@@ -76,6 +86,10 @@ pub fn import_cad_path(state: &mut AppState, path: PathBuf) {
             }
             if out["truncated"].as_bool() == Some(true) {
                 message = format!("{message} {}", t!("msg-cad-truncated"));
+            }
+            if let Some(types) = out["components"]["types"].as_array() {
+                let line = t!("msg-cad-blocks", "types" => types.len(), "count" => placed.len());
+                message = format!("{message} {line}");
             }
             state.message = message;
         }

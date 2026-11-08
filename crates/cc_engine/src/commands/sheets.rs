@@ -320,9 +320,11 @@ impl Command for TitleBlockCreate {
     }
 }
 
-/// A 2D piece of a title block. Coordinates are millimeters from the
-/// paper's bottom-left corner: numbers or expressions over the
-/// parameters, `SheetWidth` and `SheetHeight`.
+/// A 2D piece of a title block or a detail component. A title block's
+/// coordinates are millimeters from the paper's bottom-left corner
+/// (numbers or expressions over the parameters, `SheetWidth` and
+/// `SheetHeight`); a detail component's are meters in its own frame, text
+/// heights too (numbers or expressions over its parameters).
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SheetPieceArg {
@@ -333,7 +335,7 @@ pub enum SheetPieceArg {
         /// Joins the last point to the first.
         #[serde(default)]
         closed: bool,
-        /// Pen width, millimeters (default 0.25).
+        /// Pen width, paper millimeters (default 0.25).
         #[serde(default)]
         weight: Option<ExprArg>,
         /// Line color [r, g, b] (default black).
@@ -342,6 +344,28 @@ pub enum SheetPieceArg {
         /// Fill color of a closed stroke [r, g, b].
         #[serde(default)]
         fill: Option<[u8; 3]>,
+        /// Dash pattern (detail components): solid (default), dash,
+        /// short_dash, dot or dash_dot.
+        #[serde(default)]
+        pattern: Option<String>,
+    },
+    /// Another detail component placed inside this one (detail components only).
+    Nested {
+        /// The component's name (the parameter values of its first type are used).
+        component: String,
+        /// Where its origin goes, across (meters).
+        x: ExprArg,
+        /// Where its origin goes, up (meters).
+        y: ExprArg,
+        /// Degrees counter-clockwise.
+        #[serde(default)]
+        rotation: Option<ExprArg>,
+        /// Size factor (default 1).
+        #[serde(default)]
+        scale: Option<ExprArg>,
+        /// Flipped across its own X axis before turning.
+        #[serde(default)]
+        mirrored: bool,
     },
     /// Text with `{fields}`; line breaks start new lines.
     Text {
@@ -381,10 +405,10 @@ pub enum SheetPieceArg {
 }
 
 impl SheetPieceArg {
-    fn shape(&self) -> Result<SheetShape> {
+    pub(crate) fn shape(&self) -> Result<SheetShape> {
         let opt = |e: &Option<ExprArg>| e.as_ref().map(ExprArg::text).transpose().map(Option::unwrap_or_default);
         Ok(match self {
-            SheetPieceArg::Stroke { points, closed, weight, color, fill } => {
+            SheetPieceArg::Stroke { points, closed, weight, color, fill, pattern } => {
                 if points.len() > title_block::MAX_STROKE_POINTS {
                     return Err(EngineError::invalid("too many points"));
                 }
@@ -394,6 +418,21 @@ impl SheetPieceArg {
                     weight: opt(weight)?,
                     color: *color,
                     fill: *fill,
+                    pattern: pattern.as_deref().map(pattern_arg).transpose()?.unwrap_or_default(),
+                    hatch: None,
+                }
+            }
+            SheetPieceArg::Nested { component, x, y, rotation, scale, mirrored } => {
+                if component.trim().is_empty() || component.chars().count() > title_block::MAX_NAME {
+                    return Err(EngineError::invalid("give the nested component's name"));
+                }
+                SheetShape::Nested {
+                    component: component.trim().to_string(),
+                    x: x.text()?,
+                    y: y.text()?,
+                    rotation: opt(rotation)?,
+                    scale: opt(scale)?,
+                    mirrored: *mirrored,
                 }
             }
             SheetPieceArg::Text { x, y, text, size, anchor, rotation } => {
@@ -436,6 +475,23 @@ impl SheetPieceArg {
             },
         })
     }
+}
+
+/// A dash pattern by its code.
+pub(crate) fn pattern_arg(code: &str) -> Result<cc_core::LinePattern> {
+    use cc_core::LinePattern as P;
+    Ok(match code.trim().to_ascii_lowercase().replace('-', "_").as_str() {
+        "solid" => P::Solid,
+        "dash" | "dashed" => P::Dash,
+        "short_dash" | "hidden" => P::ShortDash,
+        "dot" | "dotted" => P::Dot,
+        "dash_dot" | "center" => P::DashDot,
+        other => {
+            return Err(EngineError::invalid(format!(
+                "unknown pattern '{other}' (solid, dash, short_dash, dot or dash_dot)"
+            )));
+        }
+    })
 }
 
 /// A picture from a file or base64 text (one of them), checked against the
@@ -496,18 +552,21 @@ pub(crate) fn def_json(def: &ComponentDef) -> Value {
 }
 
 fn title_block_def(def: &ComponentDef) -> Result<()> {
-    if def.kind == ComponentKind::TitleBlock {
+    if def.kind.is_2d() {
         Ok(())
     } else {
-        Err(EngineError::invalid("sheet pieces go into title blocks only"))
+        Err(EngineError::invalid("2D pieces go into title blocks and detail components only"))
     }
 }
 
-/// Push `shapes` onto a title block's pieces, the first named `name` (the
-/// others `Piece1`, `Piece2`…), and return their indices; refused whole
-/// when they would pass the most pieces it holds.
-fn push_pieces(def: &mut ComponentDef, shapes: Vec<SheetShape>, name: Option<&str>) -> Result<Vec<usize>> {
+/// Push `shapes` onto a title block's or detail component's pieces, the
+/// first named `name` (the others `Piece1`, `Piece2`…), and return their
+/// indices; refused whole when they would pass the most pieces it holds.
+pub(crate) fn push_pieces(def: &mut ComponentDef, shapes: Vec<SheetShape>, name: Option<&str>) -> Result<Vec<usize>> {
     title_block_def(def)?;
+    if def.kind == ComponentKind::TitleBlock && shapes.iter().any(|s| matches!(s, SheetShape::Nested { .. })) {
+        return Err(EngineError::invalid("only detail components nest other components"));
+    }
     if def.sheet.len().saturating_add(shapes.len()) > title_block::MAX_SHEET_PIECES {
         return Err(EngineError::invalid("the title block has the most pieces it can hold"));
     }
@@ -526,19 +585,22 @@ fn push_pieces(def: &mut ComponentDef, shapes: Vec<SheetShape>, name: Option<&st
     Ok(indices)
 }
 
-/// Add 2D pieces to a title block component (every type of it), in one step.
+/// Add 2D pieces to a title block or detail component (every type of it), in one step.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentSheetPieceAdd {
-    /// A type of the title block: id or name.
+    /// A type of the title block or detail component: id or name.
     #[serde(rename = "type")]
     pub type_ref: Ref,
     /// The piece, by `kind`: `stroke` (`points` as [{u, v, radius}], `closed`,
-    /// `weight`, `color`, `fill`), `text` (`x`, `y`, `text` with `{fields}`,
-    /// `size`, `anchor`: left, center, right or middle, `rotation`) or
-    /// `image` (`x`, `y`, `width`, `height`, and `image_path` or base64
-    /// `image`). Millimeters from the paper's bottom-left corner, as
-    /// numbers or expressions over the parameters, `SheetWidth` and `SheetHeight`.
+    /// `weight`, `color`, `fill`, `pattern`), `text` (`x`, `y`, `text` with
+    /// `{fields}`, `size`, `anchor`: left, center, right or middle,
+    /// `rotation`), `image` (`x`, `y`, `width`, `height`, and `image_path` or
+    /// base64 `image`) or, in a detail component, `nested` (`component`,
+    /// `x`, `y`, `rotation`, `scale`, `mirrored`). A title block's are
+    /// millimeters from the paper's bottom-left corner, as numbers or
+    /// expressions over the parameters, `SheetWidth` and `SheetHeight`; a
+    /// detail component's are meters in its frame.
     #[serde(default)]
     pub piece: Option<SheetPieceArg>,
     /// More pieces (each as `piece`), added after it in the same step: all
@@ -558,12 +620,35 @@ impl Command for ComponentSheetPieceAdd {
         if shapes.is_empty() {
             return Err(EngineError::invalid("give a `piece` or `pieces` to add"));
         }
+        check_nested(s.project(), &self.type_ref, &shapes)?;
         let indices = edit_def(s, &self.type_ref, &[], |def| push_pieces(def, shapes, self.name.as_deref()))?;
         Ok(json!({ "index": indices.first(), "indices": indices }))
     }
 }
 
-/// Change a 2D piece of a title block: `piece` is a merge patch over its
+/// Nested pieces must name detail components that do not hold the
+/// component of `type_ref` (a cycle).
+pub(crate) fn check_nested(p: &Project, type_ref: &Ref, shapes: &[SheetShape]) -> Result<()> {
+    let id = refs::element_type(p, type_ref)?;
+    let Some(TypeData::Component { component, .. }) = p.element_type(id).map(|t| &t.data) else { return Ok(()) };
+    check_nested_in(p, component, shapes)
+}
+
+/// Nested pieces of `shapes` must name detail components that do not hold `component`.
+pub(crate) fn check_nested_in(p: &Project, component: &str, shapes: &[SheetShape]) -> Result<()> {
+    for shape in shapes {
+        let SheetShape::Nested { component: inner, .. } = shape else { continue };
+        if p.detail_def(inner).is_none() {
+            return Err(EngineError::invalid(format!("no detail component is named '{inner}'")));
+        }
+        if p.detail_nests(inner, component) {
+            return Err(EngineError::invalid(format!("'{inner}' holds '{component}': nesting it would make a cycle")));
+        }
+    }
+    Ok(())
+}
+
+/// Change a 2D piece of a title block or detail component: `piece` is a merge patch over its
 /// form in `component_get` `def.sheet` (e.g. `{"Text": {"size": "4"}}`);
 /// an image piece's picture is replaced with `image_path` or `image`, not
 /// by the patch.
@@ -606,6 +691,18 @@ impl Command for ComponentSheetPieceSet {
             (path, text) => Some(read_picture(path.as_deref(), text.as_deref())?),
         };
         let added = self.add.iter().map(SheetPieceArg::shape).collect::<Result<Vec<_>>>()?;
+        check_nested(s.project(), &self.type_ref, &added)?;
+        if let Some(patch) = &self.piece {
+            // A patched nested piece must not make a cycle either.
+            let id = refs::element_type(s.project(), &self.type_ref)?;
+            if let Some(TypeData::Component { def, .. }) = s.project().element_type(id).map(|t| &t.data)
+                && let Some(item) = def.sheet.get(self.index)
+                && matches!(item.shape, SheetShape::Nested { .. })
+            {
+                let shape: SheetShape = super::patch_value(&item.shape, patch)?;
+                check_nested(s.project(), &self.type_ref, std::slice::from_ref(&shape))?;
+            }
+        }
         let added = edit_def(s, &self.type_ref, &[], |def| {
             title_block_def(def)?;
             let item = def.sheet.get_mut(self.index).ok_or_else(|| EngineError::invalid("no such piece"))?;
@@ -645,7 +742,8 @@ impl Command for ComponentSheetPieceSet {
     }
 }
 
-/// Delete 2D pieces of a title block, in one step.
+/// Delete 2D pieces of a title block or detail component, in one step.
+
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentSheetPieceDelete {

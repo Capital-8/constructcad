@@ -117,6 +117,11 @@ fn patched(
                 super::region::check(old, r)?;
             }
         }
+        cc_core::ElementKind::DetailComponent(c) => {
+            if let cc_core::ElementKind::DetailComponent(old) = &element.kind {
+                super::detail_component::check(old, c)?;
+            }
+        }
         _ => {}
     }
     Ok(kind)

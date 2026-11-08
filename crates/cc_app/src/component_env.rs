@@ -116,8 +116,14 @@ pub fn open(state: &mut AppState, type_id: ElementTypeId) {
 /// previews `sheet` (its paper and fields), or sample values on A3 paper
 /// when there is none.
 pub fn open_on(state: &mut AppState, type_id: ElementTypeId, sheet: Option<cc_core::ViewId>) {
-    if !matches!(state.project().element_type(type_id).map(|t| &t.data), Some(TypeData::Component { .. })) {
-        return;
+    match state.project().element_type(type_id).map(|t| &t.data) {
+        // Detail components are 2D: their pieces are edited with commands.
+        Some(TypeData::Component { def, .. }) if def.kind == cc_core::ComponentKind::Detail => {
+            state.message = t!("msg-detail-component-edit");
+            return;
+        }
+        Some(TypeData::Component { .. }) => {}
+        _ => return,
     }
     state.set_tool(crate::tools::Tool::Select);
     state.selection.clear();
@@ -137,7 +143,11 @@ pub fn target_type(state: &AppState) -> Option<ElementTypeId> {
     let p = state.project();
     let from_selection = state.selection.iter().find_map(|id| {
         let e = p.element(*id)?;
-        matches!(p.element_type(e.type_id).map(|t| &t.data), Some(TypeData::Component { .. })).then_some(e.type_id)
+        matches!(
+            p.element_type(e.type_id).map(|t| &t.data),
+            Some(TypeData::Component { def, .. }) if def.kind != cc_core::ComponentKind::Detail
+        )
+        .then_some(e.type_id)
     });
     from_selection.or(match state.tool {
         crate::tools::Tool::Component { type_id } => Some(type_id),

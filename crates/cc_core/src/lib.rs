@@ -12,6 +12,7 @@ pub mod component_ref;
 pub mod component_script;
 pub mod curtain;
 pub mod detail;
+pub mod detail_component;
 pub mod dim_line;
 pub mod dim_refs;
 mod document;
@@ -60,6 +61,7 @@ pub use component::{
 pub use component_ref::{PlaneAxis, RefDimension, RefEqual, RefLine, RefPlane};
 pub use component_script::{Hotspot, HotspotShape, ParamChoice, ScriptEval, ScriptInput, ScriptOwner, ScriptResult};
 pub use detail::{DetailLine, DetailStyle, LineStyleDef, LineStyleRef};
+pub use detail_component::DetailComponent;
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{

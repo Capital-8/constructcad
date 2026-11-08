@@ -161,6 +161,14 @@ pub struct CadImportFile {
     /// Draw it faded (default false).
     #[serde(default)]
     pub halftone: Option<bool>,
+    /// Bring the file's blocks in as detail components (DWG and DXF): each
+    /// block inserted by a move, turn, uniform scale or mirror becomes a
+    /// detail component type named after it (its nested blocks as nested
+    /// pieces), and each such insert a detail component placed in the view;
+    /// everything else stays in the imported drawing (default false: blocks
+    /// are flattened into it).
+    #[serde(default)]
+    pub blocks: Option<bool>,
 }
 
 impl Command for CadImportFile {
@@ -176,10 +184,20 @@ impl Command for CadImportFile {
         let position = self.position.map(refs::point).transpose()?;
 
         let path = self.path.clone();
-        let mut read = guard(|| cc_cad::read_file(&path, &cc_cad::Limits::default()))?
-            .map_err(|e| EngineError::invalid(e.to_string()))?;
-        let drawing = Arc::new(std::mem::take(&mut read.drawing));
-        if drawing.prims.is_empty() {
+        let keep_blocks = self.blocks.unwrap_or(false);
+        let limits = cc_cad::Limits { keep_blocks, ..Default::default() };
+        let mut read = guard(|| cc_cad::read_file(&path, &limits))?.map_err(|e| EngineError::invalid(e.to_string()))?;
+        let mut drawing = std::mem::take(&mut read.drawing);
+        if keep_blocks && !read.inserts.is_empty() {
+            // The extents take in where the blocks are inserted.
+            let pts = read.inserts.iter().map(|i| i.position);
+            let (lo, hi) = pts.fold(drawing.extents.unwrap_or((DVec2::INFINITY, DVec2::NEG_INFINITY)), |(a, b), p| {
+                (a.min(p), b.max(p))
+            });
+            drawing.extents = Some((lo, hi));
+        }
+        let drawing = Arc::new(drawing);
+        if drawing.prims.is_empty() && read.inserts.is_empty() {
             return Err(EngineError::invalid(t!("msg-cad-empty")));
         }
         let assumed = units.is_none() && drawing.units.is_none();
@@ -199,10 +217,19 @@ impl Command for CadImportFile {
             color_mode,
             halftone: self.halftone.unwrap_or(false),
         };
-        let (id, import) =
-            add_import(s, view_id, level, import, position, center, auto, t!("tx-import-cad", "name" => name.clone()))?;
+        let tx = t!("tx-import-cad", "name" => name.clone());
+        let (id, import, components) = if keep_blocks {
+            let mut import = import;
+            place_import(s, view_id, &mut import, position, center, auto);
+            let (id, components) = add_with_blocks(s, level, &import, &read, tx)?;
+            (id, import, components)
+        } else {
+            let (id, import) = add_import(s, view_id, level, import, position, center, auto, tx)?;
+            (Some(id), import, json!(null))
+        };
         Ok(json!({
-            "id": id.0,
+            "id": id.map(|i| i.0),
+            "components": components,
             "name": name,
             "format": match read.format { cc_cad::Format::Dwg => "dwg", cc_cad::Format::Dxf => "dxf", cc_cad::Format::Svg => "svg" },
             "version": read.version,
@@ -221,22 +248,114 @@ impl Command for CadImportFile {
     }
 }
 
-/// Place `import` in its view and add it pinned, in one undo step: its
-/// origin at `position` (default [0, 0]); with `center`, the center of its
-/// extents at `position` (default: the middle of what the view shows); with
-/// `auto`, the origin unless that leaves the drawing more than 1 km from
-/// what the view shows, then the center there.
-#[allow(clippy::too_many_arguments)]
-fn add_import(
+/// Add an import read with its blocks kept, in one undo step: the drawing
+/// (when anything is left in it, pinned), a detail component type per
+/// block (named after it, made unique), and a detail component per insert
+/// of the drawing on a visible layer, placed through the import's
+/// placement. Returns the drawing's id and what was made.
+fn add_with_blocks(
+    s: &mut Session,
+    level: cc_core::LevelId,
+    import: &CadImport,
+    read: &cc_cad::CadRead,
+    tx: String,
+) -> Result<(Option<ElementId>, Value)> {
+    use super::detail_component::{cad_blocks, insert_place};
+    let p = s.project();
+    let f = import.factor();
+    // Component names: the block's, made unique among the project's types and components.
+    let mut taken: std::collections::BTreeSet<String> = p
+        .types
+        .values()
+        .flat_map(|t| match &t.data {
+            TypeData::Component { component, .. } => vec![t.name.clone(), component.clone()],
+            _ => vec![t.name.clone()],
+        })
+        .collect();
+    let mut names = std::collections::BTreeMap::new();
+    for b in &read.kept {
+        let mut name = b.name.clone();
+        let mut n = 2;
+        while taken.contains(&name) {
+            name = format!("{} ({n})", b.name);
+            n += 1;
+        }
+        taken.insert(name.clone());
+        names.insert(b.name.clone(), name);
+    }
+    let blocks = cad_blocks(read, &import.drawing.layers, f, &names);
+    for (_, def) in &blocks.types {
+        super::types::validate(def)?;
+    }
+    let made: std::collections::BTreeMap<String, String> =
+        names.into_iter().filter(|(_, name)| blocks.types.iter().any(|(n, _)| n == name)).collect();
+    let visible = |layer: u32| import.drawing.layers.get(layer as usize).is_none_or(|l| l.visible);
+    let place = import.placement();
+    let view = import.view;
+    let mut placements = Vec::new();
+    for i in read.inserts.iter().filter(|i| visible(i.layer)) {
+        let Some(component) = made.get(&i.block) else { continue };
+        let at = insert_place(i, f, &place);
+        let c = cc_core::DetailComponent {
+            view,
+            position: at.t.translation,
+            rotation_deg: at.t.angle.to_degrees().rem_euclid(360.0),
+            scale: at.scale,
+            mirrored: at.t.mirror,
+            overrides: Default::default(),
+        };
+        if c.is_valid() {
+            placements.push((component.clone(), c));
+        }
+    }
+    let keep_drawing = !import.drawing.prims.is_empty();
+    let kind = ElementKind::CadImport(Box::new(import.clone()));
+    let types = blocks.types;
+    let (id, type_ids, elements) = edit(s, tx, |e| {
+        let id = if keep_drawing {
+            let type_id = cad_type(e);
+            let id = super::add_element(e, level, type_id, kind);
+            e.set_pinned(&[id], true);
+            Some(id)
+        } else {
+            None
+        };
+        let mut by_name = std::collections::BTreeMap::new();
+        for (name, def) in types {
+            let type_id = ElementTypeId(e.alloc_id());
+            let data = TypeData::Component { component: name.clone(), def };
+            let type_id = e.add_type(ElementType {
+                id: type_id,
+                name: name.clone(),
+                data,
+                info: Default::default(),
+                uid: Default::default(),
+            });
+            by_name.insert(name, type_id);
+        }
+        let mut elements = Vec::with_capacity(placements.len());
+        for (name, c) in placements {
+            let Some(type_id) = by_name.get(&name) else { continue };
+            elements.push(super::add_element(e, level, *type_id, ElementKind::DetailComponent(Box::new(c))).0);
+        }
+        Ok((id, by_name.values().map(|t| t.0).collect::<Vec<_>>(), elements))
+    })?;
+    Ok((id, json!({ "types": type_ids, "elements": elements, "dropped_pieces": blocks.dropped })))
+}
+
+/// Place `import` in its view: its origin at `position` (default [0, 0]);
+/// with `center`, the center of its extents at `position` (default: the
+/// middle of what the view shows); with `auto`, the origin unless that
+/// leaves the drawing more than 1 km from what the view shows, then the
+/// center there.
+fn place_import(
     s: &mut Session,
     view_id: cc_core::ViewId,
-    level: cc_core::LevelId,
-    mut import: CadImport,
+    import: &mut CadImport,
     position: Option<DVec2>,
     center: bool,
     auto: bool,
-    tx: String,
-) -> Result<(ElementId, CadImport)> {
+) {
     let drawing = import.drawing.clone();
     let shown = s.drawing(view_id).and_then(|d| d.fit_bounds()).map_or(DVec2::ZERO, |(a, b)| (a + b) * 0.5);
     let mid = drawing.extents.map_or(DVec2::ZERO, |(a, b)| (a + b) * 0.5);
@@ -254,7 +373,24 @@ fn add_import(
         import.position = DVec2::ZERO;
         import.position = target - import.to_view(mid);
     }
+}
+
+/// Place `import` in its view (see [`place_import`]) and add it pinned, in
+/// one undo step.
+#[allow(clippy::too_many_arguments)]
+fn add_import(
+    s: &mut Session,
+    view_id: cc_core::ViewId,
+    level: cc_core::LevelId,
+    mut import: CadImport,
+    position: Option<DVec2>,
+    center: bool,
+    auto: bool,
+    tx: String,
+) -> Result<(ElementId, CadImport)> {
+    place_import(s, view_id, &mut import, position, center, auto);
     let kind = ElementKind::CadImport(Box::new(import.clone()));
+
     let id = edit(s, tx, |e| {
         let type_id = cad_type(e);
         let id = super::add_element(e, level, type_id, kind);

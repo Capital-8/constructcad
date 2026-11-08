@@ -188,6 +188,10 @@ pub struct AppState {
     pub detail: crate::detail_ui::DetailOptions,
     /// Detail lines being drawn (the picks of the curve in progress).
     pub detail_draw: Option<crate::detail_ui::DetailDraw>,
+    /// Options of the Detail Component tool (rotation, scale, mirror).
+    pub detail_component: crate::detail_component_ui::PlaceOptions,
+    /// Import CAD brings a drawing's blocks in as detail components.
+    pub cad_blocks: bool,
     /// The visual programming editor (see [`crate::graph_ui`]).
     pub graph: crate::graph_ui::GraphEditor,
     /// Selection seen last frame (see [`AppState::follow_selection`]).
@@ -256,6 +260,8 @@ impl AppState {
             text_options: Default::default(),
             detail: Default::default(),
             detail_draw: None,
+            detail_component: Default::default(),
+            cad_blocks: false,
         }
     }
 
