@@ -32,8 +32,15 @@ pub fn category_icon(category: ViewCategory) -> Icon {
     }
 }
 
+/// The browser with its header (the app docks it with `side_panels`).
+#[cfg(test)]
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     theme::panel_header(ui, &t!("browser-title"), Some(&state.project().info.name));
+    body(ui, state);
+}
+
+/// The browser's tree, under a header drawn by the caller.
+pub fn body(ui: &mut Ui, state: &mut AppState) {
     egui::ScrollArea::vertical().id_salt("browser").auto_shrink([false, false]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.add_space(4.0);

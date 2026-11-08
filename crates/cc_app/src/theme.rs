@@ -237,8 +237,8 @@ pub fn title(text: impl Into<String>) -> RichText {
     RichText::new(text).family(semibold()).size(13.0).color(PALETTE.text)
 }
 
-/// Full-width header strip at the top of a side panel.
-pub fn panel_header(ui: &mut egui::Ui, title_text: &str, subtitle: Option<&str>) {
+/// Full-width header strip at the top of a side panel; its response covers the strip.
+pub fn panel_header(ui: &mut egui::Ui, title_text: &str, subtitle: Option<&str>) -> egui::Response {
     let response = egui::Frame::new().fill(PALETTE.surface).inner_margin(Margin::symmetric(12, 7)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
@@ -250,6 +250,7 @@ pub fn panel_header(ui: &mut egui::Ui, title_text: &str, subtitle: Option<&str>)
     });
     let r = response.response.rect;
     ui.painter().hline(r.x_range(), r.bottom(), Stroke::new(1.0, PALETTE.border));
+    response.response
 }
 
 /// Small uppercase-free caption, used for group labels.
