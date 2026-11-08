@@ -151,6 +151,8 @@ impl Tool {
             Tool::Sketch { category: Category::Foundation, .. } => "tool-foundation-slab",
             Tool::Sketch { category: Category::Mass, .. } => "tool-mass",
             Tool::Sketch { category: Category::Shaft, .. } => "tool-shaft",
+            Tool::Sketch { category: Category::FilledRegion, .. } => "tool-filled-region",
+            Tool::Sketch { category: Category::MaskingRegion, .. } => "tool-masking-region",
             Tool::Sketch { .. } => "tool-floor",
             Tool::Section => "tool-section",
             Tool::Room { .. } => "tool-room",
@@ -292,7 +294,9 @@ impl Tool {
             | Category::Mass
             | Category::Shaft
             | Category::Topography
-            | Category::Pad => Tool::Sketch { category, type_id },
+            | Category::Pad
+            | Category::FilledRegion
+            | Category::MaskingRegion => Tool::Sketch { category, type_id },
             Category::Room => Tool::Room { type_id },
             Category::Grid => Tool::Grid { type_id },
             Category::Dimension => Tool::Dimension { type_id, mode: DimensionMode::Aligned },
@@ -1322,6 +1326,12 @@ pub fn handle(
             let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
             crate::text_tool::add_leader_tool(ui, resp, painter, state, view, *id, xf, px_per_mm)
         }
+        // Regions are sketched in any view that holds drawings, in its coordinates.
+        (Tool::Sketch { category: Category::FilledRegion | Category::MaskingRegion, .. }, level)
+            if cc_views::hosts_cad(&view.kind) =>
+        {
+            crate::sketch_mode::canvas(ui, resp, painter, state, level, xf);
+        }
         // Detail lines go in any view that holds drawings.
         (Tool::DetailLine, _) if cc_views::hosts_cad(&view.kind) => {
             crate::detail_ui::tool(ui, resp, painter, state, view, xf);
@@ -1362,7 +1372,7 @@ pub fn handle(
         (Tool::Hosted { category, type_id }, Some(level)) => {
             hosted_tool(ui, resp, painter, state, level, *category, *type_id, xf)
         }
-        (Tool::Sketch { .. }, Some(level)) => crate::sketch_mode::canvas(ui, resp, painter, state, level, xf),
+        (Tool::Sketch { .. }, Some(level)) => crate::sketch_mode::canvas(ui, resp, painter, state, Some(level), xf),
         (Tool::Section, level) => section_tool(ui, resp, painter, state, level, xf),
         (Tool::Opening { host, .. }, Some(level)) => {
             if let Some(pts) = sketch_input(ui, resp, painter, state, level, xf) {

@@ -237,6 +237,21 @@ pub fn phase(p: &Project, r: &Ref) -> Result<cc_core::PhaseId> {
     }
 }
 
+/// One of the project's line styles by id or name.
+pub fn line_style(p: &Project, r: &Ref) -> Result<cc_core::LineStyleId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::LineStyleId(*id);
+            p.line_style(id)
+                .map(|_| id)
+                .ok_or_else(|| EngineError::not_found(format!("no line style with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            unique("line style", n, p.line_styles.values().filter(|s| matches(&s.name, n)).map(|s| s.id).collect())
+        }
+    }
+}
+
 /// A phase filter by id or name.
 pub fn phase_filter(p: &Project, r: &Ref) -> Result<cc_core::PhaseFilterId> {
     match r {

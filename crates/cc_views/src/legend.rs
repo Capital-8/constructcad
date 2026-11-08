@@ -218,6 +218,8 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
+            | TypeData::FilledRegion { .. }
+            | TypeData::MaskingRegion {}
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
             | TypeData::Topography { .. }

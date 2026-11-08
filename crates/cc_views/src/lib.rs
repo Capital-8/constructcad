@@ -25,6 +25,7 @@ pub mod notes;
 mod plan;
 mod projected;
 pub mod raster;
+pub mod region;
 mod schedule;
 mod sheet;
 pub mod sheet_fields;
@@ -92,6 +93,8 @@ pub fn generate_temporary(
                 fade(&mut d);
                 mep::services(&mut d, project, geom, *level, *cut_height, discipline, view.scale);
             }
+            // Regions over the model, under the plan's marks, tags and grids.
+            region::regions(&mut d, project, view.id, view.scale);
             if !ceiling {
                 plan::section_marks(&mut d, project, view.scale);
             }
@@ -119,7 +122,11 @@ pub fn generate_temporary(
     // Imported CAD drawings, under everything (not in 3D views or diagrams).
     if hosts_cad(&view.kind) {
         cad::underlays(&mut d, project, view.id, view.scale);
-        // Detail lines, on top of the model.
+        // Regions over the model (plans drew theirs under their annotations).
+        if view.level().is_none() {
+            region::regions(&mut d, project, view.id, view.scale);
+        }
+        // Detail lines, on top of the model and the regions.
         detail::lines(&mut d, project, view.id);
     }
     annotate::dimensions(&mut d, project, view.id, view.scale);

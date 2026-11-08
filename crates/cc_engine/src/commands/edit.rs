@@ -88,7 +88,11 @@ fn patched(
         // The drawing read from the file is not a parameter.
         cc_core::ElementKind::CadImport(c) => super::cad::patch(c, patch)?,
         // A style may be given by its code.
-        kind @ cc_core::ElementKind::DetailLine(_) => patch_variant(kind, &super::detail::normalize_patch(patch)?)?,
+        kind @ cc_core::ElementKind::DetailLine(_) => patch_variant(kind, &super::detail::normalize_patch(p, patch)?)?,
+        // A boundary style may be given by its code (or "none").
+        kind @ (cc_core::ElementKind::FilledRegion(_) | cc_core::ElementKind::MaskingRegion(_)) => {
+            patch_variant(kind, &super::region::normalize_patch(p, patch)?)?
+        }
         kind => patch_variant(kind, patch)?,
     };
     if std::mem::discriminant(&kind) != std::mem::discriminant(&element.kind) {
@@ -106,6 +110,11 @@ fn patched(
         cc_core::ElementKind::DetailLine(l) => {
             if let cc_core::ElementKind::DetailLine(old) = &element.kind {
                 super::detail::check(old, l)?;
+            }
+        }
+        cc_core::ElementKind::FilledRegion(r) | cc_core::ElementKind::MaskingRegion(r) => {
+            if let cc_core::ElementKind::FilledRegion(old) | cc_core::ElementKind::MaskingRegion(old) = &element.kind {
+                super::region::check(old, r)?;
             }
         }
         _ => {}

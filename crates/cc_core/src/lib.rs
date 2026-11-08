@@ -36,6 +36,7 @@ pub mod properties;
 pub mod ramp;
 pub mod raster;
 pub mod recovery;
+pub mod region;
 mod repair;
 pub mod roofing;
 mod schedule;
@@ -58,7 +59,7 @@ pub use component::{
 };
 pub use component_ref::{PlaneAxis, RefDimension, RefEqual, RefLine, RefPlane};
 pub use component_script::{Hotspot, HotspotShape, ParamChoice, ScriptEval, ScriptInput, ScriptOwner, ScriptResult};
-pub use detail::{DetailLine, DetailStyle, LineStyleRef};
+pub use detail::{DetailLine, DetailStyle, LineStyleDef, LineStyleRef};
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
@@ -71,7 +72,8 @@ pub use graphics::{
     LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
 };
 pub use ids::{
-    ElementId, ElementTypeId, FilterId, GroupId, LevelId, PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
+    ElementId, ElementTypeId, FilterId, GroupId, LevelId, LineStyleId, PhaseFilterId, PhaseId, SystemId, TemplateId,
+    Uid, ViewId,
 };
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind};
@@ -85,6 +87,7 @@ pub use project::{
     Group, Level, Project, ProjectField, ProjectInfo, can_join_geometry, join_priority, template_default,
 };
 pub use ramp::{RampCheck, RampIssue, RampLayout, RampRules, RampShape, ramp_flights};
+pub use region::Region;
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use stair::{
     LandingBeams, LandingPosts, PostAt, StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout,

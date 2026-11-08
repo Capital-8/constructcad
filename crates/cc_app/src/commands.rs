@@ -141,6 +141,9 @@ pub enum UiCommand {
     LevelMarkSection,
     AddLeader,
     DetailLine,
+    FilledRegion,
+    MaskingRegion,
+    LineStyles,
     Move,
     CopyElements,
     Rotate,
@@ -315,6 +318,9 @@ impl UiCommand {
             LevelMarkSection,
             AddLeader,
             DetailLine,
+            FilledRegion,
+            MaskingRegion,
+            LineStyles,
             Move,
             CopyElements,
             Rotate,
@@ -481,6 +487,9 @@ impl UiCommand {
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
             DetailLine => Icon::DetailLine,
+            FilledRegion => Icon::FilledRegion,
+            MaskingRegion => Icon::MaskingRegion,
+            LineStyles => Icon::LineStyles,
             LevelMarkPlan => Icon::LevelMarkPlan,
             LevelMarkSection => Icon::LevelMarkSection,
             AddLeader => Icon::Leader,
@@ -652,6 +661,9 @@ impl UiCommand {
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
             DetailLine => t!("tool-detail-line"),
+            FilledRegion => t!("tool-filled-region"),
+            MaskingRegion => t!("tool-masking-region"),
+            LineStyles => t!("action-line-styles"),
             LevelMarkPlan => t!("tool-level-mark-plan"),
             LevelMarkSection => t!("tool-level-mark-section"),
             AddLeader => t!("tool-add-leader"),
@@ -839,6 +851,9 @@ impl UiCommand {
             Dimension(DimensionMode::Diameter) => t!("cmd-desc-dim-diameter"),
             Text => t!("cmd-desc-text"),
             DetailLine => t!("cmd-desc-detail-line"),
+            FilledRegion => t!("cmd-desc-filled-region"),
+            MaskingRegion => t!("cmd-desc-masking-region"),
+            LineStyles => t!("cmd-desc-line-styles"),
             LevelMarkPlan => t!("cmd-desc-level-mark-plan"),
             LevelMarkSection => t!("cmd-desc-level-mark-section"),
             AddLeader => t!("hint-add-leader-button"),
@@ -979,6 +994,7 @@ impl UiCommand {
             Dimension(DimensionMode::Aligned) => "DI",
             Text => "TT",
             DetailLine => "DL",
+            FilledRegion => "FR",
             Move => "MV",
             CopyElements => "CO",
             Rotate => "RO",
@@ -1095,6 +1111,9 @@ impl UiCommand {
             Dimension(_) => "dimension_create",
             Text => "text_create",
             DetailLine => "detail_line_create",
+            FilledRegion => "filled_region_create",
+            MaskingRegion => "masking_region_create",
+            LineStyles => "line_styles_list",
             LevelMarkPlan | LevelMarkSection => "level_mark_create",
             AddLeader => "text_add_leader",
             Move => "elements_move",
@@ -1205,7 +1224,9 @@ impl UiCommand {
             ExportPdf | ExportSvg if actions::active_sheet(state).is_none() => Some(t!("hint-export-sheet")),
             ExportImage if actions::image_view(state).is_none() => Some(t!("hint-export-image")),
             ExportDxf if actions::image_view(state).is_none() => Some(t!("hint-export-dxf")),
-            ImportCad | ImportImage | DetailLine if crate::cad_ui::cad_view(state).is_none() => {
+            ImportCad | ImportImage | DetailLine | FilledRegion | MaskingRegion
+                if crate::cad_ui::cad_view(state).is_none() =>
+            {
                 Some(t!("why-cad-view"))
             }
             // Pads grade a terrain of the plan's level.
@@ -1371,6 +1392,8 @@ impl UiCommand {
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
             DetailLine => *tool == Tool::DetailLine,
+            FilledRegion => matches!(tool, Tool::Sketch { category: Category::FilledRegion, .. }),
+            MaskingRegion => matches!(tool, Tool::Sketch { category: Category::MaskingRegion, .. }),
             LevelMarkPlan | LevelMarkSection => matches!(tool, Tool::LevelMark { .. }),
             AddLeader => matches!(tool, Tool::AddLeader { .. }),
             Move => *tool == Tool::Move,
@@ -1461,6 +1484,8 @@ fn place_label(category: Category) -> String {
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::DetailLine => t!("tool-detail-line"),
+        Category::FilledRegion => t!("tool-filled-region"),
+        Category::MaskingRegion => t!("tool-masking-region"),
         Category::LevelMark => t!("tool-level-mark"),
         Category::TitleBlock => t!("category-title-block"),
         Category::Component => t!("tool-component"),
@@ -1495,6 +1520,8 @@ fn place_description(category: Category) -> String {
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::DetailLine => t!("cmd-desc-detail-line"),
+        Category::FilledRegion => t!("cmd-desc-filled-region"),
+        Category::MaskingRegion => t!("cmd-desc-masking-region"),
         Category::LevelMark => t!("cmd-desc-level-mark-plan"),
         Category::TitleBlock => t!("category-title-block"),
         Category::Component => t!("cmd-desc-component"),
@@ -1720,6 +1747,9 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             state.set_tool(Tool::DetailLine);
             state.message = t!("hint-detail-line");
         }
+        FilledRegion => crate::region_ui::start(state, Category::FilledRegion),
+        MaskingRegion => crate::region_ui::start(state, Category::MaskingRegion),
+        LineStyles => crate::line_styles_dialog::open(state),
         LevelMarkPlan | LevelMarkSection => {
             // A project gets its level mark type with its first mark.
             if Tool::for_category(state.project(), Category::LevelMark).is_none() {

@@ -2445,7 +2445,7 @@ fn detail_lines_are_drawn_in_a_drafting_view() {
         SketchCurve::Line { a: DVec2::ZERO, b: DVec2::new(1.0, 0.0) },
         SketchCurve::Circle { center: DVec2::new(3.0, 0.0), radius: 0.5 },
     ];
-    crate::detail_ui::create(&mut state, view, cc_core::DetailStyle::Dashed, &curves);
+    crate::detail_ui::create(&mut state, view, cc_core::LineStyleRef::BuiltIn(cc_core::DetailStyle::Dashed), &curves);
     assert_eq!(state.selection.len(), 2, "{}", state.message);
     let first = *state.selection.iter().next().unwrap();
     let Some(cc_core::ElementKind::DetailLine(l)) = state.project().element(first).map(|e| &e.kind) else {
@@ -2456,4 +2456,75 @@ fn detail_lines_are_drawn_in_a_drafting_view() {
     // Moving them is allowed in the drafting view: they belong to it.
     crate::modify::start(&mut state, crate::tools::Tool::Move);
     assert!(crate::detail_ui::view_owned(&state, &crate::tools::Tool::Move));
+}
+
+/// Issue #150: Filled Region and Masking Region sketch in a drafting view
+/// and *Finish* makes the region there; *Edit Boundary* reopens it; the
+/// Line Styles dialog adds a style (Cancel undoes it, OK keeps it) that the
+/// Detail Line tool and the region's boundary can use.
+#[test]
+fn regions_are_sketched_and_line_styles_edited() {
+    use crate::commands::UiCommand;
+    use crate::sketch_mode::{Target, finish};
+    use cc_core::sketch::SketchCurve;
+    use glam::DVec2;
+    let mut state = sample_state();
+    let three_d = state.project().views.values().find(|v| v.category() == cc_core::ViewCategory::ThreeD);
+    state.active_view = three_d.map(|v| v.id);
+    assert_eq!(UiCommand::FilledRegion.unavailable(&state), Some(t!("why-cad-view")));
+    let made = crate::actions::run_command(
+        &mut state,
+        cc_engine::commands::views::ViewCreate { kind: "drafting".into(), ..Default::default() },
+    );
+    let view = cc_core::ViewId(made.unwrap()["id"].as_u64().unwrap());
+    state.active_view = Some(view);
+    for command in [UiCommand::FilledRegion, UiCommand::MaskingRegion] {
+        assert_eq!(command.unavailable(&state), None);
+        crate::commands::run(&mut state, &egui::Context::default(), command);
+        assert!(command.selected(&state));
+        let square = |o: DVec2, s: f64| {
+            let p = [o, o + DVec2::new(s, 0.0), o + DVec2::new(s, s), o + DVec2::new(0.0, s)];
+            (0..4).map(|i| SketchCurve::Line { a: p[i], b: p[(i + 1) % 4] }).collect::<Vec<_>>()
+        };
+        let mut curves = square(DVec2::ZERO, 4.0);
+        curves.extend(square(DVec2::ONE, 1.0));
+        state.sketch.as_mut().unwrap().curves = curves;
+        finish(&mut state);
+        assert!(state.sketch.is_none(), "{}", state.message);
+        let id = *state.selection.iter().next().unwrap();
+        let e = state.project().element(id).unwrap();
+        assert_eq!(e.owner_view(), Some(view));
+        assert!(matches!(&e.kind,
+            cc_core::ElementKind::FilledRegion(r) | cc_core::ElementKind::MaskingRegion(r) if r.openings.len() == 1));
+        // Edit Boundary opens its sketch with its curves.
+        assert_eq!(UiCommand::EditBoundary.unavailable(&state), None);
+        crate::commands::run(&mut state, &egui::Context::default(), UiCommand::EditBoundary);
+        let s = state.sketch.as_ref().unwrap();
+        assert_eq!((s.target, s.curves.len()), (Target::Edit { id }, 8));
+        crate::sketch_mode::cancel(&mut state);
+    }
+
+    // The Line Styles dialog: Cancel undoes a new style, OK keeps it.
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::LineStyles);
+    assert!(state.dialogs.line_styles.is_some());
+    let create = cc_engine::commands::line_style::LineStyleCreate { name: "Mine".into(), ..Default::default() };
+    crate::actions::run_command(&mut state, create);
+    assert_eq!(state.project().line_styles.len(), 1);
+    if let Some(d) = state.dialogs.line_styles.take() {
+        d.edits_finish(&mut state, false);
+    }
+    assert!(state.project().line_styles.is_empty());
+    crate::line_styles_dialog::open(&mut state);
+    let create = cc_engine::commands::line_style::LineStyleCreate { name: "Mine".into(), ..Default::default() };
+    crate::actions::run_command(&mut state, create);
+    if let Some(d) = state.dialogs.line_styles.take() {
+        d.edits_finish(&mut state, true);
+    }
+    let style = *state.project().line_styles.keys().next().unwrap();
+    // Detail lines take it.
+    let curves = [SketchCurve::Line { a: DVec2::ZERO, b: DVec2::new(1.0, 0.0) }];
+    crate::detail_ui::create(&mut state, view, cc_core::LineStyleRef::Project(style), &curves);
+    let line = *state.selection.iter().next().unwrap();
+    assert!(matches!(&state.project().element(line).unwrap().kind,
+        cc_core::ElementKind::DetailLine(l) if l.style == cc_core::LineStyleRef::Project(style)));
 }

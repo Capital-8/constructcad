@@ -166,6 +166,7 @@ impl Element {
             }
             ElementKind::CadImport(c) => c.transform(t),
             ElementKind::DetailLine(l) => l.curve.transform(t),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.points_mut().for_each(p),
             ElementKind::Mass(m) => {
                 m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(p);
             }
@@ -407,6 +408,7 @@ impl crate::Project {
             ElementKind::LevelMark(m) => self.view(m.view).is_some(),
             ElementKind::CadImport(c) => self.view(c.view).is_some(),
             ElementKind::DetailLine(l) => self.view(l.view).is_some(),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => self.view(r.view).is_some(),
             ElementKind::Pad(p) => set
                 .iter()
                 .find(|t| t.id == p.host)

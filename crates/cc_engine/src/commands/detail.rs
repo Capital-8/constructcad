@@ -34,12 +34,21 @@ fn detail_type(e: &mut cc_core::EditCtx) -> ElementTypeId {
     })
 }
 
-/// A line style named by its code.
-pub fn style_arg(code: &str) -> Result<LineStyleRef> {
-    DetailStyle::from_code(code).map(LineStyleRef::BuiltIn).ok_or_else(|| {
-        let codes: Vec<&str> = DetailStyle::ALL.iter().map(|s| s.code()).collect();
-        EngineError::invalid(format!("unknown line style '{code}' ({})", codes.join(", ")))
-    })
+/// A line style named by its code: a built-in style's code, or the name
+/// of one of the project's line styles.
+pub fn style_arg(p: &cc_core::Project, code: &str) -> Result<LineStyleRef> {
+    if let Some(s) = DetailStyle::from_code(code) {
+        return Ok(LineStyleRef::BuiltIn(s));
+    }
+    if let Some(s) = p.line_styles.values().find(|s| s.name.trim().eq_ignore_ascii_case(code.trim())) {
+        return Ok(LineStyleRef::Project(s.id));
+    }
+    let codes: Vec<String> = DetailStyle::ALL
+        .iter()
+        .map(|s| s.code().to_string())
+        .chain(p.line_styles.values().map(|s| s.name.clone()))
+        .collect();
+    Err(EngineError::invalid(format!("unknown line style '{code}' ({})", codes.join(", "))))
 }
 
 /// The view (and its level) detail lines go in: a plan, ceiling plan,
@@ -72,7 +81,9 @@ pub struct DetailLineCreate {
     /// The curves to draw, as for sketches (`line`, `arc`, `circle`,
     /// `ellipse`, `rectangle`, `polygon`).
     pub curves: Vec<CurveArg>,
-    /// Line style: thin (default), medium, wide, hidden, dashed, center or dotted.
+    /// Line style: thin (default), medium, wide, hidden, dashed, center or
+    /// dotted, or the name of one of the project's line styles
+    /// (`line_styles_list`).
     #[serde(default)]
     pub style: Option<String>,
 }
@@ -82,7 +93,7 @@ impl Command for DetailLineCreate {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let (view, level) = detail_view(s.project(), &self.view)?;
-        let style = self.style.as_deref().map(style_arg).transpose()?.unwrap_or_default();
+        let style = self.style.as_deref().map(|c| style_arg(s.project(), c)).transpose()?.unwrap_or_default();
         let mut lines = Vec::new();
         for arg in &self.curves {
             for curve in arg.curves()? {
@@ -112,10 +123,10 @@ impl Command for DetailLineCreate {
 
 /// A `params` patch for a detail line with its style given by code
 /// (`"style": "wide"`) turned into the model's form.
-pub(crate) fn normalize_patch(patch: &Value) -> Result<Value> {
+pub(crate) fn normalize_patch(p: &cc_core::Project, patch: &Value) -> Result<Value> {
     let mut patch = patch.clone();
     if let Some(code) = patch.get("style").and_then(Value::as_str) {
-        let style = serde_json::to_value(style_arg(code)?).map_err(|e| EngineError::invalid(e.to_string()))?;
+        let style = serde_json::to_value(style_arg(p, code)?).map_err(|e| EngineError::invalid(e.to_string()))?;
         if let Some(o) = patch.as_object_mut() {
             o.insert("style".into(), style);
         }

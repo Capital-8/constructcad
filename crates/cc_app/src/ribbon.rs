@@ -43,6 +43,8 @@ pub fn category_icon(category: Category) -> Icon {
         Category::LevelMark => Icon::LevelMarkPlan,
         Category::CadImport => Icon::CadImport,
         Category::DetailLine => Icon::DetailLine,
+        Category::FilledRegion => Icon::FilledRegion,
+        Category::MaskingRegion => Icon::MaskingRegion,
         Category::Mass => Icon::Mass,
         Category::Shaft => Icon::Shaft,
         Category::Topography => Icon::Topography,
@@ -699,7 +701,13 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-dimension"), |ui| {
         command_buttons(ui, state, &DimensionMode::ALL.map(UiCommand::Dimension));
     });
-    group(ui, t!("group-detail"), |ui| command_button(ui, state, UiCommand::DetailLine));
+    group(ui, t!("group-detail"), |ui| {
+        command_buttons(
+            ui,
+            state,
+            &[UiCommand::DetailLine, UiCommand::FilledRegion, UiCommand::MaskingRegion, UiCommand::LineStyles],
+        )
+    });
     group(ui, t!("group-text"), |ui| command_buttons(ui, state, &[UiCommand::Text, UiCommand::AddLeader]));
     group(ui, t!("group-level-marks"), |ui| {
         command_buttons(ui, state, &[UiCommand::LevelMarkPlan, UiCommand::LevelMarkSection]);

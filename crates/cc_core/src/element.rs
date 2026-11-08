@@ -61,6 +61,10 @@ pub enum ElementKind {
     Pad(crate::pad::Pad),
     /// A 2D line, arc, circle or ellipse drawn in one view.
     DetailLine(crate::detail::DetailLine),
+    /// A 2D area of one view filled as its type says.
+    FilledRegion(crate::region::Region),
+    /// A 2D area of one view that hides the model's linework under it.
+    MaskingRegion(crate::region::Region),
     /// The elevation of a point, written in one view.
     LevelMark(Box<crate::level_mark::LevelMark>),
 }
@@ -95,6 +99,8 @@ impl Element {
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
             ElementKind::DetailLine(_) => Category::DetailLine,
+            ElementKind::FilledRegion(_) => Category::FilledRegion,
+            ElementKind::MaskingRegion(_) => Category::MaskingRegion,
             ElementKind::LevelMark(_) => Category::LevelMark,
         }
     }
@@ -107,6 +113,7 @@ impl Element {
             ElementKind::Text(t) => Some(t.view),
             ElementKind::CadImport(c) => Some(c.view),
             ElementKind::DetailLine(l) => Some(l.view),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some(r.view),
             ElementKind::LevelMark(m) => Some(m.view),
             _ => None,
         }
@@ -168,6 +175,7 @@ impl Element {
             ElementKind::Shaft(s) => Some(&mut s.sketch),
             ElementKind::Topography(t) => Some(&mut t.sketch),
             ElementKind::Pad(p) => Some(&mut p.sketch),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some(&mut r.sketch),
             _ => None,
         }
     }
@@ -182,6 +190,7 @@ impl Element {
             ElementKind::Shaft(s) => s.sketch.as_ref(),
             ElementKind::Topography(t) => t.sketch.as_ref(),
             ElementKind::Pad(p) => p.sketch.as_ref(),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.sketch.as_ref(),
             _ => None,
         }
     }
@@ -197,6 +206,7 @@ impl Element {
             ElementKind::Shaft(s) => Some((&s.outline, &[])),
             ElementKind::Topography(t) => Some((&t.boundary, &[])),
             ElementKind::Pad(p) => Some((&p.outline, &[])),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some((&r.outline, &r.openings)),
             _ => None,
         }
     }
@@ -287,6 +297,7 @@ impl Element {
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
             ElementKind::CadImport(c) => c.position += delta,
             ElementKind::DetailLine(l) => l.curve.transform(&t),
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.points_mut().for_each(|p| *p += delta),
             ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
             // Placed by their hosts.
             ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}

@@ -13,7 +13,7 @@ use crate::state::AppState;
 use crate::t;
 use crate::table::{readonly_row, row, section};
 use crate::tools::{Drag, Tool, draw_snap, snap_at};
-use cc_core::detail::{DetailLine, DetailStyle, LineStyleRef};
+use cc_core::detail::{DetailLine, DetailStyle, LineStyleRef, LineStyles};
 use cc_core::sketch::SketchCurve;
 use cc_core::{ElementId, ElementKind, ViewId};
 use cc_engine::Ref;
@@ -85,7 +85,8 @@ impl DetailMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DetailOptions {
     pub mode: DetailMode,
-    pub style: DetailStyle,
+    /// A built-in style or one of the project's.
+    pub style: LineStyleRef,
 }
 
 /// The curve being drawn in a view.
@@ -140,11 +141,13 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
 }
 
 /// Make `curves` detail lines of `view` (one undo step); they are selected.
-pub(crate) fn create(state: &mut AppState, view: ViewId, style: DetailStyle, curves: &[SketchCurve]) {
+pub(crate) fn create(state: &mut AppState, view: ViewId, style: LineStyleRef, curves: &[SketchCurve]) {
+    // A project style that was deleted meanwhile falls back to the default.
+    let style = if style.exists(&state.project().line_styles) { style } else { LineStyleRef::default() };
     let command = DetailLineCreate {
         view: Ref::Id(view.0),
         curves: curves.iter().map(CurveArg::of).collect(),
-        style: Some(style.code().to_string()),
+        style: Some(style.code(&state.project().line_styles)),
     };
     if let Some(out) = crate::actions::run_command(state, command) {
         let ids = out["created"].as_array().map(|a| a.iter().filter_map(|v| v.as_u64()).map(ElementId).collect());
@@ -334,7 +337,13 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
     }
     ui.separator();
     ui.label(t!("label-line-style"));
-    style_combo(ui, "detail-style", &mut o.style);
+    let mut style = Some(o.style);
+    if style_picker(ui, "detail-style", &state.session.doc.project.line_styles, &mut style, false)
+        && let Some(s) = style
+    {
+        state.detail.style = s;
+    }
+    let o = &state.detail;
     let hint = match o.mode {
         DetailMode::Polyline => "hint-detail-polyline",
         DetailMode::Arc3 => "hint-detail-arc3",
@@ -345,12 +354,40 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
     ui.label(crate::theme::muted(crate::i18n::tr(hint)));
 }
 
-/// A combo box of the built-in line styles; returns whether it changed.
-fn style_combo(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, style: &mut DetailStyle) -> bool {
+/// The name of a line style as shown: a built-in style's translated name,
+/// a project style's own name; `None` (no line) when allowed.
+pub fn style_label(style: Option<LineStyleRef>, styles: &LineStyles) -> String {
+    match style {
+        None => t!("line-style-none"),
+        Some(LineStyleRef::BuiltIn(s)) => crate::i18n::tr(s.key()),
+        Some(LineStyleRef::Project(id)) => {
+            styles.get(&id).map(|s| s.name.clone()).unwrap_or_else(|| crate::i18n::tr(DetailStyle::default().key()))
+        }
+    }
+}
+
+/// A combo box of the built-in line styles and the project's (and "none"
+/// with `allow_none`); returns whether it changed.
+pub fn style_picker(
+    ui: &mut Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    styles: &LineStyles,
+    style: &mut Option<LineStyleRef>,
+    allow_none: bool,
+) -> bool {
     let before = *style;
-    egui::ComboBox::from_id_salt(id).selected_text(crate::i18n::tr(style.key())).show_ui(ui, |ui| {
+    egui::ComboBox::from_id_salt(id).selected_text(style_label(*style, styles)).show_ui(ui, |ui| {
+        if allow_none {
+            ui.selectable_value(style, None, t!("line-style-none"));
+        }
         for s in DetailStyle::ALL {
-            ui.selectable_value(style, s, crate::i18n::tr(s.key()));
+            ui.selectable_value(style, Some(LineStyleRef::BuiltIn(s)), crate::i18n::tr(s.key()));
+        }
+        if !styles.is_empty() {
+            ui.separator();
+        }
+        for s in styles.values() {
+            ui.selectable_value(style, Some(LineStyleRef::Project(s.id)), s.name.as_str());
         }
     });
     *style != before
@@ -360,11 +397,15 @@ fn style_combo(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, style: &
 pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, line: &DetailLine) {
     let line = *line;
     section(ui, "detail-line", t!("section-graphics"), |ui| {
-        let LineStyleRef::BuiltIn(mut style) = line.style;
-        if row(ui, &t!("label-line-style"), |ui| style_combo(ui, ("detail-line-style", id.0), &mut style)) {
+        let mut style = Some(line.style);
+        let styles = state.project().line_styles.clone();
+        let changed = row(ui, &t!("label-line-style"), |ui| {
+            style_picker(ui, ("detail-line-style", id.0), &styles, &mut style, false)
+        });
+        if changed && let Some(style) = style {
             crate::engine_edit::element(state, id, None, |e| {
                 if let ElementKind::DetailLine(l) = &mut e.kind {
-                    l.style = LineStyleRef::BuiltIn(style);
+                    l.style = style;
                 }
             });
         }

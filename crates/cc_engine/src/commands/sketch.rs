@@ -204,7 +204,8 @@ pub fn outline(sketch: &Sketch) -> Result<Vec<DVec2>> {
 }
 
 /// The curves an element's outline is drawn with: its sketch, or lines along
-/// its outline and openings when it has none (floors, ceilings, roofs and masses).
+/// its outline and openings when it has none (floors, ceilings, roofs,
+/// masses and the other sketched elements, regions among them).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SketchGet {
@@ -230,15 +231,16 @@ impl Command for SketchGet {
     }
 }
 
-/// Draw an element's outline again from curves (edit its boundary): floors
-/// and roofs take the loops inside the outline as their openings; ceilings
+/// Draw an element's outline again from curves (edit its boundary): floors,
+/// roofs and regions take the loops inside the outline as their openings; ceilings
 /// and masses take one loop. The element keeps the curves, so `sketch_get`
 /// gives them back. A terrain's measured points can change in the same
 /// step (`points`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SketchSet {
-    /// Element id (a floor, ceiling, roof, mass, shaft or terrain).
+    /// Element id (a floor, ceiling, roof, mass, shaft, terrain, pad, or a
+    /// filled or masking region).
     pub id: u64,
     /// The curves, closed into loops.
     pub curves: Vec<CurveArg>,
@@ -293,6 +295,7 @@ impl Command for SketchSet {
                 pad.outline = outline(&sketch)?;
                 pad.sketch = Some(sketch);
             }
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => super::region::redraw(r, sketch)?,
             ElementKind::Topography(t) => {
                 t.boundary = outline(&sketch)?;
                 t.sketch = Some(sketch);
@@ -302,7 +305,7 @@ impl Command for SketchSet {
             }
             _ => {
                 return Err(EngineError::invalid(
-                    "only floors, ceilings, roofs, masses, shafts, terrain and pads have a sketched outline",
+                    "only floors, ceilings, roofs, masses, shafts, terrain, pads and regions have a sketched outline",
                 ));
             }
         }

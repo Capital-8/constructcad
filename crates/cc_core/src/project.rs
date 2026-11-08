@@ -89,6 +89,10 @@ pub struct Project {
     /// each (see [`crate::graph_binding`]).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub graph_bindings: BTreeMap<ElementId, crate::graph_binding::GraphBinding>,
+    /// The project's own line styles (see [`crate::detail`]), used by detail
+    /// lines and region boundaries next to the built-in ones.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub line_styles: crate::detail::LineStyles,
     next_id: u64,
 }
 
@@ -121,6 +125,7 @@ impl Project {
             phase_filters: BTreeMap::new(),
             phase_graphics: crate::PhaseGraphics::default(),
             graph_bindings: BTreeMap::new(),
+            line_styles: BTreeMap::new(),
             next_id: 1,
         }
     }
@@ -845,6 +850,7 @@ impl Project {
         let filters = self.filters.keys().map(|k| k.0);
         let templates = self.templates.keys().map(|k| k.0);
         let phase_filters = self.phase_filters.keys().map(|k| k.0);
+        let line_styles = self.line_styles.keys().map(|k| k.0);
         levels
             .chain(phases)
             .chain(types)
@@ -855,6 +861,7 @@ impl Project {
             .chain(filters)
             .chain(templates)
             .chain(phase_filters)
+            .chain(line_styles)
             .max()
             .unwrap_or(0)
     }
@@ -1019,6 +1026,24 @@ impl Project {
 
     pub fn filter(&self, id: crate::FilterId) -> Option<&crate::ViewFilter> {
         self.filters.get(&id)
+    }
+
+    pub fn line_style(&self, id: crate::LineStyleId) -> Option<&crate::LineStyleDef> {
+        self.line_styles.get(&id)
+    }
+
+    /// The detail lines and regions drawn with a project line style.
+    pub fn line_style_users(&self, id: crate::LineStyleId) -> Vec<ElementId> {
+        let wanted = Some(crate::LineStyleRef::Project(id));
+        self.elements
+            .values()
+            .filter(|e| match &e.kind {
+                ElementKind::DetailLine(l) => Some(l.style) == wanted,
+                ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.boundary == wanted,
+                _ => false,
+            })
+            .map(|e| e.id)
+            .collect()
     }
 
     pub fn template(&self, id: crate::TemplateId) -> Option<&crate::ViewTemplate> {

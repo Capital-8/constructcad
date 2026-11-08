@@ -385,6 +385,8 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         });
     }
 
+    crate::region_ui::type_section(ui, state, ty);
+
     if let TypeData::Roof { covering, framing, .. } = &ty.data {
         section(ui, "type-roofing", t!("section-roofing"), |ui| roofing(ui, state, tid, *covering, framing));
     }

@@ -42,12 +42,16 @@ pub enum Category {
     TitleBlock,
     /// Detail lines: 2D lines of one view.
     DetailLine,
+    /// Filled regions: 2D areas of one view filled with a pattern.
+    FilledRegion,
+    /// Masking regions: 2D areas of one view hiding the model under them.
+    MaskingRegion,
     /// Level marks: the elevation of a point in a plan, elevation or section.
     LevelMark,
 }
 
 impl Category {
-    pub const ALL: [Category; 28] = [
+    pub const ALL: [Category; 30] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -70,6 +74,8 @@ impl Category {
         Category::Dimension,
         Category::Text,
         Category::DetailLine,
+        Category::FilledRegion,
+        Category::MaskingRegion,
         Category::LevelMark,
         Category::CadImport,
         Category::Mass,
@@ -173,6 +179,8 @@ impl Category {
             Category::CadImport => "category-cad-import",
             Category::Mass => "category-mass",
             Category::DetailLine => "category-detail-line",
+            Category::FilledRegion => "category-filled-region",
+            Category::MaskingRegion => "category-masking-region",
         }
     }
 
@@ -413,6 +421,13 @@ pub enum TypeData {
     CadImport {},
     /// Detail lines have no type parameters (each line has its style).
     DetailLine {},
+    /// Filled regions: how they are filled (see [`crate::region`]).
+    FilledRegion {
+        #[serde(default)]
+        fill: crate::PatternFill,
+    },
+    /// Masking regions have no type parameters (they are opaque white).
+    MaskingRegion {},
     /// Conceptual masses, shown in `material`.
     Mass {
         material: String,
@@ -509,6 +524,8 @@ impl TypeData {
             | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
+            | TypeData::FilledRegion { .. }
+            | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => Vec::new(),
         }
@@ -577,6 +594,8 @@ impl TypeData {
             | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
+            | TypeData::FilledRegion { .. }
+            | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => {}
         }
@@ -721,6 +740,8 @@ impl ElementType {
             TypeData::Component { def, .. } => def.category(),
             TypeData::CadImport {} => Category::CadImport,
             TypeData::DetailLine {} => Category::DetailLine,
+            TypeData::FilledRegion { .. } => Category::FilledRegion,
+            TypeData::MaskingRegion {} => Category::MaskingRegion,
             TypeData::Mass { .. } => Category::Mass,
             TypeData::Sweep { .. } => Category::Sweep,
             TypeData::Shaft {} => Category::Shaft,
@@ -842,6 +863,8 @@ impl ElementType {
             | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
+            | TypeData::FilledRegion { .. }
+            | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => "",
             TypeData::Column { material, .. }
