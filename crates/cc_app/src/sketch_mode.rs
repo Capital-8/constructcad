@@ -526,9 +526,14 @@ pub fn edit_boundary(state: &mut AppState) {
         (None, Some((outline, openings))) => Sketch::from_polygons(outline, openings).curves,
         _ => return,
     };
-    // The element's level shows its outline: open its plan if another view is active.
+    // A region's own view shows it; else the element's level shows its
+    // outline: open its plan if another view is active.
     let level = e.level;
-    if state.active_level() != Some(level)
+    if let Some(view) = e.owner_view() {
+        if state.active_view != Some(view) {
+            state.open_view(view);
+        }
+    } else if state.active_level() != Some(level)
         && let Some(view) = state.project().views.values().find(|v| v.level() == Some(level)).map(|v| v.id)
     {
         state.open_view(view);
@@ -570,9 +575,9 @@ pub fn finish(state: &mut AppState) {
     let Some(session) = state.sketch.clone() else { return };
     let sketch = Sketch { curves: session.curves.clone() };
     let allows_openings = match session.target {
-        Target::New { category, .. } => matches!(category, Category::Floor | Category::Roof),
+        Target::New { category, .. } => crate::region_ui::takes_openings(category),
         Target::Edit { id } => {
-            matches!(state.project().element(id).map(|e| e.category()), Some(Category::Floor | Category::Roof))
+            state.project().element(id).is_some_and(|e| crate::region_ui::takes_openings(e.category()))
         }
         Target::Piece => {
             crate::component_sketch::finish(state);
@@ -609,11 +614,16 @@ pub fn finish(state: &mut AppState) {
                 Tool::Sketch { type_id, .. } => type_id,
                 _ => type_id,
             };
-            let Some(level) = state.active_level() else {
-                state.message = t!("msg-open-plan");
-                return;
-            };
-            create(state, category, type_id, level, curves, &session.points)
+            // Regions go in the active view, in its drawing coordinates.
+            if matches!(category, Category::FilledRegion | Category::MaskingRegion) {
+                crate::region_ui::create(state, category, type_id, curves)
+            } else {
+                let Some(level) = state.active_level() else {
+                    state.message = t!("msg-open-plan");
+                    return;
+                };
+                create(state, category, type_id, level, curves, &session.points)
+            }
         }
         Target::Profile { type_id } => {
             let command = cc_engine::commands::sweep::SweepProfileSet {
@@ -767,14 +777,15 @@ pub fn pick_walls(state: &mut AppState) {
     }
 }
 
-/// The sketch in a plan: its curves, the tool's preview, snapping, picks and grips.
-pub fn canvas(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, level: LevelId, xf: &Xf) {
+/// The sketch in a plan (or, for regions, any view that holds drawings,
+/// with no level): its curves, the tool's preview, snapping, picks and grips.
+pub fn canvas(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, level: Option<LevelId>, xf: &Xf) {
     let Some(mut s) = state.sketch.take() else { return };
     let raw = resp.hover_pos().map(|p| xf.to_world(p));
     let shift = ui.input(|i| i.modifiers.shift);
     let extra = s.snap_points();
     let anchor = s.picks.last().copied();
-    let snapped = raw.map(|r| snap_at(state, Some(level), r, anchor, &extra, xf.scale, shift));
+    let snapped = raw.map(|r| snap_at(state, level, r, anchor, &extra, xf.scale, shift));
     if let Some(message) = interact(ui, resp, painter, &mut s, &state.modify, raw, snapped, xf) {
         state.message = message;
     }

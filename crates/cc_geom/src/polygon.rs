@@ -105,6 +105,122 @@ pub fn triangulate_with_holes(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Vec<[DVe
         .collect()
 }
 
+/// Most segment tests [`keyhole`] makes before it gives up.
+const KEYHOLE_WORK: usize = 4_000_000;
+
+/// One ring covering `outer` less `holes` (simple, inside it, apart): the
+/// outline counter-clockwise with each hole, clockwise, joined to it by a
+/// bridge walked there and back. A single polygon with holes, for painters
+/// and formats that fill one ring (nonzero and even-odd fills both leave
+/// the holes out). `None` when a bridge could not be found within the work
+/// limit or the input is degenerate; callers then fall back to
+/// [`triangulate_with_holes`].
+pub fn keyhole(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Option<Vec<DVec2>> {
+    if outer.len() < 3 || outer.iter().chain(holes.iter().flatten()).any(|p| !p.is_finite()) {
+        return None;
+    }
+    let mut ring = ccw(outer);
+    let mut pending: Vec<Vec<DVec2>> = holes
+        .iter()
+        .filter(|h| h.len() >= 3)
+        .map(|h| {
+            let mut h = ccw(h);
+            h.reverse();
+            h
+        })
+        .collect();
+    // Rightmost holes first, so later bridges see earlier ones as ring.
+    let max_x = |h: &Vec<DVec2>| h.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
+    pending.sort_by(|a, b| max_x(b).total_cmp(&max_x(a)));
+    let mut work = 0usize;
+    while !pending.is_empty() {
+        let hole = pending.remove(0);
+        let hi = (0..hole.len()).max_by(|&a, &b| hole[a].x.total_cmp(&hole[b].x))?;
+        let m = hole[hi];
+        let mut order: Vec<usize> = (0..ring.len()).collect();
+        order.sort_by(|&a, &b| ring[a].distance_squared(m).total_cmp(&ring[b].distance_squared(m)));
+        let mut found = None;
+        for ri in order {
+            let v = ring[ri];
+            let n = ring.len();
+            let (prev, next) = (ring[(ri + n - 1) % n], ring[(ri + 1) % n]);
+            if v.distance_squared(m) < 1e-24 || !in_wedge(prev, v, next, m - v) {
+                continue;
+            }
+            work = work.saturating_add(ring.len() + hole.len() + pending.iter().map(Vec::len).sum::<usize>());
+            if work > KEYHOLE_WORK {
+                return None;
+            }
+            let blocked = |poly: &[DVec2]| {
+                let k = poly.len();
+                (0..k).any(|i| {
+                    let (a, b) = (poly[i], poly[(i + 1) % k]);
+                    crosses(m, v, a, b)
+                })
+            };
+            if !blocked(&ring) && !blocked(&hole) && !pending.iter().any(|h| blocked(h)) {
+                found = Some(ri);
+                break;
+            }
+        }
+        let ri = found?;
+        let v = ring[ri];
+        let mut joined = Vec::with_capacity(ring.len() + hole.len() + 2);
+        joined.extend_from_slice(&ring[..=ri]);
+        joined.extend((0..hole.len()).map(|k| hole[(hi + k) % hole.len()]));
+        joined.push(m);
+        joined.push(v);
+        joined.extend_from_slice(&ring[ri + 1..]);
+        ring = joined;
+    }
+    Some(ring)
+}
+
+/// Whether direction `d` from vertex `v` of a counter-clockwise ring
+/// (between `prev` and `next`) points into the ring.
+fn in_wedge(prev: DVec2, v: DVec2, next: DVec2, d: DVec2) -> bool {
+    let (a, b) = (next - v, prev - v);
+    if a.perp_dot(b) > 0.0 {
+        a.perp_dot(d) > 0.0 && d.perp_dot(b) > 0.0
+    } else {
+        a.perp_dot(d) > 0.0 || d.perp_dot(b) > 0.0
+    }
+}
+
+/// Whether segments `p`-`q` and `a`-`b` meet anywhere but at a shared end.
+fn crosses(p: DVec2, q: DVec2, a: DVec2, b: DVec2) -> bool {
+    let same = |x: DVec2, y: DVec2| x.distance_squared(y) < 1e-24;
+    if same(p, a) || same(p, b) || same(q, a) || same(q, b) {
+        // Sharing an end: they still overlap when collinear and pointing the same way.
+        let (d, e) = (q - p, b - a);
+        return d.perp_dot(e).abs() <= 1e-12 * d.length() * e.length()
+            && d.perp_dot(a - p).abs() <= 1e-12 * d.length().max(1e-300) * (a - p).length()
+            && overlap_collinear(p, q, a, b);
+    }
+    let o = |x: DVec2, y: DVec2, z: DVec2| (y - x).perp_dot(z - x);
+    let (d1, d2, d3, d4) = (o(p, q, a), o(p, q, b), o(a, b, p), o(a, b, q));
+    if ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0)) {
+        return true;
+    }
+    // Touching: an end of one on the other.
+    let on = |x: DVec2, y: DVec2, z: DVec2| {
+        o(x, y, z).abs() <= 1e-12 * (y - x).length() * (z - x).length().max(1e-300) && (z - x).dot(z - y) <= 0.0
+    };
+    on(p, q, a) || on(p, q, b) || on(a, b, p) || on(a, b, q)
+}
+
+/// Whether collinear segments `p`-`q` and `a`-`b` share more than a point.
+fn overlap_collinear(p: DVec2, q: DVec2, a: DVec2, b: DVec2) -> bool {
+    let d = q - p;
+    let len2 = d.length_squared();
+    if len2 <= 0.0 {
+        return false;
+    }
+    let (ta, tb) = ((a - p).dot(d) / len2, (b - p).dot(d) / len2);
+    let (lo, hi) = (ta.min(tb), ta.max(tb));
+    hi.min(1.0) - lo.max(0.0) > 1e-9
+}
+
 /// Parts of the infinite line `origin + t*dir` inside `poly`, as `(t0, t1)` pairs.
 pub fn clip_line(poly: &[DVec2], origin: DVec2, dir: DVec2) -> Vec<(f64, f64)> {
     let n = poly.len();
@@ -193,6 +309,23 @@ mod tests {
         bad[1] = DVec2::new(f64::INFINITY, 0.0);
         assert!(triangulate(&bad).is_empty());
         assert!(triangulate(&[DVec2::new(n, n); 6]).is_empty());
+    }
+
+    #[test]
+    fn keyhole_rings_keep_the_area_and_leave_holes_out() {
+        let hole = |x: f64, y: f64| {
+            vec![DVec2::new(x, y), DVec2::new(x + 1.0, y), DVec2::new(x + 1.0, y + 1.0), DVec2::new(x, y + 1.0)]
+        };
+        let holes = vec![hole(0.5, 0.5), hole(2.5, 2.5), hole(2.5, 0.5)];
+        let ring = keyhole(&square(), &holes).unwrap();
+        assert!((signed_area(&ring) - 13.0).abs() < 1e-9, "{}", signed_area(&ring));
+        assert!(contains(&ring, DVec2::new(2.0, 2.0)));
+        for p in [DVec2::new(1.0, 1.0), DVec2::new(3.0, 3.0), DVec2::new(3.0, 1.0)] {
+            assert!(!contains(&ring, p));
+        }
+        let tris: f64 = triangulate(&ring).iter().map(|t| area(&[ring[t[0]], ring[t[1]], ring[t[2]]])).sum();
+        assert!((tris - 13.0).abs() < 1e-6, "{tris}");
+        assert!(keyhole(&square(), &[vec![DVec2::new(f64::NAN, 0.0); 3]]).is_none());
     }
 
     #[test]

@@ -11,7 +11,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
-- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
+- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
@@ -143,7 +143,7 @@ No parameters.
 
 ### `view_export`
 
-*file* — Export any view with a drawing (plan, elevation, section, 3D view as a hidden-line axonometric, legend, drafting view, diagram or sheet) as a PNG image, as vector SVG or PDF, or as DXF for other CAD programs (by `format`, else by the file extension). The view is drawn at its scale as printed, without temporary hiding, on a page that fits it; sheets keep their paper size. A DXF holds the view at full size in millimeters (a sheet in paper millimeters), each element on the layer of its category (detail lines on the layer named after their line style), colors as the nearest color index and line patterns as line types.
+*file* — Export any view with a drawing (plan, elevation, section, 3D view as a hidden-line axonometric, legend, drafting view, diagram or sheet) as a PNG image, as vector SVG or PDF, or as DXF for other CAD programs (by `format`, else by the file extension). The view is drawn at its scale as printed, without temporary hiding, on a page that fits it; sheets keep their paper size. A DXF holds the view at full size in millimeters (a sheet in paper millimeters), each element on the layer of its category (detail lines, and regions with a boundary, on the layer named after their line style; region fills as `SOLID` triangles, their patterns as lines), colors as the nearest color index and line patterns as line types.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -861,7 +861,7 @@ No parameters.
 
 ### `sketch_get`
 
-*query* — The curves an element's outline is drawn with: its sketch, or lines along its outline and openings when it has none (floors, ceilings, roofs and masses).
+*query* — The curves an element's outline is drawn with: its sketch, or lines along its outline and openings when it has none (floors, ceilings, roofs, masses and the other sketched elements, regions among them).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -869,12 +869,12 @@ No parameters.
 
 ### `sketch_set`
 
-*edit* — Draw an element's outline again from curves (edit its boundary): floors and roofs take the loops inside the outline as their openings; ceilings and masses take one loop. The element keeps the curves, so `sketch_get` gives them back. A terrain's measured points can change in the same step (`points`).
+*edit* — Draw an element's outline again from curves (edit its boundary): floors, roofs and regions take the loops inside the outline as their openings; ceilings and masses take one loop. The element keeps the curves, so `sketch_get` gives them back. A terrain's measured points can change in the same step (`points`).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `curves` | [JSON, …] | required | The curves, closed into loops. |
-| `id` | integer | required | Element id (a floor, ceiling, roof, mass, shaft or terrain). |
+| `id` | integer | required | Element id (a floor, ceiling, roof, mass, shaft, terrain, pad, or a filled or masking region). |
 | `points` | [[number, …], …] | optional | Terrain only: measured points `[[x, y, z], …]` replacing the current ones (points that repeat another in plan are dropped). |
 
 ### `mass_floors_set`
@@ -1557,7 +1557,78 @@ No parameters.
 |---|---|---|---|
 | `curves` | [JSON, …] | required | The curves to draw, as for sketches (`line`, `arc`, `circle`, `ellipse`, `rectangle`, `polygon`). |
 | `view` | id or name | required | View id or name. |
-| `style` | string | optional | Line style: thin (default), medium, wide, hidden, dashed, center or dotted. |
+| `style` | string | optional | Line style: thin (default), medium, wide, hidden, dashed, center or dotted, or the name of one of the project's line styles (`line_styles_list`). |
+
+### `line_styles_list`
+
+*query* — The line styles detail lines and region boundaries can use: the built-in ones (by code) and the project's (by name), each with its weight on paper (mm), color, dash pattern and how many elements use it.
+
+No parameters.
+
+### `line_style_create`
+
+*edit* — Create a project line style for detail lines and region boundaries: a unique name (not a built-in code), a weight on paper, a color and a dash pattern. Commands then name it like a built-in style.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique, not a built-in style's code). |
+| `color` | [id, …] | optional | Color `[r, g, b]`, 0 to 255 (default black). |
+| `pattern` | string | optional | Dash pattern: solid (default), dash, short_dash, dot or dash_dot. |
+| `weight` | number | optional | Width on paper, millimeters (0.05 to 5; default 0.25). |
+
+### `line_style_set`
+
+*edit* — Change a project line style: name, weight, color or pattern. The lines and boundaries drawn with it follow.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `style` | id or name | required | Line style id or name. |
+| `color` | [id, …] | optional | Color `[r, g, b]`. |
+| `name` | string | optional | New name. |
+| `pattern` | string | optional | Dash pattern: solid, dash, short_dash, dot or dash_dot. |
+| `weight` | number | optional | Width on paper, millimeters (0.05 to 5). |
+
+### `line_style_delete`
+
+*edit* — Delete a project line style. The detail lines and region boundaries drawn with it move to `replace_with` (a built-in code or another project style's name; default `thin`) in the same undo step.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `style` | id or name | required | Line style id or name. |
+| `replace_with` | string | optional | The style that takes its place where it is used (default `thin`). |
+
+### `filled_region_create`
+
+*edit* — Draw a filled region in a 2D view (plan, ceiling plan, elevation, section, legend or drafting view): the closed loops of `curves` in the view's drawing coordinates (meters), the largest the outline and those inside it openings, filled as its type says (a pattern over a background, or a solid color) and edged in a line style. It is drawn only in that view, over the model and under the view's annotations. A project without a filled region type gets one (diagonal lines over white).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `curves` | [JSON, …] | required | The curves, closed into loops, as for sketches (`line`, `arc`, `circle`, `ellipse`, `rectangle`, `polygon`). |
+| `view` | id or name | required | View id or name. |
+| `boundary` | string | optional | Boundary line style (a built-in code or a project style's name; default `thin`), or `none` for no boundary. |
+| `type` | id or name | optional | Filled region type id or name (default: the project's first). |
+
+### `masking_region_create`
+
+*edit* — Draw a masking region in a 2D view: an opaque white area (the closed loops of `curves`, openings inside the outline) that hides the model's linework of the view under it, while the view's annotations (detail lines, dimensions, texts, tags) stay on top. Drawn only in that view.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `curves` | [JSON, …] | required | The curves, closed into loops, as for sketches. |
+| `view` | id or name | required | View id or name. |
+| `boundary` | string | optional | Boundary line style (a built-in code or a project style's name), or `none` (the default) for no boundary. |
+
+### `filled_region_type_create`
+
+*edit* — Create a filled region type: a foreground pattern over a background pattern, each with its color (a `solid` pattern fills with its color; a `none` background leaves the model visible between the pattern lines). Change it later with `type_set` (`{"fill": {...}}`).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `background` | string | optional | Background pattern (default `solid`), as for `foreground`. |
+| `background_color` | [id, …] | optional | Background color `[r, g, b]` (default white). |
+| `foreground` | string | optional | Foreground pattern (default `diagonal`): none, solid, diagonal, diagonal_back, crosshatch, horizontal, vertical, grid, brick, concrete, sand, insulation or earth. |
+| `foreground_color` | [id, …] | optional | Foreground color `[r, g, b]` (default black). |
+| `name` | string | optional | Type name (default: the template's filled region name). |
 
 ### `text_add_leader`
 

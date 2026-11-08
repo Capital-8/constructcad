@@ -91,6 +91,7 @@ fn element_is_valid(e: &Element) -> bool {
         }
         ElementKind::CadImport(c) => c.is_valid(),
         ElementKind::DetailLine(l) => l.is_valid(),
+        ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.is_valid(),
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
@@ -177,6 +178,8 @@ impl Project {
                 TypeData::Room {}
                 | TypeData::CadImport {}
                 | TypeData::DetailLine {}
+                | TypeData::FilledRegion { .. }
+                | TypeData::MaskingRegion {}
                 | TypeData::Mass { .. }
                 | TypeData::Shaft {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
@@ -295,6 +298,11 @@ impl Project {
             }
         }
 
+        // Line styles: ids that match their keys, weights in range, a bounded
+        // count; detail lines and region boundaries that use a style that is
+        // gone fall back to the thin built-in style.
+        repairs += self.repair_line_styles();
+
         // Sketches that are invalid or no longer make their element's outline.
         repairs += self.elements.values_mut().map(|e| usize::from(e.drop_stale_sketch())).sum::<usize>();
 
@@ -328,6 +336,7 @@ impl Project {
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::CadImport(c) => self.view(c.view).is_some(),
                         ElementKind::DetailLine(l) => self.view(l.view).is_some(),
+                        ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => self.view(r.view).is_some(),
                         ElementKind::Pad(p) => {
                             self.element(p.host).is_some_and(|t| matches!(t.kind, ElementKind::Topography(_)))
                         }
@@ -696,6 +705,41 @@ impl Project {
     }
 }
 
+impl Project {
+    /// See [`crate::detail`]: returns how many things it changed.
+    fn repair_line_styles(&mut self) -> usize {
+        let mut repairs = 0;
+        if self.line_styles.len() > crate::detail::MAX_LINE_STYLES {
+            repairs += self.line_styles.len() - crate::detail::MAX_LINE_STYLES;
+            let keep: Vec<_> = self.line_styles.keys().take(crate::detail::MAX_LINE_STYLES).copied().collect();
+            self.line_styles.retain(|k, _| keep.contains(k));
+        }
+        for (id, style) in self.line_styles.iter_mut() {
+            if style.id != *id {
+                style.id = *id;
+                repairs += 1;
+            }
+            repairs += usize::from(style.repair());
+        }
+        let styles = &self.line_styles;
+        for e in self.elements.values_mut() {
+            let style = match &mut e.kind {
+                ElementKind::DetailLine(l) => &mut l.style,
+                ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => match &mut r.boundary {
+                    Some(b) => b,
+                    None => continue,
+                },
+                _ => continue,
+            };
+            if !style.exists(styles) {
+                *style = crate::LineStyleRef::default();
+                repairs += 1;
+            }
+        }
+        repairs
+    }
+}
+
 /// Script sources, text values, choices and hotspots of a component
 /// definition within their limits; the number of repairs.
 fn repair_scripted(def: &mut crate::ComponentDef) -> usize {
@@ -885,6 +929,77 @@ mod tests {
         for id in [nan, on_nan, missing_type, wrong_type] {
             assert!(p.element(id).is_none());
         }
+        assert_eq!(p.repair(), 0, "repair is idempotent");
+    }
+
+    /// Crafted line styles and regions: a style stored under another id and
+    /// with a weight out of range, detail lines and region boundaries using
+    /// a style that is gone, and a region with a NaN point.
+    #[test]
+    fn line_styles_and_regions_are_repaired() {
+        use crate::region::Region;
+        use crate::{LinePattern, LineStyleDef, LineStyleId, LineStyleRef, TypeData};
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let view = *p.views.keys().next().unwrap();
+        let ty = |p: &mut Project, data| {
+            let id = crate::ElementTypeId(p.alloc_id());
+            p.types.insert(
+                id,
+                crate::ElementType { id, name: "T".into(), data, info: Default::default(), uid: Default::default() },
+            );
+            id
+        };
+        let line_t = ty(&mut p, TypeData::DetailLine {});
+        let region_t = ty(&mut p, TypeData::FilledRegion { fill: Default::default() });
+        let kept = LineStyleId(p.alloc_id());
+        p.line_styles.insert(
+            kept,
+            LineStyleDef {
+                id: LineStyleId(1),
+                name: "A".into(),
+                weight_mm: 99.0,
+                color: [0; 3],
+                pattern: LinePattern::Dash,
+            },
+        );
+        let add = |p: &mut Project, type_id, kind| {
+            let id = ElementId(p.alloc_id());
+            p.elements.insert(
+                id,
+                Element {
+                    id,
+                    level,
+                    type_id,
+                    mark: String::new(),
+                    comments: String::new(),
+                    kind,
+                    uid: Default::default(),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
+                },
+            );
+            id
+        };
+        let gone = LineStyleRef::Project(LineStyleId(9999));
+        let curve = crate::sketch::SketchCurve::Line { a: DVec2::ZERO, b: DVec2::X };
+        let line = add(&mut p, line_t, ElementKind::DetailLine(crate::DetailLine { view, curve, style: gone }));
+        let square = vec![DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y];
+        let region = |boundary| Region { view, outline: square.clone(), openings: vec![], sketch: None, boundary };
+        let good = add(&mut p, region_t, ElementKind::FilledRegion(region(Some(gone))));
+        let mut nan = region(None);
+        nan.outline[1].y = f64::NAN;
+        let bad = add(&mut p, region_t, ElementKind::FilledRegion(nan));
+        // The style's id and weight, the line's and the region's style, the NaN region.
+        assert_eq!(p.repair(), 5);
+        assert_eq!(p.line_style(kept).map(|s| (s.id, s.weight_mm)), Some((kept, crate::detail::MAX_WEIGHT_MM)));
+        assert!(
+            matches!(&p.element(line).unwrap().kind, ElementKind::DetailLine(l) if l.style == LineStyleRef::default())
+        );
+        assert!(
+            matches!(&p.element(good).unwrap().kind, ElementKind::FilledRegion(r) if r.boundary == Some(LineStyleRef::default()))
+        );
+        assert!(p.element(bad).is_none());
         assert_eq!(p.repair(), 0, "repair is idempotent");
     }
 

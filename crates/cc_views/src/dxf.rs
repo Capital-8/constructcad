@@ -34,8 +34,8 @@ impl DxfScale {
 const MIN_FILL_ALPHA: u8 = 200;
 
 /// The named colors of the AutoCAD Color Index used for pens: the seven
-/// standard colors and the grays.
-const ACI: [(u8, [u8; 3]); 13] = [
+/// standard colors, the grays and white (masking regions, white fills).
+const ACI: [(u8, [u8; 3]); 14] = [
     (1, [255, 0, 0]),
     (2, [255, 255, 0]),
     (3, [0, 255, 0]),
@@ -49,6 +49,7 @@ const ACI: [(u8, [u8; 3]); 13] = [
     (251, [91, 91, 91]),
     (252, [132, 132, 132]),
     (253, [173, 173, 173]),
+    (255, [255, 255, 255]),
 ];
 
 /// The nearest index color of `c` (7, black on white paper, for dark colors).

@@ -78,6 +78,8 @@ pub struct Dialogs {
     pub templates: Option<crate::graphics_dialog::TemplateManager>,
     /// Phases, phase filters and phase graphics.
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
+    /// The project's line styles.
+    pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
     /// The Preferences window.

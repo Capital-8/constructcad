@@ -10,15 +10,19 @@
 //! ordinary curve that the sketch edits ([`crate::sketch_edit`]: trim,
 //! extend, split, offset) and grips change on its own.
 //!
-//! The line style is a [`LineStyleRef`]: for now one of the built-in
-//! [`DetailStyle`]s. Project line styles (named, with weight, color and
-//! dash pattern, kept as project settings) will be another variant of it,
-//! so files written now keep loading.
+//! The line style is a [`LineStyleRef`]: one of the built-in
+//! [`DetailStyle`]s or one of the project's own line styles
+//! ([`LineStyleDef`]: a name, weight, color and dash pattern, kept in
+//! `Project::line_styles` and tracked as project settings). Region
+//! boundaries ([`crate::region`]) take the same references. A reference to
+//! a project style that no longer exists reads as the thin built-in style,
+//! and repair resets it.
 
 use crate::sketch::SketchCurve;
-use crate::{LinePattern, ViewId};
+use crate::{LinePattern, LineStyleId, ViewId};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// A detail line of one view.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -100,11 +104,16 @@ fn within(c: &SketchCurve) -> bool {
     }
 }
 
-/// The style a detail line is drawn with.
+/// The project's line styles, by id.
+pub type LineStyles = BTreeMap<LineStyleId, LineStyleDef>;
+
+/// The style a detail line or a region's boundary is drawn with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LineStyleRef {
     /// One of the built-in styles.
     BuiltIn(DetailStyle),
+    /// One of the project's line styles (`Project::line_styles`).
+    Project(LineStyleId),
 }
 
 impl Default for LineStyleRef {
@@ -114,25 +123,76 @@ impl Default for LineStyleRef {
 }
 
 impl LineStyleRef {
-    /// Width on paper (millimeters), color and dash pattern.
-    pub fn pen(self) -> (f64, [u8; 3], LinePattern) {
+    /// Width on paper (millimeters), color and dash pattern; a project
+    /// style that is gone reads as the default built-in style.
+    pub fn pen(self, styles: &LineStyles) -> (f64, [u8; 3], LinePattern) {
         match self {
             LineStyleRef::BuiltIn(s) => (s.weight_mm(), [0, 0, 0], s.pattern()),
+            LineStyleRef::Project(id) => match styles.get(&id) {
+                Some(s) => (s.weight_mm, s.color, s.pattern),
+                None => LineStyleRef::default().pen(styles),
+            },
         }
     }
 
-    /// The style's name as a code (DXF layers, commands).
-    pub fn code(self) -> &'static str {
+    /// The style's name as a code (DXF layers, commands): a built-in
+    /// style's code, a project style's name.
+    pub fn code(self, styles: &LineStyles) -> String {
         match self {
-            LineStyleRef::BuiltIn(s) => s.code(),
+            LineStyleRef::BuiltIn(s) => s.code().to_string(),
+            LineStyleRef::Project(id) => match styles.get(&id) {
+                Some(s) => s.name.clone(),
+                None => DetailStyle::default().code().to_string(),
+            },
         }
     }
 
-    /// Translation key of the style's name.
-    pub fn key(self) -> &'static str {
+    /// Whether the reference is to a style that exists.
+    pub fn exists(self, styles: &LineStyles) -> bool {
         match self {
-            LineStyleRef::BuiltIn(s) => s.key(),
+            LineStyleRef::BuiltIn(_) => true,
+            LineStyleRef::Project(id) => styles.contains_key(&id),
         }
+    }
+}
+
+/// Most project line styles (a crafted file).
+pub const MAX_LINE_STYLES: usize = 1000;
+/// Range of a line style's weight, paper millimeters.
+pub const MIN_WEIGHT_MM: f64 = 0.05;
+pub const MAX_WEIGHT_MM: f64 = 5.0;
+
+/// One of the project's line styles: a name, a weight on paper, a color and
+/// a dash pattern. Names are unique and differ from the built-in codes, so
+/// commands can name either.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LineStyleDef {
+    pub id: LineStyleId,
+    pub name: String,
+    /// Width on paper, millimeters.
+    pub weight_mm: f64,
+    #[serde(default)]
+    pub color: [u8; 3],
+    #[serde(default)]
+    pub pattern: LinePattern,
+}
+
+impl LineStyleDef {
+    /// Bring the weight into range (a crafted file); returns whether it changed.
+    pub fn repair(&mut self) -> bool {
+        let mut changed = false;
+        if !self.weight_mm.is_finite() {
+            self.weight_mm = DetailStyle::Medium.weight_mm();
+            changed = true;
+        } else if !(MIN_WEIGHT_MM..=MAX_WEIGHT_MM).contains(&self.weight_mm) {
+            self.weight_mm = self.weight_mm.clamp(MIN_WEIGHT_MM, MAX_WEIGHT_MM);
+            changed = true;
+        }
+        if self.name.trim().is_empty() {
+            self.name = format!("{}", self.id);
+            changed = true;
+        }
+        changed
     }
 }
 
@@ -233,6 +293,25 @@ mod tests {
         assert!(!line(DVec2::ZERO).is_valid());
         assert!(!line(DVec2::new(f64::NAN, 0.0)).is_valid());
         assert!(!line(DVec2::new(1e9, 0.0)).is_valid());
+    }
+
+    #[test]
+    fn project_styles_resolve_and_fall_back() {
+        let mut styles = LineStyles::new();
+        let id = LineStyleId(9);
+        styles.insert(
+            id,
+            LineStyleDef { id, name: "Red".into(), weight_mm: 0.7, color: [200, 0, 0], pattern: LinePattern::Dot },
+        );
+        assert_eq!(LineStyleRef::Project(id).pen(&styles), (0.7, [200, 0, 0], LinePattern::Dot));
+        assert_eq!(LineStyleRef::Project(id).code(&styles), "Red");
+        let gone = LineStyleRef::Project(LineStyleId(10));
+        assert!(!gone.exists(&styles));
+        assert_eq!(gone.pen(&styles), LineStyleRef::default().pen(&styles));
+        let mut bad =
+            LineStyleDef { id, name: " ".into(), weight_mm: f64::NAN, color: [0; 3], pattern: LinePattern::Solid };
+        assert!(bad.repair());
+        assert!(bad.weight_mm.is_finite() && !bad.name.trim().is_empty());
     }
 
     #[test]

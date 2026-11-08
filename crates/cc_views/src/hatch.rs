@@ -100,6 +100,38 @@ pub fn hatch(pattern: Pattern, poly: &[DVec2], spacing: f64) -> Vec<(DVec2, DVec
     out
 }
 
+/// Segments of `pattern` inside `poly` and outside each of `holes`.
+pub fn hatch_with_holes(pattern: Pattern, poly: &[DVec2], holes: &[Vec<DVec2>], spacing: f64) -> Vec<(DVec2, DVec2)> {
+    let mut lines = hatch(pattern, poly, spacing);
+    for hole in holes.iter().filter(|h| h.len() >= 3) {
+        lines = lines.into_iter().flat_map(|(a, b)| outside(hole, a, b)).collect();
+    }
+    lines
+}
+
+/// The parts of segment `a`-`b` outside `poly`.
+fn outside(poly: &[DVec2], a: DVec2, b: DVec2) -> Vec<(DVec2, DVec2)> {
+    let d = b - a;
+    let len = d.length();
+    if len < 1e-12 {
+        return Vec::new();
+    }
+    let dir = d / len;
+    let mut out = Vec::new();
+    let mut from = 0.0;
+    for (t0, t1) in polygon::clip_line(poly, a, dir) {
+        let (t0, t1) = (t0.clamp(0.0, len), t1.clamp(0.0, len));
+        if t0 > from {
+            out.push((a + dir * from, a + dir * t0));
+        }
+        from = from.max(t1);
+    }
+    if len > from {
+        out.push((a + dir * from, b));
+    }
+    out
+}
+
 fn bounds(poly: &[DVec2]) -> (DVec2, DVec2) {
     poly.iter()
         .fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(lo, hi), p| (lo.min(*p), hi.max(*p)))
@@ -223,6 +255,14 @@ mod tests {
 
     #[test]
     fn hostile_input_is_bounded() {
+        let holed = hatch_with_holes(
+            Pattern::Vertical,
+            &square(1.0),
+            &[vec![DVec2::new(0.25, 0.25), DVec2::new(0.75, 0.25), DVec2::new(0.75, 0.75), DVec2::new(0.25, 0.75)]],
+            0.1,
+        );
+        let inside = |p: DVec2| p.x > 0.26 && p.x < 0.74 && p.y > 0.26 && p.y < 0.74;
+        assert!(!holed.is_empty() && holed.iter().all(|(a, b)| !inside((*a + *b) * 0.5)));
         assert!(hatch(Pattern::Grid, &square(1.0), 0.0).is_empty());
         assert!(hatch(Pattern::Grid, &square(1.0), f64::NAN).is_empty());
         assert!(hatch(Pattern::Grid, &square(1e6), 1e-3).len() <= MAX_LINES * 2);

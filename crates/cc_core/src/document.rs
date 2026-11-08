@@ -24,6 +24,7 @@ struct Settings {
     phase_filters: BTreeMap<crate::PhaseFilterId, crate::PhaseFilter>,
     phase_graphics: crate::PhaseGraphics,
     graph_bindings: BTreeMap<ElementId, crate::graph_binding::GraphBinding>,
+    line_styles: crate::detail::LineStyles,
 }
 
 impl Settings {
@@ -43,6 +44,7 @@ impl Settings {
             phase_filters: p.phase_filters.clone(),
             phase_graphics: p.phase_graphics,
             graph_bindings: p.graph_bindings.clone(),
+            line_styles: p.line_styles.clone(),
         }
     }
 
@@ -61,6 +63,7 @@ impl Settings {
         p.phase_filters = self.phase_filters;
         p.phase_graphics = self.phase_graphics;
         p.graph_bindings = self.graph_bindings;
+        p.line_styles = self.line_styles;
     }
 }
 
@@ -499,6 +502,12 @@ impl<'a> EditCtx<'a> {
                 *v = view;
             }
         }
+    }
+
+    /// The project's line styles.
+    pub fn line_styles_mut(&mut self) -> &mut crate::detail::LineStyles {
+        self.touch_settings();
+        &mut self.project.line_styles
     }
 
     /// Construction phases, in time order.

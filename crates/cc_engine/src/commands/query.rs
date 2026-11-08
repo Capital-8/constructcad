@@ -262,7 +262,12 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         ElementKind::DetailLine(l) => {
             let length: f64 = l.curve.points().windows(2).map(|w| w[0].distance(w[1])).sum();
             derived.insert("length".into(), json!(length));
-            derived.insert("style_name".into(), json!(l.style.code()));
+            derived.insert("style_name".into(), json!(l.style.code(&p.line_styles)));
+        }
+        ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => {
+            derived.insert("area".into(), json!(r.area()));
+            derived.insert("perimeter".into(), json!(r.perimeter()));
+            derived.insert("boundary_name".into(), json!(r.boundary.map(|b| b.code(&p.line_styles))));
         }
         ElementKind::Component(c) => {
             if let Some(mep) = p.mep_data(&e) {
