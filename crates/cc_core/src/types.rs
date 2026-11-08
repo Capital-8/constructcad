@@ -40,10 +40,12 @@ pub enum Category {
     Pad,
     /// Title blocks: sheet layouts (components drawn on sheets).
     TitleBlock,
+    /// Detail lines: 2D lines of one view.
+    DetailLine,
 }
 
 impl Category {
-    pub const ALL: [Category; 26] = [
+    pub const ALL: [Category; 27] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -65,6 +67,7 @@ impl Category {
         Category::Grid,
         Category::Dimension,
         Category::Text,
+        Category::DetailLine,
         Category::CadImport,
         Category::Mass,
         Category::Shaft,
@@ -165,6 +168,7 @@ impl Category {
             Category::Conduit => "category-conduit",
             Category::CadImport => "category-cad-import",
             Category::Mass => "category-mass",
+            Category::DetailLine => "category-detail-line",
         }
     }
 
@@ -391,6 +395,8 @@ pub enum TypeData {
     },
     /// Imported CAD drawings have no type parameters; the type names them.
     CadImport {},
+    /// Detail lines have no type parameters (each line has its style).
+    DetailLine {},
     /// Conceptual masses, shown in `material`.
     Mass {
         material: String,
@@ -485,6 +491,7 @@ impl TypeData {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::CadImport {}
+            | TypeData::DetailLine {}
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => Vec::new(),
         }
@@ -551,6 +558,7 @@ impl TypeData {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::CadImport {}
+            | TypeData::DetailLine {}
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => {}
         }
@@ -693,6 +701,7 @@ impl ElementType {
             TypeData::Railing { .. } => Category::Railing,
             TypeData::Component { def, .. } => def.category(),
             TypeData::CadImport {} => Category::CadImport,
+            TypeData::DetailLine {} => Category::DetailLine,
             TypeData::Mass { .. } => Category::Mass,
             TypeData::Sweep { .. } => Category::Sweep,
             TypeData::Shaft {} => Category::Shaft,
@@ -796,6 +805,7 @@ impl ElementType {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::CadImport {}
+            | TypeData::DetailLine {}
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => "",
             TypeData::Column { material, .. }

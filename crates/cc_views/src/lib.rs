@@ -8,6 +8,7 @@ mod annotate;
 pub mod cad;
 pub mod component_view;
 mod cut;
+pub mod detail;
 mod diagram;
 mod drawing;
 pub mod dxf;
@@ -117,6 +118,8 @@ pub fn generate_temporary(
     // Imported CAD drawings, under everything (not in 3D views or diagrams).
     if hosts_cad(&view.kind) {
         cad::underlays(&mut d, project, view.id, view.scale);
+        // Detail lines, on top of the model.
+        detail::lines(&mut d, project, view.id);
     }
     annotate::dimensions(&mut d, project, view.id, view.scale);
     notes::notes(&mut d, project, view.id, view.scale);

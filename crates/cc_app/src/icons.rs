@@ -50,6 +50,7 @@ pub enum Icon {
     MacroRecord,
     MacroRun,
     Text,
+    DetailLine,
     Leader,
     ChevronDown,
     ChevronUp,
@@ -167,7 +168,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 152] = [
+    pub const ALL: [Icon; 153] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -207,6 +208,7 @@ impl Icon {
         Icon::MacroRecord,
         Icon::MacroRun,
         Icon::Text,
+        Icon::DetailLine,
         Icon::Leader,
         Icon::ChevronDown,
         Icon::ChevronUp,
@@ -364,6 +366,7 @@ impl Icon {
             Icon::MacroRecord => include_str!("../../../assets/icons/ui/macro-record.svg"),
             Icon::MacroRun => include_str!("../../../assets/icons/ui/macro-run.svg"),
             Icon::Text => include_str!("../../../assets/icons/ui/text.svg"),
+            Icon::DetailLine => include_str!("../../../assets/icons/ui/detail-line.svg"),
             Icon::Leader => include_str!("../../../assets/icons/ui/leader.svg"),
             Icon::ChevronDown => include_str!("../../../assets/icons/ui/chevron-down.svg"),
             Icon::ChevronUp => include_str!("../../../assets/icons/ui/chevron-up.svg"),

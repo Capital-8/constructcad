@@ -375,10 +375,24 @@ pub(crate) fn apply_mirror(state: &mut AppState, targets: &BTreeSet<ElementId>, 
     finish(state, if copy { result } else { ids });
 }
 
-/// The linear element (wall, beam, grid) under the pointer, and its line.
+/// The linear element (wall, beam, grid) or detail line under the
+/// pointer, and its line (a detail line's chord). Outside plans only
+/// detail lines are picked: the view's coordinates are not the plan's.
 fn linear_at(state: &AppState, drawing: &Drawing2D, raw: DVec2, tol: f64) -> Option<(ElementId, (DVec2, DVec2))> {
     let id = drawing.hit_test(raw, tol)?;
-    let line = state.project().element(id).and_then(cc_core::wall_ops::line_of)?;
+    let e = state.project().element(id)?;
+    if let ElementKind::DetailLine(l) = &e.kind {
+        let pts = l.curve.points();
+        return Some((id, (*pts.first()?, *pts.last()?)));
+    }
+    let plan = state
+        .active_view
+        .and_then(|v| state.project().view(v))
+        .is_some_and(|v| matches!(v.kind, cc_core::ViewKind::FloorPlan { .. } | cc_core::ViewKind::CeilingPlan { .. }));
+    if !plan {
+        return None;
+    }
+    let line = cc_core::wall_ops::line_of(e)?;
     Some((id, line))
 }
 
@@ -630,6 +644,9 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
         }
         Tool::Split => {
             let Some((id, (a, b))) = hovered else { return };
+            if crate::detail_ui::split_pick(painter, xf, state, id, raw, clicked) {
+                return;
+            }
             let dir = (b - a).normalize_or_zero();
             let p = a + dir * (raw - a).dot(dir);
             let n = dir.perp() * (8.0 / xf.scale);
@@ -656,6 +673,10 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
         }
         Tool::Offset => {
             let Some((id, (a, b))) = hovered else { return };
+            let distance = state.modify.offset;
+            if crate::detail_ui::offset_pick(painter, xf, state, id, raw, distance, clicked) {
+                return;
+            }
             let n = (b - a).normalize_or_zero().perp();
             let side = if (raw - a).dot(n) >= 0.0 { 1.0 } else { -1.0 };
             let d = state.modify.offset.abs() * side;

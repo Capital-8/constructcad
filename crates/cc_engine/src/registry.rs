@@ -258,6 +258,7 @@ registry![
         annotate::DimensionOrdinateCreate,
         annotate::DimensionSetValue,
         annotate::TextCreate,
+        detail::DetailLineCreate,
         annotate::TextAddLeader,
         annotate::TextRemoveLeader,
     ],

@@ -41,6 +41,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Component => Icon::Component,
         Category::Text | Category::TitleBlock => Icon::Text,
         Category::CadImport => Icon::CadImport,
+        Category::DetailLine => Icon::DetailLine,
         Category::Mass => Icon::Mass,
         Category::Shaft => Icon::Shaft,
         Category::Topography => Icon::Topography,
@@ -697,6 +698,7 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-dimension"), |ui| {
         command_buttons(ui, state, &DimensionMode::ALL.map(UiCommand::Dimension));
     });
+    group(ui, t!("group-detail"), |ui| command_button(ui, state, UiCommand::DetailLine));
     group(ui, t!("group-text"), |ui| command_buttons(ui, state, &[UiCommand::Text, UiCommand::AddLeader]));
     group(ui, t!("group-tags"), |ui| command_button(ui, state, UiCommand::StructureTags));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
@@ -1080,6 +1082,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Text { .. } => crate::text_tool::options(ui, state, false),
             Tool::AddLeader { .. } => crate::text_tool::options(ui, state, true),
+            Tool::DetailLine => crate::detail_ui::options(ui, state),
             Tool::Column { .. } => {
                 ui.label(theme::muted(t!("hint-column")));
             }

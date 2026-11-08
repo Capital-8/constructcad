@@ -48,6 +48,9 @@ pub enum Target {
     Profile { type_id: ElementTypeId },
     /// Lines of a title block on its Sheet view (see [`crate::title_block_env`]).
     Sheet,
+    /// Detail lines being drawn (see [`crate::detail_ui`]): each curve
+    /// becomes an element as soon as it is drawn, so there is nothing to finish.
+    Detail,
 }
 
 /// How clicks draw.
@@ -422,6 +425,11 @@ fn distance(c: &SketchCurve, p: DVec2) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
+/// The grips of a curve, each with its handle number (see [`moved`]).
+pub(crate) fn curve_grips(c: &SketchCurve) -> Vec<(u8, DVec2)> {
+    grips(c, 0).into_iter().map(|(g, p)| (g.which, p)).collect()
+}
+
 /// The grips of curve `i`.
 fn grips(c: &SketchCurve, curve: usize) -> Vec<(Grip, DVec2)> {
     let g = |which| Grip { curve, which };
@@ -451,7 +459,7 @@ fn grips(c: &SketchCurve, curve: usize) -> Vec<(Grip, DVec2)> {
 }
 
 /// Curve `c` with its grip `which` moved to `p`.
-fn moved(c: &SketchCurve, which: u8, p: DVec2) -> SketchCurve {
+pub(crate) fn moved(c: &SketchCurve, which: u8, p: DVec2) -> SketchCurve {
     match (*c, which) {
         (SketchCurve::Line { b, .. }, 0) => SketchCurve::Line { a: p, b },
         (SketchCurve::Line { a, .. }, 1) => SketchCurve::Line { a, b: p },
@@ -575,6 +583,7 @@ pub fn finish(state: &mut AppState) {
             crate::title_block_env::finish_stroke(state);
             return;
         }
+        Target::Detail => return,
     };
     let checked = if allows_openings { sketch.profile().map(|_| ()) } else { sketch.outline().map(|_| ()) };
     if let Err(e) = checked {
@@ -618,7 +627,7 @@ pub fn finish(state: &mut AppState) {
             }
             return;
         }
-        Target::Piece | Target::Sheet => None,
+        Target::Piece | Target::Sheet | Target::Detail => None,
     };
     if let Some(id) = out {
         state.sketch = None;
@@ -744,7 +753,7 @@ pub fn pick_walls(state: &mut AppState) {
     let category = match state.sketch.as_ref().map(|s| s.target) {
         Some(Target::New { category, .. }) => category,
         Some(Target::Edit { id }) => state.project().element(id).map_or(Category::Floor, |e| e.category()),
-        Some(Target::Piece | Target::Profile { .. } | Target::Sheet) | None => return,
+        Some(Target::Piece | Target::Profile { .. } | Target::Sheet | Target::Detail) | None => return,
     };
     let outward = if category == Category::Ceiling { -1.0 } else { 1.0 };
     match crate::tools::walls_loop(state.project(), level, outward) {
@@ -1053,7 +1062,7 @@ fn select(
 }
 
 /// The drawing tools: preview at `p`, and a click adds a point or the curve.
-fn draw(click: bool, painter: &Painter, s: &mut Session, p: DVec2, xf: &Xf, tol: f64) {
+pub(crate) fn draw(click: bool, painter: &Painter, s: &mut Session, p: DVec2, xf: &Xf, tol: f64) {
     let preview = |painter: &Painter, curves: &[SketchCurve]| {
         for c in curves.iter().filter(|c| c.is_valid()) {
             let pts: Vec<egui::Pos2> = c.points().iter().map(|q| xf.to_screen(*q)).collect();

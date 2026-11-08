@@ -459,7 +459,8 @@ impl Command for GroupUngroup {
 
 /// Trim or extend two linear elements (walls, beams, grids) to meet at a
 /// corner; each pick point marks the part of its element to keep. Arc walls
-/// meet lines and other arcs where their circles cross them.
+/// meet lines and other arcs where their circles cross them. Two detail
+/// lines meet where their lines, circles or ellipses cross.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimCorner {
@@ -488,7 +489,9 @@ impl Command for TrimCorner {
 
 /// Trim or extend a linear element to the line of a reference element (the
 /// circle of an arc wall); the pick point marks the part to keep. Arc walls
-/// trim and extend along their circle.
+/// trim and extend along their circle. A detail line trims or extends to
+/// another detail line (also a circle or an ellipse) or to the line of a
+/// wall, beam or grid.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrimExtend {
@@ -512,14 +515,27 @@ impl Command for TrimExtend {
     fn run(self, s: &mut Session) -> Result<Value> {
         let id = refs::element(s.project(), self.id)?;
         not_pinned(s.project(), id)?;
-        let reference = path(s, self.reference)?;
         let pick = point(self.pick)?;
+        // A detail line trims to any curve: another detail line's (a circle,
+        // an ellipse) or the line of a wall, beam or grid.
+        if matches!(s.project().element(id).map(|e| &e.kind), Some(ElementKind::DetailLine(_))) {
+            let p = s.project();
+            let boundary = p
+                .element(refs::element(p, self.reference)?)
+                .and_then(cc_core::wall_ops::curve_of)
+                .ok_or_else(|| EngineError::invalid(format!("element {} has no line", self.reference)))?;
+            edit(s, t!("tx-trim"), |e| Ok(e.trim_detail(id, pick, &boundary)?))?;
+            return Ok(super::created(s, id));
+        }
+        let reference = path(s, self.reference)?;
         edit(s, t!("tx-trim"), |e| Ok(e.trim_to(id, pick, reference)?))?;
         Ok(super::created(s, id))
     }
 }
 
-/// Split a linear element (wall, beam, grid) at a point; returns the new element.
+/// Split a linear element (wall, beam, grid) or a detail line at a point;
+/// returns the new element. A detail circle or whole ellipse splits into
+/// halves, from the point and from the one opposite.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementSplit {
@@ -541,7 +557,10 @@ impl Command for ElementSplit {
     }
 }
 
-/// Copy a linear element parallel at `distance` (positive: to the left of its direction).
+/// Copy a linear element parallel at `distance` (positive: to the left of
+/// its direction). Detail lines too: an arc's or a circle's copy is
+/// concentric (positive: towards the center of a circle); ellipses have no
+/// offset.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementOffset {

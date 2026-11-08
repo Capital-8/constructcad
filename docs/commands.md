@@ -11,7 +11,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
-- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
+- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
@@ -143,7 +143,7 @@ No parameters.
 
 ### `view_export`
 
-*file* — Export any view with a drawing (plan, elevation, section, 3D view as a hidden-line axonometric, legend, drafting view, diagram or sheet) as a PNG image, as vector SVG or PDF, or as DXF for other CAD programs (by `format`, else by the file extension). The view is drawn at its scale as printed, without temporary hiding, on a page that fits it; sheets keep their paper size. A DXF holds the view at full size in millimeters (a sheet in paper millimeters), each element on the layer of its category, colors as the nearest color index and line patterns as line types.
+*file* — Export any view with a drawing (plan, elevation, section, 3D view as a hidden-line axonometric, legend, drafting view, diagram or sheet) as a PNG image, as vector SVG or PDF, or as DXF for other CAD programs (by `format`, else by the file extension). The view is drawn at its scale as printed, without temporary hiding, on a page that fits it; sheets keep their paper size. A DXF holds the view at full size in millimeters (a sheet in paper millimeters), each element on the layer of its category (detail lines on the layer named after their line style), colors as the nearest color index and line patterns as line types.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1368,7 +1368,7 @@ No parameters.
 
 ### `trim_corner`
 
-*edit* — Trim or extend two linear elements (walls, beams, grids) to meet at a corner; each pick point marks the part of its element to keep. Arc walls meet lines and other arcs where their circles cross them.
+*edit* — Trim or extend two linear elements (walls, beams, grids) to meet at a corner; each pick point marks the part of its element to keep. Arc walls meet lines and other arcs where their circles cross them. Two detail lines meet where their lines, circles or ellipses cross.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1379,7 +1379,7 @@ No parameters.
 
 ### `trim_extend`
 
-*edit* — Trim or extend a linear element to the line of a reference element (the circle of an arc wall); the pick point marks the part to keep. Arc walls trim and extend along their circle.
+*edit* — Trim or extend a linear element to the line of a reference element (the circle of an arc wall); the pick point marks the part to keep. Arc walls trim and extend along their circle. A detail line trims or extends to another detail line (also a circle or an ellipse) or to the line of a wall, beam or grid.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1389,7 +1389,7 @@ No parameters.
 
 ### `element_split`
 
-*edit* — Split a linear element (wall, beam, grid) at a point; returns the new element.
+*edit* — Split a linear element (wall, beam, grid) or a detail line at a point; returns the new element. A detail circle or whole ellipse splits into halves, from the point and from the one opposite.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1398,7 +1398,7 @@ No parameters.
 
 ### `element_offset`
 
-*edit* — Copy a linear element parallel at `distance` (positive: to the left of its direction).
+*edit* — Copy a linear element parallel at `distance` (positive: to the left of its direction). Detail lines too: an arc's or a circle's copy is concentric (positive: towards the center of a circle); ellipses have no offset.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1548,6 +1548,16 @@ No parameters.
 | `rotation` | number | optional | Rotation in degrees counter-clockwise. |
 | `type` | id or name | optional | Text type id or name (default: the default text type). |
 | `width` | number | optional | Wrapping width in paper millimeters (multiline text). |
+
+### `detail_line_create`
+
+*edit* — Draw detail lines in a 2D view (plan, ceiling plan, elevation, section, legend or drafting view): lines, arcs, circles and ellipses in the view's drawing coordinates (meters, as for dimensions and text notes), shown only in that view, on top of the model. Each curve becomes one element (a polyline is its segments; rectangles and polygons their sides), all in one undo step. Detail lines are left out of 3D views and IFC export; DXF export puts them on a layer named after their style.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `curves` | [JSON, …] | required | The curves to draw, as for sketches (`line`, `arc`, `circle`, `ellipse`, `rectangle`, `polygon`). |
+| `view` | id or name | required | View id or name. |
+| `style` | string | optional | Line style: thin (default), medium, wide, hidden, dashed, center or dotted. |
 
 ### `text_add_leader`
 

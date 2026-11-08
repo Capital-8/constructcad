@@ -1456,13 +1456,14 @@ impl<'a> Exporter<'a> {
         let mut base =
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
-            // Rooms, grids, dimensions, texts, imported drawings, masses, shafts
-            // and pads have no IFC type object.
+            // Rooms, grids, dimensions, texts, detail lines, imported drawings,
+            // masses, shafts and pads have no IFC type object.
             TypeData::Room {}
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::CadImport {}
+            | TypeData::DetailLine {}
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
             | TypeData::Pad { .. } => {

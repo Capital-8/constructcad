@@ -33,6 +33,9 @@ pub enum Tool {
         type_id: ElementTypeId,
     },
     Section,
+    /// Draw detail lines in the active 2D view (mode and style in
+    /// `AppState::detail`, see [`crate::detail_ui`]).
+    DetailLine,
     Room {
         type_id: ElementTypeId,
     },
@@ -182,6 +185,7 @@ impl Tool {
             Tool::Demolish => "tool-demolish",
             Tool::CurtainGrid => "tool-curtain-grid",
             Tool::Text { .. } => "tool-text",
+            Tool::DetailLine => "tool-detail-line",
             Tool::AddLeader { .. } => "tool-add-leader",
             Tool::Opening { floor: false, .. } => "tool-roof-opening",
             Tool::Opening { floor: true, .. } => "tool-floor-opening",
@@ -231,6 +235,7 @@ impl Tool {
             Tool::Pipe { .. } => Some(Category::Pipe),
             Tool::Conduit { .. } => Some(Category::Conduit),
             Tool::Text { .. } => Some(Category::Text),
+            Tool::DetailLine => Some(Category::DetailLine),
             _ => None,
         }
     }
@@ -294,6 +299,7 @@ impl Tool {
             Category::Pipe => Tool::Pipe { type_id },
             Category::Conduit => Tool::Conduit { type_id },
             Category::Text => Tool::Text { type_id },
+            Category::DetailLine => Tool::DetailLine,
             // Imported, not drawn.
             Category::CadImport | Category::TitleBlock => return None,
         })
@@ -356,6 +362,11 @@ pub enum Drag {
         id: ElementId,
         at_start: bool,
         fixed: DVec2,
+    },
+    /// A grip of a selected detail line (see [`crate::sketch_mode::moved`] for `which`).
+    DetailGrip {
+        id: ElementId,
+        which: u8,
     },
     /// The curvature handle of an arc wall from `a` to `b`: the arc passes through the cursor.
     Bend {
@@ -707,7 +718,8 @@ pub(crate) fn snap_at(
 
 const SNAP_PX: f64 = 10.0;
 
-/// Snap features of the imported drawings shown in the active view near `raw`.
+/// Snap features of the imported drawings and detail lines shown in the
+/// active view near `raw`.
 fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
     let mut out = cc_core::cad::CadSnap::default();
     let Some(view) = state.active_view else { return out };
@@ -715,7 +727,11 @@ fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
         .project()
         .elements
         .values()
-        .filter(|e| matches!(&e.kind, ElementKind::CadImport(c) if c.view == view))
+        .filter(|e| match &e.kind {
+            ElementKind::CadImport(c) => c.view == view,
+            ElementKind::DetailLine(l) => l.view == view && crate::detail_ui::near(l, raw, r),
+            _ => false,
+        })
         .map(|e| e.id)
         .collect();
     if ids.is_empty() {
@@ -726,6 +742,9 @@ fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
     for id in ids {
         if !drawing.prims.iter().any(|p| p.element() == Some(id)) {
             continue;
+        }
+        if let Some(ElementKind::DetailLine(l)) = state.project().element(id).map(|e| &e.kind) {
+            l.snap_features(&mut out);
         }
         if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| &e.kind) {
             let f = c.snap_features(raw, r);
@@ -1279,6 +1298,36 @@ pub fn handle(
         (Tool::AddLeader { id }, _) => {
             let px_per_mm = xf.scale * view.scale.max(1) as f64 / 1000.0;
             crate::text_tool::add_leader_tool(ui, resp, painter, state, view, *id, xf, px_per_mm)
+        }
+        // Detail lines go in any view that holds drawings.
+        (Tool::DetailLine, _) if cc_views::hosts_cad(&view.kind) => {
+            crate::detail_ui::tool(ui, resp, painter, state, view, xf);
+        }
+        // Outside plans the modify tools edit what the view owns (detail
+        // lines, texts, dimensions), in its drawing coordinates.
+        (
+            Tool::Move
+            | Tool::Copy
+            | Tool::Rotate
+            | Tool::Mirror { .. }
+            | Tool::Array
+            | Tool::TrimCorner
+            | Tool::TrimExtend
+            | Tool::Split
+            | Tool::Offset,
+            _,
+        ) if !is_plan && cc_views::hosts_cad(&view.kind) => {
+            if crate::detail_ui::view_owned(state, &tool) {
+                let level = view.level().or_else(|| state.project().levels.first().map(|l| l.id));
+                if let Some(level) = level {
+                    crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool);
+                }
+            } else {
+                if resp.clicked() {
+                    state.message = t!("msg-plan-only");
+                }
+                select(ui, resp, painter, state, false, xf, drawing);
+            }
         }
         (_, None) | (_, Some(_)) if !is_plan => {
             if resp.clicked() {
@@ -3023,6 +3072,10 @@ fn select(
     if movable && crate::section_mark::select(ui, resp, painter, state, xf, drawing) {
         return;
     }
+    // The grips of selected detail lines, in any view that holds them.
+    if crate::detail_ui::grips(ui, resp, painter, state, xf) {
+        return;
+    }
     let raw = resp.hover_pos().map(|p| xf.to_world(p));
     let tol = 5.0 / xf.scale;
     let (ctrl, shift) = ui.input(|i| (i.modifiers.command, i.modifiers.shift));
@@ -3262,7 +3315,13 @@ fn select(
                 }
             }
             // Handled above while the pointer is over the view.
-            Some(Drag::Grip { .. } | Drag::Bend { .. } | Drag::Hotspot { .. } | Drag::Section { .. }) => {}
+            Some(
+                Drag::Grip { .. }
+                | Drag::DetailGrip { .. }
+                | Drag::Bend { .. }
+                | Drag::Hotspot { .. }
+                | Drag::Section { .. },
+            ) => {}
             Some(Drag::Tag { tag, start }) => {
                 if let (Some(raw), Some(view)) = (raw.or(state.cursor), state.active_view)
                     && raw.distance(start) > 1e-6
