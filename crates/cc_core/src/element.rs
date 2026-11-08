@@ -65,6 +65,8 @@ pub enum ElementKind {
     FilledRegion(crate::region::Region),
     /// A 2D area of one view that hides the model's linework under it.
     MaskingRegion(crate::region::Region),
+    /// The elevation of a point, written in one view.
+    LevelMark(Box<crate::level_mark::LevelMark>),
 }
 
 impl Element {
@@ -99,6 +101,7 @@ impl Element {
             ElementKind::DetailLine(_) => Category::DetailLine,
             ElementKind::FilledRegion(_) => Category::FilledRegion,
             ElementKind::MaskingRegion(_) => Category::MaskingRegion,
+            ElementKind::LevelMark(_) => Category::LevelMark,
         }
     }
 
@@ -111,6 +114,7 @@ impl Element {
             ElementKind::CadImport(c) => Some(c.view),
             ElementKind::DetailLine(l) => Some(l.view),
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some(r.view),
+            ElementKind::LevelMark(m) => Some(m.view),
             _ => None,
         }
     }
@@ -260,6 +264,7 @@ impl Element {
                     *vertex += delta;
                 }
             }
+            ElementKind::LevelMark(m) => m.position += delta,
             ElementKind::Text(t) => {
                 t.position += delta;
                 for l in &mut t.leaders {

@@ -248,6 +248,17 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
                 derived.insert("check".into(), json!(g.check));
             }
         }
+        ElementKind::LevelMark(m) => {
+            if let (Some(view), Some(ty)) = (p.view(m.view), p.element_type(e.type_id)) {
+                if let Some(levels) = cc_geom::level_mark::levels(p, view, m) {
+                    derived.insert("finished".into(), json!(levels.finished));
+                    derived.insert("raw".into(), json!(levels.raw));
+                }
+                if let Some(texts) = cc_views::level_marks::texts(p, view, m, &ty.data) {
+                    derived.insert("texts".into(), json!(texts));
+                }
+            }
+        }
         ElementKind::Pipe(seg) | ElementKind::Conduit(seg) => {
             derived.insert("length".into(), json!(seg.length()));
             derived.insert("slope".into(), json!(seg.slope()));

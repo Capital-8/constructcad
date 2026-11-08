@@ -54,6 +54,8 @@ pub enum Icon {
     FilledRegion,
     MaskingRegion,
     LineStyles,
+    LevelMarkPlan,
+    LevelMarkSection,
     Leader,
     ChevronDown,
     ChevronUp,
@@ -171,7 +173,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 156] = [
+    pub const ALL: [Icon; 158] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -215,6 +217,8 @@ impl Icon {
         Icon::FilledRegion,
         Icon::MaskingRegion,
         Icon::LineStyles,
+        Icon::LevelMarkPlan,
+        Icon::LevelMarkSection,
         Icon::Leader,
         Icon::ChevronDown,
         Icon::ChevronUp,
@@ -376,6 +380,8 @@ impl Icon {
             Icon::FilledRegion => include_str!("../../../assets/icons/ui/filled-region.svg"),
             Icon::MaskingRegion => include_str!("../../../assets/icons/ui/masking-region.svg"),
             Icon::LineStyles => include_str!("../../../assets/icons/ui/line-styles.svg"),
+            Icon::LevelMarkPlan => include_str!("../../../assets/icons/ui/level-mark-plan.svg"),
+            Icon::LevelMarkSection => include_str!("../../../assets/icons/ui/level-mark-section.svg"),
             Icon::Leader => include_str!("../../../assets/icons/ui/leader.svg"),
             Icon::ChevronDown => include_str!("../../../assets/icons/ui/chevron-down.svg"),
             Icon::ChevronUp => include_str!("../../../assets/icons/ui/chevron-up.svg"),

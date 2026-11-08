@@ -248,7 +248,12 @@ impl Category {
     pub fn is_phased(self) -> bool {
         !matches!(
             self,
-            Category::Dimension | Category::Text | Category::Grid | Category::CadImport | Category::TitleBlock
+            Category::Dimension
+                | Category::Text
+                | Category::LevelMark
+                | Category::Grid
+                | Category::CadImport
+                | Category::TitleBlock
         )
     }
 }

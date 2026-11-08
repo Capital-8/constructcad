@@ -40,6 +40,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Railing => Icon::Railing,
         Category::Component => Icon::Component,
         Category::Text | Category::TitleBlock => Icon::Text,
+        Category::LevelMark => Icon::LevelMarkPlan,
         Category::CadImport => Icon::CadImport,
         Category::DetailLine => Icon::DetailLine,
         Category::FilledRegion => Icon::FilledRegion,
@@ -708,6 +709,9 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
         )
     });
     group(ui, t!("group-text"), |ui| command_buttons(ui, state, &[UiCommand::Text, UiCommand::AddLeader]));
+    group(ui, t!("group-level-marks"), |ui| {
+        command_buttons(ui, state, &[UiCommand::LevelMarkPlan, UiCommand::LevelMarkSection]);
+    });
     group(ui, t!("group-tags"), |ui| command_button(ui, state, UiCommand::StructureTags));
     group(ui, t!("group-selection"), |ui| command_button(ui, state, UiCommand::Select));
 }
@@ -1089,6 +1093,9 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 }
             }
             Tool::Text { .. } => crate::text_tool::options(ui, state, false),
+            Tool::LevelMark { .. } => {
+                ui.label(theme::muted(t!("hint-level-mark")));
+            }
             Tool::AddLeader { .. } => crate::text_tool::options(ui, state, true),
             Tool::DetailLine => crate::detail_ui::options(ui, state),
             Tool::Column { .. } => {

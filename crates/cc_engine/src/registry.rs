@@ -266,6 +266,8 @@ registry![
         region::FilledRegionCreate,
         region::MaskingRegionCreate,
         region::FilledRegionTypeCreate,
+        level_mark::LevelMarkCreate,
+        level_mark::LevelMarkTypeCreate,
         annotate::TextAddLeader,
         annotate::TextRemoveLeader,
     ],

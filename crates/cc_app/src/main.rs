@@ -25,6 +25,7 @@ mod graphics_dialog;
 mod home;
 mod i18n;
 mod icons;
+mod level_mark_ui;
 mod library;
 mod line_styles_dialog;
 mod material_browser;
