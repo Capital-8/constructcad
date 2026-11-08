@@ -52,6 +52,7 @@ mod sheet_props;
 mod side_panels;
 mod site_ui;
 mod sketch_mode;
+mod snap_geom;
 mod stair_ui;
 mod state;
 mod systems_dialog;

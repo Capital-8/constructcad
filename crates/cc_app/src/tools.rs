@@ -696,8 +696,12 @@ enum SnapKind {
     Nearest,
     /// On a guide from an acquired point.
     Alignment,
-    /// Where two guides cross.
+    /// Where two guides cross, or two lines or arcs.
     Intersection,
+    /// The foot of the perpendicular from the point a segment is drawn from.
+    Perpendicular,
+    /// Where a line from the point a segment is drawn from touches an arc or circle.
+    Tangent,
     Free,
 }
 
@@ -946,6 +950,18 @@ fn snap_with(
     if let Some((p, _)) = nearest(&mids) {
         return Snap::at(p, SnapKind::Midpoint);
     }
+    // Where two lines or arcs cross; the perpendicular and tangent from the anchor (issue #159).
+    if let Some(p) = crate::snap_geom::crossing(&lines, &arcs, raw, r) {
+        return Snap::at(p, SnapKind::Intersection);
+    }
+    if let Some(a) = anchor {
+        if let Some(p) = crate::snap_geom::perpendicular(a, &lines, &arcs, raw, r) {
+            return Snap { point: p, kind: SnapKind::Perpendicular, guides: [Some((a, p)), None] };
+        }
+        if let Some(p) = crate::snap_geom::tangent(a, &arcs, raw, r) {
+            return Snap { point: p, kind: SnapKind::Tangent, guides: [Some((a, p)), None] };
+        }
+    }
 
     // Guides (origin, unit direction) passing near the pointer.
     let mut origins: Vec<DVec2> = tracked.iter().chain(extra).copied().chain(anchor).collect();
@@ -1067,6 +1083,18 @@ pub(crate) fn draw_snap(painter: &Painter, xf: &Xf, s: Snap) {
         }
         SnapKind::Alignment => {
             painter.circle_stroke(c, 4.0, stroke);
+        }
+        SnapKind::Perpendicular => {
+            // A right angle on its base.
+            let (l, r, top) = (c + egui::vec2(-6.0, 6.0), c + egui::vec2(6.0, 6.0), c + egui::vec2(-6.0, -6.0));
+            painter.line_segment([l, r], stroke);
+            painter.line_segment([l, top], stroke);
+            painter.add(egui::Shape::line(vec![c + egui::vec2(-6.0, 0.0), c, c + egui::vec2(0.0, 6.0)], stroke));
+        }
+        SnapKind::Tangent => {
+            // A circle under a line that touches it.
+            painter.circle_stroke(c + egui::vec2(0.0, 2.0), 4.5, stroke);
+            painter.line_segment([c + egui::vec2(-7.0, -2.5), c + egui::vec2(7.0, -2.5)], stroke);
         }
         SnapKind::Endpoint => {
             painter.rect_stroke(
