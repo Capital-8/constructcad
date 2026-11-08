@@ -82,7 +82,11 @@ fn plan(s: &mut Session) -> u64 {
 }
 
 fn import(s: &mut Session, args: Value) -> u64 {
-    let path = scratch("explode.dxf");
+    // A file of its own per call: the tests run in parallel and a shared one
+    // could be read while another test rewrites it.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = scratch(&format!("explode-{n}.dxf"));
     std::fs::write(&path, sample_dxf()).unwrap();
     let mut args = args;
     args["path"] = json!(path);
