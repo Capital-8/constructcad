@@ -124,11 +124,14 @@ pub fn central(ui: &mut Ui, state: &mut AppState) {
         cam.center -= DVec2::new(f64::from(d.x), -f64::from(d.y)) / cam.scale;
     }
     if let Some(hover) = resp.hover_pos() {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-        if scroll != 0.0 {
+        let gesture = crate::gestures::read(ui);
+        let d = gesture.pan;
+        cam.center -= DVec2::new(f64::from(d.x), -f64::from(d.y)) / cam.scale;
+        let factor = gesture.zoom(0.002);
+        if (factor - 1.0).abs() > 1e-6 {
             let xf = Xf { screen: rect.center(), origin: cam.center, scale: cam.scale };
             let before = xf.to_world(hover);
-            cam.scale = (cam.scale * (1.0 + f64::from(scroll) * 0.002)).clamp(50.0, 1e6);
+            cam.scale = (cam.scale * factor).clamp(50.0, 1e6);
             let after = Xf { scale: cam.scale, ..xf }.to_world(hover);
             cam.center += before - after;
         }

@@ -97,6 +97,10 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
 
+## Navigating views
+
+In 2D and 3D views the mouse wheel zooms around the cursor and a middle (or, in 3D views, right) drag pans; a middle double-click fits the view. On a trackpad, two fingers pan and a pinch zooms; on a Mac, Cmd and two fingers zoom too. The views tell a trackpad from a wheel by the scroll it reports (points, not lines); *Preferences → Interface → Trackpad scrolling pans* turns this off, so that any scrolling zooms (for a mouse that reports its wheel like a trackpad). The component, profile and title block editors, the visual programming editor and the site map work the same way.
+
 ## Selecting in 2D views
 
 A click picks the element under the pointer (Ctrl adds or removes it). A drag that starts on empty paper, or inside a floor, a hatch or another fill, draws a selection box: dragged to the right it is a window and takes the elements wholly inside it (their lines, fills and texts); dragged to the left it is a crossing, dashed and green, and also takes those it cuts or lies in: a wall crossed between its ends, a floor around the box, a text anchored in it. Room areas and imported drawings are not taken by a crossing (a window around them takes them). Ctrl keeps the current selection and adds to it. A drag that starts on an element's line, or on an element already selected, moves it instead (Ctrl+drag copies).

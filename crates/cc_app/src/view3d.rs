@@ -300,8 +300,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if resp.drag_started() && !zooming && v3.select_start.is_none() {
         v3.remember();
     }
-    let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) as f64 } else { 0.0 };
-    if scroll != 0.0 {
+    // Wheel or pinch zoom, two-finger (trackpad) pan (see `gestures`).
+    let gesture = if resp.hovered() { Some(crate::gestures::read(ui)) } else { None };
+    let zoom = gesture.map_or(1.0, |g| g.zoom(0.0025));
+    let finger_pan = gesture.map_or(egui::Vec2::ZERO, |g| g.pan);
+    if (zoom - 1.0).abs() > 1e-6 || finger_pan != egui::Vec2::ZERO {
         if now - v3.last_wheel > 0.6 {
             v3.remember();
         }
@@ -318,7 +321,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         cam.yaw_deg += d.x as f64 * 0.4;
         cam.pitch_deg = (cam.pitch_deg + d.y as f64 * 0.4).clamp(-89.0, 89.0);
         v3.camera_dirty = true;
-    } else if resp.dragged_by(PointerButton::Middle) || resp.dragged_by(PointerButton::Secondary) {
+    } else if resp.dragged_by(PointerButton::Middle)
+        || resp.dragged_by(PointerButton::Secondary)
+        || finger_pan != egui::Vec2::ZERO
+    {
+        let d = if finger_pan != egui::Vec2::ZERO { finger_pan } else { d };
         let fwd = cam.forward();
         let right = fwd.cross(DVec3::Z).normalize_or_zero();
         let up = right.cross(fwd);
@@ -326,8 +333,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         cam.target += (-right * d.x as f64 + up * d.y as f64) * k;
         v3.camera_dirty = true;
     }
-    if scroll != 0.0 {
-        cam.distance = (cam.distance * (-scroll * 0.0025).exp()).clamp(0.5, 5000.0);
+    if (zoom - 1.0).abs() > 1e-6 {
+        cam.distance = (cam.distance / zoom).clamp(0.5, 5000.0);
         v3.camera_dirty = true;
     }
     if resp.double_clicked_by(PointerButton::Middle) {
@@ -519,7 +526,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     // Persist the camera into the view when the interaction ends (not undoable).
     let interacting = resp.dragged()
         || v3.anim.is_some()
-        || ui.input(|i| i.smooth_scroll_delta.y != 0.0)
+        || ui.input(|i| i.smooth_scroll_delta != egui::Vec2::ZERO || i.zoom_delta() != 1.0)
         || cube.orbit.is_some()
         || cube.turn != 0.0;
     if v3.camera_dirty && !interacting {

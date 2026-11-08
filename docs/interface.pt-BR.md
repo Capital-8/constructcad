@@ -97,6 +97,10 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
 
+## Navegando nas vistas
+
+Nas vistas 2D e 3D a roda do mouse dá zoom em torno do cursor e arrastar com o botão do meio (ou, nas vistas 3D, com o direito) move a vista; um clique duplo com o botão do meio enquadra a vista. No trackpad, dois dedos movem a vista e o gesto de pinça dá zoom; no Mac, Cmd com dois dedos também dá zoom. As vistas distinguem o trackpad da roda pela rolagem que ele informa (em pontos, não em linhas); *Preferências → Interface → Rolagem do trackpad move a vista* desliga isso, e então qualquer rolagem dá zoom (para um mouse que informa a roda como um trackpad). Os editores de componente, de perfil e de carimbo, o editor de programação visual e o mapa do terreno funcionam do mesmo jeito.
+
 ## Selecionar em vistas 2D
 
 Um clique escolhe o elemento sob o cursor (Ctrl soma ou retira). Um arrasto que começa no papel vazio, ou dentro de uma laje, de um hachurado ou de outro preenchimento, desenha uma caixa de seleção: arrastada para a direita é uma janela e pega os elementos inteiramente dentro dela (linhas, preenchimentos e textos); para a esquerda é um cruzamento, tracejado e verde, e pega também os que ela corta ou em que está: uma parede cortada entre as pontas, uma laje em volta da caixa, um texto ancorado nela. Áreas de ambiente e desenhos importados não entram por cruzamento (uma janela em volta deles os pega). Ctrl mantém a seleção atual e soma a ela. Um arrasto que começa na linha de um elemento, ou num elemento já selecionado, o move (Ctrl+arrastar copia).

@@ -21,6 +21,7 @@ mod dialog;
 mod dialogs;
 mod dim_edit;
 mod engine_edit;
+mod gestures;
 mod gpu;
 mod graph_ui;
 mod graphics_dialog;

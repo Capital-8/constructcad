@@ -318,16 +318,20 @@ fn map(ui: &mut Ui, d: &mut SiteDialog) {
     let (cx, cy) = world(d.site.latitude, d.site.longitude);
     let (cx, cy) = (cx * scale, cy * scale);
     // Drag moves the map under the marker; the wheel zooms about the center.
-    if r.dragged() {
-        let delta = r.drag_delta();
+    // Two fingers on a trackpad move the map like a drag (see `gestures`).
+    let gesture = if r.hovered() { Some(crate::gestures::read(ui)) } else { None };
+    let fingers = gesture.map_or(egui::Vec2::ZERO, |g| g.pan);
+    if r.dragged() || fingers != egui::Vec2::ZERO {
+        let delta = if r.dragged() { r.drag_delta() } else { fingers };
         let (lat, lon) = unworld((cx - delta.x as f64) / scale, (cy - delta.y as f64) / scale);
         d.site.latitude = lat;
         d.site.longitude = ((lon + 180.0).rem_euclid(360.0)) - 180.0;
     }
-    if r.hovered() {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-        if scroll != 0.0 {
-            d.zoom = (d.zoom + scroll as f64 / 240.0).clamp(MIN_ZOOM, MAX_ZOOM);
+    if let Some(g) = gesture {
+        // One zoom level per 240 points of wheel scroll, or per doubling of a pinch.
+        let levels = g.zoom(std::f64::consts::LN_2 / 240.0).log2();
+        if levels.abs() > 1e-9 {
+            d.zoom = (d.zoom + levels).clamp(MIN_ZOOM, MAX_ZOOM);
         }
     }
     let painter = ui.painter_at(rect);
