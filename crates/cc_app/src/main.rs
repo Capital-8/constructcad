@@ -41,6 +41,7 @@ mod schedule_ui;
 mod section_mark;
 mod sheet;
 mod sheet_props;
+mod site_ui;
 mod sketch_mode;
 mod stair_ui;
 mod state;

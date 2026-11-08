@@ -326,7 +326,8 @@ impl<'a> Exporter<'a> {
         .collect();
         let units = w.add("IFCUNITASSIGNMENT", args![units]);
         let wcs = w.add("IFCAXIS2PLACEMENT3D", args![self.origin3, self.dir_z, self.dir_x]);
-        let north = w.add("IFCDIRECTION", args![reals(&[0.0, 1.0])]);
+        let north = self.project.info.site.as_ref().map_or(glam::DVec2::Y, |site| site.north());
+        let north = w.add("IFCDIRECTION", args![reals(&[north.x, north.y])]);
         let model = w.add("IFCGEOMETRICREPRESENTATIONCONTEXT", args![Value::Null, "Model", 3i64, 1e-5, wcs, north]);
         let sub = |w: &mut StepWriter, id: &str, view: &'static str| {
             let d = Value::Derived;
@@ -365,10 +366,47 @@ impl<'a> Exporter<'a> {
         )
     }
 
+    /// The project's postal address (its address line and the site's address parts), if any.
+    fn write_address(&mut self) -> Option<Id> {
+        let info = &self.project.info;
+        let parts = info.site.as_ref().map(|s| s.address.clone()).unwrap_or_default();
+        let street = [parts.street.trim(), parts.number.trim()]
+            .iter()
+            .filter(|s| !s.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(", ");
+        let line = if info.address.trim().is_empty() { street } else { info.address.clone() };
+        if line.is_empty() && parts.is_empty() {
+            return None;
+        }
+        let lines = if line.is_empty() { Value::Null } else { Value::List(vec![Value::Str(line)]) };
+        let args = args![
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            lines,
+            Value::Null,
+            opt_str(&parts.city),
+            opt_str(&parts.region),
+            opt_str(&parts.postcode),
+            opt_str(&parts.country)
+        ];
+        Some(self.w.add("IFCPOSTALADDRESS", args))
+    }
+
     fn write_spatial_structure(&mut self, project_id: Id) {
         let site_placement = self.local_placement(None, Frame::at(DVec3::ZERO));
         let gid = self.guid("site");
         let n = Value::Null;
+        let address = self.write_address();
+        let location = self.project.info.site.clone();
+        let angle = |deg: f64| Value::List(cc_core::site::to_dms(deg).into_iter().map(Value::Int).collect());
+        let (lat, lon, elevation, long_name) = match &location {
+            Some(l) => (angle(l.latitude), angle(l.longitude), Value::Real(l.elevation), opt_str(&l.place)),
+            None => (n.clone(), n.clone(), n.clone(), n.clone()),
+        };
         let site = self.w.add(
             "IFCSITE",
             args![
@@ -379,31 +417,15 @@ impl<'a> Exporter<'a> {
                 n.clone(),
                 site_placement,
                 n.clone(),
-                n.clone(),
+                long_name,
                 Value::Enum("ELEMENT"),
+                lat,
+                lon,
+                elevation,
                 n.clone(),
-                n.clone(),
-                n.clone(),
-                n.clone(),
-                n.clone()
+                address
             ],
         );
-        let address = (!self.project.info.address.is_empty()).then(|| {
-            let lines = vec![self.project.info.address.clone()];
-            let args = args![
-                Value::Null,
-                Value::Null,
-                Value::Null,
-                Value::Null,
-                lines,
-                Value::Null,
-                Value::Null,
-                Value::Null,
-                Value::Null,
-                Value::Null
-            ];
-            self.w.add("IFCPOSTALADDRESS", args)
-        });
         let building_placement = self.local_placement(Some(site_placement), Frame::at(DVec3::ZERO));
         let gid = self.guid("building");
         let name = opt_str(&self.project.info.name);

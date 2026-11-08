@@ -3101,3 +3101,85 @@ fn railings_take_and_leave_a_host() {
     assert_eq!(fails(&mut s, "railing_host_set", json!({"id": drawn, "detach": true})), ErrorCode::InvalidArguments);
     assert_eq!(s.doc.undo_depth(), depth + 1);
 }
+
+#[test]
+fn site_location_is_set_patched_and_cleared() {
+    let mut s = Session::default();
+    assert_eq!(run(&mut s, "site_get", json!({}))["site"], Value::Null);
+    // A new location needs both coordinates.
+    assert_eq!(fails(&mut s, "site_set", json!({"latitude": -3.73})), ErrorCode::InvalidArguments);
+    let out = run(
+        &mut s,
+        "site_set",
+        json!({
+            "latitude": -3.7319, "longitude": -38.5267, "elevation": 21.5, "true_north": 370,
+            "place": "Praça do Ferreira",
+            "address": {"street": "Rua Floriano Peixoto", "number": "10", "city": "Fortaleza", "region": "CE", "country": "Brasil"}
+        }),
+    );
+    assert_eq!(out["site"]["elevation"], 21.5);
+    assert_eq!(out["site"]["true_north"], 10.0);
+    assert_eq!(out["address"], "Rua Floriano Peixoto, 10, Fortaleza - CE, Brasil");
+    // Fields left out keep their values; the project address stays when asked.
+    let out = run(&mut s, "site_set", json!({"elevation": 30, "address": {"number": "12"}, "project_address": false}));
+    assert_eq!(out["site"]["latitude"], -3.7319);
+    assert_eq!(out["site"]["address"]["number"], "12");
+    assert_eq!(out["address"], "Rua Floriano Peixoto, 10, Fortaleza - CE, Brasil");
+    assert_eq!(fails(&mut s, "site_set", json!({"latitude": 95})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "site_set", json!({"address": {"planet": "Earth"}})), ErrorCode::InvalidArguments);
+    assert_eq!(fails(&mut s, "site_set", json!({"elevation": 20000})), ErrorCode::InvalidArguments);
+    // The location is saved with the project and reloads.
+    let path = scratch("site.ccad");
+    run(&mut s, "project_save", json!({"path": path}));
+    let mut t = Session::default();
+    run(&mut t, "project_open", json!({"path": path}));
+    assert_eq!(run(&mut t, "site_get", json!({}))["site"]["elevation"], 30.0);
+    // One undo step each; clear removes it.
+    run(&mut s, "site_set", json!({"clear": true}));
+    assert_eq!(run(&mut s, "site_get", json!({}))["site"], Value::Null);
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "site_get", json!({}))["site"]["elevation"], 30.0);
+}
+
+#[test]
+fn site_context_comes_in_as_a_drawing_and_masses() {
+    let mut s = Session::default();
+    let overpass = json!({"elements": [
+        {"type": "way", "id": 1, "tags": {"building": "yes", "building:levels": "3", "name": "Bloco A"},
+         "geometry": [{"lat": -3.7319, "lon": -38.5267}, {"lat": -3.7319, "lon": -38.5265},
+                      {"lat": -3.7317, "lon": -38.5265}, {"lat": -3.7317, "lon": -38.5267},
+                      {"lat": -3.7319, "lon": -38.5267}]},
+        {"type": "way", "id": 2, "tags": {"highway": "residential", "name": "Rua Major Facundo"},
+         "geometry": [{"lat": -3.7322, "lon": -38.5275}, {"lat": -3.7322, "lon": -38.5255}]}
+    ]})
+    .to_string();
+    // The location places the data, so it comes first.
+    assert_eq!(fails(&mut s, "site_context_import", json!({"data": overpass})), ErrorCode::Rejected);
+    run(&mut s, "site_set", json!({"latitude": -3.7319, "longitude": -38.5267}));
+    let out = run(&mut s, "site_context_import", json!({"data": overpass, "extent": 150}));
+    assert_eq!(out["layers"]["buildings"], 1);
+    assert_eq!(out["layers"]["streets"], 1);
+    assert_eq!(out["layers"]["names"], 1);
+    assert!(out["attribution"].as_str().unwrap().contains("OpenStreetMap"));
+    let masses = out["masses"].as_array().unwrap();
+    assert_eq!(masses.len(), 1);
+    let mass = run(&mut s, "element_get", json!({"id": masses[0]}));
+    assert!((mass["params"]["height"].as_f64().unwrap() - 9.0).abs() < 1e-9, "{mass}");
+    assert!(mass["comments"].as_str().unwrap().contains("Bloco A"));
+    // The footprint starts at the project origin: the site's point.
+    let outline = mass["params"]["outline"].as_array().unwrap();
+    assert!(outline.iter().any(|p| p[0].as_f64().unwrap().abs() < 0.01 && p[1].as_f64().unwrap().abs() < 0.01));
+    let drawing = run(&mut s, "element_get", json!({"id": out["drawing"]}));
+    assert_eq!(drawing["category"], "cadimport");
+    // One undo step removes both.
+    run(&mut s, "undo", json!({}));
+    assert!(run(&mut s, "elements_list", json!({"category": "mass"})).as_array().unwrap().is_empty());
+    // Without masses, only the drawing; data with nothing to draw is refused.
+    let out = run(&mut s, "site_context_import", json!({"data": overpass, "masses": false}));
+    assert!(out["masses"].as_array().unwrap().is_empty());
+    assert_eq!(
+        fails(&mut s, "site_context_import", json!({"data": "{\"elements\": []}"})),
+        ErrorCode::InvalidArguments
+    );
+    assert_eq!(fails(&mut s, "site_context_import", json!({"data": "nonsense"})), ErrorCode::InvalidArguments);
+}

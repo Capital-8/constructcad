@@ -165,6 +165,8 @@ pub struct AppState {
     pub updates: crate::update::Updates,
     /// The plugins of the plugins folder and the Plugins window.
     pub plugins: crate::plugins_ui::Plugins,
+    /// The open Site Location window.
+    pub site: Option<crate::site_ui::SiteDialog>,
     pub thumbnail_jobs: Vec<crate::thumbnails::Job>,
     /// Samples whose thumbnail was already requested this session.
     pub requested_samples: std::collections::BTreeSet<&'static str>,
@@ -237,6 +239,7 @@ impl AppState {
             prefs: Default::default(),
             updates: Default::default(),
             plugins: Default::default(),
+            site: None,
             thumbnail_jobs: Vec::new(),
             requested_samples: Default::default(),
             clipboard: Default::default(),

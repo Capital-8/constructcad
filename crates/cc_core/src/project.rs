@@ -28,6 +28,9 @@ pub struct ProjectInfo {
     /// Fields named by the user, in the order they were added.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<ProjectField>,
+    /// Where the project stands on Earth (see [`crate::site`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<crate::site::SiteLocation>,
 }
 
 impl ProjectInfo {
@@ -162,6 +165,7 @@ impl Project {
             address: String::new(),
             author: String::new(),
             fields: Vec::new(),
+            site: None,
         };
         let ground = LevelId(p.alloc_id());
         let first = LevelId(p.alloc_id());

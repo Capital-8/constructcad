@@ -134,6 +134,15 @@ impl Project {
         self.info.fields.retain(|f| !f.name.trim().is_empty() && seen.insert(f.name.clone()));
         repairs += before - self.info.fields.len();
 
+        if let Some(site) = &mut self.info.site {
+            let (valid, fixes) = site.repair();
+            repairs += fixes;
+            if !valid {
+                self.info.site = None;
+                repairs += 1;
+            }
+        }
+
         // Curtain panels may only be component types.
         let components: std::collections::BTreeSet<crate::ElementTypeId> =
             self.types.values().filter(|t| matches!(t.data, TypeData::Component { .. })).map(|t| t.id).collect();
