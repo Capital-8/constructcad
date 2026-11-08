@@ -2699,6 +2699,7 @@ site-search-hint = ທີ່ຢູ່, ສະຖານທີ່ ຫຼື ພິ
 site-search = ຊອກຫາ
 site-search-none = ບໍ່ພົບຫຍັງ.
 site-request-failed = ການຮ້ອງຂໍລົ້ມເຫຼວ: { $error }
+site-server-busy = ເຊີບເວີຂໍ້ມູນແຜນທີ່ (OpenStreetMap Overpass) ກຳລັງຫຍຸ້ງ (ຂໍ້ຜິດພາດ { $status }), ແມ່ນແຕ່ຫຼັງຈາກລອງຫຼາຍຄັ້ງ. ລອງໃໝ່ໃນອີກສອງສາມນາທີ ຫຼື ດ້ວຍສີ່ຫຼ່ຽມທີ່ນ້ອຍກວ່າ.
 site-latitude = ເສັ້ນຂະໜານ
 site-longitude = ເສັ້ນແວງ
 site-elevation = ລະດັບຄວາມສູງ

@@ -2697,6 +2697,7 @@ site-search-hint = Address, place or coordinates
 site-search = Search
 site-search-none = Nothing found.
 site-request-failed = The request failed: { $error }
+site-server-busy = The map data server (OpenStreetMap Overpass) is busy (error { $status }), even after several tries. Try again in a few minutes, or with a smaller square.
 site-latitude = Latitude
 site-longitude = Longitude
 site-elevation = Elevation
