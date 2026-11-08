@@ -2593,3 +2593,58 @@ fn callouts_are_drawn_resized_and_opened() {
     }
     assert_eq!(harness.state().open_requests.last(), Some(&detail));
 }
+
+/// The Project Browser and Properties dock on either side, stacked or in
+/// columns of their own: dragged by their headers, or from the header's menu.
+#[test]
+fn side_panels_dock_by_dragging_their_headers() {
+    use crate::side_panels::{Pane, PanelLayout};
+    let mut harness = themed_harness(sample_state(), egui::vec2(1200.0, 800.0), egui::Theme::Light, |ui, state| {
+        crate::side_panels::show(ui, state);
+        egui::CentralPanel::default().show(ui, |ui| ui.label("views"));
+    });
+    let title = |h: &Harness<'static, AppState>, pane: Pane| h.get_by_label(&pane.title()).rect();
+    assert!(title(&harness, Pane::Browser).center().x < 300.0, "both on the left");
+    assert!(title(&harness, Pane::Properties).center().x < 300.0);
+
+    let press = |h: &mut Harness<'static, AppState>, pos: egui::Pos2, pressed: bool| {
+        h.input_mut().events.push(egui::Event::PointerMoved(pos));
+        let (button, modifiers) = (egui::PointerButton::Primary, egui::Modifiers::NONE);
+        h.input_mut().events.push(egui::Event::PointerButton { pos, button, pressed, modifiers });
+        h.run();
+    };
+    let drag = |h: &mut Harness<'static, AppState>, from: egui::Pos2, to: egui::Pos2| {
+        press(h, from, true);
+        for step in 1..=6 {
+            h.input_mut().events.push(egui::Event::PointerMoved(from + (to - from) * step as f32 / 6.0));
+            h.run();
+        }
+        press(h, to, false);
+        h.run();
+    };
+    // Properties to the window's right edge: one panel on each side.
+    let from = title(&harness, Pane::Properties).center();
+    drag(&mut harness, from, egui::pos2(1195.0, 400.0));
+    assert_eq!(harness.state().prefs.panels.right, vec![vec![Pane::Properties]]);
+    assert!(title(&harness, Pane::Properties).center().x > 900.0);
+    // The browser onto the top of Properties: stacked on the right.
+    let from = title(&harness, Pane::Browser).center();
+    let props = harness.get_by_label(&Pane::Properties.title()).rect();
+    drag(&mut harness, from, egui::pos2(props.center().x, props.top() + 30.0));
+    let stacked = PanelLayout { left: vec![], right: vec![vec![Pane::Browser, Pane::Properties]] };
+    assert_eq!(harness.state().prefs.panels, stacked);
+    let (b, p) = (title(&harness, Pane::Browser), title(&harness, Pane::Properties));
+    assert!(b.center().x > 900.0 && b.center().y < p.center().y, "browser above properties, on the right");
+
+    // The header's menu separates them, and resets the layout.
+    let mut state = sample_state();
+    state.prefs.panels = stacked;
+    let mut menu =
+        Harness::new_ui_state(|ui, state: &mut AppState| _ = crate::side_panels::menu(ui, state, Pane::Browser), state);
+    menu.get_by_label(&t!("panel-separate-from", "panel" => Pane::Properties.title())).click();
+    menu.run();
+    assert_eq!(menu.state().prefs.panels.right, vec![vec![Pane::Properties], vec![Pane::Browser]]);
+    menu.get_by_label(&t!("panel-reset-layout")).click();
+    menu.run();
+    assert_eq!(menu.state().prefs.panels, PanelLayout::default());
+}

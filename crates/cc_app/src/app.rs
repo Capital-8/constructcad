@@ -4,7 +4,7 @@ use crate::i18n::Language;
 use crate::state::{AppState, PendingAction};
 use crate::theme::PALETTE;
 use crate::tools::Tool;
-use crate::{actions, browser, canvas, dialogs, properties, ribbon, schedule_ui, sheet, t, theme, view3d};
+use crate::{actions, canvas, dialogs, ribbon, schedule_ui, sheet, t, theme, view3d};
 use cc_core::{Document, Project, ViewCategory, ViewId};
 use egui::{Event, Key, Modifiers, Ui, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
@@ -521,30 +521,8 @@ impl ConstructApp {
         egui::Panel::bottom("status")
             .frame(bar(PALETTE.surface, 3).stroke(egui::Stroke::new(1.0, PALETTE.border)))
             .show(ui, |ui| ribbon::status_bar(ui, state));
-        egui::Panel::left("left")
-            .frame(egui::Frame::new().fill(PALETTE.panel).stroke(egui::Stroke::new(1.0, PALETTE.border)))
-            .resizable(true)
-            .default_size(290.0)
-            .size_range(220.0..=520.0)
-            .show(ui, |ui| {
-                if env {
-                    crate::component_env::panel(ui, state);
-                    return;
-                }
-                // A profile being sketched: only its picked curve's properties.
-                if crate::profile_sketch::is_open(state) {
-                    properties::show(ui, state);
-                    return;
-                }
-                let h = ui.available_height();
-                egui::Panel::top("browser")
-                    .frame(egui::Frame::new().fill(PALETTE.panel))
-                    .resizable(true)
-                    .default_size(h * 0.5)
-                    .size_range(120.0..=h - 120.0)
-                    .show(ui, |ui| browser::show(ui, state));
-                properties::show(ui, state);
-            });
+        // The Project Browser and Properties, docked where the user put them.
+        crate::side_panels::show(ui, state);
         // The visual programming editor, under the views.
         if state.graph.open && !env {
             egui::Panel::bottom("graph")

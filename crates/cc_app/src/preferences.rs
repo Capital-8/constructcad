@@ -60,6 +60,8 @@ const PLUGIN_FOLDER_KEY: &str = "plugin_folder";
 const PLUGINS_OFF_KEY: &str = "plugins_off";
 /// eframe storage key of the plugins allowed to work with files (one id per line).
 const PLUGINS_FILES_KEY: &str = "plugins_files";
+/// eframe storage key of where the side panels are docked (`side_panels::PanelLayout::to_text`).
+const PANELS_KEY: &str = "side_panels";
 /// Most plugin ids kept in each of those lists.
 const MAX_PLUGIN_IDS: usize = 1000;
 
@@ -121,6 +123,8 @@ pub struct Preferences {
     pub plugins_off: BTreeSet<String>,
     /// Plugins the user allowed to work with files (the `files` permission).
     pub plugins_files: BTreeSet<String>,
+    /// Where the Project Browser and Properties are docked.
+    pub panels: crate::side_panels::PanelLayout,
 }
 
 impl Default for Preferences {
@@ -142,6 +146,7 @@ impl Default for Preferences {
             plugin_folder: None,
             plugins_off: BTreeSet::new(),
             plugins_files: BTreeSet::new(),
+            panels: Default::default(),
         }
     }
 }
@@ -238,6 +243,7 @@ impl Preferences {
             plugin_folder: folder(get(PLUGIN_FOLDER_KEY)),
             plugins_off: get(PLUGINS_OFF_KEY).map(|v| id_lines(&v)).unwrap_or_default(),
             plugins_files: get(PLUGINS_FILES_KEY).map(|v| id_lines(&v)).unwrap_or_default(),
+            panels: get(PANELS_KEY).and_then(|v| crate::side_panels::PanelLayout::from_text(&v)).unwrap_or_default(),
         }
     }
 
@@ -262,6 +268,7 @@ impl Preferences {
         let ids = |set: &BTreeSet<String>| set.iter().cloned().collect::<Vec<_>>().join("\n");
         set(PLUGINS_OFF_KEY, ids(&self.plugins_off));
         set(PLUGINS_FILES_KEY, ids(&self.plugins_files));
+        set(PANELS_KEY, self.panels.to_text());
     }
 
     /// Time between autosave copies, or `None` when autosave is off.
@@ -705,6 +712,15 @@ fn interface(ui: &mut Ui, state: &mut AppState) {
     }
     let label = t!("pref-detailed-tooltips");
     check_row(ui, &label, &mut state.prefs.detailed_tooltips, Some(t!("pref-detailed-tooltips-hint")));
+    group(ui, t!("pref-group-panels"), false);
+    table::row(ui, &t!("pref-panel-layout"), |ui| {
+        let default = crate::side_panels::PanelLayout::default();
+        let changed = state.prefs.panels != default;
+        if cell_button(ui, changed, t!("panel-reset-layout")).clicked() {
+            state.prefs.panels = default;
+        }
+    });
+    hint(ui, t!("panel-drag-hint"));
     group(ui, t!("pref-group-3d"), false);
     let label = t!("pref-select-drag-3d");
     check_row(ui, &label, &mut state.prefs.select_drag_3d, Some(t!("pref-select-drag-3d-hint")));
@@ -1050,6 +1066,10 @@ mod tests {
             plugin_folder: Some(PathBuf::from("/plugins")),
             plugins_off: BTreeSet::from(["old_tool".to_string()]),
             plugins_files: BTreeSet::from(["exporter".to_string(), "importer".to_string()]),
+            panels: crate::side_panels::PanelLayout {
+                left: vec![],
+                right: vec![vec![crate::side_panels::Pane::Properties], vec![crate::side_panels::Pane::Browser]],
+            },
         };
         let map = stored(&prefs);
         let back = Preferences::read(|k| map.get(k).cloned(), 1.0);
