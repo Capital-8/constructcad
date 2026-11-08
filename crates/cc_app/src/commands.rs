@@ -137,6 +137,8 @@ pub enum UiCommand {
     PanelDiagram,
     Dimension(DimensionMode),
     Text,
+    LevelMarkPlan,
+    LevelMarkSection,
     AddLeader,
     Move,
     CopyElements,
@@ -308,6 +310,8 @@ impl UiCommand {
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
+            LevelMarkPlan,
+            LevelMarkSection,
             AddLeader,
             Move,
             CopyElements,
@@ -474,6 +478,8 @@ impl UiCommand {
             PanelDiagram => Icon::Systems,
             Dimension(mode) => dimension_icon(mode),
             Text => Icon::Text,
+            LevelMarkPlan => Icon::LevelMarkPlan,
+            LevelMarkSection => Icon::LevelMarkSection,
             AddLeader => Icon::Leader,
             Move => Icon::Move,
             CopyElements | ClipboardCopy => Icon::Copy,
@@ -642,6 +648,8 @@ impl UiCommand {
             PanelDiagram => t!("action-panel-diagram"),
             Dimension(mode) => crate::i18n::tr(mode.key()),
             Text => t!("tool-text"),
+            LevelMarkPlan => t!("tool-level-mark-plan"),
+            LevelMarkSection => t!("tool-level-mark-section"),
             AddLeader => t!("tool-add-leader"),
             Move => t!("tool-move"),
             CopyElements => t!("tool-copy"),
@@ -826,6 +834,8 @@ impl UiCommand {
             Dimension(DimensionMode::Radial) => t!("cmd-desc-dim-radial"),
             Dimension(DimensionMode::Diameter) => t!("cmd-desc-dim-diameter"),
             Text => t!("cmd-desc-text"),
+            LevelMarkPlan => t!("cmd-desc-level-mark-plan"),
+            LevelMarkSection => t!("cmd-desc-level-mark-section"),
             AddLeader => t!("hint-add-leader-button"),
             Move => t!("cmd-desc-move"),
             CopyElements => t!("cmd-desc-copy-elements"),
@@ -1078,6 +1088,7 @@ impl UiCommand {
             ComponentLibrary => "component_library_list",
             Dimension(_) => "dimension_create",
             Text => "text_create",
+            LevelMarkPlan | LevelMarkSection => "level_mark_create",
             AddLeader => "text_add_leader",
             Move => "elements_move",
             CopyElements | Array => "elements_copy",
@@ -1206,6 +1217,8 @@ impl UiCommand {
             }
             Dimension(_) if Tool::for_category(project, Category::Dimension).is_none() => Some(t!("msg-no-type")),
             Text if Tool::for_category(project, Category::Text).is_none() => Some(t!("msg-no-type")),
+            LevelMarkPlan if !active_view_is(state, cc_core::View::is_plan) => Some(t!("msg-open-plan")),
+            LevelMarkSection if !active_view_is(state, |v| v.projection().is_some()) => Some(t!("why-open-section")),
             AddLeader if crate::ribbon::selected_text(state).is_none() && !self.selected(state) => {
                 Some(t!("why-select-text"))
             }
@@ -1348,6 +1361,7 @@ impl UiCommand {
                 .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::Dimension { .. })),
             Dimension(mode) => matches!(tool, Tool::Dimension { mode: m, .. } if *m == mode),
             Text => matches!(tool, Tool::Text { .. }),
+            LevelMarkPlan | LevelMarkSection => matches!(tool, Tool::LevelMark { .. }),
             AddLeader => matches!(tool, Tool::AddLeader { .. }),
             Move => *tool == Tool::Move,
             CopyElements => *tool == Tool::Copy,
@@ -1409,6 +1423,11 @@ fn mep_kind(state: &AppState, type_id: cc_core::ElementTypeId) -> Option<bool> {
     }
 }
 
+/// Whether the active view is one `test` accepts.
+fn active_view_is(state: &AppState, test: impl Fn(&cc_core::View) -> bool) -> bool {
+    state.active_view.and_then(|v| state.project().view(v)).is_some_and(test)
+}
+
 fn place_label(category: Category) -> String {
     match category {
         Category::Wall => t!("tool-wall"),
@@ -1431,6 +1450,7 @@ fn place_label(category: Category) -> String {
         Category::Conduit => t!("tool-conduit"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
+        Category::LevelMark => t!("tool-level-mark"),
         Category::TitleBlock => t!("category-title-block"),
         Category::Component => t!("tool-component"),
         Category::CadImport => t!("action-import-cad"),
@@ -1463,6 +1483,7 @@ fn place_description(category: Category) -> String {
         Category::Conduit => t!("cmd-desc-conduit"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
+        Category::LevelMark => t!("cmd-desc-level-mark-plan"),
         Category::TitleBlock => t!("category-title-block"),
         Category::Component => t!("cmd-desc-component"),
         Category::CadImport => t!("cmd-desc-import-cad"),
@@ -1681,6 +1702,17 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             if let Some(tool) = Tool::for_category(state.project(), Category::Text) {
                 state.set_tool(tool);
                 state.message = t!("hint-text");
+            }
+        }
+        LevelMarkPlan | LevelMarkSection => {
+            // A project gets its level mark type with its first mark.
+            if Tool::for_category(state.project(), Category::LevelMark).is_none() {
+                let command = cc_engine::commands::level_mark::LevelMarkTypeCreate::default();
+                crate::actions::run_command(state, command);
+            }
+            if let Some(tool) = Tool::for_category(state.project(), Category::LevelMark) {
+                state.set_tool(tool);
+                state.message = t!("hint-level-mark");
             }
         }
         AddLeader => {

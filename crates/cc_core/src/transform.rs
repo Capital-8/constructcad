@@ -140,6 +140,13 @@ impl Element {
                     d.offset = -d.offset;
                 }
             }
+            ElementKind::LevelMark(m) => {
+                p(&mut m.position);
+                // The values stay readable: a mirror moves them to the other side.
+                if t.mirror {
+                    m.flip = !m.flip;
+                }
+            }
             ElementKind::Text(note) => {
                 p(&mut note.position);
                 for l in &mut note.leaders {
@@ -396,6 +403,7 @@ impl crate::Project {
                 .is_some_and(|w| w.as_wall().is_some()),
             ElementKind::Dimension(d) => self.view(d.view).is_some(),
             ElementKind::Text(t) => self.view(t.view).is_some(),
+            ElementKind::LevelMark(m) => self.view(m.view).is_some(),
             ElementKind::CadImport(c) => self.view(c.view).is_some(),
             ElementKind::Pad(p) => set
                 .iter()

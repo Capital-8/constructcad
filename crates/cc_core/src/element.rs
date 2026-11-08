@@ -59,6 +59,8 @@ pub enum ElementKind {
     Topography(crate::topography::Topography),
     /// A building pad graded into its terrain.
     Pad(crate::pad::Pad),
+    /// The elevation of a point, written in one view.
+    LevelMark(Box<crate::level_mark::LevelMark>),
 }
 
 impl Element {
@@ -90,6 +92,7 @@ impl Element {
             ElementKind::Shaft(_) => Category::Shaft,
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
+            ElementKind::LevelMark(_) => Category::LevelMark,
         }
     }
 
@@ -100,6 +103,7 @@ impl Element {
             ElementKind::Dimension(d) => Some(d.view),
             ElementKind::Text(t) => Some(t.view),
             ElementKind::CadImport(c) => Some(c.view),
+            ElementKind::LevelMark(m) => Some(m.view),
             _ => None,
         }
     }
@@ -246,6 +250,7 @@ impl Element {
                     *vertex += delta;
                 }
             }
+            ElementKind::LevelMark(m) => m.position += delta,
             ElementKind::Text(t) => {
                 t.position += delta;
                 for l in &mut t.leaders {
