@@ -42,10 +42,12 @@ pub enum Category {
     TitleBlock,
     /// Detail lines: 2D lines of one view.
     DetailLine,
+    /// Level marks: the elevation of a point in a plan, elevation or section.
+    LevelMark,
 }
 
 impl Category {
-    pub const ALL: [Category; 27] = [
+    pub const ALL: [Category; 28] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -68,6 +70,7 @@ impl Category {
         Category::Dimension,
         Category::Text,
         Category::DetailLine,
+        Category::LevelMark,
         Category::CadImport,
         Category::Mass,
         Category::Shaft,
@@ -151,6 +154,7 @@ impl Category {
             Category::Grid => "category-grid",
             Category::Dimension => "category-dimension",
             Category::Text => "category-text",
+            Category::LevelMark => "category-level-mark",
             Category::TitleBlock => "category-title-block",
             Category::Column => "category-column",
             Category::Beam => "category-beam",
@@ -325,6 +329,18 @@ pub enum TypeData {
         #[serde(default)]
         symbol: crate::LeaderSymbol,
     },
+    /// Level marks with text of `text_size` paper millimeters, writing
+    /// `datum` plus each level, followed by `finished_suffix` (the finished
+    /// level) or `raw_suffix` (the raw, structural one).
+    LevelMark {
+        text_size: f64,
+        #[serde(default)]
+        datum: f64,
+        #[serde(default)]
+        finished_suffix: String,
+        #[serde(default)]
+        raw_suffix: String,
+    },
     Column {
         section: ColumnSection,
         material: String,
@@ -490,6 +506,7 @@ impl TypeData {
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
+            | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::Shaft {}
@@ -557,6 +574,7 @@ impl TypeData {
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
+            | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::Shaft {}
@@ -690,6 +708,7 @@ impl ElementType {
             TypeData::Grid { .. } => Category::Grid,
             TypeData::Dimension { .. } => Category::Dimension,
             TypeData::Text { .. } => Category::Text,
+            TypeData::LevelMark { .. } => Category::LevelMark,
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Foundation { .. } => Category::Foundation,
@@ -771,6 +790,22 @@ impl ElementType {
         }
     }
 
+    /// Position of a wall's location line `line` across a wall of this type,
+    /// measured from the centerline towards the exterior (left) face.
+    pub fn location_offset(&self, line: crate::LocationLine) -> f64 {
+        use crate::LocationLine as L;
+        let half = self.thickness() * 0.5;
+        let (core_ext, core_int) = self.core_range();
+        match line {
+            L::Centerline => 0.0,
+            L::FinishExterior => half,
+            L::FinishInterior => -half,
+            L::CoreExterior => half - core_ext,
+            L::CoreInterior => half - core_int,
+            L::CoreCenter => half - (core_ext + core_int) * 0.5,
+        }
+    }
+
     /// Width/height of an opening type (doors, windows).
     pub fn opening_size(&self) -> Option<(f64, f64)> {
         match &self.data {
@@ -804,6 +839,7 @@ impl ElementType {
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
+            | TypeData::LevelMark { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::Shaft {}

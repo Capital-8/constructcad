@@ -48,6 +48,7 @@ fn element_is_valid(e: &Element) -> bool {
             };
             kind && d.offset.is_finite() && finite_points(&[d.a, d.b])
         }
+        ElementKind::LevelMark(m) => m.position.is_finite(),
         ElementKind::Text(t) => {
             let leaders = t.leaders.iter().all(|l| l.end.is_finite() && l.elbow.is_none_or(|e| e.is_finite()));
             let width = t.width.is_none_or(|w| w.is_finite() && w > 0.0);
@@ -174,6 +175,9 @@ impl Project {
                 TypeData::Grid { bubble } => repairs += usize::from(fix_positive(bubble, 8.0)),
                 TypeData::Dimension { text_size } => repairs += usize::from(fix_positive(text_size, 2.5)),
                 TypeData::Text { size, .. } => repairs += usize::from(fix_positive(size, 2.5)),
+                TypeData::LevelMark { text_size, datum, .. } => {
+                    repairs += crate::level_mark::repair_type(text_size, datum)
+                }
                 TypeData::Room {}
                 | TypeData::CadImport {}
                 | TypeData::DetailLine {}
@@ -326,6 +330,7 @@ impl Project {
                             .is_some_and(|h| matches!(h.kind, ElementKind::Beam(_) | ElementKind::Column(_))),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
+                        ElementKind::LevelMark(m) => self.view(m.view).is_some(),
                         ElementKind::CadImport(c) => self.view(c.view).is_some(),
                         ElementKind::DetailLine(l) => self.view(l.view).is_some(),
                         ElementKind::Pad(p) => {
@@ -394,6 +399,7 @@ impl Project {
                 ElementKind::Topography(t) => repairs += t.repair(),
                 ElementKind::Pad(p) => repairs += p.repair(),
                 ElementKind::Stair(s) => repairs += s.layout.repair(),
+                ElementKind::LevelMark(m) => repairs += m.repair(),
                 ElementKind::Ramp(r) => repairs += r.layout.repair(),
                 ElementKind::Railing(r) => {
                     if r.stair.is_some_and(|h| !stairs.contains(&h.host)) {

@@ -21,6 +21,7 @@ pub mod graph_binding;
 pub mod graphics;
 pub mod grid;
 mod ids;
+pub mod level_mark;
 pub mod mass;
 pub mod material;
 pub mod mep;

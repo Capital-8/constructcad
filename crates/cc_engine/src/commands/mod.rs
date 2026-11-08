@@ -17,6 +17,7 @@ pub mod framing;
 pub mod graph;
 pub mod graphics;
 pub mod io;
+pub mod level_mark;
 pub mod levels;
 pub mod mass;
 pub mod materials;

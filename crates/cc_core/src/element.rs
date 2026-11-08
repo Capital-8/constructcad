@@ -61,6 +61,8 @@ pub enum ElementKind {
     Pad(crate::pad::Pad),
     /// A 2D line, arc, circle or ellipse drawn in one view.
     DetailLine(crate::detail::DetailLine),
+    /// The elevation of a point, written in one view.
+    LevelMark(Box<crate::level_mark::LevelMark>),
 }
 
 impl Element {
@@ -93,6 +95,7 @@ impl Element {
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
             ElementKind::DetailLine(_) => Category::DetailLine,
+            ElementKind::LevelMark(_) => Category::LevelMark,
         }
     }
 
@@ -104,6 +107,7 @@ impl Element {
             ElementKind::Text(t) => Some(t.view),
             ElementKind::CadImport(c) => Some(c.view),
             ElementKind::DetailLine(l) => Some(l.view),
+            ElementKind::LevelMark(m) => Some(m.view),
             _ => None,
         }
     }
@@ -250,6 +254,7 @@ impl Element {
                     *vertex += delta;
                 }
             }
+            ElementKind::LevelMark(m) => m.position += delta,
             ElementKind::Text(t) => {
                 t.position += delta;
                 for l in &mut t.leaders {
