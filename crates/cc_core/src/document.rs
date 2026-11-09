@@ -25,6 +25,7 @@ struct Settings {
     phase_graphics: crate::PhaseGraphics,
     graph_bindings: BTreeMap<ElementId, crate::graph_binding::GraphBinding>,
     line_styles: crate::detail::LineStyles,
+    fill_patterns: crate::fill_pattern::FillPatterns,
     option_sets: Vec<crate::OptionSet>,
 }
 
@@ -46,6 +47,7 @@ impl Settings {
             phase_graphics: p.phase_graphics,
             graph_bindings: p.graph_bindings.clone(),
             line_styles: p.line_styles.clone(),
+            fill_patterns: p.fill_patterns.clone(),
             option_sets: p.option_sets.clone(),
         }
     }
@@ -66,6 +68,7 @@ impl Settings {
         p.phase_graphics = self.phase_graphics;
         p.graph_bindings = self.graph_bindings;
         p.line_styles = self.line_styles;
+        p.fill_patterns = self.fill_patterns;
         p.option_sets = self.option_sets;
     }
 }
@@ -542,6 +545,12 @@ impl<'a> EditCtx<'a> {
     pub fn line_styles_mut(&mut self) -> &mut crate::detail::LineStyles {
         self.touch_settings();
         &mut self.project.line_styles
+    }
+
+    /// The project's fill patterns.
+    pub fn fill_patterns_mut(&mut self) -> &mut crate::fill_pattern::FillPatterns {
+        self.touch_settings();
+        &mut self.project.fill_patterns
     }
 
     /// Construction phases, in time order.

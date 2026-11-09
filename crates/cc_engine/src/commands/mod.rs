@@ -19,6 +19,7 @@ pub mod detail;
 pub mod detail_component;
 pub mod devices;
 pub mod edit;
+pub mod fill_patterns;
 pub mod foundation;
 pub mod framing;
 pub mod graph;

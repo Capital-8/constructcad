@@ -20,26 +20,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// A fill pattern's code: `none`, `solid`, `diagonal`, `diagonal_back`,
-/// `crosshatch`, `horizontal`, `vertical`, `grid`, `brick`, `concrete`,
-/// `sand`, `insulation` or `earth`.
-pub fn pattern_code(p: Pattern) -> String {
-    let mut out = String::new();
-    for (i, c) in format!("{p:?}").chars().enumerate() {
-        if c.is_uppercase() && i > 0 {
-            out.push('_');
-        }
-        out.push(c.to_ascii_lowercase());
-    }
-    out
-}
-
-fn pattern_arg(code: &str) -> Result<Pattern> {
-    Pattern::ALL.into_iter().find(|p| pattern_code(*p).eq_ignore_ascii_case(code.trim())).ok_or_else(|| {
-        let codes: Vec<String> = Pattern::ALL.iter().map(|p| pattern_code(*p)).collect();
-        EngineError::invalid(format!("unknown fill pattern '{code}' ({})", codes.join(", ")))
-    })
-}
+use super::fill_patterns::pattern_arg;
 
 /// A boundary style by code; `none` for no boundary.
 fn boundary_arg(p: &Project, code: &str) -> Result<Option<LineStyleRef>> {
@@ -217,10 +198,10 @@ impl Command for FilledRegionTypeCreate {
     fn run(self, s: &mut Session) -> Result<Value> {
         let mut fill = default_fill();
         if let Some(p) = &self.foreground {
-            fill.foreground = pattern_arg(p)?;
+            fill.foreground = pattern_arg(s.project(), p)?;
         }
         if let Some(p) = &self.background {
-            fill.background = pattern_arg(p)?;
+            fill.background = pattern_arg(s.project(), p)?;
         }
         if let Some(c) = self.foreground_color {
             fill.foreground_color = c;
@@ -281,18 +262,4 @@ pub(crate) fn redraw(r: &mut Region, sketch: cc_core::sketch::Sketch) -> Result<
         return Err(EngineError::invalid("the region has no area or is out of bounds"));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pattern_codes_round_trip() {
-        for p in Pattern::ALL {
-            assert_eq!(pattern_arg(&pattern_code(p)).ok(), Some(p));
-        }
-        assert_eq!(pattern_code(Pattern::DiagonalBack), "diagonal_back");
-        assert!(pattern_arg("zigzag").is_err());
-    }
 }

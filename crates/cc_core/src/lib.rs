@@ -20,6 +20,7 @@ pub mod dim_refs;
 mod document;
 mod element;
 pub mod expr;
+pub mod fill_pattern;
 pub mod graph_binding;
 pub mod graphics;
 pub mod grid;
@@ -32,6 +33,7 @@ pub mod mep;
 pub mod openings;
 pub mod pad;
 pub mod paint;
+pub mod pat;
 mod persist;
 pub mod phase;
 pub mod profile;
@@ -76,13 +78,14 @@ pub use element::{
     ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Ramp,
     Rebar, RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
 };
+pub use fill_pattern::{FillPattern, FillPatternKind, PatternLine};
 pub use graphics::{
     CategoryGraphics, FillGraphics, FilterOp, FilterParam, FilterRule, FilterUse, GraphicOverride, LineGraphics,
     LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
 };
 pub use ids::{
-    ElementId, ElementTypeId, FilterId, GroupId, LevelId, LineStyleId, OptionId, OptionSetId, PhaseFilterId, PhaseId,
-    SystemId, TemplateId, Uid, ViewId,
+    ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId, OptionSetId,
+    PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
 };
 pub use lightning::{ConductorRole, LightningConductor, LpsClass};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};

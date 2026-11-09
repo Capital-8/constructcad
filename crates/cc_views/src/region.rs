@@ -28,7 +28,7 @@ pub fn regions(d: &mut Drawing2D, project: &Project, view: ViewId, scale: u32) {
                     Some(TypeData::FilledRegion { fill }) => *fill,
                     _ => PatternFill::default(),
                 };
-                draw_filled(d, r, &fill, &project.line_styles, scale, Some(e.id));
+                draw_filled(d, r, &fill, &project.line_styles, &project.fill_patterns, scale, Some(e.id));
             }
             ElementKind::MaskingRegion(r) if r.view == view && r.is_valid() => {
                 draw_masking(d, r, &project.line_styles, Some(e.id));
@@ -55,6 +55,7 @@ pub fn draw_filled(
     r: &Region,
     fill: &PatternFill,
     styles: &LineStyles,
+    patterns: &cc_core::fill_pattern::FillPatterns,
     scale: u32,
     id: Option<ElementId>,
 ) {
@@ -65,7 +66,7 @@ pub fn draw_filled(
             continue;
         }
         let pen = Some(Pen { color: Some(color), weight: Some(PATTERN_WEIGHT_MM), pattern: None, halftone: false });
-        for (a, b) in crate::hatch::hatch_with_holes(pattern, &r.outline, &r.openings, spacing) {
+        for (a, b) in crate::hatch::hatch_with_holes_in(patterns, pattern, &r.outline, &r.openings, spacing) {
             d.prims.push(Prim::Line { a, b, style: LineStyle::Hatch, element: id, pen });
         }
     }
@@ -133,7 +134,7 @@ mod tests {
             background_color: [0, 0, 200],
         };
         let mut d = Drawing2D::default();
-        draw_filled(&mut d, &r, &fill, &Default::default(), 50, Some(ElementId(3)));
+        draw_filled(&mut d, &r, &fill, &Default::default(), &Default::default(), 50, Some(ElementId(3)));
         let fills: Vec<_> = d
             .prims
             .iter()

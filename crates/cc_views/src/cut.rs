@@ -8,7 +8,7 @@ use glam::DVec2;
 pub(crate) const POCHE: [u8; 4] = [196, 196, 192, 255];
 
 /// Base spacing of hatch patterns on paper, millimeters.
-const PATTERN_MM: f64 = 1.8;
+pub(crate) const PATTERN_MM: f64 = 1.8;
 
 /// Hatch spacing in drawing units for a view at `1:scale`.
 pub(crate) fn spacing(scale: u32) -> f64 {
@@ -40,7 +40,7 @@ pub(crate) fn cut_fill(
         if matches!(pattern, Pattern::Solid | Pattern::None) {
             continue;
         }
-        for (a, b) in crate::hatch::hatch(pattern, &poly, spacing) {
+        for (a, b) in crate::hatch::hatch_in(&project.fill_patterns, pattern, &poly, spacing) {
             // Tagged with the element, so joined geometry can trim them.
             d.line(a, b, LineStyle::Hatch, id);
         }

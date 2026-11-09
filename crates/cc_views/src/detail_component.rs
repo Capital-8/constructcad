@@ -52,11 +52,20 @@ pub fn draw(
     id: Option<ElementId>,
 ) -> bool {
     let lookup = |n: &str| project.detail_def(n);
-    walk(&lookup, name, def, overrides, place, &mut |v| draw_pieces(d, v.pieces, &v.place, scale, id))
+    walk(&lookup, name, def, overrides, place, &mut |v| {
+        draw_pieces(d, &project.fill_patterns, v.pieces, &v.place, scale, id)
+    })
 }
 
 /// Draw one resolution's own pieces (not what it nests) through `place`.
-pub fn draw_pieces(d: &mut Drawing2D, pieces: &SheetPieces, place: &Place, scale: u32, id: Option<ElementId>) {
+pub fn draw_pieces(
+    d: &mut Drawing2D,
+    patterns: &cc_core::fill_pattern::FillPatterns,
+    pieces: &SheetPieces,
+    place: &Place,
+    scale: u32,
+    id: Option<ElementId>,
+) {
     let to = |p: DVec2| place.apply(p);
     for img in &pieces.images {
         let origin = to(img.corner);
@@ -80,7 +89,7 @@ pub fn draw_pieces(d: &mut Drawing2D, pieces: &SheetPieces, place: &Place, scale
             let region =
                 Region { view: ViewId(0), outline: pts.clone(), openings: Vec::new(), sketch: None, boundary: None };
             if region.is_valid() {
-                crate::region::draw_filled(d, &region, fill, &Default::default(), scale, id);
+                crate::region::draw_filled(d, &region, fill, &Default::default(), patterns, scale, id);
             }
         }
         let pen = Some(Pen { color: Some(s.color), weight: Some(s.weight), pattern: Some(s.pattern), halftone: false });
@@ -186,7 +195,7 @@ pub fn dxf_blocks(
         let scope = def.scope(&overrides, &[]);
         let pieces = def.resolve_2d(&|n: &str| scope.get(n));
         let mut d = Drawing2D::default();
-        draw_pieces(&mut d, &pieces, &Place::default(), scale, None);
+        draw_pieces(&mut d, &project.fill_patterns, &pieces, &Place::default(), scale, None);
         let mut block = DxfBlock { name: name_of(&key, &component), prims: d.prims, inserts: Vec::new() };
         for n in &pieces.nested {
             if project.detail_def(&n.component).is_none() || project.detail_nests(&n.component, &component) {
