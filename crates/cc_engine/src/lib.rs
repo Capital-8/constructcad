@@ -40,6 +40,25 @@ pub fn element_params(kind: &cc_core::ElementKind) -> serde_json::Value {
     commands::cad::params(kind)
 }
 
+/// The `params` patch a `*_set` command needs to turn the enum value `old`
+/// (a view kind, type data) into `new`. Unlike `params_of(new)`, it also
+/// clears the fields `new` leaves out of its JSON form (an option set back
+/// to none, a list emptied, a flag turned off), which a merge patch would
+/// otherwise keep.
+pub fn params_patch<T>(old: &T, new: &T) -> serde_json::Value
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq,
+{
+    let check = |patch: &serde_json::Value| commands::patch_variant(old, patch).ok().map(|v| v == *new);
+    commands::clearing_patch(&params_of(old), &params_of(new), &check)
+}
+
+/// [`params_patch`] for an element's kind, as `element_set` applies it.
+pub fn element_params_patch(old: &cc_core::ElementKind, new: &cc_core::ElementKind) -> serde_json::Value {
+    let check = |patch: &serde_json::Value| commands::edit::patch_kind(old, patch).ok().map(|v| v == *new);
+    commands::clearing_patch(&element_params(old), &element_params(new), &check)
+}
+
 pub use defaults::{
     conduit_offset, default_roof_base, default_top, device_height, drain_slope, next_number, pipe_offset, tray_offset,
     walls_loop,
