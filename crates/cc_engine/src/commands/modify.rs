@@ -895,18 +895,73 @@ pub struct ElementsPaste {
     /// Level id or name to paste on (default: each element's own level).
     #[serde(default)]
     pub level: Option<crate::refs::Ref>,
+    /// View id or name to paste the elements drawn in a view into (detail
+    /// lines, filled and masking regions, text notes, dimensions, level
+    /// marks, detail components and imported drawings), at the same drawing
+    /// coordinates and on its level (default: each one's own view). Every
+    /// such element must be one the view takes. Elements of the model ignore it.
+    #[serde(default)]
+    pub view: Option<crate::refs::Ref>,
 }
 
 impl Command for ElementsPaste {
     const NAME: &'static str = "elements_paste";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let set: Vec<cc_core::Element> = serde_json::from_value(self.elements)
+        let mut set: Vec<cc_core::Element> = serde_json::from_value(self.elements)
             .map_err(|e| EngineError::invalid(format!("invalid elements: {e}")))?;
         let t = PlanTransform::translate(self.delta.map(point).transpose()?.unwrap_or(DVec2::ZERO));
         let level = self.level.as_ref().map(|l| refs::level(s.project(), l)).transpose()?;
+        if let Some(view) = &self.view {
+            let view = refs::view(s.project(), view)?;
+            retarget(s.project(), &mut set, view)?;
+        }
         let created = edit(s, t!("tx-paste"), |e| Ok(e.paste_elements(&set, &[t], level)))?;
         Ok(json!({ "created": ids_json(&created) }))
+    }
+}
+
+/// Move the view-owned elements of a copied set (see
+/// [`cc_core::Element::owner_view`]) into `view`, onto its level (or the
+/// lowest). Refused unless the view takes every one of them, as the
+/// commands that create them would. A dimension moved between views that
+/// do not share a drawing frame (two plans) stops measuring elements and
+/// stays where it is drawn.
+pub(crate) fn retarget(p: &Project, set: &mut [cc_core::Element], view: cc_core::ViewId) -> Result<()> {
+    let target = p.view(view).ok_or_else(|| EngineError::not_found("view"))?;
+    let level =
+        target.level().or_else(|| p.levels.first().map(|l| l.id)).ok_or_else(|| EngineError::rejected("no levels"))?;
+    for e in set.iter_mut() {
+        let Some(from) = e.owner_view() else { continue };
+        if !view_takes(target, &e.kind) {
+            let category = refs::category_name(e.category());
+            return Err(EngineError::invalid(format!("the view '{}' does not take {category} elements", target.name)));
+        }
+        let same_frame = from == view || (target.is_plan() && p.view(from).is_some_and(|v| v.is_plan()));
+        if let ElementKind::Dimension(d) = &mut e.kind
+            && !same_frame
+        {
+            for r in d.all_refs_mut() {
+                *r = None;
+            }
+        }
+        e.set_owner_view(view);
+        e.level = level;
+    }
+    Ok(())
+}
+
+/// Whether `view` takes a view-owned element of this kind, as the command
+/// that creates it would.
+fn view_takes(view: &cc_core::View, e: &ElementKind) -> bool {
+    use cc_core::ViewKind as V;
+    match e {
+        ElementKind::Text(_) => !matches!(view.kind, V::Schedule { .. } | V::Sheet { .. }),
+        ElementKind::Dimension(_) => view.takes_dimensions(),
+        ElementKind::LevelMark(_) => {
+            matches!(view.kind, V::FloorPlan { .. } | V::CeilingPlan { .. } | V::Elevation { .. } | V::Section { .. })
+        }
+        _ => cc_views::hosts_cad(&view.kind),
     }
 }
 

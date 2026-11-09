@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Schedules on sheets. A schedule is placed on a sheet like any view (dragged from the project browser, *Place on active sheet* or `sheet_place_view`) and drawn as a ruled table at its printed size: its name in the first row, the headers, a row per element its phase shows and the totals, right-aligned numbers. It follows the model, and the sheet's PDF, SVG, PNG and DXF carry it. *Export Image*, *Export DXF* and `view_export` also write a schedule alone as its table.
+- Detailing reused across views (#159). What is drawn in a view (detail lines, filled and masking regions, text notes, dimensions, level marks, detail components, imported drawings) pastes into the active view when another 2D view is active, at the same coordinates, so a plot boundary or a buildable area drawn in the site plan can be reused in another plan. Dimensions pasted into another plan keep measuring the same elements. In the project browser, *Duplicate with Detailing* copies a view with what is drawn in it. Commands: `elements_paste` takes `view`, `view_duplicate` takes `detailing`.
 
 ### Fixed
 

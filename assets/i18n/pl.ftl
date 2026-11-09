@@ -24,6 +24,7 @@ browser-new = + Nowy
 browser-open = Otwórz
 browser-rename = Zmień nazwę
 browser-duplicate = Duplikuj
+browser-duplicate-detailing = Duplikuj ze szczegółami
 browser-delete = Usuń
 browser-place-on-sheet = Umieść na aktywnym arkuszu
 

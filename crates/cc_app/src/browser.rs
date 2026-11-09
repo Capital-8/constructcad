@@ -210,7 +210,13 @@ fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
                 ui.close();
             }
             if ui.button(t!("browser-duplicate")).clicked() {
-                actions::duplicate_view(state, id);
+                actions::duplicate_view(state, id, false);
+                ui.close();
+            }
+            // Views that hold detailing can be copied with it.
+            let detailed = state.project().view(id).is_some_and(|v| cc_views::hosts_cad(&v.kind));
+            if detailed && ui.button(t!("browser-duplicate-detailing")).clicked() {
+                actions::duplicate_view(state, id, true);
                 ui.close();
             }
             if crate::title_block_env::sheet_title_block_of(state, id).is_some()

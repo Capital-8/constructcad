@@ -24,6 +24,7 @@ browser-new = + Новий
 browser-open = Відкрити
 browser-rename = Перейменувати
 browser-duplicate = Дублювати
+browser-duplicate-detailing = Дублювати з деталізацією
 browser-delete = Видалити
 browser-place-on-sheet = Розмістити на активному аркуші
 

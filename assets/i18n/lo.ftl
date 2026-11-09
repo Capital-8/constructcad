@@ -24,6 +24,7 @@ browser-new = + ສ້າງໃໝ່
 browser-open = ເປີດ
 browser-rename = ປ່ຽນຊື່
 browser-duplicate = ສຳເນົາຊ້ຳ
+browser-duplicate-detailing = ສຳເນົາຊ້ຳພ້ອມລາຍລະອຽດ
 browser-delete = ລຶບ
 browser-place-on-sheet = ວາງລົງເທິງແຜ່ນງານທີ່ໃຊ້ງານຢູ່
 

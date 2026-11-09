@@ -24,6 +24,7 @@ browser-new = + Novo
 browser-open = Abrir
 browser-rename = Renomear
 browser-duplicate = Duplicar
+browser-duplicate-detailing = Duplicar com detalhamento
 browser-delete = Excluir
 browser-place-on-sheet = Inserir na folha ativa
 

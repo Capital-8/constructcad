@@ -1355,6 +1355,7 @@ No parameters.
 | `elements` | JSON | required | The `elements` of an `elements_export` result. |
 | `delta` | [x, y] | optional | Displacement `[dx, dy]`, meters (default: none). |
 | `level` | id or name | optional | Level id or name to paste on (default: each element's own level). |
+| `view` | id or name | optional | View id or name to paste the elements drawn in a view into (detail lines, filled and masking regions, text notes, dimensions, level marks, detail components and imported drawings), at the same drawing coordinates and on its level (default: each one's own view). Every such element must be one the view takes. Elements of the model ignore it. |
 
 ### `wall_join`
 
@@ -2183,11 +2184,12 @@ No parameters.
 
 ### `view_duplicate`
 
-*edit* — Copy a view (a copied sheet starts without viewports).
+*edit* — Copy a view (a copied sheet starts without viewports), in one undo step. With `detailing`, what is drawn in it comes along: detail lines, filled and masking regions, text notes, dimensions (still measuring the same elements), level marks, detail components and imported drawings; the result lists them in `copied`.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
+| `view` | id or name | required | The view to copy (id or name). |
+| `detailing` | boolean | optional | Copy the elements drawn in the view too (default: only the view). |
 
 ### `view_delete`
 

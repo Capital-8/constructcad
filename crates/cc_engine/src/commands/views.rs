@@ -381,11 +381,19 @@ impl Command for ViewSet {
     }
 }
 
-/// Copy a view (a copied sheet starts without viewports).
+/// Copy a view (a copied sheet starts without viewports), in one undo step.
+/// With `detailing`, what is drawn in it comes along: detail lines, filled
+/// and masking regions, text notes, dimensions (still measuring the same
+/// elements), level marks, detail components and imported drawings; the
+/// result lists them in `copied`.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewDuplicate {
+    /// The view to copy (id or name).
     pub view: Ref,
+    /// Copy the elements drawn in the view too (default: only the view).
+    #[serde(default)]
+    pub detailing: bool,
 }
 
 impl Command for ViewDuplicate {
@@ -403,11 +411,30 @@ impl Command for ViewDuplicate {
             viewports.clear();
             number.push('a');
         }
-        let new = edit(s, t!("tx-duplicate-view"), |e| {
+        let mut set = match self.detailing {
+            true => {
+                let owned: Vec<_> = p.elements.values().filter(|e| e.owner_view() == Some(id)).map(|e| e.id).collect();
+                p.copy_set(&owned)
+            }
+            false => Vec::new(),
+        };
+        let (new, copied) = edit(s, t!("tx-duplicate-view"), |e| {
             v.id = ViewId(e.alloc_id());
-            Ok(e.add_view(v))
+            let new = e.add_view(v);
+            // The copies take the new view and keep their places.
+            for el in &mut set {
+                el.set_owner_view(new);
+            }
+            let copied = e.paste_elements(&set, &[cc_core::PlanTransform::IDENTITY], None);
+            Ok((new, copied))
         })?;
-        Ok(view_out(s, new))
+        let mut out = view_out(s, new);
+        if self.detailing
+            && let Some(o) = out.as_object_mut()
+        {
+            o.insert("copied".into(), json!(copied.iter().map(|c| c.0).collect::<Vec<_>>()));
+        }
+        Ok(out)
     }
 }
 

@@ -24,6 +24,7 @@ browser-new = + 新規
 browser-open = 開く
 browser-rename = 名前を変更
 browser-duplicate = 複製
+browser-duplicate-detailing = 詳細付きで複製
 browser-delete = 削除
 browser-place-on-sheet = アクティブなシートに配置
 

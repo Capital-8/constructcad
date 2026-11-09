@@ -24,6 +24,7 @@ browser-new = + Neu
 browser-open = Öffnen
 browser-rename = Umbenennen
 browser-duplicate = Duplizieren
+browser-duplicate-detailing = Mit Detaillierung duplizieren
 browser-delete = Löschen
 browser-place-on-sheet = Auf aktiven Plan setzen
 
