@@ -561,6 +561,7 @@ mod tests {
                 }),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         (doc, id)

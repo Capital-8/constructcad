@@ -1040,6 +1040,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         }
     });
     crate::phases_dialog::element_rows(ui, state, &el);
+    crate::design_options_ui::element_rows(ui, state, &el);
     section(ui, "ifc", t!("section-ifc"), |ui| {
         readonly_row(ui, &t!("prop-ifc-guid"), cc_ifc::guid::encode(el.uid.0));
     });
@@ -2696,6 +2697,7 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         | ViewKind::Diagram { .. } => {}
     }
     crate::phases_dialog::view_section(ui, state, id);
+    crate::design_options_ui::view_section(ui, state, id);
 
     section(ui, "identity", t!("section-identity"), |ui| {
         view_text_row(ui, state, id, &t!("prop-name"), "name", view.name.clone(), |v, s| v.name = s);

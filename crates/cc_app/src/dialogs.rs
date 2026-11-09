@@ -33,6 +33,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::systems_dialog::sizing(ctx, state);
     crate::graphics_dialog::show(ctx, state);
     crate::phases_dialog::show(ctx, state);
+    crate::design_options_ui::show(ctx, state);
     crate::line_styles_dialog::show(ctx, state);
     crate::library::show(ctx, state);
     crate::plugins_ui::drain_messages(state);

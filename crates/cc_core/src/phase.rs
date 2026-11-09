@@ -459,6 +459,7 @@ mod tests {
             uid: Default::default(),
             phase_created: created,
             phase_demolished: demolished,
+            design_option: None,
         };
         e.uid = crate::Uid::generate();
         p.elements.insert(id, e);

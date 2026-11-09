@@ -79,6 +79,8 @@ pub struct Resolver<'a> {
     phase: Option<PhaseView<'a>>,
     /// Every element of the view shows by category (or not at all) in its phase.
     phase_trivial: bool,
+    /// The design options the view shows, when it leaves any element out.
+    options: Option<std::collections::BTreeSet<cc_core::OptionId>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -91,12 +93,29 @@ impl<'a> Resolver<'a> {
         let phase = PhaseView::of(project, view);
         let phase_trivial = phase
             .is_none_or(|ph| project.elements.values().all(|e| ph.style(project, e).is_some_and(|g| g.is_empty())));
-        Self { project, geom, graphics: &view.graphics, temporary, cache: HashMap::new(), phase, phase_trivial }
+        let options = view
+            .kind
+            .is_phased()
+            .then(|| project.shown_options(Some(view)))
+            .filter(|shown| project.options_hide_any(shown));
+        Self {
+            project,
+            geom,
+            graphics: &view.graphics,
+            temporary,
+            cache: HashMap::new(),
+            phase,
+            phase_trivial,
+            options,
+        }
     }
 
     /// Whether the view draws everything as generated.
     pub fn is_trivial(&self) -> bool {
-        self.graphics.is_empty() && self.temporary.is_none_or(|t| t.is_empty()) && self.phase_trivial
+        self.graphics.is_empty()
+            && self.temporary.is_none_or(|t| t.is_empty())
+            && self.phase_trivial
+            && self.options.is_none()
     }
 
     /// The overrides of an element, or `None` when it is hidden. Ids that
@@ -108,6 +127,7 @@ impl<'a> Resolver<'a> {
         let s = match self.project.element(id) {
             None => Some(GraphicOverride::default()),
             Some(e) if self.temporary.is_some_and(|t| !t.shows(id, e.category())) => None,
+            Some(e) if self.options.as_ref().is_some_and(|shown| !self.project.option_shows(e, shown)) => None,
             Some(e) => {
                 let (project, geom) = (self.project, self.geom);
                 match self.phase.map_or(Some(GraphicOverride::default()), |ph| ph.style(project, e)) {

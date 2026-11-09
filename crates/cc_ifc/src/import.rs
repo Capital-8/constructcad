@@ -795,6 +795,69 @@ impl<'a> Importer<'a> {
         out
     }
 
+    /// Design options as this program writes them ([`crate::export::DESIGN_OPTION_PSET`]):
+    /// sets and options by name, the first option of a set its primary (exports
+    /// write primary options only); hosted elements then follow their hosts.
+    fn import_design_options(&mut self) {
+        use cc_core::design_option::{MAX_OPTION_SETS, MAX_OPTIONS};
+        use cc_core::{DesignOption, OptionId, OptionSet, OptionSetId};
+        let is_set = |n: &str| n == crate::export::DESIGN_OPTION_PSET;
+        let mut found: Vec<(ElementId, String, String)> = Vec::new();
+        for (element, ifc) in &self.products {
+            let first = |name: &str| self.pset_texts(*ifc, &is_set, name).first().map(|s| s.trim().to_string());
+            let (Some(set), Some(option)) = (first("OptionSet"), first("Option")) else { continue };
+            if set.is_empty() || option.is_empty() {
+                continue;
+            }
+            found.push((*element, set, option));
+        }
+        for (element, set_name, option_name) in found {
+            let si = match self.p.option_sets.iter().position(|s| s.name.eq_ignore_ascii_case(&set_name)) {
+                Some(i) => i,
+                None if self.p.option_sets.len() < MAX_OPTION_SETS => {
+                    let id = OptionSetId(self.p.alloc_id());
+                    self.p.option_sets.push(OptionSet {
+                        id,
+                        name: set_name,
+                        options: Vec::new(),
+                        primary: OptionId(0),
+                    });
+                    self.p.option_sets.len() - 1
+                }
+                None => continue,
+            };
+            let existing = self
+                .p
+                .option_sets
+                .get(si)
+                .and_then(|s| s.options.iter().find(|o| o.name.eq_ignore_ascii_case(&option_name)).map(|o| o.id));
+            let option = match existing {
+                Some(o) => o,
+                None => {
+                    let id = OptionId(self.p.alloc_id());
+                    let Some(s) = self.p.option_sets.get_mut(si).filter(|s| s.options.len() < MAX_OPTIONS) else {
+                        continue;
+                    };
+                    s.options.push(DesignOption { id, name: option_name });
+                    id
+                }
+            };
+            if let Some(s) = self.p.option_sets.get_mut(si)
+                && !s.contains(s.primary)
+            {
+                s.primary = option;
+            }
+            if let Some(e) = self.p.elements.get_mut(&element) {
+                e.design_option = Some(option);
+            }
+        }
+        for (id, option) in self.p.option_fixes() {
+            if let Some(e) = self.p.elements.get_mut(&id) {
+                e.design_option = option;
+            }
+        }
+    }
+
     /// Construction phases: the project's phases when the file lists them
     /// (as this program writes them), then each element's phases by name,
     /// or else from its IFC `Status` relative to the last phase (existing:
@@ -865,6 +928,7 @@ impl<'a> Importer<'a> {
     }
 
     fn finish(&mut self) {
+        self.import_design_options();
         self.import_phases();
         let levels: Vec<(LevelId, String)> = self.p.levels.iter().map(|l| (l.id, l.name.clone())).collect();
         let add_view = |p: &mut Project, name: &str, kind: ViewKind| {
@@ -1132,6 +1196,7 @@ impl<'a> Importer<'a> {
             uid,
             phase_created: Default::default(),
             phase_demolished: None,
+            design_option: None,
         };
         *self.report.imported.entry(element.category()).or_default() += 1;
         self.p.elements.insert(id, element);
@@ -2068,6 +2133,7 @@ impl<'a> Importer<'a> {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             };
             *self.report.imported.entry(Category::Pad).or_default() += 1;
             self.p.elements.insert(pid, element);
@@ -2225,7 +2291,10 @@ impl<'a> Importer<'a> {
         let mut out = Vec::new();
         for set in self.psets_of.get(&owner).into_iter().flatten().filter_map(|s| f.get(*s)) {
             let name = set.arg(2).as_str().unwrap_or_default().to_string();
-            if name == crate::export::COMPONENT_PSET || name == crate::export::PHASING_PSET {
+            if name == crate::export::COMPONENT_PSET
+                || name == crate::export::PHASING_PSET
+                || name == crate::export::DESIGN_OPTION_PSET
+            {
                 continue;
             }
             let (quantities, properties) = match set.name.as_str() {
@@ -2499,6 +2568,7 @@ impl<'a> Importer<'a> {
                 uid: Uid::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             };
             *self.report.imported.entry(Category::Grid).or_default() += 1;
             self.p.elements.insert(element, el);

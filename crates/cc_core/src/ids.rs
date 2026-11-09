@@ -27,6 +27,8 @@ id_type!(TemplateId, "VT");
 id_type!(PhaseId, "PH");
 id_type!(PhaseFilterId, "PF");
 id_type!(LineStyleId, "LS");
+id_type!(OptionSetId, "OS");
+id_type!(OptionId, "OP");
 
 impl Default for PhaseId {
     /// Unassigned: read as the last phase until one is given.

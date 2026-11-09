@@ -852,6 +852,10 @@ fn manage_tab(ui: &mut Ui, state: &mut AppState) {
     });
     group(ui, t!("group-graphics"), |ui| command_buttons(ui, state, &[ViewTemplates, ViewFilters]));
     group(ui, t!("group-phasing"), |ui| command_button(ui, state, Phases));
+    group(ui, t!("group-design-options"), |ui| {
+        command_button(ui, state, DesignOptions);
+        active_option_menu(ui, state);
+    });
     group(ui, t!("group-macros"), |ui| {
         command_button(ui, state, MacroRecord);
         macro_menu(ui, state);
@@ -899,6 +903,12 @@ fn plugin_menu(ui: &mut Ui, state: &mut AppState) {
 
 /// Run Macro: a menu of the macros in the macros folder (see Preferences)
 /// and Browse… for any other file.
+/// The option being edited: the main model or one option, from a menu.
+fn active_option_menu(ui: &mut Ui, state: &mut AppState) {
+    let r = command_menu(ui, state, UiCommand::ActiveOption);
+    egui::Popup::menu(&r).show(|ui| crate::design_options_ui::active_menu(ui, state));
+}
+
 fn macro_menu(ui: &mut Ui, state: &mut AppState) {
     let r = command_menu(ui, state, UiCommand::MacroRun);
     egui::Popup::menu(&r).show(|ui| {

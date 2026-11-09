@@ -1127,6 +1127,11 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         });
         ui.end_row();
 
+        changed |= ui.checkbox(&mut include.design_options, "").changed();
+        ui.label(t!("section-design-options"));
+        crate::design_options_ui::template_rows(ui, state, id);
+        ui.end_row();
+
         changed |= ui.checkbox(&mut include.categories, "").changed();
         ui.label(t!("vg-categories-graphics"));
         if ui.button(t!("vg-edit")).clicked() {

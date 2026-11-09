@@ -17,9 +17,9 @@ pub struct Session {
     recording: Option<Vec<Recorded>>,
     geom: ModelGeometry,
     geom_revision: Option<u64>,
-    /// Geometry of the phases (by index) whose views leave elements out,
-    /// with the revision it was built at.
-    phase_geoms: HashMap<usize, (u64, ModelGeometry)>,
+    /// Geometry of the phases and design options whose views leave
+    /// elements out, with the revision it was built at.
+    phase_geoms: HashMap<GeomKey, (u64, ModelGeometry)>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
     sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
     /// Elements temporarily hidden or isolated per view: display state, not
@@ -32,6 +32,10 @@ pub struct Session {
     /// How many commands are running (a plugin command runs others).
     nesting: u32,
 }
+
+/// What a view's own geometry depends on: its phase (an index, when it
+/// leaves elements out) and the design options it shows.
+type GeomKey = (Option<usize>, std::collections::BTreeSet<cc_core::OptionId>);
 
 /// A command recorded in a macro.
 #[derive(Debug, Clone)]
@@ -109,31 +113,36 @@ impl Session {
         true
     }
 
-    /// The phase (an index) whose own geometry `view` shows, when its phase
-    /// leaves elements out (see [`ModelGeometry::build_phase`]).
-    fn phase_of_view(&self, view: ViewId) -> Option<usize> {
+    /// The phase (an index, when it leaves elements out) and design options
+    /// whose own geometry `view` shows, or `None` when it shows the whole
+    /// model's (see [`ModelGeometry::build_view`]).
+    fn geom_key(&self, view: ViewId) -> Option<GeomKey> {
         let p = &self.doc.project;
         let v = p.view(view)?;
         if !v.kind.is_phased() {
             return None;
         }
-        let index = p.view_phase(v).and_then(|ph| p.phase_index(ph))?;
-        p.phase_differs(index).then_some(index)
-    }
-
-    /// Build (if needed) the geometry `view` shows; returns its phase key.
-    fn sync_view(&mut self, view: ViewId) -> Option<usize> {
-        self.sync();
-        let index = self.phase_of_view(view)?;
-        let rev = self.doc.revision();
-        if self.phase_geoms.get(&index).is_none_or(|(r, _)| *r != rev) {
-            let g = ModelGeometry::build_phase(&self.doc.project, index, &self.geom);
-            self.phase_geoms.insert(index, (rev, g));
+        let phase = p.view_phase(v).and_then(|ph| p.phase_index(ph)).filter(|i| p.phase_differs(*i));
+        let options = p.shown_options(Some(v));
+        if phase.is_none() && options == p.shown_options(None) {
+            return None;
         }
-        Some(index)
+        Some((phase, options))
     }
 
-    fn geom_of(&self, key: Option<usize>) -> &ModelGeometry {
+    /// Build (if needed) the geometry `view` shows; returns its key.
+    fn sync_view(&mut self, view: ViewId) -> Option<GeomKey> {
+        self.sync();
+        let key = self.geom_key(view)?;
+        let rev = self.doc.revision();
+        if self.phase_geoms.get(&key).is_none_or(|(r, _)| *r != rev) {
+            let g = ModelGeometry::build_view(&self.doc.project, key.0, &key.1, &self.geom);
+            self.phase_geoms.insert(key.clone(), (rev, g));
+        }
+        Some(key)
+    }
+
+    fn geom_of(&self, key: Option<GeomKey>) -> &ModelGeometry {
         key.and_then(|k| self.phase_geoms.get(&k)).map_or(&self.geom, |(_, g)| g)
     }
 
@@ -150,10 +159,37 @@ impl Session {
     /// back to the whole model's geometry when the phase's is not built.
     pub fn geom_for(&self, view: ViewId) -> &ModelGeometry {
         let rev = self.doc.revision();
-        match self.phase_of_view(view).and_then(|k| self.phase_geoms.get(&k)) {
+        match self.geom_key(view).and_then(|k| self.phase_geoms.get(&k)) {
             Some((r, g)) if *r == rev => g,
             _ => &self.geom,
         }
+    }
+
+    /// Geometry of the model in which element `id` stands: the whole
+    /// model's, or, for an element of a design option views do not show by
+    /// default, the main model with that option (cached like a view's).
+    pub fn element_geometry(&mut self, id: cc_core::ElementId) -> &ModelGeometry {
+        self.sync();
+        let p = &self.doc.project;
+        let mut options = p.shown_options(None);
+        let key = match p.element(id).and_then(|e| e.design_option) {
+            Some(o) if !options.contains(&o) => {
+                if let Some(set) = p.option_set_of(o) {
+                    options.retain(|x| !set.contains(*x));
+                }
+                options.insert(o);
+                Some((None, options))
+            }
+            _ => None,
+        };
+        let rev = self.doc.revision();
+        if let Some(key) = &key
+            && self.phase_geoms.get(key).is_none_or(|(r, _)| *r != rev)
+        {
+            let g = ModelGeometry::build_view(&self.doc.project, None, &key.1, &self.geom);
+            self.phase_geoms.insert(key.clone(), (rev, g));
+        }
+        self.geom_of(key)
     }
 
     /// Derived geometry as of the last [`Session::sync`] (callers that keep
@@ -283,8 +319,12 @@ impl Session {
         self.sync_units();
         self.geometry();
         let p = &self.doc.project;
-        let phase = cc_views::graphics::PhaseView::of(p, p.view(view)?);
-        Some(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| phase.is_none_or(|ph| ph.shows(p, e))))
+        let v = p.view(view)?;
+        let phase = cc_views::graphics::PhaseView::of(p, v);
+        let options = p.shown_options(Some(v));
+        Some(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| {
+            p.option_shows(e, &options) && phase.is_none_or(|ph| ph.shows(p, e))
+        }))
     }
 
     /// Run a typed command (the way the GUI calls the engine): it goes

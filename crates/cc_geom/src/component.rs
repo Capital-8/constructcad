@@ -314,6 +314,7 @@ mod tests {
             uid: cc_core::Uid(8),
             phase_created: Default::default(),
             phase_demolished: None,
+            design_option: None,
         };
         let mut c = cc_core::Component::default();
         c.overrides.insert("width".into(), 3.0);

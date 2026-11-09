@@ -303,6 +303,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     }
     let pinned = p.is_pinned(id);
     let (phase_created, phase_demolished) = super::phases::element_phases_json(p, &e);
+    let design_option = super::design_options::option_ref_json(p, e.design_option);
     let joined_with: Vec<u64> = p.joined_with(id).map(|j| j.0).collect();
     let group = p.group_of(id).map(|g| g.0);
     let level = json!({"id": e.level.0, "name": p.level_name(e.level)});
@@ -312,7 +313,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         _ => None,
     };
     let pad_ids: Vec<ElementId> = p.pads_of(id).map(|(e, _)| e.id).collect();
-    let geom = s.geometry();
+    let geom = s.element_geometry(id);
     if geom.solids_of(id).next().is_some() {
         derived.insert("volume".into(), json!(geom.volume(id)));
     }
@@ -389,6 +390,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         "pinned": pinned,
         "phase_created": phase_created,
         "phase_demolished": phase_demolished,
+        "design_option": design_option,
         "joined_with": joined_with,
         "group": group,
         "params": params,
@@ -431,6 +433,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "template": v.template.map(|t| t.0),
         "phase": phase,
         "phase_filter": phase_filter,
+        "design_options": super::design_options::view_options_json(s.project(), v),
         "crop": crop,
         "callout": callout,
     }))

@@ -271,6 +271,10 @@ pub struct View {
     /// Which statuses the view shows, and how (`None`: all, by category).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_filter: Option<crate::PhaseFilterId>,
+    /// The option the view shows of each design option set; sets left out
+    /// show automatically (see [`crate::design_option`]).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub design_options: std::collections::BTreeMap<crate::OptionSetId, crate::OptionId>,
     /// Tags moved by hand in this view: their offset in plan from where they
     /// sit by default, by the element they tag.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -519,6 +523,7 @@ impl View {
             template: None,
             phase: Default::default(),
             phase_filter: None,
+            design_options: Default::default(),
             tag_offsets: Default::default(),
             detail: DetailLevel::Medium,
             visual_style: None,

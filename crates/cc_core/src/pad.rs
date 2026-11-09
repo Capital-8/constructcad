@@ -177,6 +177,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             };
             p.elements.insert(id, e);
             id

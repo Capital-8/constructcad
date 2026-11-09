@@ -96,6 +96,14 @@ pub struct Project {
     /// lines and region boundaries next to the built-in ones.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub line_styles: crate::detail::LineStyles,
+    /// Design option sets (see [`crate::design_option`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub option_sets: Vec<crate::OptionSet>,
+    /// The design option new elements go into and views without a choice of
+    /// their own show for its set: session state, not saved nor undone (set
+    /// through [`crate::Document::set_active_option`]).
+    #[serde(skip)]
+    pub active_option: Option<crate::OptionId>,
     next_id: u64,
 }
 
@@ -129,6 +137,8 @@ impl Project {
             phase_graphics: crate::PhaseGraphics::default(),
             graph_bindings: BTreeMap::new(),
             line_styles: BTreeMap::new(),
+            option_sets: Vec::new(),
+            active_option: None,
             next_id: 1,
         }
     }
@@ -860,6 +870,8 @@ impl Project {
         let templates = self.templates.keys().map(|k| k.0);
         let phase_filters = self.phase_filters.keys().map(|k| k.0);
         let line_styles = self.line_styles.keys().map(|k| k.0);
+        let option_sets = self.option_sets.iter().map(|s| s.id.0);
+        let options = self.option_sets.iter().flat_map(|s| s.options.iter().map(|o| o.id.0));
         levels
             .chain(phases)
             .chain(types)
@@ -871,6 +883,8 @@ impl Project {
             .chain(templates)
             .chain(phase_filters)
             .chain(line_styles)
+            .chain(option_sets)
+            .chain(options)
             .max()
             .unwrap_or(0)
     }

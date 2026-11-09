@@ -13,6 +13,7 @@ pub mod component_piece;
 pub mod component_script;
 pub mod create;
 pub mod curtain;
+pub mod design_options;
 pub mod detail;
 pub mod detail_component;
 pub mod edit;
@@ -81,6 +82,7 @@ pub(crate) fn add_element(e: &mut EditCtx, level: LevelId, type_id: ElementTypeI
         uid: Default::default(),
         phase_created: Default::default(),
         phase_demolished: None,
+        design_option: None,
     };
     if matches!(element.category(), Category::Door | Category::Window) {
         element.mark = e.project().next_mark(element.category());

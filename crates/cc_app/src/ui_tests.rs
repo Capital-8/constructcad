@@ -597,6 +597,28 @@ fn phases_dialog_adds_a_phase_and_cancel_undoes() {
     assert!(harness.state().dialogs.phases.is_none());
 }
 
+#[test]
+fn design_options_dialog_adds_a_set_and_cancel_undoes() {
+    let mut state = sample_state();
+    let depth = state.session.doc.undo_depth();
+    assert_eq!(crate::commands::UiCommand::ActiveOption.unavailable(&state), Some(t!("why-no-option-sets")));
+    crate::design_options_ui::open(&mut state);
+    let mut harness = themed_harness(state, egui::vec2(800.0, 600.0), egui::Theme::Light, |ui, state| {
+        crate::design_options_ui::show(ui.ctx(), state)
+    });
+    harness.get_by_label(&t!("opt-new-set")).click();
+    harness.run();
+    let sets = &harness.state().project().option_sets;
+    assert_eq!(sets.len(), 1);
+    assert_eq!(sets[0].options.len(), 2);
+    assert_eq!(crate::commands::UiCommand::ActiveOption.unavailable(harness.state()), None);
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().project().option_sets.is_empty());
+    assert_eq!(harness.state().session.doc.undo_depth(), depth);
+    assert!(harness.state().dialogs.design_options.is_none());
+}
+
 /// Demolish acts on a selection at once, also from a 3D view; with nothing
 /// demolishable selected it starts the tool.
 #[test]
