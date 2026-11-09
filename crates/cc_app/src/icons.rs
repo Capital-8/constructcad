@@ -50,6 +50,7 @@ pub enum Icon {
     SiteLocation,
     Levels,
     Materials,
+    FillPatterns,
     MacroRecord,
     MacroRun,
     Text,
@@ -192,7 +193,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 177] = [
+    pub const ALL: [Icon; 178] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -232,6 +233,7 @@ impl Icon {
         Icon::SiteLocation,
         Icon::Levels,
         Icon::Materials,
+        Icon::FillPatterns,
         Icon::MacroRecord,
         Icon::MacroRun,
         Icon::Text,
@@ -414,6 +416,7 @@ impl Icon {
             Icon::SiteLocation => include_str!("../../../assets/icons/ui/site-location.svg"),
             Icon::Levels => include_str!("../../../assets/icons/ui/levels.svg"),
             Icon::Materials => include_str!("../../../assets/icons/ui/materials.svg"),
+            Icon::FillPatterns => include_str!("../../../assets/icons/ui/fill-patterns.svg"),
             Icon::MacroRecord => include_str!("../../../assets/icons/ui/macro-record.svg"),
             Icon::MacroRun => include_str!("../../../assets/icons/ui/macro-run.svg"),
             Icon::Text => include_str!("../../../assets/icons/ui/text.svg"),
