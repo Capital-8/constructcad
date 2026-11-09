@@ -10,6 +10,7 @@
 
 use crate::component::{
     ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, HostOpening, ParamKind, WALL_THICKNESS,
+    WindowOperation,
 };
 use crate::{Project, TypeData};
 
@@ -21,6 +22,9 @@ const FRAME: f64 = 0.05;
 pub struct OpeningNames {
     pub door: String,
     pub window: String,
+    /// The template's side-hung windows: one panel and two.
+    pub casement: String,
+    pub double_casement: String,
     pub width: String,
     pub height: String,
     pub sill: String,
@@ -53,6 +57,8 @@ impl OpeningNames {
         Self {
             door: n("tpl-comp-door"),
             window: n("tpl-comp-window"),
+            casement: n("tpl-comp-window-casement"),
+            double_casement: n("tpl-comp-window-double"),
             width: param("tpl-param-width"),
             height: param("tpl-param-height"),
             sill: param("tpl-param-sill"),
@@ -107,6 +113,7 @@ pub fn door_def(names: &OpeningNames, width: f64, height: f64, material: &str) -
             height: h.clone(),
             sill: String::new(),
             own_symbol: false,
+            operation: WindowOperation::Fixed,
         })),
         ..Default::default()
     }
@@ -143,9 +150,39 @@ pub fn window_def(names: &OpeningNames, width: f64, height: f64, sill: f64, mate
             height: h.clone(),
             sill: names.sill.clone(),
             own_symbol: false,
+            operation: WindowOperation::Fixed,
         })),
         ..Default::default()
     }
+}
+
+/// A window whose panels open as `operation` says: [`window_def`] with,
+/// for two panels, a stile where they meet and a pane in each.
+pub fn casement_window_def(
+    names: &OpeningNames,
+    (width, height, sill): (f64, f64, f64),
+    material: &str,
+    operation: WindowOperation,
+) -> ComponentDef {
+    let mut def = window_def(names, width, height, sill, material);
+    if let Some(o) = def.opening.as_mut() {
+        o.operation = operation;
+    }
+    if operation == WindowOperation::DoubleSideHung {
+        let (w, h) = (&names.width, &names.height);
+        let s = |text: &str| text.replace("{W}", w).replace("{H}", h).replace("{F}", &FRAME.to_string());
+        def.items.retain(|i| i.name != names.glass);
+        def.items.push(piece(
+            &names.sash,
+            "",
+            [s("-{F}"), s("-0.04"), s("{F}"), s("2 * {F}"), s("0.08"), s("{H} - 2 * {F}")],
+        ));
+        for x in [s("-{W} / 2 + {F}"), s("{F}")] {
+            let pane = [x, s("-0.006"), s("{F}"), s("{W} / 2 - 2 * {F}"), s("0.012"), s("{H} - 2 * {F}")];
+            def.items.push(piece(&names.glass, material, pane));
+        }
+    }
+    def
 }
 
 impl Project {
@@ -188,6 +225,27 @@ mod tests {
 
     fn names() -> OpeningNames {
         OpeningNames::new(&|key| crate::project::template_default(key).to_string())
+    }
+
+    #[test]
+    fn casement_windows_resolve_and_map_to_ifc_panels() {
+        let names = names();
+        for op in WindowOperation::ALL {
+            let def = casement_window_def(&names, (1.2, 1.2, 1.0), "Vidro", op);
+            let (parts, errors) = def.resolve_in(&Default::default(), &[(WALL_THICKNESS, 0.15)]);
+            assert!(errors.is_empty(), "{op:?}: {errors:?}");
+            let panes = def.items.iter().filter(|i| i.name == names.glass).count();
+            assert_eq!(panes, if op == WindowOperation::DoubleSideHung { 2 } else { 1 });
+            assert!(!parts.is_empty());
+            assert_eq!(def.opening.as_ref().map(|o| o.operation), Some(op));
+            let panels: Vec<&str> = op.ifc_panels().iter().map(|(o, _)| *o).collect();
+            assert_eq!(WindowOperation::from_ifc_panels(&panels), Some(op));
+            assert_eq!(op.hinges().len(), if op == WindowOperation::Fixed { 0 } else { panels.len() });
+        }
+        assert_eq!(WindowOperation::from_ifc_panels(&["TILTANDTURNLEFTHAND"]), None);
+        // Fixed windows keep files as they were: no operation is written.
+        let fixed = ron::to_string(&window_def(&names, 1.2, 1.2, 1.0, "Vidro")).unwrap();
+        assert!(!fixed.contains("operation"));
     }
 
     #[test]

@@ -307,11 +307,14 @@ impl Command for TypeDelete {
 /// `void: true` is cut out of the solid pieces it overlaps; one with
 /// `plan_only: true` is a plan symbol (a door's swing), drawn in plans and
 /// not a solid. A `kind` of
-/// `Door` or `Window` with an `opening` {width, height, sill, own_symbol}
-/// (expressions) makes a door or window type, placed with `door_create` or
-/// `window_create`: it cuts that opening in its wall; its frame has x along
-/// the wall from the opening's center, y across it (towards the side a door
-/// opens to), z up from the sill, and `WallThickness` is the wall's thickness.
+/// `Door` or `Window` with an `opening` {width, height, sill, own_symbol,
+/// operation} (expressions, then a window's `operation`: `Fixed`,
+/// `SideHungLeft`, `SideHungRight` or `DoubleSideHung`, drawn as swings in
+/// plans and written as IFC panel properties) makes a door or window type,
+/// placed with `door_create` or `window_create`: it cuts that opening in its
+/// wall; its frame has x along the wall from the opening's center, y across
+/// it (towards the side a door or window opens to), z up from the sill, and
+/// `WallThickness` is the wall's thickness.
 /// `connectors` [{name, system: `ColdWater`, `HotWater`, `Sanitary`, `Vent`,
 /// `Rainwater`, `Power` or `Lighting`, x, y, z, direction: `Down`, `Up`,
 /// `Front` (-y), `Back` (+y), `Left` (-x) or `Right` (+x), diameter}] are

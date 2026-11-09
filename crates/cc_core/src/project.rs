@@ -228,6 +228,14 @@ impl Project {
             component: names.window.clone(),
             def: crate::openings::window_def(&names, w, h, sill, m),
         };
+        let casement = |size: (f64, f64, f64), m: &str, op: crate::WindowOperation| TypeData::Component {
+            component: if op == crate::WindowOperation::DoubleSideHung {
+                names.double_casement.clone()
+            } else {
+                names.casement.clone()
+            },
+            def: crate::openings::casement_window_def(&names, size, m, op),
+        };
         let types = [
             (
                 &n("tpl-type-masonry-15"),
@@ -265,6 +273,14 @@ impl Project {
             (&n("tpl-type-door-90"), door(0.9, 2.1, &n("tpl-mat-wood"))),
             (&n("tpl-type-window-120"), window(1.2, 1.2, 1.0, &n("tpl-mat-glass"))),
             (&n("tpl-type-window-150"), window(1.5, 1.0, 1.1, &n("tpl-mat-glass"))),
+            (
+                &n("tpl-type-window-casement-60"),
+                casement((0.6, 1.0, 1.1), &n("tpl-mat-glass"), crate::WindowOperation::SideHungLeft),
+            ),
+            (
+                &n("tpl-type-window-double-120"),
+                casement((1.2, 1.2, 1.0), &n("tpl-mat-glass"), crate::WindowOperation::DoubleSideHung),
+            ),
             (
                 &n("tpl-type-slab-12"),
                 TypeData::Floor {
@@ -1218,6 +1234,10 @@ pub fn template_default(key: &str) -> &'static str {
         "tpl-type-door-90" => "Porta 90x210",
         "tpl-type-window-120" => "Janela 120x120",
         "tpl-type-window-150" => "Janela 150x100",
+        "tpl-type-window-casement-60" => "Janela de abrir 60x100",
+        "tpl-type-window-double-120" => "Janela de abrir 2 folhas 120x120",
+        "tpl-comp-window-casement" => "Janela de abrir",
+        "tpl-comp-window-double" => "Janela de abrir 2 folhas",
         "tpl-comp-door" => "Porta de giro",
         "tpl-conn-sewer" => "Esgoto",
         "tpl-conn-cold-water" => "Água fria",

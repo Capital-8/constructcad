@@ -247,8 +247,15 @@ fn opening(ui: &mut Ui, ed: &mut Editor) {
     let first = |i: usize| ed.def.params.get(i).map_or_else(|| "1".to_string(), |p| p.name.clone());
     let (w, h) = (first(0), first(1));
     let o = ed.def.opening.get_or_insert_with(|| {
-        Box::new(cc_core::component::HostOpening { width: w, height: h, sill: String::new(), own_symbol: false })
+        Box::new(cc_core::component::HostOpening {
+            width: w,
+            height: h,
+            sill: String::new(),
+            own_symbol: false,
+            operation: Default::default(),
+        })
     });
+    let window = ed.def.kind == ComponentKind::Window;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
         ui.label(theme::muted(t!("comp-opening")));
@@ -262,6 +269,21 @@ fn opening(ui: &mut Ui, ed: &mut Editor) {
         }
         ui.checkbox(&mut o.own_symbol, t!("comp-own-symbol")).on_hover_text(t!("comp-own-symbol-tip"));
     });
+    if window {
+        ui.horizontal(|ui| {
+            ui.label(theme::muted(t!("comp-window-operation"))).on_hover_text(t!("comp-window-operation-tip"));
+            egui::ComboBox::from_id_salt("comp-window-operation")
+                .selected_text(tr(o.operation.key()))
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for op in cc_core::WindowOperation::ALL {
+                        ui.selectable_value(&mut o.operation, op, tr(op.key()));
+                    }
+                });
+        });
+    } else {
+        o.operation = Default::default();
+    }
     ui.label(theme::muted(t!("comp-opening-hint", "name" => cc_core::component::WALL_THICKNESS)).size(11.5));
 }
 

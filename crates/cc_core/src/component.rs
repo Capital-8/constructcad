@@ -510,6 +510,89 @@ pub struct HostOpening {
     /// symbol (a door's swing, a window's sash lines).
     #[serde(default, skip_serializing_if = "is_false")]
     pub own_symbol: bool,
+    /// How a window's panels open (doors ignore it): the plan symbol and
+    /// the IFC panel properties.
+    #[serde(default, skip_serializing_if = "WindowOperation::is_fixed")]
+    pub operation: WindowOperation,
+}
+
+/// How the panels of a window open, after IFC's window panel operations:
+/// side-hung panels swing about a vertical hinge towards the side the
+/// window opens to (`y` of its frame). The hand is the hinge's side seen
+/// looking that way (a door's convention): left is the start of the
+/// opening along the wall (`-x`), swapped by the element's hand flip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum WindowOperation {
+    /// One panel that does not open.
+    #[default]
+    Fixed,
+    /// One panel hinged on the left.
+    SideHungLeft,
+    /// One panel hinged on the right.
+    SideHungRight,
+    /// Two panels hinged on either jamb, meeting in the middle.
+    DoubleSideHung,
+}
+
+impl WindowOperation {
+    pub const ALL: [Self; 4] = [Self::Fixed, Self::SideHungLeft, Self::SideHungRight, Self::DoubleSideHung];
+
+    pub fn is_fixed(&self) -> bool {
+        *self == Self::Fixed
+    }
+
+    /// The interface key of its name.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Fixed => "window-op-fixed",
+            Self::SideHungLeft => "window-op-left",
+            Self::SideHungRight => "window-op-right",
+            Self::DoubleSideHung => "window-op-double",
+        }
+    }
+
+    /// The panels from the start of the opening: each one's IFC operation
+    /// and position (`IfcWindowPanelOperationEnum`, `IfcWindowPanelPositionEnum`).
+    pub fn ifc_panels(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Self::Fixed => &[("FIXEDCASEMENT", "MIDDLE")],
+            Self::SideHungLeft => &[("SIDEHUNGLEFTHAND", "MIDDLE")],
+            Self::SideHungRight => &[("SIDEHUNGRIGHTHAND", "MIDDLE")],
+            Self::DoubleSideHung => &[("SIDEHUNGLEFTHAND", "LEFT"), ("SIDEHUNGRIGHTHAND", "RIGHT")],
+        }
+    }
+
+    /// The IFC partitioning of a window type with these panels.
+    pub fn ifc_partitioning(self) -> &'static str {
+        match self {
+            Self::DoubleSideHung => "DOUBLE_PANEL_VERTICAL",
+            _ => "SINGLE_PANEL",
+        }
+    }
+
+    /// The operation of IFC panels (operations in order along the window);
+    /// `None` for combinations it has no value for.
+    pub fn from_ifc_panels(panels: &[&str]) -> Option<Self> {
+        match panels {
+            ["FIXEDCASEMENT"] => Some(Self::Fixed),
+            ["SIDEHUNGLEFTHAND"] => Some(Self::SideHungLeft),
+            ["SIDEHUNGRIGHTHAND"] => Some(Self::SideHungRight),
+            ["SIDEHUNGLEFTHAND", "SIDEHUNGRIGHTHAND"] => Some(Self::DoubleSideHung),
+            _ => None,
+        }
+    }
+
+    /// The hinges in plan: for each side-hung panel, where its hinge stands
+    /// as a fraction of the opening's width from its start, and which way
+    /// along the wall the panel closes (+1 towards the end). Fixed: none.
+    pub fn hinges(self) -> &'static [(f64, f64)] {
+        match self {
+            Self::Fixed => &[],
+            Self::SideHungLeft => &[(0.0, 1.0)],
+            Self::SideHungRight => &[(1.0, -1.0)],
+            Self::DoubleSideHung => &[(0.0, 1.0), (1.0, -1.0)],
+        }
+    }
 }
 
 impl HostOpening {

@@ -668,10 +668,11 @@ fn draw_openings(
         let Some(host) = e.as_hosted() else { continue };
         let id = Some(e.id);
         // A door or window component may draw its own symbol: its pieces marked for plans.
-        let own_symbol = match project.element_type(e.type_id).map(|t| &t.data) {
-            Some(cc_core::TypeData::Component { def, .. }) => def.opening.as_ref().is_some_and(|o| o.own_symbol),
-            _ => false,
+        let opening = match project.element_type(e.type_id).map(|t| &t.data) {
+            Some(cc_core::TypeData::Component { def, .. }) => def.opening.as_deref(),
+            _ => None,
         };
+        let own_symbol = opening.is_some_and(|o| o.own_symbol);
         if own_symbol {
             if !ceiling {
                 let shown = |p: &&cc_core::component::ComponentPart| p.in_plan && !p.void && p.detail.shows(detail);
@@ -681,33 +682,59 @@ fn draw_openings(
             }
             continue;
         }
+        let width = o.u1 - o.u0;
+        let side = if host.flip_facing { -1.0 } else { 1.0 };
         match e.kind {
             ElementKind::Door(_) if !ceiling => {
-                let width = o.u1 - o.u0;
-                let side = if host.flip_facing { -1.0 } else { 1.0 };
                 let (hinge_u, toward) = if host.flip_hand { (o.u1, -1.0) } else { (o.u0, 1.0) };
-                let hinge = g.world(hinge_u, side * g.half);
-                // Square to the wall at the opening's center (an arc wall's chord).
-                let (_, dir, normal) = g.frame_at((o.u0 + o.u1) * 0.5);
-                let leaf_dir = normal * side;
-                d.line(hinge, hinge + leaf_dir * width, LineStyle::Projection, id);
-                let a0 = leaf_dir.to_angle();
-                let mut a1 = (dir * toward).to_angle();
-                if a1 - a0 > PI {
-                    a1 -= TAU;
-                } else if a0 - a1 > PI {
-                    a1 += TAU;
-                }
-                d.arc(hinge, width, a0, a1, LineStyle::Thin, id);
+                swing(d, g, (o.u0 + o.u1) * 0.5, (hinge_u, toward), width, side, id);
             }
             ElementKind::Window(_) => {
                 for v in [-0.01, 0.01] {
                     d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Thin, id);
                 }
+                if ceiling {
+                    continue;
+                }
+                // Side-hung panels, open square to the wall on the side the window opens to.
+                let operation = opening.map(|o| o.operation).unwrap_or_default();
+                let hinges = operation.hinges();
+                let leaf = width / hinges.len().max(1) as f64;
+                for &(at, toward) in hinges {
+                    let (at, toward) = if host.flip_hand { (1.0 - at, -toward) } else { (at, toward) };
+                    swing(d, g, (o.u0 + o.u1) * 0.5, (o.u0 + at * width, toward), leaf, side, id);
+                }
             }
             _ => {}
         }
     }
+}
+
+/// A swing in plan: a leaf `width` long from the hinge at `hinge_u` on the
+/// wall's face on `side`, square to the wall at `center_u` (an arc wall's
+/// chord), and the arc its free end runs back to the wall `toward` the
+/// opening's other end (+1 along the wall).
+fn swing(
+    d: &mut Drawing2D,
+    g: &WallGeom,
+    center_u: f64,
+    (hinge_u, toward): (f64, f64),
+    width: f64,
+    side: f64,
+    id: Option<cc_core::ElementId>,
+) {
+    let hinge = g.world(hinge_u, side * g.half);
+    let (_, dir, normal) = g.frame_at(center_u);
+    let leaf_dir = normal * side;
+    d.line(hinge, hinge + leaf_dir * width, LineStyle::Projection, id);
+    let a0 = leaf_dir.to_angle();
+    let mut a1 = (dir * toward).to_angle();
+    if a1 - a0 > PI {
+        a1 -= TAU;
+    } else if a0 - a1 > PI {
+        a1 += TAU;
+    }
+    d.arc(hinge, width, a0, a1, LineStyle::Thin, id);
 }
 
 fn ceiling_grid(d: &mut Drawing2D, boundary: &[DVec2], id: cc_core::ElementId) {

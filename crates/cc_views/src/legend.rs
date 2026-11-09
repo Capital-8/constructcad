@@ -37,8 +37,10 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
         });
         // Door swings and tall component outlines extend above the row; leave room for them.
+        let hinges = t.window_operation().hinges();
         let above = match opening {
             Some(width) if t.category() == Category::Door => width + 0.075,
+            Some(width) if !hinges.is_empty() => width / hinges.len() as f64 + 0.075,
             _ => plan_bounds.map_or(0.0, |(lo, hi)| (hi.y - lo.y) / 2.0),
         };
         y -= above;
@@ -94,6 +96,13 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 }
                 for v in [-0.01, 0.01] {
                     d.line(o + DVec2::new(0.2, v), o + DVec2::new(0.2 + width, v), LineStyle::Thin, None);
+                }
+                let leaf = width / hinges.len().max(1) as f64;
+                for &(at, toward) in hinges {
+                    let hinge = o + DVec2::new(0.2 + at * width, h);
+                    let a1 = if toward > 0.0 { 0.0 } else { std::f64::consts::PI };
+                    d.line(hinge, hinge + DVec2::Y * leaf, LineStyle::Projection, None);
+                    d.arc(hinge, leaf, std::f64::consts::FRAC_PI_2, a1, LineStyle::Thin, None);
                 }
             }
             TypeData::Ceiling { thickness, .. } => {

@@ -1638,14 +1638,39 @@ impl<'a> Exporter<'a> {
                 if matches!(&predefined, Value::EnumName(p) if p == "USERDEFINED") {
                     base[8] = Value::Str(class.object_type.clone());
                 }
+                // A native window's panels: how each opens, in the type's property sets.
+                let operation = (layout == TypeLayout::Window && def.ifc.is_none() && def.opening.is_some())
+                    .then(|| def.opening.as_ref().map(|o| o.operation).unwrap_or_default());
+                if let Some(op) = operation {
+                    let mut sets: Vec<Value> = match std::mem::replace(&mut base[5], Value::Null) {
+                        Value::List(sets) => sets,
+                        _ => Vec::new(),
+                    };
+                    for (i, (operation, position)) in op.ifc_panels().iter().enumerate() {
+                        let gid = self.guid(&format!("window-panel-{type_id}-{i}"));
+                        let args = args![
+                            gid,
+                            Value::Null,
+                            format!("Panel {}", i + 1),
+                            Value::Null,
+                            Value::Enum(operation),
+                            Value::Enum(position),
+                            Value::Null,
+                            Value::Null,
+                            Value::Null
+                        ];
+                        sets.push(Value::Ref(self.w.add("IFCWINDOWPANELPROPERTIES", args)));
+                    }
+                    base[5] = Value::List(sets);
+                }
+                let partitioning = Value::Enum(operation.map_or("NOTDEFINED", |op| op.ifc_partitioning()));
                 let extra = match layout {
                     TypeLayout::Predefined => vec![predefined],
                     TypeLayout::Plain => Vec::new(),
                     // Furniture types also state where they are assembled.
                     TypeLayout::Furniture => vec![Value::Enum("NOTDEFINED"), predefined],
-                    TypeLayout::Door | TypeLayout::Window => {
-                        vec![predefined, Value::Enum("NOTDEFINED"), Value::Null, Value::Null]
-                    }
+                    TypeLayout::Door => vec![predefined, Value::Enum("NOTDEFINED"), Value::Null, Value::Null],
+                    TypeLayout::Window => vec![predefined, partitioning, Value::Null, Value::Null],
                 };
                 (entity, extra)
             }
@@ -2124,7 +2149,8 @@ impl<'a> Exporter<'a> {
                 ("IFCDOOR", "Qto_DoorBaseQuantities")
             }
             _ => {
-                attrs.extend(args![Value::Enum("WINDOW"), Value::Enum("SINGLE_PANEL"), Value::Null]);
+                let partitioning = ty.window_operation().ifc_partitioning();
+                attrs.extend(args![Value::Enum("WINDOW"), Value::Enum(partitioning), Value::Null]);
                 ("IFCWINDOW", "Qto_WindowBaseQuantities")
             }
         };
