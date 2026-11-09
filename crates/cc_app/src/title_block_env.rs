@@ -62,12 +62,15 @@ pub struct SheetEditor {
     drag_from: Option<DVec2>,
     /// The grip being dragged: piece index, and 0 (position) or 1 (size).
     grip: Option<(usize, u8)>,
+    /// The picture being dragged by its body: piece index, and where it was
+    /// grabbed from its corner (millimeters).
+    moving: Option<(usize, DVec2)>,
 }
 
 impl SheetEditor {
     pub fn new(sheet: Option<ViewId>) -> Self {
         let preview = sheet.map_or(Preview::Paper { size: SheetSize::A3, portrait: false }, Preview::Sheet);
-        Self { sheet, preview, raw_keys: false, editing: None, camera: None, drag_from: None, grip: None }
+        Self { sheet, preview, raw_keys: false, editing: None, camera: None, drag_from: None, grip: None, moving: None }
     }
 }
 
@@ -408,7 +411,8 @@ pub fn central(ui: &mut Ui, state: &mut AppState) {
             for (_, at) in &lone_grips.1 {
                 painter.rect_filled(Rect::from_center_size(mm.to_screen(*at), vec2(8.0, 8.0)), 0.0, PALETTE.accent);
             }
-            // A press on a grip drags it, elsewhere starts a window.
+            // A press on a grip drags it, inside a picture moves the picture,
+            // elsewhere starts a window.
             if resp.drag_started_by(egui::PointerButton::Primary)
                 && let Some(origin) = ui.input(|i| i.pointer.press_origin())
             {
@@ -419,12 +423,30 @@ pub fn central(ui: &mut Ui, state: &mut AppState) {
                     .filter(|(_, at)| at.distance(from) <= reach * 1.5)
                     .min_by(|a, b| a.1.distance(from).total_cmp(&b.1.distance(from)))
                     .map(|(which, _)| (lone_grips.0, *which));
+                let picture = picture_at(&pieces, from, reach);
+                if grip.is_none()
+                    && let Some((index, _)) = picture
+                {
+                    set_pick(state, vec![index]);
+                }
                 if let Some(e) = editor_mut(state) {
-                    match grip {
-                        Some(g) => e.grip = Some(g),
-                        None => e.drag_from = Some(from),
+                    match (grip, picture) {
+                        (Some(g), _) => e.grip = Some(g),
+                        (None, Some((index, corner))) => e.moving = Some((index, from - corner)),
+                        (None, None) => e.drag_from = Some(from),
                     }
                 }
+            }
+            if let (Some((index, grab)), Some(r)) = (editor(state).and_then(|e| e.moving), raw)
+                && resp.dragged_by(egui::PointerButton::Primary)
+                && resp.drag_delta() != egui::Vec2::ZERO
+            {
+                drag_picture(state, &pieces, &planes, index, grab, r * MM, tol);
+            }
+            if resp.drag_stopped_by(egui::PointerButton::Primary)
+                && editor_mut(state).and_then(|e| e.moving.take()).is_some()
+            {
+                state.session.doc.break_merge();
             }
             if let (Some((index, which)), Some(r)) = (editor(state).and_then(|e| e.grip), raw)
                 && resp.dragged_by(egui::PointerButton::Primary)
@@ -564,6 +586,31 @@ pub fn piece_at(pieces: &SheetPieces, p: DVec2, tol: f64) -> Option<usize> {
         .min_by(|a, b| a.0.total_cmp(&b.0))
         .map(|(_, i)| i);
     stroke.or_else(|| pieces.images.iter().rev().find(|im| inside((im.corner, im.corner + im.size))).map(|im| im.item))
+}
+
+/// A picture dragged by its body to `pointer` (millimeters), grabbed `grab`
+/// from its corner: the corner follows, snapped like its grip (`tol` in
+/// paper meters), in one undo step until the drag ends.
+fn drag_picture(
+    state: &mut AppState,
+    pieces: &SheetPieces,
+    planes: &[SheetPlane],
+    index: usize,
+    grab: DVec2,
+    pointer: DVec2,
+    tol: f64,
+) {
+    let (at, _) = crate::component_sketch::snap(&plane_view(planes, 1.0 / MM), (pointer - grab) / MM, tol);
+    move_grip(state, pieces, planes, index, 0, at * MM, false);
+}
+
+/// The picture whose body is under `p` (millimeters) and nothing else is
+/// picked there before it (see [`piece_at`]): its index and corner.
+fn picture_at(pieces: &SheetPieces, p: DVec2, tol: f64) -> Option<(usize, DVec2)> {
+    let index = piece_at(pieces, p, tol)?;
+    let im = pieces.images.iter().find(|im| im.item == index)?;
+    let (lo, hi) = (im.corner.min(im.corner + im.size), im.corner.max(im.corner + im.size));
+    (p.cmpge(lo).all() && p.cmple(hi).all()).then_some((index, im.corner))
 }
 
 /// The pieces wholly inside the window from `a` to `b` (millimeters), in order.
@@ -2424,6 +2471,44 @@ mod tests {
         let local = path.to_string_lossy().replace('\\', "/");
         assert!(!opaque(&local), "a picture on this machine is not read");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A picture is moved by dragging its body, not only its corner grip:
+    /// grabbed anywhere inside, it keeps that point under the pointer.
+    #[test]
+    fn a_picture_dragged_by_its_body_moves_in_one_step() {
+        let (mut state, _, _) = editor_state();
+        let paper_mm = DVec2::new(420.0, 297.0);
+        let (_, def) = crate::component_env::component(&state).unwrap();
+        let ps = planes(&def, paper_mm);
+        assert!(add_image(&mut state, &ps, DVec2::new(15.0, 15.0), DVec2::new(40.0, 20.0), &svg_picture()));
+        let (index, _) = last_piece(&state);
+        let (_, def) = crate::component_env::component(&state).unwrap();
+        let pieces = def.resolve_sheet(paper_mm);
+        // The middle of the picture holds it; outside it does not.
+        let (picked, corner) = picture_at(&pieces, DVec2::new(35.0, 25.0), 0.5).expect("a picture under the press");
+        assert_eq!(picked, index);
+        assert!(picture_at(&pieces, DVec2::new(100.0, 100.0), 0.5).is_none());
+        let grab = DVec2::new(35.0, 25.0) - corner;
+        let bytes = |state: &AppState| {
+            let (_, def) = crate::component_env::component(state).unwrap();
+            match def.sheet.get(index).map(|i| i.shape.clone()) {
+                Some(SheetShape::Image { x, y, image, .. }) => (x, y, image),
+                _ => panic!("a picture"),
+            }
+        };
+        let before = bytes(&state).2;
+        let depth = state.session.doc.undo_depth();
+        // Three frames of one drag, the pointer ending 30 mm right and 10 mm up.
+        for pointer in [DVec2::new(45.0, 28.0), DVec2::new(55.0, 32.0), DVec2::new(65.0, 35.0)] {
+            let (_, def) = crate::component_env::component(&state).unwrap();
+            drag_picture(&mut state, &def.resolve_sheet(paper_mm), &ps, index, grab, pointer, 1e-6);
+        }
+        state.session.doc.break_merge();
+        let (x, y, image) = bytes(&state);
+        assert_eq!((x.as_str(), y.as_str()), ("45", "25"), "{}", state.message);
+        assert_eq!(state.session.doc.undo_depth(), depth + 1, "one drag, one step");
+        assert!(std::sync::Arc::ptr_eq(&image, &before), "the picture is kept, not resent");
     }
 
     #[test]
