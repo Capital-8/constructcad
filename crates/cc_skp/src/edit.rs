@@ -69,7 +69,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::create::{
     AttributeDict, AttributeValue, ComponentDefinitionBuilder, DefinitionHandle, DefinitionOptions, FaceOptions,
-    InstanceOptions, LayerOptions, Matrix3x3, Point3, SkpBuilder, SkpWriteError, UvCorrespondence, create,
+    GuideOptions, InstanceOptions, LayerOptions, Matrix3x3, Point3, SkpBuilder, SkpWriteError, UvCorrespondence,
+    create,
 };
 use crate::errors::SkpParseError;
 use crate::internal::is_legacy;
@@ -331,6 +332,11 @@ fn definition_order(model: &SkpModel) -> Result<Vec<EntityId>, SkpWriteError> {
                 "circular component-definition reference involving definition {def_id}"
             )));
         }
+        if in_progress.len() >= crate::scene_build::MAX_COMPONENT_DEPTH {
+            return Err(SkpWriteError::new(format!(
+                "component-definition nesting depth exceeds maximum allowed limit at definition {def_id}"
+            )));
+        }
         in_progress.insert(def_id);
         if let Some(defn) = model.definitions.get(&def_id) {
             for inst in &defn.instances {
@@ -381,12 +387,13 @@ fn definition_has_content(defn: &Definition, def_builders: &BTreeMap<EntityId, D
 trait ReplayTarget {
     fn add_face(&mut self, points: &[Point3], options: &FaceOptions) -> Result<(), SkpWriteError>;
     fn add_instance(&mut self, definition: DefinitionHandle, options: &InstanceOptions) -> Result<(), SkpWriteError>;
-    fn add_construction_point(&mut self, position: Point3) -> Result<(), SkpWriteError>;
+    fn add_construction_point(&mut self, position: Point3, options: &GuideOptions) -> Result<(), SkpWriteError>;
     fn add_construction_line(
         &mut self,
         point: Point3,
         point2: Option<Point3>,
         direction: Option<Point3>,
+        options: &GuideOptions,
     ) -> Result<(), SkpWriteError>;
 }
 
@@ -397,16 +404,17 @@ impl ReplayTarget for SkpBuilder {
     fn add_instance(&mut self, definition: DefinitionHandle, options: &InstanceOptions) -> Result<(), SkpWriteError> {
         SkpBuilder::add_instance(self, definition, options)
     }
-    fn add_construction_point(&mut self, position: Point3) -> Result<(), SkpWriteError> {
-        SkpBuilder::add_construction_point(self, position)
+    fn add_construction_point(&mut self, position: Point3, options: &GuideOptions) -> Result<(), SkpWriteError> {
+        SkpBuilder::add_construction_point(self, position, options)
     }
     fn add_construction_line(
         &mut self,
         point: Point3,
         point2: Option<Point3>,
         direction: Option<Point3>,
+        options: &GuideOptions,
     ) -> Result<(), SkpWriteError> {
-        SkpBuilder::add_construction_line(self, point, point2, direction)
+        SkpBuilder::add_construction_line(self, point, point2, direction, options)
     }
 }
 
@@ -417,16 +425,17 @@ impl ReplayTarget for ComponentDefinitionBuilder<'_> {
     fn add_instance(&mut self, definition: DefinitionHandle, options: &InstanceOptions) -> Result<(), SkpWriteError> {
         ComponentDefinitionBuilder::add_instance(self, definition, options)
     }
-    fn add_construction_point(&mut self, position: Point3) -> Result<(), SkpWriteError> {
-        ComponentDefinitionBuilder::add_construction_point(self, position)
+    fn add_construction_point(&mut self, position: Point3, options: &GuideOptions) -> Result<(), SkpWriteError> {
+        ComponentDefinitionBuilder::add_construction_point(self, position, options)
     }
     fn add_construction_line(
         &mut self,
         point: Point3,
         point2: Option<Point3>,
         direction: Option<Point3>,
+        options: &GuideOptions,
     ) -> Result<(), SkpWriteError> {
-        ComponentDefinitionBuilder::add_construction_line(self, point, point2, direction)
+        ComponentDefinitionBuilder::add_construction_line(self, point, point2, direction, options)
     }
 }
 
@@ -436,18 +445,34 @@ impl ReplayTarget for ComponentDefinitionBuilder<'_> {
 /// Search for the first non-collinear triple - an affine map preserves collinearity, so a
 /// non-collinear triple in 3D is also non-collinear in (u, v).
 pub(crate) fn non_collinear_triple(points: &[Point3]) -> Option<[Point3; 3]> {
-    for i in 0..points.len() {
-        for j in i + 1..points.len() {
-            for k in j + 1..points.len() {
-                let (a, b, c) = (points[i], points[j], points[k]);
-                let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-                let e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-                let cx = e1[1] * e2[2] - e1[2] * e2[1];
-                let cy = e1[2] * e2[0] - e1[0] * e2[2];
-                let cz = e1[0] * e2[1] - e1[1] * e2[0];
-                if cx * cx + cy * cy + cz * cz > 1e-9 {
-                    return Some([a, b, c]);
+    let is_non_collinear = |a: Point3, b: Point3, c: Point3| {
+        let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let cx = e1[1] * e2[2] - e1[2] * e2[1];
+        let cy = e1[2] * e2[0] - e1[0] * e2[2];
+        let cz = e1[0] * e2[1] - e1[1] * e2[0];
+        cx * cx + cy * cy + cz * cz > 1e-9
+    };
+    let cap = points.len().min(64);
+    for i in 0..cap {
+        for j in i + 1..cap {
+            for k in j + 1..cap {
+                if is_non_collinear(points[i], points[j], points[k]) {
+                    return Some([points[i], points[j], points[k]]);
                 }
+            }
+        }
+    }
+    if points.len() > cap {
+        let a = points[0];
+        let b = *points[1..].iter().max_by(|p, q| {
+            let dp = (p[0] - a[0]).powi(2) + (p[1] - a[1]).powi(2) + (p[2] - a[2]).powi(2);
+            let dq = (q[0] - a[0]).powi(2) + (q[1] - a[1]).powi(2) + (q[2] - a[2]).powi(2);
+            dp.total_cmp(&dq)
+        })?;
+        for &c in &points[cap..] {
+            if is_non_collinear(a, b, c) {
+                return Some([a, b, c]);
             }
         }
     }
@@ -661,15 +686,21 @@ impl ReplayContext<'_> {
         for inst in &defn.instances {
             self.replay_instance(target, inst, warnings, context);
         }
+        let guide_options = |layer: &str, hidden: bool| GuideOptions {
+            layer: (!layer.is_empty()).then(|| self.layer_slots.get(layer).copied()).flatten(),
+            hidden,
+        };
         for cp in &defn.construction_points {
-            if let Err(exc) = target.add_construction_point(cp.position) {
+            let options = guide_options(&cp.layer, cp.hidden);
+            if let Err(exc) = target.add_construction_point(cp.position, &options) {
                 warnings.push(format!("{context}: construction point skipped ({exc})"));
             }
         }
         for cl in &defn.construction_lines {
+            let options = guide_options(&cl.layer, cl.hidden);
             let result = match (cl.start, cl.end) {
-                (Some(start), Some(end)) => target.add_construction_line(start, Some(end), None),
-                (None, None) => target.add_construction_line(cl.point, None, Some(cl.direction)),
+                (Some(start), Some(end)) => target.add_construction_line(start, Some(end), None, &options),
+                (None, None) => target.add_construction_line(cl.point, None, Some(cl.direction), &options),
                 _ => {
                     warnings.push(format!("{context}: half-bounded construction line skipped"));
                     continue;

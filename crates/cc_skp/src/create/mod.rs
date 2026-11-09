@@ -55,9 +55,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use archive::{
     ArcCurveParams, ArchiveWriter, AttributeDictList, EdgeFlags, FaceSpec, IdSource, Placement, PutLe, TextureSource,
-    Topology, detect_image_subtype, read_u16_at, shift_ref, write_u16_at, write_u32_at,
+    Topology, detect_image_subtype, shift_ref, write_u32_at,
 };
-use geometry::{arc_points, circle_basis, circle_points, is_coplanar, normalize3, resolve_matrix3x3};
+use geometry::{
+    arc_points, circle_basis, circle_points, is_coplanar, newell_plane, normalize3, plane_from_polygon,
+    resolve_matrix3x3,
+};
 use scaffold_blank_v17 as scaffold;
 
 /// A 3D point (x, y, z) in inches.
@@ -171,6 +174,141 @@ impl MaterialColor for Color4 {
 }
 
 const DEFAULT_ATTRIBUTE_DICT_NAME: &str = "attributes";
+
+/// Display settings supported by the legacy document scaffold, for
+/// [`SkpBuilder::set_document_options`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocumentOptions {
+    /// Native UnitsOptions values: inches=0, feet=1, mm=2, cm=3, metres=4, yards=5.
+    pub length_unit: i32,
+    pub length_precision: i32,
+    /// Native style item ids and scalar values (colours are packed ABGR u32 values). Only items
+    /// present in the bundled legacy style are updated; newer items are ignored.
+    pub style_items: BTreeMap<i32, f64>,
+}
+
+impl Default for DocumentOptions {
+    fn default() -> Self {
+        DocumentOptions { length_unit: 0, length_precision: 3, style_items: BTreeMap::new() }
+    }
+}
+
+fn read_u32_le(buf: &[u8], pos: usize) -> u32 {
+    u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]])
+}
+
+/// The scalar a style item or rendering option stores as an integer: the value truncated toward
+/// zero to 64 bits, then to 32 (as the C++ writer's casts do).
+fn style_u32(v: f64) -> u32 {
+    v as i64 as u32
+}
+
+/// Patches the scaffold's style item table at `pos` (one of the two: working and saved style).
+/// Patched before archive references are widened, so every offset still refers to the scaffold.
+fn patch_style_items(tail: &mut [u8], mut pos: usize, options: &DocumentOptions) {
+    for _ in 0..56 {
+        let id = read_u32_le(tail, pos) as i32;
+        let valid = read_u32_le(tail, pos + 4) != 0;
+        pos += 8;
+        if !valid {
+            continue; // e.g. the empty watermark list has no variant payload
+        }
+        let kind = read_u32_le(tail, pos);
+        pos += 4;
+        let size = match kind {
+            1 => 1,
+            7 => 8,
+            _ => 4,
+        };
+        if let Some(&v) = options.style_items.get(&id) {
+            match kind {
+                1 => tail[pos] = u8::from(v != 0.0),
+                4 => write_u32_at(tail, pos, style_u32(v)),
+                6 => write_u32_at(tail, pos, (v as f32).to_bits()),
+                7 => tail[pos..pos + 8].copy_from_slice(&v.to_le_bytes()),
+                _ => {}
+            }
+        }
+        pos += size;
+    }
+}
+
+/// Current rendering options, also stored outside the style manager. These scaffold offsets
+/// were cross-checked (upstream) by changing one option at a time with the SketchUp 2026 C API,
+/// saving as v17, and reading the result with that API: (style item id, offset, is boolean).
+const RENDERING_OPTION_FIELDS: [(i32, usize, bool); 41] = [
+    (1000, 3173, false),
+    (1001, 3279, false),
+    (1002, 3197, false),
+    (1004, 3201, true),
+    (1005, 3202, false),
+    (1006, 3206, true),
+    (1007, 3207, false),
+    (1008, 3211, true),
+    (1009, 3212, false),
+    (1010, 3216, true),
+    (1011, 3217, false),
+    (1012, 3172, true),
+    (1014, 3181, false),
+    (1015, 3353, true),
+    (2001, 3166, false),
+    (2002, 3227, false),
+    (2003, 3231, false),
+    (2004, 3170, true),
+    (2005, 3171, true),
+    (2006, 3326, false),
+    (2007, 3196, true),
+    (4000, 3177, false),
+    (4001, 3287, false),
+    (4002, 3299, true),
+    (4003, 3295, false),
+    (4004, 3300, true),
+    (4005, 3302, false),
+    (4006, 3301, true),
+    (4007, 3291, false),
+    (5000, 3344, true),
+    (7000, 3185, false),
+    (7001, 3340, false),
+    (7002, 3189, false),
+    (7003, 3306, false),
+    (7004, 3310, false),
+    (7005, 3314, false),
+    (7008, 3283, true),
+    (7010, 3222, true),
+    (7011, 3195, true),
+    (7012, 3286, true),
+    (7014, 3318, false),
+];
+
+/// Applies `options` to the scaffold prefix: the native named UnitsOptions and the current
+/// rendering options, at fixed offsets in the immutable v17 scaffold.
+fn patch_document_prefix(prefix: &mut [u8], options: &DocumentOptions) {
+    write_u32_at(prefix, 2327, options.length_precision as u32);
+    write_u32_at(prefix, 2360, 0); // LengthFormat: decimal
+    write_u32_at(prefix, 2389, options.length_unit as u32);
+    write_u32_at(prefix, 2689, options.length_unit as u32); // AreaUnit
+    write_u32_at(prefix, 2718, options.length_unit as u32); // VolumeUnit
+    for (id, offset, boolean) in RENDERING_OPTION_FIELDS {
+        let Some(&v) = options.style_items.get(&id) else {
+            continue;
+        };
+        if boolean {
+            prefix[offset] = u8::from(v != 0.0);
+        } else {
+            write_u32_at(prefix, offset, style_u32(v));
+        }
+    }
+}
+
+/// Options for `add_construction_line` / `add_construction_point` on [`SkpBuilder`] and
+/// [`ComponentDefinitionBuilder`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GuideOptions {
+    /// Layer handle (from `add_layer`); `None` = default (Layer0).
+    pub layer: Option<i32>,
+    /// Hides the guide itself (SketchUp's "Hide" on this specific guide).
+    pub hidden: bool,
+}
 
 /// Options for `add_face`.
 #[derive(Clone, Debug, PartialEq)]
@@ -502,6 +640,8 @@ pub struct SkpBuilder {
     /// Root entities added so far (faces, placements, curves, annotations...) - to_bytes refuses
     /// an empty model.
     face_count: i32,
+    /// Display units and style values from `set_document_options`, applied in `to_bytes`.
+    document_options: Option<DocumentOptions>,
 }
 
 impl Default for SkpBuilder {
@@ -559,11 +699,41 @@ fn write_face_or_triangulate(
         return Err(SkpWriteError::new("auto_triangulate cannot be combined with front_uv/back_uv positioning"));
     }
     let triangle = FaceSpec { front_uv: None, back_uv: None, curve: None, holes: &[], ..*spec };
-    let mut total = 0;
+    // Collinear fan wedges have no surface to emit. Validate all remaining wedges before
+    // writing any: a later failure must not leave earlier triangles serialized without their
+    // entity counts (SketchUp rejects the whole document).
+    check_finite_points(points, "face")?;
+    let mut triangles = Vec::new();
     for pair in points[1..].windows(2) {
-        total += writer.write_face(&[points[0], pair[0], pair[1]], topo, &triangle)?;
+        let wedge = [points[0], pair[0], pair[1]];
+        if newell_plane(&wedge).is_err() {
+            continue;
+        }
+        plane_from_polygon(&wedge)?;
+        triangles.push(wedge);
+    }
+    if triangles.is_empty() {
+        return Err(SkpWriteError::new("triangulation has no non-degenerate faces"));
+    }
+    let mut total = 0;
+    for wedge in &triangles {
+        total += writer.write_face(wedge, topo, &triangle)?;
     }
     Ok(total)
+}
+
+fn check_finite_point(p: Point3, what: &str) -> Result<(), SkpWriteError> {
+    if !p[0].is_finite() || !p[1].is_finite() || !p[2].is_finite() {
+        return Err(SkpWriteError::new(format!("{what} coordinates must be finite (got NaN or Infinity)")));
+    }
+    Ok(())
+}
+
+fn check_finite_points(points: &[Point3], what: &str) -> Result<(), SkpWriteError> {
+    for &p in points {
+        check_finite_point(p, what)?;
+    }
+    Ok(())
 }
 
 fn add_face_to(
@@ -573,6 +743,10 @@ fn add_face_to(
     points: &[Point3],
     options: &FaceOptions,
 ) -> Result<i32, SkpWriteError> {
+    check_finite_points(points, "face")?;
+    for hole in options.holes.iter() {
+        check_finite_points(hole, "hole")?;
+    }
     let dicts = single_dict(&options.attribute_dict_name, &options.attributes);
     let front_uv = scale_pins(options.front_uv.as_deref(), applied_sizes, options.material.unwrap_or(0));
     let back_uv = scale_pins(options.back_uv.as_deref(), applied_sizes, options.back_material.unwrap_or(0));
@@ -599,6 +773,11 @@ fn add_circle_to(
     radius: f64,
     options: &CircleOptions,
 ) -> Result<i32, SkpWriteError> {
+    check_finite_point(center, "circle center")?;
+    check_finite_point(normal, "circle normal")?;
+    if !radius.is_finite() {
+        return Err(SkpWriteError::new("circle radius must be finite"));
+    }
     check_segments(options.num_segments)?;
     let n = normalize3(normal)?;
     let (u, w) = circle_basis(n)?;
@@ -639,6 +818,14 @@ fn add_arc_to(
     end_angle: f64,
     options: &ArcOptions,
 ) -> Result<i32, SkpWriteError> {
+    check_finite_point(center, "arc center")?;
+    check_finite_point(normal, "arc normal")?;
+    if !radius.is_finite() {
+        return Err(SkpWriteError::new("arc radius must be finite"));
+    }
+    if !start_angle.is_finite() || !end_angle.is_finite() {
+        return Err(SkpWriteError::new("arc angles must be finite"));
+    }
     check_segments(options.num_segments)?;
     if end_angle == start_angle {
         return Err(SkpWriteError::new("start_angle and end_angle must differ - use add_circle for a full circle"));
@@ -666,6 +853,7 @@ fn add_polyline_to(
     points: &[Point3],
     options: &PolylineOptions,
 ) -> Result<i32, SkpWriteError> {
+    check_finite_points(points, "polyline")?;
     if points.len() < 2 {
         return Err(SkpWriteError::new("a polyline needs at least 2 points"));
     }
@@ -681,7 +869,7 @@ impl SkpBuilder {
             materials_by_name: BTreeMap::new(),
             layers_by_name: BTreeMap::new(),
             ids: IdSource::Random,
-            material_writer: ArchiveWriter::new(scaffold::BASE, HashMap::new()),
+            material_writer: ArchiveWriter::new(scaffold::BASE, HashMap::new(), scaffold::FIRST_NEW_PID),
             material_count: 0,
             applied_sizes: HashMap::new(),
             layer_writer: None,
@@ -697,6 +885,7 @@ impl SkpBuilder {
             root_topology: Topology::default(),
             new_entity_count: 0,
             face_count: 0,
+            document_options: None,
         }
     }
 
@@ -716,6 +905,18 @@ impl SkpBuilder {
     #[doc(hidden)]
     pub fn use_deterministic_ids(&mut self, timestamp: u32) {
         self.ids = IdSource::Deterministic { next: 0, timestamp };
+    }
+
+    /// Set decimal display units and basic working/saved style values, without scaling geometry.
+    pub fn set_document_options(&mut self, options: &DocumentOptions) -> Result<(), SkpWriteError> {
+        if !(0..=5).contains(&options.length_unit) || !(0..=6).contains(&options.length_precision) {
+            return Err(SkpWriteError::new("invalid decimal display units or precision"));
+        }
+        if options.style_items.values().any(|&v| !v.is_finite() || !(-2_147_483_648.0..=4_294_967_295.0).contains(&v)) {
+            return Err(SkpWriteError::new("style scalar is out of range"));
+        }
+        self.document_options = Some(options.clone());
+        Ok(())
     }
 
     /// The root geometry writer's next archive slot, once root geometry exists (test hook).
@@ -824,7 +1025,13 @@ impl SkpBuilder {
         }
         let start = scaffold::SCAFFOLD_NEXT_SLOT + self.material_shift() + self.layer_shift() + self.definition_shift();
         let class_slot = self.post_definition_class_slot();
-        let writer = self.geometry_writer.insert(ArchiveWriter::new(start, class_slot));
+        // Persistent ids continue from the last section written before root geometry.
+        let next_pid = self
+            .definition_writer
+            .as_ref()
+            .or(self.layer_writer.as_ref())
+            .map_or(self.material_writer.next_pid, |w| w.next_pid);
+        let writer = self.geometry_writer.insert(ArchiveWriter::new(start, class_slot, next_pid));
         // Flush groups that closed earlier, in creation order - deferred until now so closing one
         // group doesn't lock in root slot numbering before a later add_group/
         // add_component_definition call has run.
@@ -913,7 +1120,11 @@ impl SkpBuilder {
         }
         if self.layer_writer.is_none() {
             self.layer_writer_start = scaffold::LAYER_WRITER_BASE + self.material_shift();
-            self.layer_writer = Some(ArchiveWriter::new(self.layer_writer_start, self.material_shifted_class_slot()));
+            self.layer_writer = Some(ArchiveWriter::new(
+                self.layer_writer_start,
+                self.material_shifted_class_slot(),
+                self.material_writer.next_pid,
+            ));
         }
         let dicts: AttributeDictList = options.extra_dictionaries.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         let writer = self.layer_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: created above"))?;
@@ -939,8 +1150,9 @@ impl SkpBuilder {
         }
         if self.definition_writer.is_none() {
             self.definition_writer_start = scaffold::SCAFFOLD_NEXT_SLOT + self.material_shift() + self.layer_shift();
+            let next_pid = self.layer_writer.as_ref().map_or(self.material_writer.next_pid, |w| w.next_pid);
             self.definition_writer =
-                Some(ArchiveWriter::new(self.definition_writer_start, self.post_layer_class_slot()));
+                Some(ArchiveWriter::new(self.definition_writer_start, self.post_layer_class_slot(), next_pid));
         }
         let writer =
             self.definition_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: created above"))?;
@@ -1177,10 +1389,34 @@ impl SkpBuilder {
     /// line's signed offset from the measured segment, in inches (C++ default:
     /// [`DEFAULT_DIMENSION_OFFSET`]).
     pub fn add_dimension(&mut self, p1: Point3, p2: Point3, offset: f64) -> Result<(), SkpWriteError> {
+        check_finite_point(p1, "dimension point")?;
+        check_finite_point(p2, "dimension point")?;
+        if !offset.is_finite() {
+            return Err(SkpWriteError::new("dimension offset must be finite"));
+        }
         self.ensure_geometry_writer()?;
         let writer =
             self.geometry_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: ensured above"))?;
-        writer.write_dimension(p1, p2, offset)?;
+        writer.write_dimension(p1, p2, offset, None)?;
+        self.new_entity_count += 1;
+        self.face_count += 1;
+        Ok(())
+    }
+
+    /// Add a linear dimension placed by an offset vector (inches, in the same space as the
+    /// endpoints): its component perpendicular to `p1`->`p2` sets the plane and side of the
+    /// dimension line. Coordinates must be finite and the endpoints distinct; a zero offset is
+    /// supported. (C++: the `add_dimension` overload taking a `Point3` offset.)
+    pub fn add_dimension_with_offset_vector(
+        &mut self,
+        p1: Point3,
+        p2: Point3,
+        offset_vector: Point3,
+    ) -> Result<(), SkpWriteError> {
+        self.ensure_geometry_writer()?;
+        let writer =
+            self.geometry_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: ensured above"))?;
+        writer.write_dimension(p1, p2, 0.0, Some(offset_vector))?;
         self.new_entity_count += 1;
         self.face_count += 1;
         Ok(())
@@ -1189,6 +1425,8 @@ impl SkpBuilder {
     /// Add a leader text anchored at `point`, its label at `point + leader` (C++ default:
     /// [`DEFAULT_TEXT_LEADER`]).
     pub fn add_text(&mut self, text: &str, point: Point3, leader: Point3) -> Result<(), SkpWriteError> {
+        check_finite_point(point, "text point")?;
+        check_finite_point(leader, "text leader")?;
         self.ensure_geometry_writer()?;
         let writer =
             self.geometry_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: ensured above"))?;
@@ -1200,28 +1438,40 @@ impl SkpBuilder {
 
     /// Add a construction (guide) line through `point`: pass exactly one of `point2` (a bounded
     /// segment, like `Entities#add_cline(p1, p2)`) or `direction` (unbounded, like
-    /// `Entities#add_cline(point, vector)`).
+    /// `Entities#add_cline(point, vector)`). `options` places the guide on a layer and/or hides
+    /// it.
     pub fn add_construction_line(
         &mut self,
         point: Point3,
         point2: Option<Point3>,
         direction: Option<Point3>,
+        options: &GuideOptions,
     ) -> Result<(), SkpWriteError> {
+        check_finite_point(point, "construction line point")?;
+        if let Some(p2) = point2 {
+            check_finite_point(p2, "construction line point2")?;
+        }
+        if let Some(d) = direction {
+            check_finite_point(d, "construction line direction")?;
+        }
+        self.check_layer_handle(options.layer)?;
         self.ensure_geometry_writer()?;
         let writer =
             self.geometry_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: ensured above"))?;
-        writer.write_construction_line(point, point2, direction)?;
+        writer.write_construction_line(point, point2, direction, options)?;
         self.new_entity_count += 1;
         self.face_count += 1;
         Ok(())
     }
 
-    /// Add a construction (guide) point.
-    pub fn add_construction_point(&mut self, position: Point3) -> Result<(), SkpWriteError> {
+    /// Add a construction (guide) point. `options` places the guide on a layer and/or hides it.
+    pub fn add_construction_point(&mut self, position: Point3, options: &GuideOptions) -> Result<(), SkpWriteError> {
+        check_finite_point(position, "construction point")?;
+        self.check_layer_handle(options.layer)?;
         self.ensure_geometry_writer()?;
         let writer =
             self.geometry_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: ensured above"))?;
-        writer.write_construction_point(position);
+        writer.write_construction_point(position, options);
         self.new_entity_count += 1;
         self.face_count += 1;
         Ok(())
@@ -1230,6 +1480,8 @@ impl SkpBuilder {
     /// Add a section plane through `point` with `normal` (any length), like
     /// `Entities#add_section_plane([point, normal])`.
     pub fn add_section_plane(&mut self, point: Point3, normal: Point3) -> Result<(), SkpWriteError> {
+        check_finite_point(point, "section plane point")?;
+        check_finite_point(normal, "section plane normal")?;
         self.ensure_geometry_writer()?;
         let writer =
             self.geometry_writer.as_mut().ok_or_else(|| SkpWriteError::new("internal error: ensured above"))?;
@@ -1258,16 +1510,13 @@ impl SkpBuilder {
         let geometry_shift = geometry.next_slot - (scaffold::SCAFFOLD_NEXT_SLOT + mshift + lshift + dshift);
         let data: &[u8] = scaffold::SCAFFOLD_BLANK_V17;
 
-        // Each layer record embeds 2 pids (write_layer); each material 1.
-        let layer_pids = self.layer_writer.as_ref().map_or(0, |w| w.next_pid as i32 - 1);
-        let pid_delta = self.material_count + layer_pids;
-
         let mut out = Vec::with_capacity(data.len() + self.material_writer.buf.len() + geometry.buf.len());
         out.extend_from_slice(&data[..scaffold::MATERIAL_INSERT_POS - 4]);
-        if pid_delta != 0 {
-            let counter = read_u16_at(&out, scaffold::PID_COUNTER_POS);
-            write_u16_at(&mut out, scaffold::PID_COUNTER_POS, (i32::from(counter) + pid_delta) as u16);
+        if let Some(options) = &self.document_options {
+            patch_document_prefix(&mut out, options);
         }
+        let pid_at = scaffold::PID_COUNTER_POS;
+        out[pid_at..pid_at + 8].copy_from_slice(&geometry.next_pid.to_le_bytes());
         let iso = scaffold::ISO_CAMERA_PREFIX_OFFSET;
         out[iso..iso + scaffold::ISO_CAMERA_PREFIX_PATCH.len()].copy_from_slice(&scaffold::ISO_CAMERA_PREFIX_PATCH);
         out.put_u32(self.material_count as u32);
@@ -1303,6 +1552,10 @@ impl SkpBuilder {
         // to the 6-byte escape form grows it, pushing every later position forward, so all are
         // applied in ascending original offset while tracking that growth.
         let mut tail = data[scaffold::TAIL_POS..].to_vec();
+        if let Some(options) = &self.document_options {
+            patch_style_items(&mut tail, 4070 - scaffold::TAIL_POS, options);
+            patch_style_items(&mut tail, 4951 - scaffold::TAIL_POS, options);
+        }
         let total_tail_shift = mshift + lshift + dshift + geometry_shift;
         let mut actions: Vec<(usize, Option<&[u8]>)> = scaffold::TAIL_REF_POSITIONS
             .iter()
@@ -1464,6 +1717,36 @@ impl ComponentDefinitionBuilder<'_> {
         Ok(())
     }
 
+    /// Add a free linear dimension - like [`SkpBuilder::add_dimension`], in definition-local
+    /// inches.
+    pub fn add_dimension(&mut self, p1: Point3, p2: Point3, offset: f64) -> Result<(), SkpWriteError> {
+        check_finite_point(p1, "dimension point")?;
+        check_finite_point(p2, "dimension point")?;
+        if !offset.is_finite() {
+            return Err(SkpWriteError::new("dimension offset must be finite"));
+        }
+        self.check_writable("dimensions")?;
+        let (writer, def) = self.parts()?;
+        writer.write_dimension(p1, p2, offset, None)?;
+        def.new_entity_count += 1;
+        Ok(())
+    }
+
+    /// Add a linear dimension placed by an offset vector - like
+    /// [`SkpBuilder::add_dimension_with_offset_vector`], in definition-local inches.
+    pub fn add_dimension_with_offset_vector(
+        &mut self,
+        p1: Point3,
+        p2: Point3,
+        offset_vector: Point3,
+    ) -> Result<(), SkpWriteError> {
+        self.check_writable("dimensions")?;
+        let (writer, def) = self.parts()?;
+        writer.write_dimension(p1, p2, 0.0, Some(offset_vector))?;
+        def.new_entity_count += 1;
+        Ok(())
+    }
+
     /// Add a construction line - like [`SkpBuilder::add_construction_line`], in
     /// definition-local inches.
     pub fn add_construction_line(
@@ -1471,20 +1754,31 @@ impl ComponentDefinitionBuilder<'_> {
         point: Point3,
         point2: Option<Point3>,
         direction: Option<Point3>,
+        options: &GuideOptions,
     ) -> Result<(), SkpWriteError> {
+        check_finite_point(point, "construction line point")?;
+        if let Some(p2) = point2 {
+            check_finite_point(p2, "construction line point2")?;
+        }
+        if let Some(d) = direction {
+            check_finite_point(d, "construction line direction")?;
+        }
         self.check_writable("construction lines")?;
+        self.skp.check_layer_handle(options.layer)?;
         let (writer, def) = self.parts()?;
-        writer.write_construction_line(point, point2, direction)?;
+        writer.write_construction_line(point, point2, direction, options)?;
         def.new_entity_count += 1;
         Ok(())
     }
 
     /// Add a construction point - like [`SkpBuilder::add_construction_point`], in
     /// definition-local inches.
-    pub fn add_construction_point(&mut self, position: Point3) -> Result<(), SkpWriteError> {
+    pub fn add_construction_point(&mut self, position: Point3, options: &GuideOptions) -> Result<(), SkpWriteError> {
+        check_finite_point(position, "construction point")?;
         self.check_writable("construction points")?;
+        self.skp.check_layer_handle(options.layer)?;
         let (writer, def) = self.parts()?;
-        writer.write_construction_point(position);
+        writer.write_construction_point(position, options);
         def.new_entity_count += 1;
         Ok(())
     }

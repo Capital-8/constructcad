@@ -108,6 +108,14 @@ impl<'a> R<'a> {
     /// `read_typed`): `Time` (9), `Length` (12), `Point3d` (17), `Vector3d`
     /// (18), nested `Array` (11).
     pub fn attr_value(&mut self, t: u8) -> Result<ParsedAttribute> {
+        self.attr_value_depth(t, 0)
+    }
+
+    fn attr_value_depth(&mut self, t: u8, depth: usize) -> Result<ParsedAttribute> {
+        const MAX_ATTR_DEPTH: usize = 32;
+        if depth > MAX_ATTR_DEPTH {
+            return Err(Error::runtime("legacy attribute nesting exceeds maximum depth"));
+        }
         Ok(match t {
             0 => ParsedAttribute::Null,
             4 => ParsedAttribute::Integer(i64::from(read_i32(self.raw(4)?, 0)?)),
@@ -121,11 +129,14 @@ impl<'a> R<'a> {
                 if n > 100000 {
                     return Err(Error::runtime("attr array too large"));
                 }
-                let mut items = Vec::with_capacity(n as usize);
+                if (n as usize) > self.d.len().saturating_sub(self.p) {
+                    return Err(Error::out_of_range("legacy archive truncated"));
+                }
+                let mut items = Vec::with_capacity((n as usize).min(1024));
                 while n > 0 {
                     n -= 1;
                     let tag = self.u8()?;
-                    items.push(self.attr_value(tag)?);
+                    items.push(self.attr_value_depth(tag, depth + 1)?);
                 }
                 ParsedAttribute::Array(items)
             }
@@ -161,4 +172,28 @@ pub(crate) fn header_major(data: &[u8]) -> Option<std::result::Result<i32, ()>> 
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attr_value_recursion_and_prealloc_bomb_are_rejected() {
+        // 1. Truncated array claiming 100,000 elements in 4 bytes must fail before allocating
+        let truncated_array = 100_000u32.to_le_bytes();
+        let mut r = R::new(&truncated_array, 0);
+        assert!(r.attr_value(11).is_err());
+
+        // 2. Deeply nested attribute arrays (100 levels of 1-element arrays, 5 bytes each)
+        let levels = 100usize;
+        let mut deep_buf = Vec::with_capacity(levels * 5 + 1);
+        for _ in 0..levels {
+            deep_buf.extend_from_slice(&1u32.to_le_bytes());
+            deep_buf.push(11);
+        }
+        deep_buf.push(0);
+        let mut r_deep = R::new(&deep_buf, 0);
+        assert!(r_deep.attr_value(11).is_err());
+    }
 }

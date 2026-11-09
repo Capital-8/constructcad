@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use super::bytes::{parse_varint, read_f64, u32_at};
 use super::transforms::{multiply_matrices, transform_point};
 use super::{RawCamera, RawDimension, RawPage, Result, TlvNode, hex_upper, text};
-use crate::model::{EntityId, Vec3};
+use crate::model::{EntityId, Vec3, constrained_offset_vector};
 
 // A second, deliberately separate flat-TLV reader from parse_flat: the
 // sub-records read here (5208, 520A, 53FC, 5BCD, ...) use Python's own
@@ -135,7 +135,8 @@ pub fn scan_instance_transforms(top: &TlvNode, world: &mut BTreeMap<String, Vec<
 ///   space; 2 = connected to geometry: 520B > 53FC names the target, 53FD the
 ///   vertex by persistent id, 53FE a length-prefixed persistent id of the
 ///   INSTANCE holding it - lifted to world by that instance's transform).
-/// * 5BCF - the dimension plane's x-axis; 5BD0 - its normal.
+/// * 5BCF - the dimension plane normal; 5BD0 - its X axis; 5BD1 - the
+///   constrained axis.
 /// * 5BD2 - the offset distance (inches).
 ///
 /// Endpoints come out in WORLD space (inches). A connection point that cannot
@@ -201,14 +202,20 @@ pub fn parse_dimensions(
             continue;
         };
         let off_b = tlv_find_int(&body, 0x5bd2);
-        dims.push(RawDimension {
-            a,
-            b,
-            plane_x: vec3_of(tlv_find_int(&body, 0x5bcf)),
-            normal: vec3_of(tlv_find_int(&body, 0x5bd0)),
-            offset: off_b.filter(|o| o.len() == 8).and_then(|o| read_f64(o, 0).ok()).unwrap_or(0.0),
-            text: String::new(),
-        });
+        let plane_x = vec3_of(tlv_find_int(&body, 0x5bcf));
+        let normal = vec3_of(tlv_find_int(&body, 0x5bd0));
+        let offset = off_b.filter(|o| o.len() == 8).and_then(|o| read_f64(o, 0).ok()).unwrap_or(0.0);
+        // VFF 5BCF is the plane normal, 5BD0 its X axis, and 5BD1 the
+        // constrained axis. Retain the historical public frame fields, but
+        // resolve placement explicitly so clients need not guess the side
+        // from the endpoints.
+        let offset_vector = match (tlv_find_int(&body, 0x5bd1), plane_x, normal) {
+            (Some(axis), Some(plane_normal), Some(x)) if axis.len() == 4 => {
+                constrained_offset_vector(u32_at(axis, 0), plane_normal, x, offset)
+            }
+            _ => None,
+        };
+        dims.push(RawDimension { a, b, plane_x, normal, offset, offset_vector, text: String::new() });
     }
     dims
 }

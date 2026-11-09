@@ -19,8 +19,9 @@ use crate::model::EntityId;
 use crate::observability::{LogLevel, PROGRESS_INTERVAL, ParseOptions, ParseStage};
 use crate::scene::GltfMaterial;
 use crate::scene_build::{
-    IDENTITY, build_error, curve_fallback_layer, definition_name, instance_layer, is_generic_definition_name,
-    name_override, recursive_definition, run_layer, scene_dictionaries,
+    IDENTITY, MAX_COMPONENT_DEPTH, MAX_EXPANDED_INSTANCES, build_error, curve_fallback_layer, definition_name,
+    instance_layer, is_generic_definition_name, max_depth_exceeded, max_instances_exceeded, name_override,
+    recursive_definition, run_layer, scene_dictionaries,
 };
 
 const INCHES_TO_MM: f64 = 25.4;
@@ -316,6 +317,12 @@ impl<'a> Instancer<'a> {
                 if self.active.contains(&r) {
                     return Err(recursive_definition(r));
                 }
+                if self.active.len() >= MAX_COMPONENT_DEPTH {
+                    return Err(max_depth_exceeded(r));
+                }
+                if self.instance_counter >= MAX_EXPANDED_INSTANCES {
+                    return Err(max_instances_exceeded(r));
+                }
                 if let Some(d) = p.definitions.get(&r) {
                     self.active.insert(r);
                     node.definition_name = d.name.clone();
@@ -347,6 +354,7 @@ pub fn build_instanced_scene_raw(mut p: RawParsed, o: &ParseOptions) -> Result<I
         LogLevel::Information,
         &format!("Building instanced scene: {} definitions available", p.definitions.len()),
     );
+    crate::scene_build::validate_hierarchy(&p)?;
     let mut inst = Instancer {
         p: &p,
         o,

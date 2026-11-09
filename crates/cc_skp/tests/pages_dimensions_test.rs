@@ -52,8 +52,8 @@ fn dimension_free_points_synthetic() {
     let body = concat(&[
         &point_block(0x5bcd, 0.0, 0.0, 0.0),
         &point_block(0x5bce, 100.0, 0.0, 0.0),
-        &tlv(0x5bcf, &vec3(1.0, 0.0, 0.0)), // plane x-axis
-        &tlv(0x5bd0, &vec3(0.0, 0.0, 1.0)), // plane normal
+        &tlv(0x5bcf, &vec3(1.0, 0.0, 0.0)), // plane normal (kept in plane_x)
+        &tlv(0x5bd0, &vec3(0.0, 0.0, 1.0)), // plane X axis (kept in normal)
         &tlv(0x5bd2, &f64s(&[15.5])),       // offset
     ]);
     let blob = concat(&[&[0u8; 8], &tlv(0x5bcc, &body), &[0u8; 8]]);
@@ -66,6 +66,61 @@ fn dimension_free_points_synthetic() {
     assert_eq!(d.offset, 15.5);
     assert_eq!(d.plane_x, Some([1.0, 0.0, 0.0]));
     assert_eq!(d.normal, Some([0.0, 0.0, 1.0]));
+}
+
+/// A 5BCC body with free endpoints `a`, `b`, the plane normal (0, -1, 0), X axis (1, 0, 0), an
+/// optional 5BD1 constrained axis and offset `distance`.
+fn constrained_body(a: Vec3, b: Vec3, axis: Option<&[u8]>, distance: f64) -> Vec<u8> {
+    let point = |wrap: u16, p: Vec3| {
+        let inner = concat(&[&tlv(0x5209, &[1, 0, 0, 0]), &tlv(0x520a, &f64s(&p))]);
+        tlv(wrap, &tlv(0x5208, &inner))
+    };
+    concat(&[
+        &point(0x5bcd, a),
+        &point(0x5bce, b),
+        &tlv(0x5bcf, &vec3(0.0, -1.0, 0.0)), // actual plane normal
+        &tlv(0x5bd0, &vec3(1.0, 0.0, 0.0)),  // actual plane X axis
+        &axis.map(|x| tlv(0x5bd1, x)).unwrap_or_default(),
+        &tlv(0x5bd2, &f64s(&[distance])),
+    ])
+}
+
+#[test]
+fn constrained_offsets_preserve_plane_side_and_endpoint_order() {
+    use cc_skp::internal::{RawParsed, build_model};
+    let (a, b): (Vec3, Vec3) = ([1.0, 2.0, 3.0], [1.0, 2.0, 13.0]);
+    for axis in [1u8, 2] {
+        for distance in [-4.0, 4.0] {
+            for reversed in [false, true] {
+                let (p, q) = if reversed { (b, a) } else { (a, b) };
+                let body = constrained_body(p, q, Some(&[axis, 0, 0, 0]), distance);
+                let parsed = RawParsed {
+                    dimensions: parse_dimensions(&tlv(0x5bcc, &body), &BTreeMap::new(), &BTreeMap::new()),
+                    ..Default::default()
+                };
+                let model = build_model(parsed, &ParseOptions::default());
+                assert_eq!(model.dimensions.len(), 1);
+                let dim = &model.dimensions[0];
+                let expected = if axis == 1 { [0.0, 0.0, distance] } else { [-distance, 0.0, 0.0] };
+                let case = format!("axis {axis}, distance {distance}, reversed {reversed}");
+                assert_eq!(dim.offset_vector, Some(expected), "{case}");
+                assert_eq!(dim.a, Some(p), "{case}");
+                assert_eq!(dim.b, Some(q), "{case}");
+            }
+        }
+    }
+}
+
+#[test]
+fn unsupported_or_malformed_constraint_keeps_scalar_fallback() {
+    let axes: [Option<&[u8]>; 4] = [None, Some(&[2]), Some(&[0, 0, 0, 0]), Some(&[3, 0, 0, 0])];
+    for axis in axes {
+        let body = constrained_body([1.0, 2.0, 3.0], [1.0, 2.0, 13.0], axis, -4.0);
+        let dims = parse_dimensions(&tlv(0x5bcc, &body), &BTreeMap::new(), &BTreeMap::new());
+        assert_eq!(dims.len(), 1);
+        assert!(dims[0].offset_vector.is_none(), "{axis:?}");
+        assert_eq!(dims[0].offset, -4.0);
+    }
 }
 
 #[test]

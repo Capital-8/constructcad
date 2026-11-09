@@ -312,12 +312,57 @@ fn extracts_vff_construction_point_and_line() {
     ]));
     assert_eq!(builder.construction_points.len(), 1);
     assert_eq!(builder.construction_points[0].position, [1.0, 2.0, 3.0]);
+    // No drawing-element base: visible, default layer.
+    assert!(!builder.construction_points[0].hidden);
+    assert!(builder.construction_points[0].layer.is_empty());
     assert_eq!(builder.construction_lines.len(), 2);
     assert!(builder.construction_lines[0].start.is_some());
     assert_eq!(builder.construction_lines[0].end.unwrap()[0], 12.0);
     assert!(builder.construction_lines[1].start.is_none());
     assert!(builder.construction_lines[1].end.is_none());
     assert_eq!(builder.construction_lines[1].point[2], 4.0);
+    assert!(!builder.construction_lines[0].hidden);
+    assert!(builder.construction_lines[0].layer.is_empty());
+}
+
+// Ported from the C++ geometry_test.cpp (openskp#475).
+#[test]
+fn reads_vff_guide_hidden_flag_and_layer() {
+    // 6842 > D007 > D307 display flags (0x06 base, +0x01 hidden), D207 layer id.
+    let drawbase = |flags: u8, layer: Option<u8>| {
+        let d307 = tlv("D307", &[flags]);
+        let d007 = match layer {
+            Some(l) => concat(&[&tlv("D207", &[l]), &d307]),
+            None => d307,
+        };
+        tlv("6842", &tlv("D007", &d007))
+    };
+    let builder = geometry(&concat(&[
+        &tlv(
+            "9213",
+            &concat(&[
+                &tlv("6C42", &concat(&[&drawbase(0x07, None), &tlv("6D42", &f64s(&[1.0, 2.0, 3.0]))])),
+                &tlv("6C42", &concat(&[&drawbase(0x06, Some(4)), &tlv("6D42", &f64s(&[4.0, 5.0, 6.0]))])),
+            ]),
+        ),
+        &tlv(
+            "9113",
+            &tlv(
+                "6942",
+                &concat(&[&drawbase(0x07, Some(3)), &tlv("6A42", &f64s(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 12.0]))]),
+            ),
+        ),
+    ]));
+    let points = &builder.construction_points;
+    assert_eq!(points.len(), 2);
+    assert!(points[0].hidden);
+    assert!(points[0].layer.is_empty());
+    assert!(!points[1].hidden);
+    assert_eq!(points[1].layer, "4");
+    let lines = &builder.construction_lines;
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].hidden);
+    assert_eq!(lines[0].layer, "3");
 }
 
 // A varint wider than 64 bits is an error, not a silent truncation.

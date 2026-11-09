@@ -547,9 +547,12 @@ impl<'a> ZipArchive<'a> {
     pub fn extract(&self, index: u32) -> Result<Vec<u8>, ZipError> {
         let st = self.stat(index)?;
         let uncomp = usize::try_from(st.uncomp_size).map_err(|_| ZipError::InvalidParameter)?;
-        // A directory or zero-length entry: the buffer is returned as is.
+        // A directory or zero-length entry: only valid when uncompressed size is 0.
         if st.is_directory || st.comp_size == 0 {
-            return Ok(vec![0; uncomp]);
+            if uncomp != 0 {
+                return Err(ZipError::InvalidHeaderOrCorrupted);
+            }
+            return Ok(Vec::new());
         }
         // Encrypted (bit 0), strong encryption (bit 6), patch data (bit 5).
         if st.bit_flag & (1 | 0x40 | 0x20) != 0 {
@@ -566,11 +569,16 @@ impl<'a> ZipArchive<'a> {
         if le32(lh, 0) != LDH_SIG {
             return Err(ZipError::InvalidHeaderOrCorrupted);
         }
-        let data_ofs = st.local_header_ofs + LDH_SIZE as u64 + u64::from(le16(lh, 26)) + u64::from(le16(lh, 28));
-        if data_ofs + st.comp_size > self.data.len() as u64 {
+        let data_ofs = st
+            .local_header_ofs
+            .checked_add(LDH_SIZE as u64 + u64::from(le16(lh, 26)) + u64::from(le16(lh, 28)))
+            .ok_or(ZipError::InvalidHeaderOrCorrupted)?;
+        let data_end = data_ofs.checked_add(st.comp_size).ok_or(ZipError::InvalidHeaderOrCorrupted)?;
+        if data_end > self.data.len() as u64 {
             return Err(ZipError::InvalidHeaderOrCorrupted);
         }
         let data_ofs = data_ofs as usize;
+        let data_end = data_end as usize;
         let out = if st.method == 0 {
             // Stored: miniz copies the declared uncompressed size.
             let src = self.data.get(data_ofs..data_ofs.saturating_add(uncomp)).ok_or(ZipError::FileReadFailed)?;
@@ -579,7 +587,7 @@ impl<'a> ZipArchive<'a> {
             }
             src.to_vec()
         } else {
-            let src = &self.data[data_ofs..data_ofs + st.comp_size as usize];
+            let src = &self.data[data_ofs..data_end];
             let out = inflate::inflate_raw(src, uncomp).map_err(|_| ZipError::DecompressionFailed)?;
             if out.len() != uncomp {
                 return Err(ZipError::UnexpectedDecompressedSize);

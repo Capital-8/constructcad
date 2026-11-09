@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Schedules on sheets. A schedule is placed on a sheet like any view (dragged from the project browser, *Place on active sheet* or `sheet_place_view`) and drawn as a ruled table at its printed size: its name in the first row, the headers, a row per element its phase shows and the totals, right-aligned numbers. It follows the model, and the sheet's PDF, SVG, PNG and DXF carry it. *Export Image*, *Export DXF* and `view_export` also write a schedule alone as its table.
 
+### Fixed
+
+- SketchUp import follows OpenSKP 1.5.0: a concave four-sided face is no longer triangulated across its outside, classic textured materials are no longer all read as colorized, an empty SketchUp 2020 model opens, legacy dimensions keep their endpoints and placement, texts anchored to an entity read, guides keep their layer and hidden flag, and crafted files meet tighter bounds (archive entry sizes, object nesting, component hierarchies).
+
 ## [0.10.0] - 2026-11-08
 
 ### Changed

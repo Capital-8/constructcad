@@ -14,8 +14,8 @@ use std::f64::consts::PI;
 
 use cc_skp::create::{
     ArcOptions, AttributeDict, AttributeValue, CircleOptions, DEFAULT_DIMENSION_OFFSET, DEFAULT_TEXT_LEADER,
-    DefinitionOptions, FaceOptions, GroupInstanceOptions, GroupOptions, ImageOptions, InstanceOptions, LayerOptions,
-    Point3, PolylineOptions, SkpBuilder, SkpWriteError, UvCorrespondence, create,
+    DefinitionOptions, DocumentOptions, FaceOptions, GroupInstanceOptions, GroupOptions, GuideOptions, ImageOptions,
+    InstanceOptions, LayerOptions, Point3, PolylineOptions, SkpBuilder, SkpWriteError, UvCorrespondence, create,
 };
 
 const PNG: &str = "tests/fixtures/create_reference/fake.png";
@@ -475,14 +475,14 @@ fn nested() {
             car.add_circle([0.0, 0.0, 5.0], [0.0, 0.0, 1.0], 3.0, &CircleOptions::default())?;
             car.add_arc([0.0, 0.0, 6.0], [1.0, 0.0, 0.0], 2.0, 0.0, PI, &ArcOptions::default())?;
             car.add_polyline(&[[0.0, 0.0, 7.0], [1.0, 0.0, 7.0], [1.0, 1.0, 7.0]], &PolylineOptions::default())?;
-            car.add_construction_point([4.0, 5.0, 6.0])?;
-            car.add_construction_line([1.0, 1.0, 1.0], Some([2.0, 2.0, 2.0]), None)?;
-            car.add_construction_line([1.0, 1.0, 1.0], None, Some([0.0, 3.0, 0.0]))?;
+            car.add_construction_point([4.0, 5.0, 6.0], &GuideOptions::default())?;
+            car.add_construction_line([1.0, 1.0, 1.0], Some([2.0, 2.0, 2.0]), None, &GuideOptions::default())?;
+            car.add_construction_line([1.0, 1.0, 1.0], None, Some([0.0, 3.0, 0.0]), &GuideOptions::default())?;
             let car = car.close()?;
             b.add_instance(car, &InstanceOptions::default())?;
-            b.add_construction_point([1.0, 2.0, 3.0])?;
-            b.add_construction_line([0.0, 0.0, 0.0], Some([12.0, 0.0, 0.0]), None)?;
-            b.add_construction_line([0.0, 0.0, 4.0], None, Some([0.0, 0.0, 1.0]))
+            b.add_construction_point([1.0, 2.0, 3.0], &GuideOptions::default())?;
+            b.add_construction_line([0.0, 0.0, 0.0], Some([12.0, 0.0, 0.0]), None, &GuideOptions::default())?;
+            b.add_construction_line([0.0, 0.0, 4.0], None, Some([0.0, 0.0, 1.0]), &GuideOptions::default())
         },
         true,
     );
@@ -539,9 +539,9 @@ fn annotations() {
             b.add_dimension([0.0, 0.0, 0.0], [10.0, 0.0, 0.0], DEFAULT_DIMENSION_OFFSET)?;
             b.add_dimension([0.0, 5.0, 0.0], [10.0, 5.0, 0.0], -3.5)?;
             b.add_text("Unicode \u{e9}\u{1F600}", [1.0, 1.0, 1.0], [1.0, 2.0, 3.0])?;
-            b.add_construction_point([1.0, 2.0, 3.0])?;
-            b.add_construction_line([0.0, 0.0, 0.0], Some([10.0, 0.0, 0.0]), None)?;
-            b.add_construction_line([0.0, 0.0, 0.0], None, Some([0.0, 0.0, 1.0]))
+            b.add_construction_point([1.0, 2.0, 3.0], &GuideOptions::default())?;
+            b.add_construction_line([0.0, 0.0, 0.0], Some([10.0, 0.0, 0.0]), None, &GuideOptions::default())?;
+            b.add_construction_line([0.0, 0.0, 0.0], None, Some([0.0, 0.0, 1.0]), &GuideOptions::default())
         },
         false,
     );
@@ -701,4 +701,74 @@ fn bundled_scaffold_matches_the_reader_fixture() {
     let fixture = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/blank_v17.skp")).unwrap();
     let embedded = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/src/create/scaffold_blank_v17.skp")).unwrap();
     assert_eq!(fixture, embedded);
+}
+
+// ---- openskp 1.5.0 writer features ----
+
+#[test]
+fn guide_options() {
+    check(
+        "guide_options",
+        |b| {
+            let guides = b.add_layer("Guides", &LayerOptions::default())?;
+            let hidden = GuideOptions { layer: None, hidden: true };
+            let mut d = b.add_component_definition("GuideDef", &DefinitionOptions::default())?;
+            d.add_face(&sq(5.0, 0.0), &FaceOptions::default())?;
+            d.add_construction_point([1.0, 1.0, 1.0], &GuideOptions { layer: Some(guides), hidden: true })?;
+            d.add_construction_line([0.0; 3], Some([5.0, 0.0, 0.0]), None, &hidden)?;
+            let d = d.close()?;
+            b.add_instance(d, &InstanceOptions::default())?;
+            b.add_face(&sq(10.0, 0.0), &FaceOptions::default())?;
+            b.add_construction_point([1.0, 2.0, 3.0], &hidden)?;
+            b.add_construction_point([4.0, 5.0, 6.0], &GuideOptions { layer: Some(guides), hidden: false })?;
+            b.add_construction_line(
+                [0.0; 3],
+                Some([10.0, 0.0, 0.0]),
+                None,
+                &GuideOptions { layer: Some(guides), hidden: true },
+            )?;
+            b.add_construction_line([0.0, 0.0, 4.0], None, Some([0.0, 0.0, 1.0]), &GuideOptions::default())
+        },
+        false,
+    );
+}
+
+#[test]
+fn document_options() {
+    check(
+        "document_options",
+        |b| {
+            b.set_document_options(&DocumentOptions {
+                length_unit: 2,
+                length_precision: 1,
+                style_items: [(4000, f64::from(0xff56_3412u32)), (1006, 0.0), (1007, 5.0), (1000, 3.0), (2004, 1.0)]
+                    .into_iter()
+                    .collect(),
+            })?;
+            b.add_face(&sq(10.0, 0.0), &FaceOptions::default())
+        },
+        false,
+    );
+}
+
+#[test]
+fn dimension_vectors() {
+    check(
+        "dimension_vectors",
+        |b| {
+            let mut d = b.add_component_definition("Dims", &DefinitionOptions::default())?;
+            d.add_face(&sq(5.0, 0.0), &FaceOptions::default())?;
+            d.add_dimension([0.0; 3], [5.0, 0.0, 0.0], 2.5)?;
+            d.add_dimension_with_offset_vector([0.0; 3], [5.0, 0.0, 0.0], [0.0, 0.0, 4.0])?;
+            let d = d.close()?;
+            b.add_instance(d, &InstanceOptions::default())?;
+            b.add_face(&sq(10.0, 0.0), &FaceOptions::default())?;
+            b.add_dimension_with_offset_vector([1.0, 2.0, 3.0], [11.0, 2.0, 3.0], [0.0, 0.0, 4.0])?;
+            b.add_dimension_with_offset_vector([11.0, 2.0, 3.0], [1.0, 2.0, 3.0], [0.0, 0.0, -4.0])?;
+            b.add_dimension_with_offset_vector([1.0, 2.0, 3.0], [1.0, 2.0, 13.0], [-4.0, 0.0, 0.0])?;
+            b.add_dimension_with_offset_vector([1.0, 2.0, 3.0], [1.0, 2.0, 13.0], [0.0; 3])?;
+            b.add_dimension_with_offset_vector([1.0, 2.0, 3.0], [11.0, 2.0, 3.0], [7.0, -4.0, 0.0])
+        },
+        false,
+    );
 }

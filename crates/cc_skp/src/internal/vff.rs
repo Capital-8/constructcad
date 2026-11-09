@@ -49,9 +49,16 @@ const META_UNITS_TAG: &str = "6D00";
 /// The model's unit-system string from a VFF file's meta/meta.dat contents, or
 /// `None` if the expected tags aren't found.
 pub fn read_meta_units(meta_bytes: &[u8]) -> Option<String> {
+    read_meta_units_depth(meta_bytes, 0)
+}
+
+fn read_meta_units_depth(meta_bytes: &[u8], depth: usize) -> Option<String> {
+    if depth > super::bytes::MAX_TLV_DEPTH {
+        return None;
+    }
     let records = parse_flat(meta_bytes);
     if let Some((_, body)) = records.iter().find(|(tag, _)| *tag == META_WRAPPER_TAG) {
-        return read_meta_units(body);
+        return read_meta_units_depth(body, depth + 1);
     }
     records.iter().find(|(tag, _)| *tag == META_UNITS_TAG).map(|(_, body)| String::from_utf8_lossy(body).into_owned())
 }

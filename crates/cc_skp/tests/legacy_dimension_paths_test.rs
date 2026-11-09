@@ -61,6 +61,8 @@ fn paths_inside_nested_components_are_read_ref_by_ref() {
     assert_eq!(res.extra, Some(0x0f69ca));
     assert_eq!(res.first, [Some(0x166157), Some(0x165bbc)]);
     assert_eq!(res.second, [Some(0x166157), Some(0x165bbd)]);
+    assert_eq!(res.first_new, [false, false]);
+    assert_eq!(res.second_new, [false, false]);
     assert_eq!(&data[res.next..], TAIL);
 }
 
@@ -78,6 +80,7 @@ fn a_path_can_hold_a_whole_new_object() {
     assert_eq!(asked_at, 2 + 4);
     assert!(res.extra.is_none());
     assert_eq!(res.first, [Some(4242)]);
+    assert_eq!(res.first_new, [true]);
     assert!(res.second.is_empty());
     assert_eq!(&data[res.next..], TAIL);
 }
