@@ -794,8 +794,7 @@ impl Command for ViewFilterMove {
 fn discipline_name(d: Option<MepDiscipline>) -> &'static str {
     match d {
         None => "none",
-        Some(MepDiscipline::Plumbing) => "plumbing",
-        Some(MepDiscipline::Electrical) => "electrical",
+        Some(d) => d.name(),
     }
 }
 
@@ -916,7 +915,8 @@ pub struct TemplateSet {
     /// Plans: cut plane height, meters.
     #[serde(default)]
     pub cut_height: Option<f64>,
-    /// Floor plans: `none`, `plumbing` or `electrical` (services over a faint architecture).
+    /// Floor plans: `none`, `plumbing`, `electrical`, `communications` or `lightning` (services over a
+    /// faint architecture).
     #[serde(default)]
     pub discipline: Option<String>,
     /// Floor plans: structural (formwork) display.
@@ -970,8 +970,7 @@ impl Command for TemplateSet {
         if let Some(d) = &self.discipline {
             t.discipline = match d.trim().to_ascii_lowercase().as_str() {
                 "none" | "" => None,
-                "plumbing" => Some(MepDiscipline::Plumbing),
-                "electrical" => Some(MepDiscipline::Electrical),
+                name if let Some(d) = MepDiscipline::ALL.into_iter().find(|d| d.name() == name) => Some(d),
                 other => return Err(EngineError::invalid(format!("unknown discipline '{other}'"))),
             };
         }

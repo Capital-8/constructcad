@@ -1499,7 +1499,7 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
             connectors: Vec::new(),
             ..Default::default()
         };
-    let device = |device: D, power: f64| MepData::Device { device, power };
+    let device = MepData::device_of;
     let body = n("tpl-part-body");
     let mut out = Vec::new();
 
@@ -1606,6 +1606,103 @@ pub fn mep_library(n: &dyn Fn(&str) -> String) -> Vec<(String, String, Component
     );
     out.push((n("tpl-comp-ceiling-light"), n("tpl-type-ceiling-light"), light));
     out
+}
+
+/// The built-in definition of a communications or lightning protection
+/// device, which a project gets with the first one placed: (component,
+/// type name, definition). Data outlets and racks hang on walls like the
+/// electrical devices (their back on the insertion point); an air terminal
+/// is a rod standing `Height` (an instance parameter) on a base plate; an
+/// earth electrode a rod driven `Length` down from its top. `None` for the
+/// other device kinds (see [`mep_library`]).
+pub fn device_library(device: crate::DeviceKind, n: &dyn Fn(&str) -> String) -> Option<(String, String, ComponentDef)> {
+    use crate::DeviceKind as D;
+    let (w, d, h, l) = (n("tpl-param-width"), n("tpl-param-depth"), n("tpl-param-height"), n("tpl-param-length"));
+    let (steel, plastic, copper) = (n("tpl-mat-steel"), n("tpl-mat-pvc"), n("tpl-mat-copper"));
+    let param = |name: &str, value: f64, instance: bool| ComponentParam {
+        name: name.to_string(),
+        value,
+        kind: ParamKind::Length,
+        instance,
+        ..Default::default()
+    };
+    let piece = |name: String, shape: ComponentShape, material: &str| ComponentItem {
+        name,
+        shape,
+        material: material.to_string(),
+        in_plan: true,
+        void: false,
+        plan_only: false,
+        detail: Default::default(),
+    };
+    let cylinder = |z: String, radius: &str, height: String| ComponentShape::Cylinder {
+        x: "0".into(),
+        y: "0".into(),
+        z,
+        radius: radius.into(),
+        height,
+    };
+    let wall_box = ComponentShape::Box {
+        x: format!("-{w} / 2"),
+        y: format!("-{d}"),
+        z: "0".into(),
+        width: w.clone(),
+        depth: d.clone(),
+        height: h.clone(),
+    };
+    let def = |params: Vec<ComponentParam>, items: Vec<ComponentItem>, mep: MepData| ComponentDef {
+        kind: ComponentKind::Electrical,
+        params,
+        items,
+        mep: Some(mep),
+        ..Default::default()
+    };
+    let sizes = |width: f64, depth: f64, height: f64| {
+        vec![param(&w, width, false), param(&d, depth, false), param(&h, height, false)]
+    };
+    let (component, type_name, def) = match device {
+        D::DataOutlet => (
+            "tpl-comp-data-outlet",
+            "tpl-type-data-outlet",
+            def(
+                sizes(0.1, 0.03, 0.1),
+                vec![piece(n("tpl-part-body"), wall_box, &plastic)],
+                MepData::Device { device, power: 0.0, ports: 2 },
+            ),
+        ),
+        D::Rack => (
+            "tpl-comp-rack",
+            "tpl-type-rack",
+            def(
+                sizes(0.6, 0.45, 0.6),
+                vec![piece(n("tpl-part-body"), wall_box, &steel)],
+                MepData::device_of(device, 0.0),
+            ),
+        ),
+        D::AirTerminal => (
+            "tpl-comp-air-terminal",
+            "tpl-type-air-terminal",
+            def(
+                vec![param(&h, 1.0, true)],
+                vec![
+                    piece(n("tpl-part-base"), cylinder("0".into(), "0.06", "0.02".into()), &steel),
+                    piece(n("tpl-part-rod"), cylinder("0".into(), "0.008", h.clone()), &steel),
+                ],
+                MepData::device_of(device, 0.0),
+            ),
+        ),
+        D::EarthElectrode => (
+            "tpl-comp-earth-electrode",
+            "tpl-type-earth-electrode",
+            def(
+                vec![param(&l, 2.4, true)],
+                vec![piece(n("tpl-part-rod"), cylinder(format!("-{l}"), "0.008", l.clone()), &copper)],
+                MepData::device_of(device, 0.0),
+            ),
+        ),
+        _ => return None,
+    };
+    Some((n(component), n(type_name), def))
 }
 
 #[cfg(test)]

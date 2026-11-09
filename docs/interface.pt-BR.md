@@ -92,7 +92,7 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 | Ctrl+X / Ctrl+C / Ctrl+V | Recortar / Copiar / Colar |
 | Delete | Excluir a seleção |
 | Esc | Cancelar a operação, sair da ferramenta, limpar a seleção |
-| Backspace | Ao desenhar uma sequência de paredes, vigas, tubos, eletrodutos ou eletrocalhas: desfaz o último segmento e continua do início dele (Ctrl+Z também; Ctrl+Y o refaz); o último ponto de um guarda-corpo |
+| Backspace | Ao desenhar uma sequência de paredes, vigas, tubos, eletrodutos, eletrocalhas ou condutores de SPDA: desfaz o último segmento e continua do início dele (Ctrl+Z também; Ctrl+Y o refaz); o último ponto de um guarda-corpo |
 | Espaço | Girar ou inverter a seleção ou o elemento sendo posicionado |
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
@@ -231,6 +231,28 @@ Cortinas de vidro são paredes de um tipo cortina (um projeto sem tipo cortina g
 - **Vistas**: as plantas elétricas desenham as eletrocalhas na sua largura, levemente tingidas na cor do circuito, com as travessas das eletrocalhas tipo leito e uma etiqueta com a seção e os circuitos; as plantas hidrossanitárias desenham os registros com o símbolo usual (dois triângulos unidos pelas pontas; um círculo vazado no de esfera, um cheio no de pressão, um triângulo cheio na válvula de retenção). Vistas 3D, cortes e elevações mostram as eletrocalhas como perfis abertos e os registros com corpo e volante ou alavanca. As tabelas listam largura, altura e comprimento das eletrocalhas e diâmetro e sistema dos registros.
 - **IFC**: eletrocalhas são gravadas como `IfcCableCarrierSegment` (`CABLETRAYSEGMENT`), as conexões entre elas como `IfcCableCarrierFitting`, os registros como `IfcValve` (`ISOLATING` para gaveta e esfera, `CHECK`, `REGULATING` para pressão) no sistema do seu tubo. Importados de volta, entram como componentes que guardam a classe IFC.
 - Pela linha de comando ou MCP: `cable_tray_create`, `cable_tray_type_create`, `valve_place` (com `point` ou `distance`, e `kind` ou `type`) e `valve_type_create`.
+
+## Proteção contra descargas atmosféricas (SPDA)
+
+O grupo *Instalações → SPDA* desenha um sistema de proteção contra descargas atmosféricas. Seus elementos pertencem a um sistema de SPDA, criado com o primeiro deles, e aparecem na planta de SPDA do pavimento (*Instalações → Documentação → Planta de SPDA*), que as ferramentas abrem quando outra vista está ativa.
+
+- **Condutor** (`LC`) desenha condutores como eletrodutos: clique nas pontas de cada um. Sobre uma cobertura o condutor fica na sua superfície, então um condutor de captação acompanha a cobertura sob as suas pontas; uma nova elevação durante o desenho cria uma descida no último ponto. Um trecho vertical é uma descida, um trecho abaixo do pavimento é aterramento, os demais são captação; a função pode ser mudada nas propriedades. Um projeto sem tipo de condutor ganha um na primeira vez (8 mm, cobre); o tipo de condutor define o diâmetro e o material.
+- **Captor** (`AT`) insere um captor (para-raios) na cobertura sob o ponto clicado; sua altura é um parâmetro de cada captor (1 m por padrão). **Haste de aterramento** insere uma haste (2,4 m por padrão) com o topo 50 cm abaixo do pavimento. **Anel de aterramento** lança condutores enterrados em volta das paredes do pavimento, a 1 m das faces externas e 50 cm de profundidade.
+- **Verificação** mostra como a captação protege as coberturas para uma classe de proteção (I a IV): as faces superiores expostas das coberturas são amostradas a cerca de 1 m, e cada ponto está protegido quando um captor ou condutor de captação o protege sozinho, pelo método da esfera rolante (raio de 20, 30, 45 ou 60 m) sobre o plano dos beirais da cobertura ou, nas partes planas, a até meia largura de malha (5, 10, 15 ou 20 m) de um condutor de captação. A proteção entre captores e pela própria edificação é desconsiderada, então o resultado fica a favor da segurança; confira o projeto com as normas aplicáveis.
+- **Vistas**: a planta de SPDA desenha os condutores de captação como linhas na cor do sistema, os enterrados tracejados, as descidas como um círculo cheio com um traço, os captores como um anel em volta de um ponto e as hastes com o símbolo de aterramento; os condutores se encontram em conectores. As vistas 3D mostram condutores e hastes. Tabelas de condutores de SPDA listam a função (*Função*), o diâmetro, o comprimento e o sistema; tabelas de componentes contam captores e hastes. *Sistemas* lista cada SPDA com os captores, as hastes e os comprimentos de condutor por função.
+- **IFC**: os condutores são gravados como `IfcCableSegment` (`CONDUCTORSEGMENT`), os conectores como `IfcCableFitting`, captores e hastes como `IfcProtectiveDevice` dos tipos definidos pelo usuário `AIRTERMINAL` e `EARTHELECTRODE` (o IFC4 não tem classe própria para eles), num `IfcDistributionSystem` do tipo `LIGHTNINGPROTECTION`.
+- Pela linha de comando ou MCP: `lps_conductor_create`, `lps_conductor_type_create`, `earth_ring_create`, `air_terminal_place`, `earth_electrode_place` e `lps_check`.
+
+## Cabeamento estruturado
+
+O grupo *Instalações → Telecomunicações* insere racks e tomadas de dados. Eles aparecem na planta de telecomunicações do pavimento (*Instalações → Documentação → Planta de telecomunicações*), com as eletrocalhas e os eletrodutos que levam o cabeamento.
+
+- **Rack** insere um rack de parede (numa parede, como os dispositivos elétricos; Espaço o gira) e cria o seu cabeamento: um sistema de dados alimentado pelo rack, com o código da sua marca (`R1`, `R2`…).
+- **Tomada de dados** (`DO`) insere tomadas de dados e voz cabeadas até o rack escolhido na barra de opções (por padrão o único rack do projeto). O tipo de tomada define os conectores (dois por padrão); cada conector leva um cabo até o rack. As propriedades mostram os conectores da tomada e o comprimento estimado dos seus cabos.
+- **Cabeamento** lista as tomadas e os cabos de cada rack, o comprimento total e o maior, e os cabos acima de 90 m (o limite de um enlace permanente). Os comprimentos são estimados pelo caminho usual: até o forro do pavimento da tomada, pelos dois eixos e descendo ao rack, mais 3 m de folga.
+- Eletrocalhas e eletrodutos levam o cabeamento como os circuitos: as suas propriedades e *Sistemas* listam os dois. Tabelas de componentes podem mostrar o *Comprimento de cabo* e o *Sistema* (o cabeamento do rack) de cada tomada e contar as tomadas por rack.
+- **IFC**: as tomadas de dados são gravadas como `IfcOutlet` (`DATAOUTLET`) e os racks como `IfcCommunicationsAppliance` do tipo definido pelo usuário `RACK`, num `IfcDistributionSystem` do tipo `DATA`.
+- Pela linha de comando ou MCP: `rack_place`, `data_outlet_place` (com `rack` ou `system`, e `ports`), `cabling_list` e `device_type_create` para qualquer tipo de dispositivo embutido.
 
 ## Vistas de desenho
 

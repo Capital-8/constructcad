@@ -315,6 +315,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     | TypeData::Conduit { material, .. }
     | TypeData::CableTray { material, .. }
     | TypeData::Valve { material, .. }
+    | TypeData::LightningConductor { material, .. }
     | TypeData::Railing { material, .. }
     | TypeData::Topography { material, .. }
     | TypeData::Sweep { material, .. } = &ty.data
@@ -337,6 +338,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     | TypeData::Conduit { material, .. }
                     | TypeData::CableTray { material, .. }
                     | TypeData::Valve { material, .. }
+                    | TypeData::LightningConductor { material, .. }
                     | TypeData::Railing { material, .. }
                     | TypeData::Topography { material, .. }
                     | TypeData::Sweep { material, .. } => *material = m,
@@ -737,6 +739,16 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 length_row(ui, state, &t!("col-diameter"), tid, "pd", diameter, |d, v| {
                     if let TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } = d {
                         *diameter = v.clamp(0.005, 2.0);
+                    }
+                });
+            });
+        }
+        TypeData::LightningConductor { diameter, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                use cc_core::lightning::{MAX_CONDUCTOR_DIAMETER, MIN_CONDUCTOR_DIAMETER};
+                length_row(ui, state, &t!("col-diameter"), tid, "cd", diameter, |d, v| {
+                    if let TypeData::LightningConductor { diameter, .. } = d {
+                        *diameter = v.clamp(MIN_CONDUCTOR_DIAMETER, MAX_CONDUCTOR_DIAMETER);
                     }
                 });
             });

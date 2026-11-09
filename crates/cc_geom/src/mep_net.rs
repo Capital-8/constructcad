@@ -117,16 +117,28 @@ pub struct MepNetwork {
     pub fittings: Vec<Fitting>,
     /// Valves, each on the node of its pipe where it sits.
     pub valves: Vec<(ElementId, usize)>,
-    /// Fixtures (on pipe nodes) and devices (on conduit nodes) attached to the networks.
+    /// Fixtures (on pipe nodes), devices (on conduit nodes) and air terminals
+    /// and earth electrodes (on lightning conductor nodes) attached to the networks.
     pub attached: Vec<(ElementId, usize)>,
 }
 
-/// Which runs may connect: pipes of one system, all conduits, all cable trays.
+/// The runs that serve a family of systems: pipes, conduits or lightning conductors.
+fn category_of(class: cc_core::SystemClass) -> Category {
+    match class {
+        cc_core::SystemClass::Plumbing => Category::Pipe,
+        cc_core::SystemClass::Circuit | cc_core::SystemClass::Data => Category::Conduit,
+        cc_core::SystemClass::Lightning => Category::LightningConductor,
+    }
+}
+
+/// Which runs may connect: pipes of one system, all conduits, all cable
+/// trays, all lightning conductors.
 fn group(e: &cc_core::Element) -> Option<(Category, Option<SystemId>)> {
     match &e.kind {
         ElementKind::Pipe(s) => Some((Category::Pipe, s.system())),
         ElementKind::Conduit(_) => Some((Category::Conduit, None)),
         ElementKind::CableTray(_) => Some((Category::CableTray, None)),
+        ElementKind::LightningConductor(_) => Some((Category::LightningConductor, None)),
         _ => None,
     }
 }
@@ -292,7 +304,7 @@ impl MepNetwork {
             let connectors = crate::component_connectors(project, e);
             if !connectors.is_empty() {
                 for k in connectors {
-                    let category = if k.system.is_electrical() { Category::Conduit } else { Category::Pipe };
+                    let category = category_of(k.system.class());
                     let near = net
                         .nodes
                         .iter()
@@ -310,7 +322,7 @@ impl MepNetwork {
             }
             let category = match project.mep_data(e) {
                 Some(MepData::Fixture { .. }) => Category::Pipe,
-                Some(MepData::Device { .. }) => Category::Conduit,
+                Some(MepData::Device { device, .. }) => category_of(device.class()),
                 None => continue,
             };
             let z = project.level_elevation(e.level) + c.base_offset;
@@ -328,7 +340,7 @@ impl MepNetwork {
                     }
                 }
             }
-            if category == Category::Conduit {
+            if category != Category::Pipe {
                 if let Some((_, n)) = best.values().min_by(|a, b| a.0.total_cmp(&b.0)) {
                     net.attached.push((e.id, *n));
                 }

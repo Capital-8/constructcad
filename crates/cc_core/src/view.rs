@@ -500,13 +500,32 @@ pub enum MepDiscipline {
     Plumbing,
     /// Conduits, cable trays, outlets, switches, lights and boards.
     Electrical,
+    /// Structured cabling: cable trays, conduits carrying it, data outlets and racks.
+    Communications,
+    /// Lightning protection: air terminals, conductors and earth electrodes.
+    Lightning,
 }
 
 impl MepDiscipline {
+    pub const ALL: [MepDiscipline; 4] =
+        [MepDiscipline::Plumbing, MepDiscipline::Electrical, MepDiscipline::Communications, MepDiscipline::Lightning];
+
+    /// Name in commands (`plumbing`, `electrical`, `communications`, `lightning`).
+    pub fn name(self) -> &'static str {
+        match self {
+            MepDiscipline::Plumbing => "plumbing",
+            MepDiscipline::Electrical => "electrical",
+            MepDiscipline::Communications => "communications",
+            MepDiscipline::Lightning => "lightning",
+        }
+    }
+
     pub fn key(self) -> &'static str {
         match self {
             MepDiscipline::Plumbing => "discipline-plumbing",
             MepDiscipline::Electrical => "discipline-electrical",
+            MepDiscipline::Communications => "discipline-communications",
+            MepDiscipline::Lightning => "discipline-lightning",
         }
     }
 }

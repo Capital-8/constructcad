@@ -105,7 +105,7 @@ impl Command for CableTrayCreate {
         let mut circuits = Vec::new();
         for r in &self.circuits {
             let id = refs::system(p, r)?;
-            check_fits(p, Some(true), id)?;
+            check_fits(p, super::mep::CABLED, id)?;
             if !circuits.contains(&id) {
                 circuits.push(id);
             }

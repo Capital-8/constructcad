@@ -1333,6 +1333,10 @@ impl<'a> Exporter<'a> {
                 ElementKind::CableTray(_) => {
                     ("IFCCABLECARRIERSEGMENT", "CABLETRAYSEGMENT", "Qto_CableCarrierSegmentBaseQuantities")
                 }
+                // Lightning protection conductors are bare conductors.
+                ElementKind::LightningConductor(_) => {
+                    ("IFCCABLESEGMENT", "CONDUCTORSEGMENT", "Qto_CableSegmentBaseQuantities")
+                }
                 _ => ("IFCPIPESEGMENT", "RIGIDSEGMENT", "Qto_PipeSegmentBaseQuantities"),
             };
             let mut attrs = self.element_args(e, placement, shape);
@@ -1384,7 +1388,11 @@ impl<'a> Exporter<'a> {
             let Some(storey) = self.storey_placement(f.level) else { continue };
             let level_z = self.project.level_elevation(f.level);
             let pipe = f.category == cc_core::Category::Pipe;
+            let conductor = f.category == cc_core::Category::LightningConductor;
             let (entity, kind, name) = match (pipe, f.kind) {
+                // Lightning conductors meet in clamps: connectors, junctions where they branch.
+                (_, K::Tee | K::Cross) if conductor => ("IFCCABLEFITTING", "JUNCTION", "Junction"),
+                _ if conductor => ("IFCCABLEFITTING", "CONNECTOR", "Connector"),
                 (true, K::Elbow { .. }) => ("IFCPIPEFITTING", "BEND", "Elbow"),
                 (true, K::Tee | K::Cross) => ("IFCPIPEFITTING", "JUNCTION", "Junction"),
                 (true, K::Coupling) => ("IFCPIPEFITTING", "CONNECTOR", "Coupling"),
@@ -1440,8 +1448,11 @@ impl<'a> Exporter<'a> {
             written.push((f.system, product));
         }
         for ((entity, kind), objects) in typed {
-            let type_entity =
-                if entity == "IFCPIPEFITTING" { "IFCPIPEFITTINGTYPE" } else { "IFCCABLECARRIERFITTINGTYPE" };
+            let type_entity = match entity {
+                "IFCPIPEFITTING" => "IFCPIPEFITTINGTYPE",
+                "IFCCABLEFITTING" => "IFCCABLEFITTINGTYPE",
+                _ => "IFCCABLECARRIERFITTINGTYPE",
+            };
             let gid = self.guid(&format!("fitting-type-{entity}-{kind}"));
             let name = format!("{} {}", crate::schema::display_name(entity), kind.to_lowercase());
             let ty = self.w.add(
@@ -1495,6 +1506,8 @@ impl<'a> Exporter<'a> {
                 K::Rainwater => ("IFCDISTRIBUTIONSYSTEM", "RAINWATER"),
                 K::Power => ("IFCDISTRIBUTIONCIRCUIT", "ELECTRICAL"),
                 K::Lighting => ("IFCDISTRIBUTIONCIRCUIT", "LIGHTING"),
+                K::Data => ("IFCDISTRIBUTIONSYSTEM", "DATA"),
+                K::Lightning => ("IFCDISTRIBUTIONSYSTEM", "LIGHTNINGPROTECTION"),
             };
             let gid = self.guid(&format!("system-{id}"));
             let group = self.w.add(
@@ -1623,6 +1636,7 @@ impl<'a> Exporter<'a> {
             TypeData::Pipe { .. } => ("IFCPIPESEGMENTTYPE", args![Value::Enum("RIGIDSEGMENT")]),
             TypeData::Conduit { .. } => ("IFCCABLECARRIERSEGMENTTYPE", args![Value::Enum("CONDUITSEGMENT")]),
             TypeData::CableTray { .. } => ("IFCCABLECARRIERSEGMENTTYPE", args![Value::Enum("CABLETRAYSEGMENT")]),
+            TypeData::LightningConductor { .. } => ("IFCCABLESEGMENTTYPE", args![Value::Enum("CONDUCTORSEGMENT")]),
             TypeData::Valve { kind, .. } => ("IFCVALVETYPE", args![Value::Enum(valve_type(kind))]),
             TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
             TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
@@ -1679,10 +1693,14 @@ impl<'a> Exporter<'a> {
             | TypeData::Conduit { material, .. }
             | TypeData::Rebar { material, .. }
             | TypeData::Topography { material, .. } => Some(self.material(material)),
-            TypeData::CableTray { material, .. } | TypeData::Valve { material, .. } if !material.is_empty() => {
+            TypeData::CableTray { material, .. }
+            | TypeData::Valve { material, .. }
+            | TypeData::LightningConductor { material, .. }
+                if !material.is_empty() =>
+            {
                 Some(self.material(material))
             }
-            TypeData::CableTray { .. } | TypeData::Valve { .. } => None,
+            TypeData::CableTray { .. } | TypeData::Valve { .. } | TypeData::LightningConductor { .. } => None,
             TypeData::Component { def, .. } if !def.main_material().is_empty() => {
                 Some(self.material(def.main_material()))
             }
@@ -2660,15 +2678,15 @@ fn component_class(def: &cc_core::ComponentDef) -> WrittenClass {
         }
         (Some(ifc), Some(proxy)) => written(proxy, "USERDEFINED", &crate::schema::display_name(&ifc.entity)),
         _ => {
-            let (entity, kind) = component_entity(def);
+            let (entity, kind, object_type) = component_entity(def);
             match element_class(entity) {
-                Some(class) => written(class, kind, ""),
+                Some(class) => written(class, kind, object_type),
                 None => WrittenClass {
                     entity,
                     attrs: 9,
                     predefined: Some(8),
                     value: kind.to_string(),
-                    object_type: String::new(),
+                    object_type: object_type.to_string(),
                     type_entity: None,
                 },
             }
@@ -2701,19 +2719,26 @@ fn typed_value(v: &cc_core::properties::IfcValue) -> Value {
     }
 }
 
-/// IFC entity and predefined type of a native component: by its device
-/// kind for electrical devices, else by its component kind.
-fn component_entity(def: &cc_core::ComponentDef) -> (&'static str, &'static str) {
+/// IFC entity, predefined type and object type (for `USERDEFINED`) of a
+/// native component: by its device kind for electrical, communications and
+/// lightning protection devices, else by its component kind. IFC4 has no
+/// class of its own for air terminals and earth electrodes: they are
+/// protective devices of a user-defined type.
+fn component_entity(def: &cc_core::ComponentDef) -> (&'static str, &'static str, &'static str) {
     use cc_core::DeviceKind as D;
     if let Some(device) = def.mep.and_then(|m| m.device()) {
         return match device {
-            D::Outlet | D::DedicatedOutlet => ("IFCOUTLET", "POWEROUTLET"),
-            D::Switch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
-            D::CeilingLight | D::WallLight => ("IFCLIGHTFIXTURE", "POINTSOURCE"),
-            D::Panel => ("IFCELECTRICDISTRIBUTIONBOARD", "DISTRIBUTIONBOARD"),
+            D::Outlet | D::DedicatedOutlet => ("IFCOUTLET", "POWEROUTLET", ""),
+            D::Switch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH", ""),
+            D::CeilingLight | D::WallLight => ("IFCLIGHTFIXTURE", "POINTSOURCE", ""),
+            D::Panel => ("IFCELECTRICDISTRIBUTIONBOARD", "DISTRIBUTIONBOARD", ""),
+            D::DataOutlet => ("IFCOUTLET", "DATAOUTLET", ""),
+            D::Rack => ("IFCCOMMUNICATIONSAPPLIANCE", "USERDEFINED", "RACK"),
+            D::AirTerminal => ("IFCPROTECTIVEDEVICE", "USERDEFINED", "AIRTERMINAL"),
+            D::EarthElectrode => ("IFCPROTECTIVEDEVICE", "USERDEFINED", "EARTHELECTRODE"),
         };
     }
-    match def.kind {
+    let (entity, kind) = match def.kind {
         cc_core::ComponentKind::Furniture | cc_core::ComponentKind::Casework => ("IFCFURNITURE", "NOTDEFINED"),
         cc_core::ComponentKind::Plumbing => ("IFCSANITARYTERMINAL", "NOTDEFINED"),
         cc_core::ComponentKind::Lighting => ("IFCLIGHTFIXTURE", "NOTDEFINED"),
@@ -2723,7 +2748,8 @@ fn component_entity(def: &cc_core::ComponentDef) -> (&'static str, &'static str)
         }
         cc_core::ComponentKind::Door => ("IFCDOOR", "DOOR"),
         cc_core::ComponentKind::Window => ("IFCWINDOW", "WINDOW"),
-    }
+    };
+    (entity, kind, "")
 }
 
 /// Current UTC time as `YYYY-MM-DDThh:mm:ss`.

@@ -58,6 +58,8 @@ pub enum ElementKind {
     CableTray(crate::MepSegment),
     /// A valve on a pipe.
     Valve(crate::Valve),
+    /// A conductor of a lightning protection system (roof, down or earth conductor).
+    LightningConductor(crate::lightning::LightningConductor),
     /// A DWG or DXF drawing placed in a 2D view (an underlay to trace over).
     CadImport(Box<crate::cad::CadImport>),
     /// A conceptual mass (massing studies).
@@ -107,6 +109,7 @@ impl Element {
             ElementKind::Conduit(_) => Category::Conduit,
             ElementKind::CableTray(_) => Category::CableTray,
             ElementKind::Valve(_) => Category::Valve,
+            ElementKind::LightningConductor(_) => Category::LightningConductor,
             ElementKind::CadImport(_) => Category::CadImport,
             ElementKind::Mass(_) => Category::Mass,
             ElementKind::Sweep(_) => Category::Sweep,
@@ -153,10 +156,11 @@ impl Element {
         true
     }
 
-    /// The run of a pipe, conduit or cable tray.
+    /// The run of a pipe, conduit, cable tray or lightning conductor.
     pub fn as_segment(&self) -> Option<&crate::MepSegment> {
         match &self.kind {
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Some(s),
+            ElementKind::LightningConductor(c) => Some(&c.run),
             _ => None,
         }
     }
@@ -164,6 +168,7 @@ impl Element {
     pub fn as_segment_mut(&mut self) -> Option<&mut crate::MepSegment> {
         match &mut self.kind {
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Some(s),
+            ElementKind::LightningConductor(c) => Some(&mut c.run),
             _ => None,
         }
     }
@@ -172,6 +177,7 @@ impl Element {
     pub fn systems(&self) -> Vec<crate::SystemId> {
         match &self.kind {
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => s.systems.clone(),
+            ElementKind::LightningConductor(c) => c.run.systems.clone(),
             ElementKind::Component(c) => c.system.into_iter().collect(),
             _ => Vec::new(),
         }
@@ -329,6 +335,10 @@ impl Element {
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
                 s.start += delta;
                 s.end += delta;
+            }
+            ElementKind::LightningConductor(c) => {
+                c.run.start += delta;
+                c.run.end += delta;
             }
             ElementKind::Foundation(f) => f.shape.points_mut().into_iter().for_each(|p| *p += delta),
             ElementKind::CadImport(c) => c.position += delta,

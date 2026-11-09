@@ -9,7 +9,8 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::{
-    Category, Element, ElementId, ElementKind, MepData, MepSegment, MepSystem, Project, SystemId, SystemKind,
+    Category, DeviceKind, Element, ElementId, ElementKind, MepData, MepSegment, MepSystem, Project, SystemClass,
+    SystemId, SystemKind,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -31,39 +32,46 @@ pub(crate) fn parse_kind(name: &str) -> Result<SystemKind> {
     })
 }
 
-/// Whether `system` may hold something electrical (`Some(true)`), of the
-/// plumbing (`Some(false)`) or either (`None`).
-pub(crate) fn check_fits(p: &Project, electrical: Option<bool>, system: SystemId) -> Result<()> {
+/// Runs of circuits and structured cabling: conduits and cable trays.
+pub(crate) const CABLED: &[SystemClass] = &[SystemClass::Circuit, SystemClass::Data];
+
+/// Whether `system` is of one of the families `classes` (any, when empty).
+pub(crate) fn check_fits(p: &Project, classes: &[SystemClass], system: SystemId) -> Result<()> {
     let Some(sys) = p.system(system) else {
         return Err(EngineError::not_found(format!("no system with id {}", system.0)));
     };
-    match electrical {
-        Some(electrical) if electrical != sys.kind.is_electrical() => {
-            Err(EngineError::invalid(t!("msg-system-mismatch", "system" => sys.name.clone())))
-        }
-        _ => Ok(()),
+    if classes.is_empty() || classes.contains(&sys.kind.class()) {
+        Ok(())
+    } else {
+        Err(EngineError::invalid(t!("msg-system-mismatch", "system" => sys.name.clone())))
     }
 }
 
-/// Whether an element of this MEP data is electrical (devices), of the plumbing (fixtures) or neither.
-pub(crate) fn is_electrical(mep: Option<MepData>) -> Option<bool> {
-    match mep {
-        Some(MepData::Device { .. }) => Some(true),
-        Some(MepData::Fixture { .. }) => Some(false),
-        None => None,
+/// The families of systems a component of this MEP data belongs to:
+/// plumbing for fixtures, the device's own family for devices, any without.
+pub(crate) fn mep_classes(mep: Option<MepData>) -> &'static [SystemClass] {
+    match mep.map(|m| (m, m.device().map(|d| d.class()))) {
+        Some((MepData::Fixture { .. }, _)) => &[SystemClass::Plumbing],
+        Some((_, Some(SystemClass::Circuit))) => &[SystemClass::Circuit],
+        Some((_, Some(SystemClass::Data))) => &[SystemClass::Data],
+        Some((_, Some(SystemClass::Lightning))) => &[SystemClass::Lightning],
+        _ => &[],
     }
 }
 
 /// Whether `system` may hold element `e`: pipes and plumbing fixtures belong
-/// to piping systems, conduits and electrical devices to circuits.
+/// to piping systems, conduits and cable trays to circuits and cabling,
+/// lightning conductors to lightning protection systems, devices to the
+/// systems of their family.
 fn check_member(p: &Project, e: &Element, system: SystemId) -> Result<()> {
-    let electrical = match &e.kind {
-        ElementKind::Pipe(_) => Some(false),
-        ElementKind::Conduit(_) | ElementKind::CableTray(_) => Some(true),
-        ElementKind::Component(_) => is_electrical(p.mep_data(e)),
+    let classes: &[SystemClass] = match &e.kind {
+        ElementKind::Pipe(_) => &[SystemClass::Plumbing],
+        ElementKind::Conduit(_) | ElementKind::CableTray(_) => CABLED,
+        ElementKind::LightningConductor(_) => &[SystemClass::Lightning],
+        ElementKind::Component(_) => mep_classes(p.mep_data(e)),
         _ => return Err(EngineError::invalid(format!("element {} cannot belong to a system", e.id.0))),
     };
-    check_fits(p, electrical, system)
+    check_fits(p, classes, system)
 }
 
 fn system_out(p: &Project, id: SystemId) -> Value {
@@ -164,7 +172,7 @@ impl Command for PipeCreate {
         let type_id = refs::type_of(p, Category::Pipe, self.type_ref.as_ref())?;
         let system = optional_system(p, self.system.as_ref())?;
         if let Some(id) = system {
-            check_fits(p, Some(false), id)?;
+            check_fits(p, &[SystemClass::Plumbing], id)?;
         }
         let kind = system.and_then(|id| p.system(id)).map(|sys| sys.kind);
         let offset = self.offset.unwrap_or_else(|| {
@@ -226,7 +234,7 @@ impl Command for ConduitCreate {
         let mut circuits = Vec::new();
         for r in &self.circuits {
             let id = refs::system(p, r)?;
-            check_fits(p, Some(true), id)?;
+            check_fits(p, CABLED, id)?;
             if !circuits.contains(&id) {
                 circuits.push(id);
             }
@@ -270,6 +278,50 @@ impl Command for SystemsList {
     }
 }
 
+/// What the structured cabling of a rack adds up to: its data outlets, the
+/// cables (one per jack) and their estimated length.
+pub(crate) fn cabling_totals(p: &Project, id: SystemId) -> serde_json::Map<String, Value> {
+    let (mut outlets, mut cables, mut length, mut longest) = (0, 0, 0.0, 0.0f64);
+    for e in p.system_members(id) {
+        if p.mep_data(e).and_then(|m| m.device()) != Some(DeviceKind::DataOutlet) {
+            continue;
+        }
+        outlets += 1;
+        if let Some((n, l)) = p.outlet_cable(e) {
+            cables += n;
+            length += l * n as f64;
+            longest = longest.max(l);
+        }
+    }
+    let mut o = serde_json::Map::new();
+    o.insert("outlets".into(), json!(outlets));
+    o.insert("cables".into(), json!(cables));
+    o.insert("cable_length".into(), json!(length));
+    o.insert("longest_cable".into(), json!(longest));
+    o
+}
+
+/// What a lightning protection system adds up to: its air terminals and
+/// earth electrodes, and the length of its conductors by role.
+fn lightning_totals(p: &Project, id: SystemId) -> serde_json::Map<String, Value> {
+    let (mut terminals, mut electrodes) = (0, 0);
+    let mut lengths: std::collections::BTreeMap<&str, f64> =
+        cc_core::ConductorRole::ALL.iter().map(|r| (r.name(), 0.0)).collect();
+    for e in p.system_members(id) {
+        match (&e.kind, p.mep_data(e).and_then(|m| m.device())) {
+            (ElementKind::LightningConductor(c), _) => *lengths.entry(c.role.name()).or_default() += c.run.length(),
+            (_, Some(DeviceKind::AirTerminal)) => terminals += 1,
+            (_, Some(DeviceKind::EarthElectrode)) => electrodes += 1,
+            _ => {}
+        }
+    }
+    let mut o = serde_json::Map::new();
+    o.insert("air_terminals".into(), json!(terminals));
+    o.insert("earth_electrodes".into(), json!(electrodes));
+    o.insert("conductor_length".into(), json!(lengths));
+    o
+}
+
 /// What a system adds up to.
 fn totals(p: &Project, id: SystemId) -> Value {
     let (mut count, mut length, mut power, mut devices, mut units, mut weight) = (0, 0.0, 0.0, 0, 0.0, 0.0);
@@ -291,9 +343,13 @@ fn totals(p: &Project, id: SystemId) -> Value {
         }
     }
     let mut v = json!({"elements": count, "length": length});
-    let electrical = p.system(id).is_some_and(|s| s.kind.is_electrical());
+    let class = p.system(id).map(|s| s.kind.class());
     if let Some(o) = v.as_object_mut() {
-        if electrical {
+        if class == Some(SystemClass::Data) {
+            o.extend(cabling_totals(p, id));
+        } else if class == Some(SystemClass::Lightning) {
+            o.extend(lightning_totals(p, id));
+        } else if class == Some(SystemClass::Circuit) {
             let volts = p.system(id).map_or(127.0, |s| s.voltage);
             o.insert("devices".into(), json!(devices));
             o.insert("power_va".into(), json!(power));
@@ -306,12 +362,14 @@ fn totals(p: &Project, id: SystemId) -> Value {
     v
 }
 
-/// Create a plumbing system or an electrical circuit. `kind` is
-/// `cold_water`, `hot_water`, `sanitary`, `vent`, `rainwater`, `power` or
-/// `lighting`; circuits may name the board (`panel`, a component element;
+/// Create a plumbing system, an electrical circuit, the structured cabling
+/// of a rack or a lightning protection system. `kind` is `cold_water`,
+/// `hot_water`, `sanitary`, `vent`, `rainwater`, `power`, `lighting`, `data`
+/// or `lightning`; circuits may name the board (`panel`, a component element;
 /// default: the project's only board, if it has one) feeding them and their
-/// voltage (default 127 V). A circuit's code defaults to the next free
-/// number on its board.
+/// voltage (default 127 V), and cabling the rack (`panel`; default: the only
+/// rack) its outlets are cabled to. The code of a circuit or of cabling
+/// defaults to the next free number on its board or rack.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct SystemCreate {
@@ -334,13 +392,9 @@ pub struct SystemCreate {
     pub voltage: Option<f64>,
 }
 
-/// The distribution boards of the project.
-fn boards(p: &Project) -> Vec<ElementId> {
-    p.elements
-        .values()
-        .filter(|e| p.mep_data(e).and_then(|m| m.device()) == Some(cc_core::DeviceKind::Panel))
-        .map(|e| e.id)
-        .collect()
+/// The distribution boards (or racks) of the project.
+fn boards(p: &Project, board: DeviceKind) -> Vec<ElementId> {
+    p.elements.values().filter(|e| p.mep_data(e).and_then(|m| m.device()) == Some(board)).map(|e| e.id).collect()
 }
 
 impl Command for SystemCreate {
@@ -349,31 +403,10 @@ impl Command for SystemCreate {
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
         let kind = parse_kind(&self.kind)?;
-        let panel = match self.panel.map(|id| refs::element(p, id)).transpose()? {
-            Some(panel) => {
-                check_panel(p, panel)?;
-                Some(panel)
-            }
-            None if kind.is_electrical() => match boards(p)[..] {
-                [only] => Some(only),
-                _ => None,
-            },
-            None => None,
-        };
-        let code = match self.code {
-            Some(c) => c.trim().to_string(),
-            None if kind.is_electrical() => crate::defaults::next_number(
-                p.systems.values().filter(|c| c.kind.is_electrical() && c.panel == panel).map(|c| c.code.as_str()),
-            ),
-            None => String::new(),
-        };
-        let name = match self.name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()) {
-            Some(n) => n,
-            None if kind.is_electrical() => t!("default-circuit-name", "n" => code.clone()),
-            None => crate::i18n::tr(kind.key()),
-        };
-        let voltage = refs::positive(self.voltage.unwrap_or(127.0), "voltage")?;
-        let system = MepSystem { name, code, kind, color: self.color, panel, voltage };
+        let panel = self.panel.map(|id| refs::element(p, id)).transpose()?;
+        let mut system = new_system(p, kind, panel, self.code, self.name)?;
+        system.color = self.color;
+        system.voltage = refs::positive(self.voltage.unwrap_or(127.0), "voltage")?;
         let id = edit(s, t!("tx-create-system"), |e| {
             let id = SystemId(e.alloc_id());
             e.systems_mut().insert(id, system);
@@ -383,10 +416,64 @@ impl Command for SystemCreate {
     }
 }
 
-/// A distribution board: a component whose type is a panel device.
-fn check_panel(p: &Project, id: ElementId) -> Result<()> {
-    match p.element(id).and_then(|e| p.mep_data(e)).and_then(|m| m.device()) {
-        Some(cc_core::DeviceKind::Panel) => Ok(()),
+/// What feeds systems of `kind`: boards feed circuits, racks the cabling.
+fn board_of(kind: SystemKind) -> Option<DeviceKind> {
+    match kind.class() {
+        SystemClass::Circuit => Some(DeviceKind::Panel),
+        SystemClass::Data => Some(DeviceKind::Rack),
+        SystemClass::Plumbing | SystemClass::Lightning => None,
+    }
+}
+
+/// A new system of `kind`: fed by `panel` (checked; default: the project's
+/// only board or rack for circuits and cabling), with `code` (default: the
+/// next free number on its board or rack) and `name` (default: after the
+/// code or the kind).
+pub(crate) fn new_system(
+    p: &Project,
+    kind: SystemKind,
+    panel: Option<ElementId>,
+    code: Option<String>,
+    name: Option<String>,
+) -> Result<MepSystem> {
+    let board = board_of(kind);
+    let panel = match (panel, board) {
+        (Some(panel), _) => {
+            check_panel(p, panel, kind)?;
+            Some(panel)
+        }
+        (None, Some(board)) => match boards(p, board)[..] {
+            [only] => Some(only),
+            _ => None,
+        },
+        (None, None) => None,
+    };
+    let class = kind.class();
+    let code = match code {
+        Some(c) => c.trim().to_string(),
+        None if board.is_some() => crate::defaults::next_number(
+            p.systems.values().filter(|c| c.kind.class() == class && c.panel == panel).map(|c| c.code.as_str()),
+        ),
+        None => String::new(),
+    };
+    let name = match name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()) {
+        Some(n) => n,
+        None if class == SystemClass::Circuit => t!("default-circuit-name", "n" => code.clone()),
+        None if class == SystemClass::Data => t!("default-cabling-name", "n" => code.clone()),
+        None => crate::i18n::tr(kind.key()),
+    };
+    let mut system = MepSystem::new(name, code, kind);
+    system.panel = panel;
+    Ok(system)
+}
+
+/// What may feed a system of `kind`: a distribution board for circuits, a
+/// rack for structured cabling; other systems have none.
+fn check_panel(p: &Project, id: ElementId, kind: SystemKind) -> Result<()> {
+    let device = p.element(id).and_then(|e| p.mep_data(e)).and_then(|m| m.device());
+    match (board_of(kind), device) {
+        (Some(board), Some(device)) if board == device => Ok(()),
+        (Some(DeviceKind::Rack), _) => Err(EngineError::invalid(t!("msg-not-a-rack", "id" => id.0))),
         _ => Err(EngineError::invalid(t!("msg-not-a-panel", "id" => id.0))),
     }
 }
@@ -415,7 +502,7 @@ impl Command for SystemSet {
         // Kinds are given by name, as in `system_create`.
         if let Some(kind) = patch.get("kind").and_then(Value::as_str) {
             let kind = parse_kind(kind)?;
-            if kind.is_electrical() != current.kind.is_electrical() && p.system_members(id).next().is_some() {
+            if kind.class() != current.kind.class() && p.system_members(id).next().is_some() {
                 return Err(EngineError::rejected(t!("msg-system-kind-in-use")));
             }
             let kind = serde_json::to_value(kind).map_err(|e| EngineError::invalid(e.to_string()))?;
@@ -423,10 +510,10 @@ impl Command for SystemSet {
                 o.insert("kind".into(), kind);
             }
         }
-        if let Some(panel) = patch.get("panel").and_then(Value::as_u64) {
-            check_panel(p, refs::element(p, panel)?)?;
-        }
         let updated: MepSystem = patch_value(&current, &patch)?;
+        if let Some(panel) = patch.get("panel").and_then(Value::as_u64) {
+            check_panel(p, refs::element(p, panel)?, updated.kind)?;
+        }
         if updated.name.trim().is_empty() {
             return Err(EngineError::invalid("the name is empty"));
         }
@@ -474,14 +561,16 @@ fn detach(e: &mut Element, id: SystemId) {
         ElementKind::Pipe(seg) | ElementKind::Conduit(seg) | ElementKind::CableTray(seg) => {
             seg.systems.retain(|s| *s != id)
         }
+        ElementKind::LightningConductor(c) => c.run.systems.retain(|s| *s != id),
         ElementKind::Component(c) if c.system == Some(id) => c.system = None,
         _ => {}
     }
 }
 
 /// Put elements in a system or circuit, or take them out (`remove`). A pipe
-/// belongs to one system (it moves); a conduit carries several circuits (one
-/// is added); a fixture or device connects to one.
+/// or a lightning conductor belongs to one system (it moves); a conduit or
+/// cable tray carries several circuits and cabling systems (one is added); a
+/// fixture or device connects to one (a data outlet to the cabling of a rack).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct SystemAssign {
@@ -514,6 +603,7 @@ impl Command for SystemAssign {
                 }
                 match &mut el.kind {
                     ElementKind::Pipe(seg) => seg.systems = vec![id],
+                    ElementKind::LightningConductor(c) => c.run.systems = vec![id],
                     ElementKind::Conduit(seg) | ElementKind::CableTray(seg) if !seg.systems.contains(&id) => {
                         seg.systems.push(id)
                     }
@@ -709,7 +799,11 @@ impl Command for MepConnect {
                 let mut connected = false;
                 let level_z = p.level_elevation(e.level);
                 for k in &connectors {
-                    let conduit = k.system.is_electrical();
+                    // Lightning protection is joined by its own conductors.
+                    if k.system.class() == SystemClass::Lightning {
+                        continue;
+                    }
+                    let conduit = k.system.is_cabled();
                     let runs = runs_on(p, e.level, conduit);
                     let fits = |seg: &MepSegment| match only {
                         Some(o) => seg.systems.contains(&o),
@@ -772,6 +866,10 @@ impl Command for MepConnect {
             };
             let base = c.base_offset;
             let mut connected = false;
+            if mep.device().is_some_and(|d| d.class() == SystemClass::Lightning) {
+                skipped += 1;
+                continue;
+            }
             match mep {
                 MepData::Fixture { drain_units, supply_weight, hot_water } => {
                     let mut kinds = vec![SystemKind::Sanitary];

@@ -9,7 +9,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`site_get`](#site_get), [`site_set`](#site_set), [`site_context_import`](#site_context_import), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set), [`cad_explode`](#cad_explode)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
-- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
+- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`device_type_create`](#device_type_create), [`lps_conductor_create`](#lps_conductor_create), [`lps_conductor_type_create`](#lps_conductor_type_create), [`earth_ring_create`](#earth_ring_create), [`air_terminal_place`](#air_terminal_place), [`earth_electrode_place`](#earth_electrode_place), [`lps_check`](#lps_check), [`rack_place`](#rack_place), [`data_outlet_place`](#data_outlet_place), [`cabling_list`](#cabling_list), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
@@ -1134,7 +1134,7 @@ No parameters.
 
 ### `component_place`
 
-*edit* — Place a component (furniture, plumbing fixture, electrical device…) of a component type. Electrical devices default to their usual mounting height (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m, ceiling lights at the level height) and may be put on a circuit.
+*edit* — Place a component (furniture, plumbing fixture, electrical device…) of a component type. Electrical devices default to their usual mounting height (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m, ceiling lights at the level height, data outlets 0.30 m, racks 1.40 m, air terminals on the roof under them, earth electrodes 0.50 m below the level) and may be put on a circuit or system of their kind; lightning protection devices join the first lightning protection system by default.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1224,6 +1224,124 @@ No parameters.
 | `material` | string | optional | Material name. |
 | `name` | string | optional | Type name (only with one kind). |
 
+### `device_type_create`
+
+*edit* — Give the project the built-in component type of a kind of device, if it has none: `device` is `outlet`, `dedicated_outlet`, `switch`, `ceiling_light`, `wall_light`, `panel`, `data_outlet` (with `ports` jacks, default 2), `rack`, `air_terminal` or `earth_electrode`. Returns the type (the existing one when there is one).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `device` | string | required | Kind of device. |
+| `ports` | integer | optional | Data outlets: jacks per outlet (1 to 48). |
+
+### `lps_conductor_create`
+
+*edit* — Create a lightning protection conductor from `start` to `end`, or a down conductor straight down from `start` (no `end`). Without offsets, a conductor lies on the roof under its ends (else where it starts on another conductor, else at the level); a down conductor runs from the roof over `start` (else the level above) down to the earthing, 0.5 m below the level. `role` is `air` (a roof conductor), `down` or `earth`; by default vertical runs are down conductors, runs below the level earth conductors and the others roof conductors. Conductors join each other where their ends meet. A project without a conductor type gets one (8 mm, copper); without a lightning protection system, one is made.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `start` | [x, y] | required | Start in plan. |
+| `end` | [x, y] | optional | End in plan (default: the start, for a down conductor). |
+| `end_offset` | number | optional | Elevation of the end above the level, meters. |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `offset` | number | optional | Elevation of the start above the level, meters. |
+| `role` | string | optional | `air`, `down` or `earth` (default: by where it runs). |
+| `system` | id or name | optional | Lightning protection system id, name or code (default: the first). |
+| `type` | id or name | optional | Conductor type id or name (default: the first conductor type). |
+
+### `lps_conductor_type_create`
+
+*edit* — Create a lightning protection conductor type: a round conductor of `diameter` (meters, 2 to 50 mm; default 8 mm) in `material` (default: copper, else the first metal), named by its diameter unless `name` is given.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `diameter` | number | optional | Diameter, meters. |
+| `material` | string | optional | Material name. |
+| `name` | string | optional | Type name. |
+
+### `earth_ring_create`
+
+*edit* — Create an earth ring: buried conductors (role `earth`) around `points` (a closed outline), or by default around the walls of the level, `distance` (default 1 m) out from their outer faces, `depth` (default 0.5 m) below the level, one conductor per side.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `depth` | number | optional | Depth below the level, meters. |
+| `distance` | number | optional | Distance out from the walls' outer faces, meters (without `points`). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `points` | [[x, y], …] | optional | The outline in plan (default: around the walls of the level). |
+| `system` | id or name | optional | Lightning protection system id, name or code (default: the first). |
+| `type` | id or name | optional | Conductor type id or name (default: the first conductor type). |
+
+### `air_terminal_place`
+
+*edit* — Place an air terminal (a lightning rod) at `position`: on the roof (or floor) surface under it by default, else at the level above; `height` is the rod's height (default: its type's, 1 m for the built-in type). A project without an air terminal type gets one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Position in plan. |
+| `height` | number | optional | Rod height, meters. |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `offset` | number | optional | Elevation of its base above the level, meters (default: the roof under it). |
+| `system` | id or name | optional | Lightning protection system id, name or code (default: the first). |
+| `type` | id or name | optional | Air terminal type id or name. |
+
+### `earth_electrode_place`
+
+*edit* — Place an earth electrode (a driven rod) at `position`: its top `depth` (default 0.5 m) below the level, `length` long (default: its type's, 2.4 m for the built-in type). A project without an earth electrode type gets one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Position in plan. |
+| `depth` | number | optional | Depth of its top below the level, meters. |
+| `length` | number | optional | Rod length, meters. |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `system` | id or name | optional | Lightning protection system id, name or code (default: the first). |
+| `type` | id or name | optional | Earth electrode type id or name. |
+
+### `lps_check`
+
+*query* — Check how the air termination (air terminals and roof conductors) covers the roofs, for a protection `class` (`I` to `IV`, default `III`): the exposed upper faces of roofs (and of floors above the lowest level that nothing covers) are sampled about `spacing` meters apart (default 1 m; more on large roofs) and each point is protected when one air termination point protects it by itself, by the rolling sphere method (sphere radius 20, 30, 45 or 60 m by class) over a horizontal plane at the roof's lowest exposed point, or, on flat parts, when it lies within half the class's mesh width (5, 10, 15 or 20 m) of a roof conductor. Mutual protection between terminals and the shielding by the building itself are left out, which errs on the safe side. Returns the counts, the share protected and up to 200 unprotected points.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `class` | string | optional | Protection class, `I` to `IV`. |
+| `spacing` | number | optional | Distance between the sampled points, meters. |
+
+### `rack_place`
+
+*edit* — Place a communications rack at `position` (on the wall, `offset` above the level, default 1.40 m) and create the data system its outlets are cabled to. The rack's mark and the system's code are `mark` (default the next free `R1`, `R2`…). A project without a rack type gets one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Insertion point in plan (the back of the rack). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `mark` | string | optional | Mark of the rack and code of its cabling. |
+| `offset` | number | optional | Elevation above the level, meters. |
+| `rotation` | number | optional | Rotation in plan, degrees. |
+| `type` | id or name | optional | Rack type id or name. |
+
+### `data_outlet_place`
+
+*edit* — Place a data (or voice) outlet at `position` (on the wall, `offset` above the level, default 0.30 m), cabled to `rack` (a rack element: its data system) or to the data system `system`; by default to the project's only rack, if it has one. `ports` picks a type with that many jacks (one cable each), made when the project has none; a project without a data outlet type gets one (two jacks).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Insertion point in plan (the back of the outlet). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `offset` | number | optional | Elevation above the level, meters. |
+| `ports` | integer | optional | Jacks per outlet (1 to 48). |
+| `rack` | integer | optional | Rack element id. |
+| `rotation` | number | optional | Rotation in plan, degrees. |
+| `system` | id or name | optional | Data system id, name or code. |
+| `type` | id or name | optional | Data outlet type id or name. |
+
+### `cabling_list`
+
+*query* — The structured cabling per rack: for each data system, its rack, its outlets with their jacks and the estimated length of each cable (up to the ceiling of the outlet's level, across along the two axes, down to the rack, plus 3 m of slack), the totals, and the cables longer than the 90 m of a permanent link. `rack` limits it to one rack.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `rack` | integer | optional | Rack element id. |
+
 ### `systems_list`
 
 *query* — List the plumbing systems and electrical circuits with what is in them: element count, pipe or conduit length, fixture units and supply weights of plumbing fixtures, and the devices and load of circuits.
@@ -1232,7 +1350,7 @@ No parameters.
 
 ### `system_create`
 
-*edit* — Create a plumbing system or an electrical circuit. `kind` is `cold_water`, `hot_water`, `sanitary`, `vent`, `rainwater`, `power` or `lighting`; circuits may name the board (`panel`, a component element; default: the project's only board, if it has one) feeding them and their voltage (default 127 V). A circuit's code defaults to the next free number on its board.
+*edit* — Create a plumbing system, an electrical circuit, the structured cabling of a rack or a lightning protection system. `kind` is `cold_water`, `hot_water`, `sanitary`, `vent`, `rainwater`, `power`, `lighting`, `data` or `lightning`; circuits may name the board (`panel`, a component element; default: the project's only board, if it has one) feeding them and their voltage (default 127 V), and cabling the rack (`panel`; default: the only rack) its outlets are cabled to. The code of a circuit or of cabling defaults to the next free number on its board or rack.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1262,7 +1380,7 @@ No parameters.
 
 ### `system_assign`
 
-*edit* — Put elements in a system or circuit, or take them out (`remove`). A pipe belongs to one system (it moves); a conduit carries several circuits (one is added); a fixture or device connects to one.
+*edit* — Put elements in a system or circuit, or take them out (`remove`). A pipe or a lightning conductor belongs to one system (it moves); a conduit or cable tray carries several circuits and cabling systems (one is added); a fixture or device connects to one (a data outlet to the cabling of a rack).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2251,11 +2369,11 @@ No parameters.
 
 ### `view_create`
 
-*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan` and `electrical_plan` (with `level`: the pipes, or the conduits and devices, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `drafting` (a 2D view independent of the model, showing only the text, dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the single-line diagram and load schedule of a distribution board; default the only board) or `sheet` (A3, numbered after the others, with the first title block type).
+*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan`, `electrical_plan`, `communications_plan` and `lightning_plan` (with `level`: the pipes, the conduits and devices, the structured cabling, or the lightning protection, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `drafting` (a 2D view independent of the model, showing only the text, dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the single-line diagram and load schedule of a distribution board; default the only board) or `sheet` (A3, numbered after the others, with the first title block type).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `drafting`, `schedule`, `panel_diagram` or `sheet`. |
+| `kind` | string | required | `floor_plan`, `ceiling_plan`, `structural_plan`, `plumbing_plan`, `electrical_plan`, `communications_plan`, `lightning_plan`, `section`, `elevation`, `three_d`, `analytical`, `rebar`, `legend`, `drafting`, `schedule`, `panel_diagram` or `sheet`. |
 | `category` | string | optional | Schedules: the category scheduled (default `wall`). |
 | `depth` | number | optional | Section depth beyond the cut line, meters (default 8). |
 | `direction` | string | optional | Elevations: `north`, `south` (default), `east` or `west`. |
@@ -2576,7 +2694,7 @@ No parameters.
 | `cut_height` | number | optional | Plans: cut plane height, meters. |
 | `design_options` | [object, …] | optional | The option shown of each design option set (replacing the template's choices; sets left out show automatically). |
 | `detail` | string | optional | Detail level: `coarse`, `medium` or `fine`. |
-| `discipline` | string | optional | Floor plans: `none`, `plumbing` or `electrical` (services over a faint architecture). |
+| `discipline` | string | optional | Floor plans: `none`, `plumbing`, `electrical`, `communications` or `lightning` (services over a faint architecture). |
 | `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural`, `phase_filter`, `detail`, `visual_style`, `underlay`, `design_options` (true/false). `design_options` is off unless set. |
 | `name` | string | optional | New name. |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none. |

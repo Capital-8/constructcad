@@ -90,6 +90,12 @@ fn element_is_valid(e: &Element) -> bool {
                 && finite_points(&[s.start, s.end])
                 && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
         }
+        ElementKind::LightningConductor(c) => {
+            let s = &c.run;
+            finite(&[s.start_offset, s.end_offset])
+                && finite_points(&[s.start, s.end])
+                && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
+        }
         ElementKind::Valve(v) => v.at.is_finite() && v.at >= 0.0,
         ElementKind::CadImport(c) => c.is_valid(),
         ElementKind::DetailLine(l) => l.is_valid(),
@@ -251,6 +257,15 @@ impl Project {
                     }
                 }
                 TypeData::Valve { .. } => {}
+                TypeData::LightningConductor { diameter, .. } => {
+                    use crate::lightning::{MAX_CONDUCTOR_DIAMETER, MIN_CONDUCTOR_DIAMETER};
+                    repairs += usize::from(fix_positive(diameter, 0.008));
+                    let fitted = diameter.clamp(MIN_CONDUCTOR_DIAMETER, MAX_CONDUCTOR_DIAMETER);
+                    if fitted != *diameter {
+                        *diameter = fitted;
+                        repairs += 1;
+                    }
+                }
                 TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
                     repairs += usize::from(fix_positive(diameter, 0.025));
                 }
@@ -306,7 +321,14 @@ impl Project {
                         Some(crate::MepData::Fixture { drain_units, supply_weight, .. }) => {
                             repairs += fix_nonnegative(drain_units) + fix_nonnegative(supply_weight);
                         }
-                        Some(crate::MepData::Device { power, .. }) => repairs += fix_nonnegative(power),
+                        Some(crate::MepData::Device { power, ports, .. }) => {
+                            repairs += fix_nonnegative(power);
+                            let fitted = (*ports).clamp(1, crate::mep::MAX_PORTS);
+                            if fitted != *ports {
+                                *ports = fitted;
+                                repairs += 1;
+                            }
+                        }
                         None => {}
                     }
                 }
@@ -552,9 +574,16 @@ impl Project {
         }
         let systems = &self.systems;
         for e in self.elements.values_mut() {
-            let max = if matches!(e.kind, ElementKind::Pipe(_)) { 1 } else { usize::MAX };
+            let max = if matches!(e.kind, ElementKind::Pipe(_) | ElementKind::LightningConductor(_)) {
+                1
+            } else {
+                usize::MAX
+            };
             match &mut e.kind {
-                ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
+                ElementKind::Pipe(s)
+                | ElementKind::Conduit(s)
+                | ElementKind::CableTray(s)
+                | ElementKind::LightningConductor(crate::LightningConductor { run: s, .. }) => {
                     let before = s.systems.len();
                     let mut seen = std::collections::BTreeSet::new();
                     s.systems.retain(|id| systems.contains_key(id) && seen.insert(*id));
@@ -1161,7 +1190,7 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        outlet.mep = Some(crate::MepData::Device { device: crate::DeviceKind::Outlet, power: f64::NAN });
+        outlet.mep = Some(crate::MepData::Device { device: crate::DeviceKind::Outlet, power: f64::NAN, ports: 1 });
         // The missing system, the second system, the empty run, the board, the voltage, the power.
         assert_eq!(p.repair(), 6);
         let Some(ElementKind::Pipe(s)) = p.element(pipe).map(|e| &e.kind) else { panic!("pipe removed") };

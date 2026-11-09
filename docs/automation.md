@@ -235,6 +235,21 @@ A curtain wall is a wall whose type has a curtain grid instead of layers: vertic
 {"command": "valve_place", "args": {"pipe": 42, "distance": 0.5, "kind": "ball"}}
 ```
 
+### Lightning protection and structured cabling
+
+`lps_conductor_create` draws a lightning protection conductor from `start` to `end` (on the roof surface under its ends unless `offset`/`end_offset` say otherwise), or a down conductor from the roof over `start` down to 0.5 m below the level when there is no `end`; `role` (`air`, `down`, `earth`) defaults by where it runs. `earth_ring_create` lays buried conductors around the level's walls (or `points`), `air_terminal_place` puts a rod of `height` on the roof under `position`, and `earth_electrode_place` drives a rod of `length` below the level. They join the first lightning protection system (`system_create` with `kind: "lightning"`), made with the first of them. `lps_check` (`class` `I` to `IV`) samples the roofs and returns how many points the air termination protects, by the rolling sphere and mesh methods, with the unprotected points; `systems_list` gives each lightning protection system's terminals, electrodes and conductor lengths by role.
+
+`rack_place` places a rack and creates its data system (`kind: "data"`, its `panel` the rack, coded after the rack's mark); `data_outlet_place` places outlets cabled to a `rack` (or a data `system`) with `ports` jacks; `cabling_list` gives per rack the outlets, cables, the estimated length of each and the cables over 90 m. `device_type_create` gives the project a built-in device type (`data_outlet`, `rack`, `air_terminal`, `earth_electrode` or any electrical device). Conduits and cable trays carry data systems like circuits.
+
+```text
+{"command": "earth_ring_create", "args": {}}
+{"command": "lps_conductor_create", "args": {"start": [0, 4], "end": [10, 4]}}
+{"command": "air_terminal_place", "args": {"position": [5, 4], "height": 2}}
+{"command": "lps_check", "args": {"class": "II"}}
+{"command": "rack_place", "args": {"position": [0, 0]}}
+{"command": "data_outlet_place", "args": {"position": [8, 3], "rack": 120, "ports": 2}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).

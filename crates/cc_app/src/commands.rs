@@ -135,6 +135,13 @@ pub enum UiCommand {
     MepConnect,
     MepSizing,
     PanelDiagram,
+    /// Place a communications or lightning protection device (its built-in type made on first use).
+    PlaceDeviceOf(cc_core::DeviceKind),
+    EarthRing,
+    LpsCheck,
+    Cabling,
+    CommunicationsPlan,
+    LightningPlan,
     Dimension(DimensionMode),
     Text,
     LevelMarkPlan,
@@ -227,8 +234,16 @@ pub enum UiCommand {
     CommandPalette,
 }
 
+/// Communications and lightning protection devices placed by a tool of their own.
+pub const DEVICE_TOOLS: [cc_core::DeviceKind; 4] = [
+    cc_core::DeviceKind::AirTerminal,
+    cc_core::DeviceKind::EarthElectrode,
+    cc_core::DeviceKind::Rack,
+    cc_core::DeviceKind::DataOutlet,
+];
+
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
-const PLACED: [Category; 24] = [
+const PLACED: [Category; 25] = [
     Category::Wall,
     Category::Door,
     Category::Window,
@@ -249,6 +264,7 @@ const PLACED: [Category; 24] = [
     Category::Conduit,
     Category::CableTray,
     Category::Valve,
+    Category::LightningConductor,
     Category::Mass,
     Category::Shaft,
     Category::Topography,
@@ -325,6 +341,8 @@ impl UiCommand {
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
         all.extend([PlaceFixture, PlaceDevice, MepConnect, Systems, MepSizing, PlumbingPlan, ElectricalPlan]);
         all.extend([MepSchedules, PanelDiagram]);
+        all.extend(DEVICE_TOOLS.map(PlaceDeviceOf));
+        all.extend([EarthRing, LpsCheck, Cabling, CommunicationsPlan, LightningPlan]);
         all.extend(DimensionMode::ALL.map(Dimension));
         all.extend([
             Text,
@@ -500,6 +518,17 @@ impl UiCommand {
             StructureTags => Icon::StructureTags,
             PlaceFixture => Icon::PlumbingFixture,
             PlaceDevice => Icon::Outlet,
+            PlaceDeviceOf(d) => match d {
+                cc_core::DeviceKind::AirTerminal => Icon::AirTerminal,
+                cc_core::DeviceKind::EarthElectrode => Icon::EarthElectrode,
+                cc_core::DeviceKind::Rack => Icon::Rack,
+                _ => Icon::DataOutlet,
+            },
+            EarthRing => Icon::EarthRing,
+            LpsCheck => Icon::LpsCheck,
+            Cabling => Icon::Cabling,
+            LightningPlan => Icon::LightningPlan,
+            CommunicationsPlan => Icon::CommunicationsPlan,
             Systems => Icon::Systems,
             PlumbingPlan => Icon::PlumbingPlan,
             ElectricalPlan => Icon::ElectricalPlan,
@@ -695,6 +724,12 @@ impl UiCommand {
             StructureTags => t!("action-structure-tags"),
             PlaceFixture => t!("tool-fixture"),
             PlaceDevice => t!("tool-device"),
+            PlaceDeviceOf(d) => crate::i18n::tr(d.key()),
+            EarthRing => t!("action-earth-ring"),
+            LpsCheck => t!("dlg-lps-check"),
+            Cabling => t!("dlg-cabling"),
+            LightningPlan => t!("action-lightning-plan"),
+            CommunicationsPlan => t!("action-communications-plan"),
             Systems => t!("dlg-systems"),
             PlumbingPlan => t!("action-plumbing-plan"),
             ElectricalPlan => t!("action-electrical-plan"),
@@ -889,6 +924,17 @@ impl UiCommand {
             StructureTags => t!("cmd-desc-structure-tags"),
             PlaceFixture => t!("cmd-desc-fixture"),
             PlaceDevice => t!("cmd-desc-device"),
+            PlaceDeviceOf(d) => match d {
+                cc_core::DeviceKind::AirTerminal => t!("cmd-desc-air-terminal"),
+                cc_core::DeviceKind::EarthElectrode => t!("cmd-desc-earth-electrode"),
+                cc_core::DeviceKind::Rack => t!("cmd-desc-rack"),
+                _ => t!("cmd-desc-data-outlet"),
+            },
+            EarthRing => t!("cmd-desc-earth-ring"),
+            LpsCheck => t!("cmd-desc-lps-check"),
+            Cabling => t!("cmd-desc-cabling"),
+            LightningPlan => t!("cmd-desc-lightning-plan"),
+            CommunicationsPlan => t!("cmd-desc-communications-plan"),
             Systems => t!("cmd-desc-systems"),
             PlumbingPlan => t!("cmd-desc-plumbing-plan"),
             ElectricalPlan => t!("cmd-desc-electrical-plan"),
@@ -1050,6 +1096,9 @@ impl UiCommand {
             Place(Category::Conduit) => "CN",
             Place(Category::CableTray) => "TY",
             Place(Category::Valve) => "VL",
+            Place(Category::LightningConductor) => "LC",
+            PlaceDeviceOf(cc_core::DeviceKind::AirTerminal) => "AT",
+            PlaceDeviceOf(cc_core::DeviceKind::DataOutlet) => "DO",
             Select => "MD",
             SelectInstances => "SA",
             Group => "GP",
@@ -1142,6 +1191,15 @@ impl UiCommand {
             Place(Category::Conduit) => "conduit_create",
             Place(Category::CableTray) => "cable_tray_create",
             Place(Category::Valve) => "valve_place",
+            Place(Category::LightningConductor) => "lps_conductor_create",
+            PlaceDeviceOf(cc_core::DeviceKind::AirTerminal) => "air_terminal_place",
+            PlaceDeviceOf(cc_core::DeviceKind::EarthElectrode) => "earth_electrode_place",
+            PlaceDeviceOf(cc_core::DeviceKind::Rack) => "rack_place",
+            PlaceDeviceOf(_) => "data_outlet_place",
+            EarthRing => "earth_ring_create",
+            LpsCheck => "lps_check",
+            Cabling => "cabling_list",
+            LightningPlan | CommunicationsPlan => "view_create",
             PlaceFixture | PlaceDevice => "component_place",
             Systems => "system_set",
             MepConnect => "mep_connect",
@@ -1365,7 +1423,11 @@ impl UiCommand {
             Truss if project.default_type(Category::Beam).is_none() => Some(t!("msg-no-type")),
             BracesX if crate::actions::selected_columns(state).len() != 2 => Some(t!("msg-columns-two-exactly")),
             TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
-            StructuralPlan | PlumbingPlan | ElectricalPlan if project.levels.is_empty() => Some(t!("why-no-levels")),
+            StructuralPlan | PlumbingPlan | ElectricalPlan | CommunicationsPlan | LightningPlan | EarthRing
+                if project.levels.is_empty() =>
+            {
+                Some(t!("why-no-levels"))
+            }
             PlaceFixture if crate::tools::mep_component_type(project, false).is_none() => Some(t!("msg-no-type")),
             PanelDiagram if crate::systems_dialog::panels(state).is_empty() => Some(t!("why-no-panel")),
             PlaceDevice if crate::tools::mep_component_type(project, true).is_none() => Some(t!("msg-no-type")),
@@ -1433,7 +1495,13 @@ impl UiCommand {
             }
             Place(category) => tool.category() == Some(category) && !matches!(tool, Tool::Section | Tool::Truss { .. }),
             PlaceFixture => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(false)),
-            PlaceDevice => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(true)),
+            PlaceDevice => {
+                matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(true)
+                    && !crate::tools::device_type(state.project(), *type_id).is_some_and(|d| DEVICE_TOOLS.contains(&d)))
+            }
+            PlaceDeviceOf(device) => {
+                matches!(tool, Tool::Component { type_id } if crate::tools::device_type(state.project(), *type_id) == Some(device))
+            }
             Truss => matches!(tool, Tool::Truss { .. }),
             StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select if state.sketch.is_some() => {
@@ -1581,6 +1649,7 @@ fn place_label(category: Category) -> String {
         Category::Conduit => t!("tool-conduit"),
         Category::CableTray => t!("tool-cable-tray"),
         Category::Valve => t!("tool-valve"),
+        Category::LightningConductor => t!("tool-lightning-conductor"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::DetailLine => t!("tool-detail-line"),
@@ -1620,6 +1689,7 @@ fn place_description(category: Category) -> String {
         Category::Conduit => t!("cmd-desc-conduit"),
         Category::CableTray => t!("cmd-desc-cable-tray"),
         Category::Valve => t!("cmd-desc-valve"),
+        Category::LightningConductor => t!("cmd-desc-lightning-conductor"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::DetailLine => t!("cmd-desc-detail-line"),
@@ -1826,6 +1896,12 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         PanelDiagram => crate::actions::open_panel_diagram(state),
         PlumbingPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Plumbing),
         ElectricalPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Electrical),
+        CommunicationsPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Communications),
+        LightningPlan => crate::actions::open_mep_plan(state, cc_core::MepDiscipline::Lightning),
+        PlaceDeviceOf(device) => crate::lps_cabling_ui::device_tool(state, device),
+        EarthRing => crate::lps_cabling_ui::earth_ring(state),
+        LpsCheck => state.dialogs.lps_check = true,
+        Cabling => state.dialogs.cabling = true,
         MepSchedules => {
             actions::new_schedule(state, Category::Pipe);
             actions::new_schedule(state, Category::Conduit);

@@ -34,6 +34,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Conduit => Icon::Conduit,
         Category::CableTray => Icon::CableTray,
         Category::Valve => Icon::Valve,
+        Category::LightningConductor => Icon::LightningConductor,
         Category::Dimension => Icon::Dimension,
         Category::Column => Icon::Column,
         Category::Beam => Icon::Beam,
@@ -690,10 +691,24 @@ fn mep_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-electrical"), |ui| {
         command_buttons(ui, state, &[place(Category::Conduit), place(Category::CableTray), PlaceDevice]);
     });
+    group(ui, t!("group-communications"), |ui| {
+        use cc_core::DeviceKind as D;
+        command_buttons(ui, state, &[PlaceDeviceOf(D::Rack), PlaceDeviceOf(D::DataOutlet)]);
+        stacks(ui, state, &[&[Cabling]]);
+    });
+    group(ui, t!("group-lightning"), |ui| {
+        use cc_core::DeviceKind as D;
+        command_buttons(ui, state, &[place(Category::LightningConductor), PlaceDeviceOf(D::AirTerminal)]);
+        stacks(ui, state, &[&[PlaceDeviceOf(D::EarthElectrode), EarthRing, LpsCheck]]);
+    });
     group(ui, t!("group-systems"), |ui| command_buttons(ui, state, &[MepConnect, Systems]));
     group(ui, t!("group-analysis"), |ui| command_button(ui, state, MepSizing));
     group(ui, t!("group-documentation"), |ui| {
-        stacks(ui, state, &[&[PlumbingPlan, ElectricalPlan, MepSchedules], &[PanelDiagram]]);
+        stacks(
+            ui,
+            state,
+            &[&[PlumbingPlan, ElectricalPlan, MepSchedules], &[CommunicationsPlan, LightningPlan, PanelDiagram]],
+        );
     });
     group(ui, t!("group-selection"), |ui| command_button(ui, state, Select));
 }
@@ -942,18 +957,23 @@ fn macro_menu(ui: &mut Ui, state: &mut AppState) {
 }
 
 /// Context options for the active tool (options bar).
-/// Options of the pipe, conduit and cable tray tools: the system (or
-/// circuit), the elevation of the run's start and, for pipes, the fall
-/// along it. Changing the system brings back its defaults.
+/// Options of the pipe, conduit, cable tray and lightning conductor tools:
+/// the system (or circuit), the elevation of the run's start and, for
+/// pipes, the fall along it. Changing the system brings back its defaults.
 fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementTypeId, run: Run) {
+    use cc_core::SystemClass as C;
     let pipe = run == Run::Pipe;
-    let mut system = if pipe { state.mep.system } else { state.mep.circuit };
-    ui.label(if pipe { t!("col-system") } else { t!("prop-circuit") });
-    if crate::systems_dialog::system_combo(ui, state, ("segment-system", pipe), Some(!pipe), &mut system) {
-        if pipe {
-            state.mep.system = system;
-        } else {
-            state.mep.circuit = system;
+    let (mut system, classes, label): (_, &[C], _) = match run {
+        Run::Pipe => (state.mep.system, &[C::Plumbing], t!("col-system")),
+        Run::Conduit | Run::Tray => (state.mep.circuit, &[C::Circuit, C::Data], t!("prop-circuit")),
+        Run::Conductor => (state.mep.lightning, &[C::Lightning], t!("col-system")),
+    };
+    ui.label(label);
+    if crate::systems_dialog::system_combo(ui, state, ("segment-system", run as u8), classes, &mut system) {
+        match run {
+            Run::Pipe => state.mep.system = system,
+            Run::Conduit | Run::Tray => state.mep.circuit = system,
+            Run::Conductor => state.mep.lightning = system,
         }
         state.mep.offset = None;
         state.mep.slope = None;
@@ -964,6 +984,8 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
         (Run::Pipe, _) => cc_engine::pipe_offset(kind),
         (Run::Conduit, Some(level)) => cc_engine::conduit_offset(project, level),
         (Run::Tray, Some(level)) => cc_engine::tray_offset(project, level),
+        // Conductors lie on the roof under them unless an elevation is given.
+        (Run::Conductor, _) => 0.0,
         (_, None) => 2.8,
     };
     let diameter = project.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
@@ -992,6 +1014,39 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
         Run::Pipe => t!("hint-pipe"),
         Run::Conduit => t!("hint-conduit"),
         Run::Tray => t!("hint-cable-tray"),
+        Run::Conductor => t!("hint-lightning-conductor"),
+    };
+    ui.label(theme::muted(hint));
+}
+
+/// Options of the device tool after the rotation: the circuit of an
+/// electrical device, the cabling (rack) of a data outlet or the lightning
+/// protection system of an air terminal or earth electrode, with a hint.
+fn device_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementTypeId) {
+    use cc_core::{DeviceKind as D, SystemClass as C};
+    let Some(device) = crate::tools::device_type(state.project(), type_id) else { return };
+    let class = device.class();
+    if device != D::Rack {
+        let (label, mut system) = match class {
+            C::Circuit => (t!("prop-circuit"), state.mep.circuit),
+            C::Data => (t!("device-rack"), state.mep.data),
+            C::Lightning | C::Plumbing => (t!("col-system"), state.mep.lightning),
+        };
+        ui.label(label);
+        if crate::systems_dialog::system_combo(ui, state, ("device-system", type_id.0), &[class], &mut system) {
+            match class {
+                C::Circuit => state.mep.circuit = system,
+                C::Data => state.mep.data = system,
+                C::Lightning | C::Plumbing => state.mep.lightning = system,
+            }
+        }
+    }
+    let hint = match device {
+        D::DataOutlet => t!("hint-data-outlet"),
+        D::Rack => t!("hint-rack"),
+        D::AirTerminal => t!("hint-air-terminal"),
+        D::EarthElectrode => t!("hint-earth-electrode"),
+        _ => t!("hint-device"),
     };
     ui.label(theme::muted(hint));
 }
@@ -1170,6 +1225,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Pipe { type_id } => segment_options(ui, state, type_id, Run::Pipe),
             Tool::Conduit { type_id } => segment_options(ui, state, type_id, Run::Conduit),
             Tool::CableTray { type_id } => segment_options(ui, state, type_id, Run::Tray),
+            Tool::LightningConductor { type_id } => segment_options(ui, state, type_id, Run::Conductor),
             Tool::Valve { .. } => {
                 ui.label(theme::muted(t!("hint-valve")));
             }
@@ -1179,18 +1235,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 if ui.add(DragValue::new(rotation).speed(1.0).suffix("°")).changed() {
                     *rotation = rotation.rem_euclid(360.0);
                 }
-                ui.label(t!("prop-circuit"));
-                let mut circuit = state.mep.circuit;
-                if crate::systems_dialog::system_combo(
-                    ui,
-                    state,
-                    ("device-circuit", type_id.0),
-                    Some(true),
-                    &mut circuit,
-                ) {
-                    state.mep.circuit = circuit;
-                }
-                ui.label(theme::muted(t!("hint-device")));
+                device_options(ui, state, type_id);
             }
             Tool::Component { .. } => {
                 ui.label(t!("prop-rotation"));

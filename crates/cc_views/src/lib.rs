@@ -23,6 +23,7 @@ mod joins;
 mod legend;
 pub mod level_marks;
 mod mep;
+pub use mep::discipline_of;
 pub mod notes;
 mod plan;
 mod projected;

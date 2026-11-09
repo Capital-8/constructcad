@@ -1,12 +1,14 @@
-//! Plumbing systems and electrical circuits: names, codes, colors, the
-//! board feeding each circuit and its voltage, with the circuits' loads.
+//! Plumbing systems, electrical circuits, the structured cabling of racks
+//! and lightning protection systems: names, codes, colors, the board (or
+//! rack) feeding each circuit (or cabling) and its voltage, with the
+//! circuits' loads.
 //! Every change is an engine command (`system_*`); Cancel undoes them all.
 
 use crate::dialog::{Dialog, session};
 use crate::state::AppState;
 use crate::t;
 use crate::theme::PALETTE;
-use cc_core::{DeviceKind, ElementId, SystemId, SystemKind};
+use cc_core::{DeviceKind, ElementId, SystemClass, SystemId, SystemKind};
 use cc_engine::Ref;
 use cc_engine::commands::mep;
 use egui::{Context, RichText, Ui};
@@ -26,22 +28,27 @@ fn done(state: &mut AppState, r: &egui::Response) {
 
 /// The distribution boards of the project: (element, label).
 pub fn panels(state: &AppState) -> Vec<(ElementId, String)> {
+    boards(state, DeviceKind::Panel)
+}
+
+/// The boards (or racks) of the project: (element, label).
+pub fn boards(state: &AppState, board: DeviceKind) -> Vec<(ElementId, String)> {
     let p = state.project();
     p.elements
         .values()
-        .filter(|e| p.mep_data(e).and_then(|m| m.device()) == Some(DeviceKind::Panel))
+        .filter(|e| p.mep_data(e).and_then(|m| m.device()) == Some(board))
         .map(|e| {
             (e.id, if e.mark.is_empty() { format!("{} {}", p.type_name(e.type_id), e.id.0) } else { e.mark.clone() })
         })
         .collect()
 }
 
-/// A choice of the systems that take `electrical` elements (or any), with "none".
+/// A choice of the systems of the families `classes` (any, when empty), with "none".
 pub fn system_combo(
     ui: &mut Ui,
     state: &AppState,
     id: impl std::hash::Hash + std::fmt::Debug,
-    electrical: Option<bool>,
+    classes: &[SystemClass],
     current: &mut Option<SystemId>,
 ) -> bool {
     let p = state.project();
@@ -51,7 +58,7 @@ pub fn system_combo(
     egui::ComboBox::from_id_salt(id).selected_text(text).width(170.0).show_ui(ui, |ui| {
         ui.selectable_value(current, None, t!("value-none"));
         for (sid, s) in &p.systems {
-            if electrical.is_none_or(|e| e == s.kind.is_electrical()) {
+            if classes.is_empty() || classes.contains(&s.kind.class()) {
                 ui.selectable_value(current, Some(*sid), label(*sid));
             }
         }
@@ -82,34 +89,57 @@ fn body(ui: &mut Ui, state: &mut AppState) {
     let systems: Vec<(SystemId, cc_core::MepSystem)> =
         state.project().systems.iter().map(|(id, s)| (*id, s.clone())).collect();
     let panels = panels(state);
+    let racks = boards(state, DeviceKind::Rack);
     let header = |ui: &mut Ui, text: String| {
         ui.label(RichText::new(text).color(PALETTE.text_muted));
     };
-    for electrical in [false, true] {
-        ui.label(RichText::new(if electrical { t!("systems-circuits") } else { t!("systems-plumbing") }).strong());
-        egui::Grid::new(("systems", electrical)).num_columns(7).striped(true).spacing([10.0, 6.0]).show(ui, |ui| {
+    for class in SystemClass::ALL {
+        let of_class: Vec<&(SystemId, cc_core::MepSystem)> =
+            systems.iter().filter(|(_, s)| s.kind.class() == class).collect();
+        // Cabling and lightning protection only show once the project has some.
+        if of_class.is_empty() && matches!(class, SystemClass::Data | SystemClass::Lightning) {
+            continue;
+        }
+        let (title, add, kind) = match class {
+            SystemClass::Plumbing => (t!("systems-plumbing"), t!("systems-add-system"), SystemKind::ColdWater),
+            SystemClass::Circuit => (t!("systems-circuits"), t!("systems-add-circuit"), SystemKind::Power),
+            SystemClass::Data => (t!("systems-cabling"), t!("systems-add-cabling"), SystemKind::Data),
+            SystemClass::Lightning => (t!("systems-lightning"), t!("systems-add-lightning"), SystemKind::Lightning),
+        };
+        let feeders: &[(ElementId, String)] = match class {
+            SystemClass::Circuit => &panels,
+            SystemClass::Data => &racks,
+            SystemClass::Plumbing | SystemClass::Lightning => &[],
+        };
+        ui.label(RichText::new(title).strong());
+        egui::Grid::new(("systems", class as u8)).num_columns(7).striped(true).spacing([10.0, 6.0]).show(ui, |ui| {
             header(ui, String::new());
             header(ui, t!("info-number"));
             header(ui, t!("prop-name"));
             header(ui, t!("prop-system-kind"));
-            if electrical {
-                header(ui, t!("device-panel"));
-                header(ui, t!("prop-voltage"));
-            } else {
-                ui.label("");
-                ui.label("");
+            match class {
+                SystemClass::Circuit => {
+                    header(ui, t!("device-panel"));
+                    header(ui, t!("prop-voltage"));
+                }
+                SystemClass::Data => {
+                    header(ui, t!("device-rack"));
+                    ui.label("");
+                }
+                SystemClass::Plumbing | SystemClass::Lightning => {
+                    ui.label("");
+                    ui.label("");
+                }
             }
             ui.label("");
             ui.end_row();
-            for (id, s) in systems.iter().filter(|(_, s)| s.kind.is_electrical() == electrical) {
-                row(ui, state, *id, s, &panels);
+            for (id, s) in of_class {
+                row(ui, state, *id, s, feeders);
                 ui.end_row();
             }
         });
-        let label = if electrical { t!("systems-add-circuit") } else { t!("systems-add-system") };
-        if ui.button(label).clicked() {
-            let kind = if electrical { SystemKind::Power } else { SystemKind::ColdWater };
-            let panel = if electrical { panels.first().map(|(id, _)| id.0) } else { None };
+        if ui.button(add).clicked() {
+            let panel = feeders.first().map(|(id, _)| id.0);
             let command = mep::SystemCreate { kind: kind.name().into(), panel, ..Default::default() };
             crate::actions::run_command(state, command);
         }
@@ -259,7 +289,11 @@ fn fittings(ui: &mut Ui, state: &mut AppState) {
         for r in &rows {
             let kind = crate::i18n::tr(&format!("fitting-{}", r["kind"].as_str().unwrap_or("")));
             let angle = r["angle"].as_f64().map_or(String::new(), |a| format!(" {a:.0}°"));
-            let category = if r["category"] == "conduit" { t!("category-conduit") } else { String::new() };
+            let category = match r["category"].as_str() {
+                Some("conduit") => t!("category-conduit"),
+                Some("lightningconductor") => t!("category-lightning-conductor"),
+                _ => String::new(),
+            };
             let system = r["system"].as_str().map_or(category, str::to_string);
             let sizes: Vec<String> =
                 r["diameters_mm"].as_array().into_iter().flatten().map(|d| format!("Ø{d}")).collect();
@@ -297,7 +331,7 @@ fn row(ui: &mut Ui, state: &mut AppState, id: SystemId, s: &cc_core::MepSystem, 
     egui::ComboBox::from_id_salt(("system-kind", id)).selected_text(crate::i18n::tr(kind.key())).width(150.0).show_ui(
         ui,
         |ui| {
-            for k in SystemKind::ALL.into_iter().filter(|k| k.is_electrical() == s.kind.is_electrical()) {
+            for k in SystemKind::ALL.into_iter().filter(|k| k.class() == s.kind.class()) {
                 ui.selectable_value(&mut kind, k, crate::i18n::tr(k.key()));
             }
         },
@@ -305,7 +339,7 @@ fn row(ui: &mut Ui, state: &mut AppState, id: SystemId, s: &cc_core::MepSystem, 
     if kind != s.kind {
         crate::engine_edit::system(state, id, None, |x| x.kind = kind);
     }
-    if s.kind.is_electrical() {
+    if matches!(s.kind.class(), SystemClass::Circuit | SystemClass::Data) {
         let mut panel = s.panel;
         let text =
             panel.and_then(|p| panels.iter().find(|(e, _)| *e == p)).map_or(t!("value-none"), |(_, l)| l.clone());
@@ -318,12 +352,16 @@ fn row(ui: &mut Ui, state: &mut AppState, id: SystemId, s: &cc_core::MepSystem, 
         if panel != s.panel {
             crate::engine_edit::system(state, id, None, |x| x.panel = panel);
         }
-        let mut volts = s.voltage;
-        let r = ui.add(egui::DragValue::new(&mut volts).range(1.0..=1000.0).suffix(" V"));
-        if r.changed() {
-            crate::engine_edit::system(state, id, Some(key((id, "volts"))), |x| x.voltage = volts);
+        if s.kind.is_electrical() {
+            let mut volts = s.voltage;
+            let r = ui.add(egui::DragValue::new(&mut volts).range(1.0..=1000.0).suffix(" V"));
+            if r.changed() {
+                crate::engine_edit::system(state, id, Some(key((id, "volts"))), |x| x.voltage = volts);
+            }
+            done(state, &r);
+        } else {
+            ui.label("");
         }
-        done(state, &r);
     } else {
         ui.label("");
         ui.label("");

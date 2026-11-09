@@ -54,10 +54,12 @@ pub enum Category {
     CableTray,
     /// Valves on pipes.
     Valve,
+    /// Conductors of lightning protection systems.
+    LightningConductor,
 }
 
 impl Category {
-    pub const ALL: [Category; 33] = [
+    pub const ALL: [Category; 34] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -72,6 +74,7 @@ impl Category {
         Category::Conduit,
         Category::CableTray,
         Category::Valve,
+        Category::LightningConductor,
         Category::Stair,
         Category::Ramp,
         Category::Railing,
@@ -106,7 +109,7 @@ impl Category {
     };
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 20] = [
+    pub const MODEL: [Category; 21] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -121,6 +124,7 @@ impl Category {
         Category::Conduit,
         Category::CableTray,
         Category::Valve,
+        Category::LightningConductor,
         Category::Stair,
         Category::Ramp,
         Category::Railing,
@@ -130,7 +134,7 @@ impl Category {
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 23] = [
+    pub const SCHEDULABLE: [Category; 24] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -145,6 +149,7 @@ impl Category {
         Category::Conduit,
         Category::CableTray,
         Category::Valve,
+        Category::LightningConductor,
         Category::Stair,
         Category::Ramp,
         Category::Railing,
@@ -191,6 +196,7 @@ impl Category {
             Category::Conduit => "category-conduit",
             Category::CableTray => "category-cable-tray",
             Category::Valve => "category-valve",
+            Category::LightningConductor => "category-lightning-conductor",
             Category::CadImport => "category-cad-import",
             Category::Mass => "category-mass",
             Category::DetailLine => "category-detail-line",
@@ -202,7 +208,10 @@ impl Category {
 
     /// Whether the category belongs to the building services (MEP).
     pub fn is_mep(self) -> bool {
-        matches!(self, Category::Pipe | Category::Conduit | Category::CableTray | Category::Valve)
+        matches!(
+            self,
+            Category::Pipe | Category::Conduit | Category::CableTray | Category::Valve | Category::LightningConductor
+        )
     }
 }
 
@@ -406,6 +415,11 @@ pub enum TypeData {
         kind: crate::ValveKind,
         material: String,
     },
+    /// Lightning protection conductors: round conductors of `diameter`.
+    LightningConductor {
+        diameter: f64,
+        material: String,
+    },
     /// Foundation: a pad `width` x `length`, a strip `width` wide or a slab,
     /// each `thickness` deep.
     Foundation {
@@ -532,6 +546,7 @@ impl TypeData {
             | TypeData::Conduit { material, .. }
             | TypeData::CableTray { material, .. }
             | TypeData::Valve { material, .. }
+            | TypeData::LightningConductor { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. }
@@ -611,6 +626,7 @@ impl TypeData {
             | TypeData::Conduit { material, .. }
             | TypeData::CableTray { material, .. }
             | TypeData::Valve { material, .. }
+            | TypeData::LightningConductor { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. }
@@ -770,6 +786,7 @@ impl ElementType {
             TypeData::Conduit { .. } => Category::Conduit,
             TypeData::CableTray { .. } => Category::CableTray,
             TypeData::Valve { .. } => Category::Valve,
+            TypeData::LightningConductor { .. } => Category::LightningConductor,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Ramp { .. } => Category::Ramp,
             TypeData::Railing { .. } => Category::Railing,
@@ -807,9 +824,10 @@ impl ElementType {
     /// Outside diameter of pipe, conduit and rebar types.
     pub fn diameter(&self) -> Option<f64> {
         match self.data {
-            TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } | TypeData::Rebar { diameter, .. } => {
-                Some(diameter)
-            }
+            TypeData::Pipe { diameter, .. }
+            | TypeData::Conduit { diameter, .. }
+            | TypeData::Rebar { diameter, .. }
+            | TypeData::LightningConductor { diameter, .. } => Some(diameter),
             _ => None,
         }
     }
@@ -927,6 +945,7 @@ impl ElementType {
             | TypeData::Conduit { material, .. }
             | TypeData::CableTray { material, .. }
             | TypeData::Valve { material, .. }
+            | TypeData::LightningConductor { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. }

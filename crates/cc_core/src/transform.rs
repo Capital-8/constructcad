@@ -116,6 +116,10 @@ impl Element {
                 p(&mut s.start);
                 p(&mut s.end);
             }
+            ElementKind::LightningConductor(c) => {
+                p(&mut c.run.start);
+                p(&mut c.run.end);
+            }
             ElementKind::Foundation(f) => {
                 if let crate::FoundationShape::Pad { rotation_deg, .. } = &mut f.shape {
                     *rotation_deg = t.apply_angle_deg(*rotation_deg);

@@ -92,7 +92,7 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / Copy / Paste |
 | Delete | Delete the selection |
 | Esc | Cancel the operation, leave the tool, clear the selection |
-| Backspace | While drawing a chain of walls, beams, pipes, conduits or cable trays: take back the last segment and go on from its start (Ctrl+Z too; Ctrl+Y puts it back); a railing's last point |
+| Backspace | While drawing a chain of walls, beams, pipes, conduits, cable trays or lightning conductors: take back the last segment and go on from its start (Ctrl+Z too; Ctrl+Y puts it back); a railing's last point |
 | Space | Rotate or flip the selection or the element being placed |
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
@@ -231,6 +231,28 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Views**: electrical plans draw trays as wide as they are, lightly tinted in their circuit's color, with the rungs of ladder trays and a tag with the section and circuits; plumbing plans draw valves with the usual symbol (two triangles meeting at their tips; a hollow circle for ball valves, a filled one for globe valves, a filled triangle for check valves). 3D views, sections and elevations show trays as open channels and valves with their body and handwheel or lever. Schedules list a tray's width, height and length and a valve's diameter and system.
 - **IFC**: trays are written as `IfcCableCarrierSegment` (`CABLETRAYSEGMENT`), their fittings as `IfcCableCarrierFitting`, valves as `IfcValve` (`ISOLATING` for gate and ball valves, `CHECK`, `REGULATING` for globe valves) in their pipe's system. Imported back, they come in as components keeping their IFC class.
 - From the command line or MCP: `cable_tray_create`, `cable_tray_type_create`, `valve_place` (with `point` or `distance`, and `kind` or `type`) and `valve_type_create`.
+
+## Lightning protection
+
+The *MEP → Lightning Protection* group draws a lightning protection system. Its elements belong to a lightning protection system, made with the first of them, and show in the level's lightning protection plan (*MEP → Documentation → Lightning Protection Plan*), which the tools open when another view is active.
+
+- **Conductor** (`LC`) draws conductors like conduits: click the ends of each one. Over a roof a conductor lies on its surface, so a roof conductor follows the roof under its ends; a new elevation while drawing adds a down conductor at the last point. A vertical run is a down conductor, a run below the level is earthing, the others roof conductors; the role can be changed in the properties. A project without a conductor type gets one the first time (8 mm, copper); a conductor type sets the diameter and the material.
+- **Air Terminal** (`AT`) places an air terminal (a lightning rod) on the roof under the point clicked; its height is a parameter of each terminal (1 m by default). **Earth Electrode** places a driven rod (2.4 m by default) with its top 50 cm below the level. **Earth Ring** lays buried conductors around the walls of the level, 1 m out from their outer faces and 50 cm deep.
+- **Check** shows how the air termination covers the roofs for a protection class (I to IV): the exposed upper faces of roofs are sampled about 1 m apart, and each point is protected when one air terminal or roof conductor protects it by itself, by the rolling sphere method (radius 20, 30, 45 or 60 m) over the plane of the roof's eaves or, on flat parts, within half the mesh width (5, 10, 15 or 20 m) of a roof conductor. Protection between terminals and by the building itself is left out, so the result errs on the safe side; check the design with the applicable standards.
+- **Views**: the lightning protection plan draws roof conductors as lines in the system's color, buried ones dashed, down conductors as a filled circle with a stroke, air terminals as a ring around a dot and earth electrodes with the earthing sign; conductors meet in clamps. 3D views show conductors and rods. Schedules of lightning conductors list their role (*Function*), diameter, length and system; schedules of components count terminals and electrodes. *Systems* lists each lightning protection system with its terminals, electrodes and conductor lengths by role.
+- **IFC**: conductors are written as `IfcCableSegment` (`CONDUCTORSEGMENT`), their clamps as `IfcCableFitting`, air terminals and earth electrodes as `IfcProtectiveDevice` of the user-defined types `AIRTERMINAL` and `EARTHELECTRODE` (IFC4 has no class of their own), in an `IfcDistributionSystem` of type `LIGHTNINGPROTECTION`.
+- From the command line or MCP: `lps_conductor_create`, `lps_conductor_type_create`, `earth_ring_create`, `air_terminal_place`, `earth_electrode_place` and `lps_check`.
+
+## Structured cabling
+
+The *MEP → Communications* group places racks and data outlets. They show in the level's communications plan (*MEP → Documentation → Communications Plan*), with the cable trays and the conduits that carry the cabling.
+
+- **Rack** places a wall rack (on a wall, like the electrical devices; Space turns it) and creates its cabling: a data system fed by the rack, coded after its mark (`R1`, `R2`…).
+- **Data Outlet** (`DO`) places data and voice outlets cabled to the rack chosen in the options bar (by default the project's only rack). A data outlet type sets its jacks (two by default); each jack takes a cable back to the rack. The properties show the outlet's jacks and the estimated length of its cables.
+- **Cabling** lists each rack's outlets and cables, their total and longest length, and the cables over 90 m (the limit of a permanent link). Lengths are estimated along the usual route: up to the ceiling of the outlet's level, across along the two axes, down to the rack, plus 3 m of slack.
+- Cable trays and conduits carry the cabling like circuits: their properties and *Systems* list both. Schedules of components can show each outlet's *Cable length* and *System* (its rack's cabling), and count the outlets per rack.
+- **IFC**: data outlets are written as `IfcOutlet` (`DATAOUTLET`) and racks as `IfcCommunicationsAppliance` of the user-defined type `RACK`, in an `IfcDistributionSystem` of type `DATA`.
+- From the command line or MCP: `rack_place`, `data_outlet_place` (with `rack` or `system`, and `ports`), `cabling_list`, and `device_type_create` for any built-in device type.
 
 ## Drafting views
 

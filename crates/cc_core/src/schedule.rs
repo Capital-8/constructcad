@@ -85,6 +85,8 @@ pub enum ScheduleField {
     CutVolume,
     /// Volume of earth filled by a pad (a terrain: by its pads).
     FillVolume,
+    /// Estimated length of the horizontal cables from a data outlet to its rack.
+    CableLength,
 }
 
 impl ScheduleField {
@@ -144,6 +146,7 @@ impl ScheduleField {
             ScheduleField::Elevation => "col-elevation",
             ScheduleField::CutVolume => "col-cut-volume",
             ScheduleField::FillVolume => "col-fill-volume",
+            ScheduleField::CableLength => "col-cable-length",
         }
     }
 
@@ -195,6 +198,7 @@ impl ScheduleField {
             Category::Conduit => &[F::Diameter, F::Length, F::System, F::Material],
             Category::CableTray => &[F::Width, F::Height, F::Length, F::System, F::Material],
             Category::Valve => &[F::Host, F::Diameter, F::System, F::Material],
+            Category::LightningConductor => &[F::Function, F::Diameter, F::Length, F::System, F::Material],
             Category::Component => &[
                 F::ComponentName,
                 F::ComponentKind,
@@ -205,6 +209,7 @@ impl ScheduleField {
                 F::System,
                 F::Power,
                 F::DrainUnits,
+                F::CableLength,
             ],
             Category::Mass => &[F::Height, F::FloorCount, F::FloorArea, F::Volume],
             Category::Room => {
@@ -270,6 +275,7 @@ impl ScheduleField {
             Category::Conduit => vec![F::Type, F::System, F::Level, F::Diameter, F::Length],
             Category::CableTray => vec![F::Type, F::System, F::Level, F::Width, F::Height, F::Length],
             Category::Valve => vec![F::Mark, F::Type, F::Diameter, F::System, F::Level],
+            Category::LightningConductor => vec![F::Type, F::System, F::Level, F::Function, F::Diameter, F::Length],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
             Category::Mass => vec![F::Mark, F::Type, F::Level, F::Height, F::FloorCount, F::FloorArea, F::Volume],

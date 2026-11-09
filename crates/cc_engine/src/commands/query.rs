@@ -263,7 +263,16 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
                 }
             }
         }
-        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) | ElementKind::CableTray(seg) => {
+        ElementKind::Pipe(_)
+        | ElementKind::Conduit(_)
+        | ElementKind::CableTray(_)
+        | ElementKind::LightningConductor(_) => {
+            let seg = e.as_segment()?;
+            if let ElementKind::LightningConductor(c) = &e.kind {
+                derived.insert("role".into(), json!(c.role.name()));
+                let diameter = p.element_type(e.type_id).and_then(|t| t.diameter()).unwrap_or(0.0);
+                derived.insert("section_mm2".into(), json!(std::f64::consts::PI * (diameter * 500.0).powi(2)));
+            }
             derived.insert("length".into(), json!(seg.length()));
             derived.insert("slope".into(), json!(seg.slope()));
             let systems: Vec<Value> = seg
@@ -313,6 +322,11 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         _ => None,
     };
     let pad_ids: Vec<ElementId> = p.pads_of(id).map(|(e, _)| e.id).collect();
+    if let Some((cables, length)) = p.outlet_cable(&e) {
+        // A data outlet: its cables to the rack and the estimated length of each.
+        derived.insert("cables".into(), json!(cables));
+        derived.insert("cable_length".into(), json!(length));
+    }
     let geom = s.element_geometry(id);
     if geom.solids_of(id).next().is_some() {
         derived.insert("volume".into(), json!(geom.volume(id)));
