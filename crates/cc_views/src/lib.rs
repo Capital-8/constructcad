@@ -88,7 +88,7 @@ pub fn generate_temporary(
                 plan::strip_fills(&mut d);
             } else if style.colored() {
                 let cut_z = project.level_elevation(*level) + cut_height;
-                let under = plan::style_underlay(geom, cut_z, ceiling, Look::of(view));
+                let under = plan::style_underlay(geom, cut_z, ceiling, Look::of(view), &project.fill_patterns);
                 d.prims.splice(0..0, under);
             }
             if let Some(discipline) = services {

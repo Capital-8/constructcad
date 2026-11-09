@@ -183,6 +183,8 @@ pub fn apply(d: &mut Drawing2D, resolver: &mut Resolver, scale: u32) {
     }
     let spacing = crate::cut::spacing(scale);
     let prims = std::mem::take(&mut d.prims);
+    let project = resolver.project;
+    let patterns = &project.fill_patterns;
     for prim in prims {
         let Some(id) = prim.element() else {
             d.prims.push(prim);
@@ -237,7 +239,7 @@ pub fn apply(d: &mut Drawing2D, resolver: &mut Resolver, scale: u32) {
                 if halftone {
                     c = crate::drawing::halftone(c);
                 }
-                let lines = hatch.map(|p| crate::hatch::hatch(p, &pts, spacing)).unwrap_or_default();
+                let lines = hatch.map(|p| crate::hatch::hatch_in(patterns, p, &pts, spacing)).unwrap_or_default();
                 d.prims.push(Prim::Fill { pts, color: rgba(c, alpha), element, cut });
                 let hatch_pen = pen(&LineGraphics { color: fill.color, ..Default::default() }, halftone);
                 for (a, b) in lines {

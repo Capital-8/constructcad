@@ -8,13 +8,12 @@
 //! of a filled region type.
 
 use crate::detail_ui::style_picker;
-use crate::i18n::tr;
 use crate::state::AppState;
 use crate::t;
 use crate::table::{readonly_row, row, section};
 use crate::tools::Tool;
 use cc_core::region::Region;
-use cc_core::{Category, ElementId, ElementKind, ElementType, ElementTypeId, Pattern, TypeData};
+use cc_core::{Category, ElementId, ElementKind, ElementType, ElementTypeId, TypeData};
 use cc_engine::Ref;
 use cc_engine::commands::region::{FilledRegionCreate, MaskingRegionCreate};
 use cc_engine::commands::sketch::CurveArg;
@@ -96,17 +95,15 @@ pub fn type_section(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 (&mut f.background, &mut f.background_color)
             };
             row(ui, &format!("{label}: {}", t!("mat-pattern")), |ui| {
-                egui::ComboBox::from_id_salt(("region-pattern", layer)).selected_text(tr(pattern.key())).show_ui(
-                    ui,
-                    |ui| {
-                        for option in Pattern::ALL {
-                            ui.selectable_value(pattern, option, tr(option.key()));
-                        }
-                    },
-                );
+                crate::fill_patterns_dialog::picker(ui, ("region-pattern", layer), state.project(), pattern, 140.0);
             });
             row(ui, &format!("{label}: {}", t!("mat-color")), |ui| ui.color_edit_button_srgb(color));
         }
+        row(ui, "", |ui| {
+            if ui.button(t!("fp-manage")).on_hover_text(t!("cmd-desc-fill-patterns")).clicked() {
+                crate::fill_patterns_dialog::open(state);
+            }
+        });
         if f != fill {
             // A color dragged in its picker stays one undo step.
             let merge = crate::graphics_dialog::key((tid, "region-fill"));

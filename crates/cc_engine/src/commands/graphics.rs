@@ -89,7 +89,11 @@ pub(crate) fn patched(current: &GraphicOverride, patch: Option<&Value>, reset: b
     if out.repair() > 0 {
         return Err(EngineError::invalid("weights must be between 0 and 10 mm and transparency between 0 and 1"));
     }
-    if out.surface_fill.pattern.is_some_and(|p| !cc_core::Pattern::ALL.contains(&p)) {
+    if out
+        .surface_fill
+        .pattern
+        .is_some_and(|p| !cc_core::Pattern::ALL.contains(&p) && !matches!(p, cc_core::Pattern::Custom(_)))
+    {
         out.surface_fill.pattern = None;
     }
     Ok(out)

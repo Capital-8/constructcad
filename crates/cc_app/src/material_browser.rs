@@ -8,11 +8,10 @@ use crate::state::AppState;
 use crate::t;
 use crate::theme::{self, PALETTE};
 use cc_core::Material;
-use cc_core::material::{Behavior, Finish, MaterialClass, Pattern, PatternFill};
+use cc_core::material::{Behavior, Finish, MaterialClass, PatternFill};
 use cc_engine::Ref;
 use cc_engine::commands::materials;
 use egui::{Color32, Context, DragValue, Pos2, Rect, RichText, Sense, Stroke, Ui, vec2};
-use glam::DVec2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Tab {
@@ -117,38 +116,29 @@ fn body(ui: &mut Ui, state: &mut AppState) {
 }
 
 /// Small swatch: the shading color with the surface pattern over it.
-fn swatch(painter: &egui::Painter, rect: Rect, m: &Material) {
+fn swatch(painter: &egui::Painter, rect: Rect, m: &Material, project: &cc_core::Project) {
     let [r, g, b] = m.shading_color();
     painter.rect_filled(rect, 3.0, Color32::from_rgb(r, g, b));
     let fill = if m.graphics.surface.is_empty() { &m.graphics.cut } else { &m.graphics.surface };
-    paint_pattern(&painter.with_clip_rect(rect), rect.shrink(1.0), fill, 6.0, false);
+    paint_pattern(&painter.with_clip_rect(rect), rect.shrink(1.0), fill, 6.0, false, project);
     painter.rect_stroke(rect, 3.0, Stroke::new(1.0, PALETTE.border_strong), egui::StrokeKind::Inside);
 }
 
 /// Paint a pattern fill into `rect` with lines `spacing` points apart.
-fn paint_pattern(painter: &egui::Painter, rect: Rect, fill: &PatternFill, spacing: f64, background: bool) {
-    let poly: Vec<DVec2> = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()]
-        .iter()
-        .map(|p| DVec2::new(p.x as f64, p.y as f64))
-        .collect();
-    let layer = |pattern: Pattern, color: [u8; 3]| {
-        let c = Color32::from_rgb(color[0], color[1], color[2]);
-        if pattern == Pattern::Solid {
-            painter.rect_filled(rect, 0.0, c);
-            return;
-        }
-        for (a, b) in cc_views::hatch::hatch(pattern, &poly, spacing) {
-            painter.line_segment(
-                [Pos2::new(a.x as f32, a.y as f32), Pos2::new(b.x as f32, b.y as f32)],
-                Stroke::new(1.0, c),
-            );
-        }
-    };
+fn paint_pattern(
+    painter: &egui::Painter,
+    rect: Rect,
+    fill: &PatternFill,
+    spacing: f64,
+    background: bool,
+    project: &cc_core::Project,
+) {
     if background {
         painter.rect_filled(rect, 0.0, Color32::WHITE);
     }
-    layer(fill.background, fill.background_color);
-    layer(fill.foreground, fill.foreground_color);
+    for (pattern, color) in [(fill.background, fill.background_color), (fill.foreground, fill.foreground_color)] {
+        crate::fill_patterns_dialog::paint(painter, rect, project, pattern, color, spacing);
+    }
 }
 
 fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
@@ -186,7 +176,7 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
                         ui.painter().rect_filled(rect, 0.0, PALETTE.hover);
                     }
                     let sw = Rect::from_min_size(rect.left_top() + vec2(6.0, 5.0), vec2(24.0, 24.0));
-                    swatch(ui.painter(), sw, m);
+                    swatch(ui.painter(), sw, m, state.project());
                     ui.painter().text(
                         rect.left_center() + vec2(38.0, -6.0),
                         egui::Align2::LEFT_CENTER,
@@ -476,11 +466,7 @@ fn pattern_rows(
         };
         ui.label(theme::muted(t!("mat-pattern")));
         let mut p = pattern;
-        egui::ComboBox::from_id_salt((which, layer)).selected_text(tr(p.key())).width(200.0).show_ui(ui, |ui| {
-            for option in Pattern::ALL {
-                ui.selectable_value(&mut p, option, tr(option.key()));
-            }
-        });
+        crate::fill_patterns_dialog::picker(ui, (which, layer), state.project(), &mut p, 170.0);
         if p != pattern {
             let mut f = fill;
             if layer == 0 {
@@ -506,7 +492,7 @@ fn pattern_rows(
     }
     ui.label(theme::muted(t!("mat-preview")));
     let (rect, _) = ui.allocate_exact_size(vec2(200.0, 60.0), Sense::hover());
-    paint_pattern(&ui.painter().with_clip_rect(rect), rect, &fill, 7.0, true);
+    paint_pattern(&ui.painter().with_clip_rect(rect), rect, &fill, 7.0, true, state.project());
     ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.0, PALETTE.border_strong), egui::StrokeKind::Inside);
     ui.end_row();
 }
@@ -536,6 +522,10 @@ fn graphics(ui: &mut Ui, state: &mut AppState, m: &Material) {
     });
     heading(ui, t!("mat-cut-pattern"));
     grid(ui, "mat-cut", |ui| pattern_rows(ui, state, m, "cut", m.graphics.cut, |x, f| x.graphics.cut = f));
+    ui.add_space(4.0);
+    if ui.button(t!("fp-manage")).on_hover_text(t!("cmd-desc-fill-patterns")).clicked() {
+        crate::fill_patterns_dialog::open(state);
+    }
 }
 
 /// A shaded sphere in the appearance color, with a highlight by finish.

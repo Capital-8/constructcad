@@ -878,11 +878,17 @@ fn draw_shafts(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64)
 /// cut in floor plans, above it in ceiling plans (the shaded, consistent
 /// colors and textures styles). Only fills and surface patterns: the plan
 /// draws its own edges and cuts.
-pub fn style_underlay(geom: &ModelGeometry, cut_z: f64, ceiling: bool, look: crate::Look) -> Vec<crate::Prim> {
+pub fn style_underlay(
+    geom: &ModelGeometry,
+    cut_z: f64,
+    ceiling: bool,
+    look: crate::Look,
+    patterns: &cc_core::fill_pattern::FillPatterns,
+) -> Vec<crate::Prim> {
     let forward = if ceiling { glam::DVec3::Z } else { -glam::DVec3::Z };
     let mut frame = crate::projected::Frame::looking(glam::DVec3::new(0.0, 0.0, cut_z), forward);
     frame.near = Some(0.0);
-    let d = crate::projected::render(geom, &frame, None, look);
+    let d = crate::projected::render(geom, &frame, None, look, patterns);
     // Looking up, the frame's up is -y: back to plan coordinates.
     let flip = |p: DVec2| if ceiling { DVec2::new(p.x, -p.y) } else { p };
     d.prims

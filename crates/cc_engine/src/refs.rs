@@ -294,6 +294,21 @@ pub fn line_style(p: &Project, r: &Ref) -> Result<cc_core::LineStyleId> {
     }
 }
 
+/// A custom fill pattern by id or name.
+pub fn fill_pattern(p: &Project, r: &Ref) -> Result<cc_core::FillPatternId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::FillPatternId(*id);
+            p.fill_pattern(id)
+                .map(|_| id)
+                .ok_or_else(|| EngineError::not_found(format!("no fill pattern with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            unique("fill pattern", n, p.fill_patterns.values().filter(|s| matches(&s.name, n)).map(|s| s.id).collect())
+        }
+    }
+}
+
 /// A phase filter by id or name.
 pub fn phase_filter(p: &Project, r: &Ref) -> Result<cc_core::PhaseFilterId> {
     match r {

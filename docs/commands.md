@@ -12,7 +12,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`device_type_create`](#device_type_create), [`lps_conductor_create`](#lps_conductor_create), [`lps_conductor_type_create`](#lps_conductor_type_create), [`earth_ring_create`](#earth_ring_create), [`air_terminal_place`](#air_terminal_place), [`earth_electrode_place`](#earth_electrode_place), [`lps_check`](#lps_check), [`rack_place`](#rack_place), [`data_outlet_place`](#data_outlet_place), [`cabling_list`](#cabling_list), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
-- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
+- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`fill_patterns_list`](#fill_patterns_list), [`fill_pattern_get`](#fill_pattern_get), [`fill_pattern_create`](#fill_pattern_create), [`fill_pattern_set`](#fill_pattern_set), [`fill_pattern_duplicate`](#fill_pattern_duplicate), [`fill_pattern_delete`](#fill_pattern_delete), [`fill_pattern_import`](#fill_pattern_import), [`fill_pattern_export`](#fill_pattern_export), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
@@ -2307,6 +2307,87 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `material` | id or name | required | A level, type, view or material: its numeric id or its name. |
+
+### `fill_patterns_list`
+
+*query* — The fill patterns materials, filled regions and view overrides can use: the built-in ones (by code) and the project's (by name, with their kind, scale and line families), each with how many materials, types, views, templates and phase graphics use it, and its `value` in model values.
+
+No parameters.
+
+### `fill_pattern_get`
+
+*query* — One project fill pattern: its definition and everything that uses it (materials, types, views, templates, phase graphics).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `pattern` | id or name | required | Fill pattern id or name. |
+
+### `fill_pattern_create`
+
+*edit* — Create a project fill pattern from line families: a unique name (not a built-in code), drafting (sized on paper, the default) or model (sized in the world, scaling with the view), a scale and the families.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `lines` | [object, …] | required | The line families (1 to 128). |
+| `name` | string | required | Name (unique, not a built-in pattern's code). |
+| `description` | string | optional | Description. |
+| `kind` | string | optional | `drafting` (default: millimeters on paper) or `model` (millimeters in the world). |
+| `scale` | number | optional | Multiplies every length (0.01 to 100; default 1). |
+
+### `fill_pattern_set`
+
+*edit* — Change a project fill pattern: name, description, kind, scale or line families. What is drawn with it follows.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `pattern` | id or name | required | Fill pattern id or name. |
+| `description` | string | optional | New description. |
+| `kind` | string | optional | `drafting` or `model`. |
+| `lines` | [object, …] | optional | New line families, in place of all of them. |
+| `name` | string | optional | New name. |
+| `scale` | number | optional | Multiplies every length (0.01 to 100). |
+
+### `fill_pattern_duplicate`
+
+*edit* — Copy a project fill pattern under a new name (default: the name with a number).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `pattern` | id or name | required | Fill pattern id or name. |
+| `name` | string | optional | Name of the copy. |
+
+### `fill_pattern_delete`
+
+*edit* — Delete a project fill pattern. Refused while something uses it, unless `replace_with` names the pattern (a built-in code or another project pattern) that takes its place there, in the same undo step.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `pattern` | id or name | required | Fill pattern id or name. |
+| `replace_with` | string | optional | The pattern that takes its place where it is used. |
+
+### `fill_pattern_import`
+
+*edit* — Import fill patterns from a `.pat` file (the plain-text hatch pattern format CAD programs share: `*NAME, description` headers, then lines of `angle, x-origin, y-origin, delta-x, delta-y [, dashes…]`). All the file's patterns or those named; each pattern is drafting or model as its `;%TYPE=MODEL` marker says unless `kind` is given, lengths in the file's `;%UNITS=` (else millimeters) unless `units` is given. Patterns with a problem are left out and listed in `errors` with their line. With `preview`, nothing changes: the result lists what the file holds.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `kind` | string | optional | `drafting` or `model` for every pattern, in place of the file's markers. |
+| `names` | [string, …] | optional | Names of the patterns to import (default: all). |
+| `on_clash` | JSON | optional | A name the project already has: `rename` (default), `replace` or `skip`. |
+| `path` | string | optional | Path of the .pat file (or give `text`). |
+| `preview` | boolean | optional | Only read the file and list its patterns. |
+| `scale` | number | optional | The scale given to every imported pattern (0.01 to 100; default 1). |
+| `text` | string | optional | The file's text (in place of `path`). |
+| `units` | string | optional | Units of the file's lengths: `auto` (default: its `;%UNITS=` marker, else millimeters), `mm` or `inch`. |
+
+### `fill_pattern_export`
+
+*file* — Write project fill patterns as `.pat` text (millimeters, each pattern's scale applied, a `;%TYPE=` marker per pattern): to `path` when given; the text is returned either way.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `path` | string | optional | Path of the .pat file to write. |
+| `patterns` | [id or name, …] | optional | Fill pattern ids or names (default: all the project's). |
 
 ### `paint`
 

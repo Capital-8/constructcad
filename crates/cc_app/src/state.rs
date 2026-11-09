@@ -89,6 +89,8 @@ pub struct Dialogs {
     pub design_options: Option<crate::design_options_ui::OptionsDialog>,
     /// The project's line styles.
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
+    /// The fill pattern manager.
+    pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
     /// The Preferences window.

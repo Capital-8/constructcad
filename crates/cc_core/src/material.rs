@@ -96,9 +96,12 @@ pub enum Pattern {
     Insulation,
     /// Earth: blocks of short strokes, alternately at 45° and 135° (a weave).
     Earth,
+    /// One of the project's own patterns (`Project::fill_patterns`).
+    Custom(crate::FillPatternId),
 }
 
 impl Pattern {
+    /// The built-in patterns (custom ones live in the project).
     pub const ALL: [Pattern; 13] = [
         Pattern::None,
         Pattern::Solid,
@@ -130,6 +133,7 @@ impl Pattern {
             Pattern::Sand => "pattern-sand",
             Pattern::Insulation => "pattern-insulation",
             Pattern::Earth => "pattern-earth",
+            Pattern::Custom(_) => "pattern-custom",
         }
     }
 }

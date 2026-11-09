@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 24;
+pub const FORMAT_VERSION: u32 = 25;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
@@ -67,7 +67,8 @@ pub fn from_ron_with_repairs_localized(
     // (older files have none); version 22 makes title blocks components
     // (older files: the standard title block on every sheet); version 23 adds
     // design options (older files have none, everything in the main model);
-    // version 24 adds material textures and painted faces (older files have none).
+    // version 24 adds material textures and painted faces (older files have none);
+    // version 25 adds custom fill patterns (older files have none).
     let mut project = file.project;
     if file.format_version < 11 {
         project.ensure_phases(&|key| crate::project::template_default(key).to_string());
@@ -210,6 +211,35 @@ mod tests {
             .replace(&format!("format_version: {FORMAT_VERSION}"), "format_version: 22");
         let q = from_ron(&old).unwrap();
         assert!(q.option_sets.is_empty() && q.elements.values().all(|e| e.design_option.is_none()));
+    }
+
+    #[test]
+    fn custom_fill_patterns_round_trip_and_format_24_files_load() {
+        use crate::fill_pattern::{FillPattern, FillPatternKind, PatternLine};
+        let mut p = Project::from_template();
+        let id = crate::FillPatternId(p.max_id() + 1);
+        p.fill_patterns.insert(
+            id,
+            FillPattern {
+                id,
+                name: "Tiles 300".into(),
+                description: String::new(),
+                kind: FillPatternKind::Model,
+                scale: 1.0,
+                lines: vec![PatternLine::solid(0.0, 300.0), PatternLine::solid(90.0, 300.0)],
+            },
+        );
+        p.materials[0].graphics.cut.foreground = crate::Pattern::Custom(id);
+        let back = from_ron(&to_ron(&p).unwrap()).unwrap();
+        assert_eq!(back.fill_patterns, p.fill_patterns);
+        assert_eq!(back.materials[0].graphics.cut.foreground, crate::Pattern::Custom(id));
+        // A format-24 file (before custom patterns) loads with none.
+        let old = to_ron(&Project::from_template())
+            .unwrap()
+            .replace(&format!("format_version: {FORMAT_VERSION}"), "format_version: 24");
+        let (q, repairs) = from_ron_with_repairs(&old).unwrap();
+        assert!(q.fill_patterns.is_empty());
+        assert_eq!(repairs, 0);
     }
 
     #[test]

@@ -281,7 +281,7 @@ fn line_cell(ui: &mut Ui, label: &str, lines: &mut LineGraphics, enabled: bool) 
     changed
 }
 
-fn fill_cell(ui: &mut Ui, label: &str, fill: &mut FillGraphics, enabled: bool) -> bool {
+fn fill_cell(ui: &mut Ui, label: &str, fill: &mut FillGraphics, enabled: bool, choices: &[(Pattern, String)]) -> bool {
     let shown = *fill;
     let r = cell(ui, label, enabled, |p, rect| {
         if shown.is_empty() {
@@ -307,7 +307,10 @@ fn fill_cell(ui: &mut Ui, label: &str, fill: &mut FillGraphics, enabled: bool) -
                 }
             }
         }
-        let text = shown.pattern.map(|pt| tr(pt.key())).unwrap_or_default();
+        let text = shown
+            .pattern
+            .map(|pt| choices.iter().find(|(p, _)| *p == pt).map_or_else(|| tr(pt.key()), |(_, n)| n.clone()))
+            .unwrap_or_default();
         p.text(
             egui::pos2(swatch.right() + 4.0, rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -324,11 +327,11 @@ fn fill_cell(ui: &mut Ui, label: &str, fill: &mut FillGraphics, enabled: bool) -
         let mut pattern = fill.pattern;
         egui::Grid::new("fill-patterns").num_columns(2).show(ui, |ui| {
             ui.selectable_value(&mut pattern, None, t!("vg-by-default"));
-            for (i, pt) in Pattern::ALL.iter().enumerate() {
+            for (i, (pt, name)) in choices.iter().enumerate() {
                 if i % 2 == 0 {
                     ui.end_row();
                 }
-                ui.selectable_value(&mut pattern, Some(*pt), tr(pt.key()));
+                ui.selectable_value(&mut pattern, Some(*pt), name.as_str());
             }
         });
         if pattern != fill.pattern {
@@ -387,12 +390,17 @@ fn halftone_cell(ui: &mut Ui, label: &str, value: &mut Option<bool>, enabled: bo
 }
 
 /// The override cells of one row, in the column order of [`override_headers`].
-pub(crate) fn override_cells(ui: &mut Ui, ov: &mut GraphicOverride, enabled: bool) -> bool {
+pub(crate) fn override_cells(
+    ui: &mut Ui,
+    ov: &mut GraphicOverride,
+    enabled: bool,
+    choices: &[(Pattern, String)],
+) -> bool {
     let mut changed = false;
     changed |= line_cell(ui, &t!("vg-projection-lines"), &mut ov.projection_lines, enabled);
-    changed |= fill_cell(ui, &t!("vg-surface-fill"), &mut ov.surface_fill, enabled);
+    changed |= fill_cell(ui, &t!("vg-surface-fill"), &mut ov.surface_fill, enabled, choices);
     changed |= line_cell(ui, &t!("vg-cut-lines"), &mut ov.cut_lines, enabled);
-    changed |= fill_cell(ui, &t!("vg-cut-fill"), &mut ov.cut_fill, enabled);
+    changed |= fill_cell(ui, &t!("vg-cut-fill"), &mut ov.cut_fill, enabled, choices);
     changed |= halftone_cell(ui, &t!("vg-halftone"), &mut ov.halftone, enabled);
     changed |= transparency_cell(ui, &t!("vg-transparency"), &mut ov.transparency, enabled);
     changed
@@ -543,6 +551,7 @@ fn categories_table(
     categories: &[Category],
     enabled: bool,
 ) {
+    let choices = crate::fill_patterns_dialog::choices(state.project());
     egui::Grid::new("vg-categories").num_columns(8).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
         header(ui, t!("vg-visible"));
         header(ui, t!("prop-category"));
@@ -559,7 +568,7 @@ fn categories_table(
             r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, enabled, on, &label));
             let mut changed = r.changed();
             ui.label(name);
-            changed |= override_cells(ui, &mut g.overrides, enabled);
+            changed |= override_cells(ui, &mut g.overrides, enabled, &choices);
             if ui.add_enabled(enabled && !g.overrides.is_empty(), egui::Button::new(t!("vg-reset")).small()).clicked() {
                 g.overrides = GraphicOverride::default();
                 changed = true;
@@ -577,6 +586,7 @@ fn filters_table(ui: &mut Ui, state: &mut AppState, target: Target, graphics: &V
         ui.label(RichText::new(t!("vg-no-filters")).color(PALETTE.text_faint));
     }
     let count = graphics.filters.len();
+    let choices = crate::fill_patterns_dialog::choices(state.project());
     egui::Grid::new("vg-filters").num_columns(10).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
         if count > 0 {
             header(ui, t!("vg-enabled"));
@@ -592,7 +602,7 @@ fn filters_table(ui: &mut Ui, state: &mut AppState, target: Target, graphics: &V
             let mut changed = ui.add_enabled(enabled, egui::Checkbox::without_text(&mut u.enabled)).changed();
             ui.label(name);
             changed |= ui.add_enabled(enabled, egui::Checkbox::without_text(&mut u.visible)).changed();
-            changed |= override_cells(ui, &mut u.overrides, enabled);
+            changed |= override_cells(ui, &mut u.overrides, enabled, &choices);
             ui.horizontal(|ui| {
                 let filter = Ref::Id(u.filter.0);
                 let moved = |index| cmd::ViewFilterMove {
@@ -666,6 +676,7 @@ fn override_dialog(ctx: &Context, state: &mut AppState) {
     else {
         return;
     };
+    let choices = crate::fill_patterns_dialog::choices(state.project());
     let (mut ok, mut reset) = (0, 0);
     let mut changed = false;
     let response = Dialog::new("element-overrides", t!("dlg-element-overrides")).width(640.0).show(
@@ -676,7 +687,7 @@ fn override_dialog(ctx: &Context, state: &mut AppState) {
             egui::Grid::new("vg-element").num_columns(6).spacing([8.0, 4.0]).show(ui, |ui| {
                 override_headers(ui);
                 ui.end_row();
-                changed = override_cells(ui, &mut value, true);
+                changed = override_cells(ui, &mut value, true, &choices);
                 ui.end_row();
             });
         },

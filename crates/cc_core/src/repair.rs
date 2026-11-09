@@ -350,6 +350,9 @@ impl Project {
         // gone fall back to the thin built-in style.
         repairs += self.repair_line_styles();
 
+        // Fill patterns: valid patterns, and references to patterns that are gone dropped.
+        repairs += self.repair_fill_patterns();
+
         // Sketches that are invalid or no longer make their element's outline.
         repairs += self.elements.values_mut().map(|e| usize::from(e.drop_stale_sketch())).sum::<usize>();
 

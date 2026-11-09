@@ -126,14 +126,21 @@ fn face_color(
 
 /// The surface pattern of face `face` of `solid` (its paint's, when painted)
 /// over its outline `pts` (the textures style), each line with the pattern's color.
-fn surface_lines(d: &mut Drawing2D, solid: &cc_geom::Solid, face: usize, pts: &[DVec2], spacing: f64) {
+fn surface_lines(
+    d: &mut Drawing2D,
+    patterns: &cc_core::fill_pattern::FillPatterns,
+    solid: &cc_geom::Solid,
+    face: usize,
+    pts: &[DVec2],
+    spacing: f64,
+) {
     let fill = solid.paint_of(face).map_or(solid.surface, |p| p.surface);
     for (pattern, color) in [(fill.background, fill.background_color), (fill.foreground, fill.foreground_color)] {
         if matches!(pattern, cc_core::Pattern::Solid | cc_core::Pattern::None) {
             continue;
         }
         let pen = crate::Pen { color: Some(color), ..Default::default() };
-        for (a, b) in crate::hatch::hatch(pattern, pts, spacing) {
+        for (a, b) in crate::hatch::hatch_in(patterns, pattern, pts, spacing) {
             d.prims.push(crate::Prim::Line {
                 a,
                 b,
@@ -170,7 +177,13 @@ pub struct CutStyle<'a> {
 /// Render the solids a view shows through `frame`, at its detail level and
 /// in its visual style; section cuts use `cut` (else, and at the coarse
 /// level, the neutral poche; in the wireframe, only their outline).
-pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>, look: Look) -> Drawing2D {
+pub fn render(
+    geom: &ModelGeometry,
+    frame: &Frame,
+    cut: Option<CutStyle>,
+    look: Look,
+    patterns: &cc_core::fill_pattern::FillPatterns,
+) -> Drawing2D {
     let (detail, style) = (look.detail, look.style);
     let planes = frame.planes();
     let mut faces = Vec::new();
@@ -222,7 +235,7 @@ pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>, look: 
                     && let Some(solid) = geom.solids.get(f.solid)
                 {
                     d.fill(f.pts.clone(), color, Some(f.element));
-                    surface_lines(&mut d, solid, f.face, &f.pts, look.spacing);
+                    surface_lines(&mut d, patterns, solid, f.face, &f.pts, look.spacing);
                 } else {
                     d.fill(f.pts, color, Some(f.element));
                 }
@@ -446,7 +459,7 @@ fn level_lines(d: &mut Drawing2D, project: &Project, frame: &Frame) {
 pub fn elevation(project: &Project, geom: &ModelGeometry, direction: Direction, look: Look) -> Drawing2D {
     let toward = direction.look();
     let frame = Frame::looking(DVec3::ZERO, DVec3::new(toward.x, toward.y, 0.0));
-    let mut d = render(geom, &frame, None, look);
+    let mut d = render(geom, &frame, None, look, &project.fill_patterns);
     level_lines(&mut d, project, &frame);
     d
 }
@@ -467,7 +480,7 @@ pub fn section(
     frame.far = Some(depth.max(0.01));
     frame.crop_x = Some((xe.min(0.0), xe.max(0.0)));
     let cut = CutStyle { project, spacing: crate::cut::spacing(scale) };
-    let mut d = render(geom, &frame, Some(cut), look);
+    let mut d = render(geom, &frame, Some(cut), look, &project.fill_patterns);
     existing_ground(&mut d, geom, &frame);
     level_lines(&mut d, project, &frame);
     d
@@ -501,8 +514,8 @@ fn existing_ground(d: &mut Drawing2D, geom: &ModelGeometry, frame: &Frame) {
     }
 }
 
-pub fn axonometric(_project: &Project, geom: &ModelGeometry, camera: &CameraState, look: Look) -> Drawing2D {
-    render(geom, &Frame::looking(DVec3::ZERO, camera.forward()), None, look)
+pub fn axonometric(project: &Project, geom: &ModelGeometry, camera: &CameraState, look: Look) -> Drawing2D {
+    render(geom, &Frame::looking(DVec3::ZERO, camera.forward()), None, look, &project.fill_patterns)
 }
 
 /// The analytical model seen along the camera: member lines (columns and
@@ -669,7 +682,7 @@ mod tests {
         wall.add_box(DVec2::ZERO, DVec2::X, DVec2::Y, 4.0, 4.2, 0.0, 10.0, 0.0, 3.0);
         let geom = ModelGeometry { solids: vec![roof, wall], ..Default::default() };
         let frame = Frame::looking(DVec3::ZERO, DVec3::new(1.0, 1.0, -1.0));
-        let d = render(&geom, &frame, None, Look::plain());
+        let d = render(&geom, &frame, None, Look::plain(), &Default::default());
         let fills: Vec<(usize, ElementId, f64)> = d
             .prims
             .iter()

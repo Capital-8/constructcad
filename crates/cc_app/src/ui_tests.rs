@@ -2867,3 +2867,34 @@ fn detail_lines_take_typed_lengths() {
     });
     assert!(line.is_some_and(|l| (l - 3.0).abs() < 1e-9), "{line:?}");
 }
+
+/// The Fill Patterns dialog (#226): opened from the Manage tab, it lists a
+/// project pattern next to the built-in ones, adds one with New, and
+/// Cancel undoes what it did; the material browser's picker then offers
+/// the kept pattern.
+#[test]
+fn fill_patterns_are_managed_and_picked() {
+    let mut state = sample_state();
+    crate::commands::run(&mut state, &egui::Context::default(), crate::commands::UiCommand::FillPatterns);
+    assert!(state.dialogs.fill_patterns.is_some());
+    let text = "*MINE, my test\n45,0,0,0,2\n135,0,0,0,2,1,-1\n";
+    let import =
+        cc_engine::commands::fill_patterns::FillPatternImport { text: Some(text.into()), ..Default::default() };
+    crate::actions::run_command(&mut state, import);
+    assert_eq!(state.project().fill_patterns.len(), 1);
+    let mut harness = themed_harness(state, egui::vec2(1100.0, 800.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state);
+    });
+    harness.run();
+    harness.get_by_label("MINE");
+    harness.get_by_label(&t!("fp-new")).click();
+    harness.run();
+    assert_eq!(harness.state().project().fill_patterns.len(), 2);
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.fill_patterns.is_none());
+    assert!(state.project().fill_patterns.is_empty(), "Cancel undoes the import and New");
+    let choices = crate::fill_patterns_dialog::choices(state.project());
+    assert_eq!(choices.len(), cc_core::Pattern::ALL.len());
+}
