@@ -1376,6 +1376,7 @@ prop-wall-thickness = Épaisseur de paroi
 prop-end-elevation-offset = Décalage d'altitude à la fin
 prop-true-length = Longueur réelle
 tool-footing = Semelle isolée
+tool-strip-footing = Semelle filante
 tool-foundation-slab = Dalle de fondation
 cmd-desc-footing = Placer des semelles isolées : cliquez leurs centres ; Espace les fait pivoter.
 hint-footing = Cliquez le centre de chaque semelle · Espace la fait pivoter de 90° · Échap termine

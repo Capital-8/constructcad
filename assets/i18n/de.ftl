@@ -1376,6 +1376,7 @@ prop-wall-thickness = Wanddicke
 prop-end-elevation-offset = Höhenversatz am Ende
 prop-true-length = Wahre Länge
 tool-footing = Einzelfundament
+tool-strip-footing = Streifenfundament
 tool-foundation-slab = Fundamentplatte
 cmd-desc-footing = Einzelfundamente setzen: ihre Mittelpunkte klicken; Leertaste dreht sie.
 hint-footing = Den Mittelpunkt jedes Fundaments klicken · Leertaste dreht um 90° · Esc beendet

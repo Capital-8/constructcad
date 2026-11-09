@@ -1395,6 +1395,7 @@ prop-wall-thickness = 壁厚
 prop-end-elevation-offset = 终点高程偏移
 prop-true-length = 实际长度
 tool-footing = 独立基础
+tool-strip-footing = 条形基础
 tool-foundation-slab = 基础底板
 cmd-desc-footing = 放置独立基础：单击其中心；空格键旋转。
 hint-footing = 单击每个基础的中心 · 空格键旋转 90° · Esc 结束

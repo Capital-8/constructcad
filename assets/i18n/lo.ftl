@@ -1347,6 +1347,7 @@ prop-wall-thickness = ຄວາມໜາຝາທໍ່
 prop-end-elevation-offset = ໄລຍະຫ່າງລະດັບຄວາມສູງຈຸດປາຍ
 prop-true-length = ຄວາມຍາວແທ້
 tool-footing = ຖານຮາກດ່ຽວ
+tool-strip-footing = ຖານຮາກຕໍ່ເນື່ອງ
 tool-foundation-slab = ຖານຮາກແຜ່
 cmd-desc-footing = ວາງຖານຮາກດ່ຽວ: ຄລິກຈຸດໃຈກາງ; Spacebar ເພື່ອໝຸນ.
 hint-footing = ຄລິກຈຸດໃຈກາງຂອງແຕ່ລະຖານຮາກ · Spacebar ເພື່ອໝຸນ 90° · Esc ເພື່ອສິ້ນສຸດ

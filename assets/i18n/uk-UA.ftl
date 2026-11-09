@@ -1376,6 +1376,7 @@ prop-wall-thickness = Товщина стінки
 prop-end-elevation-offset = Зміщення відмітки кінця
 prop-true-length = Фактична довжина
 tool-footing = Окремий фундамент
+tool-strip-footing = Стрічковий фундамент
 tool-foundation-slab = Плитний фундамент
 cmd-desc-footing = Розмістити окремі фундаменти: клацніть у центрі кожного. Пробіл повертає фундамент.
 hint-footing = Клацніть у центрі кожного фундаменту · Пробіл — повернути на 90° · Esc — завершити

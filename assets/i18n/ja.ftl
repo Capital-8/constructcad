@@ -1395,6 +1395,7 @@ prop-wall-thickness = 壁厚
 prop-end-elevation-offset = 終点標高オフセット
 prop-true-length = 実長
 tool-footing = 独立基礎
+tool-strip-footing = 連続基礎
 tool-foundation-slab = 基礎スラブ
 cmd-desc-footing = 独立基礎を配置します: 中心をクリック; スペースキーで回転。
 hint-footing = 各基礎の中心をクリック · スペースキーで 90° 回転 · Esc で終了

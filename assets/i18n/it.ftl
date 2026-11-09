@@ -1376,6 +1376,7 @@ prop-wall-thickness = Spessore della parete
 prop-end-elevation-offset = Offset di quota finale
 prop-true-length = Lunghezza reale
 tool-footing = Plinto
+tool-strip-footing = Fondazione continua
 tool-foundation-slab = Platea di fondazione
 cmd-desc-footing = Inserisci plinti: fai clic sui loro centri; Spazio li ruota.
 hint-footing = Fai clic sul centro di ogni plinto · Spazio lo ruota di 90° · Esc termina
