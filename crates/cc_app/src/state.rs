@@ -68,6 +68,13 @@ pub struct Dialogs {
     pub systems: bool,
     /// Sizing of the pipes and circuits.
     pub sizing: bool,
+    /// The lightning protection coverage check, with the class it checks
+    /// and its last result (class, document revision, `lps_check` output).
+    pub lps_check: bool,
+    pub lps_class: cc_core::LpsClass,
+    pub lps_result: Option<(cc_core::LpsClass, u64, serde_json::Value)>,
+    /// The structured cabling per rack.
+    pub cabling: bool,
     /// Visibility/Graphics of a view or view template.
     pub graphics: Option<crate::graphics_dialog::GraphicsDialog>,
     /// Graphic overrides of the selected elements in a view.

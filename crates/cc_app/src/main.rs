@@ -33,6 +33,7 @@ mod jobs;
 mod level_mark_ui;
 mod library;
 mod line_styles_dialog;
+mod lps_cabling_ui;
 mod material_browser;
 mod modify;
 mod modify3d;

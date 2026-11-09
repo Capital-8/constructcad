@@ -235,6 +235,21 @@ Uma cortina de vidro é uma parede cujo tipo tem uma grade de cortina em vez de 
 {"command": "valve_place", "args": {"pipe": 42, "distance": 0.5, "kind": "ball"}}
 ```
 
+### SPDA e cabeamento estruturado
+
+`lps_conductor_create` desenha um condutor de SPDA de `start` a `end` (sobre a superfície da cobertura sob as pontas, salvo `offset`/`end_offset`), ou uma descida da cobertura sobre `start` até 0,5 m abaixo do nível quando não há `end`; `role` (`air`, `down`, `earth`) tem padrão pelo lugar onde ele passa. `earth_ring_create` lança condutores enterrados em volta das paredes do nível (ou de `points`), `air_terminal_place` põe um captor de altura `height` na cobertura sob `position`, e `earth_electrode_place` crava uma haste de comprimento `length` abaixo do nível. Eles entram no primeiro sistema de SPDA (`system_create` com `kind: "lightning"`), criado com o primeiro deles. `lps_check` (`class` de `I` a `IV`) amostra as coberturas e informa quantos pontos a captação protege, pelos métodos da esfera rolante e da malha, com os pontos desprotegidos; `systems_list` dá os captores, as hastes e os comprimentos de condutor por função de cada SPDA.
+
+`rack_place` insere um rack e cria o seu sistema de dados (`kind: "data"`, com o rack como `panel` e o código da marca do rack); `data_outlet_place` insere tomadas cabeadas até um `rack` (ou um `system` de dados) com `ports` conectores; `cabling_list` dá por rack as tomadas, os cabos, o comprimento estimado de cada um e os cabos acima de 90 m. `device_type_create` dá ao projeto um tipo de dispositivo embutido (`data_outlet`, `rack`, `air_terminal`, `earth_electrode` ou qualquer dispositivo elétrico). Eletrodutos e eletrocalhas levam sistemas de dados como os circuitos.
+
+```text
+{"command": "earth_ring_create", "args": {}}
+{"command": "lps_conductor_create", "args": {"start": [0, 4], "end": [10, 4]}}
+{"command": "air_terminal_place", "args": {"position": [5, 4], "height": 2}}
+{"command": "lps_check", "args": {"class": "II"}}
+{"command": "rack_place", "args": {"position": [0, 0]}}
+{"command": "data_outlet_place", "args": {"position": [8, 3], "rack": 120, "ports": 2}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).

@@ -851,7 +851,10 @@ impl Command for RailingCreate {
 /// Place a component (furniture, plumbing fixture, electrical device…) of a
 /// component type. Electrical devices default to their usual mounting height
 /// (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m,
-/// ceiling lights at the level height) and may be put on a circuit.
+/// ceiling lights at the level height, data outlets 0.30 m, racks 1.40 m,
+/// air terminals on the roof under them, earth electrodes 0.50 m below the
+/// level) and may be put on a circuit or system of their kind; lightning
+/// protection devices join the first lightning protection system by default.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentPlace {
@@ -885,14 +888,31 @@ impl Command for ComponentPlace {
             Some(cc_core::TypeData::Component { def, .. }) => def.mep.and_then(|m| m.device()),
             _ => None,
         };
-        let height = device.map_or(0.0, |d| crate::defaults::device_height(p, level, d));
-        let system = self.system.as_ref().map(|r| refs::system(p, r)).transpose()?;
+        let mut height = device.map_or(0.0, |d| crate::defaults::device_height(p, level, d));
+        // Air terminals stand on the roof under them; lightning protection
+        // devices join the project's first lightning protection system.
+        let lightning = device.is_some_and(|d| d.class() == cc_core::SystemClass::Lightning);
+        let default_system = lightning
+            .then(|| p.systems.iter().find(|(_, s)| s.kind == cc_core::SystemKind::Lightning).map(|(id, _)| *id))
+            .flatten();
+        if device == Some(cc_core::DeviceKind::AirTerminal) && self.base_offset.is_none() {
+            let at = point(self.position)?;
+            let level_z = p.level_elevation(level);
+            if let Some(top) = cc_geom::lightning::surface_top(s.geometry(), at) {
+                height = top - level_z;
+            }
+        }
+        let p = s.project();
+        let system = match self.system.as_ref().map(|r| refs::system(p, r)).transpose()? {
+            Some(id) => Some(id),
+            None => default_system,
+        };
         if let Some(id) = system {
             let mep = match p.element_type(type_id).map(|t| &t.data) {
                 Some(cc_core::TypeData::Component { def, .. }) => def.mep,
                 _ => None,
             };
-            super::mep::check_fits(p, super::mep::is_electrical(mep), id)?;
+            super::mep::check_fits(p, super::mep::mep_classes(mep), id)?;
         }
         let component = Component {
             position: point(self.position)?,

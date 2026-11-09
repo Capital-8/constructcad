@@ -90,6 +90,10 @@ pub enum Tool {
     CableTray {
         type_id: ElementTypeId,
     },
+    /// Click the ends of lightning protection conductors, one after the other.
+    LightningConductor {
+        type_id: ElementTypeId,
+    },
     /// Click a pipe to place a valve on it.
     Valve {
         type_id: ElementTypeId,
@@ -190,6 +194,7 @@ impl Tool {
             Tool::Pipe { .. } => "tool-pipe",
             Tool::Conduit { .. } => "tool-conduit",
             Tool::CableTray { .. } => "tool-cable-tray",
+            Tool::LightningConductor { .. } => "tool-lightning-conductor",
             Tool::Valve { .. } => "tool-valve",
             Tool::Move => "tool-move",
             Tool::Copy => "tool-copy",
@@ -244,6 +249,7 @@ impl Tool {
             | Tool::Pipe { type_id }
             | Tool::Conduit { type_id }
             | Tool::CableTray { type_id }
+            | Tool::LightningConductor { type_id }
             | Tool::Valve { type_id }
             | Tool::Text { type_id }
             | Tool::LevelMark { type_id }
@@ -271,6 +277,7 @@ impl Tool {
             Tool::Pipe { .. } => Some(Category::Pipe),
             Tool::Conduit { .. } => Some(Category::Conduit),
             Tool::CableTray { .. } => Some(Category::CableTray),
+            Tool::LightningConductor { .. } => Some(Category::LightningConductor),
             Tool::Valve { .. } => Some(Category::Valve),
             Tool::Text { .. } => Some(Category::Text),
             Tool::DetailLine => Some(Category::DetailLine),
@@ -300,6 +307,7 @@ impl Tool {
             Tool::Pipe { .. } => Tool::Pipe { type_id: id },
             Tool::Conduit { .. } => Tool::Conduit { type_id: id },
             Tool::CableTray { .. } => Tool::CableTray { type_id: id },
+            Tool::LightningConductor { .. } => Tool::LightningConductor { type_id: id },
             Tool::Valve { .. } => Tool::Valve { type_id: id },
             Tool::Text { .. } => Tool::Text { type_id: id },
             Tool::LevelMark { .. } => Tool::LevelMark { type_id: id },
@@ -345,6 +353,7 @@ impl Tool {
             Category::Pipe => Tool::Pipe { type_id },
             Category::Conduit => Tool::Conduit { type_id },
             Category::CableTray => Tool::CableTray { type_id },
+            Category::LightningConductor => Tool::LightningConductor { type_id },
             Category::Valve => Tool::Valve { type_id },
             Category::Text => Tool::Text { type_id },
             Category::DetailLine => Tool::DetailLine,
@@ -621,6 +630,7 @@ fn chains(tool: &Tool) -> bool {
             | Tool::Pipe { .. }
             | Tool::Conduit { .. }
             | Tool::CableTray { .. }
+            | Tool::LightningConductor { .. }
             | Tool::Railing { .. }
             | Tool::Sweep { .. }
     )
@@ -1507,6 +1517,9 @@ pub fn handle(
         (Tool::CableTray { type_id }, Some(level)) => {
             segment_tool(ui, resp, painter, state, level, *type_id, Run::Tray, xf);
         }
+        (Tool::LightningConductor { type_id }, Some(level)) => {
+            segment_tool(ui, resp, painter, state, level, *type_id, Run::Conductor, xf);
+        }
         (Tool::Valve { type_id }, Some(_)) => valve_tool(resp, painter, state, *type_id, xf, drawing),
         _ => {}
     }
@@ -1565,6 +1578,10 @@ pub struct MepOptions {
     pub system: Option<cc_core::SystemId>,
     /// Circuit of new conduits and devices.
     pub circuit: Option<cc_core::SystemId>,
+    /// Cabling (a rack's data system) of new data outlets.
+    pub data: Option<cc_core::SystemId>,
+    /// Lightning protection system of new conductors and devices (`None`: the engine's default).
+    pub lightning: Option<cc_core::SystemId>,
     /// Elevation of new pipes and conduits above the level (`None`: the engine's default).
     pub offset: Option<f64>,
     /// Fall of new pipes, percent (`None`: the default for the system and diameter).
@@ -1590,7 +1607,9 @@ pub fn mep_component_type(project: &Project, device: bool) -> Option<ElementType
         .types_of(Category::Component)
         .find(|t| match &t.data {
             cc_core::TypeData::Component { def, .. } => match def.mep {
-                Some(cc_core::MepData::Device { .. }) => device,
+                Some(cc_core::MepData::Device { device: d, .. }) => {
+                    device && d.class() == cc_core::SystemClass::Circuit
+                }
                 Some(cc_core::MepData::Fixture { .. }) => !device,
                 None => false,
             },
@@ -1605,9 +1624,10 @@ pub enum Run {
     Pipe,
     Conduit,
     Tray,
+    Conductor,
 }
 
-/// Clicks chain pipe, conduit or cable tray runs: each ends where the next
+/// Clicks chain pipe, conduit, cable tray or lightning conductor runs: each ends where the next
 /// one starts, at the elevation the last one reached (a sloped drain keeps
 /// falling). A new elevation set while drawing makes a vertical run at the
 /// last point first; clicking that point again makes only the vertical run.
@@ -1631,8 +1651,11 @@ fn segment_tool(
     let ty = project.element_type(type_id);
     // A tray shows as wide as it is.
     let diameter = ty.and_then(|t| t.diameter().or(t.tray_section().map(|s| s.0))).unwrap_or(0.025);
-    let pipe = run == Run::Pipe;
-    let system = if pipe { state.mep.system } else { state.mep.circuit };
+    let system = match run {
+        Run::Pipe => state.mep.system,
+        Run::Conduit | Run::Tray => state.mep.circuit,
+        Run::Conductor => state.mep.lightning,
+    };
     let color = system.and_then(|id| project.system(id)).map_or(PREVIEW, |sys| {
         let [r, g, b] = sys.color();
         Color32::from_rgb(r, g, b)
@@ -1696,6 +1719,19 @@ fn segment_tool(
                     circuits,
                     offset,
                     end_offset,
+                };
+                crate::actions::run_command(state, command)
+            }
+            Run::Conductor => {
+                let command = cc_engine::commands::lightning::LpsConductorCreate {
+                    start: a.to_array(),
+                    end: end.map(|p| p.to_array()),
+                    level: level_ref.clone(),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    role: None,
+                    offset,
+                    end_offset,
+                    system: state.mep.lightning.map(|id| Ref::Id(id.0)),
                 };
                 crate::actions::run_command(state, command)
             }
@@ -1867,13 +1903,32 @@ fn component_tool(
         }
     }
     if resp.clicked() {
+        let device = device_type(state.project(), type_id);
+        if device == Some(cc_core::DeviceKind::Rack) {
+            // A rack comes with the cabling its outlets are cabled to.
+            let command = cc_engine::commands::cabling::RackPlace {
+                position: s.point.to_array(),
+                level: Some(Ref::Id(level.0)),
+                rotation: Some(rotation),
+                type_ref: Some(Ref::Id(type_id.0)),
+                ..Default::default()
+            };
+            run_create(state, command);
+            return;
+        }
+        let system = match device.map(|d| d.class()) {
+            Some(cc_core::SystemClass::Circuit) => state.mep.circuit,
+            Some(cc_core::SystemClass::Data) => state.mep.data,
+            Some(cc_core::SystemClass::Lightning) => state.mep.lightning,
+            _ => None,
+        };
         let command = create::ComponentPlace {
             position: s.point.to_array(),
             type_ref: Ref::Id(type_id.0),
             rotation: Some(rotation),
             level: Some(Ref::Id(level.0)),
             base_offset: None,
-            system: device_type(state.project(), type_id).and(state.mep.circuit).map(|s| Ref::Id(s.0)),
+            system: system.filter(|id| state.project().system(*id).is_some()).map(|s| Ref::Id(s.0)),
         };
         run_create(state, command);
     }

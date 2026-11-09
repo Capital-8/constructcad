@@ -478,6 +478,101 @@ fn mep_fixture_exports_cable_trays_and_valves() {
     assert!(imported.elements.len() > project.elements.len() / 2);
 }
 
+/// Lightning protection and structured cabling (#34): conductors are cable
+/// segments, air terminals protective devices, data outlets data outlets
+/// and racks communications appliances, grouped in their systems.
+#[test]
+fn lightning_protection_and_cabling_export_with_their_classes() {
+    use cc_core::{DeviceKind, ElementId, ElementTypeId, MepSystem, SystemId, SystemKind};
+    let mut doc = cc_core::Document::new(Project::from_template());
+    let level = doc.project.levels[0].id;
+    let name = |key: &str| key.trim_start_matches("tpl-param-").replace('-', "_");
+    doc.edit("t", |e| {
+        let add_type = |e: &mut cc_core::EditCtx, data: TypeData| {
+            let id = ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::ElementType {
+                id,
+                name: "t".into(),
+                data,
+                info: Default::default(),
+                uid: Uid::generate(),
+            })
+        };
+        let device = |e: &mut cc_core::EditCtx, d: DeviceKind| {
+            let (component, _, def) = cc_core::component::device_library(d, &name).unwrap();
+            let id = ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::ElementType {
+                id,
+                name: format!("{d:?}"),
+                data: TypeData::Component { component, def },
+                info: Default::default(),
+                uid: Uid::generate(),
+            })
+        };
+        let conductor_t = add_type(e, TypeData::LightningConductor { diameter: 0.008, material: String::new() });
+        let (terminal_t, outlet_t, rack_t) =
+            (device(e, DeviceKind::AirTerminal), device(e, DeviceKind::DataOutlet), device(e, DeviceKind::Rack));
+        let lps = SystemId(e.alloc_id());
+        e.systems_mut().insert(lps, MepSystem::new("LPS", "", SystemKind::Lightning));
+        let add = |e: &mut cc_core::EditCtx, type_id, kind| {
+            let id = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Uid::generate(),
+                kind,
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            });
+            id
+        };
+        let mut run = cc_core::MepSegment::new(DVec2::ZERO, DVec2::new(6.0, 0.0), 3.0);
+        run.systems = vec![lps];
+        let role = cc_core::ConductorRole::Air;
+        add(e, conductor_t, ElementKind::LightningConductor(cc_core::LightningConductor { run, role }));
+        let rod = cc_core::Component {
+            position: DVec2::new(3.0, 0.0),
+            base_offset: 3.0,
+            system: Some(lps),
+            ..Default::default()
+        };
+        add(e, terminal_t, ElementKind::Component(rod));
+        let rack =
+            add(e, rack_t, ElementKind::Component(cc_core::Component { base_offset: 1.4, ..Default::default() }));
+        let data = SystemId(e.alloc_id());
+        let mut system = MepSystem::new("Cabling R1", "R1", SystemKind::Data);
+        system.panel = Some(rack);
+        e.systems_mut().insert(data, system);
+        let outlet = cc_core::Component {
+            position: DVec2::new(4.0, 2.0),
+            base_offset: 0.3,
+            system: Some(data),
+            ..Default::default()
+        };
+        add(e, outlet_t, ElementKind::Component(outlet));
+    });
+    let text = export(&doc.project, &ExportOptions::default());
+    let lines = |entity: &str| text.lines().filter(|l| l.contains(&format!("={entity}("))).collect::<Vec<_>>();
+    let conductors = lines("IFCCABLESEGMENT");
+    assert_eq!(conductors.len(), 1);
+    assert!(conductors[0].contains(".CONDUCTORSEGMENT."), "{}", conductors[0]);
+    assert!(lines("IFCCABLESEGMENTTYPE").iter().any(|l| l.contains(".CONDUCTORSEGMENT.")));
+    let terminals = lines("IFCPROTECTIVEDEVICE");
+    assert_eq!(terminals.len(), 1);
+    assert!(terminals[0].contains("'AIRTERMINAL'") && terminals[0].contains(".USERDEFINED."), "{}", terminals[0]);
+    assert!(lines("IFCPROTECTIVEDEVICETYPE").iter().any(|l| l.contains("'AIRTERMINAL'")));
+    assert!(lines("IFCOUTLET").iter().any(|l| l.contains(".DATAOUTLET.")));
+    assert!(lines("IFCCOMMUNICATIONSAPPLIANCE").iter().any(|l| l.contains("'RACK'")));
+    let systems = lines("IFCDISTRIBUTIONSYSTEM");
+    assert!(systems.iter().any(|l| l.contains(".LIGHTNINGPROTECTION.")), "{systems:?}");
+    assert!(systems.iter().any(|l| l.contains(".DATA.") && l.contains("'R1'")), "{systems:?}");
+}
+
 /// Phases of an element by name: (created, demolished).
 fn phase_names(p: &Project, e: &Element) -> (String, Option<String>) {
     let created = p.phases.get(p.created_index(e)).map(|ph| ph.name.clone()).unwrap_or_default();

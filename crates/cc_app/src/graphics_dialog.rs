@@ -1158,16 +1158,12 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         let label = |d: Option<cc_core::MepDiscipline>| d.map_or(t!("vg-discipline-none"), |d| tr(d.key()));
         let mut d = t.discipline;
         egui::ComboBox::from_id_salt(("tpl-discipline", id)).selected_text(label(d)).show_ui(ui, |ui| {
-            for o in [None, Some(cc_core::MepDiscipline::Plumbing), Some(cc_core::MepDiscipline::Electrical)] {
+            for o in std::iter::once(None).chain(cc_core::MepDiscipline::ALL.into_iter().map(Some)) {
                 ui.selectable_value(&mut d, o, label(o));
             }
         });
         if d != t.discipline {
-            set.discipline = Some(match d {
-                None => "none".into(),
-                Some(cc_core::MepDiscipline::Plumbing) => "plumbing".into(),
-                Some(cc_core::MepDiscipline::Electrical) => "electrical".into(),
-            });
+            set.discipline = Some(d.map_or("none", cc_core::MepDiscipline::name).into());
         }
         ui.end_row();
 

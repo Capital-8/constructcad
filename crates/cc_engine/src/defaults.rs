@@ -59,6 +59,11 @@ pub fn device_height(project: &Project, level: LevelId, device: cc_core::DeviceK
         D::Switch => 1.1,
         D::WallLight => 2.1,
         D::Panel => 1.3,
+        D::DataOutlet => 0.3,
+        D::Rack => 1.4,
+        // Placing commands put air terminals on the roof under them.
+        D::AirTerminal => project.level_height(level, 2.8),
+        D::EarthElectrode => -cc_core::lightning::EARTH_DEPTH,
         D::CeilingLight => project.level_height(level, 2.8),
     }
 }

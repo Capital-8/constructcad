@@ -687,7 +687,14 @@ impl Project {
             ElementKind::Valve(v) => self.valve_host(v).map_or(element, |(host, _)| host),
             _ => element,
         };
-        element.systems().first().and_then(|s| self.system(*s)).map_or([128, 128, 128], crate::MepSystem::color)
+        // Lightning protection keeps its color outside any system.
+        let lightning = matches!(element.kind, ElementKind::LightningConductor(_))
+            || self
+                .mep_data(element)
+                .and_then(|m| m.device())
+                .is_some_and(|d| d.class() == crate::SystemClass::Lightning);
+        let fallback = if lightning { crate::SystemKind::Lightning.default_color() } else { [128, 128, 128] };
+        element.systems().first().and_then(|s| self.system(*s)).map_or(fallback, crate::MepSystem::color)
     }
 
     /// The MEP data of a component element's type.
@@ -696,6 +703,39 @@ impl Project {
             (ElementKind::Component(_), Some(TypeData::Component { def, .. })) => def.mep,
             _ => None,
         }
+    }
+
+    /// The board or rack feeding a system (its `panel`, when that is still a
+    /// component element).
+    pub fn feeder(&self, system: crate::SystemId) -> Option<&Element> {
+        let e = self.element(self.system(system)?.panel?)?;
+        matches!(e.kind, ElementKind::Component(_)).then_some(e)
+    }
+
+    /// Where a component element stands in the world: its insertion point at
+    /// its base (`None` for other elements).
+    pub fn component_point(&self, element: &Element) -> Option<glam::DVec3> {
+        let ElementKind::Component(c) = &element.kind else { return None };
+        Some(c.position.extend(self.level_elevation(element.level) + c.base_offset))
+    }
+
+    /// The estimated length of the horizontal cables of a data outlet: one
+    /// per jack, each routed to the rack of its data system as
+    /// [`crate::mep::cable_length`] says (up to the ceiling of the outlet's
+    /// level, across and down to the rack). `None` for elements that are not
+    /// data outlets cabled to a rack.
+    pub fn outlet_cable(&self, element: &Element) -> Option<(u32, f64)> {
+        let mep = self.mep_data(element)?;
+        let ports = mep.cables();
+        let ElementKind::Component(c) = &element.kind else { return None };
+        if ports == 0 {
+            return None;
+        }
+        let system = c.system.filter(|s| self.system(*s).is_some_and(|x| x.kind == crate::SystemKind::Data))?;
+        let rack = self.feeder(system)?;
+        let (outlet, rack) = (self.component_point(element)?, self.component_point(rack)?);
+        let ceiling = self.level_elevation(element.level) + self.level_height(element.level, 2.8);
+        Some((ports, crate::mep::cable_length(outlet, rack, ceiling)))
     }
 
     /// A pipe, conduit or cable tray run as seen from `level`, with its elevations above

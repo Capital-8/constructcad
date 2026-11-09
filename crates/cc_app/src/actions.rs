@@ -177,6 +177,10 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
     if category == Category::Pad && state.project().default_type(Category::Pad).is_none() {
         run_command(state, cc_engine::commands::pad::PadTypeCreate::default());
     }
+    if category == Category::LightningConductor && state.project().default_type(Category::LightningConductor).is_none()
+    {
+        run_command(state, cc_engine::commands::lightning::LpsConductorTypeCreate::default());
+    }
     if category == Category::CableTray && state.project().default_type(Category::CableTray).is_none() {
         run_command(state, cc_engine::commands::cable_tray::CableTrayTypeCreate::default());
     }
@@ -215,13 +219,15 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
 }
 
 /// The services plan to draw `category` in (with the message telling so),
-/// when it is a pipe, conduit, cable tray or valve and the active plan does not show it.
+/// when it is a pipe, conduit, cable tray, valve or lightning conductor and
+/// the active plan does not show it.
 fn services_plan_needed(state: &AppState, category: Category) -> Option<(cc_core::MepDiscipline, String)> {
     let (discipline, message) = match category {
         Category::Pipe => (cc_core::MepDiscipline::Plumbing, t!("msg-pipes-in-plumbing-plan")),
         Category::Conduit => (cc_core::MepDiscipline::Electrical, t!("msg-conduits-in-electrical-plan")),
         Category::CableTray => (cc_core::MepDiscipline::Electrical, t!("msg-trays-in-electrical-plan")),
         Category::Valve => (cc_core::MepDiscipline::Plumbing, t!("msg-valves-in-plumbing-plan")),
+        Category::LightningConductor => (cc_core::MepDiscipline::Lightning, t!("msg-conductors-in-lightning-plan")),
         _ => return None,
     };
     let view = state.active_view.and_then(|v| state.project().view(v))?;
@@ -985,7 +991,7 @@ pub fn open_panel_diagram(state: &mut AppState) {
     }
 }
 
-/// Open the plumbing or electrical plan of the active level (or the lowest), creating it the first time.
+/// Open the plumbing, electrical, communications or lightning protection plan of the active level (or the lowest), creating it the first time.
 pub fn open_mep_plan(state: &mut AppState, discipline: cc_core::MepDiscipline) {
     let Some(level) = state.active_level().or_else(|| state.project().levels.first().map(|l| l.id)) else { return };
     let existing = state
@@ -1000,6 +1006,8 @@ pub fn open_mep_plan(state: &mut AppState, discipline: cc_core::MepDiscipline) {
             let kind = match discipline {
                 cc_core::MepDiscipline::Plumbing => "plumbing_plan",
                 cc_core::MepDiscipline::Electrical => "electrical_plan",
+                cc_core::MepDiscipline::Communications => "communications_plan",
+                cc_core::MepDiscipline::Lightning => "lightning_plan",
             };
             new_view(state, kind, Some(level), None);
         }

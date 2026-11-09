@@ -223,6 +223,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             },
             ElementKind::Railing(r) => Value::Length(cc_geom::railing_length(project, e, r)),
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Value::Length(s.length()),
+            ElementKind::LightningConductor(c) => Value::Length(c.run.length()),
             ElementKind::Sweep(sw) => Value::Length(sw.length()),
             _ => Value::Missing,
         },
@@ -306,7 +307,11 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             })
             .and_then(|h| project.element(h))
             .map_or(Value::Missing, |w| text(&if w.mark.is_empty() { w.id.to_string() } else { w.mark.clone() })),
-        F::Function => ty.and_then(|t| t.wall_function()).map_or(Value::Missing, |f| Value::Key(f.key())),
+        F::Function => match &e.kind {
+            ElementKind::LightningConductor(c) => Value::Key(c.role.key()),
+            _ => ty.and_then(|t| t.wall_function()).map_or(Value::Missing, |f| Value::Key(f.key())),
+        },
+        F::CableLength => project.outlet_cable(e).map_or(Value::Missing, |(n, l)| Value::Length(l * n as f64)),
         F::Structural => match &e.kind {
             ElementKind::Wall(w) => Value::Key(if w.structural { "value-yes" } else { "value-no" }),
             ElementKind::Column(c) => Value::Key(if c.structural { "value-yes" } else { "value-no" }),
@@ -328,21 +333,23 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         },
         F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
-        F::Diameter => match valve_pipe(project, e)
-            .map_or(ty, |pipe| project.element_type(pipe.type_id))
-            .map(|t| &t.data)
-        {
-            Some(
-                TypeData::Rebar { diameter, .. } | TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. },
-            ) if format::imperial() => Value::Text(format!("Ø {}\"", format::inches(*diameter))),
-            Some(TypeData::Rebar { diameter, .. }) => {
-                Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
+        F::Diameter => {
+            match valve_pipe(project, e).map_or(ty, |pipe| project.element_type(pipe.type_id)).map(|t| &t.data) {
+                Some(
+                    TypeData::Rebar { diameter, .. }
+                    | TypeData::Pipe { diameter, .. }
+                    | TypeData::Conduit { diameter, .. }
+                    | TypeData::LightningConductor { diameter, .. },
+                ) if format::imperial() => Value::Text(format!("Ø {}\"", format::inches(*diameter))),
+                Some(TypeData::Rebar { diameter, .. } | TypeData::LightningConductor { diameter, .. }) => {
+                    Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
+                }
+                Some(TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. }) => {
+                    Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 0)))
+                }
+                _ => Value::Missing,
             }
-            Some(TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. }) => {
-                Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 0)))
-            }
-            _ => Value::Missing,
-        },
+        }
         F::System => {
             // Valves are in their pipe's system.
             let systems = valve_pipe(project, e).unwrap_or(e).systems();

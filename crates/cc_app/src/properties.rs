@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::t;
 use crate::table::{header_block, padded, readonly_row, row, section};
 use crate::theme::PALETTE;
-use cc_core::{Category, Element, ElementId, ElementKind, RoofShape, ViewId, ViewKind};
+use cc_core::{Category, Element, ElementId, ElementKind, RoofShape, SystemClass, ViewId, ViewKind};
 use cc_views::format;
 use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
 use std::hash::{Hash, Hasher};
@@ -661,6 +661,10 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         }
         ElementKind::Rebar(r) => rebar_props(ui, state, &el, r),
         ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => segment_props(ui, state, &el, s),
+        ElementKind::LightningConductor(c) => {
+            segment_props(ui, state, &el, &c.run);
+            conductor_role(ui, state, &el, c.role);
+        }
         ElementKind::Valve(v) => valve_props(ui, state, &el, v),
         ElementKind::Beam(b) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -1319,6 +1323,7 @@ pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
 fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::MepSegment) {
     let id = el.id;
     let pipe = matches!(el.kind, ElementKind::Pipe(_));
+    let conductor = matches!(el.kind, ElementKind::LightningConductor(_));
     section(ui, "constraints", t!("section-constraints"), |ui| {
         level_row(ui, state, el);
         length_row(ui, state, &t!("prop-start-elevation"), id, "seg-start", s.start_offset, |e, v| {
@@ -1333,10 +1338,12 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
         });
     });
     section(ui, "mep-system", t!("section-mep"), |ui| {
-        if pipe {
+        if pipe || conductor {
+            // A pipe or a lightning conductor belongs to one system.
             let mut system = s.system();
+            let classes = if pipe { [SystemClass::Plumbing] } else { [SystemClass::Lightning] };
             let changed = row(ui, &t!("col-system"), |ui| {
-                crate::systems_dialog::system_combo(ui, state, ("pipe-system", id.0), Some(false), &mut system)
+                crate::systems_dialog::system_combo(ui, state, ("pipe-system", id.0), &classes, &mut system)
             });
             if changed {
                 crate::engine_edit::element(state, id, None, |e| {
@@ -1346,12 +1353,12 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
                 });
             }
         } else {
-            // A conduit or cable tray carries any number of circuits.
+            // A conduit or cable tray carries any number of circuits and cabling systems.
             let circuits: Vec<(cc_core::SystemId, String)> = state
                 .project()
                 .systems
                 .iter()
-                .filter(|(_, c)| c.kind.is_electrical())
+                .filter(|(_, c)| c.kind.is_cabled())
                 .map(|(cid, c)| (*cid, format!("{} – {}", c.label(), c.name)))
                 .collect();
             for (cid, label) in circuits {
@@ -1420,16 +1427,41 @@ fn valve_props(ui: &mut Ui, state: &mut AppState, el: &Element, v: &cc_core::Val
     });
 }
 
+/// What a lightning protection conductor does (on the roof, down, in the ground).
+fn conductor_role(ui: &mut Ui, state: &mut AppState, el: &Element, role: cc_core::ConductorRole) {
+    let id = el.id;
+    section(ui, "lps-role", t!("section-lightning"), |ui| {
+        let mut chosen = role;
+        row(ui, &t!("prop-conductor-role"), |ui| {
+            egui::ComboBox::from_id_salt(("conductor-role", id.0)).selected_text(tr(role.key())).show_ui(ui, |ui| {
+                for r in cc_core::ConductorRole::ALL {
+                    ui.selectable_value(&mut chosen, r, tr(r.key()));
+                }
+            });
+        });
+        if chosen != role {
+            crate::engine_edit::element(state, id, None, |e| {
+                if let ElementKind::LightningConductor(c) = &mut e.kind {
+                    c.role = chosen;
+                }
+            });
+        }
+    });
+}
+
 /// The system or circuit of a plumbing fixture or electrical device, and its data.
 fn component_services(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_core::Component) {
     let Some(mep) = state.project().mep_data(el) else { return };
     let id = el.id;
-    let device = matches!(mep, cc_core::MepData::Device { .. });
+    let class = match mep {
+        cc_core::MepData::Device { device, .. } => device.class(),
+        cc_core::MepData::Fixture { .. } => SystemClass::Plumbing,
+    };
     section(ui, "mep-system", t!("section-mep"), |ui| {
         let mut system = c.system;
-        let label = if device { t!("prop-circuit") } else { t!("col-system") };
+        let label = if class == SystemClass::Circuit { t!("prop-circuit") } else { t!("col-system") };
         let changed = row(ui, &label, |ui| {
-            crate::systems_dialog::system_combo(ui, state, ("comp-system", id.0), Some(device), &mut system)
+            crate::systems_dialog::system_combo(ui, state, ("comp-system", id.0), &[class], &mut system)
         });
         if changed {
             crate::engine_edit::element(state, id, None, |e| {
@@ -1439,9 +1471,17 @@ fn component_services(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_co
             });
         }
         match mep {
-            cc_core::MepData::Device { device, power } => {
+            cc_core::MepData::Device { device, power, ports } => {
                 readonly_row(ui, &t!("prop-device"), tr(device.key()));
-                readonly_row(ui, &t!("col-power"), format!("{} VA", format::number(power, 0)));
+                if class == SystemClass::Circuit {
+                    readonly_row(ui, &t!("col-power"), format!("{} VA", format::number(power, 0)));
+                }
+                if device == cc_core::DeviceKind::DataOutlet {
+                    readonly_row(ui, &t!("prop-ports"), ports.to_string());
+                    if let Some((_, length)) = state.project().outlet_cable(el) {
+                        readonly_row(ui, &t!("col-cable-length"), format::length(length));
+                    }
+                }
             }
             cc_core::MepData::Fixture { drain_units, supply_weight, .. } => {
                 readonly_row(ui, &t!("col-drain-units"), format::number(drain_units, 1));
