@@ -218,7 +218,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             ElementKind::Beam(b) => Value::Length(b.true_length()),
             ElementKind::Rebar(_) => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.total_length())),
             ElementKind::Foundation(f) => match &f.shape {
-                cc_core::FoundationShape::Strip { start, end } => Value::Length(start.distance(*end)),
+                shape @ cc_core::FoundationShape::Strip { .. } => Value::Length(shape.strip_length()),
                 _ => Value::Missing,
             },
             ElementKind::Railing(r) => Value::Length(cc_geom::railing_length(project, e, r)),
@@ -276,9 +276,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Area => match &e.kind {
             ElementKind::Wall(w) => Value::Area(wall_area(project, e, w)),
             ElementKind::Room(_) => room_boundary.map_or(Value::Missing, |b| Value::Area(polygon::area(b))),
-            ElementKind::Foundation(_) => {
-                geom.foundations.get(&e.id).map_or(Value::Missing, |g| Value::Area(polygon::area(&g.footprint)))
-            }
+            ElementKind::Foundation(_) => geom.foundations.get(&e.id).map_or(Value::Missing, |g| Value::Area(g.area())),
             ElementKind::Roof(r) => Value::Area(r.area()),
             ElementKind::Floor(f) => Value::Area(f.area()),
             ElementKind::Shaft(s) => Value::Area(polygon::area(&s.outline)),

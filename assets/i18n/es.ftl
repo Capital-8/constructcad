@@ -1366,6 +1366,7 @@ foundation-pad = Zapata aislada
 foundation-strip = Zapata corrida / viga de cimentación
 foundation-slab = Losa de cimentación
 msg-foundation-kind = Elija un tipo de la clase { $kind }.
+msg-strip-arc-tight = El arco es demasiado cerrado para el ancho de la zapata corrida
 tx-create-foundation = Crear cimentación
 prop-foundation-kind = Clase
 prop-section-kind = Sección

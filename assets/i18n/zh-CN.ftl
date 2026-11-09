@@ -1385,6 +1385,7 @@ foundation-pad = 独立基础
 foundation-strip = 条形基础/地梁
 foundation-slab = 基础底板（筏板）
 msg-foundation-kind = 请选择 { $kind } 种类的类型。
+msg-strip-arc-tight = 圆弧相对条形基础的宽度过小
 tx-create-foundation = 创建基础
 prop-foundation-kind = 种类
 prop-section-kind = 截面

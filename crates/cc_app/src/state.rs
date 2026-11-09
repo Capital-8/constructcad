@@ -160,6 +160,8 @@ pub struct AppState {
     pub ramp_layout: cc_core::RampLayout,
     /// The wall tool draws arcs (start, end, then a point on the arc).
     pub wall_arc: bool,
+    /// The footing tool, with a strip type, draws arc strips as the wall tool draws arcs.
+    pub strip_arc: bool,
     /// Level new walls rise to (`None`: unconnected, `wall_height` tall).
     pub wall_top_level: Option<LevelId>,
     /// Allow the window to close after the user confirmed.
@@ -258,6 +260,7 @@ impl AppState {
             railing_host: Default::default(),
             ramp_layout: Default::default(),
             wall_arc: false,
+            strip_arc: false,
             wall_top_level: None,
             quit_confirmed: false,
             textures_to_free: Vec::new(),

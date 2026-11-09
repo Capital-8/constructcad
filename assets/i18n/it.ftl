@@ -1366,6 +1366,7 @@ foundation-pad = Plinto
 foundation-strip = Fondazione continua / trave di fondazione
 foundation-slab = Platea di fondazione
 msg-foundation-kind = Scegli un tipo della tipologia { $kind }.
+msg-strip-arc-tight = L'arco è troppo stretto per la larghezza della fondazione continua
 tx-create-foundation = Crea fondazione
 prop-foundation-kind = Tipologia
 prop-section-kind = Sezione

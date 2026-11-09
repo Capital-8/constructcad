@@ -6,6 +6,7 @@
 use crate::polygon;
 use crate::wall::{EndJoin, WallLine, resolve_join};
 use cc_core::ElementId;
+use cc_core::arc::Arc;
 use glam::DVec2;
 
 /// How close to a column outline a beam end must lie to frame into it.
@@ -45,12 +46,21 @@ pub struct BeamGeom {
     pub end_ext: (f64, f64),
     pub start: BeamEnd,
     pub end: BeamEnd,
+    /// The centerline arc of an arc strip footing (`dir` and `normal` are
+    /// then its frame at the start, `u` runs along the arc and `v` to its
+    /// left); beams are straight and have none. The straight-frame methods
+    /// ([`Self::footprint`], [`Self::parts`], [`Self::volume`]) are for
+    /// straight bodies only.
+    pub arc: Option<Arc>,
 }
 
 impl BeamGeom {
     /// World plan position of beam-local `(u, v)`.
     pub fn world(&self, u: f64, v: f64) -> DVec2 {
-        self.origin + self.dir * u + self.normal * v
+        match &self.arc {
+            Some(a) => a.at(u, v),
+            None => self.origin + self.dir * u + self.normal * v,
+        }
     }
 
     /// The footprint corners in beam-local `(u, v)`, counter-clockwise.
@@ -150,6 +160,9 @@ pub(crate) struct BeamInput {
     pub section: Vec<(DVec2, DVec2)>,
     pub join_start: bool,
     pub join_end: bool,
+    /// Bulge of the centerline: 0 for beams, which are straight; arc strip
+    /// footings bend (see [`cc_core::arc`]).
+    pub bulge: f64,
 }
 
 impl BeamInput {
@@ -229,7 +242,7 @@ pub(crate) fn resolve_beams(beams: &[BeamInput], columns: &[ColumnInput]) -> Vec
             half: b.half,
             join_start: b.join_start && f[0].is_none(),
             join_end: b.join_end && f[1].is_none(),
-            bulge: 0.0,
+            bulge: b.bulge,
             drawn: [b.start, b.end],
         })
         .collect();
@@ -251,14 +264,21 @@ pub(crate) fn resolve_beams(beams: &[BeamInput], columns: &[ColumnInput]) -> Vec
             };
             let (start, start_join) = resolve(0, true);
             let (end, end_join) = resolve(1, false);
-            beam_geom(b, (start, start_join), (end, end_join))
+            beam_geom(b, &lines[i], (start, start_join), (end, end_join))
         })
         .collect()
 }
 
-fn beam_geom(b: &BeamInput, start: (BeamEnd, Option<EndJoin>), end: (BeamEnd, Option<EndJoin>)) -> BeamGeom {
-    let dir = (b.end - b.start).try_normalize().unwrap_or(DVec2::X);
-    let length = b.start.distance(b.end);
+fn beam_geom(
+    b: &BeamInput,
+    line: &WallLine,
+    start: (BeamEnd, Option<EndJoin>),
+    end: (BeamEnd, Option<EndJoin>),
+) -> BeamGeom {
+    // An arc too tight for the body's width stays straight, as walls do.
+    let arc = line.arc();
+    let dir = arc.map_or_else(|| (b.end - b.start).try_normalize().unwrap_or(DVec2::X), |a| a.tangent(0.0));
+    let length = arc.map_or_else(|| b.start.distance(b.end), |a| a.length());
     let mut g = BeamGeom {
         element: b.element,
         origin: b.start,
@@ -273,6 +293,7 @@ fn beam_geom(b: &BeamInput, start: (BeamEnd, Option<EndJoin>), end: (BeamEnd, Op
         end_ext: (length, length),
         start: BeamEnd::Free,
         end: BeamEnd::Free,
+        arc,
     };
     // At the start the ray runs along +u and ray-left is the beam's left;
     // at the end the ray runs along -u and ray-left is the beam's right.
@@ -300,6 +321,7 @@ mod tests {
             section: vec![(DVec2::new(-0.1, 0.0), DVec2::new(0.1, 0.4))],
             join_start: true,
             join_end: true,
+            bulge: 0.0,
         }
     }
 
@@ -389,6 +411,28 @@ mod tests {
         assert!(close(g[0].start_ext, (0.0, 0.0)) && close(g[0].end_ext, (4.0, 4.0)));
         // The other beam no longer miters against it.
         assert_eq!(g[1].start, BeamEnd::Free);
+    }
+
+    #[test]
+    fn an_arc_strip_meets_a_straight_one_at_shared_corners() {
+        // A straight strip along +X ending where a quarter circle (center at the origin) starts.
+        let mut arc = beam(2, (4.0, 0.0), (0.0, 4.0));
+        arc.bulge = (std::f64::consts::FRAC_PI_2 / 4.0).tan();
+        let g = resolve_beams(&[beam(1, (0.0, 0.0), (4.0, 0.0)), arc], &[]);
+        assert!(g[0].arc.is_none());
+        let a = g[1].arc.unwrap();
+        assert!((a.radius - 4.0).abs() < 1e-9 && (g[1].length - a.length()).abs() < 1e-12);
+        assert_eq!((g[0].end, g[1].start), (BeamEnd::Beam, BeamEnd::Beam));
+        // The straight strip's end corners lie on the arc strip's faces at its start.
+        let inner = DVec2::new((3.9f64 * 3.9 - 0.01).sqrt(), 0.1);
+        let outer = DVec2::new((4.1f64 * 4.1 - 0.01).sqrt(), -0.1);
+        let fa = g[0].footprint();
+        assert!(fa.iter().any(|p| p.distance(inner) < 1e-9) && fa.iter().any(|p| p.distance(outer) < 1e-9), "{fa:?}");
+        let (s, e) = (g[1].start_ext, g[1].end_ext);
+        assert!(g[1].world(s.0, 0.1).distance(inner) < 1e-9, "{:?}", g[1].world(s.0, 0.1));
+        assert!(g[1].world(s.1, -0.1).distance(outer) < 1e-9, "{:?}", g[1].world(s.1, -0.1));
+        // The free end stays square.
+        assert!(close(e, (a.length(), a.length())));
     }
 
     #[test]

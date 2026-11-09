@@ -1366,6 +1366,7 @@ foundation-pad = Semelle isolée
 foundation-strip = Semelle filante / longrine
 foundation-slab = Dalle de fondation (radier)
 msg-foundation-kind = Choisissez un type du genre { $kind }.
+msg-strip-arc-tight = L'arc est trop serré pour la largeur de la semelle filante
 tx-create-foundation = Créer une fondation
 prop-foundation-kind = Genre
 prop-section-kind = Section

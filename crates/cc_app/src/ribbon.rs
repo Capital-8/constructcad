@@ -1195,6 +1195,18 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Beam { .. } => {
                 ui.label(theme::muted(t!("hint-beam")));
             }
+            Tool::Footing { type_id } if crate::tools::is_strip(state.project(), type_id) => {
+                // Strip footings: straight, or arcs through a third point, as walls.
+                let mut arc = state.strip_arc;
+                ui.selectable_value(&mut arc, false, t!("wall-mode-line")).on_hover_text(t!("hint-wall"));
+                ui.selectable_value(&mut arc, true, t!("wall-mode-arc")).on_hover_text(t!("hint-wall-arc"));
+                if arc != state.strip_arc {
+                    state.strip_arc = arc;
+                    state.interaction.points.clear();
+                }
+                ui.separator();
+                ui.label(theme::muted(if state.strip_arc { t!("hint-wall-arc") } else { t!("hint-wall") }));
+            }
             Tool::Footing { .. } => {
                 ui.label(theme::muted(t!("hint-footing")));
             }

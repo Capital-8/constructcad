@@ -1366,6 +1366,7 @@ foundation-pad = Окремий фундамент
 foundation-strip = Стрічковий фундамент / фундаментна балка
 foundation-slab = Плитний фундамент
 msg-foundation-kind = Виберіть тип фундаменту: { $kind }.
+msg-strip-arc-tight = Дуга надто крута для ширини стрічкового фундаменту
 tx-create-foundation = Створити фундамент
 prop-foundation-kind = Тип фундаменту
 prop-section-kind = Форма поперечного перерізу

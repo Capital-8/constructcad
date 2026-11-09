@@ -1366,6 +1366,7 @@ foundation-pad = Einzelfundament
 foundation-strip = Streifenfundament / Fundamentbalken
 foundation-slab = Fundamentplatte
 msg-foundation-kind = Wählen Sie einen Typ der Art { $kind }.
+msg-strip-arc-tight = Der Bogen ist zu eng für die Breite des Streifenfundaments
 tx-create-foundation = Fundament erstellen
 prop-foundation-kind = Art
 prop-section-kind = Querschnitt

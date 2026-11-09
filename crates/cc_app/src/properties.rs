@@ -716,9 +716,35 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     }
                 });
             });
+            if let cc_core::FoundationShape::Strip { bulge, .. } = f.shape {
+                section(ui, "geometry", t!("section-geometry"), |ui| {
+                    // Arc strips: the angle the arc turns (0 for a straight strip).
+                    let mut sweep = (4.0 * bulge.atan()).to_degrees();
+                    let drag = DragValue::new(&mut sweep).speed(1.0).range(-337.0..=337.0).suffix("°");
+                    let r = row(ui, &t!("prop-arc-angle"), |ui| ui.add(drag));
+                    if r.changed() {
+                        modify(state, id, "sweep", |el| {
+                            if let ElementKind::Foundation(cc_core::Foundation {
+                                shape: cc_core::FoundationShape::Strip { bulge, .. },
+                                ..
+                            }) = &mut el.kind
+                            {
+                                *bulge = if sweep.abs() < 0.01 { 0.0 } else { (sweep.to_radians() / 4.0).tan() };
+                            }
+                        });
+                    }
+                    finish(state, &r);
+                });
+            }
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
+                if matches!(f.shape, cc_core::FoundationShape::Strip { .. }) {
+                    readonly_row(ui, &t!("prop-length"), format::length(f.shape.strip_length()));
+                }
+                if let Some(arc) = f.shape.arc() {
+                    readonly_row(ui, &t!("prop-radius"), format::length(arc.radius));
+                }
                 if let Some(g) = state.session.geom().foundations.get(&id).cloned() {
-                    readonly_row(ui, &t!("col-area"), format::area(cc_geom::polygon::area(&g.footprint)));
+                    readonly_row(ui, &t!("col-area"), format::area(g.area()));
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });

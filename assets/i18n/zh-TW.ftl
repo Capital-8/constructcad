@@ -1366,6 +1366,7 @@ foundation-pad = 獨立基腳
 foundation-strip = 條形基礎／基礎梁
 foundation-slab = 基礎底板
 msg-foundation-kind = 請選擇 { $kind } 類別中的類型。
+msg-strip-arc-tight = 圓弧相對條形基礎的寬度過小
 tx-create-foundation = 建立基礎
 prop-foundation-kind = 類別
 prop-section-kind = 截面

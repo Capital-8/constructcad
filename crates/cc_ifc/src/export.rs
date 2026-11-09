@@ -960,8 +960,24 @@ impl<'a> Exporter<'a> {
                     let Some(g) = self.geom.foundations.get(&e.id) else { continue };
                     let frame = Frame::at(DVec3::new(0.0, 0.0, g.z_range.0 - level_z));
                     let position = self.placement3(frame);
-                    let item = self.extrude_polygon(&g.footprint, position, self.dir_z, g.z_range.1 - g.z_range.0);
-                    let area = polygon::area(&g.footprint);
+                    let depth = g.z_range.1 - g.z_range.0;
+                    let item = match &g.arc {
+                        // An arc strip: its outline of arcs and lines extruded.
+                        Some(a) => {
+                            let (h, l, r) = (a.half, a.left, a.right);
+                            let profile = self.arc_band_profile([
+                                a.world(r.0, -h),
+                                a.world((r.0 + r.1) * 0.5, -h),
+                                a.world(r.1, -h),
+                                a.world(l.1, h),
+                                a.world((l.0 + l.1) * 0.5, h),
+                                a.world(l.0, h),
+                            ]);
+                            self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth])
+                        }
+                        None => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
+                    };
+                    let area = g.area();
                     let q = vec![
                         ("Height", Quantity::Length(g.z_range.1 - g.z_range.0)),
                         ("NetVolume", Quantity::Volume(g.volume())),
@@ -2141,13 +2157,14 @@ impl<'a> Exporter<'a> {
             g.world((left.0 + left.1) * 0.5, v.0),
             g.world(left.0, v.0),
         ];
-        let coords: Vec<Value> = pts
-            .iter()
-            .map(|p| {
-                let q = wall_local(g, *p);
-                reals(&[q.x, q.y])
-            })
-            .collect();
+        self.arc_band_profile(pts.map(|p| wall_local(g, p)))
+    }
+
+    /// A closed profile of two arcs and two lines through `pts` (in the
+    /// placement's coordinates): an arc through the first three points, a
+    /// line to the fourth, an arc through the last three and a line back.
+    fn arc_band_profile(&mut self, pts: [DVec2; 6]) -> Id {
+        let coords: Vec<Value> = pts.iter().map(|q| reals(&[q.x, q.y])).collect();
         let list = self.w.add("IFCCARTESIANPOINTLIST2D", args![coords]);
         let index = |kind: &'static str, ids: &[i64]| {
             Value::Typed(kind, Box::new(Value::List(ids.iter().map(|&i| Value::Int(i)).collect())))

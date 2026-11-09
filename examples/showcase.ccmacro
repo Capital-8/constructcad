@@ -64,7 +64,7 @@
 {"command": "beams_between_columns", "args": {"columns": [125, 130]}}
 {"command": "beams_between_columns", "args": {"columns": [124, 128]}}
 {"command": "footings_under_columns", "args": {}}
-{"command": "strip_footings_under_walls", "args": {"walls": [90, 91, 92, 93, 96, 97, 98, 99, 100]}}
+{"command": "strip_footings_under_walls", "args": {"walls": [90, 91, 92, 93, 96, 97, 99, 100]}}
 {"command": "rebar_typical", "args": {}}
 {"command": "structure_number", "args": {}}
 // A steel pergola over the terrace.
@@ -177,3 +177,5 @@
 // A second filter (344) fills the exterior walls in the same view.
 {"command": "filter_create", "args": {"name": "Exterior walls", "categories": ["wall"], "rules": [{"param": "thickness", "op": "greater", "value": 0.12}]}}
 {"command": "view_filter_add", "args": {"view": 341, "filter": 344, "overrides": {"cut_fill": {"pattern": "Solid", "color": [150, 185, 225]}}}}
+// The arc wall's strip footing follows its curve (#22); placed last so the ids above stay put.
+{"command": "strip_footings_under_walls", "args": {"walls": [98]}}

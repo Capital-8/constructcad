@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 25;
+pub const FORMAT_VERSION: u32 = 26;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
@@ -239,6 +239,45 @@ mod tests {
             .replace(&format!("format_version: {FORMAT_VERSION}"), "format_version: 24");
         let (q, repairs) = from_ron_with_repairs(&old).unwrap();
         assert!(q.fill_patterns.is_empty());
+        assert_eq!(repairs, 0);
+    }
+
+    #[test]
+    fn arc_strips_round_trip_and_format_25_strips_load_straight() {
+        use crate::{Element, ElementId, ElementKind, Foundation, FoundationShape};
+        use glam::DVec2;
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let type_id = p.default_type(crate::Category::Foundation).unwrap();
+        let strip = |bulge: f64| Foundation {
+            shape: FoundationShape::Strip { start: DVec2::ZERO, end: DVec2::new(4.0, 0.0), bulge },
+            top_offset: 0.0,
+        };
+        let id = ElementId(p.alloc_id());
+        let e = Element {
+            id,
+            level,
+            type_id,
+            mark: String::new(),
+            comments: String::new(),
+            kind: ElementKind::Foundation(strip(0.5)),
+            uid: Default::default(),
+            phase_created: Default::default(),
+            phase_demolished: None,
+            design_option: None,
+            paints: Vec::new(),
+        };
+        p.elements.insert(id, e);
+        let text = to_ron(&p).unwrap();
+        assert_eq!(from_ron(&text).unwrap().element(id).unwrap().kind, ElementKind::Foundation(strip(0.5)));
+        // A format-25 file has no bulge: its strips are straight.
+        let old = text
+            .replace(", bulge: 0.5", "")
+            .replace("bulge: 0.5,", "")
+            .replace(&format!("format_version: {FORMAT_VERSION}"), "format_version: 25");
+        assert!(!old.contains("bulge: 0.5"), "{old}");
+        let (q, repairs) = from_ron_with_repairs(&old).unwrap();
+        assert_eq!(q.element(id).unwrap().kind, ElementKind::Foundation(strip(0.0)));
         assert_eq!(repairs, 0);
     }
 

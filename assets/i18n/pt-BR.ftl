@@ -1385,6 +1385,7 @@ foundation-pad = Sapata isolada
 foundation-strip = Sapata corrida / viga baldrame
 foundation-slab = Radier
 msg-foundation-kind = Escolha um tipo da espécie { $kind }.
+msg-strip-arc-tight = O arco é fechado demais para a largura da sapata corrida
 tx-create-foundation = Criar fundação
 prop-foundation-kind = Espécie
 prop-section-kind = Seção
