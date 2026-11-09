@@ -1385,6 +1385,7 @@ foundation-pad = 独立基礎
 foundation-strip = 連続基礎 / 地中梁
 foundation-slab = 基礎スラブ (ベタ基礎)
 msg-foundation-kind = 種類 { $kind } のタイプを選択してください。
+msg-strip-arc-tight = 円弧が連続基礎の幅に対してきつすぎます
 tx-create-foundation = 基礎を作成
 prop-foundation-kind = 種類
 prop-section-kind = 断面

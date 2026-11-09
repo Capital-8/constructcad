@@ -161,15 +161,23 @@ pub struct ModelGeometry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FoundationGeom {
     pub element: ElementId,
-    /// Plan outline, counter-clockwise.
+    /// Plan outline, counter-clockwise (an arc strip's arcs as short chords).
     pub footprint: Vec<DVec2>,
     /// Bottom and top elevations.
     pub z_range: (f64, f64),
+    /// An arc strip footing's exact plan (`None` for straight strips, pads and slabs).
+    pub arc: Option<crate::StripArc>,
 }
 
 impl FoundationGeom {
+    /// Plan area, exact for arc strips.
+    pub fn area(&self) -> f64 {
+        self.arc.map_or_else(|| polygon::area(&self.footprint), |a| a.area())
+    }
+
+    /// Volume, exact for arc strips.
     pub fn volume(&self) -> f64 {
-        polygon::area(&self.footprint) * (self.z_range.1 - self.z_range.0)
+        self.area() * (self.z_range.1 - self.z_range.0)
     }
 }
 
@@ -521,6 +529,7 @@ impl ModelGeometry {
                         section,
                         join_start: b.join_start,
                         join_end: b.join_end,
+                        bulge: 0.0,
                     });
                 }
                 (ElementKind::Column(c), Some(TypeData::Column { section, .. })) if c.structural => {
@@ -554,7 +563,7 @@ impl ModelGeometry {
                     column_outline(section, *position, *rotation_deg)
                 }
                 cc_core::FoundationShape::Slab { boundary } => polygon::ccw(boundary),
-                cc_core::FoundationShape::Strip { start, end } => {
+                cc_core::FoundationShape::Strip { start, end, bulge } => {
                     if start.distance(*end) > 1e-6 {
                         strips.push(BeamInput {
                             element: e.id,
@@ -566,23 +575,35 @@ impl ModelGeometry {
                             section: Vec::new(),
                             join_start: true,
                             join_end: true,
+                            bulge: *bulge,
                         });
                     }
                     continue;
                 }
             };
-            self.foundations.insert(e.id, FoundationGeom { element: e.id, footprint, z_range });
+            self.foundations.insert(e.id, FoundationGeom { element: e.id, footprint, z_range, arc: None });
         }
+        // Strips meet at the true crossings of their faces, arcs included.
         for g in resolve_beams(&strips, &[]) {
-            let footprint = g.footprint().to_vec();
-            self.foundations.insert(g.element, FoundationGeom { element: g.element, footprint, z_range: g.z_range });
+            let arc = g.arc.map(|arc| crate::StripArc {
+                arc,
+                half: g.half,
+                left: (g.start_ext.0, g.end_ext.0),
+                right: (g.start_ext.1, g.end_ext.1),
+            });
+            let footprint = arc.map_or_else(|| g.footprint().to_vec(), |a| a.outline());
+            self.foundations
+                .insert(g.element, FoundationGeom { element: g.element, footprint, z_range: g.z_range, arc });
         }
         for (id, g) in &self.foundations {
             let Some(e) = project.element(*id) else { continue };
             let material = project.element_type(e.type_id).map_or("", |t| t.main_material());
             let mut s = Solid::of_material(*id, Category::Foundation, project, material);
             let (z0, z1) = g.z_range;
-            s.add_prism(&g.footprint, |_| z0, |_| z1);
+            match &g.arc {
+                Some(arc) => arc.add_to(&mut s, z0, z1),
+                None => s.add_prism(&g.footprint, |_| z0, |_| z1),
+            }
             if !s.faces.is_empty() {
                 self.solids.push(s);
             }
@@ -1131,6 +1152,10 @@ impl ModelGeometry {
         }
         if let Some(t) = self.topographies.get(&id) {
             return t.volume;
+        }
+        // Exact for arc strips (their solids mesh the arcs with chords).
+        if let Some(f) = self.foundations.get(&id).filter(|f| f.arc.is_some()) {
+            return f.volume();
         }
         self.body_of(id).map(Solid::volume).sum()
     }

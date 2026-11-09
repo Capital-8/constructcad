@@ -105,27 +105,7 @@ impl Command for WallCreate {
                 .map_err(|_| EngineError::invalid(format!("unknown location line '{name}'")))?,
             None => LocationLine::default(),
         };
-        let bulge = match (self.mid, self.bulge) {
-            (Some(m), _) => cc_core::arc::Arc::bulge_through(start, point(m)?, end)
-                .ok_or_else(|| EngineError::invalid("the three points of the arc are on a line"))?,
-            (None, Some(b)) => {
-                let b = finite(b, "bulge")?;
-                if b.abs() > cc_core::arc::MAX_BULGE {
-                    return Err(EngineError::invalid("the bulge must be between -10 and 10"));
-                }
-                b
-            }
-            (None, None) => match self.radius {
-                Some(r) => {
-                    let r = finite(r, "radius")?;
-                    let major = self.major_arc.unwrap_or(false);
-                    cc_core::arc::Arc::bulge_radius(start, end, r.abs(), r > 0.0, major).ok_or_else(|| {
-                        EngineError::invalid("the radius must be at least half the distance between the ends")
-                    })?
-                }
-                None => 0.0,
-            },
-        };
+        let bulge = arc_bulge(start, end, self.mid, self.bulge, self.radius, self.major_arc)?;
         let wall = Wall {
             start,
             end,
@@ -140,6 +120,41 @@ impl Command for WallCreate {
         check_arc(p, type_id, &wall)?;
         create(s, t!("tx-create-wall"), level, Category::Wall, self.type_ref.as_ref(), ElementKind::Wall(wall))
     }
+}
+
+/// The bulge of the line or arc from `start` to `end`: through `mid`, else
+/// `bulge`, else of `radius` (signed: positive counter-clockwise; the longer
+/// arc when `major`), else 0 (straight).
+pub(crate) fn arc_bulge(
+    start: glam::DVec2,
+    end: glam::DVec2,
+    mid: Option<Point>,
+    bulge: Option<f64>,
+    radius: Option<f64>,
+    major: Option<bool>,
+) -> Result<f64> {
+    Ok(match (mid, bulge) {
+        (Some(m), _) => cc_core::arc::Arc::bulge_through(start, point(m)?, end)
+            .ok_or_else(|| EngineError::invalid("the three points of the arc are on a line"))?,
+        (None, Some(b)) => check_bulge(finite(b, "bulge")?)?,
+        (None, None) => match radius {
+            Some(r) => {
+                let r = finite(r, "radius")?;
+                cc_core::arc::Arc::bulge_radius(start, end, r.abs(), r > 0.0, major.unwrap_or(false)).ok_or_else(
+                    || EngineError::invalid("the radius must be at least half the distance between the ends"),
+                )?
+            }
+            None => 0.0,
+        },
+    })
+}
+
+/// A bulge within the range arcs accept.
+pub(crate) fn check_bulge(bulge: f64) -> Result<f64> {
+    if !bulge.is_finite() || bulge.abs() > cc_core::arc::MAX_BULGE {
+        return Err(EngineError::invalid("the bulge must be between -10 and 10"));
+    }
+    Ok(bulge)
 }
 
 /// An arc wall must leave room inside its curve for its thickness.

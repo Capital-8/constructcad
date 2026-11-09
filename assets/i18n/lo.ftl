@@ -1337,6 +1337,7 @@ foundation-pad = ຖານຮາກດ່ຽວ
 foundation-strip = ຖານຮາກຕໍ່ເນື່ອງ / ຄານດິນ
 foundation-slab = ຖານຮາກແຜ່
 msg-foundation-kind = ເລືອກປະເພດຂອງຮູບແບບ { $kind }.
+msg-strip-arc-tight = ເສັ້ນໂຄ້ງແຄບເກີນໄປສຳລັບຄວາມກວ້າງຂອງຖານຮາກຕໍ່ເນື່ອງ
 tx-create-foundation = ສ້າງຖານຮາກ
 prop-foundation-kind = ປະເພດຖານຮາກ
 prop-section-kind = ຮູບຮ່າງໜ້າຕັດ

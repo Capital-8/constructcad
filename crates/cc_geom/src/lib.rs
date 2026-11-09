@@ -31,6 +31,7 @@ pub mod sizing;
 pub mod skeleton;
 mod solid;
 pub mod stair;
+pub mod strip;
 pub mod topography;
 mod wall;
 
@@ -50,6 +51,7 @@ pub use stair::{
     Flight, LandingRect, Pieces, StairGeom, StairLanding, StairStep, StepKind, add_railing, railing_length,
     railing_path, railing_pieces, stair_geom,
 };
+pub use strip::StripArc;
 pub use wall::{Column, LayerGap, Opening, WallGeom};
 
 pub use glam::{DVec2, DVec3};

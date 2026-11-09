@@ -753,13 +753,17 @@ No parameters.
 
 ### `strip_footing_create`
 
-*edit* — Place a strip footing (a ground beam) centered on the line `start`-`end`; its top is `top_offset` above the level (default 0). Strips meet at corners and tees like beams.
+*edit* — Place a strip footing (a ground beam) centered on the line `start`-`end`, or on an arc through `mid` (or with a `bulge` or a `radius`); its top is `top_offset` above the level (default 0). Strips meet at corners and tees like beams, arcs at the true crossings of their faces.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `end` | [x, y] | required | End of the strip's center line. |
 | `start` | [x, y] | required | Start of the strip's center line. |
+| `bulge` | number | optional | Arc strips: tan(sweep / 4), positive when the arc turns counter-clockwise from `start` to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given. |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `major_arc` | boolean | optional | With `radius`: take the longer of the two arcs (default: the shorter). |
+| `mid` | [x, y] | optional | A point on the arc between the ends: makes an arc strip through the three points. |
+| `radius` | number | optional | Arc strips: the radius in meters, positive when the arc turns counter-clockwise from `start` to `end`, negative clockwise; at least half the distance between the ends. Ignored when `mid` or `bulge` is given. |
 | `top_offset` | number | optional | Top above the level, meters (default 0). |
 | `type` | id or name | optional | Strip footing type id or name (default: the first strip type). |
 
@@ -788,7 +792,7 @@ No parameters.
 
 ### `strip_footings_under_walls`
 
-*edit* — Place a strip footing under each wall (default: every wall of the level), along its body's centerline, its top at the wall's base. Walls that already have a strip are skipped; strips meet at corners like beams.
+*edit* — Place a strip footing under each wall (default: every wall of the level), along its body's centerline (an arc under an arc wall), its top at the wall's base. Walls that already have a strip, and arc walls too tight for the strip's width, are skipped; strips meet at corners like beams.
 
 | Parameter | Type | | Description |
 |---|---|---|---|

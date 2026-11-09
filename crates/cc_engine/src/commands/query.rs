@@ -224,6 +224,15 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
                 derived.insert("true_length".into(), json!(b.true_length()));
             }
         }
+        ElementKind::Foundation(f) if matches!(f.shape, cc_core::FoundationShape::Strip { .. }) => {
+            derived.insert("length".into(), json!(f.shape.strip_length()));
+            if let Some(arc) = f.shape.arc() {
+                // The centerline's circle and the turn from start to end.
+                derived.insert("center".into(), json!(arc.center.to_array()));
+                derived.insert("radius".into(), json!(arc.radius));
+                derived.insert("sweep".into(), json!(arc.sweep.to_degrees()));
+            }
+        }
         ElementKind::Railing(r) => {
             derived.insert("length".into(), json!(cc_geom::railing_length(p, &e, r)));
         }

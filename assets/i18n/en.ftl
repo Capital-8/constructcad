@@ -1385,6 +1385,7 @@ foundation-pad = Pad footing
 foundation-strip = Strip footing / ground beam
 foundation-slab = Foundation slab (raft)
 msg-foundation-kind = Choose a type of the kind { $kind }.
+msg-strip-arc-tight = The arc is too tight for the width of the strip footing
 tx-create-foundation = Create Foundation
 prop-foundation-kind = Kind
 prop-section-kind = Section

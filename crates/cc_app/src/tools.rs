@@ -54,7 +54,8 @@ pub enum Tool {
     Beam {
         type_id: ElementTypeId,
     },
-    /// Click to place a pad footing; Space turns it by 90°.
+    /// Click to place a pad footing; Space turns it by 90°. With a strip
+    /// type, draw strip footings as walls are drawn (lines or arcs).
     Footing {
         type_id: ElementTypeId,
     },
@@ -627,6 +628,7 @@ fn chains(tool: &Tool) -> bool {
         tool,
         Tool::Wall { .. }
             | Tool::Beam { .. }
+            | Tool::Footing { .. }
             | Tool::Pipe { .. }
             | Tool::Conduit { .. }
             | Tool::CableTray { .. }
@@ -1847,6 +1849,11 @@ fn footing_tool(
     type_id: ElementTypeId,
     xf: &Xf,
 ) {
+    // A strip type draws strips, as the wall tool draws walls.
+    if is_strip(state.project(), type_id) {
+        strip_tool(ui, resp, painter, state, level, type_id, xf);
+        return;
+    }
     if resp.hovered() && ui.input(|i| i.key_pressed(Key::Space)) {
         state.interaction.rotation = (state.interaction.rotation + 90.0).rem_euclid(360.0);
     }
@@ -1874,6 +1881,127 @@ fn footing_tool(
         };
         run_create(state, command);
     }
+}
+
+/// Whether `type_id` is a strip footing type.
+pub fn is_strip(project: &Project, type_id: ElementTypeId) -> bool {
+    matches!(
+        project.element_type(type_id).map(|t| &t.data),
+        Some(cc_core::TypeData::Foundation { kind: cc_core::FoundationKind::Strip, .. })
+    )
+}
+
+/// Strip footings, drawn as walls are: a chain of straight strips, or in
+/// arc mode the start, the end and then a point on the arc (or a typed radius).
+fn strip_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    type_id: ElementTypeId,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let anchor = state.interaction.anchor;
+    let crossings = grid_crossings(state.project());
+    let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
+    let mut p = s.point;
+    draw_snap(painter, xf, s);
+    let half = match state.project().element_type(type_id).map(|t| &t.data) {
+        Some(cc_core::TypeData::Foundation { width, .. }) => width / 2.0,
+        _ => 0.1,
+    };
+    let arc_end = state.interaction.points.first().copied().filter(|_| state.strip_arc);
+    if let (Some(a), Some(b)) = (anchor, arc_end) {
+        let radius = state.typed.length_value();
+        let bulge = match radius {
+            Some(r) => bulge_with_radius(a, b, p, r),
+            None => cc_core::arc::Arc::bulge_through(a, p, b),
+        };
+        match bulge {
+            Some(bulge) => arc_preview(painter, xf, a, b, bulge, 0.0, half),
+            None => paint_wall_preview(painter, xf, a, b, 0.0, half),
+        }
+        let unit = format::current().0.length.unit.symbol();
+        let arc = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge));
+        let text = match (radius, arc) {
+            (Some(_), Some(arc)) => {
+                format!("R {} {unit} \u{23ce}  {}", state.typed.length, format::length(arc.length()))
+            }
+            (Some(_), None) => format!("R {} {unit}  {}", state.typed.length, t!("msg-arc-radius-short")),
+            (None, Some(arc)) => format!("R {}  {}", format::length(arc.radius), format::length(arc.length())),
+            (None, None) => String::new(),
+        };
+        if !text.is_empty() {
+            label(painter, xf.to_screen(p), text);
+        }
+        let enter = ui.input(|i| i.key_pressed(Key::Enter)) && radius.is_some();
+        if resp.clicked() || enter {
+            match bulge {
+                Some(bulge) => {
+                    let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
+                    create_strip(state, level, type_id, a, b, bulge);
+                    state.interaction.anchor = Some(b);
+                    state.interaction.points.clear();
+                    state.typed.clear();
+                    if let Some(arc) = cc_core::arc::Arc::from_bulge(a, b, bulge) {
+                        state.interaction.prev_dir = Some(-arc.tangent(arc.length()));
+                    }
+                    chain_placed(state, before, depth);
+                }
+                None if radius.is_some() => state.message = t!("msg-arc-radius-short"),
+                None => state.message = t!("msg-arc-collinear"),
+            }
+        }
+        return;
+    }
+    if let Some(a) = anchor {
+        if !state.typed.is_empty() {
+            p = state.typed.apply(a, p, state.interaction.prev_dir);
+        }
+        if state.strip_arc {
+            painter.line_segment([xf.to_screen(a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
+        } else {
+            paint_wall_preview(painter, xf, a, p, 0.0, half);
+        }
+        temp_dimension(painter, xf, a, p, state.interaction.prev_dir, Some(&state.typed), half);
+    }
+    let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.typed.is_empty();
+    if resp.clicked() || enter {
+        match anchor {
+            None => state.interaction.anchor = Some(p),
+            Some(a) if a.distance(p) > 0.01 && state.strip_arc => {
+                // The end of the arc; the next click places a point on it.
+                state.interaction.points = vec![p];
+                state.message = t!("hint-wall-arc-point");
+                state.typed.clear();
+            }
+            Some(a) if a.distance(p) > 0.01 => {
+                let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
+                create_strip(state, level, type_id, a, p, 0.0);
+                state.interaction.anchor = Some(p);
+                state.interaction.prev_dir = Some(a - p);
+                state.typed.clear();
+                chain_placed(state, before, depth);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Create a strip footing from `a` to `b` (an arc when `bulge` is not 0).
+fn create_strip(state: &mut AppState, level: LevelId, type_id: ElementTypeId, a: DVec2, b: DVec2, bulge: f64) {
+    let command = cc_engine::commands::foundation::StripFootingCreate {
+        start: a.to_array(),
+        end: b.to_array(),
+        bulge: (bulge != 0.0).then_some(bulge),
+        level: Some(Ref::Id(level.0)),
+        type_ref: Some(Ref::Id(type_id.0)),
+        ..Default::default()
+    };
+    run_create(state, command);
 }
 
 /// Click to place a component; Space turns it by 90°.

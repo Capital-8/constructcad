@@ -121,8 +121,13 @@ impl Element {
                 p(&mut c.run.end);
             }
             ElementKind::Foundation(f) => {
-                if let crate::FoundationShape::Pad { rotation_deg, .. } = &mut f.shape {
-                    *rotation_deg = t.apply_angle_deg(*rotation_deg);
+                match &mut f.shape {
+                    crate::FoundationShape::Pad { rotation_deg, .. } => {
+                        *rotation_deg = t.apply_angle_deg(*rotation_deg);
+                    }
+                    // A mirror turns an arc strip the other way.
+                    crate::FoundationShape::Strip { bulge, .. } if t.mirror => *bulge = -*bulge,
+                    _ => {}
                 }
                 f.shape.points_mut().into_iter().for_each(p);
             }

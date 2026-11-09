@@ -109,10 +109,14 @@ fn patched(
     }
     match &kind {
         cc_core::ElementKind::Wall(w) => {
-            if w.bulge.abs() > cc_core::arc::MAX_BULGE || !w.bulge.is_finite() {
-                return Err(EngineError::invalid("the bulge must be between -10 and 10"));
-            }
+            super::create::check_bulge(w.bulge)?;
             super::create::check_arc(p, type_id.unwrap_or(element.type_id), w)?;
+        }
+        cc_core::ElementKind::Foundation(f) => {
+            if let cc_core::FoundationShape::Strip { bulge, .. } = f.shape {
+                super::create::check_bulge(bulge)?;
+            }
+            super::foundation::check_strip_arc(p, type_id.unwrap_or(element.type_id), &f.shape)?;
         }
         cc_core::ElementKind::Roof(r) => super::create::check_roof_holes(r)?,
         cc_core::ElementKind::Floor(f) => super::create::check_openings(&f.boundary, &f.openings)?,

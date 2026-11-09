@@ -992,8 +992,15 @@ impl Beam {
 pub enum FoundationShape {
     /// A pad centered at `position`, its width along the rotated X axis.
     Pad { position: DVec2, rotation_deg: f64 },
-    /// A strip centered on the line `start`-`end`.
-    Strip { start: DVec2, end: DVec2 },
+    /// A strip centered on the line `start`-`end`, or on an arc between them
+    /// when `bulge` is not 0 (`tan(sweep / 4)`, positive when it turns
+    /// counter-clockwise from `start` to `end`; see [`crate::arc`]).
+    Strip {
+        start: DVec2,
+        end: DVec2,
+        #[serde(default)]
+        bulge: f64,
+    },
     /// A slab with this boundary.
     Slab { boundary: Vec<DVec2> },
 }
@@ -1002,7 +1009,7 @@ impl FoundationShape {
     pub fn points_mut(&mut self) -> Vec<&mut DVec2> {
         match self {
             FoundationShape::Pad { position, .. } => vec![position],
-            FoundationShape::Strip { start, end } => vec![start, end],
+            FoundationShape::Strip { start, end, .. } => vec![start, end],
             FoundationShape::Slab { boundary } => boundary.iter_mut().collect(),
         }
     }
@@ -1010,8 +1017,24 @@ impl FoundationShape {
     pub fn points(&self) -> Vec<DVec2> {
         match self {
             FoundationShape::Pad { position, .. } => vec![*position],
-            FoundationShape::Strip { start, end } => vec![*start, *end],
+            FoundationShape::Strip { start, end, .. } => vec![*start, *end],
             FoundationShape::Slab { boundary } => boundary.clone(),
+        }
+    }
+
+    /// The centerline arc of an arc strip (`None` for straight strips and other shapes).
+    pub fn arc(&self) -> Option<crate::arc::Arc> {
+        match self {
+            FoundationShape::Strip { start, end, bulge } => crate::arc::Arc::from_bulge(*start, *end, *bulge),
+            _ => None,
+        }
+    }
+
+    /// Length of a strip's centerline (along the arc for arc strips); 0 for other shapes.
+    pub fn strip_length(&self) -> f64 {
+        match self {
+            FoundationShape::Strip { start, end, .. } => self.arc().map_or(start.distance(*end), |a| a.length()),
+            _ => 0.0,
         }
     }
 }

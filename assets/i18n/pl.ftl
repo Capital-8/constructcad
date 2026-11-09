@@ -1366,6 +1366,7 @@ foundation-pad = Stopa fundamentowa
 foundation-strip = Ława fundamentowa / belka podwalinowa
 foundation-slab = Płyta fundamentowa
 msg-foundation-kind = Wybierz typ rodzaju { $kind }.
+msg-strip-arc-tight = Łuk jest zbyt ciasny dla szerokości ławy fundamentowej
 tx-create-foundation = Utwórz fundament
 prop-foundation-kind = Rodzaj
 prop-section-kind = Przekrój

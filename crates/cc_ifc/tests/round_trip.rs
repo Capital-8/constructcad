@@ -425,10 +425,16 @@ fn structure_fixture_exports_foundations_profiles_and_cut_slabs() {
     let project = load(include_str!("fixtures/structure.ccad"));
     let text = export(&project, &ExportOptions::default());
     let lines = |entity: &str| text.lines().filter(|l| l.contains(&format!("={entity}("))).collect::<Vec<_>>();
-    // Pads under the four columns and strips under the four walls; a raft as a base slab.
+    // Pads under the four columns and strips under the four walls, a straight
+    // strip meeting an arc strip (#22); a raft as a base slab.
     let footings = lines("IFCFOOTING");
-    assert_eq!(footings.len(), 8);
+    assert_eq!(footings.len(), 10);
     assert_eq!(footings.iter().filter(|l| l.contains(".PAD_FOOTING.")).count(), 4);
+    // The arc strip's body is its outline of true arcs, extruded.
+    assert_eq!(lines("IFCINDEXEDPOLYCURVE").len(), 1);
+    assert_eq!(lines("IFCARCINDEX").len(), 0, "arc indices are typed values inside the curve");
+    let curve = lines("IFCINDEXEDPOLYCURVE")[0];
+    assert_eq!(curve.matches("IFCARCINDEX").count(), 2, "{curve}");
     assert!(lines("IFCSLAB").iter().any(|l| l.contains(".BASESLAB.")));
     // Steel profiles as parametric profiles.
     for profile in [

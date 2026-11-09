@@ -366,6 +366,24 @@ fn wall_tool_has_an_arc_mode() {
     assert!(!harness.state().wall_arc);
 }
 
+/// With a strip type, the footing tool draws strips in line or arc mode (#22).
+#[test]
+fn strip_footing_tool_has_an_arc_mode() {
+    let mut state = sample_state();
+    let strip = crate::tools::foundation_type(state.project(), cc_core::FoundationKind::Strip).unwrap();
+    state.tool = crate::tools::Tool::Footing { type_id: strip };
+    let mut harness = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::options_bar(ui, state)
+    });
+    assert!(!harness.state().strip_arc);
+    harness.get_by_label(&t!("wall-mode-arc")).click();
+    harness.run();
+    assert!(harness.state().strip_arc && !harness.state().wall_arc);
+    harness.get_by_label(&t!("wall-mode-line")).click();
+    harness.run();
+    assert!(!harness.state().strip_arc);
+}
+
 /// Aligned and linear dimensions are placed singly or in a continuous chain.
 #[test]
 fn dimension_tool_has_a_continuous_mode() {

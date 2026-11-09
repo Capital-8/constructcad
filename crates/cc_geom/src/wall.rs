@@ -470,6 +470,26 @@ pub(crate) fn resolve_join(walls: &[WallLine], me: usize, at_start: bool) -> Opt
     best.and_then(|(i, _)| t_join(walls, me, at_start, i))
 }
 
+/// Exact plan area of the band `half` either side of the arc `a` whose left
+/// side spans `left` and right side `right` along the arc, its ends cut
+/// straight across.
+pub(crate) fn arc_band_area(a: &Arc, half: f64, left: (f64, f64), right: (f64, f64)) -> f64 {
+    let h = half;
+    // Green's theorem: an arc of radius r from p0 to p1 turning by dφ adds
+    // (r² dφ + c × (p1 - p0)) / 2; a segment p → q adds (p × q) / 2.
+    let arc_part = |u0: f64, u1: f64, v: f64| {
+        let r = a.radius_at(v);
+        let (p0, p1) = (a.at(u0, v), a.at(u1, v));
+        (r * r * (a.angle_at(u1) - a.angle_at(u0)) + a.center.perp_dot(p1 - p0)) * 0.5
+    };
+    let seg = |p: DVec2, q: DVec2| p.perp_dot(q) * 0.5;
+    let sum = arc_part(right.0, right.1, -h)
+        + seg(a.at(right.1, -h), a.at(left.1, h))
+        + arc_part(left.1, left.0, h)
+        + seg(a.at(left.0, h), a.at(right.0, -h));
+    sum.abs()
+}
+
 /// Subtract `cut` from the sorted disjoint `intervals`.
 fn subtract(intervals: &[(f64, f64)], cut: (f64, f64)) -> Vec<(f64, f64)> {
     let mut out = Vec::new();
@@ -725,21 +745,10 @@ impl WallGeom {
 
     /// Exact plan area of [`Self::outline`] (arcs included).
     pub fn outline_area(&self, left: (f64, f64), right: (f64, f64)) -> f64 {
-        let Some(a) = &self.arc else { return crate::polygon::area(&self.outline(left, right)) };
-        let h = self.half;
-        // Green's theorem: an arc of radius r from p0 to p1 turning by dφ adds
-        // (r² dφ + c × (p1 - p0)) / 2; a segment p → q adds (p × q) / 2.
-        let arc_part = |u0: f64, u1: f64, v: f64| {
-            let r = a.radius_at(v);
-            let (p0, p1) = (a.at(u0, v), a.at(u1, v));
-            (r * r * (a.angle_at(u1) - a.angle_at(u0)) + a.center.perp_dot(p1 - p0)) * 0.5
-        };
-        let seg = |p: DVec2, q: DVec2| p.perp_dot(q) * 0.5;
-        let sum = arc_part(right.0, right.1, -h)
-            + seg(a.at(right.1, -h), a.at(left.1, h))
-            + arc_part(left.1, left.0, h)
-            + seg(a.at(left.0, h), a.at(right.0, -h));
-        sum.abs()
+        match &self.arc {
+            Some(a) => arc_band_area(a, self.half, left, right),
+            None => crate::polygon::area(&self.outline(left, right)),
+        }
     }
 
     /// Plan footprint of a column, counter-clockwise.

@@ -72,7 +72,7 @@ fn element_is_valid(e: &Element) -> bool {
                 crate::FoundationShape::Pad { position, rotation_deg } => {
                     position.is_finite() && rotation_deg.is_finite()
                 }
-                crate::FoundationShape::Strip { start, end } => finite_points(&[*start, *end]),
+                crate::FoundationShape::Strip { start, end, .. } => finite_points(&[*start, *end]),
                 crate::FoundationShape::Slab { boundary } => boundary.len() >= 3 && finite_points(boundary),
             };
             shape && f.top_offset.is_finite()
@@ -547,17 +547,25 @@ impl Project {
                 r.edge_slopes.pop();
             }
         }
-        // Arc walls: a bulge that is not a number makes the wall straight, one
-        // past a nearly full circle is clamped, a negligible one is dropped.
+        // Arc walls and arc strip footings: a bulge that is not a number makes
+        // them straight, one past a nearly full circle is clamped, a negligible
+        // one is dropped.
         for e in self.elements.values_mut() {
-            let ElementKind::Wall(w) = &mut e.kind else { continue };
-            let fixed = if !w.bulge.is_finite() || w.bulge.abs() < 1e-6 {
+            let bulge = match &mut e.kind {
+                ElementKind::Wall(w) => &mut w.bulge,
+                ElementKind::Foundation(crate::Foundation {
+                    shape: crate::FoundationShape::Strip { bulge, .. },
+                    ..
+                }) => bulge,
+                _ => continue,
+            };
+            let fixed = if !bulge.is_finite() || bulge.abs() < 1e-6 {
                 0.0
             } else {
-                w.bulge.clamp(-crate::arc::MAX_BULGE, crate::arc::MAX_BULGE)
+                bulge.clamp(-crate::arc::MAX_BULGE, crate::arc::MAX_BULGE)
             };
-            if fixed.to_bits() != w.bulge.to_bits() {
-                w.bulge = fixed;
+            if fixed.to_bits() != bulge.to_bits() {
+                *bulge = fixed;
                 repairs += 1;
             }
         }
@@ -1111,6 +1119,47 @@ mod tests {
         assert_eq!(p.repair(), 0);
         // Collinear three points give no arc.
         assert!(crate::arc::Arc::bulge_through(DVec2::ZERO, DVec2::X, DVec2::new(2.0, 0.0)).is_none());
+    }
+
+    /// Crafted arc strip footings: their bulges are repaired like walls'.
+    #[test]
+    fn degenerate_arc_strips_are_repaired() {
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let type_id = p.default_type(Category::Foundation).unwrap();
+        let mut ids = Vec::new();
+        for bulge in [f64::NAN, f64::NEG_INFINITY, 1e6, 1e-9, -0.5] {
+            let id = ElementId(p.alloc_id());
+            let shape = crate::FoundationShape::Strip { start: DVec2::ZERO, end: DVec2::new(4.0, 0.0), bulge };
+            let e = Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind: ElementKind::Foundation(crate::Foundation { shape, top_offset: 0.0 }),
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            };
+            p.elements.insert(id, e);
+            ids.push(id);
+        }
+        assert_eq!(p.repair(), 4);
+        let bulges: Vec<f64> = ids
+            .iter()
+            .map(|id| match &p.element(*id).unwrap().kind {
+                ElementKind::Foundation(crate::Foundation {
+                    shape: crate::FoundationShape::Strip { bulge, .. },
+                    ..
+                }) => *bulge,
+                k => panic!("{k:?}"),
+            })
+            .collect();
+        assert_eq!(bulges, vec![0.0, 0.0, crate::arc::MAX_BULGE, 0.0, -0.5]);
+        assert_eq!(p.repair(), 0);
     }
 
     /// Crafted roof edge slopes: more than edges, a NaN and a negative one.
