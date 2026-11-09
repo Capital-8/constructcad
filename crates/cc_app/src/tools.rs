@@ -163,6 +163,15 @@ pub enum Tool {
 }
 
 impl Tool {
+    /// Translation key of the tool's name as the options bar shows it: the
+    /// footing tool drawing a strip type is named for strips.
+    pub fn name_key(&self, project: &Project) -> &'static str {
+        match self {
+            Tool::Footing { type_id } if is_strip(project, *type_id) => "tool-strip-footing",
+            tool => tool.key(),
+        }
+    }
+
     /// Translation key of the tool name.
     pub fn key(&self) -> &'static str {
         match self {
@@ -1884,6 +1893,32 @@ fn footing_tool(
 }
 
 /// Whether `type_id` is a strip footing type.
+/// The ends and the arc of an arc wall or arc strip footing: what the
+/// curvature handle of a selected element bends.
+fn bendable(e: &cc_core::Element) -> Option<(DVec2, DVec2, cc_core::arc::Arc)> {
+    match &e.kind {
+        ElementKind::Wall(w) => Some((w.start, w.end, w.arc()?)),
+        ElementKind::Foundation(f) => match &f.shape {
+            cc_core::FoundationShape::Strip { start, end, .. } => Some((*start, *end, f.shape.arc()?)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Give a wall or strip footing a new bulge (the curvature handle's edit).
+fn set_bulge(e: &mut cc_core::Element, to: f64) {
+    match &mut e.kind {
+        ElementKind::Wall(w) => w.bulge = to,
+        ElementKind::Foundation(f) => {
+            if let cc_core::FoundationShape::Strip { bulge, .. } = &mut f.shape {
+                *bulge = to;
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn is_strip(project: &Project, type_id: ElementTypeId) -> bool {
     matches!(
         project.element_type(type_id).map(|t| &t.data),
@@ -3492,7 +3527,7 @@ fn select(
     } else {
         Vec::new()
     };
-    // Curvature handles of selected arc walls, at the middle of the arc.
+    // Curvature handles of selected arc walls and strip footings, at the middle of the arc.
     let bends: Vec<(ElementId, DVec2, DVec2, cc_core::arc::Arc)> = if movable && state.interaction.drag.is_none() {
         state
             .selection
@@ -3500,8 +3535,8 @@ fn select(
             .take(50)
             .filter(|id| !state.project().is_pinned(**id))
             .filter_map(|id| {
-                let w = state.project().element(*id)?.as_wall()?;
-                Some((*id, w.start, w.end, w.arc()?))
+                let (a, b, arc) = bendable(state.project().element(*id)?)?;
+                Some((*id, a, b, arc))
             })
             .collect()
     } else {
@@ -3648,11 +3683,7 @@ fn select(
             state.interaction.drag = None;
             match bulge {
                 Some(bulge) => {
-                    crate::engine_edit::element(state, id, None, |e| {
-                        if let ElementKind::Wall(w) = &mut e.kind {
-                            w.bulge = bulge;
-                        }
-                    });
+                    crate::engine_edit::element(state, id, None, |e| set_bulge(e, bulge));
                 }
                 None => state.message = t!("msg-arc-collinear"),
             }
@@ -3849,6 +3880,39 @@ mod tests {
 
     /// 100 px per meter: the snap radius is 0.1 m.
     const SCALE: f64 = 100.0;
+
+    /// The curvature handle bends arc strip footings as it bends arc walls
+    /// (a straight strip has none, like a straight wall), through the engine
+    /// in one undo step; a bulge the engine refuses leaves the strip as it was.
+    #[test]
+    fn the_curvature_handle_bends_arc_strip_footings() {
+        fn strip(state: &mut AppState, args: serde_json::Value) -> ElementId {
+            let out = state.session.execute("strip_footing_create", args).unwrap();
+            ElementId(out["id"].as_u64().unwrap())
+        }
+        let mut state = AppState::new(cc_core::Document::new(crate::actions::new_project()));
+        let level = state.project().levels.first().map(|l| l.id.0).unwrap();
+        let arc = strip(&mut state, serde_json::json!({"level": level, "start": [0, 0], "end": [6, 0], "mid": [3, 1]}));
+        let straight = strip(&mut state, serde_json::json!({"level": level, "start": [0, 5], "end": [6, 5]}));
+        let element = |state: &AppState, id| state.project().element(id).cloned().unwrap();
+        assert!(bendable(&element(&state, straight)).is_none());
+        let (a, b, before) = bendable(&element(&state, arc)).expect("an arc strip has a handle");
+        assert_eq!((a, b), (DVec2::ZERO, DVec2::new(6.0, 0.0)));
+        // Drag the middle up to (3, 2): the ends stay, the arc passes there.
+        let bulge = cc_core::arc::Arc::bulge_through(a, DVec2::new(3.0, 2.0), b).unwrap();
+        let depth = state.session.doc.undo_depth();
+        assert!(crate::engine_edit::element(&mut state, arc, None, |e| set_bulge(e, bulge)));
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
+        let (a2, b2, after) = bendable(&element(&state, arc)).unwrap();
+        assert_eq!((a2, b2), (a, b));
+        assert!(after.radius < before.radius, "{} {}", after.radius, before.radius);
+        assert!(after.point(after.length() * 0.5).distance(DVec2::new(3.0, 2.0)) < 1e-9);
+        // A bulge out of range is refused: unchanged, with a message.
+        let kept = element(&state, arc);
+        assert!(!crate::engine_edit::element(&mut state, arc, None, |e| set_bulge(e, 1e3)));
+        assert_eq!(element(&state, arc), kept);
+        assert!(!state.message.is_empty());
+    }
 
     #[test]
     fn typed_radius_takes_the_cursor_side() {

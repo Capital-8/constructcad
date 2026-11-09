@@ -227,6 +227,7 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Drawing**: the *Structure → Pad Footing* tool (`FT`) with a strip footing type picked in the options bar's type list draws strips as walls are drawn: *Line* chains straight strips (type a length + Enter; Backspace or Ctrl+Z takes back the last one), *Arc* takes the start, the end and then a point on the arc, or a typed radius + Enter.
 - **Joins**: strips meet at corners and tees like beams; an arc strip meets a straight one or another arc where their faces truly cross. An arc too tight for the strip's width is refused.
 - **Properties**: *Arc angle* bends a strip (0 makes it straight); its length along the arc, radius, area and volume are shown. A mirror turns an arc the other way; moving and rotating keep it.
+- **Curvature handle**: a selected arc strip shows a round handle at the middle of its arc, as arc walls do; dragging it bends the strip through the pointer, its ends staying (the radius and length show while dragging). While a strip type is chosen, the options bar names the tool *Strip Footing*.
 - **Views**: plans dash strips below the cut plane and hatch those it cuts, the arcs as short chords; sections cut the curved body; schedules list the length along the arc and the exact volume. IFC export writes an arc strip as an `IfcFooting` (`STRIP_FOOTING`) whose body is its outline of true arcs extruded. IFC import brings strip footings, straight or arc, back as components with their mesh, as before.
 
 ## Cable trays and valves

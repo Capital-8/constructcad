@@ -375,6 +375,9 @@ fn strip_footing_tool_has_an_arc_mode() {
     let mut harness = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
         crate::ribbon::options_bar(ui, state)
     });
+    // The tool is named for strips, not pad footings.
+    harness.get_by_label(&t!("tool-strip-footing"));
+    assert!(harness.query_by_label(&t!("tool-footing")).is_none());
     assert!(!harness.state().strip_arc);
     harness.get_by_label(&t!("wall-mode-arc")).click();
     harness.run();

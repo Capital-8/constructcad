@@ -1061,7 +1061,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 let (r, _) = ui.allocate_exact_size(vec2(15.0, 15.0), Sense::hover());
                 icons::paint(ui.painter(), r, tool_icon(&state.tool), PALETTE.accent_text);
-                let name = crate::i18n::tr(state.tool.key());
+                let name = crate::i18n::tr(state.tool.name_key(state.project()));
                 ui.label(RichText::new(name).family(theme::semibold()).color(PALETTE.accent_text));
             });
         ui.separator();

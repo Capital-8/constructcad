@@ -1376,6 +1376,7 @@ prop-wall-thickness = Grubość ścianki
 prop-end-elevation-offset = Odsunięcie rzędnej końca
 prop-true-length = Długość rzeczywista
 tool-footing = Stopa fundamentowa
+tool-strip-footing = Ława fundamentowa
 tool-foundation-slab = Płyta fundamentowa
 cmd-desc-footing = Umieszczaj stopy fundamentowe: klikaj ich środki; Spacja je obraca.
 hint-footing = Kliknij środek każdej stopy · Spacja obraca ją o 90° · Esc kończy

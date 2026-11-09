@@ -1376,6 +1376,7 @@ prop-wall-thickness = Espesor de pared
 prop-end-elevation-offset = Desfase de elevación final
 prop-true-length = Longitud real
 tool-footing = Zapata aislada
+tool-strip-footing = Zapata corrida
 tool-foundation-slab = Losa de cimentación
 cmd-desc-footing = Coloca zapatas aisladas: haga clic en sus centros; Espacio las gira.
 hint-footing = Haga clic en el centro de cada zapata · Espacio la gira 90° · Esc termina

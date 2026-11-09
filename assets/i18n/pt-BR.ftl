@@ -1395,6 +1395,7 @@ prop-wall-thickness = Espessura da parede
 prop-end-elevation-offset = Deslocamento de elevação no fim
 prop-true-length = Comprimento real
 tool-footing = Sapata
+tool-strip-footing = Sapata corrida
 tool-foundation-slab = Radier
 cmd-desc-footing = Coloca sapatas isoladas: clique os centros; Espaço gira.
 hint-footing = Clique o centro de cada sapata · Espaço gira 90° · Esc encerra

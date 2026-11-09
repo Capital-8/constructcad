@@ -1395,6 +1395,7 @@ prop-wall-thickness = Wall Thickness
 prop-end-elevation-offset = End Elevation Offset
 prop-true-length = True Length
 tool-footing = Pad Footing
+tool-strip-footing = Strip Footing
 tool-foundation-slab = Foundation Slab
 cmd-desc-footing = Place pad footings: click their centers; Space turns them.
 hint-footing = Click the center of each footing · Space turns it by 90° · Esc ends
