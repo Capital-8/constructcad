@@ -144,6 +144,7 @@ fn the_active_option_takes_new_elements_and_shows_in_automatic_views() {
 #[test]
 fn options_are_renamed_made_primary_deleted_and_accepted() {
     let Fixture { mut s, plan, split_plan, set, open, split, partition, walls, .. } = fixture();
+    let depth = s.doc.undo_depth();
     assert_eq!(fails(&mut s, "option_set_create", json!({"name": "layout"})), ErrorCode::Rejected);
     assert_eq!(fails(&mut s, "option_create", json!({"set": set, "name": "split"})), ErrorCode::Rejected);
     let third = run(&mut s, "option_create", json!({"set": "Layout"}));
@@ -173,7 +174,7 @@ fn options_are_renamed_made_primary_deleted_and_accepted() {
     assert_eq!(run(&mut s, "view_get", json!({"view": split_plan}))["design_options"], json!([]));
     assert!(s.project().view(ViewId(split_plan)).unwrap().design_options.is_empty());
     // Everything undoes back to the fixture.
-    while s.doc.undo_name().is_some_and(|n| n != "tx-view-options") {
+    while s.doc.undo_depth() > depth {
         s.doc.undo();
     }
     assert!(drawn(&mut s, split_plan).contains(&partition));
