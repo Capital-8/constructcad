@@ -123,6 +123,23 @@ impl Element {
         }
     }
 
+    /// Give a view-owned element (see [`Self::owner_view`]) another view.
+    /// Returns false, changing nothing, for elements of the model.
+    pub fn set_owner_view(&mut self, view: ViewId) -> bool {
+        let owner = match &mut self.kind {
+            ElementKind::Dimension(d) => &mut d.view,
+            ElementKind::Text(t) => &mut t.view,
+            ElementKind::CadImport(c) => &mut c.view,
+            ElementKind::DetailLine(l) => &mut l.view,
+            ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => &mut r.view,
+            ElementKind::LevelMark(m) => &mut m.view,
+            ElementKind::DetailComponent(c) => &mut c.view,
+            _ => return false,
+        };
+        *owner = view;
+        true
+    }
+
     /// The pipe or conduit run of MEP segments.
     pub fn as_segment(&self) -> Option<&crate::MepSegment> {
         match &self.kind {

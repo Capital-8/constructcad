@@ -24,6 +24,7 @@ browser-new = + 新增
 browser-open = 開啟
 browser-rename = 重新命名
 browser-duplicate = 複製
+browser-duplicate-detailing = 帶詳圖複製
 browser-delete = 刪除
 browser-place-on-sheet = 放置於目前工作表
 

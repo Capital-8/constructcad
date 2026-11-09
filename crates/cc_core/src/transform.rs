@@ -437,7 +437,9 @@ impl crate::EditCtx<'_> {
     /// copied stay on that wall's level). Elements whose type, level, view
     /// or wall no longer exist are skipped, and walls attached to a missing
     /// level become unconnected. Copies are built in the creation phase
-    /// (see [`crate::phase`]). Returns the new ids.
+    /// (see [`crate::phase`]). A copied dimension measures the copies of
+    /// what it measured; pasted in place (no move, no level) it keeps
+    /// measuring what was not copied. Returns the new ids.
     pub fn paste_elements(
         &mut self,
         set: &[Element],
@@ -533,12 +535,17 @@ impl crate::EditCtx<'_> {
                 }
                 created.push(self.add_element(c));
             }
-            // Copied dimensions follow the copies of what they measure, or nothing.
+            // Copied dimensions follow the copies of what they measure; pasted
+            // in place (into another view), they keep measuring the originals.
+            let in_place = *t == PlanTransform::IDENTITY && level.is_none();
             for id in &created[first..] {
                 let Some(ElementKind::Dimension(d)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 for r in d.all_refs_mut() {
                     *r = r.and_then(|r| match r.element() {
-                        Some(e) => remap.get(&e).map(|n| crate::DimRef { target: crate::RefTarget::Element(*n), ..r }),
+                        Some(e) => match remap.get(&e) {
+                            Some(n) => Some(crate::DimRef { target: crate::RefTarget::Element(*n), ..r }),
+                            None => in_place.then_some(r),
+                        },
                         None => Some(r),
                     });
                 }

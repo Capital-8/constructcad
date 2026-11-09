@@ -24,6 +24,7 @@ browser-new = + 新建
 browser-open = 打开
 browser-rename = 重命名
 browser-duplicate = 复制
+browser-duplicate-detailing = 带详图复制
 browser-delete = 删除
 browser-place-on-sheet = 放置到当前图纸
 

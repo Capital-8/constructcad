@@ -75,8 +75,9 @@ pub fn t_category(category: Category) -> String {
     crate::i18n::tr(category.key())
 }
 
-pub fn duplicate_view(state: &mut AppState, id: ViewId) {
-    if let Some(new) = run(state, views::ViewDuplicate { view: Ref::Id(id.0) }).as_ref().and_then(view_id) {
+/// Copy a view and open the copy; with `detailing`, what is drawn in it too.
+pub fn duplicate_view(state: &mut AppState, id: ViewId, detailing: bool) {
+    if let Some(new) = run(state, views::ViewDuplicate { view: Ref::Id(id.0), detailing }).as_ref().and_then(view_id) {
         state.open_view(new);
     }
 }
