@@ -460,6 +460,7 @@ mod tests {
             phase_created: created,
             phase_demolished: demolished,
             design_option: None,
+            paints: Vec::new(),
         };
         e.uid = crate::Uid::generate();
         p.elements.insert(id, e);

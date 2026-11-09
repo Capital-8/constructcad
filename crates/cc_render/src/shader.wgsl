@@ -6,6 +6,9 @@ struct Uniforms {
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
+// Material textures, one per layer (see `textures.rs`), and their sampler (repeating).
+@group(0) @binding(1) var tex_layers: texture_2d_array<f32>;
+@group(0) @binding(2) var tex_sampler: sampler;
 
 struct VsIn {
     @location(0) pos: vec3<f32>,
@@ -14,6 +17,8 @@ struct VsIn {
     /// Surface pattern over the face (textures style): rgb its color, w its kind.
     @location(3) fg: vec4<f32>,
     @location(4) bg: vec4<f32>,
+    /// Material texture: xy its coordinates in repeats, z its layer plus one (0 for none).
+    @location(5) tex: vec4<f32>,
 };
 
 struct VsOut {
@@ -23,6 +28,7 @@ struct VsOut {
     @location(2) world: vec3<f32>,
     @location(3) fg: vec4<f32>,
     @location(4) bg: vec4<f32>,
+    @location(5) tex: vec4<f32>,
 };
 
 // The target is a plain (non-sRGB) texture shown by egui, which expects
@@ -43,6 +49,7 @@ fn vs_main(v: VsIn) -> VsOut {
     o.world = v.pos;
     o.fg = v.fg;
     o.bg = v.bg;
+    o.tex = v.tex;
     return o;
 }
 
@@ -125,7 +132,13 @@ fn fs_face(i: VsOut) -> @location(0) vec4<f32> {
     // Derivatives in uniform control flow, before any branch.
     let fw = fwidth(uv);
     let w = max(max(fw.x, fw.y), 1e-5);
+    // Sampled in uniform control flow too; used only where the face has a texture.
+    let layer = max(i32(round(i.tex.z)) - 1, 0);
+    let texel = textureSample(tex_layers, tex_sampler, i.tex.xy, layer);
     var base = i.color.rgb;
+    if i.tex.z > 0.5 {
+        base = texel.rgb;
+    }
     if i.bg.w > 0.5 {
         base = mix(base, i.bg.rgb, pattern(i.bg.w, uv, w));
     }

@@ -30,6 +30,7 @@ pub mod materials;
 pub mod mep;
 pub mod modify;
 pub mod pad;
+pub mod paint;
 pub mod phases;
 pub mod project;
 pub mod query;
@@ -83,6 +84,7 @@ pub(crate) fn add_element(e: &mut EditCtx, level: LevelId, type_id: ElementTypeI
         phase_created: Default::default(),
         phase_demolished: None,
         design_option: None,
+        paints: Vec::new(),
     };
     if matches!(element.category(), Category::Door | Category::Window) {
         element.mark = e.project().next_mark(element.category());

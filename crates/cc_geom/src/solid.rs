@@ -25,7 +25,7 @@ fn newell(verts: &[DVec3]) -> DVec3 {
 }
 
 /// Smooth facets meeting at less than this angle (cosine) read as one surface.
-const SMOOTH_COS: f64 = 0.85;
+pub(crate) const SMOOTH_COS: f64 = 0.85;
 
 impl Face {
     pub fn new(verts: Vec<DVec3>, normal: DVec3) -> Self {
@@ -33,7 +33,7 @@ impl Face {
     }
 
     /// Orthonormal in-plane basis `(u, v)`.
-    fn basis(&self) -> (DVec3, DVec3) {
+    pub(crate) fn basis(&self) -> (DVec3, DVec3) {
         // A face built without a normal (its points on one line, or a normal
         // that was zero) gets the normal of its points; with none, any plane.
         let n = if self.normal.length_squared() > 0.5 { self.normal } else { newell(&self.verts) };
@@ -82,6 +82,35 @@ pub struct Solid {
     /// The material's appearance color and surface pattern (the textures style).
     pub appearance: [u8; 3],
     pub surface: cc_core::PatternFill,
+    /// The material the solid is made of (its texture in the textures style).
+    pub material: Option<String>,
+    /// Faces painted with another material, by face index (see [`crate::paint`]).
+    pub painted: std::collections::BTreeMap<usize, Look>,
+}
+
+/// How a material shows on a face: shading color, appearance color, surface
+/// pattern and transparency, and the material's name (for its texture).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Look {
+    pub material: Option<String>,
+    pub color: [u8; 3],
+    pub appearance: [u8; 3],
+    pub surface: cc_core::PatternFill,
+    pub transparency: f64,
+}
+
+impl Look {
+    /// The look of material `name`; `None` when the project has no such material.
+    pub fn of(project: &cc_core::Project, name: &str) -> Option<Self> {
+        let m = project.material(name)?;
+        Some(Self {
+            material: Some(m.name.clone()),
+            color: m.shading_color(),
+            appearance: m.appearance.color,
+            surface: m.graphics.surface,
+            transparency: project.material_transparency(name),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -102,6 +131,8 @@ impl Solid {
             detail: Default::default(),
             appearance: color,
             surface: Default::default(),
+            material: None,
+            painted: Default::default(),
         }
     }
 
@@ -121,7 +152,43 @@ impl Solid {
         if let Some(m) = project.material(name) {
             self.appearance = m.appearance.color;
             self.surface = m.graphics.surface;
+            self.material = Some(m.name.clone());
         }
+    }
+
+    /// How the solid's own material shows (its faces that are not painted).
+    pub fn look(&self) -> Look {
+        Look {
+            material: self.material.clone(),
+            color: self.color,
+            appearance: self.appearance,
+            surface: self.surface,
+            transparency: self.transparency,
+        }
+    }
+
+    /// The paint of face `face`, if it is painted.
+    pub fn paint_of(&self, face: usize) -> Option<&Look> {
+        self.painted.get(&face)
+    }
+
+    /// The nearest face along `ray`: its distance and index.
+    pub fn raycast_face(&self, ray: Ray) -> Option<(f64, usize)> {
+        let mut best: Option<(f64, usize)> = None;
+        for (i, face) in self.faces.iter().enumerate() {
+            for [a, b, c] in face.triangulate() {
+                let (Some(&pa), Some(&pb), Some(&pc)) = (face.verts.get(a), face.verts.get(b), face.verts.get(c))
+                else {
+                    continue;
+                };
+                if let Some(t) = ray_triangle(ray, pa, pb, pc)
+                    && best.is_none_or(|(bt, _)| t < bt)
+                {
+                    best = Some((t, i));
+                }
+            }
+        }
+        best
     }
 
     pub fn bounds(&self) -> Option<(DVec3, DVec3)> {

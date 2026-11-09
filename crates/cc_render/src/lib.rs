@@ -8,8 +8,10 @@ mod camera;
 mod mesh;
 mod renderer;
 mod select;
+pub mod textures;
 
 pub use camera::{pick_ray, view_proj};
-pub use mesh::{SceneMesh, SolidStyle, Tessellation, Vertex};
+pub use mesh::{SceneMesh, SolidStyle, Tessellation, Vertex, plane_axes};
 pub use renderer::Renderer3D;
 pub use select::elements_in_rect;
+pub use textures::TextureSet;

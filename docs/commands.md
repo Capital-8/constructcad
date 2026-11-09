@@ -12,7 +12,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
-- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
+- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
@@ -2167,6 +2167,57 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `material` | id or name | required | A level, type, view or material: its numeric id or its name. |
+
+### `material_texture_set`
+
+*edit* — Give a material an image texture (shown on its faces in the textures visual style of 3D views), or change how its texture is laid out. The image comes from `path` or from `data` (base64); with neither, the current texture's size, offset and rotation change. One repeat covers `width` × `height` meters on the faces: on floors and other horizontal faces along plan X and Y, on walls and slopes level across the face and up it.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `material` | id or name | required | A level, type, view or material: its numeric id or its name. |
+| `data` | string | optional | The image file's bytes as base64 (instead of `path`). |
+| `height` | number | optional | Height of one repeat, meters (default: the current one, else the width in the image's proportions). |
+| `offset` | [x, y] | optional | Where a repeat starts, `[x, y]` meters along the face (default: the current one, else `[0, 0]`). |
+| `path` | string | optional | Path of a PNG, JPEG, GIF, BMP or WebP file. |
+| `rotation` | number | optional | Rotation of the image on the faces, degrees counter-clockwise (default: the current one, else 0). |
+| `width` | number | optional | Width of one repeat, meters (default: the current one, else 1 m). |
+
+### `material_texture_clear`
+
+*edit* — Take a material's texture away (its faces show the appearance color).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `material` | id or name | required | A level, type, view or material: its numeric id or its name. |
+
+### `paint`
+
+*edit* — Paint a face of an element with a material: the face at `point` (and those touching it in its plane, or the rest of a curved surface). It shows the material's colors, surface pattern and texture over the type's material; painting a painted surface again replaces its paint. The paint follows the face when the element changes (the face turned like it that passes nearest its point).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `element` | integer | required | Element id. |
+| `material` | id or name | required | Material name (or index in `materials_list`). |
+| `point` | [number, …] | required | A point on the face, `[x, y, z]` meters (within 5 cm of it). |
+| `normal` | [number, …] | optional | The face's outward normal, to pick between faces meeting at the point (a 3D pick gives it); default: the nearest face. |
+
+### `paint_remove`
+
+*edit* — Take the paint off a face of an element (the one at `point`), or every paint of the element when no point is given.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `element` | integer | required | Element id. |
+| `normal` | [number, …] | optional | The face's outward normal (see `paint`). |
+| `point` | [number, …] | optional | A point on the painted face, `[x, y, z]` meters (default: every paint of the element). |
+
+### `paints_list`
+
+*query* — The painted faces of an element (or of every element): each paint's material, point and normal, and the faces and area it covers now (none when no face is turned like it any more).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `element` | integer | optional | Element id (default: every element with paints). |
 
 ## Levels and views
 

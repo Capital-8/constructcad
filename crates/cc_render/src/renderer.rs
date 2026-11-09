@@ -1,3 +1,4 @@
+use crate::textures::{LAYER_SIZE, TextureSet, mip_count};
 use crate::{SceneMesh, Vertex, view_proj};
 use cc_core::CameraState;
 use wgpu::util::DeviceExt;
@@ -42,7 +43,11 @@ pub struct Renderer3D {
     blended: wgpu::RenderPipeline,
     edges: wgpu::RenderPipeline,
     uniforms: wgpu::Buffer,
+    bind_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
+    /// The generation of the textures uploaded (see [`TextureSet::generation`]).
+    textures: Option<u64>,
     buffers: Option<Buffers>,
     targets: Option<Targets>,
     /// Camera and size of the frame in the targets, while it is current:
@@ -60,16 +65,34 @@ impl Renderer3D {
         });
         let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("cc_render uniforms"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("cc_render layout"),
@@ -82,14 +105,20 @@ impl Renderer3D {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("cc_render uniforms"),
-            layout: &bind_layout,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() }],
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("cc_render textures"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
         });
+        // No textures yet: an empty (black) array of two 1-pixel layers.
+        let layers = Self::texture_array(device, 1, 2, 1).create_view(&Self::array_view());
+        let bind_group = Self::bind(device, &bind_layout, &uniforms, &layers, &sampler);
 
-        let attributes =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4];
+        let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4];
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -135,7 +164,100 @@ impl Renderer3D {
         let faces = pipeline("cc_render faces", tri, "fs_face", face_bias, None);
         let blended = pipeline("cc_render blended", tri, "fs_face", face_bias, Some(wgpu::BlendState::ALPHA_BLENDING));
         let edges = pipeline("cc_render edges", wgpu::PrimitiveTopology::LineList, "fs_edge", Default::default(), None);
-        Self { faces, blended, edges, uniforms, bind_group, buffers: None, targets: None, drawn: None, unlit: false }
+        Self {
+            faces,
+            blended,
+            edges,
+            uniforms,
+            bind_layout,
+            sampler,
+            bind_group,
+            textures: None,
+            buffers: None,
+            targets: None,
+            drawn: None,
+            unlit: false,
+        }
+    }
+
+    /// A texture array of `layers` square layers of `size` pixels with `mips` levels.
+    fn texture_array(device: &wgpu::Device, size: u32, layers: u32, mips: u32) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("cc_render textures"),
+            size: wgpu::Extent3d { width: size, height: size, depth_or_array_layers: layers },
+            mip_level_count: mips,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+    }
+
+    /// Views of the texture array are arrays even with one layer.
+    fn array_view() -> wgpu::TextureViewDescriptor<'static> {
+        wgpu::TextureViewDescriptor {
+            label: Some("cc_render textures"),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        }
+    }
+
+    fn bind(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        uniforms: &wgpu::Buffer,
+        layers: &wgpu::TextureView,
+        sampler: &wgpu::Sampler,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("cc_render uniforms"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(layers) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) },
+            ],
+        })
+    }
+
+    /// Upload the materials' textures (when they changed since the last
+    /// call); meshes built with [`SceneMesh::build_textured`] and the same
+    /// set refer to their layers.
+    pub fn set_textures(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, set: &TextureSet) {
+        if self.textures == Some(set.generation()) {
+            return;
+        }
+        self.textures = Some(set.generation());
+        self.drawn = None;
+        let layers = set.len().max(2) as u32;
+        let (size, mips) = if set.is_empty() { (1, 1) } else { (LAYER_SIZE, mip_count()) };
+        let texture = Self::texture_array(device, size, layers, mips);
+        for level in 0..mips {
+            let side = (size >> level).max(1);
+            for (layer, pixels) in set.level(level as usize).enumerate() {
+                if pixels.len() != (side * side * 4) as usize {
+                    continue;
+                }
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &texture,
+                        mip_level: level,
+                        origin: wgpu::Origin3d { x: 0, y: 0, z: layer as u32 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    pixels,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(side * 4),
+                        rows_per_image: Some(side),
+                    },
+                    wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
+                );
+            }
+        }
+        let view = texture.create_view(&Self::array_view());
+        self.bind_group = Self::bind(device, &self.bind_layout, &self.uniforms, &view, &self.sampler);
     }
 
     pub fn upload(&mut self, device: &wgpu::Device, mesh: &SceneMesh) {

@@ -100,23 +100,34 @@ impl Look {
 }
 
 /// The fill of a face of `solid` in `style` (none for the wireframe).
-fn face_color(solid: &cc_geom::Solid, normal: DVec3, frame: &Frame, style: VisualStyle) -> Option<[u8; 4]> {
+fn face_color(
+    solid: &cc_geom::Solid,
+    face: usize,
+    normal: DVec3,
+    frame: &Frame,
+    style: VisualStyle,
+) -> Option<[u8; 4]> {
+    // A painted face shows its paint.
+    let paint = solid.paint_of(face);
+    let color = paint.map_or(solid.color, |p| p.color);
+    let appearance = paint.map_or(solid.appearance, |p| p.appearance);
+    let transparency = paint.map_or(solid.transparency, |p| p.transparency);
     let mut c = match style {
         VisualStyle::Wireframe => return None,
         VisualStyle::HiddenLine => [255, 255, 255, 255],
-        VisualStyle::Shaded => shade(solid.color, normal, frame),
-        VisualStyle::ConsistentColors => [solid.color[0], solid.color[1], solid.color[2], 255],
-        VisualStyle::Textures => shade(solid.appearance, normal, frame),
+        VisualStyle::Shaded => shade(color, normal, frame),
+        VisualStyle::ConsistentColors => [color[0], color[1], color[2], 255],
+        VisualStyle::Textures => shade(appearance, normal, frame),
     };
     // Transparent materials let what is behind show through (never fully: alpha 0 means "no hit").
-    c[3] = ((1.0 - solid.transparency.clamp(0.0, 1.0)) * 255.0).round().clamp(40.0, 255.0) as u8;
+    c[3] = ((1.0 - transparency.clamp(0.0, 1.0)) * 255.0).round().clamp(40.0, 255.0) as u8;
     Some(c)
 }
 
-/// The surface pattern of `solid` over a face outline `pts` (the textures
-/// style), each line with the pattern's color.
-fn surface_lines(d: &mut Drawing2D, solid: &cc_geom::Solid, pts: &[DVec2], spacing: f64) {
-    let fill = solid.surface;
+/// The surface pattern of face `face` of `solid` (its paint's, when painted)
+/// over its outline `pts` (the textures style), each line with the pattern's color.
+fn surface_lines(d: &mut Drawing2D, solid: &cc_geom::Solid, face: usize, pts: &[DVec2], spacing: f64) {
+    let fill = solid.paint_of(face).map_or(solid.surface, |p| p.surface);
     for (pattern, color) in [(fill.background, fill.background_color), (fill.foreground, fill.foreground_color)] {
         if matches!(pattern, cc_core::Pattern::Solid | cc_core::Pattern::None) {
             continue;
@@ -143,8 +154,9 @@ struct ProjectedFace {
     pts: Vec<DVec2>,
     color: Option<[u8; 4]>,
     element: ElementId,
-    /// Index of its solid in the geometry (its surface pattern).
+    /// Index of its solid in the geometry and of the face in it (its surface pattern).
     solid: usize,
+    face: usize,
     edges: Vec<(DVec2, DVec2)>,
 }
 
@@ -167,7 +179,7 @@ pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>, look: 
     for (index, solid) in geom.solids.iter().enumerate().filter(|(_, s)| shown(s)) {
         let edges = solid.feature_edges();
         let seams = solid.smooth_edges();
-        for ((face, mut face_edges), seams) in solid.faces.iter().zip(edges).zip(seams) {
+        for (face_index, ((face, mut face_edges), seams)) in solid.faces.iter().zip(edges).zip(seams).enumerate() {
             // The wireframe sees through: faces turned away show their edges too.
             if face.normal.dot(frame.forward) > -1e-6 && style.fills() {
                 continue;
@@ -192,9 +204,10 @@ pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>, look: 
                 normal: face.normal,
                 point: verts[0],
                 pts: verts.iter().map(|v| frame.project(*v)).collect(),
-                color: face_color(solid, face.normal, frame, style),
+                color: face_color(solid, face_index, face.normal, frame, style),
                 element: solid.element,
                 solid: index,
+                face: face_index,
                 edges,
             });
         }
@@ -209,7 +222,7 @@ pub fn render(geom: &ModelGeometry, frame: &Frame, cut: Option<CutStyle>, look: 
                     && let Some(solid) = geom.solids.get(f.solid)
                 {
                     d.fill(f.pts.clone(), color, Some(f.element));
-                    surface_lines(&mut d, solid, &f.pts, look.spacing);
+                    surface_lines(&mut d, solid, f.face, &f.pts, look.spacing);
                 } else {
                     d.fill(f.pts, color, Some(f.element));
                 }
@@ -562,6 +575,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         (doc, id)
@@ -686,6 +700,7 @@ mod tests {
                 color: Some([0; 4]),
                 element: ElementId(1),
                 solid: 0,
+                face: 0,
                 edges: Vec::new(),
             }
         };

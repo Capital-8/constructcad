@@ -27,6 +27,9 @@ pub struct Element {
     /// shown with every option; see [`crate::design_option`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design_option: Option<crate::OptionId>,
+    /// Faces painted with a material of their own (see [`crate::paint`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paints: Vec<crate::paint::FacePaint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -271,6 +274,7 @@ impl Element {
         if let Some(Some(sketch)) = self.drawn_sketch_mut() {
             sketch.transform(&t);
         }
+        self.paints.iter_mut().for_each(|p| p.translate(delta));
         match &mut self.kind {
             ElementKind::Wall(w) => {
                 w.start += delta;

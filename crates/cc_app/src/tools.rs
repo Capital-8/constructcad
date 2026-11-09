@@ -150,6 +150,11 @@ pub enum Tool {
     Demolish,
     /// Click curtain walls to edit their grids and panels (options in `AppState::curtain`).
     CurtainGrid,
+    /// Click faces in a 3D view to paint them with `AppState::paint_material`
+    /// (or to take their paint off).
+    Paint {
+        remove: bool,
+    },
 }
 
 impl Tool {
@@ -207,6 +212,8 @@ impl Tool {
             Tool::MatchType => "tool-match-type",
             Tool::Demolish => "tool-demolish",
             Tool::CurtainGrid => "tool-curtain-grid",
+            Tool::Paint { remove: false } => "tool-paint",
+            Tool::Paint { remove: true } => "tool-remove-paint",
             Tool::Text { .. } => "tool-text",
             Tool::DetailLine => "tool-detail-line",
             Tool::LevelMark { .. } => "tool-level-mark",
@@ -1432,6 +1439,13 @@ pub fn handle(
                 }
                 select(ui, resp, painter, state, false, xf, drawing);
             }
+        }
+        // Faces are painted in 3D views.
+        (Tool::Paint { .. }, _) => {
+            if resp.clicked() {
+                state.message = t!("hint-paint-3d");
+            }
+            select(ui, resp, painter, state, is_plan, xf, drawing);
         }
         (_, None) | (_, Some(_)) if !is_plan => {
             if resp.clicked() {

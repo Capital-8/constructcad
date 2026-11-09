@@ -83,6 +83,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::MatchType => Icon::MatchType,
         Tool::Demolish => Icon::Demolish,
         Tool::CurtainGrid => Icon::CurtainGrid,
+        Tool::Paint { .. } => Icon::Paint,
         Tool::AddLeader { .. } => Icon::Leader,
         Tool::Opening { floor: false, .. } => category_icon(Category::Roof),
         Tool::Opening { floor: true, .. } => category_icon(Category::Floor),
@@ -762,7 +763,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     });
     group(ui, t!("group-measure"), |ui| command_button(ui, state, Measure));
     group(ui, t!("group-geometry"), |ui| {
-        command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry, AttachTop, DetachTop])
+        command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry, AttachTop, DetachTop, Paint, RemovePaint])
     });
     group(ui, t!("group-sketch"), |ui| command_buttons(ui, state, &[EditBoundary, EditProfile]));
     group(ui, t!("prop-title-block"), |ui| command_button(ui, state, EditTitleBlock));
@@ -1270,6 +1271,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("hint-demolish")));
             }
             Tool::CurtainGrid => crate::curtain_ui::options_bar(ui, state),
+            Tool::Paint { remove } => crate::paint_ui::options_bar(ui, state, remove),
             Tool::Mirror { draw } => {
                 ui.checkbox(&mut state.modify.mirror_copy, t!("opt-copy"));
                 ui.label(theme::muted(if draw { t!("hint-mirror-draw") } else { t!("hint-mirror-pick") }));

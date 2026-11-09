@@ -319,6 +319,7 @@ impl ModelGeometry {
         geom.build_mep(project);
         geom.apply_joins(project);
         geom.build_rooms(project);
+        crate::paint::apply(project, &mut geom.solids);
         geom
     }
 
@@ -1240,6 +1241,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 });
             }
             let id = ElementId(e.alloc_id());
@@ -1260,6 +1262,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
             let id = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -1273,6 +1276,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
         });
         doc
@@ -1298,6 +1302,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
         });
         (doc, beam)
@@ -1392,6 +1397,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 })
             };
             let arc =
@@ -1502,6 +1508,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 })
             };
             let top = WallTop::Level { level: upper, offset: 0.0 };

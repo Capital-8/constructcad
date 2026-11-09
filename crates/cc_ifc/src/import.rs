@@ -1197,6 +1197,7 @@ impl<'a> Importer<'a> {
             phase_created: Default::default(),
             phase_demolished: None,
             design_option: None,
+            paints: Vec::new(),
         };
         *self.report.imported.entry(element.category()).or_default() += 1;
         self.p.elements.insert(id, element);
@@ -2134,6 +2135,7 @@ impl<'a> Importer<'a> {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             };
             *self.report.imported.entry(Category::Pad).or_default() += 1;
             self.p.elements.insert(pid, element);
@@ -2569,6 +2571,7 @@ impl<'a> Importer<'a> {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             };
             *self.report.imported.entry(Category::Grid).or_default() += 1;
             self.p.elements.insert(element, el);

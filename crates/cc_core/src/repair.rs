@@ -331,6 +331,12 @@ impl Project {
         // Sketches that are invalid or no longer make their element's outline.
         repairs += self.elements.values_mut().map(|e| usize::from(e.drop_stale_sketch())).sum::<usize>();
 
+        // Painted faces with bad numbers or of materials that are gone.
+        let materials: std::collections::BTreeSet<String> = self.materials.iter().map(|m| m.name.clone()).collect();
+        for e in self.elements.values_mut().filter(|e| !e.paints.is_empty()) {
+            repairs += crate::paint::repair(&mut e.paints, &|m| materials.contains(m));
+        }
+
         // Mass floors on levels that are gone.
         let levels: std::collections::BTreeSet<_> = self.levels.iter().map(|l| l.id).collect();
         for e in self.elements.values_mut() {
@@ -944,6 +950,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 },
             );
             id
@@ -1013,6 +1020,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 },
             );
             id
@@ -1060,6 +1068,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             };
             p.elements.insert(id, e);
             ids.push(id);
@@ -1093,6 +1102,7 @@ mod tests {
             phase_created: Default::default(),
             phase_demolished: None,
             design_option: None,
+            paints: Vec::new(),
         };
         p.elements.insert(id, e);
         assert_eq!(p.repair(), 3, "one too many, a NaN, a negative slope");
@@ -1123,6 +1133,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             };
             p.elements.insert(id, e);
             id
@@ -1194,6 +1205,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 },
             );
         }
