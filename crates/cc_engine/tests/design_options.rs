@@ -147,7 +147,9 @@ fn options_are_renamed_made_primary_deleted_and_accepted() {
     assert_eq!(fails(&mut s, "option_set_create", json!({"name": "layout"})), ErrorCode::Rejected);
     assert_eq!(fails(&mut s, "option_create", json!({"set": set, "name": "split"})), ErrorCode::Rejected);
     let third = run(&mut s, "option_create", json!({"set": "Layout"}));
-    assert_eq!(third["option"]["name"], json!("option-default-name"));
+    // A default name in the session's language (which follows the system's).
+    let name = third["option"]["name"].as_str().unwrap_or_default();
+    assert!(!name.is_empty() && name != "Open" && name != "Split", "{name}");
     let third = id(&third["option"]);
     run(&mut s, "option_set", json!({"option": split, "name": "Two rooms", "primary": true}));
     assert!(drawn(&mut s, plan).contains(&partition));
