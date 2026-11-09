@@ -456,9 +456,30 @@ fn tag_is(data: &[u8], offset: usize, tag: &str) -> bool {
 
 // ── the parse ───────────────────────────────────────────────────────────
 
+/// Stack of the thread a parse runs on. The readers recurse up to their depth limits
+/// (legacy objects nest 256 deep), which a hostile file reaches: an optimized build needs
+/// more than the 1 MiB of the Windows main thread there and a debug build more than 8 MiB.
+/// The stack is reserved, not committed, so a large one costs only address space.
+pub const PARSE_STACK_BYTES: usize = 64 * 1024 * 1024;
+
 /// Reads a whole .skp buffer: legacy (pre-2021) files go to the legacy reader,
-/// VFF files are read here.
+/// VFF files are read here. The parse runs on its own thread with a
+/// [`PARSE_STACK_BYTES`] stack, so the caller's stack size does not matter.
 pub fn full_parse(data: &[u8], o: &ParseOptions) -> Result<RawParsed, SkpParseError> {
+    std::thread::scope(|scope| {
+        let worker = std::thread::Builder::new()
+            .name("skp-parse".into())
+            .stack_size(PARSE_STACK_BYTES)
+            .spawn_scoped(scope, || full_parse_here(data, o));
+        match worker {
+            Ok(handle) => handle.join().unwrap_or_else(|payload| std::panic::resume_unwind(payload)),
+            Err(e) => Err(SkpParseError::new(format!("cannot start the parse thread: {e}"))),
+        }
+    })
+}
+
+/// [`full_parse`] on the calling thread.
+fn full_parse_here(data: &[u8], o: &ParseOptions) -> Result<RawParsed, SkpParseError> {
     emit_log(o, LogLevel::Information, &format!("Parsing buffer ({} bytes)", data.len()));
     if !valid_header(data) {
         return Err(SkpParseError::at_stage("Not a valid SketchUp file (bad header magic)", ParseStage::Header));

@@ -224,6 +224,35 @@ fn deep_component_chain_and_exponential_dag_are_rejected() {
     );
 }
 
+/// A legacy v18 header + CMaterial class record whose preamble's CAttributeContainer chains
+/// 5,000 nested 2-byte class-ref tags (0x8001).
+fn nested_legacy_class_refs() -> Vec<u8> {
+    let mut legacy = Vec::new();
+    legacy.extend_from_slice(&[0xff, 0xfe, 0xff, 0x0e]);
+    for b in b"SketchUp Model" {
+        legacy.push(*b);
+        legacy.push(0);
+    }
+    legacy.extend_from_slice(&[0xff, 0xfe, 0xff, 0x0e]);
+    for b in b"{18.0.0}" {
+        legacy.push(*b);
+        legacy.push(0);
+    }
+    legacy.resize(96, 0);
+    // Material count = 2, followed by CMaterial class declaration (slot 0)
+    legacy.extend_from_slice(&2u32.to_le_bytes());
+    legacy.extend_from_slice(&0xFFFFu16.to_le_bytes());
+    legacy.extend_from_slice(&0u16.to_le_bytes()); // schema
+    legacy.extend_from_slice(&9u16.to_le_bytes());
+    legacy.extend_from_slice(b"CMaterial");
+    // CMaterial::read -> preamble -> object(Some("CAttributeContainer")):
+    // First tag 0x8001 registers slot 1 as CAttributeContainer and enters CAttributeContainer::read -> preamble
+    for _ in 0..5_000 {
+        legacy.extend_from_slice(&0x8001u16.to_le_bytes());
+    }
+    legacy
+}
+
 #[test]
 fn legacy_mfc_object_recursion_and_attr_bombs_are_rejected() {
     // Run on a thread with a 32 MiB stack: unoptimized Windows debug builds
@@ -234,35 +263,25 @@ fn legacy_mfc_object_recursion_and_attr_bombs_are_rejected() {
             use cc_skp::ParseOptions;
             use cc_skp::legacy::parse_legacy;
 
-            // Craft a legacy v18 header + CMaterial class record whose preamble's
-            // CAttributeContainer chains 5,000 nested 2-byte class-ref tags (0x8001).
-            let mut legacy = Vec::new();
-            legacy.extend_from_slice(&[0xff, 0xfe, 0xff, 0x0e]);
-            for b in b"SketchUp Model" {
-                legacy.push(*b);
-                legacy.push(0);
-            }
-            legacy.extend_from_slice(&[0xff, 0xfe, 0xff, 0x0e]);
-            for b in b"{18.0.0}" {
-                legacy.push(*b);
-                legacy.push(0);
-            }
-            legacy.resize(96, 0);
-            // Material count = 2, followed by CMaterial class declaration (slot 0)
-            legacy.extend_from_slice(&2u32.to_le_bytes());
-            legacy.extend_from_slice(&0xFFFFu16.to_le_bytes());
-            legacy.extend_from_slice(&0u16.to_le_bytes()); // schema
-            legacy.extend_from_slice(&9u16.to_le_bytes());
-            legacy.extend_from_slice(b"CMaterial");
-            // CMaterial::read -> preamble -> object(Some("CAttributeContainer")):
-            // First tag 0x8001 registers slot 1 as CAttributeContainer and enters CAttributeContainer::read -> preamble
-            for _ in 0..5_000 {
-                legacy.extend_from_slice(&0x8001u16.to_le_bytes());
-            }
+            let legacy = nested_legacy_class_refs();
             assert!(
                 parse_legacy(&legacy, &ParseOptions::default()).is_err(),
                 "5,000 nested legacy MFC object class-refs must be rejected without stack overflow"
             );
+        })
+        .unwrap();
+    handle.join().unwrap();
+}
+
+/// The public parse runs on its own large stack, so the hostile chain above is refused even
+/// when the caller's thread has only 1 MiB (the Windows main thread), in debug builds too.
+#[test]
+fn legacy_object_recursion_is_rejected_on_a_small_caller_stack() {
+    let handle = std::thread::Builder::new()
+        .stack_size(1024 * 1024)
+        .spawn(|| {
+            let file = cc_skp::SkpFile::from_buffer(nested_legacy_class_refs());
+            assert!(file.parse(&cc_skp::ParseOptions::default()).is_err());
         })
         .unwrap();
     handle.join().unwrap();
