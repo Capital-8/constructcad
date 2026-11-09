@@ -313,6 +313,8 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     | TypeData::Ramp { material, .. }
     | TypeData::Pipe { material, .. }
     | TypeData::Conduit { material, .. }
+    | TypeData::CableTray { material, .. }
+    | TypeData::Valve { material, .. }
     | TypeData::Railing { material, .. }
     | TypeData::Topography { material, .. }
     | TypeData::Sweep { material, .. } = &ty.data
@@ -333,6 +335,8 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     | TypeData::Ramp { material, .. }
                     | TypeData::Pipe { material, .. }
                     | TypeData::Conduit { material, .. }
+                    | TypeData::CableTray { material, .. }
+                    | TypeData::Valve { material, .. }
                     | TypeData::Railing { material, .. }
                     | TypeData::Topography { material, .. }
                     | TypeData::Sweep { material, .. } => *material = m,
@@ -735,6 +739,54 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         *diameter = v.clamp(0.005, 2.0);
                     }
                 });
+            });
+        }
+        TypeData::CableTray { width, height, style, .. } => {
+            crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
+                length_row(ui, state, &t!("col-width"), tid, "tw", width, |d, v| {
+                    if let TypeData::CableTray { width, .. } = d {
+                        *width = v.clamp(0.02, cc_core::mep::MAX_TRAY_WIDTH);
+                    }
+                });
+                length_row(ui, state, &t!("col-height"), tid, "th", height, |d, v| {
+                    if let TypeData::CableTray { height, .. } = d {
+                        *height = v.clamp(0.01, cc_core::mep::MAX_TRAY_HEIGHT);
+                    }
+                });
+                let mut s = style;
+                row(ui, &t!("prop-tray-style"), |ui| {
+                    egui::ComboBox::from_id_salt(("tray-style", tid.0)).selected_text(tr(s.key())).show_ui(ui, |ui| {
+                        for option in cc_core::TrayStyle::ALL {
+                            ui.selectable_value(&mut s, option, tr(option.key()));
+                        }
+                    });
+                });
+                if s != style {
+                    update(state, tid, "tray-style", |t| {
+                        if let TypeData::CableTray { style, .. } = &mut t.data {
+                            *style = s;
+                        }
+                    });
+                }
+            });
+        }
+        TypeData::Valve { kind, .. } => {
+            crate::table::section(ui, "type-valve", t!("section-mep"), |ui| {
+                let mut k = kind;
+                row(ui, &t!("prop-valve-kind"), |ui| {
+                    egui::ComboBox::from_id_salt(("valve-kind", tid.0)).selected_text(tr(k.key())).show_ui(ui, |ui| {
+                        for option in cc_core::ValveKind::ALL {
+                            ui.selectable_value(&mut k, option, tr(option.key()));
+                        }
+                    });
+                });
+                if k != kind {
+                    update(state, tid, "valve-kind", |t| {
+                        if let TypeData::Valve { kind, .. } = &mut t.data {
+                            *kind = k;
+                        }
+                    });
+                }
             });
         }
         TypeData::Ramp { width, thickness, rules, .. } => {

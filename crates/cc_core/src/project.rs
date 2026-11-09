@@ -670,8 +670,13 @@ impl Project {
         self.systems.get(&id)
     }
 
-    /// Display color of a pipe, conduit or device: its (first) system's, or gray.
+    /// Display color of a pipe, conduit, cable tray or device: its (first)
+    /// system's, or gray; a valve takes its pipe's.
     pub fn system_color(&self, element: &Element) -> [u8; 3] {
+        let element = match &element.kind {
+            ElementKind::Valve(v) => self.valve_host(v).map_or(element, |(host, _)| host),
+            _ => element,
+        };
         element.systems().first().and_then(|s| self.system(*s)).map_or([128, 128, 128], crate::MepSystem::color)
     }
 
@@ -683,7 +688,7 @@ impl Project {
         }
     }
 
-    /// A pipe or conduit run as seen from `level`, with its elevations above
+    /// A pipe, conduit or cable tray run as seen from `level`, with its elevations above
     /// that level: the level's own runs, and the vertical runs of other levels
     /// that pass through it (risers between floors, reaching at least its floor
     /// and starting below its top). `None` for other elements and runs.
@@ -705,7 +710,7 @@ impl Project {
         })
     }
 
-    /// The pipe and conduit runs seen from `level` (see [`Project::segment_at`]).
+    /// The pipe, conduit and cable tray runs seen from `level` (see [`Project::segment_at`]).
     pub fn segments_at(&self, level: LevelId) -> impl Iterator<Item = (&Element, crate::MepSegment)> {
         self.elements.values().filter_map(move |e| Some((e, self.segment_at(e, level)?)))
     }
@@ -1007,6 +1012,23 @@ impl Project {
             ElementKind::Rebar(r) if r.host == host => Some((e, r)),
             _ => None,
         })
+    }
+
+    /// The valves on pipe `host`.
+    pub fn valves_of(&self, host: ElementId) -> impl Iterator<Item = (&Element, &crate::Valve)> {
+        self.elements.values().filter_map(move |e| match &e.kind {
+            ElementKind::Valve(v) if v.host == host => Some((e, v)),
+            _ => None,
+        })
+    }
+
+    /// A valve's pipe element and its run.
+    pub fn valve_host(&self, valve: &crate::Valve) -> Option<(&Element, &crate::MepSegment)> {
+        let host = self.element(valve.host)?;
+        match &host.kind {
+            ElementKind::Pipe(s) => Some((host, s)),
+            _ => None,
+        }
     }
 
     pub fn elements_of(&self, category: Category) -> impl Iterator<Item = &Element> {

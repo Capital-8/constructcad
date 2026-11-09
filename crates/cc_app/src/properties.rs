@@ -660,7 +660,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             reinforcement(ui, state, id);
         }
         ElementKind::Rebar(r) => rebar_props(ui, state, &el, r),
-        ElementKind::Pipe(s) | ElementKind::Conduit(s) => segment_props(ui, state, &el, s),
+        ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => segment_props(ui, state, &el, s),
+        ElementKind::Valve(v) => valve_props(ui, state, &el, v),
         ElementKind::Beam(b) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
                 level_row(ui, state, &el);
@@ -1312,7 +1313,8 @@ pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
     }
 }
 
-/// A pipe or conduit: elevations of its ends, its system or circuits, length and slope.
+/// A pipe, conduit or cable tray: elevations of its ends, its system or
+/// circuits, size, length and slope.
 fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::MepSegment) {
     let id = el.id;
     let pipe = matches!(el.kind, ElementKind::Pipe(_));
@@ -1343,7 +1345,7 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
                 });
             }
         } else {
-            // A conduit carries any number of circuits.
+            // A conduit or cable tray carries any number of circuits.
             let circuits: Vec<(cc_core::SystemId, String)> = state
                 .project()
                 .systems
@@ -1367,12 +1369,52 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
         }
     });
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
-        if let Some(d) = state.project().element_type(el.type_id).and_then(|t| t.diameter()) {
+        let ty = state.project().element_type(el.type_id);
+        if let Some(d) = ty.and_then(|t| t.diameter()) {
             readonly_row(ui, &t!("col-diameter"), format::length(d));
+        }
+        if let Some((width, height, style)) = ty.and_then(|t| t.tray_section()) {
+            readonly_row(ui, &t!("col-width"), format::length(width));
+            readonly_row(ui, &t!("col-height"), format::length(height));
+            readonly_row(ui, &t!("prop-tray-style"), tr(style.key()));
         }
         readonly_row(ui, &t!("prop-length"), format::length(s.length()));
         if pipe && !s.is_vertical() {
             readonly_row(ui, &t!("col-slope"), format::slope(s.slope()));
+        }
+    });
+}
+
+/// A valve: its pipe, where it sits along it, its kind and the pipe's size and system.
+fn valve_props(ui: &mut Ui, state: &mut AppState, el: &Element, v: &cc_core::Valve) {
+    let id = el.id;
+    let project = state.project();
+    let host = project.valve_host(v).map(|(pipe, run)| {
+        let label = if pipe.mark.is_empty() { tr(pipe.category().key()) } else { pipe.mark.clone() };
+        let system = pipe.systems().first().and_then(|s| project.system(*s)).map(|s| s.name.clone());
+        let diameter = project.element_type(pipe.type_id).and_then(|t| t.diameter());
+        (label, run.length(), system, diameter)
+    });
+    let kind = project.element_type(el.type_id).and_then(|t| t.valve_kind());
+    section(ui, "constraints", t!("section-constraints"), |ui| {
+        let Some((label, length, _, _)) = &host else { return };
+        readonly_row(ui, &t!("prop-valve-pipe"), label.clone());
+        let length = *length;
+        length_row(ui, state, &t!("prop-valve-distance"), id, "valve-at", v.at.min(length), move |e, x| {
+            if let ElementKind::Valve(v) = &mut e.kind {
+                v.at = x.clamp(0.0, length);
+            }
+        });
+    });
+    section(ui, "mep-system", t!("section-mep"), |ui| {
+        if let Some(kind) = kind {
+            readonly_row(ui, &t!("prop-valve-kind"), tr(kind.key()));
+        }
+        if let Some((_, _, system, diameter)) = &host {
+            readonly_row(ui, &t!("col-system"), system.clone().unwrap_or_else(|| t!("value-none")));
+            if let Some(d) = diameter {
+                readonly_row(ui, &t!("col-diameter"), format::length(*d));
+            }
         }
     });
 }

@@ -92,7 +92,7 @@ Os comandos de arquivo do motor (`project_open`, `project_save`, `ifc_import`, `
 | Ctrl+X / Ctrl+C / Ctrl+V | Recortar / Copiar / Colar |
 | Delete | Excluir a seleção |
 | Esc | Cancelar a operação, sair da ferramenta, limpar a seleção |
-| Backspace | Ao desenhar uma sequência de paredes, vigas, tubos ou eletrodutos: desfaz o último segmento e continua do início dele (Ctrl+Z também; Ctrl+Y o refaz); o último ponto de um guarda-corpo |
+| Backspace | Ao desenhar uma sequência de paredes, vigas, tubos, eletrodutos ou eletrocalhas: desfaz o último segmento e continua do início dele (Ctrl+Z também; Ctrl+Y o refaz); o último ponto de um guarda-corpo |
 | Espaço | Girar ou inverter a seleção ou o elemento sendo posicionado |
 
 As teclas de duas letras funcionam com o foco numa vista e nenhum campo de texto em edição. O README lista todas elas, e cada dica mostra também o seu atalho.
@@ -213,6 +213,18 @@ Cortinas de vidro são paredes de um tipo cortina (um projeto sem tipo cortina g
 - **Perfis**: o tipo guarda o perfil e o material. `sweep_type_create` cria um tipo a partir de pontos `[x, y]` ou de `curves` (linhas, arcos, círculos, retângulos… formando um contorno fechado, então uma meia-cana ou uma calha meia-cana se desenham com arcos), e `sweep_profile_set` redesenha o perfil de um tipo; os dois estão na paleta de comandos. Um perfil precisa ser um contorno fechado que não se cruza.
 - **Editar perfil** (*Modificar → Esboço*, com um perfil varrido selecionado, ou o botão em *Editar tipo…* do seu tipo) abre o perfil do tipo num esboço que ocupa o lugar das vistas: no seu plano, x é a transversal (para fora, à esquerda do caminho) e y sobe a partir do caminho, com o ponto do caminho marcado onde os eixos se cruzam. O esboço tem o ribbon de sempre, as ferramentas de desenho e de modificação, as alças e o desfazer; os pontos se prendem aos pontos do próprio esboço, ao ponto do caminho, aos eixos e aos milímetros. *Concluir* redesenha o perfil de todos os perfis varridos do tipo num só passo de desfazer (um contorno aberto ou que se cruza é recusado e mostrado), *Cancelar* o deixa como estava. O tipo guarda as curvas, então o arco de uma meia-cana continua arco ao editar o perfil de novo; mudar os pontos do perfil de outro jeito as descarta.
 - **Vistas**: plantas e plantas de forro desenham o que o plano de corte corta e o que fica abaixo (ou acima, nas plantas de forro), elevações, cortes e vistas 3D mostram o sólido, legendas mostram a seção do perfil e tabelas listam comprimento e volume. A exportação IFC os grava como revestimentos do tipo `MOLDING`.
+
+## Eletrocalhas e registros
+
+*Instalações → Elétrica → Eletrocalha* (`TY`) desenha trechos de eletrocalha como os eletrodutos: clique as pontas de cada trecho, um depois do outro; uma nova elevação durante o desenho cria um trecho vertical, e Backspace desfaz o último segmento. A barra de opções define o circuito que as eletrocalhas levam e a sua elevação (por padrão 30 cm abaixo do nível de cima, ou a altura da eletrocalha onde o trecho começa). Um projeto sem tipo de eletrocalha ganha um na primeira vez (200 × 100 mm, leito).
+
+*Instalações → Hidrossanitária → Registro* (`VL`) insere um registro ou válvula no tubo clicado, no ponto clicado. Um projeto sem tipos de registro ganha um de cada na primeira vez: registro de gaveta, de esfera, de pressão e válvula de retenção.
+
+- **Tipos**: um tipo de eletrocalha define a largura, a altura, a construção (leito, fundo liso ou perfurada) e o material; um tipo de registro define a função e o material. O registro tem o diâmetro do seu tubo.
+- **Redes**: eletrocalhas se ligam a outras eletrocalhas onde as pontas se encontram ou uma ponta cai sobre um trecho (curvas, tês e cruzetas, listados por `mep_fittings`), não a eletrodutos nem tubos. Um registro é um nó da rede do seu tubo; ele se move, é copiado e é excluído com o tubo, e as propriedades definem a distância dele ao início do tubo.
+- **Vistas**: as plantas elétricas desenham as eletrocalhas na sua largura, levemente tingidas na cor do circuito, com as travessas das eletrocalhas tipo leito e uma etiqueta com a seção e os circuitos; as plantas hidrossanitárias desenham os registros com o símbolo usual (dois triângulos unidos pelas pontas; um círculo vazado no de esfera, um cheio no de pressão, um triângulo cheio na válvula de retenção). Vistas 3D, cortes e elevações mostram as eletrocalhas como perfis abertos e os registros com corpo e volante ou alavanca. As tabelas listam largura, altura e comprimento das eletrocalhas e diâmetro e sistema dos registros.
+- **IFC**: eletrocalhas são gravadas como `IfcCableCarrierSegment` (`CABLETRAYSEGMENT`), as conexões entre elas como `IfcCableCarrierFitting`, os registros como `IfcValve` (`ISOLATING` para gaveta e esfera, `CHECK`, `REGULATING` para pressão) no sistema do seu tubo. Importados de volta, entram como componentes que guardam a classe IFC.
+- Pela linha de comando ou MCP: `cable_tray_create`, `cable_tray_type_create`, `valve_place` (com `point` ou `distance`, e `kind` ou `type`) e `valve_type_create`.
 
 ## Vistas de desenho
 

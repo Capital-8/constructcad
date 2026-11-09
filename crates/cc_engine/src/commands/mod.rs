@@ -3,6 +3,7 @@
 
 pub mod analytical;
 pub mod annotate;
+pub mod cable_tray;
 pub mod cad;
 pub mod cad_explode;
 pub mod callout;
@@ -44,6 +45,7 @@ pub mod structure;
 pub mod sweep;
 pub mod topography;
 pub mod types;
+pub mod valve;
 pub mod views;
 
 use crate::error::{EngineError, Result};

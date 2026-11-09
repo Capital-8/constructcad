@@ -1,6 +1,7 @@
-//! Building services (MEP): plumbing and electrical systems, the pipe and
-//! conduit segments that run them, and the data that makes a component a
-//! plumbing fixture or an electrical device.
+//! Building services (MEP): plumbing and electrical systems, the pipe,
+//! conduit and cable tray segments that run them, the valves on pipes, and
+//! the data that makes a component a plumbing fixture or an electrical
+//! device.
 //!
 //! A system (a water supply, a drain, an electrical circuit) is a project
 //! setting; pipes, conduits and components refer to it by [`SystemId`].
@@ -182,6 +183,112 @@ impl MepSegment {
     /// The first system, for pipes.
     pub fn system(&self) -> Option<SystemId> {
         self.systems.first().copied()
+    }
+}
+
+/// How a cable tray is built; it picks the 3D shape and the plan drawing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum TrayStyle {
+    /// Two side rails joined by rungs.
+    #[default]
+    Ladder,
+    /// A channel with a solid bottom.
+    SolidBottom,
+    /// A channel with a perforated bottom.
+    Perforated,
+}
+
+impl TrayStyle {
+    pub const ALL: [TrayStyle; 3] = [TrayStyle::Ladder, TrayStyle::SolidBottom, TrayStyle::Perforated];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            TrayStyle::Ladder => "tray-ladder",
+            TrayStyle::SolidBottom => "tray-solid-bottom",
+            TrayStyle::Perforated => "tray-perforated",
+        }
+    }
+
+    /// Name in commands (`ladder`, `solid_bottom`, `perforated`).
+    pub fn name(self) -> &'static str {
+        match self {
+            TrayStyle::Ladder => "ladder",
+            TrayStyle::SolidBottom => "solid_bottom",
+            TrayStyle::Perforated => "perforated",
+        }
+    }
+}
+
+/// Distance between the rungs of a ladder tray, meters.
+pub const TRAY_RUNG_SPACING: f64 = 0.3;
+/// Widest and tallest cable tray section, meters (larger values in files are cut down).
+pub const MAX_TRAY_WIDTH: f64 = 2.0;
+pub const MAX_TRAY_HEIGHT: f64 = 1.0;
+
+/// What a valve does; it picks the plan symbol and the IFC predefined type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum ValveKind {
+    /// Opens or shuts the flow with a sliding gate.
+    #[default]
+    Gate,
+    /// Opens or shuts the flow with a quarter turn.
+    Ball,
+    /// Lets the flow pass one way only.
+    Check,
+    /// Regulates the flow.
+    Globe,
+}
+
+impl ValveKind {
+    pub const ALL: [ValveKind; 4] = [ValveKind::Gate, ValveKind::Ball, ValveKind::Check, ValveKind::Globe];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            ValveKind::Gate => "valve-gate",
+            ValveKind::Ball => "valve-ball",
+            ValveKind::Check => "valve-check",
+            ValveKind::Globe => "valve-globe",
+        }
+    }
+
+    /// Name in commands (`gate`, `ball`, `check`, `globe`).
+    pub fn name(self) -> &'static str {
+        match self {
+            ValveKind::Gate => "gate",
+            ValveKind::Ball => "ball",
+            ValveKind::Check => "check",
+            ValveKind::Globe => "globe",
+        }
+    }
+
+    /// Whether it has a stem and handwheel (check valves work by themselves).
+    pub fn has_handle(self) -> bool {
+        !matches!(self, ValveKind::Check)
+    }
+}
+
+/// A valve on a pipe: an inline accessory `at` meters along its host's run
+/// (true length from the start), of the pipe's diameter. It moves, is
+/// copied and is deleted with its pipe.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Valve {
+    pub host: ElementId,
+    /// Distance from the start of the host pipe along its run, meters
+    /// (clamped to the run where it is read).
+    pub at: f64,
+}
+
+impl Valve {
+    /// Its position along `run` as a fraction (0 at the start, 1 at the end).
+    pub fn fraction(&self, run: &MepSegment) -> f64 {
+        let length = run.length();
+        if length < 1e-9 || !self.at.is_finite() { 0.0 } else { (self.at / length).clamp(0.0, 1.0) }
+    }
+
+    /// Its center in the world, on a host run whose level is at `level_z`.
+    pub fn point(&self, run: &MepSegment, level_z: f64) -> DVec3 {
+        let (a, b) = run.points(level_z);
+        a.lerp(b, self.fraction(run))
     }
 }
 

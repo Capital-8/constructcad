@@ -9,7 +9,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`site_get`](#site_get), [`site_set`](#site_set), [`site_context_import`](#site_context_import), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set), [`cad_explode`](#cad_explode)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
-- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
+- **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete)
@@ -1174,6 +1174,54 @@ No parameters.
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Elevation of the start above the level, meters. |
 | `type` | id or name | optional | Conduit type id or name (default: the first conduit type). |
+
+### `cable_tray_create`
+
+*edit* — Create a cable tray from `start` to `end` (or a vertical run at `start` to `end_offset`) carrying `circuits`. Its center line runs `offset` above the level (default: where it starts on another cable tray, such as the end of a run; else 0.30 m under the level above). Trays meet other trays at their ends or along them (elbows, tees and crosses are derived), not conduits or pipes. A project without a cable tray type gets one (200 × 100 mm, ladder).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `start` | [x, y] | required | Start of the center line in plan. |
+| `circuits` | [id or name, …] | optional | Circuits it carries: ids, names or codes. |
+| `end` | [x, y] | optional | End in plan (default: the start, for a vertical run). |
+| `end_offset` | number | optional | Elevation of the end above the level, meters (default: as the start). |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `offset` | number | optional | Elevation of the start above the level, meters. |
+| `type` | id or name | optional | Cable tray type id or name (default: the first cable tray type). |
+
+### `cable_tray_type_create`
+
+*edit* — Create a cable tray type: an open channel `width` × `height` (meters; default 0.2 × 0.1, at most 2 × 1), built as `style` says (`ladder`, the default, `solid_bottom` or `perforated`), in `material` (default: the project's first metal). The name defaults to its section.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `height` | number | optional | Outside height, meters. |
+| `material` | string | optional | Material name. |
+| `name` | string | optional | Type name (default: by its section, e.g. "Cable tray 200×100"). |
+| `style` | string | optional | `ladder`, `solid_bottom` or `perforated`. |
+| `width` | number | optional | Outside width, meters. |
+
+### `valve_place`
+
+*edit* — Place a valve on a pipe, at `point` (the nearest point of the pipe in plan, within 0.5 m) or `distance` meters along the pipe from its start (default: its middle). `type` picks a valve type; else `kind` (`gate`, `ball`, `check` or `globe`) picks the first type of that kind, created when the project has none; else the first valve type (a gate valve type is created when there is none). The valve takes the pipe's diameter and system and splits its network there; it moves, is copied and is deleted with the pipe.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `pipe` | integer | required | Pipe element id. |
+| `distance` | number | optional | Distance from the pipe's start along it, meters. |
+| `kind` | string | optional | `gate`, `ball`, `check` or `globe`. |
+| `point` | [x, y] | optional | A point in plan on (or near) the pipe. |
+| `type` | id or name | optional | Valve type id or name. |
+
+### `valve_type_create`
+
+*edit* — Create valve types, one per kind in `kinds` (`gate`, `ball`, `check`, `globe`; default: a gate valve), named after their kind (or `name`, for one kind), in `material` (default: the project's first metal).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `kinds` | [string, …] | optional | Kinds of valve to create a type for. |
+| `material` | string | optional | Material name. |
+| `name` | string | optional | Type name (only with one kind). |
 
 ### `systems_list`
 

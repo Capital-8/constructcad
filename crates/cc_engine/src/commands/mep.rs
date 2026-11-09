@@ -59,7 +59,7 @@ pub(crate) fn is_electrical(mep: Option<MepData>) -> Option<bool> {
 fn check_member(p: &Project, e: &Element, system: SystemId) -> Result<()> {
     let electrical = match &e.kind {
         ElementKind::Pipe(_) => Some(false),
-        ElementKind::Conduit(_) => Some(true),
+        ElementKind::Conduit(_) | ElementKind::CableTray(_) => Some(true),
         ElementKind::Component(_) => is_electrical(p.mep_data(e)),
         _ => return Err(EngineError::invalid(format!("element {} cannot belong to a system", e.id.0))),
     };
@@ -85,7 +85,7 @@ fn optional_system(p: &Project, r: Option<&Ref>) -> Result<Option<SystemId>> {
 }
 
 /// Where a segment ends: `end`, or straight up or down from `start` (a riser).
-fn segment(start: Point, end: Option<Point>, offset: f64, end_offset: Option<f64>) -> Result<MepSegment> {
+pub(crate) fn segment(start: Point, end: Option<Point>, offset: f64, end_offset: Option<f64>) -> Result<MepSegment> {
     let start = point(start)?;
     let end = end.map(point).transpose()?.unwrap_or(start);
     let mut s = MepSegment::new(start, end, finite(offset, "offset")?);
@@ -99,23 +99,20 @@ fn segment(start: Point, end: Option<Point>, offset: f64, end_offset: Option<f64
 }
 
 /// The elevation above `level` where a new run starting at `start` joins a
-/// run of its network there (pipes of `system`, any conduit; risers of other
-/// floors included): the run's elevation at that point, or on a riser the
-/// height nearest `wanted` within it.
-fn joined_offset(
+/// run of its network there (runs of `category`: pipes of `system`, any
+/// conduit or cable tray; risers of other floors included): the run's
+/// elevation at that point, or on a riser the height nearest `wanted` within it.
+pub(crate) fn joined_offset(
     p: &Project,
     level: cc_core::LevelId,
     start: Point,
-    conduit: bool,
+    category: Category,
     system: Option<SystemId>,
     wanted: f64,
 ) -> Option<f64> {
     let start = point(start).ok()?;
     p.segments_at(level)
-        .filter(|(e, seg)| match e.kind {
-            ElementKind::Pipe(_) => !conduit && seg.system() == system,
-            _ => conduit,
-        })
+        .filter(|(e, seg)| e.category() == category && (category != Category::Pipe || seg.system() == system))
         .filter_map(|(_, seg)| {
             let (q, z) = nearest_on(&seg, start, wanted);
             (q.distance(start) <= cc_geom::mep_net::TOL).then_some(z)
@@ -172,7 +169,7 @@ impl Command for PipeCreate {
         let kind = system.and_then(|id| p.system(id)).map(|sys| sys.kind);
         let offset = self.offset.unwrap_or_else(|| {
             let wanted = pipe_offset(kind);
-            joined_offset(p, level, self.start, false, system, wanted).unwrap_or(wanted)
+            joined_offset(p, level, self.start, Category::Pipe, system, wanted).unwrap_or(wanted)
         });
         let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
         if self.end_offset.is_none() && !seg.is_vertical() {
@@ -236,7 +233,7 @@ impl Command for ConduitCreate {
         }
         let offset = self.offset.unwrap_or_else(|| {
             let wanted = conduit_offset(p, level);
-            joined_offset(p, level, self.start, true, None, wanted).unwrap_or(wanted)
+            joined_offset(p, level, self.start, Category::Conduit, None, wanted).unwrap_or(wanted)
         });
         let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
         seg.systems = circuits;
@@ -474,7 +471,9 @@ impl Command for SystemDelete {
 
 fn detach(e: &mut Element, id: SystemId) {
     match &mut e.kind {
-        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) => seg.systems.retain(|s| *s != id),
+        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) | ElementKind::CableTray(seg) => {
+            seg.systems.retain(|s| *s != id)
+        }
         ElementKind::Component(c) if c.system == Some(id) => c.system = None,
         _ => {}
     }
@@ -515,7 +514,9 @@ impl Command for SystemAssign {
                 }
                 match &mut el.kind {
                     ElementKind::Pipe(seg) => seg.systems = vec![id],
-                    ElementKind::Conduit(seg) if !seg.systems.contains(&id) => seg.systems.push(id),
+                    ElementKind::Conduit(seg) | ElementKind::CableTray(seg) if !seg.systems.contains(&id) => {
+                        seg.systems.push(id)
+                    }
                     ElementKind::Component(c) => c.system = Some(id),
                     _ => {}
                 }
@@ -649,7 +650,7 @@ struct Branch {
 
 /// The nearest point in plan of run `s` to `p`, and the run's elevation there
 /// (on a riser, the height nearest `wanted_z`).
-fn nearest_on(s: &MepSegment, p: glam::DVec2, wanted_z: f64) -> (glam::DVec2, f64) {
+pub(crate) fn nearest_on(s: &MepSegment, p: glam::DVec2, wanted_z: f64) -> (glam::DVec2, f64) {
     if s.is_vertical() {
         let (lo, hi) = (s.start_offset.min(s.end_offset), s.start_offset.max(s.end_offset));
         return (s.start, wanted_z.clamp(lo, hi));
@@ -670,7 +671,8 @@ fn pipe_type_for(p: &Project, diameter: f64) -> Option<cc_core::ElementTypeId> {
 /// The runs seen from `level` as (element, run with elevations above the
 /// level), pipes or conduits: its own and the risers of other floors through it.
 fn runs_on(p: &Project, level: cc_core::LevelId, conduit: bool) -> Vec<(&Element, MepSegment)> {
-    p.segments_at(level).filter(|(r, _)| matches!(r.kind, ElementKind::Conduit(_)) == conduit).collect()
+    let category = if conduit { Category::Conduit } else { Category::Pipe };
+    p.segments_at(level).filter(|(r, _)| r.category() == category).collect()
 }
 
 /// The run nearest `p` in plan among `runs`, with the point and elevation there.

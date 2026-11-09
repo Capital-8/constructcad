@@ -492,9 +492,9 @@ impl ViewKind {
 /// The building services shown by a services plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MepDiscipline {
-    /// Water supply, drainage and their fixtures.
+    /// Water supply, drainage, their valves and fixtures.
     Plumbing,
-    /// Conduits, outlets, switches, lights and boards.
+    /// Conduits, cable trays, outlets, switches, lights and boards.
     Electrical,
 }
 

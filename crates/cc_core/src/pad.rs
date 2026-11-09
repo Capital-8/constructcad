@@ -91,13 +91,18 @@ impl Project {
         })
     }
 
-    /// Pads whose level differs from their terrain's, with the level they take.
+    /// Pads whose level differs from their terrain's and valves whose level
+    /// differs from their pipe's, with the level they take.
     pub(crate) fn pad_levels(&self) -> Vec<(ElementId, crate::LevelId)> {
         self.elements
             .values()
             .filter_map(|e| {
-                let ElementKind::Pad(p) = &e.kind else { return None };
-                let host = self.element(p.host)?;
+                let host = match &e.kind {
+                    ElementKind::Pad(p) => p.host,
+                    ElementKind::Valve(v) => v.host,
+                    _ => return None,
+                };
+                let host = self.element(host)?;
                 (host.level != e.level).then_some((e.id, host.level))
             })
             .collect()

@@ -216,6 +216,10 @@ registry![
     "Building services" => [
         mep::PipeCreate,
         mep::ConduitCreate,
+        cable_tray::CableTrayCreate,
+        cable_tray::CableTrayTypeCreate,
+        valve::ValvePlace,
+        valve::ValveTypeCreate,
         mep::SystemsList,
         mep::SystemCreate,
         mep::SystemSet,

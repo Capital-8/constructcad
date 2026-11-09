@@ -145,6 +145,8 @@ pub enum Icon {
     DimDiameter,
     Pipe,
     Conduit,
+    CableTray,
+    Valve,
     PlumbingFixture,
     Outlet,
     PlumbingPlan,
@@ -177,7 +179,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 162] = [
+    pub const ALL: [Icon; 164] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -312,6 +314,8 @@ impl Icon {
         Icon::DimDiameter,
         Icon::Pipe,
         Icon::Conduit,
+        Icon::CableTray,
+        Icon::Valve,
         Icon::PlumbingFixture,
         Icon::Outlet,
         Icon::PlumbingPlan,
@@ -479,6 +483,8 @@ impl Icon {
             Icon::DimDiameter => include_str!("../../../assets/icons/ui/dim-diameter.svg"),
             Icon::Pipe => include_str!("../../../assets/icons/ui/pipe.svg"),
             Icon::Conduit => include_str!("../../../assets/icons/ui/conduit.svg"),
+            Icon::CableTray => include_str!("../../../assets/icons/ui/cable-tray.svg"),
+            Icon::Valve => include_str!("../../../assets/icons/ui/valve.svg"),
             Icon::PlumbingFixture => include_str!("../../../assets/icons/ui/plumbing-fixture.svg"),
             Icon::Outlet => include_str!("../../../assets/icons/ui/outlet.svg"),
             Icon::PlumbingPlan => include_str!("../../../assets/icons/ui/plumbing-plan.svg"),

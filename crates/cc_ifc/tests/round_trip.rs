@@ -443,6 +443,35 @@ fn structure_fixture_exports_foundations_profiles_and_cut_slabs() {
     assert!(representations.iter().filter(|l| uses(l)).all(|l| l.contains("'Brep'")));
 }
 
+#[test]
+fn mep_fixture_exports_cable_trays_and_valves() {
+    let project = load(include_str!("fixtures/mep.ccad"));
+    let text = export(&project, &ExportOptions::default());
+    let lines = |entity: &str| text.lines().filter(|l| l.contains(&format!("={entity}("))).collect::<Vec<_>>();
+    // Two tray runs, typed as tray segments, meeting at a bend.
+    let trays: Vec<&str> =
+        lines("IFCCABLECARRIERSEGMENT").into_iter().filter(|l| l.contains(".CABLETRAYSEGMENT.")).collect();
+    assert_eq!(trays.len(), 2);
+    assert!(lines("IFCCABLECARRIERSEGMENTTYPE").iter().any(|l| l.contains(".CABLETRAYSEGMENT.")));
+    assert!(lines("IFCCABLECARRIERFITTING").iter().any(|l| l.contains("'Bend'")));
+    // The gate valve isolates, typed, as a tessellated body.
+    let valves = lines("IFCVALVE");
+    assert_eq!(valves.len(), 1);
+    assert!(valves[0].contains(".ISOLATING.") && valves[0].contains("'V1'"), "{}", valves[0]);
+    assert!(lines("IFCVALVETYPE").iter().any(|l| l.contains(".ISOLATING.")));
+    // It is in its pipe's system.
+    let valve_id = valves[0].split('=').next().unwrap();
+    assert!(
+        lines("IFCRELASSIGNSTOGROUP")
+            .iter()
+            .any(|l| l.contains(&format!("{valve_id},")) || l.contains(&format!("{valve_id})")))
+    );
+    // Imported back, they come in as components keeping their class.
+    let (imported, report) = round_trip(&project);
+    assert!(report.generic.contains_key("IfcValve"), "{:?}", report.generic);
+    assert!(imported.elements.len() > project.elements.len() / 2);
+}
+
 /// Phases of an element by name: (created, demolished).
 fn phase_names(p: &Project, e: &Element) -> (String, Option<String>) {
     let created = p.phases.get(p.created_index(e)).map(|ph| ph.name.clone()).unwrap_or_default();

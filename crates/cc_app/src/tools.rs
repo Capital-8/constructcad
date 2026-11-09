@@ -86,6 +86,14 @@ pub enum Tool {
     Conduit {
         type_id: ElementTypeId,
     },
+    /// Click the ends of cable tray runs, one after the other.
+    CableTray {
+        type_id: ElementTypeId,
+    },
+    /// Click a pipe to place a valve on it.
+    Valve {
+        type_id: ElementTypeId,
+    },
     Move,
     Copy,
     Rotate,
@@ -176,6 +184,8 @@ impl Tool {
             Tool::Component { .. } => "tool-component",
             Tool::Pipe { .. } => "tool-pipe",
             Tool::Conduit { .. } => "tool-conduit",
+            Tool::CableTray { .. } => "tool-cable-tray",
+            Tool::Valve { .. } => "tool-valve",
             Tool::Move => "tool-move",
             Tool::Copy => "tool-copy",
             Tool::Rotate => "tool-rotate",
@@ -226,6 +236,8 @@ impl Tool {
             | Tool::Component { type_id }
             | Tool::Pipe { type_id }
             | Tool::Conduit { type_id }
+            | Tool::CableTray { type_id }
+            | Tool::Valve { type_id }
             | Tool::Text { type_id }
             | Tool::LevelMark { type_id }
             | Tool::DetailComponent { type_id } => Some(*type_id),
@@ -251,6 +263,8 @@ impl Tool {
             Tool::Component { .. } => Some(Category::Component),
             Tool::Pipe { .. } => Some(Category::Pipe),
             Tool::Conduit { .. } => Some(Category::Conduit),
+            Tool::CableTray { .. } => Some(Category::CableTray),
+            Tool::Valve { .. } => Some(Category::Valve),
             Tool::Text { .. } => Some(Category::Text),
             Tool::DetailLine => Some(Category::DetailLine),
             Tool::LevelMark { .. } => Some(Category::LevelMark),
@@ -278,6 +292,8 @@ impl Tool {
             Tool::Component { .. } => Tool::Component { type_id: id },
             Tool::Pipe { .. } => Tool::Pipe { type_id: id },
             Tool::Conduit { .. } => Tool::Conduit { type_id: id },
+            Tool::CableTray { .. } => Tool::CableTray { type_id: id },
+            Tool::Valve { .. } => Tool::Valve { type_id: id },
             Tool::Text { .. } => Tool::Text { type_id: id },
             Tool::LevelMark { .. } => Tool::LevelMark { type_id: id },
             Tool::DetailComponent { .. } => Tool::DetailComponent { type_id: id },
@@ -321,6 +337,8 @@ impl Tool {
             Category::Component => Tool::Component { type_id },
             Category::Pipe => Tool::Pipe { type_id },
             Category::Conduit => Tool::Conduit { type_id },
+            Category::CableTray => Tool::CableTray { type_id },
+            Category::Valve => Tool::Valve { type_id },
             Category::Text => Tool::Text { type_id },
             Category::DetailLine => Tool::DetailLine,
             Category::LevelMark => Tool::LevelMark { type_id },
@@ -595,6 +613,7 @@ fn chains(tool: &Tool) -> bool {
             | Tool::Beam { .. }
             | Tool::Pipe { .. }
             | Tool::Conduit { .. }
+            | Tool::CableTray { .. }
             | Tool::Railing { .. }
             | Tool::Sweep { .. }
     )
@@ -1465,8 +1484,16 @@ pub fn handle(
         ) => crate::modify::handle(ui, resp, painter, state, level, xf, drawing, &tool),
         (Tool::Paste, Some(level)) => crate::clipboard::paste_tool(ui, resp, painter, state, view.id, level, xf),
         (Tool::Component { type_id }, Some(level)) => component_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Pipe { type_id }, Some(level)) => segment_tool(ui, resp, painter, state, level, *type_id, true, xf),
-        (Tool::Conduit { type_id }, Some(level)) => segment_tool(ui, resp, painter, state, level, *type_id, false, xf),
+        (Tool::Pipe { type_id }, Some(level)) => {
+            segment_tool(ui, resp, painter, state, level, *type_id, Run::Pipe, xf);
+        }
+        (Tool::Conduit { type_id }, Some(level)) => {
+            segment_tool(ui, resp, painter, state, level, *type_id, Run::Conduit, xf);
+        }
+        (Tool::CableTray { type_id }, Some(level)) => {
+            segment_tool(ui, resp, painter, state, level, *type_id, Run::Tray, xf);
+        }
+        (Tool::Valve { type_id }, Some(_)) => valve_tool(resp, painter, state, *type_id, xf, drawing),
         _ => {}
     }
 }
@@ -1558,10 +1585,18 @@ pub fn mep_component_type(project: &Project, device: bool) -> Option<ElementType
         .map(|t| t.id)
 }
 
-/// Clicks chain pipe or conduit runs: each ends where the next one starts,
-/// at the elevation the last one reached (a sloped drain keeps falling). A
-/// new elevation set while drawing makes a vertical run at the last point
-/// first; clicking that point again makes only the vertical run.
+/// What a run tool draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Run {
+    Pipe,
+    Conduit,
+    Tray,
+}
+
+/// Clicks chain pipe, conduit or cable tray runs: each ends where the next
+/// one starts, at the elevation the last one reached (a sloped drain keeps
+/// falling). A new elevation set while drawing makes a vertical run at the
+/// last point first; clicking that point again makes only the vertical run.
 #[allow(clippy::too_many_arguments)]
 fn segment_tool(
     ui: &Ui,
@@ -1570,7 +1605,7 @@ fn segment_tool(
     state: &mut AppState,
     level: LevelId,
     type_id: ElementTypeId,
-    pipe: bool,
+    run: Run,
     xf: &Xf,
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
@@ -1579,7 +1614,10 @@ fn segment_tool(
     let s = snap_at(state, Some(level), raw, anchor, &[], xf.scale, shift);
     draw_snap(painter, xf, s);
     let project = state.project();
-    let diameter = project.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.025);
+    let ty = project.element_type(type_id);
+    // A tray shows as wide as it is.
+    let diameter = ty.and_then(|t| t.diameter().or(t.tray_section().map(|s| s.0))).unwrap_or(0.025);
+    let pipe = run == Run::Pipe;
     let system = if pipe { state.mep.system } else { state.mep.circuit };
     let color = system.and_then(|id| project.system(id)).map_or(PREVIEW, |sys| {
         let [r, g, b] = sys.color();
@@ -1608,29 +1646,45 @@ fn segment_tool(
     };
     let level_ref = Some(Ref::Id(level.0));
     let create = |state: &mut AppState, end: Option<DVec2>, offset: Option<f64>, end_offset: Option<f64>| {
-        if pipe {
-            let command = cc_engine::commands::mep::PipeCreate {
-                start: a.to_array(),
-                end: end.map(|p| p.to_array()),
-                level: level_ref.clone(),
-                type_ref: Some(Ref::Id(type_id.0)),
-                system: state.mep.system.map(|id| Ref::Id(id.0)),
-                offset,
-                end_offset,
-                slope: state.mep.slope,
-            };
-            crate::actions::run_command(state, command)
-        } else {
-            let command = cc_engine::commands::mep::ConduitCreate {
-                start: a.to_array(),
-                end: end.map(|p| p.to_array()),
-                level: level_ref.clone(),
-                type_ref: Some(Ref::Id(type_id.0)),
-                circuits: state.mep.circuit.map(|id| Ref::Id(id.0)).into_iter().collect(),
-                offset,
-                end_offset,
-            };
-            crate::actions::run_command(state, command)
+        let circuits = state.mep.circuit.map(|id| Ref::Id(id.0)).into_iter().collect();
+        match run {
+            Run::Pipe => {
+                let command = cc_engine::commands::mep::PipeCreate {
+                    start: a.to_array(),
+                    end: end.map(|p| p.to_array()),
+                    level: level_ref.clone(),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    system: state.mep.system.map(|id| Ref::Id(id.0)),
+                    offset,
+                    end_offset,
+                    slope: state.mep.slope,
+                };
+                crate::actions::run_command(state, command)
+            }
+            Run::Conduit => {
+                let command = cc_engine::commands::mep::ConduitCreate {
+                    start: a.to_array(),
+                    end: end.map(|p| p.to_array()),
+                    level: level_ref.clone(),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    circuits,
+                    offset,
+                    end_offset,
+                };
+                crate::actions::run_command(state, command)
+            }
+            Run::Tray => {
+                let command = cc_engine::commands::cable_tray::CableTrayCreate {
+                    start: a.to_array(),
+                    end: end.map(|p| p.to_array()),
+                    level: level_ref.clone(),
+                    type_ref: Some(Ref::Id(type_id.0)),
+                    circuits,
+                    offset,
+                    end_offset,
+                };
+                crate::actions::run_command(state, command)
+            }
         }
     };
     let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
@@ -2089,6 +2143,40 @@ fn host_railing_tool(
             near: Some(raw.to_array()),
         };
         crate::actions::run_command(state, command);
+    }
+}
+
+/// The pipe under the pointer, or the pipe of a valve under it.
+fn pipe_at(project: &Project, drawing: &cc_views::Drawing2D, p: DVec2, reach: f64) -> Option<ElementId> {
+    let id = drawing.hit_test(p, reach)?;
+    match &project.element(id)?.kind {
+        ElementKind::Pipe(_) => Some(id),
+        ElementKind::Valve(v) => project.valve_host(v).map(|(pipe, _)| pipe.id),
+        _ => None,
+    }
+}
+
+/// Click a pipe to place a valve of `type_id` there; the pipe lights up under the pointer.
+fn valve_tool(
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    type_id: ElementTypeId,
+    xf: &Xf,
+    drawing: &cc_views::Drawing2D,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let Some(pipe) = pipe_at(state.project(), drawing, raw, 6.0 / xf.scale) else { return };
+    let lit: BTreeSet<ElementId> = [pipe].into_iter().collect();
+    crate::modify::paint_ghost(painter, xf, drawing, &lit, &cc_core::PlanTransform::IDENTITY);
+    if resp.clicked() {
+        let command = cc_engine::commands::valve::ValvePlace {
+            pipe: pipe.0,
+            point: Some(raw.to_array()),
+            type_ref: Some(Ref::Id(type_id.0)),
+            ..Default::default()
+        };
+        run_create(state, command);
     }
 }
 

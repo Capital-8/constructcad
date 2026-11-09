@@ -263,7 +263,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
                 }
             }
         }
-        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) => {
+        ElementKind::Pipe(seg) | ElementKind::Conduit(seg) | ElementKind::CableTray(seg) => {
             derived.insert("length".into(), json!(seg.length()));
             derived.insert("slope".into(), json!(seg.slope()));
             let systems: Vec<Value> = seg
@@ -338,6 +338,17 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("cut_length".into(), json!(beam.cut_length()));
         derived.insert("start_join".into(), framing(beam.start));
         derived.insert("end_join".into(), framing(beam.end));
+    }
+    if let Some(v) = geom.valves.get(&id) {
+        // Where the valve sits, its kind and its pipe's diameter.
+        derived.insert("point".into(), json!(v.point.to_array()));
+        derived.insert("kind".into(), json!(v.kind.name()));
+        derived.insert("diameter".into(), json!(v.diameter));
+    }
+    if let Some(t) = geom.segments.get(&id).and_then(|g| g.tray) {
+        derived.insert("width".into(), json!(t.width));
+        derived.insert("height".into(), json!(t.height));
+        derived.insert("style".into(), json!(t.style.name()));
     }
     if let Some(set) = geom.rebar.get(&id) {
         derived.insert("count".into(), json!(set.count()));

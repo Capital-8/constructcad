@@ -1,6 +1,7 @@
 //! Building services in plans: pipes and conduits as bands in their
-//! system's color with diameter, slope and circuit tags, and electrical
-//! devices as the usual plan symbols (sizes in paper millimeters).
+//! system's color with diameter, slope and circuit tags, cable trays as
+//! outlines as wide as they are, valves on pipes, and electrical devices
+//! as the usual plan symbols (sizes in paper millimeters).
 //!
 //! Symbols follow common Brazilian practice: an outlet is a triangle,
 //! hollow when low, half filled at medium height and filled when high; a
@@ -31,6 +32,14 @@ pub(crate) fn services(
     scale: u32,
 ) {
     let mm = scale as f64 / 1000.0;
+    // Cable trays first: conduits and devices are drawn over them.
+    if discipline == MepDiscipline::Electrical {
+        for e in project.elements.values() {
+            if let (ElementKind::CableTray(_), Some(s)) = (&e.kind, project.segment_at(e, level)) {
+                tray(d, project, geom, e, &s, mm);
+            }
+        }
+    }
     for e in project.elements.values() {
         match (&e.kind, discipline) {
             (ElementKind::Pipe(_), MepDiscipline::Plumbing) | (ElementKind::Conduit(_), MepDiscipline::Electrical) => {
@@ -56,6 +65,123 @@ pub(crate) fn services(
     for f in geom.mep.fittings.iter().filter(|f| f.level == level && f.category == category) {
         fitting(d, project, f, mm);
     }
+    if discipline == MepDiscipline::Plumbing {
+        valves(d, project, geom, level, mm);
+    }
+}
+
+/// The valves on the pipes seen from `level`: on its own runs, and on risers
+/// through it between its floor and the level above.
+fn valves(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, mm: f64) {
+    let (floor, top) =
+        (project.level_elevation(level), project.level_elevation(level) + project.level_height(level, 3.0));
+    for v in geom.valves.values() {
+        let Some(host) = project.element(v.host) else { continue };
+        let seen =
+            host.level == level || (project.segment_at(host, level).is_some() && (floor..top).contains(&v.point.z));
+        if !seen {
+            continue;
+        }
+        let dir = v.dir.truncate().try_normalize().unwrap_or(DVec2::X);
+        valve_symbol(d, v.point.truncate(), dir, mm, v.kind, Some(v.element));
+    }
+}
+
+/// The plan symbol of a valve at `c` on a pipe running along `dir`: two
+/// triangles meeting at their tips (a gate valve); a ball valve adds a
+/// hollow circle, a globe valve a filled one, and a check valve fills the
+/// triangle the flow leaves through. `mm` is one paper millimeter.
+pub(crate) fn valve_symbol(
+    d: &mut Drawing2D,
+    c: DVec2,
+    dir: DVec2,
+    mm: f64,
+    kind: cc_core::ValveKind,
+    id: Option<cc_core::ElementId>,
+) {
+    use cc_core::ValveKind as K;
+    let (l, h) = (dir * (2.0 * mm), dir.perp() * (1.4 * mm));
+    let before = vec![c, c - l + h, c - l - h];
+    let after = vec![c, c + l + h, c + l - h];
+    for (i, tri) in [before, after].into_iter().enumerate() {
+        let filled = kind == K::Check && i == 1;
+        d.fill(tri.clone(), if filled { INK } else { [255, 255, 255, 255] }, id);
+        d.polyline(&tri, true, LineStyle::Projection, id);
+    }
+    match kind {
+        K::Ball => {
+            let pts = circle(c, 0.7 * mm);
+            d.fill(pts.clone(), [255, 255, 255, 255], id);
+            d.polyline(&pts, true, LineStyle::Projection, id);
+        }
+        K::Globe => {
+            let pts = circle(c, 0.7 * mm);
+            d.fill(pts.clone(), INK, id);
+            d.polyline(&pts, true, LineStyle::Projection, id);
+        }
+        K::Gate | K::Check => {}
+    }
+}
+
+/// Tag text of a cable tray: its section (width × height, mm or inches) and
+/// the circuits it carries.
+fn tray_tag(project: &Project, e: &Element, width: f64, height: f64) -> String {
+    let size = if format::imperial() {
+        format!("{}\"×{}\"", format::inches(width), format::inches(height))
+    } else {
+        format!("{}×{}", format::number(width * 1000.0, 0), format::number(height * 1000.0, 0))
+    };
+    let codes: Vec<&str> = e.systems().iter().filter_map(|s| project.system(*s)).map(|s| s.label()).collect();
+    if codes.is_empty() { size } else { format!("{size} ({})", codes.join(", ")) }
+}
+
+/// A cable tray run in an electrical plan: its outline as wide as the tray,
+/// lightly tinted in its circuit's color, with the rungs of a ladder tray
+/// and its tag; a vertical tray shows its section crossed.
+fn tray(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, e: &Element, s: &cc_core::MepSegment, mm: f64) {
+    let Some(g) = geom.segments.get(&e.id) else { return };
+    let Some(section) = g.tray else { return };
+    let c = project.system_color(e);
+    let tint = |v: u8| (255.0 - (255.0 - v as f64) * 0.25) as u8;
+    let fill = [tint(c[0]), tint(c[1]), tint(c[2]), 255];
+    let style = if s.start_offset.max(s.end_offset) < IN_FLOOR { LineStyle::Hidden } else { LineStyle::Projection };
+    let text = tray_tag(project, e, section.width, section.height);
+    let (w, h) = (section.width * 0.5, section.height * 0.5);
+    if s.is_vertical() {
+        let o = s.start;
+        let pts = vec![o + DVec2::new(-w, -h), o + DVec2::new(w, -h), o + DVec2::new(w, h), o + DVec2::new(-w, h)];
+        d.fill(pts.clone(), fill, Some(e.id));
+        d.polyline(&pts, true, style, Some(e.id));
+        d.line(pts[0], pts[2], LineStyle::Thin, Some(e.id));
+        d.line(pts[1], pts[3], LineStyle::Thin, Some(e.id));
+        d.tag_text(o + DVec2::new(w + mm, h + mm), text, 2.0, Anchor::LeftBottom, 0.0, Some(e.id));
+        return;
+    }
+    let length = s.plan_length();
+    let dir = (s.end - s.start) / length;
+    let n = dir.perp() * w;
+    let pts = vec![s.start - n, s.end - n, s.end + n, s.start + n];
+    d.fill(pts.clone(), fill, Some(e.id));
+    d.polyline(&pts, true, style, Some(e.id));
+    // Rungs, when they stand at least 1.5 mm apart on paper.
+    let spacing = cc_core::mep::TRAY_RUNG_SPACING;
+    if section.style == cc_core::TrayStyle::Ladder && spacing >= 1.5 * mm {
+        let count = ((length / spacing).floor() as usize).min(1000);
+        let step = if count > 0 { length / count as f64 } else { 0.0 };
+        for i in 0..count {
+            let p = s.start + dir * (step * (i as f64 + 0.5));
+            d.line(p - n, p + n, LineStyle::Thin, Some(e.id));
+        }
+    }
+    if length < 15.0 * mm {
+        return;
+    }
+    let (dir, angle) = {
+        let a = dir.to_angle();
+        if dir.x < -1e-9 || (dir.x.abs() <= 1e-9 && dir.y < 0.0) { (-dir, a + std::f64::consts::PI) } else { (dir, a) }
+    };
+    let mid = (s.start + s.end) * 0.5 + dir.perp() * (w + 0.8 * mm);
+    d.tag_text(mid, text, 2.0, Anchor::CenterBottom, angle, Some(e.id));
 }
 
 /// A fitting in plan: a dot in the system's color on pipes; on conduits, a
@@ -372,5 +498,75 @@ mod tests {
         assert_eq!(fills(0.3), 0);
         assert_eq!(fills(1.1), 1);
         assert_eq!(fills(2.0), 1);
+    }
+
+    #[test]
+    fn trays_show_in_electrical_plans_and_valves_in_plumbing_plans() {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let (tray_t, valve_t) = doc.edit("t", |e| {
+            let mut add = |data| {
+                let id = cc_core::ElementTypeId(e.alloc_id());
+                e.add_type(cc_core::ElementType {
+                    id,
+                    name: "t".into(),
+                    data,
+                    info: Default::default(),
+                    uid: Default::default(),
+                })
+            };
+            let tray = TypeData::CableTray {
+                width: 0.3,
+                height: 0.1,
+                style: cc_core::TrayStyle::Ladder,
+                material: String::new(),
+            };
+            (add(tray), add(TypeData::Valve { kind: cc_core::ValveKind::Check, material: String::new() }))
+        });
+        let pipe_t = doc.project.default_type(Category::Pipe).unwrap();
+        let (tray, pipe, valve) = doc.edit("t", |e| {
+            let mut add = |type_id, kind| {
+                let id = ElementId(e.alloc_id());
+                e.add_element(cc_core::Element {
+                    id,
+                    level,
+                    type_id,
+                    mark: String::new(),
+                    comments: String::new(),
+                    uid: Default::default(),
+                    kind,
+                    phase_created: Default::default(),
+                    phase_demolished: None,
+                })
+            };
+            let tray = add(tray_t, ElementKind::CableTray(MepSegment::new(DVec2::ZERO, DVec2::new(6.0, 0.0), 2.6)));
+            let pipe = add(pipe_t, ElementKind::Pipe(MepSegment::new(DVec2::new(0.0, 3.0), DVec2::new(4.0, 3.0), 0.6)));
+            let valve = add(valve_t, ElementKind::Valve(cc_core::Valve { host: pipe, at: 2.0 }));
+            (tray, pipe, valve)
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let plan = |mep| {
+            cc_core::View::new(
+                cc_core::ViewId(999),
+                "",
+                50,
+                ViewKind::FloorPlan {
+                    level,
+                    cut_height: 1.2,
+                    structural: false,
+                    structure_tags: false,
+                    mep: Some(mep),
+                    underlay: Default::default(),
+                },
+            )
+        };
+        let electrical = crate::generate(&doc.project, &geom, &plan(MepDiscipline::Electrical)).unwrap();
+        // The tray is as wide as its type: picked 14 cm off its center line, tagged with its section.
+        assert_eq!(electrical.hit_test(DVec2::new(3.0, 0.14), 0.001), Some(tray));
+        assert!(electrical.prims.iter().any(|p| matches!(p, Prim::Text { text, .. } if text == "300×100")));
+        assert!(electrical.prims.iter().all(|p| p.element() != Some(valve) && p.element() != Some(pipe)));
+        let plumbing = crate::generate(&doc.project, &geom, &plan(MepDiscipline::Plumbing)).unwrap();
+        assert_eq!(plumbing.hit_test(DVec2::new(2.0, 3.0), 0.001), Some(valve));
+        assert!(plumbing.prims.iter().all(|p| p.element() != Some(tray)));
     }
 }

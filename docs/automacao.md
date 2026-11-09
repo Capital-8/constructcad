@@ -218,6 +218,15 @@ Uma cortina de vidro é uma parede cujo tipo tem uma grade de cortina em vez de 
 {"command": "wall_create", "args": {"start": [2, 0], "end": [6, 0], "type": "Vitrine", "height": 2.8}}
 ```
 
+### Eletrocalhas e registros
+
+`cable_tray_create` desenha um trecho de eletrocalha como `conduit_create` (com `circuits`, `offset`, `end_offset`); um projeto sem tipo de eletrocalha ganha um (200 × 100 mm, leito), e `cable_tray_type_create` cria outros (`width`, `height`, `style`: `ladder`, `solid_bottom` ou `perforated`). Eletrocalhas só se ligam a outras eletrocalhas, e as curvas e tês entre elas aparecem em `mep_fittings`. `valve_place` coloca um registro num tubo, num `point` perto dele ou a uma `distance` ao longo dele, de um `type` ou de uma função `kind` (`gate`, `ball`, `check`, `globe`; um tipo dessa função é criado quando não há); `valve_type_create` cria tipos de várias funções (`kinds`) de uma vez. O registro tem o diâmetro e o sistema do seu tubo, é um nó da rede e acompanha o tubo; `element_get` mostra `derived.point`, `kind` e `diameter`, e `element_set` o desloca ao longo do tubo (`params.at`).
+
+```text
+{"command": "cable_tray_create", "args": {"start": [0, 0], "end": [6, 0], "circuits": ["1"]}}
+{"command": "valve_place", "args": {"pipe": 42, "distance": 0.5, "kind": "ball"}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).

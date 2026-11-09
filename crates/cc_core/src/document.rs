@@ -225,6 +225,7 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.railings_of(id).map(|e| e.id));
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.pads_of(id).map(|(e, _)| e.id));
+            pending.extend(self.project.valves_of(id).map(|(e, _)| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);
             // A pinned element removed with its host or view takes its pin along.
