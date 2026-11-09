@@ -199,6 +199,12 @@ fn validate(ed: &Editor) -> Result<(), String> {
 /// The wall a door or window component is previewed and checked in: 15 cm thick.
 const PREVIEW_WALL: &[(&str, f64)] = &[(cc_core::component::WALL_THICKNESS, 0.15)];
 
+/// The names a piece's fields read, as the preview resolves them: the
+/// parameters, the reference planes and the preview wall's thickness.
+fn field_scope(def: &ComponentDef) -> cc_core::component_ref::Scope {
+    def.scope(&Default::default(), PREVIEW_WALL)
+}
+
 fn part_error(e: &PartError) -> String {
     match e {
         PartError::Expr { field, error } => format!("{}: {error}", tr(&format!("comp-field-{field}"))),
@@ -579,7 +585,7 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
     if let Some((_, Some(error))) = &ed.script {
         ui.label(RichText::new(format!("{}: {error}", t!("comp-field-script"))).color(PALETTE.danger).size(11.0));
     }
-    let values = ed.def.values(&Default::default());
+    let scope = field_scope(&ed.def);
     let n = ed.def.items.len();
     let i = ed.selected;
     let Some(item) = ed.def.items.get_mut(i) else { return };
@@ -587,7 +593,7 @@ fn pieces(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
     // One grid for the piece and its shape, so the labels line up.
     let mut moved = None;
     let mut removed = false;
-    let lookup = |name: &str| values.get(name).copied();
+    let lookup = |name: &str| scope.get(name);
     let field = |ui: &mut Ui, label: &str, text: &mut String| {
         ui.label(theme::muted(label));
         ui.horizontal(|ui| {
@@ -958,6 +964,34 @@ mod tests {
         match state.project().element_type(id).map(|t| &t.data) {
             Some(TypeData::Component { component, def }) => (component.clone(), def.clone()),
             _ => panic!("not a component type"),
+        }
+    }
+
+    /// The fields of a window's pieces read the wall thickness (#238).
+    #[test]
+    fn fields_read_the_wall_thickness() {
+        let def = cc_core::openings::window_def(&Default::default(), 1.2, 1.2, 1.0, "Glass");
+        let scope = field_scope(&def);
+        let lookup = |name: &str| scope.get(name);
+        let mut fields = 0;
+        for item in &def.items {
+            let json = serde_json::to_value(&item.shape).unwrap();
+            let mut texts = Vec::new();
+            collect_strings(&json, &mut texts);
+            for text in texts.iter().filter(|t| t.contains(cc_core::component::WALL_THICKNESS)) {
+                fields += 1;
+                assert!(expr::eval(text, &lookup).is_ok(), "{}: {text}", item.name);
+            }
+        }
+        assert!(fields > 0, "the window's pieces use the wall thickness");
+    }
+
+    fn collect_strings(v: &serde_json::Value, out: &mut Vec<String>) {
+        match v {
+            serde_json::Value::String(s) => out.push(s.clone()),
+            serde_json::Value::Array(a) => a.iter().for_each(|v| collect_strings(v, out)),
+            serde_json::Value::Object(o) => o.values().for_each(|v| collect_strings(v, out)),
+            _ => {}
         }
     }
 
