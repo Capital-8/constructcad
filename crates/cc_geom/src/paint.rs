@@ -275,6 +275,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
                 paints: vec![FacePaint {
                     point: DVec3::new(2.0, 1.0, 1.5),
                     normal: DVec3::Y,

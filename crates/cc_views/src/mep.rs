@@ -540,6 +540,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 })
             };
             let tray = add(tray_t, ElementKind::CableTray(MepSegment::new(DVec2::ZERO, DVec2::new(6.0, 0.0), 2.6)));

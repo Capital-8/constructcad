@@ -263,6 +263,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: option,
+                paints: Vec::new(),
             },
         );
         id
