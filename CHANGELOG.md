@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A picture in the title block editor moves by dragging its body, not only its corner grip: grabbed anywhere inside, it keeps that point under the pointer and its corner snaps to the paper edges and planes, in one undo step.
 - Curved surfaces shade smoothly in 3D views (#22): the facets of arc walls and other curved surfaces share their normals where they meet, so a curved wall no longer shows a step of light at each facet. Flat faces, and facets meeting at a sharp angle, keep their own shading.
 
 ### Fixed
