@@ -75,7 +75,7 @@ pub fn element(state: &mut AppState, id: ElementId, key: Option<u64>, f: impl Fn
         type_ref: (new.type_id != old.type_id).then_some(Ref::Id(new.type_id.0)),
         mark: (new.mark != old.mark).then_some(new.mark),
         comments: (new.comments != old.comments).then_some(new.comments),
-        params: (new.kind != old.kind).then(|| cc_engine::element_params(&new.kind)),
+        params: (new.kind != old.kind).then(|| cc_engine::element_params_patch(&old.kind, &new.kind)),
     };
     run(state, key, command)
 }
@@ -96,7 +96,7 @@ pub fn element_type(
     let command = types::TypeSet {
         type_ref: Ref::Id(id.0),
         name: (new.name != old.name).then_some(new.name),
-        params: (new.data != old.data).then(|| cc_engine::params_of(&new.data)),
+        params: (new.data != old.data).then(|| cc_engine::params_patch(&old.data, &new.data)),
         info: (new.info != old.info).then(|| json(&new.info)),
         renames: Vec::new(),
     };
@@ -117,7 +117,7 @@ pub fn view(state: &mut AppState, id: ViewId, key: Option<u64>, f: impl FnOnce(&
         view: Ref::Id(id.0),
         name: (new.name != old.name).then_some(new.name),
         scale: (new.scale != old.scale).then_some(new.scale),
-        params: (new.kind != old.kind).then(|| cc_engine::params_of(&new.kind)),
+        params: (new.kind != old.kind).then(|| cc_engine::params_patch(&old.kind, &new.kind)),
         phase: (new.phase != old.phase).then_some(Ref::Id(new.phase.0)),
         detail: (new.detail != old.detail).then(|| new.detail.name().to_string()),
         visual_style: (new.visual_style != old.visual_style)
@@ -286,6 +286,37 @@ mod tests {
 
     fn kind(state: &AppState, id: ViewId) -> ViewKind {
         state.project().view(id).unwrap().kind.clone()
+    }
+
+    /// Issue #225: a plan's underlay set to "Next level below" could not be
+    /// set back to "None" (the patch left the cleared field out, and the
+    /// merge kept the old value). The same goes for any field that returns
+    /// to its empty value.
+    #[test]
+    fn a_property_set_back_to_none_is_cleared() {
+        let mut state = AppState::new(Document::new(crate::actions::new_project()));
+        let plan = state.project().views.values().find(|v| v.is_plan()).map(|v| v.id).unwrap();
+        let below = cc_core::UnderlayPlan::default();
+        assert!(view(&mut state, plan, None, |v| {
+            if let Some(u) = v.kind.underlay_mut() {
+                (u.below, u.above, u.printed) = (Some(below), Some(below), true);
+            }
+        }));
+        assert_eq!(kind(&state, plan).underlay().map(|u| (u.below, u.printed)), Some((Some(below), true)));
+        // One back to none, then the whole underlay.
+        assert!(view(&mut state, plan, None, |v| {
+            if let Some(u) = v.kind.underlay_mut() {
+                u.below = None;
+            }
+        }));
+        assert_eq!(kind(&state, plan).underlay().map(|u| (u.below, u.above)), Some((None, Some(below))));
+        assert!(view(&mut state, plan, None, |v| {
+            if let Some(u) = v.kind.underlay_mut() {
+                *u = Default::default();
+            }
+        }));
+        assert!(kind(&state, plan).underlay().is_some_and(|u| u.is_empty()), "{:?}", kind(&state, plan));
+        assert!(state.message.is_empty(), "{}", state.message);
     }
 
     #[test]

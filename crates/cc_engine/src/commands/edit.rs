@@ -76,6 +76,15 @@ impl Command for ElementSet {
     }
 }
 
+/// `kind` with `patch` merged into its parameters as `element_set` merges
+/// them (an imported drawing keeps its drawing), before any checks.
+pub(crate) fn patch_kind(kind: &cc_core::ElementKind, patch: &Value) -> Result<cc_core::ElementKind> {
+    match kind {
+        cc_core::ElementKind::CadImport(c) => super::cad::patch(c, patch),
+        kind => patch_variant(kind, patch),
+    }
+}
+
 /// `element`'s kind with `patch` merged into its parameters, checked (with
 /// its type, or `type_id` when it changes too).
 fn patched(
