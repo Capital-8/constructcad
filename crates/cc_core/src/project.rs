@@ -1008,6 +1008,11 @@ impl Project {
             .collect()
     }
 
+    /// Elements with a face painted in material `name`.
+    pub fn material_paint_users(&self, name: &str) -> Vec<ElementId> {
+        self.elements.values().filter(|e| e.paints.iter().any(|p| p.material == name)).map(|e| e.id).collect()
+    }
+
     /// Doors and windows hosted by `wall`.
     pub fn hosted_by(&self, wall: ElementId) -> impl Iterator<Item = &Element> {
         self.elements.values().filter(move |e| e.as_hosted().is_some_and(|h| h.host == wall))

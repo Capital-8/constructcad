@@ -30,6 +30,7 @@ pub mod material;
 pub mod mep;
 pub mod openings;
 pub mod pad;
+pub mod paint;
 mod persist;
 pub mod phase;
 pub mod profile;

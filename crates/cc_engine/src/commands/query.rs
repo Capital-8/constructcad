@@ -519,7 +519,10 @@ impl Command for MaterialGet {
     const KIND: CommandKind = CommandKind::Query;
     fn run(self, s: &mut Session) -> Result<Value> {
         let name = refs::material(s.project(), &self.material)?;
-        s.project().material(&name).map(to_json).ok_or_else(|| EngineError::not_found("material"))
+        s.project()
+            .material(&name)
+            .map(super::materials::material_json)
+            .ok_or_else(|| EngineError::not_found("material"))
     }
 }
 

@@ -349,7 +349,11 @@ struct ImageTextures(Vec<(std::sync::Weak<RasterImage>, bool, Option<egui::Textu
 
 /// The texture of `image`, decoded the first time it is shown; `None` when
 /// it cannot be decoded.
-fn image_texture(ctx: &egui::Context, image: &std::sync::Arc<RasterImage>, faded: bool) -> Option<egui::TextureHandle> {
+pub(crate) fn image_texture(
+    ctx: &egui::Context,
+    image: &std::sync::Arc<RasterImage>,
+    faded: bool,
+) -> Option<egui::TextureHandle> {
     let id = egui::Id::new("image-textures");
     let mut cache: ImageTextures = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
     cache.0.retain(|(w, _, _)| w.strong_count() > 0);

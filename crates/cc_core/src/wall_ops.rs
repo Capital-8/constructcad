@@ -541,6 +541,7 @@ mod tests {
                         phase_created: Default::default(),
                         phase_demolished: None,
                         design_option: None,
+                        paints: Vec::new(),
                     })
                 })
                 .collect()
@@ -590,6 +591,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         // Split at x = 6: the door (at 8) moves to the second wall at 2.
@@ -734,6 +736,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         let outer = path(&doc.project, ids[1]).unwrap();

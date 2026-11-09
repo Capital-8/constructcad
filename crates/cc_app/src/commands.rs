@@ -168,6 +168,9 @@ pub enum UiCommand {
     UnjoinGeometry,
     AttachTop,
     DetachTop,
+    /// Paint faces with a material in a 3D view.
+    Paint,
+    RemovePaint,
     Group,
     Ungroup,
     /// Explode the selected imported drawing into native 2D elements.
@@ -355,6 +358,8 @@ impl UiCommand {
             UnjoinGeometry,
             AttachTop,
             DetachTop,
+            Paint,
+            RemovePaint,
             Group,
             Ungroup,
             Explode,
@@ -535,6 +540,7 @@ impl UiCommand {
             Explode => Icon::Explode,
             UnjoinGeometry => Icon::UnjoinGeometry,
             AttachTop | DetachTop => Icon::AttachTop,
+            Paint | RemovePaint => Icon::Paint,
             Pin => Icon::Pin,
             Unpin => Icon::Unpin,
             Delete => Icon::Delete,
@@ -600,7 +606,7 @@ impl UiCommand {
             | CreateDetailComponent => Some(Badge::New),
             ImportIfc | ImportCad | ImportImage | ImportSkp | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | ExportImage | ExportDxf | AnalyticalExport => Some(Badge::Export),
-            Delete | DetachTop => Some(Badge::Remove),
+            Delete | DetachTop | RemovePaint => Some(Badge::Remove),
             _ => None,
         }
     }
@@ -731,6 +737,8 @@ impl UiCommand {
             UnjoinGeometry => t!("tool-unjoin-geometry"),
             AttachTop => t!("tool-attach-top"),
             DetachTop => t!("tool-detach-top"),
+            Paint => t!("tool-paint"),
+            RemovePaint => t!("tool-remove-paint"),
             Pin => t!("action-pin"),
             Unpin => t!("action-unpin"),
             Delete => t!("action-delete"),
@@ -928,6 +936,8 @@ impl UiCommand {
             UnjoinGeometry => t!("cmd-desc-unjoin-geometry"),
             AttachTop => t!("cmd-desc-attach-top"),
             DetachTop => t!("cmd-desc-detach-top"),
+            Paint => t!("cmd-desc-paint"),
+            RemovePaint => t!("cmd-desc-remove-paint"),
             Pin => t!("cmd-desc-pin"),
             Unpin => t!("cmd-desc-unpin"),
             Delete => t!("cmd-desc-delete"),
@@ -1079,6 +1089,7 @@ impl UiCommand {
             TempIsolateCategory => "IC",
             TempReset => "HR",
             Demolish => "DE",
+            Paint => "PA",
             ToggleRibbon => "Ctrl+F1",
             Preferences => "Ctrl+,",
             CommandPalette => "Ctrl+Shift+P",
@@ -1196,6 +1207,8 @@ impl UiCommand {
             Explode => "cad_explode",
             UnjoinGeometry => "geometry_unjoin",
             AttachTop | DetachTop => "wall_attach",
+            Paint => "paint",
+            RemovePaint => "paint_remove",
             Pin | Unpin => "elements_pin",
             Delete | Cut => "elements_delete",
             Paste => "elements_paste",
@@ -1392,6 +1405,8 @@ impl UiCommand {
             }
             Demolish if phase_view(state).is_none() => Some(t!("why-no-phase-view")),
             ActiveOption if state.project().option_sets.is_empty() => Some(t!("why-no-option-sets")),
+            Paint | RemovePaint if !crate::modify3d::active_3d(state) => Some(t!("why-paint-3d")),
+            Paint if state.project().materials.is_empty() => Some(t!("why-no-materials")),
             // These pick ends and sides on plan linework; the other modify tools work in 3D too.
             TrimCorner | TrimExtend | Split | Offset | ToggleJoin if crate::modify3d::active_3d(state) => {
                 Some(t!("msg-plan-only"))
@@ -1492,6 +1507,8 @@ impl UiCommand {
             JoinGeometry => *tool == Tool::JoinGeometry { unjoin: false },
             UnjoinGeometry => *tool == Tool::JoinGeometry { unjoin: true },
             AttachTop => *tool == Tool::AttachTop,
+            Paint => *tool == Tool::Paint { remove: false },
+            RemovePaint => *tool == Tool::Paint { remove: true },
             Paste => *tool == Tool::Paste,
             MatchType => *tool == Tool::MatchType,
             Demolish => *tool == Tool::Demolish,
@@ -1891,6 +1908,8 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         }
         AttachTop => crate::modify::start_attach(state),
         DetachTop => crate::modify::detach_tops(state),
+        Paint => crate::paint_ui::start(state, false),
+        RemovePaint => crate::paint_ui::start(state, true),
         Pin => crate::modify::set_pinned(state, true),
         Unpin => crate::modify::set_pinned(state, false),
         Delete => match state.sketch.as_mut() {
@@ -2060,6 +2079,41 @@ mod tests {
         assert_eq!(state.tool, Tool::Align);
         assert_eq!(state.message, t!("hint-align-3d"));
         assert!(crate::modify3d::works_in_3d(&state.tool));
+    }
+
+    /// Paint needs a 3D view; it picks a face there and paints it with the
+    /// material of the options bar, and Remove Paint takes it off.
+    #[test]
+    fn paint_picks_faces_in_3d() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let plan = state.project().views_of(ViewCategory::FloorPlan).next().map(|v| v.id);
+        state.active_view = plan;
+        assert_eq!(UiCommand::Paint.unavailable(&state), Some(t!("why-paint-3d")));
+        let view = state.project().views_of(ViewCategory::ThreeD).next().map(|v| v.id).unwrap();
+        state.active_view = Some(view);
+        assert_eq!(UiCommand::Paint.unavailable(&state), None);
+        let ctx = egui::Context::default();
+        invoke(&mut state, &ctx, UiCommand::Paint);
+        assert_eq!(state.tool, Tool::Paint { remove: false });
+        assert!(state.project().material(&state.paint_material).is_some());
+        // A ray straight down onto the middle of the first wall's top.
+        let (wall, w) = state.project().walls().next().map(|(e, w)| (e.id, w.clone())).unwrap();
+        let mid = (w.start + w.end) * 0.5;
+        state.session.sync();
+        let ray = cc_geom::Ray { origin: mid.extend(100.0), dir: -glam::DVec3::Z };
+        crate::paint_ui::pick(&mut state, view, false, Some(wall), ray);
+        assert_eq!(state.message, t!("msg-painted"));
+        let painted = state.project().element(wall).unwrap().paints.clone();
+        assert_eq!(painted.len(), 1);
+        assert!(painted[0].normal.z > 0.5);
+        state.session.sync();
+        crate::paint_ui::pick(&mut state, view, true, Some(wall), ray);
+        assert!(state.project().element(wall).unwrap().paints.is_empty(), "{}", state.message);
+        // Nothing under the pointer: the hint again.
+        crate::paint_ui::pick(&mut state, view, false, None, ray);
+        assert_eq!(state.message, t!("hint-paint"));
     }
 
     /// Issue #148: *Drafting View* creates and opens a drafting view, which

@@ -937,6 +937,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
             let dr = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -956,6 +957,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
             (w, dr)
         });
@@ -1011,6 +1013,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 });
                 id
             })
@@ -1089,6 +1092,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
             w
         });
@@ -1185,6 +1189,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
             id
         });

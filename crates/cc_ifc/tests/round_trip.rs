@@ -248,6 +248,7 @@ fn arc_walls_round_trip() {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         };
         let arc = Wall { start: DVec2::new(4.0, 0.0), end: DVec2::new(-4.0, 0.0), bulge: 1.0, ..Default::default() };
@@ -336,6 +337,7 @@ fn framed_beams_round_trip() {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
         };
         let column = Column {
@@ -408,6 +410,7 @@ fn floor_openings_and_foundation_slabs_round_trip() {
             phase_created: Default::default(),
             phase_demolished: None,
             design_option: None,
+            paints: Vec::new(),
         };
         project.elements.insert(id, e);
     }
@@ -689,6 +692,7 @@ fn curtain_project() -> Project {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
         };
         add(e, plain, Wall { start: DVec2::new(0.0, 0.0), end: DVec2::new(10.0, 0.0), ..Default::default() });

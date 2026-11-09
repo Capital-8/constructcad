@@ -37,6 +37,7 @@ mod material_browser;
 mod modify;
 mod modify3d;
 mod paint;
+mod paint_ui;
 mod palette;
 mod phases_dialog;
 mod plugins_ui;

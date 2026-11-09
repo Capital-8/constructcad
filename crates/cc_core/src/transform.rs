@@ -81,6 +81,7 @@ impl Element {
         if let Some(Some(sketch)) = self.drawn_sketch_mut() {
             sketch.transform(t);
         }
+        self.paints.iter_mut().for_each(|paint| paint.transform(t));
         match &mut self.kind {
             ElementKind::Wall(w) => {
                 p(&mut w.start);

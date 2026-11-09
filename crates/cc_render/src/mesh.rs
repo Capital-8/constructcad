@@ -1,5 +1,7 @@
+use crate::textures::TextureSet;
 use cc_core::ElementId;
 use cc_geom::ModelGeometry;
+use glam::DVec3;
 use std::collections::BTreeSet;
 
 #[repr(C)]
@@ -12,12 +14,15 @@ pub struct Vertex {
     /// (linear) and, in `w`, its kind (the order of `cc_core::Pattern`, 0 for none).
     pub fg: [f32; 4],
     pub bg: [f32; 4],
+    /// The material's texture (textures style): coordinates in repeats in
+    /// `xy` and, in `z`, its layer plus one (0 for none).
+    pub tex: [f32; 4],
 }
 
 impl Vertex {
-    /// A vertex with no surface pattern.
+    /// A vertex with no surface pattern or texture.
     pub fn plain(pos: [f32; 3], normal: [f32; 3], color: [f32; 4]) -> Self {
-        Self { pos, normal, color, fg: [0.0; 4], bg: [0.0; 4] }
+        Self { pos, normal, color, fg: [0.0; 4], bg: [0.0; 4], tex: [0.0; 4] }
     }
 }
 
@@ -41,69 +46,100 @@ pub struct Tessellation {
     solids: Vec<SolidTess>,
 }
 
+/// The faces of a solid that show one material: all of them, or those
+/// painted with one paint (a painted solid makes several).
 #[derive(Debug, Clone)]
 struct SolidTess {
     element: ElementId,
-    color: [u8; 3],
-    /// The material's appearance color and surface pattern (textures style).
-    appearance: [u8; 3],
-    surface: cc_core::PatternFill,
-    transparency: f64,
+    /// The material's colors, surface pattern and transparency.
+    look: cc_geom::Look,
     /// The detail levels of the views that show it (a component's piece).
     detail: cc_core::component::DetailLevels,
-    /// Position and normal of each vertex.
-    vertices: Vec<([f32; 3], [f32; 3])>,
+    /// Position, normal and plane coordinates (meters, see [`plane_axes`]) of each vertex.
+    vertices: Vec<([f32; 3], [f32; 3], [f64; 2])>,
+    /// Where each face's vertices start in `vertices`.
+    faces: Vec<u32>,
     /// Triangles, as indices into `vertices`.
     triangles: Vec<u32>,
     /// Outline segments (pairs of points) with their face's normal.
     edges: Vec<([f32; 3], [f32; 3])>,
 }
 
+/// The axes a texture is laid along on a face with normal `n`: plan X and Y
+/// on faces turned up or down, else level across the face (to the right,
+/// seen from outside) and up its slope.
+pub fn plane_axes(n: DVec3) -> (DVec3, DVec3) {
+    if n.z.abs() > 0.9 {
+        return (DVec3::X, if n.z >= 0.0 { DVec3::Y } else { -DVec3::Y });
+    }
+    let u = DVec3::new(-n.y, n.x, 0.0).normalize_or(DVec3::X);
+    (u, n.cross(u).normalize_or(DVec3::Z))
+}
+
 impl Tessellation {
     pub fn new(geom: &ModelGeometry) -> Self {
-        let solids = geom
-            .solids
-            .iter()
-            .map(|solid| {
-                let mut s = SolidTess {
-                    element: solid.element,
-                    color: solid.color,
-                    appearance: solid.appearance,
-                    surface: solid.surface,
-                    transparency: solid.transparency,
-                    detail: solid.detail,
-                    vertices: Vec::new(),
-                    triangles: Vec::new(),
-                    edges: Vec::new(),
-                };
-                // Curved surfaces shade smoothly across their facets.
-                for (face, normals) in solid.faces.iter().zip(solid.vertex_normals()) {
-                    let start = s.vertices.len() as u32;
-                    s.vertices.extend(
-                        face.verts.iter().zip(normals).map(|(p, n)| (p.as_vec3().to_array(), n.as_vec3().to_array())),
-                    );
-                    for [a, b, c] in face.triangulate() {
-                        s.triangles.extend([start + a as u32, start + b as u32, start + c as u32]);
+        let mut solids = Vec::new();
+        for solid in &geom.solids {
+            let part = |look: cc_geom::Look| SolidTess {
+                element: solid.element,
+                look,
+                detail: solid.detail,
+                vertices: Vec::new(),
+                faces: Vec::new(),
+                triangles: Vec::new(),
+                edges: Vec::new(),
+            };
+            // One part for the solid's own material, one per paint.
+            let mut parts: Vec<SolidTess> = vec![part(solid.look())];
+            let mut part_of = vec![0usize; solid.faces.len()];
+            for (fi, look) in &solid.painted {
+                let at = match parts.iter().position(|p| p.look == *look) {
+                    Some(i) => i,
+                    None => {
+                        parts.push(part(look.clone()));
+                        parts.len() - 1
                     }
+                };
+                if let Some(slot) = part_of.get_mut(*fi) {
+                    *slot = at;
                 }
+            }
+            // Curved surfaces shade smoothly across their facets.
+            for (fi, (face, normals)) in solid.faces.iter().zip(solid.vertex_normals()).enumerate() {
+                let Some(s) = part_of.get(fi).and_then(|i| parts.get_mut(*i)) else { continue };
+                let (u, v) = plane_axes(face.normal);
+                let start = s.vertices.len() as u32;
+                s.faces.push(start);
+                s.vertices.extend(
+                    face.verts
+                        .iter()
+                        .zip(normals)
+                        .map(|(p, n)| (p.as_vec3().to_array(), n.as_vec3().to_array(), [p.dot(u), p.dot(v)])),
+                );
+                for [a, b, c] in face.triangulate() {
+                    s.triangles.extend([start + a as u32, start + b as u32, start + c as u32]);
+                }
+            }
+            if let Some(first) = parts.first_mut() {
                 for (face, edges) in solid.faces.iter().zip(solid.feature_edges()) {
                     let normal = face.normal.as_vec3().to_array();
                     for (a, b) in edges {
-                        s.edges.push((a.as_vec3().to_array(), normal));
-                        s.edges.push((b.as_vec3().to_array(), normal));
+                        first.edges.push((a.as_vec3().to_array(), normal));
+                        first.edges.push((b.as_vec3().to_array(), normal));
                     }
                 }
-                s
-            })
-            .collect();
+            }
+            solids.extend(parts.into_iter().filter(|p| !p.triangles.is_empty() || !p.edges.is_empty()));
+        }
         Self { solids }
     }
 }
 
 impl SceneMesh {
-    /// Append `solid`'s triangles in `color` (with its surface pattern when
-    /// `textured`), to the blended pass when transparent.
-    fn add_faces(&mut self, solid: &SolidTess, color: [f32; 4], textured: bool) {
+    /// Append `solid`'s triangles in `color` (with its surface pattern and
+    /// its material's texture in `textures` when `textured`), to the
+    /// blended pass when transparent.
+    fn add_faces(&mut self, solid: &SolidTess, color: [f32; 4], textured: bool, textures: &TextureSet) {
         let start = self.vertices.len() as u32;
         let layer = |pattern: cc_core::Pattern, c: [u8; 3]| -> [f32; 4] {
             let kind = cc_core::Pattern::ALL.iter().position(|p| *p == pattern).unwrap_or(0);
@@ -112,9 +148,35 @@ impl SceneMesh {
             }
             [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2]), kind as f32]
         };
-        let fg = layer(solid.surface.foreground, solid.surface.foreground_color);
-        let bg = layer(solid.surface.background, solid.surface.background_color);
-        self.vertices.extend(solid.vertices.iter().map(|&(pos, normal)| Vertex { pos, normal, color, fg, bg }));
+        let surface = solid.look.surface;
+        let fg = layer(surface.foreground, surface.foreground_color);
+        let bg = layer(surface.background, surface.background_color);
+        let texture = if textured { solid.look.material.as_deref().and_then(|m| textures.of(m)) } else { None };
+        match texture {
+            Some((index, t)) => {
+                // Per face, whole repeats are taken off so the coordinates stay precise as f32.
+                let mut shift = [0.0, 0.0];
+                let mut next_face = solid.faces.iter().peekable();
+                for (i, &(pos, normal, uv)) in solid.vertices.iter().enumerate() {
+                    // Image rows run down from the top: the texture's up is the face's up.
+                    let [x, y] = t.map(uv);
+                    let y = -y;
+                    if next_face.next_if(|s| **s as usize == i).is_some() {
+                        shift = [x.floor(), y.floor()];
+                    }
+                    let tex = [(x - shift[0]) as f32, (y - shift[1]) as f32, index as f32 + 1.0, 0.0];
+                    self.vertices.push(Vertex { pos, normal, color, fg, bg, tex });
+                }
+            }
+            None => self.vertices.extend(solid.vertices.iter().map(|&(pos, normal, _)| Vertex {
+                pos,
+                normal,
+                color,
+                fg,
+                bg,
+                tex: [0.0; 4],
+            })),
+        }
         let target = if color[3] < 0.999 { &mut self.transparent_indices } else { &mut self.indices };
         target.extend(solid.triangles.iter().map(|i| start + i));
     }
@@ -172,6 +234,20 @@ impl SceneMesh {
         detail: cc_core::DetailLevel,
         visual: cc_core::VisualStyle,
     ) -> Self {
+        Self::build_textured(tess, selected, style, detail, visual, &TextureSet::default())
+    }
+
+    /// [`SceneMesh::build_styled`] with the materials' textures: in the textures
+    /// style, faces of a material with a texture in `textures` show it (not
+    /// where view graphics override the color, under halftone or selected).
+    pub fn build_textured(
+        tess: &Tessellation,
+        selected: &BTreeSet<ElementId>,
+        style: &mut dyn FnMut(ElementId) -> Option<SolidStyle>,
+        detail: cc_core::DetailLevel,
+        visual: cc_core::VisualStyle,
+        textures: &TextureSet,
+    ) -> Self {
         use cc_core::VisualStyle as V;
         let mut mesh = Self { unlit: matches!(visual, V::HiddenLine | V::ConsistentColors), ..Self::default() };
         let mut styles: std::collections::HashMap<ElementId, Option<SolidStyle>> = Default::default();
@@ -180,15 +256,15 @@ impl SceneMesh {
             let sel = selected.contains(&solid.element);
             let own = match visual {
                 V::HiddenLine => [255, 255, 255],
-                V::Textures => solid.appearance,
-                _ => solid.color,
+                V::Textures => solid.look.appearance,
+                _ => solid.look.color,
             };
             let mut base = st.color.unwrap_or(own);
             if st.halftone {
                 base = base.map(|v| (f32::from(v) + (255.0 - f32::from(v)) * 0.66).round() as u8);
             }
             let base = if sel { SELECTED } else { base };
-            let transparency = st.transparency.unwrap_or(solid.transparency).clamp(0.0, 1.0) as f32;
+            let transparency = st.transparency.unwrap_or(solid.look.transparency).clamp(0.0, 1.0) as f32;
             // Selected solids stay opaque so they read clearly.
             let alpha = if sel { 1.0 } else { (1.0 - transparency).clamp(0.08, 1.0) };
             let color = [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), alpha];
@@ -199,7 +275,8 @@ impl SceneMesh {
                 (false, None) => [0.02, 0.02, 0.025, 1.0],
             };
             if visual.fills() {
-                mesh.add_faces(solid, color, visual == V::Textures && st.color.is_none() && !sel);
+                let textured = visual == V::Textures && st.color.is_none() && !st.halftone && !sel;
+                mesh.add_faces(solid, color, textured, textures);
             }
             mesh.edges.extend(solid.edges.iter().map(|&(pos, normal)| Vertex::plain(pos, normal, edge_color)));
         }
@@ -236,11 +313,12 @@ impl SceneMesh {
     fn faint(tess: &Tessellation) -> Self {
         let mut mesh = Self::default();
         for solid in &tess.solids {
-            let base = solid.color;
+            let base = solid.look.color;
             mesh.add_faces(
                 solid,
                 [srgb_to_linear(base[0]), srgb_to_linear(base[1]), srgb_to_linear(base[2]), 0.12],
                 false,
+                &TextureSet::default(),
             );
         }
         mesh
@@ -347,5 +425,76 @@ mod tests {
         let bricked: Vec<&Vertex> = textured.vertices.iter().filter(|v| v.fg[3] == brick).collect();
         assert!(!textured.unlit && bricked.len() * 2 > textured.vertices.len(), "{}", bricked.len());
         assert!(bricked.iter().all(|v| (v.fg[0] - srgb_to_linear(90)).abs() < 1e-6));
+    }
+
+    /// A 2 x 2 PNG.
+    fn png() -> cc_core::raster::RasterImage {
+        let mut bytes = Vec::new();
+        let img = image::RgbaImage::from_pixel(2, 2, image::Rgba([10, 200, 10, 255]));
+        img.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).unwrap();
+        cc_core::raster::RasterImage { format: cc_core::raster::RasterFormat::Png, width: 2, height: 2, data: bytes }
+    }
+
+    #[test]
+    fn textures_and_paints_reach_the_vertices() {
+        use cc_core::VisualStyle as V;
+        let mut project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
+        let geom = ModelGeometry::build(&project);
+        // The material of the first wall gets a texture 0.5 m wide.
+        let wall = geom.solids.iter().find(|s| s.category == cc_core::Category::Wall).unwrap();
+        let material = wall.material.clone().unwrap();
+        let m = project.materials.iter_mut().find(|m| m.name == material).unwrap();
+        m.appearance.texture = Some(cc_core::material::MaterialTexture::new(png(), 0.5, 0.5));
+        // A face of another wall is painted with a second material.
+        let paint = project.materials.iter().find(|m| m.name != material).unwrap().clone();
+        let (id, face) = geom
+            .solids
+            .iter()
+            .filter(|s| s.category == cc_core::Category::Wall)
+            .find_map(|s| Some((s.element, s.faces.iter().find(|f| f.normal.z.abs() < 0.1)?.clone())))
+            .unwrap();
+        project.elements.get_mut(&id).unwrap().paints.push(cc_core::paint::FacePaint {
+            point: face.centroid(),
+            normal: face.normal,
+            material: paint.name.clone(),
+        });
+        let geom = ModelGeometry::build(&project);
+        let tess = Tessellation::new(&geom);
+        let mut textures = TextureSet::default();
+        textures.update(&project);
+        assert_eq!(textures.len(), 1);
+        let build = |visual| {
+            SceneMesh::build_textured(
+                &tess,
+                &BTreeSet::new(),
+                &mut |_| Some(SolidStyle::default()),
+                cc_core::DetailLevel::Medium,
+                visual,
+                &textures,
+            )
+        };
+        let textured = build(V::Textures);
+        let mapped: Vec<&Vertex> = textured.vertices.iter().filter(|v| v.tex[2] == 1.0).collect();
+        assert!(!mapped.is_empty());
+        // Coordinates in repeats of 0.5 m, kept near zero per face.
+        assert!(mapped.iter().all(|v| v.tex[0].abs() < 1e4 && v.tex[1].abs() < 1e4));
+        assert!(mapped.iter().any(|v| v.tex[0].fract().abs() > 1e-3 || v.tex[0].abs() > 1.5));
+        // Shaded views do not texture; the painted face shows its paint's color.
+        assert!(build(V::Shaded).vertices.iter().all(|v| v.tex[2] == 0.0));
+        let c = paint.shading_color();
+        let want = [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2])];
+        assert!(build(V::Shaded).vertices.iter().any(|v| v.color[..3] == want));
+    }
+
+    #[test]
+    fn walls_and_floors_lay_textures_level_and_up() {
+        // A wall facing south: across to the east (the right seen from the south), up the wall.
+        let (u, v) = plane_axes(-DVec3::Y);
+        assert!(u.distance(DVec3::X) < 1e-9 && v.distance(DVec3::Z) < 1e-9, "{u} {v}");
+        let (u, v) = plane_axes(DVec3::Z);
+        assert_eq!((u, v), (DVec3::X, DVec3::Y));
+        // A roof slope: level along the eave, up the slope.
+        let (u, v) = plane_axes(DVec3::new(0.0, -1.0, 1.0).normalize());
+        assert!(u.z.abs() < 1e-9 && v.z > 0.5);
     }
 }

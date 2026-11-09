@@ -386,6 +386,11 @@ impl<'a> EditCtx<'a> {
                 c.text_overrides.values_mut().filter(|v| *v == old).for_each(|v| *v = new.to_string());
             }
         }
+        for id in self.project.material_paint_users(old) {
+            if let Some(e) = self.element_mut(id) {
+                e.paints.iter_mut().filter(|p| p.material == old).for_each(|p| p.material = new.to_string());
+            }
+        }
         if let Some(m) = self.materials_mut().iter_mut().find(|m| m.name == old) {
             m.name = new.to_string();
         }
@@ -1122,6 +1127,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         })
     }
@@ -1168,6 +1174,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         doc.edit("delete", |e| e.remove_element(wall));
@@ -1205,6 +1212,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 });
             }
             let selfie = ElementId(e.alloc_id());
@@ -1226,6 +1234,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             });
             e.remove_element(selfie);
             (a, b)

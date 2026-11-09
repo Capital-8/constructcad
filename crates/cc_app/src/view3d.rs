@@ -16,6 +16,8 @@ pub struct View3DState {
     mesh_key: Option<(u64, u64, u64)>,
     /// Triangles and edges of the geometry shown, with the revision they were made at.
     tessellation: Option<(u64, cc_render::Tessellation)>,
+    /// The materials' textures, decoded, with the revision they follow.
+    textures: (Option<u64>, cc_render::TextureSet),
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
     fit_requested: bool,
@@ -64,6 +66,7 @@ impl View3DState {
             texture: None,
             mesh_key: None,
             tessellation: None,
+            textures: (None, cc_render::TextureSet::default()),
             camera_dirty: false,
             fit_requested: false,
             auto_fit: None,
@@ -346,6 +349,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     let mut demolish_pick = None;
     let mut opening_pick = None;
     let mut attach_pick = None;
+    let mut paint_pick = None;
     // The modify tools that work in 3D take the clicks themselves (see `modify3d`).
     let modifying = crate::modify3d::works_in_3d(&state.tool);
     if resp.clicked()
@@ -373,7 +377,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let demolishing = state.tool == crate::tools::Tool::Demolish;
         let placing = matches!(state.tool, crate::tools::Tool::Hosted { .. });
         let attaching = state.tool == crate::tools::Tool::AttachTop;
+        let painting = match state.tool {
+            crate::tools::Tool::Paint { remove } => Some(remove),
+            _ => None,
+        };
         match picked {
+            _ if painting.is_some() => paint_pick = painting.map(|remove| (remove, picked.map(|(id, _)| id), ray)),
             _ if demolishing => demolish_pick = Some(picked.map(|(id, _)| id)),
             _ if attaching => attach_pick = Some(picked.map(|(id, _)| id)),
             Some((id, t)) if placing && project.element(id).is_some_and(|e| e.as_wall().is_some()) => {
@@ -415,7 +424,13 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
                     let temporary = state.session.temporary(view_id);
                     let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
                     let style = &mut |e| resolver.style(e).map(|g| solid_style(&g));
-                    SceneMesh::build_styled(tess, &state.selection, style, view.detail, view.style())
+                    if v3.textures.0 != Some(revision) {
+                        v3.textures.1.update(project);
+                        v3.textures.0 = Some(revision);
+                    }
+                    renderer.set_textures(&rs.device, &rs.queue, &v3.textures.1);
+                    let textures = &v3.textures.1;
+                    SceneMesh::build_textured(tess, &state.selection, style, view.detail, view.style(), textures)
                 }
                 None => SceneMesh::build_plain(tess, &state.selection),
             }
@@ -511,6 +526,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     }
     if let Some(picked) = attach_pick {
         crate::modify::attach_pick(state, picked);
+    }
+    if let Some((remove, picked, ray)) = paint_pick {
+        crate::paint_ui::pick(state, view_id, remove, picked, ray);
     }
     if let Some(picked) = demolish_pick {
         let ids = crate::phases_dialog::demolishable(state, view_id, picked);

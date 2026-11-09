@@ -104,6 +104,8 @@ pub struct AppState {
     pub mep: crate::tools::MepOptions,
     /// Options of the Curtain Grid tool.
     pub curtain: crate::curtain_ui::CurtainOptions,
+    /// The material of the Paint tool.
+    pub paint_material: String,
     pub active_view: Option<ViewId>,
     pub view2d: HashMap<ViewId, View2DState>,
     pub view3d: HashMap<ViewId, View3DState>,
@@ -221,6 +223,7 @@ impl AppState {
             truss: Default::default(),
             mep: Default::default(),
             curtain: Default::default(),
+            paint_material: String::new(),
             active_view: None,
             view2d: HashMap::new(),
             view3d: HashMap::new(),
@@ -455,6 +458,7 @@ impl AppState {
             phase_created: Default::default(),
             phase_demolished: None,
             design_option: None,
+            paints: Vec::new(),
         }
         .category();
         let id = self.session.doc.edit(name, |e| {
@@ -475,6 +479,7 @@ impl AppState {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         self.selection = BTreeSet::from([id]);

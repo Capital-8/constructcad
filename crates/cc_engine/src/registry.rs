@@ -315,6 +315,11 @@ registry![
         materials::MaterialRename,
         materials::MaterialSet,
         materials::MaterialDelete,
+        materials::MaterialTextureSet,
+        materials::MaterialTextureClear,
+        paint::Paint,
+        paint::PaintRemove,
+        paint::PaintsList,
     ],
     "Levels and views" => [
         levels::LevelCreate,

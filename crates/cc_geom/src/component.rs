@@ -315,6 +315,7 @@ mod tests {
             phase_created: Default::default(),
             phase_demolished: None,
             design_option: None,
+            paints: Vec::new(),
         };
         let mut c = cc_core::Component::default();
         c.overrides.insert("width".into(), 3.0);

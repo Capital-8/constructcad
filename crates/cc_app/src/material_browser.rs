@@ -596,6 +596,104 @@ fn appearance(ui: &mut Ui, state: &mut AppState, m: &Material) {
             |m, v| m.appearance.description = v,
         );
     });
+    texture(ui, state, m);
+}
+
+/// Picture files a texture is read from.
+const TEXTURE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
+
+/// The material's texture: a thumbnail, loading and clearing the image, and
+/// the size, offset and rotation of one repeat on the faces.
+fn texture(ui: &mut Ui, state: &mut AppState, m: &Material) {
+    heading(ui, t!("mat-texture"));
+    let tex = m.appearance.texture.as_ref();
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(72.0, 72.0), Sense::hover());
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 3.0, Color32::from_gray(70));
+        match tex.and_then(|t| crate::paint::image_texture(ui.ctx(), &t.image, false)) {
+            Some(handle) => {
+                let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+                painter.image(handle.id(), rect.shrink(2.0), uv, Color32::WHITE);
+            }
+            None => {
+                let c = m.appearance.color;
+                painter.rect_filled(rect.shrink(2.0), 2.0, Color32::from_rgb(c[0], c[1], c[2]));
+            }
+        }
+        ui.vertical(|ui| {
+            match tex {
+                Some(t) => {
+                    ui.label(theme::muted(t!("mat-texture-pixels", "w" => t.image.width, "h" => t.image.height)))
+                }
+                None => ui.label(theme::muted(t!("mat-texture-none"))),
+            };
+            ui.horizontal(|ui| {
+                if ui.button(t!("mat-texture-load")).clicked() {
+                    let mut dialog = rfd::FileDialog::new().add_filter(t!("file-filter-image"), &TEXTURE_EXTENSIONS);
+                    if let Some(dir) = state.prefs.projects_dir() {
+                        dialog = dialog.set_directory(dir);
+                    }
+                    if let Some(path) = dialog.pick_file() {
+                        let command = materials::MaterialTextureSet {
+                            material: Ref::Name(m.name.clone()),
+                            path: Some(path),
+                            data: None,
+                            width: None,
+                            height: None,
+                            offset: None,
+                            rotation: None,
+                        };
+                        crate::actions::run_command(state, command);
+                    }
+                }
+                if tex.is_some() && ui.button(t!("mat-texture-clear")).clicked() {
+                    let command = materials::MaterialTextureClear { material: Ref::Name(m.name.clone()) };
+                    crate::actions::run_command(state, command);
+                }
+            });
+        });
+    });
+    let Some(t) = tex else { return };
+    let (lo, hi) = (cc_core::material::MIN_TEXTURE_SIZE, cc_core::material::MAX_TEXTURE_SIZE);
+    grid(ui, "mat-texture", |ui| {
+        type Set = fn(&mut cc_core::material::MaterialTexture, f64);
+        let rows: [(String, &str, f64, Set); 4] = [
+            (t!("mat-texture-width"), "tex-w", t.width, |x, v| x.width = v),
+            (t!("mat-texture-height"), "tex-h", t.height, |x, v| x.height = v),
+            (t!("mat-texture-offset-x"), "tex-x", t.offset[0], |x, v| x.offset[0] = v),
+            (t!("mat-texture-offset-y"), "tex-y", t.offset[1], |x, v| x.offset[1] = v),
+        ];
+        for (i, (label, field, value, set)) in rows.into_iter().enumerate() {
+            ui.label(theme::muted(label));
+            let mut v = value;
+            let drag = crate::properties::length_drag(&mut v);
+            // Sizes stay positive; offsets may be anything.
+            let r = ui.add(if i < 2 { drag.range(lo..=hi) } else { drag.range(-1e5..=1e5) });
+            if r.changed() {
+                update(state, &m.name, field, |x| {
+                    if let Some(t) = x.appearance.texture.as_mut() {
+                        set(t, v);
+                    }
+                });
+            }
+            done(state, &r);
+            ui.end_row();
+        }
+        ui.label(theme::muted(t!("prop-rotation")));
+        let mut r = t.rotation_deg;
+        let resp = ui.add(DragValue::new(&mut r).speed(1.0).suffix("°"));
+        if resp.changed() {
+            update(state, &m.name, "tex-r", |x| {
+                if let Some(t) = x.appearance.texture.as_mut() {
+                    t.rotation_deg = r.rem_euclid(360.0);
+                }
+            });
+        }
+        done(state, &resp);
+        ui.end_row();
+    });
+    ui.label(theme::muted(t!("mat-texture-hint")));
 }
 
 /// A physical property row: key, value, unit and setter.

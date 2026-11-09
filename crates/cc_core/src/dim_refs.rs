@@ -406,6 +406,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             };
             e.add_element(el)
         });
@@ -502,6 +503,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         assert!((self::dim(&doc, id).value().to_degrees() - 90.0).abs() < 1e-9);
@@ -559,6 +561,7 @@ mod tests {
                 phase_created: Default::default(),
                 phase_demolished: None,
                 design_option: None,
+                paints: Vec::new(),
             })
         });
         let height = |doc: &Document| self::dim(doc, id).value();
@@ -618,6 +621,7 @@ mod tests {
                     phase_created: Default::default(),
                     phase_demolished: None,
                     design_option: None,
+                    paints: Vec::new(),
                 })
             });
             out.push((id, p));

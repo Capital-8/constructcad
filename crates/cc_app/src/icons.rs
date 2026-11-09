@@ -165,6 +165,7 @@ pub enum Icon {
     DesignOptions,
     ActiveOption,
     Demolish,
+    Paint,
     CurtainGrid,
     Image,
     Library,
@@ -181,7 +182,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 166] = [
+    pub const ALL: [Icon; 167] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -336,6 +337,7 @@ impl Icon {
         Icon::DesignOptions,
         Icon::ActiveOption,
         Icon::Demolish,
+        Icon::Paint,
         Icon::CurtainGrid,
         Icon::Image,
         Icon::Library,
@@ -507,6 +509,7 @@ impl Icon {
             Icon::DesignOptions => include_str!("../../../assets/icons/ui/design-options.svg"),
             Icon::ActiveOption => include_str!("../../../assets/icons/ui/active-option.svg"),
             Icon::Demolish => include_str!("../../../assets/icons/ui/demolish.svg"),
+            Icon::Paint => include_str!("../../../assets/icons/ui/paint.svg"),
             Icon::CurtainGrid => include_str!("../../../assets/icons/ui/curtain-grid.svg"),
             Icon::Image => include_str!("../../../assets/icons/ui/image.svg"),
             Icon::CadImport => include_str!("../../../assets/icons/ui/cad-import.svg"),

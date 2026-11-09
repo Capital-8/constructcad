@@ -481,6 +481,7 @@ mod tests {
             phase_created: Default::default(),
             phase_demolished: None,
             design_option: None,
+            paints: Vec::new(),
         };
         (project, e)
     }
