@@ -76,10 +76,12 @@ impl Tessellation {
                     triangles: Vec::new(),
                     edges: Vec::new(),
                 };
-                for face in &solid.faces {
+                // Curved surfaces shade smoothly across their facets.
+                for (face, normals) in solid.faces.iter().zip(solid.vertex_normals()) {
                     let start = s.vertices.len() as u32;
-                    let normal = face.normal.as_vec3().to_array();
-                    s.vertices.extend(face.verts.iter().map(|p| (p.as_vec3().to_array(), normal)));
+                    s.vertices.extend(
+                        face.verts.iter().zip(normals).map(|(p, n)| (p.as_vec3().to_array(), n.as_vec3().to_array())),
+                    );
                     for [a, b, c] in face.triangulate() {
                         s.triangles.extend([start + a as u32, start + b as u32, start + c as u32]);
                     }
