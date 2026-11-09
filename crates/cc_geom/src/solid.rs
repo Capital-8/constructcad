@@ -206,6 +206,50 @@ impl Solid {
         out
     }
 
+    /// The shading normal at each vertex of each face: a flat face's own
+    /// normal, and on a smooth facet the average of the normals of the
+    /// smooth facets meeting at that point (those that read as one surface
+    /// with it), so a curved surface shades without steps.
+    pub fn vertex_normals(&self) -> Vec<Vec<DVec3>> {
+        // Facets meet at the same points; look them up on a fine grid.
+        let key = |p: DVec3| {
+            let q = (p * 1e5).round();
+            (q.x as i64, q.y as i64, q.z as i64)
+        };
+        let mut at: std::collections::HashMap<(i64, i64, i64), Vec<usize>> = std::collections::HashMap::new();
+        for (fi, face) in self.faces.iter().enumerate().filter(|(_, f)| f.smooth) {
+            for p in &face.verts {
+                let list = at.entry(key(*p)).or_default();
+                if list.last() != Some(&fi) {
+                    list.push(fi);
+                }
+            }
+        }
+        self.faces
+            .iter()
+            .map(|face| {
+                if !face.smooth {
+                    return vec![face.normal; face.verts.len()];
+                }
+                face.verts
+                    .iter()
+                    .map(|p| {
+                        let sum: DVec3 = at
+                            .get(&key(*p))
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|fj| self.faces.get(*fj))
+                            .map(|other| other.normal)
+                            .filter(|n| n.dot(face.normal) > SMOOTH_COS)
+                            .sum();
+                        let n = sum.normalize_or_zero();
+                        if n == DVec3::ZERO || !n.is_finite() { face.normal } else { n }
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
     /// Edges between smooth facets (hidden by [`Self::feature_edges`]), per
     /// face, with the neighbor's normal: a view draws one as a silhouette
     /// where the face is seen and its neighbor is not.
@@ -621,6 +665,40 @@ mod tests {
             f.smooth = true;
         }
         assert_eq!(s.feature_edges(), feature_edges_brute(&s));
+    }
+
+    /// Issue #22: the facets of a curved surface shade as one surface (the
+    /// normal at a shared point is their average), while flat faces and
+    /// facets meeting at a sharp angle keep their own normals.
+    #[test]
+    fn smooth_facets_share_their_vertex_normals() {
+        // Two vertical facets of a cylinder of radius 1, 10° apart, and a flat top.
+        let at = |deg: f64, z: f64| DVec3::new(deg.to_radians().cos(), deg.to_radians().sin(), z);
+        let facet = |a: f64, b: f64| {
+            let mid = ((a + b) / 2.0).to_radians();
+            let mut f =
+                Face::new(vec![at(a, 0.0), at(b, 0.0), at(b, 1.0), at(a, 1.0)], DVec3::new(mid.cos(), mid.sin(), 0.0));
+            f.smooth = true;
+            f
+        };
+        let mut s = Solid::new(ElementId(1), Category::Wall, [0; 3]);
+        s.faces = vec![
+            facet(0.0, 10.0),
+            facet(10.0, 20.0),
+            Face::new(vec![at(0.0, 1.0), at(10.0, 1.0), at(20.0, 1.0)], DVec3::Z),
+        ];
+        let normals = s.vertex_normals();
+        // On the shared edge (at 10°) both facets get the radial direction there.
+        let radial = DVec3::new(10f64.to_radians().cos(), 10f64.to_radians().sin(), 0.0);
+        assert!(normals[0][1].distance(radial) < 1e-9, "{:?}", normals[0][1]);
+        assert!(normals[1][0].distance(radial) < 1e-9, "{:?}", normals[1][0]);
+        // At the outer edges each keeps its own facet's normal; the top stays flat.
+        assert!(normals[0][0].distance(s.faces[0].normal) < 1e-9);
+        assert!(normals[2].iter().all(|n| *n == DVec3::Z));
+        // A sharp corner between smooth facets is not smoothed across.
+        s.faces[1] = facet(10.0, 80.0);
+        let normals = s.vertex_normals();
+        assert!(normals[0][1].distance(s.faces[0].normal) < 1e-9);
     }
 
     #[test]
