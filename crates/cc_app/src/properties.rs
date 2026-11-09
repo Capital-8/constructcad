@@ -1240,10 +1240,12 @@ pub fn underlay_rows(
     *u != before
 }
 
-/// The patch of `view_set` or `template_set` that gives a view or template
-/// `underlay` (`null` clears it).
-pub fn underlay_patch(u: &cc_core::Underlay) -> serde_json::Value {
-    if u.is_empty() { serde_json::Value::Null } else { serde_json::to_value(u).unwrap_or_default() }
+/// The patch of `view_set` or `template_set` that turns a view's or
+/// template's underlay `old` into `new`. Plans set back to none are
+/// cleared (issue #235): the plain JSON of `new` leaves them out, and a
+/// merge would keep the old ones.
+pub fn underlay_patch(old: &cc_core::Underlay, new: &cc_core::Underlay) -> serde_json::Value {
+    cc_engine::value_patch(old, new)
 }
 
 /// Number, name, height and computed area of a room.
@@ -2687,14 +2689,14 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             });
             // Other levels' plans under this one.
             if let Some(u) = view.kind.underlay() {
-                let mut u = *u;
+                let (old, mut u) = (*u, *u);
                 let locked = crate::graphics_dialog::controlled(state, id, "underlay");
                 let level = *level;
                 section(ui, "underlay", t!("section-underlay"), |ui| {
                     if underlay_rows(ui, state, id.0, Some(level), !locked, &mut u) {
                         let command = cc_engine::commands::views::ViewSet {
                             view: cc_engine::Ref::Id(id.0),
-                            params: Some(serde_json::json!({ "underlay": underlay_patch(&u) })),
+                            params: Some(serde_json::json!({ "underlay": underlay_patch(&old, &u) })),
                             ..Default::default()
                         };
                         crate::actions::run_command(state, command);

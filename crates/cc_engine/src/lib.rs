@@ -53,6 +53,18 @@ where
     commands::clearing_patch(&params_of(old), &params_of(new), &check)
 }
 
+/// The merge patch that turns a whole value `old` (a struct a command takes
+/// as a patch, such as a template's `underlay`) into `new`, clearing the
+/// fields `new` leaves out as [`params_patch`] does.
+pub fn value_patch<T>(old: &T, new: &T) -> serde_json::Value
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq,
+{
+    let json = |v: &T| serde_json::to_value(v).unwrap_or_default();
+    let check = |patch: &serde_json::Value| commands::patch_value(old, patch).ok().map(|v| v == *new);
+    commands::clearing_patch(&json(old), &json(new), &check)
+}
+
 /// [`params_patch`] for an element's kind, as `element_set` applies it.
 pub fn element_params_patch(old: &cc_core::ElementKind, new: &cc_core::ElementKind) -> serde_json::Value {
     let check = |patch: &serde_json::Value| commands::edit::patch_kind(old, patch).ok().map(|v| v == *new);

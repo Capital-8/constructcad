@@ -1130,10 +1130,10 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
 
         changed |= ui.checkbox(&mut include.underlay, "").changed();
         ui.label(t!("section-underlay"));
-        let mut u = t.underlay;
+        let (old, mut u) = (t.underlay, t.underlay);
         ui.vertical(|ui| {
             if crate::properties::underlay_rows(ui, state, id.0, None, true, &mut u) {
-                set.underlay = Some(crate::properties::underlay_patch(&u));
+                set.underlay = Some(crate::properties::underlay_patch(&old, &u));
             }
         });
         ui.end_row();

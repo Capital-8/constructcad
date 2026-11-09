@@ -288,6 +288,55 @@ mod tests {
         state.project().view(id).unwrap().kind.clone()
     }
 
+    /// Issue #235: the properties palette and the template manager send the
+    /// underlay through their own `view_set` / `template_set` patch (not
+    /// [`view`]); setting a plan back to "None" there must clear it too, one
+    /// plan at a time and both at once.
+    #[test]
+    fn the_palette_and_templates_set_an_underlay_back_to_none() {
+        use crate::properties::underlay_patch;
+        use cc_engine::commands::{graphics, views};
+        let mut state = AppState::new(Document::new(crate::actions::new_project()));
+        let plan = state.project().views.values().find(|v| v.is_plan()).map(|v| v.id).unwrap();
+        let underlay = |state: &AppState| *kind(state, plan).underlay().unwrap();
+        let set_view = |state: &mut AppState, new: cc_core::Underlay| {
+            let old = underlay(state);
+            let params = serde_json::json!({ "underlay": underlay_patch(&old, &new) });
+            let command = views::ViewSet { view: Ref::Id(plan.0), params: Some(params), ..Default::default() };
+            assert!(crate::actions::run_command(state, command).is_some(), "{}", state.message);
+        };
+        let plan_below = cc_core::UnderlayPlan::default();
+        let both = cc_core::Underlay { below: Some(plan_below), above: Some(plan_below), printed: true };
+        set_view(&mut state, both);
+        assert_eq!(underlay(&state), both);
+        set_view(&mut state, cc_core::Underlay { below: None, ..both });
+        assert_eq!(underlay(&state), cc_core::Underlay { below: None, ..both });
+        set_view(&mut state, cc_core::Underlay::default());
+        assert!(underlay(&state).is_empty(), "{:?}", underlay(&state));
+
+        // A template's underlay, from the template manager.
+        let out = state.session.execute("template_create", serde_json::json!({ "name": "T" })).unwrap();
+        let template = out["id"].as_u64().unwrap();
+        let template_underlay = |state: &AppState| {
+            state.project().templates.values().find(|t| t.id.0 == template).map(|t| t.underlay).unwrap()
+        };
+        let set_template = |state: &mut AppState, new: cc_core::Underlay| {
+            let old = template_underlay(state);
+            let command = graphics::TemplateSet {
+                template: Ref::Id(template),
+                underlay: Some(underlay_patch(&old, &new)),
+                ..Default::default()
+            };
+            assert!(crate::actions::run_command(state, command).is_some(), "{}", state.message);
+        };
+        set_template(&mut state, both);
+        assert_eq!(template_underlay(&state), both);
+        set_template(&mut state, cc_core::Underlay { above: None, ..both });
+        assert_eq!(template_underlay(&state).above, None);
+        set_template(&mut state, cc_core::Underlay::default());
+        assert!(template_underlay(&state).is_empty());
+    }
+
     /// Issue #225: a plan's underlay set to "Next level below" could not be
     /// set back to "None" (the patch left the cleared field out, and the
     /// merge kept the old value). The same goes for any field that returns
