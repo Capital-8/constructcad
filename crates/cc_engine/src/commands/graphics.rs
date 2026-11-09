@@ -813,6 +813,7 @@ pub(crate) fn template_json(p: &Project, t: &ViewTemplate) -> Value {
         "detail": t.detail.name(),
         "visual_style": t.visual_style.map_or("default", |s| s.name()),
         "underlay": t.underlay,
+        "design_options": t.design_options.values().map(|o| super::design_options::option_ref_json(p, Some(*o))).collect::<Vec<_>>(),
         "graphics": graphics_json(p, &t.graphics),
         "views": p.views.values().filter(|v| v.template == Some(t.id)).map(|v| v.id.0).collect::<Vec<_>>(),
     })
@@ -938,9 +939,14 @@ pub struct TemplateSet {
     /// `underlay` (e.g. `{"below": {"level": "Next", "looking": "Down"}}`).
     #[serde(default)]
     pub underlay: Option<Value>,
+    /// The option shown of each design option set (replacing the
+    /// template's choices; sets left out show automatically).
+    #[serde(default)]
+    pub design_options: Option<Vec<super::design_options::OptionChoice>>,
     /// Which properties the template controls: `scale`, `categories`,
     /// `filters`, `cut_height`, `discipline`, `structural`, `phase_filter`,
-    /// `detail`, `visual_style`, `underlay` (true/false).
+    /// `detail`, `visual_style`, `underlay`, `design_options` (true/false).
+    /// `design_options` is off unless set.
     #[serde(default)]
     pub include: Option<Value>,
 }
@@ -988,6 +994,9 @@ impl Command for TemplateSet {
         }
         if let Some(patch) = &self.include {
             t.include = patch_value(&t.include, patch)?;
+        }
+        if let Some(list) = &self.design_options {
+            t.design_options = super::design_options::choices(p, list)?;
         }
         if let Some(patch) = &self.underlay {
             t.underlay = patch_value(&t.underlay, patch)?;

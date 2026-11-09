@@ -12,6 +12,7 @@ pub mod component_file;
 pub mod component_ref;
 pub mod component_script;
 pub mod curtain;
+pub mod design_option;
 pub mod detail;
 pub mod detail_component;
 pub mod dim_line;
@@ -63,6 +64,7 @@ pub use component::{
 };
 pub use component_ref::{PlaneAxis, RefDimension, RefEqual, RefLine, RefPlane};
 pub use component_script::{Hotspot, HotspotShape, ParamChoice, ScriptEval, ScriptInput, ScriptOwner, ScriptResult};
+pub use design_option::{DesignOption, OptionSet};
 pub use detail::{DetailLine, DetailStyle, LineStyleDef, LineStyleRef};
 pub use detail_component::DetailComponent;
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
@@ -77,8 +79,8 @@ pub use graphics::{
     LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
 };
 pub use ids::{
-    ElementId, ElementTypeId, FilterId, GroupId, LevelId, LineStyleId, PhaseFilterId, PhaseId, SystemId, TemplateId,
-    Uid, ViewId,
+    ElementId, ElementTypeId, FilterId, GroupId, LevelId, LineStyleId, OptionId, OptionSetId, PhaseFilterId, PhaseId,
+    SystemId, TemplateId, Uid, ViewId,
 };
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind, TrayStyle, Valve, ValveKind};

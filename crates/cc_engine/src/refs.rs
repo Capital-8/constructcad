@@ -237,6 +237,48 @@ pub fn phase(p: &Project, r: &Ref) -> Result<cc_core::PhaseId> {
     }
 }
 
+/// A design option set by id or name.
+pub fn option_set(p: &Project, r: &Ref) -> Result<cc_core::OptionSetId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::OptionSetId(*id);
+            p.option_set(id)
+                .map(|_| id)
+                .ok_or_else(|| EngineError::not_found(format!("no design option set with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            unique("design option set", n, p.option_sets.iter().filter(|s| matches(&s.name, n)).map(|s| s.id).collect())
+        }
+    }
+}
+
+/// A design option by id, by name (unique in the project), or as
+/// `"Set: Option"`.
+pub fn design_option(p: &Project, r: &Ref) -> Result<cc_core::OptionId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::OptionId(*id);
+            p.design_option(id)
+                .map(|_| id)
+                .ok_or_else(|| EngineError::not_found(format!("no design option with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            let all = || p.option_sets.iter().flat_map(|s| s.options.iter().map(move |o| (s, o)));
+            let found: Vec<cc_core::OptionId> = match n.split_once(':') {
+                Some((set, option)) => all()
+                    .filter(|(s, o)| matches(&s.name, set) && matches(&o.name, option))
+                    .map(|(_, o)| o.id)
+                    .collect(),
+                None => Vec::new(),
+            };
+            if !found.is_empty() {
+                return unique("design option", n, found);
+            }
+            unique("design option", n, all().filter(|(_, o)| matches(&o.name, n)).map(|(_, o)| o.id).collect())
+        }
+    }
+}
+
 /// One of the project's line styles by id or name.
 pub fn line_style(p: &Project, r: &Ref) -> Result<cc_core::LineStyleId> {
     match r {

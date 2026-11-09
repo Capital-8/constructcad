@@ -23,6 +23,10 @@ pub struct Element {
     /// The phase the element is demolished in (not before it is built).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_demolished: Option<crate::PhaseId>,
+    /// The design option the element belongs to (`None`: the main model,
+    /// shown with every option; see [`crate::design_option`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design_option: Option<crate::OptionId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

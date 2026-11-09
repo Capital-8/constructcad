@@ -205,6 +205,8 @@ pub enum UiCommand {
     TempReset,
     TempPermanent,
     Phases,
+    DesignOptions,
+    ActiveOption,
     Demolish,
     CurtainGrid,
     ProjectInfo,
@@ -387,6 +389,8 @@ impl UiCommand {
             TempReset,
             TempPermanent,
             Phases,
+            DesignOptions,
+            ActiveOption,
             Demolish,
             CurtainGrid,
             ProjectInfo,
@@ -555,6 +559,8 @@ impl UiCommand {
             TempIsolate | TempIsolateCategory => Icon::Isolate,
             TempReset => Icon::ResetTemporary,
             Phases => Icon::Phases,
+            DesignOptions => Icon::DesignOptions,
+            ActiveOption => Icon::ActiveOption,
             Demolish => Icon::Demolish,
             CurtainGrid => Icon::CurtainGrid,
             ProjectInfo => Icon::ProjectInfo,
@@ -756,6 +762,8 @@ impl UiCommand {
             TempReset => t!("action-temp-reset"),
             TempPermanent => t!("action-temp-permanent"),
             Phases => t!("action-phases"),
+            DesignOptions => t!("action-design-options"),
+            ActiveOption => crate::design_options_ui::active_label(state),
             Demolish => t!("tool-demolish"),
             CurtainGrid => t!("tool-curtain-grid"),
             ProjectInfo => t!("dlg-project-info"),
@@ -951,6 +959,8 @@ impl UiCommand {
             TempReset => t!("cmd-desc-temp-reset"),
             TempPermanent => t!("cmd-desc-temp-permanent"),
             Phases => t!("cmd-desc-phases"),
+            DesignOptions => t!("cmd-desc-design-options"),
+            ActiveOption => t!("hint-active-option"),
             Demolish => t!("cmd-desc-demolish"),
             CurtainGrid => t!("cmd-desc-curtain-grid"),
             ProjectInfo => t!("cmd-desc-project-info"),
@@ -1203,6 +1213,8 @@ impl UiCommand {
             TempHide | TempIsolate | TempHideCategory | TempIsolateCategory | TempReset => "view_temporary",
             TempPermanent => "view_temporary_apply",
             Phases => "phase_set",
+            DesignOptions => "option_set",
+            ActiveOption => "option_active_set",
             Demolish => "elements_demolish",
             CurtainGrid => "curtain_grid_set",
             Units => "units_set",
@@ -1379,6 +1391,7 @@ impl UiCommand {
                 Some(t!("msg-nothing-temporary"))
             }
             Demolish if phase_view(state).is_none() => Some(t!("why-no-phase-view")),
+            ActiveOption if state.project().option_sets.is_empty() => Some(t!("why-no-option-sets")),
             // These pick ends and sides on plan linework; the other modify tools work in 3D too.
             TrimCorner | TrimExtend | Split | Offset | ToggleJoin if crate::modify3d::active_3d(state) => {
                 Some(t!("msg-plan-only"))
@@ -1487,6 +1500,7 @@ impl UiCommand {
             Callout => *tool == Tool::Callout,
             FoundationSlab => matches!(tool, Tool::Sketch { category: Category::Foundation, .. }),
             MacroRecord => state.session.is_recording(),
+            ActiveOption => state.project().active_option().is_some(),
             VisualProgramming => state.graph.open,
             ToggleRibbon => state.ribbon_collapsed,
             _ => false,
@@ -1942,6 +1956,9 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         TempReset => actions::temporary(state, "reset"),
         TempPermanent => actions::temporary_permanent(state),
         Phases => crate::phases_dialog::open(state),
+        DesignOptions => crate::design_options_ui::open(state),
+        // A menu in the ribbon; from the palette, the Design Options dialog.
+        ActiveOption => crate::design_options_ui::open(state),
         Demolish => crate::phases_dialog::start_demolish(state),
         CurtainGrid => {
             state.set_tool(Tool::CurtainGrid);

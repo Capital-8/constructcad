@@ -540,6 +540,7 @@ mod tests {
                         uid: Default::default(),
                         phase_created: Default::default(),
                         phase_demolished: None,
+                        design_option: None,
                     })
                 })
                 .collect()
@@ -588,6 +589,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         // Split at x = 6: the door (at 8) moves to the second wall at 2.
@@ -731,6 +733,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         let outer = path(&doc.project, ids[1]).unwrap();

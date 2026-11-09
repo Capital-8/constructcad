@@ -123,8 +123,9 @@ pub fn generate_temporary(
         // A schedule draws as a table, for sheets: the elements its phase shows.
         ViewKind::Schedule { category, def } => {
             let phase = graphics::PhaseView::of(project, view);
+            let options = project.shown_options(Some(view));
             let table = schedule::schedule_where(project, geom, *category, def, &mut |e| {
-                phase.as_ref().is_none_or(|ph| ph.shows(project, e))
+                project.option_shows(e, &options) && phase.as_ref().is_none_or(|ph| ph.shows(project, e))
             });
             schedule::drawing(&table, &view.name, view.scale, label)
         }
@@ -417,6 +418,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             },
         );
         assert_eq!(project.repair(), 0);

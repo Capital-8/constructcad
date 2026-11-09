@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 22;
+pub const FORMAT_VERSION: u32 = 23;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
@@ -65,7 +65,8 @@ pub fn from_ron_with_repairs_localized(
     // built-in door and window components with the same sizes); version 18
     // adds script pieces and text, boolean, choice and material parameters
     // (older files have none); version 22 makes title blocks components
-    // (older files: the standard title block on every sheet).
+    // (older files: the standard title block on every sheet); version 23 adds
+    // design options (older files have none, everything in the main model).
     let mut project = file.project;
     if file.format_version < 11 {
         project.ensure_phases(&|key| crate::project::template_default(key).to_string());
@@ -178,6 +179,36 @@ mod tests {
             assert_eq!(q.title_blocks().len(), 1, "case {n}");
             assert!(q.next_id() > q.max_id(), "case {n}");
         }
+    }
+
+    #[test]
+    fn design_options_round_trip_and_format_22_files_load() {
+        let mut p = Project::from_template();
+        let set = crate::OptionSetId(p.alloc_id());
+        let (a, b) = (crate::OptionId(p.alloc_id()), crate::OptionId(p.alloc_id()));
+        p.option_sets.push(crate::OptionSet {
+            id: set,
+            name: "Entrance".into(),
+            options: vec![
+                crate::DesignOption { id: a, name: "Porch".into() },
+                crate::DesignOption { id: b, name: "Canopy".into() },
+            ],
+            primary: b,
+        });
+        let view = *p.views.keys().next().unwrap();
+        p.views.get_mut(&view).unwrap().design_options.insert(set, a);
+        p.active_option = Some(a);
+        let back = from_ron(&to_ron(&p).unwrap()).unwrap();
+        assert_eq!(back.option_sets, p.option_sets);
+        assert_eq!(back.view(view).unwrap().design_options.get(&set), Some(&a));
+        // The option being edited is session state.
+        assert_eq!(back.active_option, None);
+        // A format-22 file (before design options) loads with none.
+        let old = to_ron(&Project::from_template())
+            .unwrap()
+            .replace(&format!("format_version: {FORMAT_VERSION}"), "format_version: 22");
+        let q = from_ron(&old).unwrap();
+        assert!(q.option_sets.is_empty() && q.elements.values().all(|e| e.design_option.is_none()));
     }
 
     #[test]

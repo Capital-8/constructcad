@@ -78,6 +78,8 @@ pub struct Dialogs {
     pub templates: Option<crate::graphics_dialog::TemplateManager>,
     /// Phases, phase filters and phase graphics.
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
+    /// Design option sets and their options.
+    pub design_options: Option<crate::design_options_ui::OptionsDialog>,
     /// The project's line styles.
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The component library window.
@@ -452,6 +454,7 @@ impl AppState {
             kind: kind.clone(),
             phase_created: Default::default(),
             phase_demolished: None,
+            design_option: None,
         }
         .category();
         let id = self.session.doc.edit(name, |e| {
@@ -471,6 +474,7 @@ impl AppState {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         self.selection = BTreeSet::from([id]);

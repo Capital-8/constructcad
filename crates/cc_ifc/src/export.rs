@@ -20,8 +20,19 @@ pub struct ExportOptions {
     pub file_name: String,
 }
 
-/// Serialize `project` as an IFC4 STEP physical file.
+/// Serialize `project` as an IFC4 STEP physical file: the main model and
+/// the primary option of each design option set (whatever option is being
+/// edited), the option of each element in [`DESIGN_OPTION_PSET`].
 pub fn export(project: &Project, options: &ExportOptions) -> String {
+    let primary;
+    let project = if project.option_sets.is_empty() {
+        project
+    } else {
+        let mut p = project.with_options(&project.primary_options()).unwrap_or_else(|| project.clone());
+        p.active_option = None;
+        primary = p;
+        &primary
+    };
     let geom = ModelGeometry::build(project);
     let mut x = Exporter::new(project, &geom);
     x.write_all();
@@ -213,7 +224,32 @@ impl<'a> Exporter<'a> {
         self.write_systems(&fittings);
         self.write_spaces();
         self.write_phasing(project_id);
+        self.write_design_options();
         self.write_relationships();
+    }
+
+    /// The design option of each element in one (only primary options are
+    /// exported), in [`DESIGN_OPTION_PSET`]; elements of one option share
+    /// the set.
+    fn write_design_options(&mut self) {
+        let project = self.project;
+        let mut by_option: BTreeMap<cc_core::OptionId, Vec<Id>> = BTreeMap::new();
+        for (&id, &product) in &self.products {
+            if let Some(option) = project.element(id).and_then(|e| e.design_option) {
+                by_option.entry(option).or_default().push(product);
+            }
+        }
+        let label = |s: &str| Value::Typed("IFCLABEL", Box::new(s.into()));
+        for (option, objects) in by_option {
+            let Some((set, o)) = project.design_option(option) else { continue };
+            let primary = set.primary_option() == Some(option);
+            let props = vec![
+                ("OptionSet", label(&set.name)),
+                ("Option", label(&o.name)),
+                ("Primary", Value::Typed("IFCBOOLEAN", Box::new(primary.into()))),
+            ];
+            self.property_set(&format!("option-{}", option.0), DESIGN_OPTION_PSET, objects, props);
+        }
     }
 
     /// Construction phases: the project's phases in order (a set on the
@@ -2519,6 +2555,10 @@ fn section_area(section: cc_core::ColumnSection) -> f64 {
 
 /// Property set with the instance parameter values of components.
 pub const COMPONENT_PSET: &str = "ConstructCAD_Parameters";
+/// Property set of the design option an element belongs to (`OptionSet`,
+/// `Option`, `Primary`).
+pub const DESIGN_OPTION_PSET: &str = "ConstructCAD_DesignOption";
+
 /// Property set of an element's construction phases (`PhaseCreated`, `PhaseDemolished`).
 pub const PHASING_PSET: &str = "ConstructCAD_Phasing";
 /// Property set of a curtain wall's grid: the type's `System` and the wall's

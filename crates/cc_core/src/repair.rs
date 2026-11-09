@@ -653,6 +653,7 @@ impl Project {
             repairs += before - f.rules.len();
         }
         repairs += self.repair_phases();
+        repairs += self.repair_options();
         for t in self.templates.values_mut() {
             repairs += t.repair(&self.filters, &self.phase_filters, &levels);
         }
@@ -942,6 +943,7 @@ mod tests {
                     uid: Default::default(),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 },
             );
             id
@@ -1010,6 +1012,7 @@ mod tests {
                     uid: Default::default(),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 },
             );
             id
@@ -1056,6 +1059,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             };
             p.elements.insert(id, e);
             ids.push(id);
@@ -1088,6 +1092,7 @@ mod tests {
             uid: Default::default(),
             phase_created: Default::default(),
             phase_demolished: None,
+            design_option: None,
         };
         p.elements.insert(id, e);
         assert_eq!(p.repair(), 3, "one too many, a NaN, a negative slope");
@@ -1117,6 +1122,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             };
             p.elements.insert(id, e);
             id
@@ -1187,6 +1193,7 @@ mod tests {
                     uid: Default::default(),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 },
             );
         }

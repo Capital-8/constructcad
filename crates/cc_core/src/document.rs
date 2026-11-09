@@ -25,6 +25,7 @@ struct Settings {
     phase_graphics: crate::PhaseGraphics,
     graph_bindings: BTreeMap<ElementId, crate::graph_binding::GraphBinding>,
     line_styles: crate::detail::LineStyles,
+    option_sets: Vec<crate::OptionSet>,
 }
 
 impl Settings {
@@ -45,6 +46,7 @@ impl Settings {
             phase_graphics: p.phase_graphics,
             graph_bindings: p.graph_bindings.clone(),
             line_styles: p.line_styles.clone(),
+            option_sets: p.option_sets.clone(),
         }
     }
 
@@ -64,6 +66,7 @@ impl Settings {
         p.phase_graphics = self.phase_graphics;
         p.graph_bindings = self.graph_bindings;
         p.line_styles = self.line_styles;
+        p.option_sets = self.option_sets;
     }
 }
 
@@ -697,6 +700,72 @@ impl<'a> EditCtx<'a> {
         }
     }
 
+    /// Design option sets (see [`crate::design_option`]).
+    pub fn option_sets_mut(&mut self) -> &mut Vec<crate::OptionSet> {
+        self.touch_settings();
+        &mut self.project.option_sets
+    }
+
+    /// Keep design options consistent: model elements added by this edit
+    /// without an option go into the active one, hosted elements follow
+    /// their hosts and unknown options mean the main model
+    /// ([`Project::option_fixes`]); views and templates drop choices of
+    /// deleted sets and options.
+    fn sync_options(&mut self) {
+        let p = &*self.project;
+        if p.option_sets.is_empty()
+            && p.elements.values().all(|e| e.design_option.is_none())
+            && p.views.values().all(|v| v.design_options.is_empty())
+            && p.templates.values().all(|t| t.design_options.is_empty())
+        {
+            return;
+        }
+        if let Some(active) = p.active_option() {
+            let added: Vec<ElementId> = self
+                .tx
+                .elements
+                .iter()
+                .filter(|(id, c)| {
+                    c.0.is_none()
+                        && p.elements.get(id).is_some_and(|e| {
+                            e.design_option.is_none()
+                                && e.category().is_phased()
+                                && crate::phase::phase_host(e).is_none()
+                        })
+                })
+                .map(|(id, _)| *id)
+                .collect();
+            for id in added {
+                if let Some(e) = self.project.elements.get_mut(&id) {
+                    e.design_option = Some(active);
+                }
+            }
+        }
+        for (id, option) in self.project.option_fixes() {
+            if let Some(e) = self.element_mut(id) {
+                e.design_option = option;
+            }
+        }
+        let p = &*self.project;
+        let views: Vec<ViewId> =
+            p.views.values().filter(|v| p.stale_choices(&v.design_options)).map(|v| v.id).collect();
+        let stale_templates = p.templates.values().any(|t| p.stale_choices(&t.design_options));
+        for id in views {
+            let mut choices = self.project.views.get(&id).map(|v| v.design_options.clone()).unwrap_or_default();
+            self.project.clean_choices(&mut choices);
+            if let Some(v) = self.view_mut(id) {
+                v.design_options = choices;
+            }
+        }
+        if stale_templates {
+            let mut templates = std::mem::take(self.templates_mut());
+            for t in templates.values_mut() {
+                self.project.clean_choices(&mut t.design_options);
+            }
+            self.project.templates = templates;
+        }
+    }
+
     pub fn units_mut(&mut self) -> &mut crate::Units {
         self.touch_settings();
         &mut self.project.units
@@ -710,6 +779,7 @@ impl<'a> EditCtx<'a> {
         self.sync_attachments();
         self.sync_dimensions();
         self.sync_phases();
+        self.sync_options();
         self.sync_sketches();
         self.sync_callouts();
         self.sync_views();
@@ -778,6 +848,23 @@ impl Document {
     pub fn set_view_state(&mut self, f: impl FnOnce(&mut Project)) {
         f(&mut self.project);
         self.view_state_changed = true;
+    }
+
+    /// Set the design option new elements go into, which views without a
+    /// choice of their own show for its set (`None`: the main model). Not
+    /// undone nor saved, but views change: the revision moves on (without
+    /// marking the document as changed).
+    pub fn set_active_option(&mut self, option: Option<crate::OptionId>) {
+        let option = option.filter(|o| self.project.option_set_of(*o).is_some());
+        if self.project.active_option == option {
+            return;
+        }
+        let clean = self.revision == self.saved_revision;
+        self.project.active_option = option;
+        self.revision += 1;
+        if clean {
+            self.saved_revision = self.revision;
+        }
     }
 
     /// Monotonic counter bumped on every model change; use it to invalidate caches.
@@ -1034,6 +1121,7 @@ mod tests {
                 }),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         })
     }
@@ -1079,6 +1167,7 @@ mod tests {
                 }),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         doc.edit("delete", |e| e.remove_element(wall));
@@ -1115,6 +1204,7 @@ mod tests {
                     uid: Default::default(),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 });
             }
             let selfie = ElementId(e.alloc_id());
@@ -1135,6 +1225,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
             e.remove_element(selfie);
             (a, b)

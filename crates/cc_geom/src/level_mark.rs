@@ -96,6 +96,7 @@ mod tests {
             kind: ElementKind::Floor(Floor::new(square, 0.15)),
             phase_created: Default::default(),
             phase_demolished: None,
+            design_option: None,
         };
         p.elements.insert(id, e);
         let plan = View::new(ViewId(9998), "P", 50, ViewKind::floor_plan(level));

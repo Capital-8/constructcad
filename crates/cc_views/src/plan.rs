@@ -936,6 +936,7 @@ mod tests {
                 }),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
             let dr = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -954,6 +955,7 @@ mod tests {
                 }),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
             (w, dr)
         });
@@ -1008,6 +1010,7 @@ mod tests {
                     }),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 });
                 id
             })
@@ -1085,6 +1088,7 @@ mod tests {
                 kind: ElementKind::Wall(wall),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
             w
         });
@@ -1180,6 +1184,7 @@ mod tests {
                 kind,
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
             id
         });

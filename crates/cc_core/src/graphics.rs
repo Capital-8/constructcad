@@ -511,6 +511,9 @@ pub struct TemplateIncludes {
     pub visual_style: bool,
     /// Plans: the underlay (other levels' plans drawn under them).
     pub underlay: bool,
+    /// The design option shown of each set (off by default: views keep
+    /// their own choice).
+    pub design_options: bool,
 }
 
 impl Default for TemplateIncludes {
@@ -526,6 +529,7 @@ impl Default for TemplateIncludes {
             detail: true,
             visual_style: true,
             underlay: true,
+            design_options: false,
         }
     }
 }
@@ -559,6 +563,9 @@ pub struct ViewTemplate {
     /// Plans: other levels' plans drawn under them.
     #[serde(default, skip_serializing_if = "crate::Underlay::is_empty")]
     pub underlay: crate::Underlay,
+    /// The option shown of each design option set (sets left out: automatic).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub design_options: BTreeMap<crate::OptionSetId, crate::OptionId>,
 }
 
 fn default_cut() -> f64 {
@@ -585,6 +592,7 @@ impl ViewTemplate {
             detail: view.detail,
             visual_style: view.visual_style,
             underlay: view.kind.underlay().copied().unwrap_or_default(),
+            design_options: view.design_options.clone(),
         };
         match &view.kind {
             ViewKind::FloorPlan { cut_height, structural, structure_tags, mep, .. } => {
@@ -634,6 +642,9 @@ impl ViewTemplate {
         }
         if inc.visual_style {
             view.visual_style = self.visual_style;
+        }
+        if inc.design_options {
+            view.design_options = self.design_options.clone();
         }
         if inc.underlay
             && let Some(u) = view.kind.underlay_mut()

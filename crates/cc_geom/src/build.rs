@@ -291,7 +291,19 @@ fn place_parts(
 }
 
 impl ModelGeometry {
+    /// Geometry of the model as views without a design option choice show
+    /// it: the main model plus the primary (or active) option of each set,
+    /// so elements of other options neither join nor bound rooms (see
+    /// [`cc_core::design_option`]).
     pub fn build(project: &Project) -> Self {
+        match project.with_options(&project.shown_options(None)) {
+            Some(shown) => Self::build_all(&shown),
+            None => Self::build_all(project),
+        }
+    }
+
+    /// Geometry of every element of `project`, whatever its design option.
+    fn build_all(project: &Project) -> Self {
         let mut geom = Self::default();
         geom.build_walls(project);
         geom.build_hosted(project);
@@ -630,13 +642,35 @@ impl ModelGeometry {
     /// the phase. Rooms of earlier phases keep their boundaries from `full`
     /// (the geometry of the whole model).
     pub fn build_phase(project: &Project, phase: usize, full: &ModelGeometry) -> Self {
+        Self::build_view(project, Some(phase), &project.shown_options(None), full)
+    }
+
+    /// Geometry of the model as a view shows it: in phase number `phase`
+    /// (see [`ModelGeometry::build_phase`]; `None`: every phase) and with
+    /// the main model plus the design options `options` only, so elements
+    /// of other options neither join, open walls nor bound rooms. `full` is
+    /// the geometry of [`ModelGeometry::build`].
+    pub fn build_view(
+        project: &Project,
+        phase: Option<usize>,
+        options: &std::collections::BTreeSet<cc_core::OptionId>,
+        full: &ModelGeometry,
+    ) -> Self {
         let mut present = project.clone();
-        present.elements.retain(|_, e| project.present_at(e, phase));
+        present
+            .elements
+            .retain(|_, e| phase.is_none_or(|ph| project.present_at(e, ph)) && project.option_shows(e, options));
         present.joins.retain(|(a, b)| present.elements.contains_key(a) && present.elements.contains_key(b));
-        let mut geom = Self::build(&present);
-        for (id, boundary) in &full.rooms {
-            if present.elements.get(id).is_some_and(|e| present.created_index(e) < phase) {
-                geom.rooms.insert(*id, boundary.clone());
+        let mut geom = Self::build_all(&present);
+        // Rooms of earlier phases keep the boundaries they had (when the
+        // options shown are those of the whole model's geometry).
+        if let Some(phase) = phase
+            && *options == project.shown_options(None)
+        {
+            for (id, boundary) in &full.rooms {
+                if present.elements.get(id).is_some_and(|e| present.created_index(e) < phase) {
+                    geom.rooms.insert(*id, boundary.clone());
+                }
             }
         }
         geom
@@ -1205,6 +1239,7 @@ mod tests {
                     }),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 });
             }
             let id = ElementId(e.alloc_id());
@@ -1224,6 +1259,7 @@ mod tests {
                 }),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
             let id = ElementId(e.alloc_id());
             e.add_element(Element {
@@ -1236,6 +1272,7 @@ mod tests {
                 kind: ElementKind::Floor(Floor::new(pts.to_vec(), 0.0)),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
         });
         doc
@@ -1260,6 +1297,7 @@ mod tests {
                 kind: ElementKind::Beam(cc_core::Beam::new(DVec2::new(0.0, 3.0), DVec2::new(8.0, 3.0), top_offset)),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             });
         });
         (doc, beam)
@@ -1353,6 +1391,7 @@ mod tests {
                     kind,
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 })
             };
             let arc =
@@ -1462,6 +1501,7 @@ mod tests {
                     uid: Default::default(),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 })
             };
             let top = WallTop::Level { level: upper, offset: 0.0 };

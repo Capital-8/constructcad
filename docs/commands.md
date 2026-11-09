@@ -16,6 +16,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
+- **Design options**: [`options_list`](#options_list), [`option_set_create`](#option_set_create), [`option_set_rename`](#option_set_rename), [`option_set_delete`](#option_set_delete), [`option_create`](#option_create), [`option_set`](#option_set), [`option_delete`](#option_delete), [`option_accept_primary`](#option_accept_primary), [`elements_option_set`](#elements_option_set), [`view_options_set`](#view_options_set), [`option_active_set`](#option_active_set)
 - **Visual programming**: [`graph_run`](#graph_run), [`graph_check`](#graph_check), [`graph_nodes`](#graph_nodes), [`graph_elements`](#graph_elements), [`graph_release`](#graph_release)
 
 ## Project and files
@@ -2522,9 +2523,10 @@ No parameters.
 |---|---|---|---|
 | `template` | id or name | required | Template id or name. |
 | `cut_height` | number | optional | Plans: cut plane height, meters. |
+| `design_options` | [object, …] | optional | The option shown of each design option set (replacing the template's choices; sets left out show automatically). |
 | `detail` | string | optional | Detail level: `coarse`, `medium` or `fine`. |
 | `discipline` | string | optional | Floor plans: `none`, `plumbing` or `electrical` (services over a faint architecture). |
-| `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural`, `phase_filter`, `detail`, `visual_style`, `underlay` (true/false). |
+| `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural`, `phase_filter`, `detail`, `visual_style`, `underlay`, `design_options` (true/false). `design_options` is off unless set. |
 | `name` | string | optional | New name. |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none. |
 | `scale` | integer | optional | Scale denominator. |
@@ -2699,6 +2701,104 @@ No parameters.
 | `status` | string | required | `existing`, `demolished`, `new` or `temporary`. |
 | `overrides` | JSON | optional | Overrides to merge. |
 | `reset` | boolean | optional | Clear the status overrides before merging. |
+
+## Design options
+
+### `options_list`
+
+*query* — The project's design option sets with their options (the primary one marked, how many elements each holds) and the option being edited.
+
+No parameters.
+
+### `option_set_create`
+
+*edit* — Add a design option set: a named group of alternatives, of which views show one at a time. It starts with the options named in `options` (the first is primary), or one option.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique, without ':'). |
+| `options` | [string, …] | optional | Names of its options (default: one, "Option 1"). |
+
+### `option_set_rename`
+
+*edit* — Rename a design option set.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | New name (unique, without ':'). |
+| `set` | id or name | required | Set id or name. |
+
+### `option_set_delete`
+
+*edit* — Delete a design option set with all its options and the elements in them (the main model stays).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `set` | id or name | required | Set id or name. |
+
+### `option_create`
+
+*edit* — Add an option to a design option set (at the end).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `set` | id or name | required | Set id or name. |
+| `name` | string | optional | Name, unique in the set (default: "Option n"). |
+| `primary` | boolean | optional | Make it the set's primary option. |
+
+### `option_set`
+
+*edit* — Rename a design option, make it its set's primary option, or move it to another place in the set's list (`index`, 0 = first).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `option` | id or name | required | Option id, name, or "Set: Option". |
+| `index` | integer | optional | New position in the set's list. |
+| `name` | string | optional | New name (unique in the set, without ':'). |
+| `primary` | boolean | optional | `true` makes it the primary option (views showing the set automatically, and exports, then use it). |
+
+### `option_delete`
+
+*edit* — Delete a design option and the elements in it (with what they host). The primary option cannot be deleted: make another option primary first, or delete the whole set.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `option` | id or name | required | Option id, name, or "Set: Option". |
+
+### `option_accept_primary`
+
+*edit* — Accept a set's primary option: its elements join the main model, and the set is deleted with its other options and their elements.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `set` | id or name | required | Set id or name. |
+
+### `elements_option_set`
+
+*edit* — Move elements into a design option, or back to the main model with `null`. Doors, windows and other hosted elements follow their host's option (moving a wall moves them); annotations belong to no option.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `ids` | [id, …] | required | Element ids. |
+| `option` | id or name | optional | Option id, name or "Set: Option"; `null` for the main model. |
+
+### `view_options_set`
+
+*edit* — Choose the option a view (plan, elevation, section, 3D view or schedule) shows of a design option set; `null` shows it automatically: the option being edited when it is in that set, else the primary one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `set` | id or name | required | Set id or name. |
+| `view` | id or name | required | View id or name. |
+| `option` | id or name | optional | Option id or name (in that set), or `null` for automatic. |
+
+### `option_active_set`
+
+*query* — Set the design option this session edits (`null`: the main model): new model elements go into it, and views without a choice of their own show it for its set. Display state: not saved, not undone.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `option` | id or name | optional | Option id, name or "Set: Option"; `null` for the main model. |
 
 ## Visual programming
 

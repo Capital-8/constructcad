@@ -480,6 +480,7 @@ mod tests {
             kind: ElementKind::Topography(Topography { points, boundary, base_depth: 2.0, sketch: None }),
             phase_created: Default::default(),
             phase_demolished: None,
+            design_option: None,
         };
         (project, e)
     }

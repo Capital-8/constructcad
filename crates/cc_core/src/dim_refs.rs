@@ -405,6 +405,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             };
             e.add_element(el)
         });
@@ -500,6 +501,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         assert!((self::dim(&doc, id).value().to_degrees() - 90.0).abs() < 1e-9);
@@ -556,6 +558,7 @@ mod tests {
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,
+                design_option: None,
             })
         });
         let height = |doc: &Document| self::dim(doc, id).value();
@@ -614,6 +617,7 @@ mod tests {
                     uid: Default::default(),
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 })
             });
             out.push((id, p));

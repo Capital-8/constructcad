@@ -209,6 +209,7 @@ mod tests {
                     uid,
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 });
                 ids.push(id);
             };

@@ -423,6 +423,7 @@ mod tests {
                     kind,
                     phase_created: Default::default(),
                     phase_demolished: None,
+                    design_option: None,
                 });
                 id
             };
