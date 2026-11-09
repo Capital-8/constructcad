@@ -47,6 +47,10 @@ pub enum ElementKind {
     Rebar(Rebar),
     Pipe(crate::MepSegment),
     Conduit(crate::MepSegment),
+    /// A cable tray run (a rectangular channel carrying circuits).
+    CableTray(crate::MepSegment),
+    /// A valve on a pipe.
+    Valve(crate::Valve),
     /// A DWG or DXF drawing placed in a 2D view (an underlay to trace over).
     CadImport(Box<crate::cad::CadImport>),
     /// A conceptual mass (massing studies).
@@ -94,6 +98,8 @@ impl Element {
             ElementKind::Rebar(_) => Category::Rebar,
             ElementKind::Pipe(_) => Category::Pipe,
             ElementKind::Conduit(_) => Category::Conduit,
+            ElementKind::CableTray(_) => Category::CableTray,
+            ElementKind::Valve(_) => Category::Valve,
             ElementKind::CadImport(_) => Category::CadImport,
             ElementKind::Mass(_) => Category::Mass,
             ElementKind::Sweep(_) => Category::Sweep,
@@ -140,17 +146,17 @@ impl Element {
         true
     }
 
-    /// The pipe or conduit run of MEP segments.
+    /// The run of a pipe, conduit or cable tray.
     pub fn as_segment(&self) -> Option<&crate::MepSegment> {
         match &self.kind {
-            ElementKind::Pipe(s) | ElementKind::Conduit(s) => Some(s),
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Some(s),
             _ => None,
         }
     }
 
     pub fn as_segment_mut(&mut self) -> Option<&mut crate::MepSegment> {
         match &mut self.kind {
-            ElementKind::Pipe(s) | ElementKind::Conduit(s) => Some(s),
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Some(s),
             _ => None,
         }
     }
@@ -158,7 +164,7 @@ impl Element {
     /// Systems (or circuits) the element belongs to.
     pub fn systems(&self) -> Vec<crate::SystemId> {
         match &self.kind {
-            ElementKind::Pipe(s) | ElementKind::Conduit(s) => s.systems.clone(),
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => s.systems.clone(),
             ElementKind::Component(c) => c.system.into_iter().collect(),
             _ => Vec::new(),
         }
@@ -312,7 +318,7 @@ impl Element {
             }
             ElementKind::Pad(p) => p.outline.iter_mut().for_each(|q| *q += delta),
             ElementKind::Component(c) => c.position += delta,
-            ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
                 s.start += delta;
                 s.end += delta;
             }
@@ -322,7 +328,7 @@ impl Element {
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.points_mut().for_each(|p| *p += delta),
             ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
             // Placed by their hosts.
-            ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) => {}
+            ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
         }
     }
 }

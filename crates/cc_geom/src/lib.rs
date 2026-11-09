@@ -39,7 +39,7 @@ pub use build::{
 };
 pub use component::{instance_errors, resolve_component, resolve_component_in, resolve_instance, resolve_pieces};
 pub use cut::{clip_polygon, face_plane_segments};
-pub use mep::{SegmentGeom, segment_geom};
+pub use mep::{SegmentGeom, TraySection, ValveGeom, segment_geom, valve_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};
 pub use ramp::{RampGeom, RampPiece, ramp_geom};
 pub use rooms::{outer_boundary, room_boundary};

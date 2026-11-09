@@ -130,6 +130,15 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 // A bar, drawn as a heavy line.
                 d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Cut, None);
             }
+            TypeData::CableTray { width, height, .. } => {
+                // The tray's section: an open channel.
+                let (w, h) = (*width, *height);
+                let pts = [o + DVec2::new(0.0, h), o, o + DVec2::new(w, 0.0), o + DVec2::new(w, h)];
+                d.polyline(&pts, false, LineStyle::Cut, None);
+            }
+            TypeData::Valve { kind, .. } => {
+                crate::mep::valve_symbol(&mut d, o + DVec2::new(3.0 * mm, 0.0), DVec2::X, mm, *kind, None);
+            }
             TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
                 // A run of the pipe in plan, at least half a millimeter wide on paper.
                 let h = diameter.max(0.5 * mm) * 0.5;

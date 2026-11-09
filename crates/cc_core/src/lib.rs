@@ -81,7 +81,7 @@ pub use ids::{
     Uid, ViewId,
 };
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
-pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind};
+pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemKind, TrayStyle, Valve, ValveKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, from_ron_with_repairs_localized, load,
     load_with_repairs, load_with_repairs_localized, save, to_ron,

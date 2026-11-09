@@ -110,8 +110,8 @@ impl Element {
             }
             ElementKind::Room(r) => p(&mut r.position),
             // Bars follow their host.
-            ElementKind::Rebar(_) => {}
-            ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+            ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
                 p(&mut s.start);
                 p(&mut s.end);
             }
@@ -342,7 +342,8 @@ impl crate::EditCtx<'_> {
 impl crate::Project {
     /// The elements a copy of `ids` takes: the non-hosted ones, plus the
     /// doors and windows of copied walls, the railings of copied stairs, the
-    /// pads of copied terrains and any selected hosted element.
+    /// pads of copied terrains, the valves of copied pipes and any selected
+    /// hosted element.
     /// The snapshot stays valid after the originals are deleted (cut).
     pub fn copy_set(&self, ids: &[ElementId]) -> Vec<Element> {
         let set: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
@@ -368,6 +369,13 @@ impl crate::Project {
                 .values()
                 .filter(|e| !set.contains(&e.id))
                 .filter(|e| matches!(&e.kind, ElementKind::Pad(p) if set.contains(&p.host)))
+                .cloned(),
+        );
+        out.extend(
+            self.elements
+                .values()
+                .filter(|e| !set.contains(&e.id))
+                .filter(|e| matches!(&e.kind, ElementKind::Valve(v) if set.contains(&v.host)))
                 .cloned(),
         );
         out
@@ -416,6 +424,11 @@ impl crate::Project {
                 .find(|t| t.id == p.host)
                 .or_else(|| self.element(p.host))
                 .is_some_and(|t| matches!(t.kind, ElementKind::Topography(_))),
+            ElementKind::Valve(v) => set
+                .iter()
+                .find(|t| t.id == v.host)
+                .or_else(|| self.element(v.host))
+                .is_some_and(|t| matches!(t.kind, ElementKind::Pipe(_))),
             _ => true,
         };
         type_ok && other_ok && self.level(e.level).is_some()
@@ -472,6 +485,13 @@ impl crate::EditCtx<'_> {
                 let Some(ElementKind::Pad(p)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 if let Some(n) = remap.get(&p.host) {
                     p.host = *n;
+                }
+            }
+            // Copied valves sit on the copies of their pipes, else on the pipe they came from.
+            for id in &created[first..] {
+                let Some(ElementKind::Valve(v)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                if let Some(n) = remap.get(&v.host) {
+                    v.host = *n;
                 }
             }
             // Copied railings follow the copies of their stairs, or become free.

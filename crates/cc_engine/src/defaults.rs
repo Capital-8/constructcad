@@ -44,6 +44,12 @@ pub fn conduit_offset(project: &Project, level: LevelId) -> f64 {
     project.level_height(level, 2.8)
 }
 
+/// Elevation of a new cable tray's center line above its level: under the
+/// slab above, clear of it by 0.3 m.
+pub fn tray_offset(project: &Project, level: LevelId) -> f64 {
+    project.level_height(level, 2.8) - 0.3
+}
+
 /// Usual mounting height of an electrical device above its level (lights:
 /// the ceiling, at the level height).
 pub fn device_height(project: &Project, level: LevelId, device: cc_core::DeviceKind) -> f64 {

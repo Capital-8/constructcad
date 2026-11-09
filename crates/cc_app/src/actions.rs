@@ -177,6 +177,13 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
     if category == Category::Pad && state.project().default_type(Category::Pad).is_none() {
         run_command(state, cc_engine::commands::pad::PadTypeCreate::default());
     }
+    if category == Category::CableTray && state.project().default_type(Category::CableTray).is_none() {
+        run_command(state, cc_engine::commands::cable_tray::CableTrayTypeCreate::default());
+    }
+    if category == Category::Valve && state.project().default_type(Category::Valve).is_none() {
+        let kinds = cc_core::ValveKind::ALL.iter().map(|k| k.name().to_string()).collect();
+        run_command(state, cc_engine::commands::valve::ValveTypeCreate { kinds, ..Default::default() });
+    }
     if category == Category::Sweep && state.project().default_type(Category::Sweep).is_none() {
         run_command(state, cc_engine::commands::sweep::SweepTypeCreate::default());
     }
@@ -208,11 +215,13 @@ pub fn activate_category_tool(state: &mut AppState, category: Category) {
 }
 
 /// The services plan to draw `category` in (with the message telling so),
-/// when it is a pipe or conduit and the active plan does not show it.
+/// when it is a pipe, conduit, cable tray or valve and the active plan does not show it.
 fn services_plan_needed(state: &AppState, category: Category) -> Option<(cc_core::MepDiscipline, String)> {
     let (discipline, message) = match category {
         Category::Pipe => (cc_core::MepDiscipline::Plumbing, t!("msg-pipes-in-plumbing-plan")),
         Category::Conduit => (cc_core::MepDiscipline::Electrical, t!("msg-conduits-in-electrical-plan")),
+        Category::CableTray => (cc_core::MepDiscipline::Electrical, t!("msg-trays-in-electrical-plan")),
+        Category::Valve => (cc_core::MepDiscipline::Plumbing, t!("msg-valves-in-plumbing-plan")),
         _ => return None,
     };
     let view = state.active_view.and_then(|v| state.project().view(v))?;

@@ -50,10 +50,14 @@ pub enum Category {
     LevelMark,
     /// Detail components: reusable 2D components placed in one view.
     DetailComponent,
+    /// Cable trays: open runs carrying electrical circuits.
+    CableTray,
+    /// Valves on pipes.
+    Valve,
 }
 
 impl Category {
-    pub const ALL: [Category; 31] = [
+    pub const ALL: [Category; 33] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -66,6 +70,8 @@ impl Category {
         Category::Rebar,
         Category::Pipe,
         Category::Conduit,
+        Category::CableTray,
+        Category::Valve,
         Category::Stair,
         Category::Ramp,
         Category::Railing,
@@ -100,7 +106,7 @@ impl Category {
     };
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 18] = [
+    pub const MODEL: [Category; 20] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -113,6 +119,8 @@ impl Category {
         Category::Rebar,
         Category::Pipe,
         Category::Conduit,
+        Category::CableTray,
+        Category::Valve,
         Category::Stair,
         Category::Ramp,
         Category::Railing,
@@ -122,7 +130,7 @@ impl Category {
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 21] = [
+    pub const SCHEDULABLE: [Category; 23] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -135,6 +143,8 @@ impl Category {
         Category::Rebar,
         Category::Pipe,
         Category::Conduit,
+        Category::CableTray,
+        Category::Valve,
         Category::Stair,
         Category::Ramp,
         Category::Railing,
@@ -179,6 +189,8 @@ impl Category {
             Category::Rebar => "category-rebar",
             Category::Pipe => "category-pipe",
             Category::Conduit => "category-conduit",
+            Category::CableTray => "category-cable-tray",
+            Category::Valve => "category-valve",
             Category::CadImport => "category-cad-import",
             Category::Mass => "category-mass",
             Category::DetailLine => "category-detail-line",
@@ -190,7 +202,7 @@ impl Category {
 
     /// Whether the category belongs to the building services (MEP).
     pub fn is_mep(self) -> bool {
-        matches!(self, Category::Pipe | Category::Conduit)
+        matches!(self, Category::Pipe | Category::Conduit | Category::CableTray | Category::Valve)
     }
 }
 
@@ -380,6 +392,20 @@ pub enum TypeData {
         diameter: f64,
         material: String,
     },
+    /// Cable trays of outside `width` x `height`, built as `style` says.
+    CableTray {
+        width: f64,
+        height: f64,
+        #[serde(default)]
+        style: crate::TrayStyle,
+        material: String,
+    },
+    /// Valves of `kind` (their diameter is their pipe's).
+    Valve {
+        #[serde(default)]
+        kind: crate::ValveKind,
+        material: String,
+    },
     /// Foundation: a pad `width` x `length`, a strip `width` wide or a slab,
     /// each `thickness` deep.
     Foundation {
@@ -504,6 +530,8 @@ impl TypeData {
             | TypeData::Rebar { material, .. }
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
+            | TypeData::CableTray { material, .. }
+            | TypeData::Valve { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. }
@@ -581,6 +609,8 @@ impl TypeData {
             | TypeData::Rebar { material, .. }
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
+            | TypeData::CableTray { material, .. }
+            | TypeData::Valve { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. }
@@ -738,6 +768,8 @@ impl ElementType {
             TypeData::Rebar { .. } => Category::Rebar,
             TypeData::Pipe { .. } => Category::Pipe,
             TypeData::Conduit { .. } => Category::Conduit,
+            TypeData::CableTray { .. } => Category::CableTray,
+            TypeData::Valve { .. } => Category::Valve,
             TypeData::Stair { .. } => Category::Stair,
             TypeData::Ramp { .. } => Category::Ramp,
             TypeData::Railing { .. } => Category::Railing,
@@ -778,6 +810,22 @@ impl ElementType {
             TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } | TypeData::Rebar { diameter, .. } => {
                 Some(diameter)
             }
+            _ => None,
+        }
+    }
+
+    /// Outside width, height and style of cable tray types.
+    pub fn tray_section(&self) -> Option<(f64, f64, crate::TrayStyle)> {
+        match self.data {
+            TypeData::CableTray { width, height, style, .. } => Some((width, height, style)),
+            _ => None,
+        }
+    }
+
+    /// What valves of a valve type do.
+    pub fn valve_kind(&self) -> Option<crate::ValveKind> {
+        match self.data {
+            TypeData::Valve { kind, .. } => Some(kind),
             _ => None,
         }
     }
@@ -877,6 +925,8 @@ impl ElementType {
             | TypeData::Rebar { material, .. }
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
+            | TypeData::CableTray { material, .. }
+            | TypeData::Valve { material, .. }
             | TypeData::Stair { material, .. }
             | TypeData::Ramp { material, .. }
             | TypeData::Railing { material, .. }

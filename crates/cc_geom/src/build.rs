@@ -128,9 +128,11 @@ pub struct ModelGeometry {
     pub beams: BTreeMap<ElementId, BeamGeom>,
     /// Reinforcement sets: their bars, placed in their hosts.
     pub rebar: BTreeMap<ElementId, crate::rebar::RebarGeom>,
-    /// Pipes and conduits: their center lines and diameters.
+    /// Pipes, conduits and cable trays: their center lines and sections.
     pub segments: BTreeMap<ElementId, crate::mep::SegmentGeom>,
-    /// Where pipes and conduits meet: nodes, fittings and attached fixtures and devices.
+    /// Valves placed on their pipes.
+    pub valves: BTreeMap<ElementId, crate::mep::ValveGeom>,
+    /// Where pipes, conduits and cable trays meet: nodes, fittings, valves and attached fixtures and devices.
     pub mep: crate::mep_net::MepNetwork,
     /// Foundations: plan outline and elevations (strips meet at corners like beams).
     pub foundations: BTreeMap<ElementId, FoundationGeom>,

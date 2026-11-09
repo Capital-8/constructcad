@@ -208,6 +208,7 @@ impl<'a> Exporter<'a> {
         self.write_rebar();
         self.write_components();
         self.write_segments();
+        self.write_valves();
         let fittings = self.write_fittings();
         self.write_systems(&fittings);
         self.write_spaces();
@@ -1252,7 +1253,8 @@ impl<'a> Exporter<'a> {
         }
     }
 
-    /// Pipes and conduits: a circle extruded along the run, placed at its start.
+    /// Pipes and conduits: a circle extruded along the run, placed at its
+    /// start; cable trays: their open channel section extruded the same way.
     fn write_segments(&mut self) {
         let project = self.project;
         let geom = self.geom;
@@ -1262,12 +1264,27 @@ impl<'a> Exporter<'a> {
             let Some(storey) = self.storey_placement(e.level) else { continue };
             let Some(axis) = (g.b - g.a).try_normalize() else { continue };
             let origin = DVec3::new(s.start.x, s.start.y, s.start_offset);
-            let frame = Frame { origin, x: axis.any_orthonormal_vector(), z: axis };
-            let placement = self.local_placement(Some(storey), frame);
-            let profile = self
-                .w
-                .add("IFCCIRCLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, Value::Null, g.diameter / 2.0]);
-            let item = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, self.identity, self.dir_z, g.length()]);
+            let item = match g.tray {
+                Some(t) => {
+                    // Local X across the tray, Y up (Z × X), Z along the run.
+                    let (side, _) = cc_geom::mep::section_frame(axis);
+                    let placement = self.local_placement(Some(storey), Frame { origin, x: side, z: axis });
+                    let profile = cc_geom::mep::tray_profile(t);
+                    let item = self.extrude_polygon(&profile, self.identity, self.dir_z, g.length());
+                    (placement, item)
+                }
+                None => {
+                    let frame = Frame { origin, x: axis.any_orthonormal_vector(), z: axis };
+                    let placement = self.local_placement(Some(storey), frame);
+                    let args = args![Value::Enum("AREA"), Value::Null, Value::Null, g.diameter / 2.0];
+                    let profile = self.w.add("IFCCIRCLEPROFILEDEF", args);
+                    (
+                        placement,
+                        self.w.add("IFCEXTRUDEDAREASOLID", args![profile, self.identity, self.dir_z, g.length()]),
+                    )
+                }
+            };
+            let (placement, item) = item;
             let color = project.system_color(e);
             let name = e.systems().first().and_then(|id| project.system(*id)).map_or("Generic", |s| s.name.as_str());
             let style = self.style(&format!("system {name}"), color, 0.0);
@@ -1277,6 +1294,9 @@ impl<'a> Exporter<'a> {
                 ElementKind::Conduit(_) => {
                     ("IFCCABLECARRIERSEGMENT", "CONDUITSEGMENT", "Qto_CableCarrierSegmentBaseQuantities")
                 }
+                ElementKind::CableTray(_) => {
+                    ("IFCCABLECARRIERSEGMENT", "CABLETRAYSEGMENT", "Qto_CableCarrierSegmentBaseQuantities")
+                }
                 _ => ("IFCPIPESEGMENT", "RIGIDSEGMENT", "Qto_PipeSegmentBaseQuantities"),
             };
             let mut attrs = self.element_args(e, placement, shape);
@@ -1285,6 +1305,33 @@ impl<'a> Exporter<'a> {
             self.products.insert(e.id, product);
             self.register(e, product);
             self.quantities(e, qto, &[("Length", Quantity::Length(g.length()))]);
+        }
+    }
+
+    /// Valves: `IfcValve`s whose body (as in the 3D view) is a polygonal face
+    /// set placed at their center, in their pipe's system color.
+    fn write_valves(&mut self) {
+        let project = self.project;
+        let geom = self.geom;
+        for v in geom.valves.values() {
+            let Some(e) = project.element(v.element) else { continue };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let level_z = project.level_elevation(e.level);
+            let faces: Vec<Vec<DVec3>> = cc_geom::mep::valve(&cc_geom::ValveGeom { point: DVec3::ZERO, ..*v });
+            let Some(item) = self.face_set(&faces) else { continue };
+            let color = project.system_color(e);
+            let pipe = project.element(v.host);
+            let system = pipe.and_then(|p| p.systems().first().and_then(|id| project.system(*id)));
+            let style = self.style(&format!("system {}", system.map_or("Generic", |s| s.name.as_str())), color, 0.0);
+            self.styled(item, style);
+            let shape = self.shape_of_type(vec![item], None, "Tessellation");
+            let origin = DVec3::new(v.point.x, v.point.y, v.point.z - level_z);
+            let placement = self.local_placement(Some(storey), Frame::at(origin));
+            let mut attrs = self.element_args(e, placement, shape);
+            attrs.push(Value::Enum(valve_type(v.kind)));
+            let product = self.w.add("IFCVALVE", attrs);
+            self.products.insert(e.id, product);
+            self.register(e, product);
         }
     }
 
@@ -1312,10 +1359,18 @@ impl<'a> Exporter<'a> {
                 (false, K::Reducer) => ("IFCCABLECARRIERFITTING", "REDUCER", "Reducer"),
                 (false, K::Coupling) => ("IFCCABLECARRIERFITTING", "NOTDEFINED", "Coupling"),
             };
+            // Cable tray fittings: the channel of the first run, half its width along each branch.
+            let tray = f.runs.first().and_then(|r| geom.segments.get(r)).and_then(|g| g.tray);
             let items: Vec<Id> = f
                 .branches
                 .iter()
                 .filter_map(|&(dir, d)| {
+                    if let Some(t) = tray {
+                        let (side, _) = cc_geom::mep::section_frame(dir);
+                        let position = self.placement3(Frame { origin: DVec3::ZERO, x: side, z: dir });
+                        let profile = cc_geom::mep::tray_profile(cc_geom::TraySection { width: d, ..t });
+                        return (d > 0.0).then(|| self.extrude_polygon(&profile, position, self.dir_z, d * 0.5));
+                    }
                     let x = dir.any_orthonormal_vector();
                     let position = self.placement3(Frame { origin: DVec3::ZERO, x, z: dir });
                     let radius = d * 0.6;
@@ -1381,6 +1436,13 @@ impl<'a> Exporter<'a> {
         for (id, system) in &project.systems {
             let mut members: Vec<Id> =
                 project.system_members(*id).filter_map(|e| self.products.get(&e.id).copied()).collect();
+            // Valves belong to their pipe's system.
+            members.extend(
+                project
+                    .system_members(*id)
+                    .flat_map(|e| project.valves_of(e.id))
+                    .filter_map(|(v, _)| self.products.get(&v.id).copied()),
+            );
             members.extend(fittings.iter().filter(|(s, _)| *s == Some(*id)).map(|(_, p)| *p));
             if let Some(panel) = system.panel.and_then(|p| self.products.get(&p).copied()) {
                 members.insert(0, panel);
@@ -1524,6 +1586,8 @@ impl<'a> Exporter<'a> {
             }
             TypeData::Pipe { .. } => ("IFCPIPESEGMENTTYPE", args![Value::Enum("RIGIDSEGMENT")]),
             TypeData::Conduit { .. } => ("IFCCABLECARRIERSEGMENTTYPE", args![Value::Enum("CONDUITSEGMENT")]),
+            TypeData::CableTray { .. } => ("IFCCABLECARRIERSEGMENTTYPE", args![Value::Enum("CABLETRAYSEGMENT")]),
+            TypeData::Valve { kind, .. } => ("IFCVALVETYPE", args![Value::Enum(valve_type(kind))]),
             TypeData::Column { .. } => ("IFCCOLUMNTYPE", args![Value::Enum("COLUMN")]),
             TypeData::Beam { .. } => ("IFCBEAMTYPE", args![Value::Enum("BEAM")]),
             TypeData::Rebar { diameter, .. } => {
@@ -1579,6 +1643,10 @@ impl<'a> Exporter<'a> {
             | TypeData::Conduit { material, .. }
             | TypeData::Rebar { material, .. }
             | TypeData::Topography { material, .. } => Some(self.material(material)),
+            TypeData::CableTray { material, .. } | TypeData::Valve { material, .. } if !material.is_empty() => {
+                Some(self.material(material))
+            }
+            TypeData::CableTray { .. } | TypeData::Valve { .. } => None,
             TypeData::Component { def, .. } if !def.main_material().is_empty() => {
                 Some(self.material(def.main_material()))
             }
@@ -2407,6 +2475,16 @@ enum Quantity {
     Length(f64),
     Area(f64),
     Volume(f64),
+}
+
+/// The `IfcValveTypeEnum` of a valve kind: gate and ball valves isolate,
+/// check valves let the flow one way, globe valves regulate it.
+fn valve_type(kind: cc_core::ValveKind) -> &'static str {
+    match kind {
+        cc_core::ValveKind::Gate | cc_core::ValveKind::Ball => "ISOLATING",
+        cc_core::ValveKind::Check => "CHECK",
+        cc_core::ValveKind::Globe => "REGULATING",
+    }
 }
 
 /// The center line a bar is swept along. A closed stirrup starts in the

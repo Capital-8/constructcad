@@ -223,7 +223,7 @@ pub enum UiCommand {
 }
 
 /// Model categories placed by a tool of their own (dimensions and text have their own commands).
-const PLACED: [Category; 22] = [
+const PLACED: [Category; 24] = [
     Category::Wall,
     Category::Door,
     Category::Window,
@@ -242,6 +242,8 @@ const PLACED: [Category; 22] = [
     Category::Foundation,
     Category::Pipe,
     Category::Conduit,
+    Category::CableTray,
+    Category::Valve,
     Category::Mass,
     Category::Shaft,
     Category::Topography,
@@ -1026,6 +1028,8 @@ impl UiCommand {
             Place(Category::Foundation) => "FT",
             Place(Category::Pipe) => "PI",
             Place(Category::Conduit) => "CN",
+            Place(Category::CableTray) => "TY",
+            Place(Category::Valve) => "VL",
             Select => "MD",
             SelectInstances => "SA",
             Group => "GP",
@@ -1115,6 +1119,8 @@ impl UiCommand {
             Place(Category::Foundation) => "footing_create",
             Place(Category::Pipe) => "pipe_create",
             Place(Category::Conduit) => "conduit_create",
+            Place(Category::CableTray) => "cable_tray_create",
+            Place(Category::Valve) => "valve_place",
             PlaceFixture | PlaceDevice => "component_place",
             Systems => "system_set",
             MepConnect => "mep_connect",
@@ -1283,7 +1289,10 @@ impl UiCommand {
             }
             // Pads grade a terrain of the plan's level.
             Place(Category::Pad) if !actions::terrain_on_level(state) => Some(t!("why-no-terrain")),
-            // A project without a ramp, mass, sweep, shaft, terrain or pad type gets one when the tool starts.
+            // Valves go on pipes.
+            Place(Category::Valve) if project.elements_of(Category::Pipe).next().is_none() => Some(t!("why-no-pipes")),
+            // A project without a ramp, mass, sweep, shaft, terrain, pad, cable tray or valve type gets
+            // one when the tool starts.
             Place(category)
                 if !matches!(
                     category,
@@ -1293,6 +1302,8 @@ impl UiCommand {
                         | Category::Shaft
                         | Category::Topography
                         | Category::Pad
+                        | Category::CableTray
+                        | Category::Valve
                 ) && Tool::for_category(project, category).is_none() =>
             {
                 Some(t!("msg-no-type"))
@@ -1537,6 +1548,8 @@ fn place_label(category: Category) -> String {
         Category::Rebar => t!("category-rebar"),
         Category::Pipe => t!("tool-pipe"),
         Category::Conduit => t!("tool-conduit"),
+        Category::CableTray => t!("tool-cable-tray"),
+        Category::Valve => t!("tool-valve"),
         Category::Dimension => t!("tool-dimension"),
         Category::Text => t!("tool-text"),
         Category::DetailLine => t!("tool-detail-line"),
@@ -1574,6 +1587,8 @@ fn place_description(category: Category) -> String {
         Category::Rebar => t!("cmd-desc-rebar-typical"),
         Category::Pipe => t!("cmd-desc-pipe"),
         Category::Conduit => t!("cmd-desc-conduit"),
+        Category::CableTray => t!("cmd-desc-cable-tray"),
+        Category::Valve => t!("cmd-desc-valve"),
         Category::Dimension => t!("cmd-desc-dim-aligned"),
         Category::Text => t!("cmd-desc-text"),
         Category::DetailLine => t!("cmd-desc-detail-line"),

@@ -92,7 +92,7 @@ The engine's file commands (`project_open`, `project_save`, `ifc_import`, `ifc_e
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / Copy / Paste |
 | Delete | Delete the selection |
 | Esc | Cancel the operation, leave the tool, clear the selection |
-| Backspace | While drawing a chain of walls, beams, pipes or conduits: take back the last segment and go on from its start (Ctrl+Z too; Ctrl+Y puts it back); a railing's last point |
+| Backspace | While drawing a chain of walls, beams, pipes, conduits or cable trays: take back the last segment and go on from its start (Ctrl+Z too; Ctrl+Y puts it back); a railing's last point |
 | Space | Rotate or flip the selection or the element being placed |
 
 Two-letter keys work while a view has the focus and no text field is being edited. The README lists them all. Each tooltip shows its own shortcut as well.
@@ -213,6 +213,18 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Profiles**: the type holds the profile and the material. `sweep_type_create` makes a type from points `[x, y]` or from `curves` (lines, arcs, circles, rectangles… making one closed outline, so a cove or a half-round gutter is drawn with arcs), and `sweep_profile_set` redraws a type's profile; both are in the command palette. A profile must be a closed outline that does not cross itself.
 - **Edit Profile** (*Modify → Sketch*, with one sweep selected, or the button in its type's *Edit Type…*) opens the type's profile in a sketch that takes the place of the views: its plane has x across (outward, to the left of the path) and y up from the path, the path's point marked where the axes cross. The sketch has the usual ribbon, drawing and Modify tools, grips and undo; points snap to the sketch's own points, the path's point, the axes and millimeters. *Finish* redraws the profile of every sweep of the type in one undo step (an open or crossing outline is refused and shown), *Cancel* leaves it as it was. The type keeps the curves, so a cove's arc is still an arc when the profile is edited again; changing the profile's points another way drops them.
 - **Views**: plans and ceiling plans draw what the cut plane cuts and what lies below (or above, in ceiling plans), elevations, sections and 3D views show the solid, legends show the profile's section, and schedules list the length and volume. IFC export writes them as coverings of type `MOLDING`.
+
+## Cable trays and valves
+
+*MEP → Electrical → Cable Tray* (`TY`) draws cable tray runs like conduits: click the ends of each run, one after the other; a new elevation while drawing adds a vertical run, and Backspace takes back the last segment. The options bar sets the circuit the trays carry and their elevation (by default 30 cm under the level above, or the height of the tray a run starts on). A project without a cable tray type gets one the first time (200 × 100 mm, ladder).
+
+*MEP → Plumbing → Valve* (`VL`) places a valve on the pipe clicked, where it was clicked. A project without valve types gets one per kind the first time: gate, ball, check and globe valves.
+
+- **Types**: a cable tray type sets the width, the height, the construction (ladder, solid bottom or perforated) and the material; a valve type sets its kind and material. A valve has its pipe's diameter.
+- **Networks**: trays join other trays where their ends meet or an end lies on a run (elbows, tees and crosses, listed by `mep_fittings`), not conduits or pipes. A valve is a node of its pipe's network; it moves, is copied and is deleted with the pipe, and its properties set its distance from the pipe's start.
+- **Views**: electrical plans draw trays as wide as they are, lightly tinted in their circuit's color, with the rungs of ladder trays and a tag with the section and circuits; plumbing plans draw valves with the usual symbol (two triangles meeting at their tips; a hollow circle for ball valves, a filled one for globe valves, a filled triangle for check valves). 3D views, sections and elevations show trays as open channels and valves with their body and handwheel or lever. Schedules list a tray's width, height and length and a valve's diameter and system.
+- **IFC**: trays are written as `IfcCableCarrierSegment` (`CABLETRAYSEGMENT`), their fittings as `IfcCableCarrierFitting`, valves as `IfcValve` (`ISOLATING` for gate and ball valves, `CHECK`, `REGULATING` for globe valves) in their pipe's system. Imported back, they come in as components keeping their IFC class.
+- From the command line or MCP: `cable_tray_create`, `cable_tray_type_create`, `valve_place` (with `point` or `distance`, and `kind` or `type`) and `valve_type_create`.
 
 ## Drafting views
 

@@ -164,6 +164,14 @@ fn section_text(section: cc_core::ColumnSection) -> String {
     }
 }
 
+/// The pipe a valve sits on (`None` for other elements).
+fn valve_pipe<'a>(project: &'a Project, e: &Element) -> Option<&'a Element> {
+    match &e.kind {
+        ElementKind::Valve(v) => project.valve_host(v).map(|(pipe, _)| pipe),
+        _ => None,
+    }
+}
+
 /// Width (X), depth (Y) and height of a component's pieces in its own frame.
 fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> {
     let ElementKind::Component(c) = &e.kind else { return None };
@@ -214,7 +222,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
                 _ => Value::Missing,
             },
             ElementKind::Railing(r) => Value::Length(cc_geom::railing_length(project, e, r)),
-            ElementKind::Pipe(s) | ElementKind::Conduit(s) => Value::Length(s.length()),
+            ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Value::Length(s.length()),
             ElementKind::Sweep(sw) => Value::Length(sw.length()),
             _ => Value::Missing,
         },
@@ -233,7 +241,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             (ElementKind::Door(_) | ElementKind::Window(_), _) => {
                 ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(_, h)| Value::Length(h))
             }
-            (_, Some(TypeData::Railing { height, .. })) => Value::Length(*height),
+            (_, Some(TypeData::Railing { height, .. } | TypeData::CableTray { height, .. })) => Value::Length(*height),
             (ElementKind::Component(_), _) => {
                 component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.2))
             }
@@ -243,7 +251,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ if matches!(e.kind, ElementKind::Door(_) | ElementKind::Window(_)) => {
                 ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(w, _)| Value::Length(w))
             }
-            Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. }) => Value::Length(*width),
+            Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. } | TypeData::CableTray { width, .. }) => {
+                Value::Length(*width)
+            }
             _ => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.0)),
         },
         F::Depth => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.1)),
@@ -291,6 +301,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             .map(|h| h.host)
             .or(match &e.kind {
                 ElementKind::Rebar(r) => Some(r.host),
+                ElementKind::Valve(v) => Some(v.host),
                 _ => None,
             })
             .and_then(|h| project.element(h))
@@ -317,7 +328,10 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         },
         F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
-        F::Diameter => match ty.map(|t| &t.data) {
+        F::Diameter => match valve_pipe(project, e)
+            .map_or(ty, |pipe| project.element_type(pipe.type_id))
+            .map(|t| &t.data)
+        {
             Some(
                 TypeData::Rebar { diameter, .. } | TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. },
             ) if format::imperial() => Value::Text(format!("Ø {}\"", format::inches(*diameter))),
@@ -330,8 +344,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ => Value::Missing,
         },
         F::System => {
-            let labels: Vec<&str> =
-                e.systems().iter().filter_map(|id| project.system(*id)).map(|s| s.label()).collect();
+            // Valves are in their pipe's system.
+            let systems = valve_pipe(project, e).unwrap_or(e).systems();
+            let labels: Vec<&str> = systems.iter().filter_map(|id| project.system(*id)).map(|s| s.label()).collect();
             if labels.is_empty() { Value::Missing } else { Value::Text(labels.join(", ")) }
         }
         F::Slope => match &e.kind {

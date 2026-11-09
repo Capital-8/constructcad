@@ -85,11 +85,12 @@ fn element_is_valid(e: &Element) -> bool {
         }
         ElementKind::Railing(r) => r.base_offset.is_finite() && r.path.len() >= 2 && finite_points(&r.path),
         ElementKind::Component(c) => finite(&[c.rotation_deg, c.base_offset]) && c.position.is_finite(),
-        ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+        ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
             finite(&[s.start_offset, s.end_offset])
                 && finite_points(&[s.start, s.end])
                 && (s.plan_length() >= 1e-3 || s.rise().abs() >= 1e-3)
         }
+        ElementKind::Valve(v) => v.at.is_finite() && v.at >= 0.0,
         ElementKind::CadImport(c) => c.is_valid(),
         ElementKind::DetailLine(l) => l.is_valid(),
         ElementKind::DetailComponent(c) => c.is_valid(),
@@ -240,6 +241,16 @@ impl Project {
                     repairs += fit_shape(shape, *width, *height);
                 }
                 TypeData::Rebar { diameter, .. } => repairs += usize::from(fix_positive(diameter, 0.01)),
+                TypeData::CableTray { width, height, .. } => {
+                    repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(height, 0.1));
+                    for (v, max) in [(width, crate::mep::MAX_TRAY_WIDTH), (height, crate::mep::MAX_TRAY_HEIGHT)] {
+                        if *v > max {
+                            *v = max;
+                            repairs += 1;
+                        }
+                    }
+                }
+                TypeData::Valve { .. } => {}
                 TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
                     repairs += usize::from(fix_positive(diameter, 0.025));
                 }
@@ -355,6 +366,9 @@ impl Project {
                         ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => self.view(r.view).is_some(),
                         ElementKind::Pad(p) => {
                             self.element(p.host).is_some_and(|t| matches!(t.kind, ElementKind::Topography(_)))
+                        }
+                        ElementKind::Valve(v) => {
+                            self.element(v.host).is_some_and(|h| matches!(h.kind, ElementKind::Pipe(_)))
                         }
                         _ => true,
                     };
@@ -534,7 +548,7 @@ impl Project {
         for e in self.elements.values_mut() {
             let max = if matches!(e.kind, ElementKind::Pipe(_)) { 1 } else { usize::MAX };
             match &mut e.kind {
-                ElementKind::Pipe(s) | ElementKind::Conduit(s) => {
+                ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
                     let before = s.systems.len();
                     let mut seen = std::collections::BTreeSet::new();
                     s.systems.retain(|id| systems.contains_key(id) && seen.insert(*id));

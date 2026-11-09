@@ -6,7 +6,7 @@ use crate::icons::{self, Badge, Icon, Tones};
 use crate::state::{AppState, RibbonTab};
 use crate::t;
 use crate::theme::{self, PALETTE};
-use crate::tools::{DimensionMode, Tool};
+use crate::tools::{DimensionMode, Run, Tool};
 use cc_core::{Category, ViewCategory};
 use cc_views::format;
 use egui::{Align, Button, DragValue, Layout, Response, RichText, Sense, Stroke, StrokeKind, Ui, vec2};
@@ -32,6 +32,8 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Rebar => Icon::Rebar,
         Category::Pipe => Icon::Pipe,
         Category::Conduit => Icon::Conduit,
+        Category::CableTray => Icon::CableTray,
+        Category::Valve => Icon::Valve,
         Category::Dimension => Icon::Dimension,
         Category::Column => Icon::Column,
         Category::Beam => Icon::Beam,
@@ -681,8 +683,12 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
 
 fn mep_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
-    group(ui, t!("group-plumbing"), |ui| command_buttons(ui, state, &[place(Category::Pipe), PlaceFixture]));
-    group(ui, t!("group-electrical"), |ui| command_buttons(ui, state, &[place(Category::Conduit), PlaceDevice]));
+    group(ui, t!("group-plumbing"), |ui| {
+        command_buttons(ui, state, &[place(Category::Pipe), place(Category::Valve), PlaceFixture]);
+    });
+    group(ui, t!("group-electrical"), |ui| {
+        command_buttons(ui, state, &[place(Category::Conduit), place(Category::CableTray), PlaceDevice]);
+    });
     group(ui, t!("group-systems"), |ui| command_buttons(ui, state, &[MepConnect, Systems]));
     group(ui, t!("group-analysis"), |ui| command_button(ui, state, MepSizing));
     group(ui, t!("group-documentation"), |ui| {
@@ -925,10 +931,11 @@ fn macro_menu(ui: &mut Ui, state: &mut AppState) {
 }
 
 /// Context options for the active tool (options bar).
-/// Options of the pipe and conduit tools: the system (or circuit), the
-/// elevation of the run's start and, for pipes, the fall along it. Changing
-/// the system brings back its defaults.
-fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementTypeId, pipe: bool) {
+/// Options of the pipe, conduit and cable tray tools: the system (or
+/// circuit), the elevation of the run's start and, for pipes, the fall
+/// along it. Changing the system brings back its defaults.
+fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementTypeId, run: Run) {
+    let pipe = run == Run::Pipe;
     let mut system = if pipe { state.mep.system } else { state.mep.circuit };
     ui.label(if pipe { t!("col-system") } else { t!("prop-circuit") });
     if crate::systems_dialog::system_combo(ui, state, ("segment-system", pipe), Some(!pipe), &mut system) {
@@ -942,10 +949,11 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
     }
     let project = state.project();
     let kind = system.and_then(|id| project.system(id)).map(|s| s.kind);
-    let default_offset = match (pipe, state.active_level()) {
-        (true, _) => cc_engine::pipe_offset(kind),
-        (false, Some(level)) => cc_engine::conduit_offset(project, level),
-        (false, None) => 2.8,
+    let default_offset = match (run, state.active_level()) {
+        (Run::Pipe, _) => cc_engine::pipe_offset(kind),
+        (Run::Conduit, Some(level)) => cc_engine::conduit_offset(project, level),
+        (Run::Tray, Some(level)) => cc_engine::tray_offset(project, level),
+        (_, None) => 2.8,
     };
     let diameter = project.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
     let default_slope =
@@ -969,7 +977,12 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
         }
     }
     ui.separator();
-    ui.label(theme::muted(if pipe { t!("hint-pipe") } else { t!("hint-conduit") }));
+    let hint = match run {
+        Run::Pipe => t!("hint-pipe"),
+        Run::Conduit => t!("hint-conduit"),
+        Run::Tray => t!("hint-cable-tray"),
+    };
+    ui.label(theme::muted(hint));
 }
 
 pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
@@ -1143,8 +1156,12 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             }
             Tool::Stair { .. } => crate::stair_ui::tool_options(ui, state),
             Tool::Ramp { .. } => crate::stair_ui::ramp_tool_options(ui, state),
-            Tool::Pipe { type_id } => segment_options(ui, state, type_id, true),
-            Tool::Conduit { type_id } => segment_options(ui, state, type_id, false),
+            Tool::Pipe { type_id } => segment_options(ui, state, type_id, Run::Pipe),
+            Tool::Conduit { type_id } => segment_options(ui, state, type_id, Run::Conduit),
+            Tool::CableTray { type_id } => segment_options(ui, state, type_id, Run::Tray),
+            Tool::Valve { .. } => {
+                ui.label(theme::muted(t!("hint-valve")));
+            }
             Tool::Component { type_id } if crate::tools::device_type(state.project(), type_id).is_some() => {
                 ui.label(t!("prop-rotation"));
                 let rotation = &mut state.interaction.rotation;

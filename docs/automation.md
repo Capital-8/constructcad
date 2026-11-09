@@ -218,6 +218,15 @@ A curtain wall is a wall whose type has a curtain grid instead of layers: vertic
 {"command": "wall_create", "args": {"start": [2, 0], "end": [6, 0], "type": "Storefront", "height": 2.8}}
 ```
 
+### Cable trays and valves
+
+`cable_tray_create` draws a cable tray run like `conduit_create` (with `circuits`, `offset`, `end_offset`); a project without a cable tray type gets one (200 × 100 mm, ladder), and `cable_tray_type_create` makes others (`width`, `height`, `style`: `ladder`, `solid_bottom` or `perforated`). Trays join only other trays, and their elbows and tees are listed by `mep_fittings`. `valve_place` puts a valve on a pipe at a `point` near it or a `distance` along it, of a `type` or a `kind` (`gate`, `ball`, `check`, `globe`; a type of that kind is made when there is none); `valve_type_create` makes types of several `kinds` at once. A valve takes its pipe's diameter and system, is a node of its network and follows the pipe; `element_get` shows its `derived.point`, `kind` and `diameter`, and `element_set` moves it along the pipe (`params.at`).
+
+```text
+{"command": "cable_tray_create", "args": {"start": [0, 0], "end": [6, 0], "circuits": ["1"]}}
+{"command": "valve_place", "args": {"pipe": 42, "distance": 0.5, "kind": "ball"}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).

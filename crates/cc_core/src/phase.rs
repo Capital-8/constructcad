@@ -266,6 +266,7 @@ pub fn phase_host(e: &Element) -> Option<ElementId> {
         ElementKind::Door(h) | ElementKind::Window(h) => Some(h.host),
         ElementKind::Rebar(r) => Some(r.host),
         ElementKind::Pad(p) => Some(p.host),
+        ElementKind::Valve(v) => Some(v.host),
         ElementKind::Railing(r) => r.stair.map(|h| h.host),
         _ => None,
     }

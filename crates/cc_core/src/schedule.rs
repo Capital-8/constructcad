@@ -193,6 +193,8 @@ impl ScheduleField {
             Category::Pad => &[F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Pipe => &[F::Diameter, F::Length, F::System, F::Slope, F::Material],
             Category::Conduit => &[F::Diameter, F::Length, F::System, F::Material],
+            Category::CableTray => &[F::Width, F::Height, F::Length, F::System, F::Material],
+            Category::Valve => &[F::Host, F::Diameter, F::System, F::Material],
             Category::Component => &[
                 F::ComponentName,
                 F::ComponentKind,
@@ -266,6 +268,8 @@ impl ScheduleField {
             Category::Sweep => vec![F::Mark, F::Type, F::Level, F::Length, F::Volume],
             Category::Pipe => vec![F::Type, F::System, F::Level, F::Diameter, F::Length, F::Slope],
             Category::Conduit => vec![F::Type, F::System, F::Level, F::Diameter, F::Length],
+            Category::CableTray => vec![F::Type, F::System, F::Level, F::Width, F::Height, F::Length],
+            Category::Valve => vec![F::Mark, F::Type, F::Diameter, F::System, F::Level],
             Category::Component => vec![F::Mark, F::ComponentName, F::Type, F::Level, F::Width, F::Depth, F::Height],
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
             Category::Mass => vec![F::Mark, F::Type, F::Level, F::Height, F::FloorCount, F::FloorArea, F::Volume],

@@ -41,7 +41,8 @@ pub fn element_params(kind: &cc_core::ElementKind) -> serde_json::Value {
 }
 
 pub use defaults::{
-    conduit_offset, default_roof_base, default_top, device_height, drain_slope, next_number, pipe_offset, walls_loop,
+    conduit_offset, default_roof_base, default_top, device_height, drain_slope, next_number, pipe_offset, tray_offset,
+    walls_loop,
 };
 pub use error::{EngineError, ErrorCode, Result};
 pub use extension::Extension;
