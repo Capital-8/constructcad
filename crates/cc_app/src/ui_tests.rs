@@ -2919,3 +2919,41 @@ fn fill_patterns_are_managed_and_picked() {
     let choices = crate::fill_patterns_dialog::choices(state.project());
     assert_eq!(choices.len(), cc_core::Pattern::ALL.len());
 }
+
+/// Hiding the Imported CAD category in Visibility/Graphics hides the
+/// drawings imported into the view.
+#[test]
+fn graphics_dialog_hides_imported_cad() {
+    let mut state = sample_state();
+    let plan = state.project().views_of(cc_core::ViewCategory::FloorPlan).next().unwrap().id;
+    state.active_view = Some(plan);
+    let dir = std::env::temp_dir().join(format!("ccad-ui-cad-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("lines.dxf");
+    let dxf = "  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n  8\nA\n 10\n0\n 20\n0\n 30\n0\n 11\n4\n 21\n0\n 31\n0\n  0\nENDSEC\n  0\nEOF\n";
+    std::fs::write(&path, dxf).unwrap();
+    crate::cad_ui::import_cad_path(&mut state, path);
+    crate::jobs::wait(&mut state);
+    let id = *state.selection.iter().next().expect("the import is selected");
+    let drawn = |s: &mut AppState| {
+        s.drawing(plan)
+            .unwrap()
+            .prims
+            .iter()
+            .any(|p| matches!(p, cc_views::Prim::Line { element: Some(e), .. } if *e == id))
+    };
+    assert!(drawn(&mut state));
+    crate::graphics_dialog::open(&mut state, crate::graphics_dialog::Target::View(plan));
+    let mut harness = themed_harness(state, egui::vec2(980.0, 680.0), egui::Theme::Light, |ui, state| {
+        crate::graphics_dialog::show(ui.ctx(), state)
+    });
+    harness.get_by_label(&t!("vg-annotation-categories")).click_accesskit();
+    harness.run();
+    let label = format!("{}: {}", t!("vg-visible"), crate::actions::t_category(cc_core::Category::CadImport));
+    harness.get_by_label(&label).click_accesskit();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(!harness.state().project().view(plan).unwrap().graphics.category(cc_core::Category::CadImport).visible);
+    assert!(!drawn(harness.state_mut()));
+}
