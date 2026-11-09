@@ -265,10 +265,10 @@ fn buttons(ui: &mut Ui, state: &mut AppState, selected: &mut Pattern, replace_wi
                 .unwrap_or_default();
             let line = cmd::LineArg { angle: 45.0, offset: [0.0, 3.0], ..Default::default() };
             let command = cmd::FillPatternCreate { name, lines: vec![line], ..Default::default() };
-            if let Some(out) = crate::actions::run_command(state, command) {
-                if let Some(id) = out["id"].as_u64() {
-                    *selected = Pattern::Custom(FillPatternId(id));
-                }
+            if let Some(out) = crate::actions::run_command(state, command)
+                && let Some(id) = out["id"].as_u64()
+            {
+                *selected = Pattern::Custom(FillPatternId(id));
             }
         }
         let custom = match *selected {

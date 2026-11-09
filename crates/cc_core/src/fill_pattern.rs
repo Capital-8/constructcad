@@ -293,7 +293,9 @@ pub fn visit_phase_graphics(g: &mut PhaseGraphics, v: &mut dyn FnMut(PatternSlot
 }
 
 /// Whether anything `visit` reaches holds `pattern` (on a copy).
-fn holds<T: Clone>(x: &T, pattern: Pattern, visit: fn(&mut T, &mut dyn FnMut(PatternSlot))) -> bool {
+type Visit<T> = fn(&mut T, &mut dyn FnMut(PatternSlot));
+
+fn holds<T: Clone>(x: &T, pattern: Pattern, visit: Visit<T>) -> bool {
     let mut copy = x.clone();
     let mut found = false;
     visit(&mut copy, &mut |s| found |= s.get() == Some(pattern));
