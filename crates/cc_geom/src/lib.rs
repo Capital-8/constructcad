@@ -38,7 +38,7 @@ mod wall;
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{
     BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, OpeningSymbol, WorldConnector, column_outline,
-    component_connectors, component_parts, hosted_parts, opening_parts,
+    component_connectors, component_parts, hosted_parts, opening_parts, rect_outline,
 };
 pub use component::{instance_errors, resolve_component, resolve_component_in, resolve_instance, resolve_pieces};
 pub use cut::{clip_polygon, face_plane_segments};

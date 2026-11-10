@@ -13,6 +13,8 @@ pub struct TypeSection {
     /// The profile it comes from; `None` for a legacy section.
     pub profile: Option<ProfileId>,
     pub material: ProfileMaterial,
+    /// Whether the outline has arcs (drawn as short chords).
+    pub curved: bool,
 }
 
 impl ProfileShape {
@@ -87,6 +89,36 @@ fn place_outline(mut outline: SectionOutline, rotation_deg: f64, mirror: bool) -
         }
     }
     outline
+}
+
+/// The parameters of a shape that round or cut its corners.
+const RADII: [&str; 4] = ["r", "ri", "ro", "chamfer"];
+
+impl ProfileShape {
+    /// Whether the outline has arcs: a round, a radius above zero, or a
+    /// sketch with arc or ellipse segments.
+    pub fn has_arcs(&self) -> bool {
+        match self {
+            Self::Round { .. } | Self::RoundTube { .. } => true,
+            Self::Sketch(s) => s
+                .outline
+                .iter()
+                .chain(s.openings.iter().flatten())
+                .any(|p| !p.radius.trim().is_empty() || p.ellipse.is_some()),
+            _ => self.params().iter().any(|(n, v)| n != "chamfer" && RADII.contains(&n.as_str()) && *v > 0.0),
+        }
+    }
+}
+
+/// `shape` with every corner radius and chamfer at zero (sketches unchanged).
+fn without_radii(shape: &ProfileShape) -> ProfileShape {
+    let mut square = shape.clone();
+    if !matches!(square, ProfileShape::Sketch(_)) {
+        for name in RADII {
+            square.set_param(name, 0.0);
+        }
+    }
+    square
 }
 
 /// The pieces of a column or beam type that make its section.
@@ -224,18 +256,38 @@ impl Project {
     /// does not fit its box reads as the box). `None` for other types or a
     /// profile whose outline fails.
     pub fn type_section(&self, data: &TypeData) -> Option<TypeSection> {
+        self.section_of(data, false)
+    }
+
+    /// [`Self::type_section`] with every radius of the shape (`r`, `ri`,
+    /// `ro`, `chamfer`) at zero: arcs replaced by their corners, as medium
+    /// detail draws it. Falls back to the rounded outline when the shape
+    /// fails without its radii; sketch profiles are unchanged.
+    pub fn type_section_without_radii(&self, data: &TypeData) -> Option<TypeSection> {
+        self.section_of(data, true)
+    }
+
+    fn section_of(&self, data: &TypeData, square: bool) -> Option<TypeSection> {
         let s = section_data(data)?;
-        let (outline, profile, material) = match s.profile.and_then(|id| self.profile(id)) {
-            Some(def) => (def.outline().ok()?, Some(def.id), def.material),
+        // The outline and whether it has arcs.
+        let outline_of = |shape: &ProfileShape| {
+            let flat = square.then(|| without_radii(shape)).and_then(|f| Some((f.outline().ok()?, f.has_arcs())));
+            match flat {
+                Some(found) => Ok(found),
+                None => shape.outline().map(|o| (o, shape.has_arcs())),
+            }
+        };
+        let ((outline, curved), profile, material) = match s.profile.and_then(|id| self.profile(id)) {
+            Some(def) => (outline_of(&def.shape).ok()?, Some(def.id), def.material),
             None => {
-                let outline = s.legacy.outline().ok().or_else(|| {
+                let outline = outline_of(&s.legacy).ok().or_else(|| {
                     let (b, h) = legacy_size(data)?;
-                    ProfileShape::Rect { b, h, chamfer: 0.0 }.outline().ok()
+                    Some((ProfileShape::Rect { b, h, chamfer: 0.0 }.outline().ok()?, false))
                 })?;
                 (outline, None, self.profile_material_for(s.material))
             }
         };
-        Some(TypeSection { outline: place_outline(outline, s.rotation_deg, s.mirror), profile, material })
+        Some(TypeSection { outline: place_outline(outline, s.rotation_deg, s.mirror), profile, material, curved })
     }
 
     /// Whether a type's legacy section is exactly its profile (unturned,

@@ -158,10 +158,10 @@ pub fn structure_tags(
                 d.tag_text(p + offset, &text, 2.5, Anchor::CenterBottom, angle, Some(e.id));
             }
             ElementKind::Column(c) if c.structural => {
-                let Some(TypeData::Column { section, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
+                let Some(data @ TypeData::Column { .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
                     continue;
                 };
-                let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
+                let outline = cc_geom::column_outline(project, data, c.position, c.rotation_deg);
                 let hi = outline.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
                 let p = hi + DVec2::splat(1.0 * mm);
                 let half = text_half(&text, 2.5, 0.0, mm);

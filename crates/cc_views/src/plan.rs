@@ -116,7 +116,7 @@ pub fn plan_of(
         crate::topography::draw(&mut d, project, geom, level, cut_z, scale);
     }
     if !ceiling {
-        draw_structure(&mut d, project, geom, level, cut_z, spacing, structural);
+        draw_structure(&mut d, project, geom, level, (cut_z, spacing, detail), structural);
     }
     if !structural {
         draw_components(&mut d, project, geom, level, cut_z, ceiling, detail);
@@ -272,29 +272,27 @@ fn draw_structure(
     project: &Project,
     geom: &ModelGeometry,
     level: LevelId,
-    cut_z: f64,
-    spacing: f64,
+    (cut_z, spacing, detail): (f64, f64, DetailLevel),
     structural: bool,
 ) {
     for e in project.elements.values().filter(|e| e.level == level && (!structural || is_structural(e))) {
         let id = Some(e.id);
         let data = project.element_type(e.type_id).map(|t| &t.data);
         match (&e.kind, data) {
-            (ElementKind::Column(c), Some(TypeData::Column { section, .. })) => {
-                let loops = cc_geom::section::column_loops(*section, c.position, c.rotation_deg);
+            (ElementKind::Column(c), Some(data @ TypeData::Column { .. })) => {
+                let Some(section) = cc_geom::section::detailed(project, data, detail) else { continue };
+                let (outer, holes) = cc_geom::section::column_body(&section, c.position, c.rotation_deg);
                 let (base, top) = project.column_span(e, c);
                 let style = if base <= cut_z && cut_z <= top {
-                    let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
-                    for part in cc_geom::section::column_parts(*section, c.position, c.rotation_deg) {
-                        crate::cut::cut_fill(d, project, material, part, spacing, id);
-                    }
+                    let material = data.cut_material();
+                    crate::cut::cut_fill_with_holes(d, project, material, &outer, &holes, spacing, id);
                     LineStyle::Cut
                 } else if base > cut_z {
                     LineStyle::Hidden
                 } else {
                     LineStyle::Projection
                 };
-                for outline in &loops {
+                for outline in std::iter::once(&outer).chain(&holes) {
                     d.polyline(outline, true, style, id);
                 }
             }

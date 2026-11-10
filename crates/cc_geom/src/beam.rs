@@ -177,7 +177,7 @@ impl BeamInput {
 #[derive(Debug, Clone)]
 pub(crate) struct ColumnInput {
     pub element: ElementId,
-    /// Plan outline (convex).
+    /// Plan outline (counter-clockwise; the outer boundary of its profile).
     pub outline: Vec<DVec2>,
     pub z_range: (f64, f64),
 }

@@ -214,20 +214,23 @@ impl BoxPart {
     }
 }
 
-/// Plan outline of a column section's bounding shape (counter-clockwise):
-/// its box, or its circle for round sections.
-pub fn column_outline(section: cc_core::ColumnSection, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
+/// Plan outline of a column type's section (counter-clockwise), placed at
+/// `position` and turned by `rotation_deg`: the outer boundary of its
+/// profile. Empty for other types or a section that fails.
+pub fn column_outline(project: &Project, data: &TypeData, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
+    project
+        .type_section(data)
+        .map(|s| crate::section::column_body(&s.outline, position, rotation_deg).0)
+        .unwrap_or_default()
+}
+
+/// A `width` x `depth` rectangle (counter-clockwise) centered at `position`,
+/// turned by `rotation_deg`: the footprint of a pad footing.
+pub fn rect_outline(width: f64, depth: f64, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
     let u = DVec2::from_angle(rotation_deg.to_radians());
     let v = u.perp();
-    match section {
-        cc_core::ColumnSection::Rectangular { width, depth } | cc_core::ColumnSection::Profile { width, depth, .. } => {
-            let (w, d) = (width / 2.0, depth / 2.0);
-            [(-w, -d), (w, -d), (w, d), (-w, d)].iter().map(|&(a, b)| position + u * a + v * b).collect()
-        }
-        cc_core::ColumnSection::Round { diameter } | cc_core::ColumnSection::Pipe { diameter, .. } => (0..24)
-            .map(|i| position + DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU) * (diameter / 2.0))
-            .collect(),
-    }
+    let (w, d) = (width / 2.0, depth / 2.0);
+    [(-w, -d), (w, -d), (w, d), (-w, d)].iter().map(|&(a, b)| position + u * a + v * b).collect()
 }
 
 /// Solid pieces of a placed component in world coordinates (voids cut
@@ -489,11 +492,11 @@ impl ModelGeometry {
             let Some(ty) = project.element_type(e.type_id) else { continue };
             let mut s = Solid::of_material(e.id, e.category(), project, ty.main_material());
             match (&e.kind, &ty.data) {
-                (ElementKind::Column(c), TypeData::Column { section, .. }) => {
+                (ElementKind::Column(c), TypeData::Column { .. }) => {
+                    let Some(section) = project.type_section(&ty.data) else { continue };
                     let (base, top) = project.column_span(e, c);
-                    for part in crate::section::column_parts(*section, c.position, c.rotation_deg) {
-                        s.add_prism(&part, |_| base, |_| top);
-                    }
+                    let (outer, holes) = crate::section::column_body(&section.outline, c.position, c.rotation_deg);
+                    crate::section::add_column_body(&mut s, &outer, &holes, base, top, section.curved);
                 }
                 (ElementKind::Beam(_), TypeData::Beam { .. }) => {
                     let Some(g) = self.beams.get(&e.id) else { continue };
@@ -546,10 +549,10 @@ impl ModelGeometry {
                         bulge: 0.0,
                     });
                 }
-                (ElementKind::Column(c), Some(TypeData::Column { section, .. })) if c.structural => {
+                (ElementKind::Column(c), Some(data @ TypeData::Column { .. })) if c.structural => {
                     columns.push(ColumnInput {
                         element: e.id,
-                        outline: column_outline(*section, c.position, c.rotation_deg),
+                        outline: column_outline(project, data, c.position, c.rotation_deg),
                         z_range: project.column_span(e, c),
                     });
                 }
@@ -573,8 +576,7 @@ impl ModelGeometry {
             let z_range = (top - thickness, top);
             let footprint = match &f.shape {
                 cc_core::FoundationShape::Pad { position, rotation_deg } => {
-                    let section = cc_core::ColumnSection::Rectangular { width: *width, depth: *length };
-                    column_outline(section, *position, *rotation_deg)
+                    rect_outline(*width, *length, *position, *rotation_deg)
                 }
                 cc_core::FoundationShape::Slab { boundary } => polygon::ccw(boundary),
                 cc_core::FoundationShape::Strip { start, end, bulge } => {

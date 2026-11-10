@@ -5,8 +5,7 @@ use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
 use cc_core::{
-    Category, ColumnSection, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId,
-    ViewKind,
+    Category, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId, ViewKind,
 };
 use cc_engine::Ref;
 use cc_engine::commands::{create, modify as modify_cmd, views};
@@ -973,13 +972,13 @@ fn snap_with(
         // Outlines as the plan draws them: corners are endpoints, edges lines.
         let outlines: Vec<Vec<DVec2>> = match (&e.kind, project.element_type(e.type_id).map(|t| &t.data)) {
             (ElementKind::Wall(_), _) => geom.walls.get(&e.id).filter(|w| w.arc.is_none()).map(|w| vec![w.footprint()]),
-            (
-                ElementKind::Column(c),
-                Some(cc_core::TypeData::Column {
-                    section: section @ (ColumnSection::Rectangular { .. } | ColumnSection::Profile { .. }),
-                    ..
-                }),
-            ) => Some(cc_geom::section::column_loops(*section, c.position, c.rotation_deg)),
+            // Corners of the section without its radii (round sections have none).
+            (ElementKind::Column(c), Some(data @ cc_core::TypeData::Column { .. })) => {
+                project.type_section_without_radii(data).filter(|s| !s.curved).map(|s| {
+                    let (outer, holes) = cc_geom::section::column_body(&s.outline, c.position, c.rotation_deg);
+                    std::iter::once(outer).chain(holes).collect()
+                })
+            }
             (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| g.parts),
             (ElementKind::Ramp(r), _) => {
                 cc_geom::ramp_geom(project, e, r).map(|g| g.pieces.into_iter().map(|p| p.outline).collect())
@@ -1582,8 +1581,8 @@ fn column_tool(
     let shift = ui.input(|i| i.modifiers.shift);
     let s = snap_at(state, Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
     draw_snap(painter, xf, s);
-    if let Some(cc_core::TypeData::Column { section, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
-        let outline: Vec<Pos2> = cc_geom::column_outline(*section, s.point, state.interaction.rotation)
+    if let Some(data @ cc_core::TypeData::Column { .. }) = state.project().element_type(type_id).map(|t| &t.data) {
+        let outline: Vec<Pos2> = cc_geom::column_outline(state.project(), data, s.point, state.interaction.rotation)
             .iter()
             .map(|p| xf.to_screen(*p))
             .collect();
@@ -1892,8 +1891,7 @@ fn footing_tool(
     if let Some(cc_core::TypeData::Foundation { width, length, .. }) =
         state.project().element_type(type_id).map(|t| &t.data)
     {
-        let section = cc_core::ColumnSection::Rectangular { width: *width, depth: *length };
-        let outline: Vec<Pos2> = cc_geom::column_outline(section, s.point, state.interaction.rotation)
+        let outline: Vec<Pos2> = cc_geom::rect_outline(*width, *length, s.point, state.interaction.rotation)
             .iter()
             .map(|p| xf.to_screen(*p))
             .collect();

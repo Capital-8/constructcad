@@ -125,13 +125,21 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 ];
                 d.polyline(&r, true, LineStyle::Projection, None);
             }
-            TypeData::Column { section, .. } => {
+            TypeData::Column { .. } => {
                 let c = o + DVec2::new(0.4, 0.0);
-                for part in cc_geom::section::column_parts(*section, c, 0.0) {
-                    d.fill(part, POCHE, None);
-                }
-                for outline in cc_geom::section::column_loops(*section, c, 0.0) {
-                    d.polyline(&outline, true, LineStyle::Cut, None);
+                if let Some(section) = project.type_section(&t.data) {
+                    let (outer, holes) = cc_geom::section::column_body(&section.outline, c, 0.0);
+                    match cc_geom::polygon::keyhole(&outer, &holes) {
+                        Some(ring) => d.fill(ring, POCHE, None),
+                        None => {
+                            for tri in cc_geom::polygon::triangulate_with_holes(&outer, &holes) {
+                                d.fill(tri.to_vec(), POCHE, None);
+                            }
+                        }
+                    }
+                    for outline in std::iter::once(&outer).chain(&holes) {
+                        d.polyline(outline, true, LineStyle::Cut, None);
+                    }
                 }
             }
             TypeData::Beam { width, height, shape, .. } => {

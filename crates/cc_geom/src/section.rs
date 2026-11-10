@@ -2,7 +2,9 @@
 //! rectangles or convex quads, which add up to its area exactly) and the
 //! outlines to draw.
 
-use cc_core::{ColumnSection, SectionShape};
+use crate::Solid;
+use cc_core::profiles_project::TypeSection;
+use cc_core::{ColumnSection, DetailLevel, Project, SectionOutline, SectionShape, TypeData};
 use glam::DVec2;
 
 /// Segments of round sections.
@@ -108,6 +110,78 @@ pub fn column_loops(section: ColumnSection, position: DVec2, rotation_deg: f64) 
     place(local, position, rotation_deg)
 }
 
+/// Sides of a section whose turn at both ends is below this, degrees: facets
+/// of an arc, drawn as one smooth surface.
+const SMOOTH_TURN_DEG: f64 = 30.0;
+
+/// The section of a column or beam type at a detail level: Fine the outline
+/// with radii, Medium without (arcs replaced by their chords' corners:
+/// rebuild the profile with r/ri/ro = 0), Coarse its bounding rectangle.
+pub fn detailed(project: &Project, data: &TypeData, detail: DetailLevel) -> Option<SectionOutline> {
+    detailed_section(project, data, detail).map(|s| s.outline)
+}
+
+/// [`detailed`] with whether the outline has arcs.
+pub fn detailed_section(project: &Project, data: &TypeData, detail: DetailLevel) -> Option<TypeSection> {
+    match detail {
+        DetailLevel::Fine => project.type_section(data),
+        DetailLevel::Medium => project.type_section_without_radii(data),
+        DetailLevel::Coarse => {
+            let mut s = project.type_section(data)?;
+            let (lo, hi) = s.outline.bbox();
+            let outer = vec![lo, DVec2::new(hi.x, lo.y), hi, DVec2::new(lo.x, hi.y)];
+            s.outline = SectionOutline { outer, holes: Vec::new() };
+            s.curved = false;
+            Some(s)
+        }
+    }
+}
+
+/// Solid parts of a column (outline + holes) placed in plan.
+pub fn column_body(section: &SectionOutline, position: DVec2, rotation_deg: f64) -> (Vec<DVec2>, Vec<Vec<DVec2>>) {
+    let rot = if rotation_deg.is_finite() { DVec2::from_angle(rotation_deg.to_radians()) } else { DVec2::X };
+    let at = |ring: &[DVec2]| ring.iter().map(|p| position + rot.rotate(*p)).collect::<Vec<_>>();
+    (at(&section.outer), section.holes.iter().map(|h| at(h)).collect())
+}
+
+/// Whether each side of a closed ring (from point `i` to `i + 1`) is a facet
+/// of an arc: the ring turns by less than [`SMOOTH_TURN_DEG`] at both ends.
+pub fn smooth_sides(ring: &[DVec2]) -> Vec<bool> {
+    let n = ring.len();
+    if n < 3 {
+        return vec![false; n];
+    }
+    let dir = |i: usize| (ring[(i + 1) % n] - ring[i % n]).normalize_or_zero();
+    let gentle =
+        |a: DVec2, b: DVec2| a != DVec2::ZERO && b != DVec2::ZERO && a.dot(b) > SMOOTH_TURN_DEG.to_radians().cos();
+    (0..n).map(|i| gentle(dir(i + n - 1), dir(i)) && gentle(dir(i), dir(i + 1))).collect()
+}
+
+/// Add a column body from `base` to `top` to `s`; the sides of a `curved`
+/// section that are facets of its arcs are smooth.
+pub fn add_column_body(s: &mut Solid, outer: &[DVec2], holes: &[Vec<DVec2>], base: f64, top: f64, curved: bool) {
+    let before = s.faces.len();
+    s.add_prism_with_holes(outer, holes, |_| base, |_| top);
+    if !curved {
+        return;
+    }
+    // Sides come last: the outline counter-clockwise, then the holes clockwise.
+    let mut rings = vec![crate::polygon::ccw(outer)];
+    rings.extend(holes.iter().filter(|h| h.len() >= 3).map(|h| {
+        let mut h = crate::polygon::ccw(h);
+        h.reverse();
+        h
+    }));
+    let flags: Vec<bool> = rings.iter().flat_map(|r| smooth_sides(r)).collect();
+    let added = s.faces.len() - before;
+    if added < flags.len() {
+        return;
+    }
+    let first = s.faces.len() - flags.len();
+    for (face, smooth) in s.faces[first..].iter_mut().zip(flags) {
+        face.smooth = smooth;
+    }
+}
 fn rects(rects: Vec<(DVec2, DVec2)>) -> Vec<Vec<DVec2>> {
     rects.into_iter().map(|(a, b)| vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)]).collect()
 }
@@ -161,5 +235,81 @@ mod tests {
         assert!((total - (ring(0.1) - ring(0.09))).abs() < 1e-12);
         let loops = column_loops(ColumnSection::Pipe { diameter: 0.2, wall: 0.01 }, DVec2::ZERO, 0.0);
         assert!((loops_area(&loops) - total).abs() < 1e-12);
+    }
+
+    /// A project with an IPE 200 profile and a column type on it, turned
+    /// `rotation_deg`; returns the type's data.
+    fn ipe_column(rotation_deg: f64) -> (Project, TypeData) {
+        use cc_core::structural_profile::{ProfileDef, ProfileMaterial, ProfileShape};
+        let mut p = Project::from_template();
+        let pid = cc_core::ProfileId(p.alloc_id());
+        let shape = ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.0056, tf: 0.0085, r: 0.012 };
+        let def = ProfileDef {
+            id: pid,
+            uid: cc_core::Uid::generate(),
+            name: "IPE 200".into(),
+            material: ProfileMaterial::Steel,
+            shape,
+            catalog: None,
+            description: String::new(),
+        };
+        p.profiles.insert(pid, def);
+        let data = TypeData::Column {
+            section: ColumnSection::Rectangular { width: 0.1, depth: 0.2 },
+            material: String::new(),
+            profile: Some(pid),
+            profile_rotation_deg: rotation_deg,
+            profile_mirror: false,
+        };
+        (p, data)
+    }
+
+    #[test]
+    fn detail_levels_round_square_or_box_a_section() {
+        let (p, data) = ipe_column(0.0);
+        let fine = detailed(&p, &data, DetailLevel::Fine).unwrap();
+        let medium = detailed(&p, &data, DetailLevel::Medium).unwrap();
+        let coarse = detailed(&p, &data, DetailLevel::Coarse).unwrap();
+        assert!(fine.outer.len() > 12);
+        assert_eq!(medium.outer.len(), 12, "the I without root radii");
+        assert_eq!(coarse.outer.len(), 4);
+        assert!(coarse.holes.is_empty());
+        // All three share the bounding box; medium's area has no fillets.
+        assert_eq!(fine.bbox(), coarse.bbox());
+        let a = |o: &SectionOutline| signed_area(&o.outer);
+        assert!((a(&medium) - (2.0 * 0.1 * 0.0085 + (0.2 - 0.017) * 0.0056)).abs() < 1e-12);
+        assert!((a(&coarse) - 0.1 * 0.2).abs() < 1e-12);
+        // The type's rotation turns every level.
+        let (p, data) = ipe_column(90.0);
+        let (lo, hi) = detailed(&p, &data, DetailLevel::Coarse).unwrap().bbox();
+        assert!(((hi - lo) - DVec2::new(0.2, 0.1)).abs().max_element() < 1e-9);
+        assert_eq!(detailed(&p, &data, DetailLevel::Medium).unwrap().outer.len(), 12);
+    }
+
+    #[test]
+    fn column_bodies_are_placed_and_smooth_only_on_arcs() {
+        let (p, data) = ipe_column(0.0);
+        let section = p.type_section(&data).unwrap();
+        assert!(section.curved);
+        let (outer, holes) = column_body(&section.outline, DVec2::new(5.0, 1.0), 90.0);
+        assert!(holes.is_empty());
+        assert!((signed_area(&outer) - signed_area(&section.outline.outer)).abs() < 1e-12);
+        let mut s = Solid::new(cc_core::ElementId(1), cc_core::Category::Column, [0; 3]);
+        add_column_body(&mut s, &outer, &holes, 0.0, 3.0, true);
+        assert!(s.faces.iter().any(|f| f.smooth), "fillet facets are smooth");
+        assert!(s.faces.iter().filter(|f| f.normal.z.abs() > 0.5).all(|f| !f.smooth), "caps are not");
+        // Without radii: a plain I has no smooth faces.
+        let square = p.type_section_without_radii(&data).unwrap();
+        assert!(!square.curved);
+        let (outer, holes) = column_body(&square.outline, DVec2::ZERO, 0.0);
+        let mut s = Solid::new(cc_core::ElementId(1), cc_core::Category::Column, [0; 3]);
+        add_column_body(&mut s, &outer, &holes, 0.0, 3.0, square.curved);
+        assert!(s.faces.iter().all(|f| !f.smooth));
+        assert!((s.volume() - 3.0 * signed_area(&outer)).abs() < 1e-9);
+        // Sharp corners are never smooth, gentle turns are.
+        let rect = [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y];
+        assert_eq!(smooth_sides(&rect), vec![false; 4]);
+        let circle = circle(1.0);
+        assert!(smooth_sides(&circle).iter().all(|s| *s));
     }
 }
