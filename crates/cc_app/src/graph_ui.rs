@@ -862,27 +862,49 @@ fn canvas(ui: &mut Ui, state: &mut AppState) {
     // Inline editors of input nodes (drawn over the canvas, so they get the clicks).
     if view.zoom >= 0.6 {
         for (id, kind, field) in inline {
-            inline_editor(ui, state, id, &kind, field);
+            inline_editor(ui, state, id, &kind, field, view.zoom);
         }
     }
     search(ui, state, &view);
 }
 
-fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: Rect) {
+/// Scales a child ui's style to the canvas zoom, so an inline editor stays inside its field.
+fn fit_style(style: &mut egui::Style, zoom: f32, field: Rect, value_w: f32) {
+    for font in style.text_styles.values_mut() {
+        font.size = (font.size * zoom * 0.9).max(4.0);
+    }
+    let s = &mut style.spacing;
+    s.item_spacing *= zoom;
+    s.button_padding *= zoom;
+    s.icon_width *= zoom;
+    s.icon_width_inner *= zoom;
+    s.icon_spacing *= zoom;
+    s.slider_rail_height *= zoom;
+    s.interact_size = vec2(value_w, field.height());
+    s.slider_width = (field.width() - value_w - s.item_spacing.x).max(8.0);
+}
+
+fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: Rect, zoom: f32) {
     let Some(node) = state.graph.graph.node(id) else { return };
+    // The editor's value box, beside the rail for a slider.
+    let value_w = if kind == "slider" { (field.width() * 0.38).max(8.0) } else { field.width() };
+    let mut child =
+        ui.new_child(egui::UiBuilder::new().max_rect(field).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    fit_style(child.style_mut(), zoom, field, value_w);
+    let ui = &mut child;
     let value = node.values.get("value").cloned().unwrap_or(json!(0));
     let mut changed: Option<Value> = None;
     let mut active = false;
     match kind {
         "boolean" => {
             let mut b = value.as_bool().unwrap_or(false);
-            if ui.put(field, egui::Checkbox::without_text(&mut b)).changed() {
+            if ui.add(egui::Checkbox::without_text(&mut b)).changed() {
                 changed = Some(json!(b));
             }
         }
         "text" => {
             let mut s = value.as_str().map(str::to_string).unwrap_or_default();
-            let r = ui.put(field, egui::TextEdit::singleline(&mut s));
+            let r = ui.add_sized(field.size(), egui::TextEdit::singleline(&mut s).font(egui::TextStyle::Body));
             active = r.has_focus();
             if r.changed() {
                 changed = Some(json!(s));
@@ -894,7 +916,7 @@ fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: 
                 let min = node.values.get("min").and_then(Value::as_f64).unwrap_or(0.0);
                 let max = node.values.get("max").and_then(Value::as_f64).unwrap_or(10.0);
                 let step = node.values.get("step").and_then(Value::as_f64).filter(|s| *s > 0.0).unwrap_or(0.1);
-                let r = ui.put(field, egui::Slider::new(&mut x, min..=max.max(min)).step_by(step));
+                let r = ui.add(egui::Slider::new(&mut x, min..=max.max(min)).step_by(step));
                 active = r.dragged() || r.has_focus();
                 if r.changed() {
                     changed = Some(json!(x));
@@ -903,7 +925,7 @@ fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: 
                 let integer = kind == "integer";
                 let drag = egui::DragValue::new(&mut x).speed(if integer { 0.2 } else { 0.05 });
                 let drag = if integer { drag.fixed_decimals(0) } else { drag };
-                let r = ui.put(field, drag);
+                let r = ui.add_sized(field.size(), drag);
                 active = r.dragged() || r.has_focus();
                 if r.changed() {
                     #[allow(clippy::cast_possible_truncation)]
