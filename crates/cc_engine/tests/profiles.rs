@@ -231,7 +231,7 @@ fn beam_schedule_cells(s: &mut Session) -> Vec<String> {
     );
     let table = run(s, "schedule_table", json!({"view": schedule["id"]}));
     let rows = table["rows"].as_array().unwrap();
-    rows[0]["cells"].as_array().unwrap().iter().map(|c| c.to_string()).collect()
+    rows[0]["cells"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string()).collect()
 }
 
 #[test]
@@ -243,19 +243,20 @@ fn schedules_show_the_profile_and_its_linear_mass() {
     let steel = p.materials.iter().find(|m| m.identity.class == cc_core::MaterialClass::Metal).unwrap().name.clone();
     let TypeData::Beam { material, .. } = &mut p.types.get_mut(&tid).unwrap().data else { panic!("not a beam") };
     *material = steel.clone();
-    let mut s = Session::new(Document::new(p));
+    let mut s = Session::new(Document::new(p.clone()));
     run(&mut s, "beam_create", json!({"type": tid.0, "start": [0.0, 0.0], "end": [4.0, 0.0]}));
-    // The template's steel has no density: nothing is guessed.
+    // The template's steel carries a density of 7850 kg/m3.
     let cells = beam_schedule_cells(&mut s);
     assert!(cells[1].contains("W 310x38.7"), "{cells:?}");
-    assert_eq!(cells[2], "\"\"", "{cells:?}");
-
-    let mut p = s.project().clone();
-    p.materials.iter_mut().find(|m| m.name == steel).unwrap().physical.density = Some(7850.0);
-    let mut s = Session::new(Document::new(p));
-    let cells = beam_schedule_cells(&mut s);
     let expected = W310.outline().unwrap().properties(7850.0).linear_mass;
-    let shown = cells[2].trim_matches('"').trim_end_matches(" kg/m").replace(',', ".");
+    let shown = cells[2].trim_end_matches(" kg/m").replace(',', ".");
     let got: f64 = shown.parse().unwrap_or_else(|_| panic!("{cells:?}"));
     assert!((got - expected).abs() / expected < 0.01, "{got} vs {expected}");
+
+    // Without a density nothing is guessed.
+    let mut p = s.project().clone();
+    p.materials.iter_mut().find(|m| m.name == steel).unwrap().physical.density = None;
+    let mut s = Session::new(Document::new(p));
+    let cells = beam_schedule_cells(&mut s);
+    assert_eq!(cells[2], "", "{cells:?}");
 }

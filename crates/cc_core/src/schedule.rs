@@ -39,7 +39,8 @@ pub enum ScheduleField {
     ComponentKind,
     /// Section size of a column or beam.
     Section,
-    /// Name of the profile of a column or beam type.
+    /// Name of the profile of a column or beam type, whatever its material (tags show it only for steel and
+    /// cold-formed profiles).
     Profile,
     /// Mass per meter of a column or beam, kg/m.
     LinearMass,

@@ -561,3 +561,59 @@ mod tests {
         assert!(texts.iter().all(|p| p.is_finite()), "{texts:?}");
     }
 }
+
+#[cfg(test)]
+mod section_label_tests {
+    use super::*;
+    use cc_core::structural_profile::{ProfileDef, ProfileMaterial, ProfileShape};
+    use cc_core::{ColumnSection, ProfileId, SectionShape, Uid};
+
+    fn with_profile(material: ProfileMaterial) -> (Project, ProfileId) {
+        let mut p = Project::empty();
+        let id = ProfileId(p.alloc_id());
+        let shape = ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.0056, tf: 0.0085, r: 0.012 };
+        p.profiles.insert(
+            id,
+            ProfileDef {
+                id,
+                uid: Uid::generate(),
+                name: "IPE 200".into(),
+                material,
+                shape,
+                catalog: None,
+                description: String::new(),
+            },
+        );
+        (p, id)
+    }
+
+    fn beam(profile: Option<ProfileId>) -> TypeData {
+        TypeData::Beam {
+            width: 0.15,
+            height: 0.4,
+            material: "m".into(),
+            shape: SectionShape::Solid,
+            profile,
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        }
+    }
+
+    #[test]
+    fn steel_profiles_show_their_name_and_others_the_size() {
+        let (p, id) = with_profile(ProfileMaterial::Steel);
+        assert_eq!(section_label(&p, &beam(Some(id))).as_deref(), Some("IPE 200"));
+        let column = TypeData::Column {
+            section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
+            material: "m".into(),
+            profile: Some(id),
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        };
+        assert_eq!(section_label(&p, &column).as_deref(), Some("IPE 200"));
+        let (p, id) = with_profile(ProfileMaterial::Concrete);
+        assert_eq!(section_label(&p, &beam(Some(id))).as_deref(), Some("15×40"));
+        assert_eq!(section_label(&p, &beam(Some(ProfileId(9999)))).as_deref(), Some("15×40"));
+        assert_eq!(section_label(&p, &beam(None)).as_deref(), Some("15×40"));
+    }
+}
