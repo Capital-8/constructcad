@@ -38,6 +38,7 @@ mod persist;
 pub mod phase;
 pub mod profile;
 pub mod profile_sweep;
+pub mod profiles_project;
 mod project;
 pub mod properties;
 pub mod ramp;

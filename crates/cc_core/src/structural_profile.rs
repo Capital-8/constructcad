@@ -221,11 +221,15 @@ impl ParamSketch {
 
     /// The outline, wound and centered on its bounding box.
     pub fn resolve(&self) -> Result<SectionOutline, ProfileError> {
-        let err = |e: profile::ProfileError| ProfileError::Sketch(format!("{e:?}"));
+        let err = |e: profile::ProfileError| ProfileError::Sketch(e.to_string());
         if self.params.len() > MAX_SKETCH_PARAMS {
             return Err(ProfileError::Sketch(format!("more than {MAX_SKETCH_PARAMS} parameters")));
         }
         if self.openings.len() > MAX_OPENINGS {
+            return Err(ProfileError::TooBig);
+        }
+        let total = self.outline.len() + self.openings.iter().map(Vec::len).sum::<usize>();
+        if total > MAX_POINTS {
             return Err(ProfileError::TooBig);
         }
         if self.outline.len() < 3 || self.openings.iter().any(|o| o.len() < 3) {

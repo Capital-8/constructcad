@@ -100,6 +100,9 @@ pub struct Project {
     /// by materials, filled regions and view overrides next to the built-in ones.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fill_patterns: crate::fill_pattern::FillPatterns,
+    /// Named structural profiles (tracked as settings).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profiles: BTreeMap<crate::ProfileId, crate::structural_profile::ProfileDef>,
     /// Design option sets (see [`crate::design_option`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_sets: Vec<crate::OptionSet>,
@@ -142,6 +145,7 @@ impl Project {
             graph_bindings: BTreeMap::new(),
             line_styles: BTreeMap::new(),
             fill_patterns: BTreeMap::new(),
+            profiles: BTreeMap::new(),
             option_sets: Vec::new(),
             active_option: None,
             next_id: 1,
@@ -967,6 +971,7 @@ impl Project {
         let phase_filters = self.phase_filters.keys().map(|k| k.0);
         let line_styles = self.line_styles.keys().map(|k| k.0);
         let fill_patterns = self.fill_patterns.keys().map(|k| k.0);
+        let profiles = self.profiles.keys().map(|k| k.0);
         let option_sets = self.option_sets.iter().map(|s| s.id.0);
         let options = self.option_sets.iter().flat_map(|s| s.options.iter().map(|o| o.id.0));
         levels
@@ -981,6 +986,7 @@ impl Project {
             .chain(phase_filters)
             .chain(line_styles)
             .chain(fill_patterns)
+            .chain(profiles)
             .chain(option_sets)
             .chain(options)
             .max()
