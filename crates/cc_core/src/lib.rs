@@ -52,6 +52,7 @@ pub mod site;
 pub mod sketch;
 pub mod sketch_edit;
 pub mod stair;
+pub mod structural_profile;
 pub mod sweep;
 pub mod title_block;
 pub mod topography;
@@ -86,7 +87,7 @@ pub use graphics::{
 };
 pub use ids::{
     ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId, OptionSetId,
-    PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
+    PhaseFilterId, PhaseId, ProfileId, SystemId, TemplateId, Uid, ViewId,
 };
 pub use lightning::{ConductorRole, LightningConductor, LpsClass};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
@@ -107,6 +108,7 @@ pub use stair::{
     LandingBeams, LandingPosts, PostAt, StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout,
     StairRailing, StairRules, StairShape, StairSide, Stringers, TreadRule, Turn, stair_steps,
 };
+pub use structural_profile::{ProfileDef, ProfileMaterial, ProfileShape, SectionOutline};
 pub use transform::PlanTransform;
 pub use types::{
     Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, TypeData, TypeInfo,
