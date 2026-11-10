@@ -164,10 +164,17 @@ pub enum Tool {
 
 impl Tool {
     /// Translation key of the tool's name as the options bar shows it: the
-    /// footing tool drawing a strip type is named for strips.
+    /// footing tool drawing a strip type is named for strips, the component
+    /// tool for the plumbing fixtures or devices it places.
     pub fn name_key(&self, project: &Project) -> &'static str {
         match self {
             Tool::Footing { type_id } if is_strip(project, *type_id) => "tool-strip-footing",
+            Tool::Component { type_id } => match component_group(project, *type_id) {
+                ComponentGroup::Generic => self.key(),
+                ComponentGroup::Fixture => "tool-fixture",
+                ComponentGroup::Device => "tool-device",
+                ComponentGroup::Own(device) => device.key(),
+            },
             tool => tool.key(),
         }
     }
@@ -1629,6 +1636,44 @@ pub fn device_type(project: &Project, type_id: ElementTypeId) -> Option<cc_core:
         Some(cc_core::TypeData::Component { def, .. }) => def.mep.and_then(|m| m.device()),
         _ => None,
     }
+}
+
+/// The ribbon tool that places a component type: the generic component tool,
+/// plumbing fixtures, electrical devices, or a device with a tool of its own
+/// (`commands::DEVICE_TOOLS`). The options bar lists the types of one of these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentGroup {
+    Generic,
+    Fixture,
+    Device,
+    Own(cc_core::DeviceKind),
+}
+
+/// Which tool places `type_id` (`Generic` for any type that is no fixture or device).
+pub fn component_group(project: &Project, type_id: ElementTypeId) -> ComponentGroup {
+    let Some(cc_core::TypeData::Component { def, .. }) = project.element_type(type_id).map(|t| &t.data) else {
+        return ComponentGroup::Generic;
+    };
+    match def.mep {
+        Some(cc_core::MepData::Fixture { .. }) => ComponentGroup::Fixture,
+        Some(cc_core::MepData::Device { device, .. }) if crate::commands::DEVICE_TOOLS.contains(&device) => {
+            ComponentGroup::Own(device)
+        }
+        Some(cc_core::MepData::Device { .. }) => ComponentGroup::Device,
+        None => ComponentGroup::Generic,
+    }
+}
+
+/// The types the options bar offers to a tool of `category` placing `type_id`:
+/// all of the category, but for components only those placed by the same
+/// tool (fixtures, electrical devices, a device with its own tool, the rest).
+pub fn tool_types(project: &Project, category: Category, type_id: ElementTypeId) -> Vec<(ElementTypeId, String)> {
+    let group = (category == Category::Component).then(|| component_group(project, type_id));
+    project
+        .types_of(category)
+        .filter(|t| group.is_none_or(|g| component_group(project, t.id) == g))
+        .map(|t| (t.id, t.name.clone()))
+        .collect()
 }
 
 /// The first component type that is an electrical device (`device`) or a plumbing fixture.
@@ -3922,6 +3967,35 @@ mod tests {
 
     /// 100 px per meter: the snap radius is 0.1 m.
     const SCALE: f64 = 100.0;
+
+    /// The plumbing fixture and electrical device tools offer only their own
+    /// types in the options bar, not furniture or each other's (issue #255);
+    /// the generic component tool offers no fixtures or devices.
+    #[test]
+    fn mep_component_tools_list_only_their_types() {
+        let project = crate::actions::new_project();
+        let group = |id| component_group(&project, id);
+        for (device, wanted) in [(false, ComponentGroup::Fixture), (true, ComponentGroup::Device)] {
+            let first = mep_component_type(&project, device).expect("the template has one");
+            let listed = tool_types(&project, Category::Component, first);
+            assert!(listed.iter().any(|(id, _)| *id == first));
+            assert!(listed.iter().all(|(id, _)| group(*id) == wanted), "{wanted:?}: {listed:?}");
+            let key = Tool::Component { type_id: first }.name_key(&project);
+            assert_eq!(key, if device { "tool-device" } else { "tool-fixture" });
+        }
+        let furniture = project
+            .types_of(Category::Component)
+            .find(|t| group(t.id) == ComponentGroup::Generic)
+            .map(|t| t.id)
+            .expect("the template has furniture");
+        let listed = tool_types(&project, Category::Component, furniture);
+        assert!(!listed.is_empty() && listed.iter().all(|(id, _)| group(*id) == ComponentGroup::Generic));
+        assert!(listed.len() < project.types_of(Category::Component).count());
+        assert_eq!(Tool::Component { type_id: furniture }.name_key(&project), "tool-component");
+        // Other categories keep every type.
+        let wall = project.types_of(Category::Wall).next().map(|t| t.id).unwrap();
+        assert_eq!(tool_types(&project, Category::Wall, wall).len(), project.types_of(Category::Wall).count());
+    }
 
     /// The curvature handle bends arc strip footings as it bends arc walls
     /// (a straight strip has none, like a straight wall), through the engine
