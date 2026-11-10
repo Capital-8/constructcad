@@ -213,6 +213,8 @@ impl SectionOutline {
 pub enum ProfileError {
     #[error("{0} must be a number between {MIN_THICKNESS} and {MAX_SIZE} m")]
     Value(&'static str),
+    #[error("{0} must be a number between 0 and {MAX_SIZE} m")]
+    Range(&'static str),
     #[error("{0}")]
     DoesNotFit(String),
     #[error("sketch: {0}")]
@@ -254,7 +256,7 @@ fn size(name: &'static str, v: f64) -> Result<(), ProfileError> {
 }
 
 fn radius(name: &'static str, v: f64) -> Result<(), ProfileError> {
-    if v.is_finite() && (0.0..=MAX_SIZE).contains(&v) { Ok(()) } else { Err(ProfileError::Value(name)) }
+    if v.is_finite() && (0.0..=MAX_SIZE).contains(&v) { Ok(()) } else { Err(ProfileError::Range(name)) }
 }
 
 fn fit(ok: bool, msg: &str) -> Result<(), ProfileError> {
@@ -333,6 +335,9 @@ fn signed_area(p: &[DVec2]) -> f64 {
 /// inner radius `ri` and the outer `ri + t` (square corners when `ri` is 0).
 fn strip(center: &[DVec2], t: f64, ri: f64) -> Result<Vec<DVec2>, ProfileError> {
     let n = center.len();
+    if n < 2 {
+        return Err(ProfileError::DoesNotFit("the strip needs at least two points".into()));
+    }
     let miss = || ProfileError::DoesNotFit("the strip folds back on itself".into());
     let dir = |i: usize| (center[i + 1] - center[i]).normalize_or_zero();
     let mut left = Vec::with_capacity(n);
@@ -625,6 +630,7 @@ impl ProfileShape {
                 Self::cold_check(d, bf, t, ri)?;
                 size("lip", lip)?;
                 fit(lip > t, "the lip (lip) must be longer than the thickness (t)")?;
+                fit(2.0 * lip < d - t, "the lips (lip) must not reach each other across the depth (d)")?;
                 let (yt, xf) = (d / 2.0 - t / 2.0, bf - t / 2.0);
                 let c = [
                     v2(xf, d / 2.0 - lip),
@@ -644,6 +650,7 @@ impl ProfileShape {
                     angle.is_finite() && (0.0..=90.0).contains(&angle),
                     "the lip angle (angle) must be between 0 and 90 degrees",
                 )?;
+                fit(lip * angle.to_radians().sin() < d - t, "the lips (lip) must not pass the opposite flange")?;
                 let (yt, xf, l) = (d / 2.0 - t / 2.0, bf - t / 2.0, lip - t / 2.0);
                 let dir = v2(angle.to_radians().cos(), -angle.to_radians().sin());
                 let c =
@@ -851,6 +858,95 @@ mod tests {
             let (lo, hi) = o.bbox();
             assert!((lo + hi).length() < 1e-12, "{code} centered");
         }
+    }
+
+    fn close(o: &SectionOutline, exact: f64) {
+        assert!((area(o) - exact).abs() / exact < 1e-9, "{} vs {exact}", area(o));
+    }
+
+    fn centroid(o: &SectionOutline) -> DVec2 {
+        let p = &o.outer;
+        let mut c = DVec2::ZERO;
+        let mut a = 0.0;
+        for i in 0..p.len() {
+            let (u, v) = (p[i], p[(i + 1) % p.len()]);
+            let w = u.perp_dot(v);
+            a += w;
+            c += (u + v) * w;
+        }
+        c / (3.0 * a)
+    }
+
+    #[test]
+    fn square_corner_areas_match_analytic_values() {
+        let o = ProfileShape::Channel { d: 0.1, bf: 0.05, tw: 0.006, tf: 0.0085, r: 0.0 }.outline().unwrap();
+        close(&o, 2.0 * 0.05 * 0.0085 + (0.1 - 2.0 * 0.0085) * 0.006);
+        let o = ProfileShape::Angle { h: 0.1, b: 0.08, t: 0.01, r: 0.0 }.outline().unwrap();
+        close(&o, 0.01 * (0.1 + 0.08 - 0.01));
+        let o = ProfileShape::T { d: 0.1, bf: 0.1, tw: 0.007, tf: 0.01, r: 0.0 }.outline().unwrap();
+        close(&o, 0.1 * 0.01 + (0.1 - 0.01) * 0.007);
+        let o = ProfileShape::IAsym { d: 0.3, bf_top: 0.15, tf_top: 0.012, bf_bot: 0.1, tf_bot: 0.01, tw: 0.007 }
+            .outline()
+            .unwrap();
+        close(&o, 0.15 * 0.012 + 0.1 * 0.01 + 0.007 * (0.3 - 0.022));
+        let (d, bf, lip, t) = (0.2, 0.075, 0.02, 0.002);
+        let o = ProfileShape::ColdU { d, bf, t, ri: 0.0 }.outline().unwrap();
+        close(&o, t * (d + 2.0 * bf - 2.0 * t));
+        let o = ProfileShape::ColdZ { d, bf, lip, t, ri: 0.0, angle: 90.0 }.outline().unwrap();
+        close(&o, t * (d + 2.0 * bf + 2.0 * lip - 3.0 * t));
+        let o = ProfileShape::ColdHat { d: 0.04, bf: 0.04, lip, t, ri: 0.0 }.outline().unwrap();
+        close(&o, t * (0.04 + 2.0 * 0.04 + 2.0 * lip - 2.0 * t));
+        let o = ProfileShape::ConcreteT { h: 0.5, bf: 0.6, hf: 0.12, bw: 0.2 }.outline().unwrap();
+        close(&o, 0.6 * 0.12 + 0.2 * 0.38);
+        let o = ProfileShape::ConcreteL { h: 0.5, bf: 0.4, hf: 0.12, bw: 0.2 }.outline().unwrap();
+        close(&o, 0.4 * 0.12 + 0.2 * 0.38);
+        let o = ProfileShape::Rect { b: 0.2, h: 0.4, chamfer: 0.03 }.outline().unwrap();
+        close(&o, 0.08 - 2.0 * 0.03 * 0.03);
+    }
+
+    #[test]
+    fn orientation_follows_steel_tables() {
+        // The web of a channel is on -x: the material leans that way.
+        let c = ProfileShape::Channel { d: 0.1, bf: 0.05, tw: 0.006, tf: 0.0085, r: 0.0 }.outline().unwrap();
+        assert!(centroid(&c).x < 0.0);
+        // The angle's vertical leg is at -x, its horizontal leg at -y.
+        let a = ProfileShape::Angle { h: 0.1, b: 0.1, t: 0.01, r: 0.0 }.outline().unwrap();
+        let has = |p: DVec2| a.outer.iter().any(|q| (*q - p).length() < 1e-12);
+        assert!(has(DVec2::new(-0.05, 0.05)) && has(DVec2::new(0.05, -0.05)) && has(DVec2::new(-0.05, -0.05)));
+        assert!(!has(DVec2::new(0.05, 0.05)));
+        let (cx, cy) = (centroid(&a).x, centroid(&a).y);
+        assert!(cx < 0.0 && cy < 0.0);
+    }
+
+    #[test]
+    fn pieces_that_do_not_fit_are_errors() {
+        // Lips that meet or pass each other.
+        for lip in [0.045, 0.08] {
+            assert!(ProfileShape::ColdLippedU { d: 0.09, bf: 0.04, lip, t: 0.00095, ri: 0.0 }.outline().is_err());
+        }
+        assert!(
+            ProfileShape::ColdZ { d: 0.05, bf: 0.04, lip: 0.06, t: 0.001, ri: 0.0, angle: 90.0 }.outline().is_err()
+        );
+        assert!(
+            ProfileShape::ColdZ { d: 0.05, bf: 0.04, lip: 0.02, t: 0.001, ri: 0.0, angle: 120.0 }.outline().is_err()
+        );
+        // Root radius too big for the flange or the web.
+        assert!(ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.0056, tf: 0.0085, r: 0.05 }.outline().is_err());
+        assert!(ProfileShape::Channel { d: 0.1, bf: 0.05, tw: 0.006, tf: 0.0085, r: 0.06 }.outline().is_err());
+        assert!(ProfileShape::Angle { h: 0.1, b: 0.1, t: 0.01, r: 0.1 }.outline().is_err());
+        // Bend radius that does not fit the legs.
+        assert!(ProfileShape::ColdU { d: 0.1, bf: 0.05, t: 0.002, ri: 0.05 }.outline().is_err());
+        assert!(ProfileShape::ColdLippedU { d: 0.09, bf: 0.04, lip: 0.012, t: 0.00095, ri: 0.02 }.outline().is_err());
+        // Radii accept zero but not negative values, with their own message.
+        let e = ProfileShape::Angle { h: 0.1, b: 0.1, t: 0.01, r: -1.0 }.outline().unwrap_err();
+        assert_eq!(e, ProfileError::Range("r"));
+        assert!(e.to_string().contains("between 0 and"));
+    }
+
+    #[test]
+    fn strip_with_too_few_points_is_an_error() {
+        assert!(strip(&[], 0.001, 0.0).is_err());
+        assert!(strip(&[DVec2::ZERO], 0.001, 0.0).is_err());
     }
 
     #[test]
