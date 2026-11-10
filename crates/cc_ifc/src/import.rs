@@ -38,6 +38,9 @@ const MAX_PARENT_DEPTH: usize = 16;
 const MAX_PHASES: usize = 100;
 /// Length tolerance when matching types (meters).
 const TYPE_TOL: f64 = 0.001;
+/// How far apart (m) the vertices of two imported pieces may be for the
+/// pieces to be the same (the mesh vertices are welded at 1/100 mm).
+const PIECE_TOL: f64 = 1e-5;
 
 /// What an import brought in.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -2497,10 +2500,22 @@ impl<'a> Importer<'a> {
         self.cut_openings(id, &mut body);
         let x = world.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X);
         let rotation = x.y.atan2(x.x);
-        let origin = world.translation;
+        let mut origin = world.translation;
         // Plan frame of the component: origin and rotation in plan, Z up.
-        let frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
-        let inv = frame.inverse();
+        let mut frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+        let mut inv = frame.inverse();
+        // Geometry written in world coordinates (a placement away from the
+        // body) with no type object: the origin goes to the bottom center of
+        // the body, so that identical objects at different places (bars, say)
+        // have the same pieces and share a type.
+        if !self.type_of.contains_key(&id)
+            && let Some((lo, hi)) = local_bounds(&body.solids, &inv)
+            && !((lo - TYPE_TOL).cmple(DVec3::ZERO).all() && (hi + TYPE_TOL).cmpge(DVec3::ZERO).all())
+        {
+            origin = frame.transform_point3(DVec3::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0, lo.z));
+            frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+            inv = frame.inverse();
+        }
         let main = self.main_material(id, e);
         let n = |v: f64| literal(v);
         let base_name = self.type_name(id, e).unwrap_or_else(|| crate::schema::display_name(&e.name));
@@ -2583,8 +2598,14 @@ impl<'a> Importer<'a> {
         let fallback = format!("{} {}", crate::schema::display_name(&e.name), id);
         let uid = self.type_uid(id);
         let component = name.clone().unwrap_or_else(|| fallback.clone());
-        // Same name and same size: the existing (possibly parametric) type.
+        // Same name and same size: the existing parametric type. A type
+        // imported before as fixed pieces must have the same pieces and class
+        // (equal bounds are not the same shape).
+        let new_def = def.clone();
         let same = move |d: &TypeData| match d {
+            TypeData::Component { def, .. } if def.params.is_empty() && def.ifc.is_some() => {
+                def.ifc == new_def.ifc && same_items(&def.items, &new_def.items)
+            }
             TypeData::Component { def, .. } => def_bounds(def, &check)
                 .is_some_and(|(a, b)| (a - lo).abs().max_element() < 1e-3 && (b - hi).abs().max_element() < 1e-3),
             _ => false,
@@ -2777,6 +2798,54 @@ fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
         }
     }
     (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
+}
+
+/// Bounds of the solids' vertices in the frame `inv` maps to.
+fn local_bounds(solids: &[Solid], inv: &DAffine3) -> Option<(DVec3, DVec3)> {
+    solids
+        .iter()
+        .flat_map(|s| s.mesh.iter().flatten())
+        .map(|p| inv.transform_point3(*p))
+        .filter(|p| p.is_finite())
+        .fold(None, |acc, p| Some(acc.map_or((p, p), |(lo, hi): (DVec3, DVec3)| (lo.min(p), hi.max(p)))))
+}
+
+/// Pieces imported from two objects are the same (within [`PIECE_TOL`]):
+/// same shapes, materials and flags. Only fixed meshes and literal
+/// extrusions are compared by value; other shapes must be equal.
+fn same_items(a: &[ComponentItem], b: &[ComponentItem]) -> bool {
+    let num = |x: &str, y: &str| match (x.parse::<f64>(), y.parse::<f64>()) {
+        (Ok(x), Ok(y)) => (x - y).abs() <= PIECE_TOL,
+        _ => x == y,
+    };
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(a, b)| {
+            a.material == b.material
+                && a.in_plan == b.in_plan
+                && a.void == b.void
+                && a.plan_only == b.plan_only
+                && a.detail == b.detail
+                && match (&a.shape, &b.shape) {
+                    (
+                        ComponentShape::Mesh { vertices: va, faces: fa },
+                        ComponentShape::Mesh { vertices: vb, faces: fb },
+                    ) => {
+                        fa == fb
+                            && va.len() == vb.len()
+                            && va.iter().zip(vb).all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
+                    }
+                    (
+                        ComponentShape::Extrusion { points: pa, z: za, height: ha },
+                        ComponentShape::Extrusion { points: pb, z: zb, height: hb },
+                    ) => {
+                        num(za, zb)
+                            && num(ha, hb)
+                            && pa.len() == pb.len()
+                            && pa.iter().zip(pb).all(|(p, q)| num(&p.0, &q.0) && num(&p.1, &q.1))
+                    }
+                    (sa, sb) => sa == sb,
+                }
+        })
 }
 
 /// A number as an expression literal.
