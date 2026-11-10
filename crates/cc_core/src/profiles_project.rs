@@ -120,6 +120,24 @@ fn section_data(data: &TypeData) -> Option<SectionData<'_>> {
     }
 }
 
+/// The profile a column or beam type points to.
+pub(crate) fn type_profile(data: &TypeData) -> Option<ProfileId> {
+    section_data(data).and_then(|s| s.profile)
+}
+
+/// Whether two column or beam types have the same legacy section fields
+/// (`section`, or `width`, `height` and `shape`).
+pub(crate) fn same_legacy(a: &TypeData, b: &TypeData) -> bool {
+    match (a, b) {
+        (TypeData::Column { section: x, .. }, TypeData::Column { section: y, .. }) => x == y,
+        (
+            TypeData::Beam { width: w1, height: h1, shape: s1, .. },
+            TypeData::Beam { width: w2, height: h2, shape: s2, .. },
+        ) => w1 == w2 && h1 == h2 && s1 == s2,
+        _ => false,
+    }
+}
+
 /// The legacy box of a column or beam type, `(width, depth or height)`.
 pub(crate) fn legacy_size(data: &TypeData) -> Option<(f64, f64)> {
     match data {
@@ -243,41 +261,13 @@ impl Project {
             .collect();
         let mut changed = 0;
         for id in pending {
-            let Some((shape, material)) = self
+            let Some(pid) = self
                 .types
                 .get(&id)
-                .and_then(|t| section_data(&t.data))
-                .map(|s| (s.legacy, self.profile_material_for(s.material)))
+                .and_then(|t| self.legacy_profile(&t.data))
+                .and_then(|(material, shape)| self.section_profile(material, shape))
             else {
                 continue;
-            };
-            if shape.outline().is_err() {
-                continue;
-            }
-            let existing = self.profiles.values().find(|p| p.material == material && p.shape == shape).map(|p| p.id);
-            let pid = match existing {
-                Some(pid) => pid,
-                None => {
-                    if self.profiles.len() >= MAX_PROFILES || self.next_id() == u64::MAX {
-                        continue;
-                    }
-                    let pid = ProfileId(self.alloc_id());
-                    if self.profiles.contains_key(&pid) {
-                        continue;
-                    }
-                    let name = self.free_profile_name(&section_name(&shape, material));
-                    let def = ProfileDef {
-                        id: pid,
-                        uid: Uid::generate(),
-                        name,
-                        material,
-                        shape,
-                        catalog: None,
-                        description: String::new(),
-                    };
-                    self.profiles.insert(pid, def);
-                    pid
-                }
             };
             if let Some(TypeData::Column { profile, .. } | TypeData::Beam { profile, .. }) =
                 self.types.get_mut(&id).map(|t| &mut t.data)
@@ -287,6 +277,42 @@ impl Project {
             }
         }
         changed
+    }
+
+    /// The (material, shape) of a column or beam type's legacy section, when
+    /// it makes a valid outline.
+    pub(crate) fn legacy_profile(&self, data: &TypeData) -> Option<(ProfileMaterial, ProfileShape)> {
+        let s = section_data(data)?;
+        s.legacy.outline().ok()?;
+        Some((self.profile_material_for(s.material), s.legacy))
+    }
+
+    /// The profile of `material` and `shape`: an existing one equal to it, or
+    /// a new one named by [`section_name`] (a fresh id and uid). `None` when
+    /// the project has no room for another.
+    pub(crate) fn section_profile(&mut self, material: ProfileMaterial, shape: ProfileShape) -> Option<ProfileId> {
+        if let Some(p) = self.profiles.values().find(|p| p.material == material && p.shape == shape) {
+            return Some(p.id);
+        }
+        if self.profiles.len() >= MAX_PROFILES || self.next_id() == u64::MAX {
+            return None;
+        }
+        let pid = ProfileId(self.alloc_id());
+        if self.profiles.contains_key(&pid) {
+            return None;
+        }
+        let name = self.free_profile_name(&section_name(&shape, material));
+        let def = ProfileDef {
+            id: pid,
+            uid: Uid::generate(),
+            name,
+            material,
+            shape,
+            catalog: None,
+            description: String::new(),
+        };
+        self.profiles.insert(pid, def);
+        Some(pid)
     }
 
     /// Clear references to profiles that are gone and turns that are not
@@ -554,6 +580,47 @@ mod tests {
         assert!(matches!(data, crate::TypeData::Column { profile: None, .. }));
         assert_eq!(crate::profiles_project::legacy_size(data), size);
         assert!(doc.project.type_section(data).is_some());
+    }
+
+    #[test]
+    fn a_legacy_edit_repoints_but_a_new_profile_wins() {
+        let mut doc = Document::new(Project::from_template());
+        let (tid, old) = doc
+            .project
+            .types
+            .values()
+            .find_map(|t| match &t.data {
+                crate::TypeData::Column {
+                    profile: Some(id),
+                    section: crate::ColumnSection::Rectangular { .. },
+                    ..
+                } => Some((t.id, *id)),
+                _ => None,
+            })
+            .unwrap();
+        let round = doc.project.profiles.values().find(|d| matches!(d.shape, ProfileShape::Round { .. })).unwrap().id;
+        // The section alone: an existing equal profile is reused.
+        doc.edit("round", |ctx| {
+            if let crate::TypeData::Column { section, .. } = &mut ctx.type_mut(tid).unwrap().data {
+                *section = crate::ColumnSection::Round { diameter: 0.3 };
+            }
+        });
+        let profile = |doc: &Document| type_profile_of(&doc.project.types[&tid].data);
+        assert_eq!(profile(&doc), Some(round));
+        // Both: the profile wins and the section becomes its box.
+        doc.edit("both", |ctx| {
+            if let crate::TypeData::Column { section, profile, .. } = &mut ctx.type_mut(tid).unwrap().data {
+                *section = crate::ColumnSection::Round { diameter: 0.5 };
+                *profile = Some(old);
+            }
+        });
+        assert_eq!(profile(&doc), Some(old));
+        let crate::TypeData::Column { section, .. } = doc.project.types[&tid].data else { panic!() };
+        assert_eq!(section.size(), (0.2, 0.2));
+    }
+
+    fn type_profile_of(data: &crate::TypeData) -> Option<ProfileId> {
+        crate::profiles_project::type_profile(data)
     }
 
     #[test]

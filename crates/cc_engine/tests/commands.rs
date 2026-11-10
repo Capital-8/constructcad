@@ -802,22 +802,22 @@ fn the_showcase_macro_builds_its_project() {
     assert_eq!([count(&mut s, "wall"), count(&mut s, "door"), count(&mut s, "room")], [13, 5, 5]);
     assert!(count(&mut s, "rebar") > 0 && count(&mut s, "pipe") > 0 && count(&mut s, "conduit") > 0);
     let get = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}));
-    assert!(get(&mut s, 104)["params"]["bulge"].as_f64().unwrap() > 0.0, "the arc wall");
+    assert!(get(&mut s, 110)["params"]["bulge"].as_f64().unwrap() > 0.0, "the arc wall");
     // Its strip footing follows the arc (#22).
     let foundations = run(&mut s, "elements_list", json!({"category": "foundation"}));
     let ids: Vec<u64> = foundations.as_array().unwrap().iter().map(|f| f["id"].as_u64().unwrap()).collect();
     assert!(ids.iter().any(|&f| get(&mut s, f)["params"]["shape"]["Strip"]["bulge"].as_f64().is_some_and(|b| b > 0.0)));
-    assert!(get(&mut s, 123)["params"]["shape"]["Hip"].is_object(), "the hip roof");
-    assert_eq!(get(&mut s, 101)["phase_demolished"]["id"], 86, "the demolished partition");
-    assert_eq!(get(&mut s, 254)["type"]["id"], 62, "the distribution board");
+    assert!(get(&mut s, 129)["params"]["shape"]["Hip"].is_object(), "the hip roof");
+    assert_eq!(get(&mut s, 107)["phase_demolished"]["id"], 86, "the demolished partition");
+    assert_eq!(get(&mut s, 260)["type"]["id"], 62, "the distribution board");
     let views = run(&mut s, "views_list", json!({}));
     let view = |id: u64| views.as_array().unwrap().iter().find(|v| v["id"] == id).map(|v| v["name"].clone());
-    assert_eq!(view(341), Some(json!("Board diagram")));
-    assert_eq!(view(349), Some(json!("3D North-east")));
-    let loads = run(&mut s, "circuit_loads", json!({"panel": 254}));
+    assert_eq!(view(347), Some(json!("Board diagram")));
+    assert_eq!(view(355), Some(json!("3D North-east")));
+    let loads = run(&mut s, "circuit_loads", json!({"panel": 260}));
     assert!(loads.to_string().contains("Kitchen and bath outlets"));
-    for filter in [348, 350] {
-        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 347}))["count"].as_u64().unwrap() > 0);
+    for filter in [354, 356] {
+        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 353}))["count"].as_u64().unwrap() > 0);
     }
 }
 
@@ -1193,6 +1193,28 @@ fn sloped_beams_and_steel_sections() {
         json!({"type": ty["id"], "params": {"section": {"Pipe": {"diameter": 0.2, "wall": 0.01}}}}),
     );
     assert!(derived(&mut s, column)["volume"].as_f64().unwrap() < volume);
+}
+
+/// Editing a profiled type's legacy section points it to a profile of the new
+/// section, and undo restores both the section and the profile.
+#[test]
+fn editing_a_legacy_section_repoints_the_profile() {
+    let mut s = Session::default();
+    let ty = run(&mut s, "type_duplicate", json!({"type": "Viga 15 x 40 cm", "name": "Perfil I"}));
+    let profile_of = |s: &mut Session| run(s, "type_get", json!({"type": ty["id"]}))["params"]["profile"].clone();
+    let before = profile_of(&mut s);
+    assert!(before.is_u64(), "the template beam has a profile: {before}");
+    run(&mut s, "type_set", json!({"type": ty["id"], "params": {"shape": {"I": {"web": 0.01, "flange": 0.02}}}}));
+    let got = run(&mut s, "type_get", json!({"type": ty["id"]}));
+    assert_eq!(got["params"]["shape"], json!({"I": {"web": 0.01, "flange": 0.02}}), "{got}");
+    let after = profile_of(&mut s);
+    assert_ne!(after, before);
+    let def = s.project().profile(cc_core::ProfileId(after.as_u64().unwrap())).unwrap();
+    assert_eq!(def.shape, cc_core::ProfileShape::I { d: 0.4, bf: 0.15, tw: 0.01, tf: 0.02, r: 0.0 });
+    run(&mut s, "undo", json!({}));
+    assert_eq!(profile_of(&mut s), before);
+    assert_eq!(run(&mut s, "type_get", json!({"type": ty["id"]}))["params"]["shape"], json!("Solid"));
+    assert!(s.project().profile(cc_core::ProfileId(after.as_u64().unwrap())).is_none(), "the new profile is undone");
 }
 
 #[test]

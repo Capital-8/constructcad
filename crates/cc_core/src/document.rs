@@ -797,7 +797,10 @@ impl<'a> EditCtx<'a> {
     /// Column and beam types with a profile keep their legacy section as the
     /// profile's bounding box (a legacy section that is exactly the profile
     /// stays as it is); types whose profile is gone drop the reference and
-    /// keep the box. Runs when this edit touched settings (profiles live
+    /// keep the box. A type whose legacy section this edit changed while
+    /// leaving its profile reference alone points to a profile made from the
+    /// new section instead (an equal one, else a new one); when both changed,
+    /// the profile wins. Runs when this edit touched settings (profiles live
     /// there) or a column or beam type, and writes only what changes.
     fn sync_profiles(&mut self) {
         const TOL: f64 = 1e-9;
@@ -816,6 +819,24 @@ impl<'a> EditCtx<'a> {
             .collect();
         for id in ids {
             let Some(data) = self.project.types.get(&id).map(|t| &t.data) else { continue };
+            // A direct edit of the legacy section (the profile reference left
+            // as it was) is authoritative: the type points to a profile made
+            // from the new section instead of getting the old box back.
+            let before = self.tx.types.get(&id).and_then(|c| c.0.as_ref()).map(|t| &t.data);
+            if let Some(before) = before
+                && crate::profiles_project::type_profile(before) == crate::profiles_project::type_profile(data)
+                && !crate::profiles_project::same_legacy(before, data)
+            {
+                let legacy = self.project.legacy_profile(data);
+                self.touch_settings();
+                let pid = legacy.and_then(|(material, shape)| self.project.section_profile(material, shape));
+                if let Some(crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. }) =
+                    self.type_mut(id).map(|t| &mut t.data)
+                {
+                    *profile = pid;
+                }
+                continue;
+            }
             let gone = match data {
                 crate::TypeData::Column { profile: Some(p), .. } | crate::TypeData::Beam { profile: Some(p), .. } => {
                     self.project.profile(*p).is_none()
