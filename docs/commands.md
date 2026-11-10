@@ -449,7 +449,7 @@ No parameters.
 | `element` | integer | required | The curtain wall's id. |
 | `add` | [number, …] | optional | Positions of new lines. |
 | `lines` | [number, …] | optional | All the interior lines, replacing the current ones. |
-| `move` | [[JSON, …], …] | optional | Lines to move, as `[index, new position]`. |
+| `move` | [[integer or number, …], …] | optional | Lines to move, as `[index, new position]`. |
 | `remove` | [id, …] | optional | Indices of lines to remove. |
 | `remove_segments` | [[id, …], …] | optional | Segments to remove, as `[line, segment]`. |
 | `reset` | boolean | optional | Go back to the type's lines (and drop removed segments of this axis). |
