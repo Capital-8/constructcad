@@ -993,3 +993,62 @@ fn window_operations_round_trip() {
         assert_eq!(b.opening_size(), a.opening_size());
     }
 }
+
+/// Occurrences of an IFC type whose name a different project type has
+/// import as one renamed type, not one type each (#247), and the types an
+/// import adds keep unique uids.
+#[test]
+fn clashing_type_names_import_as_one_type() {
+    use cc_core::{Document, Hosted, Wall};
+    // The project's "Janela 120x120" is 130 cm wide: the template's stays 120.
+    let mut project = Project::from_template();
+    let ty = project.types_of(Category::Window).find(|t| t.name == "Janela 120x120").unwrap().id;
+    if let Some(TypeData::Component { def, .. }) = project.types.get_mut(&ty).map(|t| &mut t.data) {
+        def.params[0].value = 1.3;
+    }
+    let mut doc = Document::new(project);
+    doc.edit("windows", |e| {
+        let level = e.project().levels[0].id;
+        let add = |e: &mut cc_core::EditCtx, type_id, kind| {
+            let id = cc_core::ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        };
+        let wall_type = e.project().default_type(Category::Wall).unwrap();
+        let wall = Wall { start: DVec2::new(0.0, 0.0), end: DVec2::new(10.0, 0.0), ..Default::default() };
+        let host = add(e, wall_type, ElementKind::Wall(wall));
+        for i in 0..3 {
+            let at =
+                Hosted { host, offset: 2.0 + 3.0 * i as f64, sill_height: 1.0, flip_facing: false, flip_hand: false };
+            add(e, ty, ElementKind::Window(at));
+        }
+    });
+    let (imported, _) = round_trip(&doc.project);
+    let names: Vec<&str> = imported
+        .elements
+        .values()
+        .filter(|e| e.category() == Category::Window)
+        .map(|e| imported.type_name(e.type_id))
+        .collect();
+    assert_eq!(names, ["Janela 120x120 (IFC)"; 3]);
+    let windows: Vec<_> =
+        imported.types_of(Category::Window).filter(|t| t.name.starts_with("Janela 120x120")).collect();
+    assert_eq!(windows.len(), 2, "the template's and the imported one");
+    assert_eq!(windows.iter().find(|t| t.name.ends_with("(IFC)")).unwrap().opening_size(), Some((1.3, 1.2)));
+    let mut uids: Vec<Uid> = imported.types.values().map(|t| t.uid).filter(|u| *u != Uid::default()).collect();
+    let n = uids.len();
+    uids.sort();
+    uids.dedup();
+    assert_eq!(uids.len(), n, "type uids are unique");
+}
