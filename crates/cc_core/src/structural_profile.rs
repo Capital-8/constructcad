@@ -6,6 +6,8 @@
 //! an I or channel vertical, the flanges of a channel and the legs of an
 //! angle pointing to +x; centered on the bounding box.
 
+use crate::component::{ComponentParam, ParamKind};
+use crate::profile::{self, ProfilePoint};
 use crate::{ProfileId, Uid};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
@@ -186,10 +188,84 @@ pub enum ProfileShape {
     Sketch(ParamSketch),
 }
 
-/// A parametric sketch (filled in by a later task); for now it has no curves
-/// and its outline is an error.
+/// Most parameters of a sketch.
+pub const MAX_SKETCH_PARAMS: usize = 64;
+
+/// A parametric sketch: an outline and openings whose points are
+/// expressions over named numeric parameters (meters).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct ParamSketch {}
+pub struct ParamSketch {
+    pub params: Vec<ComponentParam>,
+    pub outline: Vec<ProfilePoint>,
+    #[serde(default)]
+    pub openings: Vec<Vec<ProfilePoint>>,
+}
+
+impl ParamSketch {
+    /// A centered `b` by `h` rectangle with parameters `b` and `h`.
+    pub fn square(b: f64, h: f64) -> ParamSketch {
+        ParamSketch {
+            params: vec![
+                ComponentParam::number("b", b, ParamKind::Length),
+                ComponentParam::number("h", h, ParamKind::Length),
+            ],
+            outline: vec![
+                ProfilePoint::new("-b/2", "-h/2"),
+                ProfilePoint::new("b/2", "-h/2"),
+                ProfilePoint::new("b/2", "h/2"),
+                ProfilePoint::new("-b/2", "h/2"),
+            ],
+            openings: Vec::new(),
+        }
+    }
+
+    /// The outline, wound and centered on its bounding box.
+    pub fn resolve(&self) -> Result<SectionOutline, ProfileError> {
+        let err = |e: profile::ProfileError| ProfileError::Sketch(format!("{e:?}"));
+        if self.params.len() > MAX_SKETCH_PARAMS {
+            return Err(ProfileError::Sketch(format!("more than {MAX_SKETCH_PARAMS} parameters")));
+        }
+        if self.openings.len() > MAX_OPENINGS {
+            return Err(ProfileError::TooBig);
+        }
+        if self.outline.len() < 3 || self.openings.iter().any(|o| o.len() < 3) {
+            return Err(ProfileError::Sketch("a loop needs at least 3 points".into()));
+        }
+        let lookup = |name: &str| {
+            self.params
+                .iter()
+                .find(|p| {
+                    p.name == name && !matches!(p.kind, ParamKind::Text | ParamKind::Choice | ParamKind::Material)
+                })
+                .map(|p| p.value)
+        };
+        let outer = profile::outline(&self.outline, &lookup).map_err(err)?;
+        let mut holes = Vec::with_capacity(self.openings.len());
+        for o in &self.openings {
+            let h = profile::outline(o, &lookup).map_err(err)?;
+            if !h.iter().all(|&p| inside(&outer, p)) {
+                return Err(ProfileError::Sketch("an opening lies outside the outline".into()));
+            }
+            holes.push(h);
+        }
+        if outer.iter().chain(holes.iter().flatten()).any(|p| !p.is_finite() || p.abs().max_element() > MAX_SIZE) {
+            return Err(ProfileError::Sketch("a point is out of range".into()));
+        }
+        finish(outer, holes)
+    }
+}
+
+/// Even-odd test of a point against a loop.
+fn inside(poly: &[DVec2], p: DVec2) -> bool {
+    let mut c = false;
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
+            c = !c;
+        }
+    }
+    c
+}
 
 /// An outline: `outer` runs counter-clockwise, `holes` clockwise.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -480,7 +556,7 @@ impl ProfileShape {
             "round" => Self::Round { d: 0.3 },
             "concrete_t" => Self::ConcreteT { h: 0.5, bf: 0.6, hf: 0.12, bw: 0.2 },
             "concrete_l" => Self::ConcreteL { h: 0.5, bf: 0.4, hf: 0.12, bw: 0.2 },
-            "sketch" => Self::Sketch(ParamSketch::default()),
+            "sketch" => Self::Sketch(ParamSketch::square(0.1, 0.1)),
             _ => return None,
         })
     }
@@ -518,13 +594,25 @@ impl ProfileShape {
     }
 
     /// The named values of the shape, in declaration order.
-    pub fn params(&self) -> Vec<(&'static str, f64)> {
-        self.clone().fields_mut().into_iter().map(|(n, v)| (n, *v)).collect()
+    pub fn params(&self) -> Vec<(String, f64)> {
+        if let Self::Sketch(s) = self {
+            return s.params.iter().map(|p| (p.name.clone(), p.value)).collect();
+        }
+        self.clone().fields_mut().into_iter().map(|(n, v)| (n.to_string(), *v)).collect()
     }
 
     /// Sets a value by name; false when the shape has none of that name. The
     /// value is checked when the outline is built.
     pub fn set_param(&mut self, name: &str, v: f64) -> bool {
+        if let Self::Sketch(s) = self {
+            return match s.params.iter_mut().find(|p| p.name == name) {
+                Some(p) => {
+                    p.value = v;
+                    true
+                }
+                None => false,
+            };
+        }
         match self.fields_mut().into_iter().find(|(n, _)| *n == name) {
             Some((_, slot)) => {
                 *slot = v;
@@ -729,7 +817,7 @@ impl ProfileShape {
                 let pts = [v2(0.0, -y), v2(bw, -y), v2(bw, y - hf), v2(bf, y - hf), v2(bf, y), v2(0.0, y)];
                 finish(pts.to_vec(), vec![])
             }
-            Self::Sketch(_) => Err(ProfileError::Sketch("empty sketch".into())),
+            Self::Sketch(ref s) => s.resolve(),
         }
     }
 
@@ -830,10 +918,6 @@ mod tests {
     #[test]
     fn every_default_shape_resolves() {
         for code in ProfileShape::CODES {
-            // Sketches resolve once they carry curves (Task 2).
-            if *code == "sketch" {
-                continue;
-            }
             let s = ProfileShape::default_for(code).unwrap();
             assert!(s.outline().is_ok(), "{code}");
             assert_eq!(s.code(), *code);
@@ -851,7 +935,7 @@ mod tests {
     #[test]
     fn outlines_are_wound_and_centered() {
         let signed = |p: &[DVec2]| 0.5 * (0..p.len()).map(|i| p[i].perp_dot(p[(i + 1) % p.len()])).sum::<f64>();
-        for code in ProfileShape::CODES.iter().filter(|c| **c != "sketch") {
+        for code in ProfileShape::CODES.iter() {
             let o = ProfileShape::default_for(code).unwrap().outline().unwrap();
             assert!(signed(&o.outer) > 0.0, "{code} outer");
             assert!(o.holes.iter().all(|h| signed(h) < 0.0), "{code} holes");
@@ -954,6 +1038,52 @@ mod tests {
         let mut s = ProfileShape::default_for("i").unwrap();
         assert!(s.set_param("tw", 0.007));
         assert!(!s.set_param("nope", 1.0));
-        assert_eq!(s.params().iter().find(|(n, _)| *n == "tw").unwrap().1, 0.007);
+        assert_eq!(s.params().iter().find(|(n, _)| n == "tw").unwrap().1, 0.007);
+    }
+
+    #[test]
+    fn sketch_reads_its_parameters() {
+        let mut s = ParamSketch::square(0.1, 0.2);
+        let o = ProfileShape::Sketch(s.clone()).outline().unwrap();
+        let (lo, hi) = o.bbox();
+        assert!((hi - lo - DVec2::new(0.1, 0.2)).length() < 1e-12);
+        s.params.iter_mut().find(|p| p.name == "b").unwrap().value = 0.3;
+        let (lo, hi) = ProfileShape::Sketch(s).outline().unwrap().bbox();
+        assert!((hi.x - lo.x - 0.3).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sketch_with_opening_is_a_hollow_section() {
+        let mut s = ParamSketch::square(0.2, 0.2);
+        s.params.push(ComponentParam::number("t", 0.01, ParamKind::Length));
+        s.openings.push(vec![
+            ProfilePoint::new("-b/2+t", "-h/2+t"),
+            ProfilePoint::new("b/2-t", "-h/2+t"),
+            ProfilePoint::new("b/2-t", "h/2-t"),
+            ProfilePoint::new("-b/2+t", "h/2-t"),
+        ]);
+        let o = ProfileShape::Sketch(s).outline().unwrap();
+        assert_eq!(o.holes.len(), 1);
+    }
+
+    #[test]
+    fn bad_sketch_is_an_error() {
+        let mut s = ParamSketch::square(0.1, 0.1);
+        s.outline[0].u = "nope + 1".into();
+        assert!(matches!(ProfileShape::Sketch(s).outline(), Err(ProfileError::Sketch(_))));
+        let mut s = ParamSketch::square(0.1, 0.1);
+        s.outline.truncate(2);
+        assert!(ProfileShape::Sketch(s).outline().is_err());
+    }
+
+    #[test]
+    fn sketch_opening_outside_is_an_error_and_params_are_named() {
+        let mut s = ParamSketch::square(0.1, 0.1);
+        s.openings.push(vec![ProfilePoint::new("1", "1"), ProfilePoint::new("2", "1"), ProfilePoint::new("2", "2")]);
+        assert!(ProfileShape::Sketch(s).outline().is_err());
+        let mut sh = ProfileShape::default_for("sketch").unwrap();
+        assert!(sh.set_param("b", 0.25));
+        assert_eq!(sh.params().iter().find(|(n, _)| n == "b").unwrap().1, 0.25);
+        assert!(!sh.set_param("zz", 1.0));
     }
 }
