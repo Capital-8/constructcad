@@ -37,6 +37,7 @@ pub mod pat;
 mod persist;
 pub mod phase;
 pub mod profile;
+pub mod profile_catalog;
 pub mod profile_sweep;
 pub mod profiles_project;
 mod project;
