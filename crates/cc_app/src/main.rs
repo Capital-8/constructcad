@@ -38,6 +38,7 @@ mod lps_cabling_ui;
 mod material_browser;
 mod modify;
 mod modify3d;
+mod opening_place;
 mod paint;
 mod paint_ui;
 mod palette;

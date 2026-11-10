@@ -350,6 +350,7 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
     }
     // The tools that take a typed length, and the detail line being drawn (issue #159).
     let typing_length = state.typing_segment() || crate::detail_ui::typing(state);
+    let two_lengths = state.typing_two_lengths();
     // Backspace edits a typed length, or else steps a chain back one segment.
     if backspace {
         if typing_length && !crate::detail_ui::typed_target(state).is_empty() {
@@ -371,7 +372,7 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
     for event in events {
         let Event::Text(text) = event else { continue };
         for ch in text.chars() {
-            if typing_length && crate::detail_ui::typed_target(state).type_char(ch, false) {
+            if typing_length && crate::detail_ui::typed_target(state).type_char(ch, two_lengths) {
                 continue;
             }
             if !ch.is_ascii_alphabetic() {

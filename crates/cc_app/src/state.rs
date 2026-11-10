@@ -390,12 +390,20 @@ impl AppState {
         }
     }
 
-    /// A segment is being drawn with typed input (wall, grid, move, copy, array).
+    /// A segment is being drawn with typed input (wall, grid, move, copy,
+    /// array), or a door or window placed at a typed distance (issue #250).
     pub fn typing_segment(&self) -> bool {
-        matches!(
+        let segment = matches!(
             self.tool,
             Tool::Wall { .. } | Tool::Grid { .. } | Tool::Move | Tool::Copy | Tool::Array | Tool::PushPull
-        ) && self.interaction.anchor.is_some()
+        ) && self.interaction.anchor.is_some();
+        segment || self.typing_two_lengths()
+    }
+
+    /// The tool takes two typed lengths (Tab switches between them): a door
+    /// or window's distances from the start and from the end of its wall.
+    pub fn typing_two_lengths(&self) -> bool {
+        matches!(self.tool, Tool::Hosted { .. })
     }
 
     pub fn set_tool(&mut self, tool: Tool) {
