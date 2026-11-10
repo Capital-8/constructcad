@@ -8,7 +8,7 @@ use crate::icons::{Badge, Icon};
 use crate::ribbon::{category_icon, dimension_icon};
 use crate::state::{AppState, PendingAction};
 use crate::t;
-use crate::tools::{DimensionMode, Tool};
+use crate::tools::{ComponentGroup, DimensionMode, Tool};
 use cc_core::{Category, ViewCategory};
 
 /// The user's two-letter keys by command id (empty: no keys), as
@@ -1496,18 +1496,11 @@ impl UiCommand {
         use UiCommand::*;
         let tool = &state.tool;
         match self {
-            Place(Category::Component) => {
-                matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id).is_none())
-            }
+            Place(Category::Component) => is_component_group(state, ComponentGroup::Generic),
             Place(category) => tool.category() == Some(category) && !matches!(tool, Tool::Section | Tool::Truss { .. }),
-            PlaceFixture => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(false)),
-            PlaceDevice => {
-                matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(true)
-                    && !crate::tools::device_type(state.project(), *type_id).is_some_and(|d| DEVICE_TOOLS.contains(&d)))
-            }
-            PlaceDeviceOf(device) => {
-                matches!(tool, Tool::Component { type_id } if crate::tools::device_type(state.project(), *type_id) == Some(device))
-            }
+            PlaceFixture => is_component_group(state, ComponentGroup::Fixture),
+            PlaceDevice => is_component_group(state, ComponentGroup::Device),
+            PlaceDeviceOf(device) => is_component_group(state, ComponentGroup::Own(device)),
             Truss => matches!(tool, Tool::Truss { .. }),
             StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select if state.sketch.is_some() => {
@@ -1620,12 +1613,9 @@ pub fn graphics_view(state: &AppState) -> Option<cc_core::ViewId> {
     state.active_view.filter(|v| state.project().view(*v).is_some_and(|v| v.kind.has_graphics()))
 }
 
-/// Whether a component type is an electrical device (`Some(true)`), a plumbing fixture or neither.
-fn mep_kind(state: &AppState, type_id: cc_core::ElementTypeId) -> Option<bool> {
-    match state.project().element_type(type_id).map(|t| &t.data) {
-        Some(cc_core::TypeData::Component { def, .. }) => def.mep.map(|m| matches!(m, cc_core::MepData::Device { .. })),
-        _ => None,
-    }
+/// Whether the component tool is placing types of `group`.
+fn is_component_group(state: &AppState, group: ComponentGroup) -> bool {
+    matches!(state.tool, Tool::Component { type_id } if crate::tools::component_group(state.project(), type_id) == group)
 }
 
 /// Whether the active view is one `test` accepts.
