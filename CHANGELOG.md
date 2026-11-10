@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- IFC import no longer makes one type per element when an IFC type shares its name with a different project type (#247): the type it adds (`<name> (IFC)`) is reused by the following occurrences, a type that already carries the IFC type's GlobalId is reused, and types made from one IFC type with occurrences of different sizes keep unique ids.
 - A property set back to its empty value in the properties palette or a dialog now changes (#225): a plan's *Underlay → Plan below/above* set back to *None* went back to the level it had, and the same happened to any value returning to none, an empty list or off (an option of a view, a type or an element). The edit now clears what it leaves out.
 - The properties palette and the view template manager now set a plan's *Underlay → Plan below/above* back to *None* (#235). The fix for #225 covered the generic property edits, but these two send the underlay through their own patch, which left a cleared plan out (and failed when both were cleared); they now clear it the same way.
 - SketchUp import follows OpenSKP 1.5.0: a concave four-sided face is no longer triangulated across its outside, classic textured materials are no longer all read as colorized, an empty SketchUp 2020 model opens, legacy dimensions keep their endpoints and placement, texts anchored to an entity read, guides keep their layer and hidden flag, and crafted files meet tighter bounds (archive entry sizes, object nesting, component hierarchies).

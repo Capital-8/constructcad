@@ -330,6 +330,9 @@ struct Importer<'a> {
     curtain_walls: std::collections::HashSet<u32>,
     /// Imported elements and their IFC instances (their phases are read at the end).
     products: Vec<(ElementId, u32)>,
+    /// Types this import added, by category and the name they were asked
+    /// for (they may have been renamed to keep names unique).
+    added_types: HashMap<(Category, String), Vec<ElementTypeId>>,
 }
 
 /// The opening size of a door or window type of `category` (of either kind).
@@ -443,6 +446,7 @@ impl<'a> Importer<'a> {
             framed_roofs: Default::default(),
             curtain_walls: Default::default(),
             products: Vec::new(),
+            added_types: HashMap::new(),
         };
         im.scale = im.unit("LENGTHUNIT");
         im.area = im.unit_opt("AREAUNIT").unwrap_or(im.scale * im.scale);
@@ -1164,7 +1168,22 @@ impl<'a> Importer<'a> {
         {
             return t.id;
         }
+        // The type an IFC type object already became (also in a project it
+        // was imported into before).
+        if let Some(uid) = uid.filter(|u| *u != Uid::default())
+            && let Some(t) = self.p.types_of(category).find(|t| t.uid == uid && same(&t.data))
+        {
+            return t.id;
+        }
         let mut base = name.unwrap_or(fallback_name);
+        // A type this import added for the same name, renamed because the
+        // project had one: the next occurrences of that name reuse it.
+        let key = (category, base.clone());
+        let types = &self.p.types;
+        let added = self.added_types.get(&key).into_iter().flatten();
+        if let Some(&id) = added.into_iter().find(|id| types.get(id).is_some_and(|t| same(&t.data))) {
+            return id;
+        }
         if self.p.types_of(category).any(|t| t.name == base) {
             base = format!("{base} (IFC)");
         }
@@ -1175,8 +1194,12 @@ impl<'a> Importer<'a> {
             n += 1;
         }
         let id = ElementTypeId(self.p.alloc_id());
-        let ty = ElementType { id, name: unique, data: make(), info: Default::default(), uid: uid.unwrap_or_default() };
+        // An IFC type whose occurrences differ (in size, say) makes several
+        // types: only the first keeps its GlobalId, so uids stay unique.
+        let uid = uid.filter(|u| !self.p.types.values().any(|t| t.uid == *u)).unwrap_or_default();
+        let ty = ElementType { id, name: unique, data: make(), info: Default::default(), uid };
         self.p.types.insert(id, ty);
+        self.added_types.entry(key).or_default().push(id);
         id
     }
 
