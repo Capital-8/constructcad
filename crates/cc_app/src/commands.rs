@@ -46,6 +46,8 @@ pub enum UiCommand {
     ImportImage,
     /// Insert a SketchUp model into the open project.
     ImportSkp,
+    /// Insert a Wavefront OBJ model into the open project.
+    ImportObj,
     ExportIfc,
     ExportPdf,
     ExportSvg,
@@ -287,6 +289,7 @@ impl UiCommand {
             ImportCad,
             ImportImage,
             ImportSkp,
+            ImportObj,
             ExportIfc,
             ExportPdf,
             ExportSvg,
@@ -449,7 +452,7 @@ impl UiCommand {
         match self {
             Home => Icon::Home,
             New => Icon::New,
-            Open | ImportIfc | ImportSkp => Icon::Open,
+            Open | ImportIfc | ImportSkp | ImportObj => Icon::Open,
             Save => Icon::Save,
             SaveAs => Icon::SaveAs,
             CloseProject => Icon::CloseProject,
@@ -636,7 +639,7 @@ impl UiCommand {
             | PanelDiagram
             | NewTitleBlock
             | CreateDetailComponent => Some(Badge::New),
-            ImportIfc | ImportCad | ImportImage | ImportSkp | LoadComponent => Some(Badge::Import),
+            ImportIfc | ImportCad | ImportImage | ImportSkp | ImportObj | LoadComponent => Some(Badge::Import),
             ExportPdf | ExportSvg | ExportImage | ExportDxf | AnalyticalExport => Some(Badge::Export),
             Delete | DetachTop | RemovePaint => Some(Badge::Remove),
             _ => None,
@@ -657,6 +660,7 @@ impl UiCommand {
             ImportCad => t!("action-import-cad"),
             ImportImage => t!("action-import-image"),
             ImportSkp => t!("action-import-skp"),
+            ImportObj => t!("action-import-obj"),
             ExportIfc => t!("action-export-ifc"),
             ExportPdf => t!("action-export-pdf"),
             ExportSvg => t!("action-export-svg"),
@@ -858,6 +862,7 @@ impl UiCommand {
             ImportCad => t!("cmd-desc-import-cad"),
             ImportImage => t!("cmd-desc-import-image"),
             ImportSkp => t!("cmd-desc-import-skp"),
+            ImportObj => t!("cmd-desc-import-obj"),
             ExportIfc => t!("cmd-desc-export-ifc"),
             ExportPdf => t!("cmd-desc-export-pdf"),
             ExportSvg => t!("cmd-desc-export-svg"),
@@ -1163,6 +1168,7 @@ impl UiCommand {
             ImportCad => "cad_import",
             ImportImage => "image_import",
             ImportSkp => "skp_import",
+            ImportObj => "obj_import",
             ExportIfc => "ifc_export",
             ExportPdf | ExportSvg => "sheet_export",
             ExportImage | ExportDxf => "view_export",
@@ -1759,6 +1765,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         ImportCad => crate::cad_ui::import_cad(state),
         ImportImage => crate::cad_ui::import_image(state),
         ImportSkp => actions::import_skp(state),
+        ImportObj => crate::obj_ui::import_obj(state),
         ExportIfc => actions::export_ifc(state),
         ExportPdf => actions::export_sheet(state, actions::SheetFormat::Pdf),
         ExportSvg => actions::export_sheet(state, actions::SheetFormat::Svg),

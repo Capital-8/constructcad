@@ -118,6 +118,7 @@ registry![
         io::IfcImport,
         io::SkpImport,
         io::SkpComponentLoad,
+        io::ObjImport,
         io::IfcExport,
         io::SheetExport,
         io::ViewExport,

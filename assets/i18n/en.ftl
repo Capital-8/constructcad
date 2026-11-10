@@ -3028,3 +3028,17 @@ comp-door-operation-tip = How the door's leaves swing: plans draw one swing per 
 door-op-left = Swing, hinged left
 door-op-right = Swing, hinged right
 door-op-double = Swing, 2 leaves
+
+# OBJ import
+action-import-obj = Import OBJ…
+cmd-desc-import-obj = Insert a Wavefront OBJ model (.obj) into the project: each object becomes a component on the active view's level, colored by its .mtl file.
+file-filter-obj = OBJ Model
+job-importing-obj = Importing OBJ
+msg-obj-imported = Imported from { $path }: { $count } components
+tx-import-obj = Import OBJ
+err-obj-too-large = the OBJ model is too large to import
+err-obj-empty = the OBJ file has no faces
+dlg-import-obj = Import OBJ
+label-obj-units = File units
+label-obj-up = Up axis
+label-obj-merge = Import as a single component

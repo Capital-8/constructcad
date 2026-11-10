@@ -3028,3 +3028,17 @@ comp-door-operation-tip = Comment s'ouvrent les vantaux de la porte : les plans 
 door-op-left = Battante, paumelles à gauche
 door-op-right = Battante, paumelles à droite
 door-op-double = Battante, 2 vantaux
+
+# OBJ import
+action-import-obj = Importer OBJ…
+cmd-desc-import-obj = Insérer un modèle Wavefront OBJ (.obj) dans le projet : chaque objet devient un composant au niveau de la vue active, coloré selon son fichier .mtl.
+file-filter-obj = Modèle OBJ
+job-importing-obj = Importation OBJ
+msg-obj-imported = Importé depuis { $path } : { $count } composants
+tx-import-obj = Importer OBJ
+err-obj-too-large = le modèle OBJ est trop volumineux pour être importé
+err-obj-empty = le fichier OBJ n’a aucune face
+dlg-import-obj = Importer OBJ
+label-obj-units = Unités du fichier
+label-obj-up = Axe vertical
+label-obj-merge = Importer comme un seul composant

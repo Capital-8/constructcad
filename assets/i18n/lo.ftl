@@ -3030,3 +3030,17 @@ comp-door-operation-tip = ບານປະຕູເປີດແນວໃດ: ແ�
 door-op-left = ບານໄຂ, ບານພັບຊ້າຍ
 door-op-right = ບານໄຂ, ບານພັບຂວາ
 door-op-double = ບານໄຂ 2 ບານ
+
+# OBJ import
+action-import-obj = ນຳເຂົ້າ OBJ…
+cmd-desc-import-obj = ໃສ່ແບບຈຳລອງ Wavefront OBJ (.obj) ເຂົ້າໃນໂຄງການ: ແຕ່ລະວັດຖຸກາຍເປັນອົງປະກອບຢູ່ຊັ້ນຂອງມຸມມອງທີ່ໃຊ້ຢູ່, ມີສີຕາມໄຟລ໌ .mtl.
+file-filter-obj = ແບບຈຳລອງ OBJ
+job-importing-obj = ກຳລັງນຳເຂົ້າ OBJ
+msg-obj-imported = ນຳເຂົ້າຈາກ { $path }: { $count } ອົງປະກອບ
+tx-import-obj = ນຳເຂົ້າ OBJ
+err-obj-too-large = ແບບຈຳລອງ OBJ ໃຫຍ່ເກີນໄປທີ່ຈະນຳເຂົ້າ
+err-obj-empty = ໄຟລ໌ OBJ ບໍ່ມີໜ້າ
+dlg-import-obj = ນຳເຂົ້າ OBJ
+label-obj-units = ຫົວໜ່ວຍຂອງໄຟລ໌
+label-obj-up = ແກນຕັ້ງ
+label-obj-merge = ນຳເຂົ້າເປັນອົງປະກອບດຽວ

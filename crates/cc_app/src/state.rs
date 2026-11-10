@@ -93,6 +93,10 @@ pub struct Dialogs {
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
+    /// The .obj file whose import options are being asked.
+    pub obj_import: Option<std::path::PathBuf>,
+    /// The last choices of the OBJ import dialog.
+    pub obj_options: crate::obj_ui::ObjOptions,
     /// The Preferences window.
     pub preferences: Option<crate::preferences::PreferencesDialog>,
 }

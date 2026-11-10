@@ -3029,3 +3029,17 @@ comp-door-operation-tip = Як відчиняються стулки двере�
 door-op-left = Розпашні, завіси ліворуч
 door-op-right = Розпашні, завіси праворуч
 door-op-double = Розпашні, 2 стулки
+
+# OBJ import
+action-import-obj = Імпортувати OBJ…
+cmd-desc-import-obj = Вставити модель Wavefront OBJ (.obj) у проєкт: кожен об’єкт стає компонентом на рівні активного виду, з кольорами з файлу .mtl.
+file-filter-obj = Модель OBJ
+job-importing-obj = Імпорт OBJ
+msg-obj-imported = Імпортовано з { $path }: компонентів — { $count }
+tx-import-obj = Імпортувати OBJ
+err-obj-too-large = модель OBJ завелика для імпорту
+err-obj-empty = файл OBJ не має граней
+dlg-import-obj = Імпортувати OBJ
+label-obj-units = Одиниці файлу
+label-obj-up = Вертикальна вісь
+label-obj-merge = Імпортувати як один компонент

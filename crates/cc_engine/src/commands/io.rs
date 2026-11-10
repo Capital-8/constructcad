@@ -1,4 +1,4 @@
-//! Files: IFC import/export, SketchUp import, sheet PDF/SVG, view PNG/SVG/PDF, schedule CSV, component files.
+//! Files: IFC import/export, SketchUp and OBJ import, sheet PDF/SVG, view PNG/SVG/PDF, schedule CSV, component files.
 
 use super::add_element;
 use super::edit;
@@ -388,6 +388,103 @@ impl Command for SkpImport {
             Ok((types.iter().map(|t| t.0).collect::<Vec<_>>(), elements, materials))
         })?;
         Ok(json!({ "types": types, "elements": elements, "materials": materials, "faces": faces, "hidden": hidden }))
+    }
+}
+
+/// Units of the coordinates in an OBJ file (the format does not say).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjUnits {
+    #[default]
+    M,
+    Cm,
+    Mm,
+    In,
+    Ft,
+}
+
+impl ObjUnits {
+    fn meters(self) -> f64 {
+        match self {
+            Self::M => 1.0,
+            Self::Cm => 0.01,
+            Self::Mm => 0.001,
+            Self::In => 0.0254,
+            Self::Ft => 0.3048,
+        }
+    }
+}
+
+/// Import a Wavefront OBJ model (.obj) into the project. Each object (or,
+/// in a file without objects, each group) becomes a component element on
+/// `level`, of a component type holding its faces as fixed mesh pieces, one
+/// per material, inserted at the center of its footprint and the bottom of
+/// its extent. Colors come from the `.mtl` libraries next to the file
+/// (`Kd`); missing materials are added by name. Faces not flat are split
+/// into triangles; lines, points, textures and normals are ignored.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObjImport {
+    /// Path of the .obj file.
+    pub path: PathBuf,
+    /// Level id or name (default: the lowest level); the file's zero height is at its elevation.
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Where the file's origin goes, in plan (default [0, 0]).
+    #[serde(default)]
+    pub position: Option<Point>,
+    /// Rotation of the whole model in plan, degrees counter-clockwise (default 0).
+    #[serde(default)]
+    pub rotation: Option<f64>,
+    /// Units of the file's coordinates: "m" (default), "cm", "mm", "in" or "ft".
+    #[serde(default)]
+    pub units: ObjUnits,
+    /// The file's Z axis points up; by default Y does (the usual OBJ convention).
+    #[serde(default)]
+    pub z_up: bool,
+    /// Make the whole file one component element, inserted at the file's origin.
+    #[serde(default)]
+    pub merge: bool,
+}
+
+impl Command for ObjImport {
+    const NAME: &'static str = "obj_import";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let level = refs::level_or_first(s.project(), self.level.as_ref())?;
+        let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
+        let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
+        if std::fs::metadata(&self.path)?.len() > crate::obj::MAX_BYTES {
+            return Err(EngineError::rejected(t!("err-obj-too-large")));
+        }
+        let bytes = std::fs::read(&self.path)?;
+        let name = file_stem(&self.path);
+        let frame = crate::obj::Frame { scale: self.units.meters(), y_up: !self.z_up };
+        let dir = self.path.parent();
+        let conv = guard(|| crate::obj::convert(&String::from_utf8_lossy(&bytes), dir, frame, &name, self.merge))?
+            .map_err(|_| EngineError::rejected(t!("err-obj-too-large")))?;
+        if conv.placements.is_empty() {
+            return Err(EngineError::rejected(t!("err-obj-empty")));
+        }
+        let faces = conv.faces;
+        let placements = conv.placements.clone();
+        let rot = glam::DMat2::from_angle(turn.to_radians());
+        let (types, elements, materials) = edit(s, t!("tx-import-obj"), |e| {
+            let (types, materials) = add_skp_types(e, conv);
+            let mut elements = Vec::with_capacity(placements.len());
+            for p in &placements {
+                let Some(&type_id) = types.get(p.ty) else { continue };
+                let component = Component {
+                    position: origin + rot * p.position,
+                    rotation_deg: p.rotation_deg + turn,
+                    base_offset: p.z,
+                    ..Default::default()
+                };
+                elements.push(add_element(e, level, type_id, ElementKind::Component(component)).0);
+            }
+            Ok((types.iter().map(|t| t.0).collect::<Vec<_>>(), elements, materials))
+        })?;
+        Ok(json!({ "types": types, "elements": elements, "materials": materials, "faces": faces }))
     }
 }
 
