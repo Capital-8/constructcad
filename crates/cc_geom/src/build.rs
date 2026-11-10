@@ -529,21 +529,24 @@ impl ModelGeometry {
         let mut columns = Vec::new();
         for e in project.elements.values() {
             match (&e.kind, project.element_type(e.type_id).map(|t| &t.data)) {
-                (ElementKind::Beam(b), Some(TypeData::Beam { width, height, shape, .. })) if b.length() > 1e-6 => {
+                (ElementKind::Beam(b), Some(data @ TypeData::Beam { width, height, .. })) if b.length() > 1e-6 => {
                     // Joins work on the body centerline, whatever the justification.
                     let (start, end) = project.beam_axis(e, b);
-                    let section = crate::section::shape_rects(*shape, *width, *height)
-                        .into_iter()
-                        .map(|(a, b)| (DVec2::new(a.x, a.y + height / 2.0), DVec2::new(b.x, b.y + height / 2.0)))
-                        .collect();
+                    // The profile's section, or the type's box when the profile fails.
+                    let (section, curved) = match project.type_section(data) {
+                        Some(s) => (s.outline, s.curved),
+                        None => (crate::beam::box_section(*width, *height), false),
+                    };
+                    let (section, half) = crate::beam::beam_section(&section);
                     beams.push(BeamInput {
                         element: e.id,
                         start,
                         end,
-                        half: width / 2.0,
+                        half,
                         z_range: project.beam_z(e, b),
                         slope: b.rise() / b.length(),
                         section,
+                        curved,
                         join_start: b.join_start,
                         join_end: b.join_end,
                         bulge: 0.0,
@@ -589,7 +592,8 @@ impl ModelGeometry {
                             half: width / 2.0,
                             z_range,
                             slope: 0.0,
-                            section: Vec::new(),
+                            section: crate::beam::box_section(*width, *thickness),
+                            curved: false,
                             join_start: true,
                             join_end: true,
                             bulge: *bulge,

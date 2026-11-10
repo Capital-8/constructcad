@@ -907,17 +907,10 @@ impl<'a> Exporter<'a> {
                     let level = g.slope.abs() < 1e-12;
                     let brep = !level || (!solid && !g.is_square());
                     let items = if brep {
-                        // Sloped, or a profile with cut ends: each part as a closed shell.
-                        g.parts()
-                            .into_iter()
-                            .map(|(footprint, (z0, z1))| {
-                                let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
-                                let (origin, dir, slope, base) = (g.origin, g.dir, g.slope, g.z_range.0);
-                                let z = move |p: DVec2| base + slope * (p - origin).dot(dir);
-                                s.add_prism(&footprint, |p| z(p) + z0, |p| z(p) + z1);
-                                self.faceted_brep(&s.faces, level_z)
-                            })
-                            .collect()
+                        // Sloped, or a profile with cut ends: the swept section as a closed shell.
+                        let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
+                        g.add_to(&mut s);
+                        vec![self.faceted_brep(&s.faces, level_z)]
                     } else if !solid {
                         // A profile square at both ends: the section swept along the axis.
                         let profile =

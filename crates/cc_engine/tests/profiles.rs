@@ -1,5 +1,5 @@
-//! Structural profiles: columns built and drawn from their profile, at the
-//! view's detail level.
+//! Structural profiles: columns and beams built and drawn from their
+//! profile, at the view's detail level.
 
 // Test helpers outside #[test] functions may fail loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -143,4 +143,80 @@ fn a_tube_column_is_cut_with_its_hole() {
     assert!(filled(glam::DVec2::new(0.072, 0.0)), "the wall is filled");
     assert!(!filled(glam::DVec2::ZERO), "the hole is not");
     assert!(!filled(glam::DVec2::new(0.05, 0.05)), "the hole is not");
+}
+
+/// W 310x38.7 (ASTM A6): depth, flange width, web, flange, root radius.
+const W310: ProfileShape = ProfileShape::I { d: 0.31, bf: 0.165, tw: 0.0058, tf: 0.0097, r: 0.008 };
+
+/// Add a steel profile of `shape` and a beam type pointing to it.
+fn add_beam_type(s: &mut Session, shape: ProfileShape) -> ElementTypeId {
+    let mut p = s.project().clone();
+    let pid = ProfileId(p.alloc_id());
+    p.profiles.insert(
+        pid,
+        ProfileDef {
+            id: pid,
+            uid: Uid::generate(),
+            name: "W 310x38.7".into(),
+            material: ProfileMaterial::Steel,
+            shape: shape.clone(),
+            catalog: None,
+            description: String::new(),
+        },
+    );
+    let material = p
+        .types
+        .values()
+        .find_map(|t| match &t.data {
+            TypeData::Beam { material, .. } => Some(material.clone()),
+            _ => None,
+        })
+        .unwrap();
+    let ProfileShape::I { d, bf, tw, tf, .. } = shape else { panic!("not an I") };
+    let tid = ElementTypeId(p.alloc_id());
+    let data = TypeData::Beam {
+        width: bf,
+        height: d,
+        material,
+        shape: SectionShape::I { web: tw, flange: tf },
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    };
+    p.types.insert(
+        tid,
+        ElementType { id: tid, name: "W 310x38.7".into(), data, info: Default::default(), uid: Uid::generate() },
+    );
+    *s = Session::new(Document::new(p));
+    tid
+}
+
+#[test]
+fn beams_with_w_profiles_meet_in_a_mitered_l() {
+    let (mut s, _) = with_ipe_column_type();
+    let tid = add_beam_type(&mut s, W310);
+    let make = |s: &mut Session, a: [f64; 2], b: [f64; 2]| {
+        let id = run(s, "beam_create", json!({"type": tid.0, "start": a, "end": b}))["id"].as_u64().unwrap();
+        ElementId(id)
+    };
+    let a = make(&mut s, [0.0, 0.0], [4.0, 0.0]);
+    let b = make(&mut s, [4.0, 0.0], [4.0, 4.0]);
+    let area = W310.outline().unwrap().properties(0.0).area;
+    let length = 4.0;
+    let g = s.geometry();
+    let (ga, gb) = (&g.beams[&a], &g.beams[&b]);
+    assert_eq!((ga.end, gb.start), (cc_geom::BeamEnd::Beam, cc_geom::BeamEnd::Beam));
+    assert!(ga.curved, "the root radii are arcs");
+    let (va, vb) = (g.volume(a), g.volume(b));
+    assert!(va > 0.0 && vb > 0.0, "{va} {vb}");
+    // Mitered on their axes the symmetric W's keep area x axis length each:
+    // the corner the square ends would overlap is cut away.
+    let square = 2.0 * area * (length + ga.half);
+    assert!(va + vb < square, "{} vs {square}", va + vb);
+    assert!(
+        (va + vb - 2.0 * area * length).abs() / (2.0 * area * length) < 1e-6,
+        "{} vs {}",
+        va + vb,
+        2.0 * area * length
+    );
 }

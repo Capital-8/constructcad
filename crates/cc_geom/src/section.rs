@@ -1,14 +1,11 @@
-//! Cross-sections of columns and beams: the solid parts of a profile (as
-//! rectangles or convex quads, which add up to its area exactly) and the
-//! outlines to draw.
+//! Cross-sections of columns and beams: type sections at each detail level,
+//! placed column bodies with smooth arc facets, and the legacy section
+//! shapes as rectangles and outlines (legends and IFC export).
 
 use crate::Solid;
 use cc_core::profiles_project::TypeSection;
-use cc_core::{ColumnSection, DetailLevel, Project, SectionOutline, SectionShape, TypeData};
+use cc_core::{DetailLevel, Project, SectionOutline, SectionShape, TypeData};
 use glam::DVec2;
-
-/// Segments of round sections.
-const ROUND: usize = 24;
 
 /// The solid parts of a profile in its `width` x `depth` box centered at the
 /// origin, as `(min, max)` rectangles that do not overlap.
@@ -74,40 +71,6 @@ pub fn shape_loops(shape: SectionShape, width: f64, depth: f64) -> Vec<Vec<DVec2
             p(&[(-w + t, -d + t), (-w + t, d - t), (w - t, d - t), (w - t, -d + t)]),
         ],
     }
-}
-
-fn circle(r: f64) -> Vec<DVec2> {
-    (0..ROUND).map(|i| DVec2::from_angle(i as f64 / ROUND as f64 * std::f64::consts::TAU) * r).collect()
-}
-
-/// Solid parts of a column section in plan (convex polygons), placed at
-/// `position` and turned by `rotation_deg`.
-pub fn column_parts(section: ColumnSection, position: DVec2, rotation_deg: f64) -> Vec<Vec<DVec2>> {
-    let local: Vec<Vec<DVec2>> = match section {
-        ColumnSection::Rectangular { width, depth } => rects(shape_rects(SectionShape::Solid, width, depth)),
-        ColumnSection::Profile { width, depth, shape } => rects(shape_rects(shape, width, depth)),
-        ColumnSection::Round { diameter } => vec![circle(diameter * 0.5)],
-        ColumnSection::Pipe { diameter, wall } => {
-            let outer = circle(diameter * 0.5);
-            let inner = circle((diameter * 0.5 - wall.clamp(0.0, diameter * 0.5)).max(0.0));
-            (0..ROUND).map(|i| vec![outer[i], outer[(i + 1) % ROUND], inner[(i + 1) % ROUND], inner[i]]).collect()
-        }
-    };
-    place(local, position, rotation_deg)
-}
-
-/// Outlines of a column section in plan (outer boundary, then holes).
-pub fn column_loops(section: ColumnSection, position: DVec2, rotation_deg: f64) -> Vec<Vec<DVec2>> {
-    let local = match section {
-        ColumnSection::Rectangular { width, depth } => shape_loops(SectionShape::Solid, width, depth),
-        ColumnSection::Profile { width, depth, shape } => shape_loops(shape, width, depth),
-        ColumnSection::Round { diameter } => vec![circle(diameter * 0.5)],
-        ColumnSection::Pipe { diameter, wall } => {
-            let inner = (diameter * 0.5 - wall.clamp(0.0, diameter * 0.5)).max(0.0);
-            vec![circle(diameter * 0.5), circle(inner).into_iter().rev().collect()]
-        }
-    };
-    place(local, position, rotation_deg)
 }
 
 /// Sides of a section whose turn at both ends is below this, degrees: facets
@@ -197,19 +160,11 @@ pub fn add_column_body(s: &mut Solid, outer: &[DVec2], holes: &[Vec<DVec2>], bas
         face.smooth = smooth;
     }
 }
-fn rects(rects: Vec<(DVec2, DVec2)>) -> Vec<Vec<DVec2>> {
-    rects.into_iter().map(|(a, b)| vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)]).collect()
-}
-
-fn place(polys: Vec<Vec<DVec2>>, position: DVec2, rotation_deg: f64) -> Vec<Vec<DVec2>> {
-    let rot = DVec2::from_angle(rotation_deg.to_radians());
-    polys.into_iter().map(|poly| poly.into_iter().map(|p| position + rot.rotate(p)).collect()).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::polygon::{area, signed_area};
+    use crate::polygon::signed_area;
+    use cc_core::ColumnSection;
 
     fn rect_area(rects: &[(DVec2, DVec2)]) -> f64 {
         rects.iter().map(|(a, b)| (b.x - a.x) * (b.y - a.y)).sum()
@@ -240,16 +195,6 @@ mod tests {
         // A web wider than the box fills it; flanges thicker than half the depth meet.
         let rects = shape_rects(SectionShape::I { web: 1.0, flange: 1.0 }, 0.2, 0.3);
         assert!((rect_area(&rects) - 0.2 * 0.3).abs() < 1e-12);
-    }
-
-    #[test]
-    fn pipes_are_rings() {
-        let parts = column_parts(ColumnSection::Pipe { diameter: 0.2, wall: 0.01 }, DVec2::ZERO, 0.0);
-        let total: f64 = parts.iter().map(|p| area(p)).sum();
-        let ring = |r: f64| 0.5 * ROUND as f64 * r * r * (std::f64::consts::TAU / ROUND as f64).sin();
-        assert!((total - (ring(0.1) - ring(0.09))).abs() < 1e-12);
-        let loops = column_loops(ColumnSection::Pipe { diameter: 0.2, wall: 0.01 }, DVec2::ZERO, 0.0);
-        assert!((loops_area(&loops) - total).abs() < 1e-12);
     }
 
     /// A project with an IPE 200 profile and a column type on it, turned
@@ -324,7 +269,7 @@ mod tests {
         // Sharp corners are never smooth, gentle turns are.
         let rect = [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y];
         assert_eq!(smooth_sides(&rect), vec![false; 4]);
-        let circle = circle(1.0);
+        let circle: Vec<DVec2> = (0..24).map(|i| DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU)).collect();
         assert!(smooth_sides(&circle).iter().all(|s| *s));
         // The long flat sides between an IPE's fillets (its web) stay flat.
         let ring = &section.outline.outer;

@@ -6,8 +6,9 @@
 use crate::polygon;
 use crate::wall::{EndJoin, WallLine, resolve_join};
 use cc_core::ElementId;
+use cc_core::SectionOutline;
 use cc_core::arc::Arc;
-use glam::DVec2;
+use glam::{DVec2, DVec3};
 
 /// How close to a column outline a beam end must lie to frame into it.
 const COLUMN_TOL: f64 = 0.01;
@@ -38,9 +39,11 @@ pub struct BeamGeom {
     pub z_range: (f64, f64),
     /// Rise per meter along the axis (sloped beams).
     pub slope: f64,
-    /// Solid parts of the section as `(min, max)` rectangles: `x` across the
-    /// beam (`v`), `y` up from the bottom of the section, square to the axis.
-    pub section: Vec<(DVec2, DVec2)>,
+    /// The section, square to the plan axis: `x` across the beam (`v`,
+    /// centered on its box), `y` up from the bottom of the section.
+    pub section: SectionOutline,
+    /// Whether the section has arcs (their facets are drawn smooth).
+    pub curved: bool,
     /// Axial extents `(left, right)` of the start/end faces after joins.
     pub start_ext: (f64, f64),
     pub end_ext: (f64, f64),
@@ -49,7 +52,7 @@ pub struct BeamGeom {
     /// The centerline arc of an arc strip footing (`dir` and `normal` are
     /// then its frame at the start, `u` runs along the arc and `v` to its
     /// left); beams are straight and have none. The straight-frame methods
-    /// ([`Self::footprint`], [`Self::parts`], [`Self::volume`]) are for
+    /// ([`Self::footprint`], [`Self::add_to`], [`Self::volume`]) are for
     /// straight bodies only.
     pub arc: Option<Arc>,
 }
@@ -109,32 +112,71 @@ impl BeamGeom {
         right + (left - right) * t
     }
 
-    /// Each solid part of the section: its plan footprint (counter-clockwise)
-    /// and its bottom and top heights above the section's bottom, measured
-    /// vertically.
-    pub fn parts(&self) -> Vec<([DVec2; 4], (f64, f64))> {
-        let k = self.stretch();
-        self.section
-            .iter()
-            .map(|(a, b)| {
-                let corners = [
-                    (self.face_u(false, a.x), a.x),
-                    (self.face_u(true, a.x), a.x),
-                    (self.face_u(true, b.x), b.x),
-                    (self.face_u(false, b.x), b.x),
-                ];
-                (corners.map(|(u, v)| self.world(u, v)), (a.y * k, b.y * k))
-            })
-            .collect()
+    /// The rings of the section: the outline counter-clockwise, then each
+    /// hole of three points or more clockwise. Empty when the outline has
+    /// fewer than three points.
+    fn rings(&self) -> Vec<Vec<DVec2>> {
+        let outer = polygon::ccw(&self.section.outer);
+        if outer.len() < 3 {
+            return Vec::new();
+        }
+        let mut rings = vec![outer];
+        rings.extend(self.section.holes.iter().filter(|h| h.len() >= 3).map(|h| {
+            let mut h = polygon::ccw(h);
+            h.reverse();
+            h
+        }));
+        rings
     }
 
-    /// Add the body to `s`: one prism per part, following the slope.
-    pub fn add_to(&self, s: &mut crate::Solid) {
-        let (origin, dir, slope, base) = (self.origin, self.dir, self.slope, self.z_range.0);
-        let z = move |p: DVec2| base + slope * (p - origin).dot(dir);
-        for (footprint, (z0, z1)) in self.parts() {
-            s.add_prism(&footprint, |p| z(p) + z0, |p| z(p) + z1);
+    /// The cap triangles of the section (counter-clockwise in `(v, y)`).
+    fn cap_triangles(&self, rings: &[Vec<DVec2>]) -> Vec<[DVec2; 3]> {
+        match rings.split_first() {
+            Some((outer, holes)) => polygon::triangulate_with_holes(outer, holes),
+            None => Vec::new(),
         }
+    }
+
+    /// World point of section point `p` on the start (`at_end` false) or
+    /// end face, following the slope.
+    fn point(&self, at_end: bool, p: DVec2) -> DVec3 {
+        let u = self.face_u(at_end, p.x);
+        self.world(u, p.x).extend(self.z_range.0 + self.slope * u + p.y * self.stretch())
+    }
+
+    /// Add the body to `s`: the section swept between the start and end
+    /// faces, following the slope. Faces are the cap triangles (start, then
+    /// end, for each triangle), then one side per edge of each ring; sides
+    /// on the arcs of a curved section are smooth.
+    pub fn add_to(&self, s: &mut crate::Solid) {
+        let rings = self.rings();
+        for t in self.cap_triangles(&rings) {
+            s.add_polygons([t.iter().rev().map(|p| self.point(false, *p)).collect::<Vec<_>>()]);
+            s.add_polygons([t.iter().map(|p| self.point(true, *p)).collect::<Vec<_>>()]);
+        }
+        for ring in &rings {
+            let smooth = if self.curved { crate::section::smooth_sides(ring) } else { vec![false; ring.len()] };
+            let n = ring.len();
+            for (i, flag) in smooth.into_iter().enumerate() {
+                let (a, b) = (ring[i], ring[(i + 1) % n]);
+                let before = s.faces.len();
+                s.add_polygons([vec![
+                    self.point(false, a),
+                    self.point(false, b),
+                    self.point(true, b),
+                    self.point(true, a),
+                ]]);
+                if let Some(face) = s.faces.get_mut(before) {
+                    face.smooth = flag;
+                }
+            }
+        }
+    }
+
+    /// The start cap in world space: the outline, then the holes (as
+    /// [`Self::add_to`] winds them).
+    pub fn section_at_start(&self) -> Vec<Vec<DVec3>> {
+        self.rings().iter().map(|r| r.iter().map(|p| self.point(false, *p)).collect()).collect()
     }
 
     /// Whether both end faces are square to the axis.
@@ -142,9 +184,36 @@ impl BeamGeom {
         (self.start_ext.0 - self.start_ext.1).abs() < 1e-9 && (self.end_ext.0 - self.end_ext.1).abs() < 1e-9
     }
 
+    /// Volume of the body: each cap triangle swept between the end faces,
+    /// exact since the faces' offsets are linear across the beam.
     pub fn volume(&self) -> f64 {
-        self.parts().iter().map(|(f, (z0, z1))| polygon::area(f) * (z1 - z0)).sum()
+        let k = self.stretch();
+        self.cap_triangles(&self.rings())
+            .iter()
+            .map(|t| {
+                let vc = (t[0].x + t[1].x + t[2].x) / 3.0;
+                polygon::area(t) * (self.face_u(true, vc) - self.face_u(false, vc)) * k
+            })
+            .sum()
     }
+}
+
+/// A `width` x `height` box section: centered across, up from 0.
+pub(crate) fn box_section(width: f64, height: f64) -> SectionOutline {
+    let w = width * 0.5;
+    let outer = vec![DVec2::new(-w, 0.0), DVec2::new(w, 0.0), DVec2::new(w, height), DVec2::new(-w, height)];
+    SectionOutline { outer, holes: Vec::new() }
+}
+
+/// A type's section as a beam sweeps it: centered across on its box, its
+/// bottom at 0 (`x` across, `y` up). Returns the section and its half width.
+pub(crate) fn beam_section(section: &SectionOutline) -> (SectionOutline, f64) {
+    let (lo, hi) = section.bbox();
+    let shift = DVec2::new(-(lo.x + hi.x) * 0.5, -lo.y);
+    let at = |ring: &[DVec2]| ring.iter().map(|p| *p + shift).collect::<Vec<_>>();
+    let placed = SectionOutline { outer: at(&section.outer), holes: section.holes.iter().map(|h| at(h)).collect() };
+    let half = (hi.x - lo.x) * 0.5;
+    (placed, if half.is_finite() { half.max(0.0) } else { 0.0 })
 }
 
 /// A beam as seen by the join resolution.
@@ -157,7 +226,8 @@ pub(crate) struct BeamInput {
     /// Bottom and top elevations at the start.
     pub z_range: (f64, f64),
     pub slope: f64,
-    pub section: Vec<(DVec2, DVec2)>,
+    pub section: SectionOutline,
+    pub curved: bool,
     pub join_start: bool,
     pub join_end: bool,
     /// Bulge of the centerline: 0 for beams, which are straight; arc strip
@@ -289,6 +359,7 @@ fn beam_geom(
         z_range: b.z_range,
         slope: b.slope,
         section: b.section.clone(),
+        curved: b.curved,
         start_ext: (0.0, 0.0),
         end_ext: (length, length),
         start: BeamEnd::Free,
@@ -318,7 +389,8 @@ mod tests {
             half: 0.1,
             z_range: (2.6, 3.0),
             slope: 0.0,
-            section: vec![(DVec2::new(-0.1, 0.0), DVec2::new(0.1, 0.4))],
+            section: box_section(0.2, 0.4),
+            curved: false,
             join_start: true,
             join_end: true,
             bulge: 0.0,
@@ -433,6 +505,128 @@ mod tests {
         assert!(g[1].world(s.1, -0.1).distance(outer) < 1e-9, "{:?}", g[1].world(s.1, -0.1));
         // The free end stays square.
         assert!(close(e, (a.length(), a.length())));
+    }
+
+    /// A level beam from `a` to `b` with square ends and `section` (as a
+    /// type section: centered), shifted up so its bottom is at 0.
+    fn beam_with_section(section: SectionOutline, a: DVec2, b: DVec2) -> BeamGeom {
+        let input = section_input(section, a, b);
+        resolve_beams(&[BeamInput { join_start: false, join_end: false, ..input }], &[]).remove(0)
+    }
+
+    fn section_input(section: SectionOutline, a: DVec2, b: DVec2) -> BeamInput {
+        let (section, half) = beam_section(&section);
+        let height = section.bbox().1.y;
+        BeamInput {
+            element: ElementId(1),
+            start: a,
+            end: b,
+            half,
+            z_range: (1.0, 1.0 + height),
+            slope: 0.0,
+            section,
+            curved: true,
+            join_start: true,
+            join_end: true,
+            bulge: 0.0,
+        }
+    }
+
+    /// Every directed edge of `s` is matched by the reverse edge of another face.
+    fn is_closed(s: &crate::Solid) -> bool {
+        let key = |p: glam::DVec3| ((p.x * 1e7).round() as i64, (p.y * 1e7).round() as i64, (p.z * 1e7).round() as i64);
+        let mut edges: std::collections::HashMap<_, i32> = std::collections::HashMap::new();
+        for f in &s.faces {
+            let n = f.verts.len();
+            for i in 0..n {
+                let (a, b) = (key(f.verts[i]), key(f.verts[(i + 1) % n]));
+                *edges.entry((a, b)).or_default() += 1;
+                *edges.entry((b, a)).or_default() -= 1;
+            }
+        }
+        !s.faces.is_empty() && edges.values().all(|c| *c == 0)
+    }
+
+    fn solid() -> crate::Solid {
+        crate::Solid::new(ElementId(1), cc_core::Category::Beam, [0; 3])
+    }
+
+    fn w_section() -> SectionOutline {
+        cc_core::ProfileShape::I { d: 0.3, bf: 0.15, tw: 0.0071, tf: 0.0107, r: 0.0 }.outline().unwrap()
+    }
+
+    #[test]
+    fn general_section_volume_is_area_times_length() {
+        let i = w_section();
+        let area = i.properties(0.0).area;
+        let g = beam_with_section(i, DVec2::ZERO, DVec2::new(5.0, 0.0));
+        assert!((g.volume() - area * 5.0).abs() < 1e-9, "{} vs {}", g.volume(), area * 5.0);
+        let mut s = solid();
+        g.add_to(&mut s);
+        assert!((s.volume() - area * 5.0).abs() / (area * 5.0) < 1e-6, "{}", s.volume());
+        assert!(is_closed(&s));
+        assert!(s.faces.iter().all(|f| !f.smooth), "a plain I has no arcs");
+        // The bottom flange rests on the beam's bottom elevation.
+        let (lo, hi) = s.bounds().unwrap();
+        assert!((lo.z - 1.0).abs() < 1e-12 && (hi.z - 1.3).abs() < 1e-12, "{lo} {hi}");
+        // The start cap in world space: the outline at x = 0.
+        let caps = g.section_at_start();
+        assert_eq!(caps.len(), 1);
+        assert_eq!(caps[0].len(), 12);
+        assert!(caps[0].iter().all(|p| p.x.abs() < 1e-12));
+    }
+
+    #[test]
+    fn round_tube_beam_is_watertight() {
+        let t = cc_core::ProfileShape::RoundTube { d: 0.1, t: 0.005 }.outline().unwrap();
+        let area = t.properties(0.0).area;
+        let g = beam_with_section(t, DVec2::ZERO, DVec2::new(3.0, 4.0));
+        let mut s = solid();
+        g.add_to(&mut s);
+        assert!(is_closed(&s), "every edge shared by two faces");
+        assert!((s.volume() - area * 5.0).abs() / (area * 5.0) < 1e-6);
+        assert!(s.faces.iter().any(|f| f.smooth), "the tube's facets are smooth");
+        assert_eq!(g.section_at_start().len(), 2, "outside and hole");
+    }
+
+    #[test]
+    fn sloped_profile_beams_rise_with_their_axis() {
+        let i = w_section();
+        let area = i.properties(0.0).area;
+        let mut input = section_input(i, DVec2::ZERO, DVec2::new(4.0, 0.0));
+        input.slope = 0.75;
+        let k = 1.25;
+        input.z_range = (1.0, 1.0 + 0.3 * k);
+        let g = resolve_beams(&[input], &[]).remove(0);
+        let mut s = solid();
+        g.add_to(&mut s);
+        assert!(is_closed(&s));
+        // Square to the plan axis, the vertical depth stretched by k.
+        assert!((g.volume() - area * 4.0 * k).abs() < 1e-9);
+        assert!((s.volume() - g.volume()).abs() < 1e-9);
+        let (_, hi) = s.bounds().unwrap();
+        assert!((hi.z - (1.0 + 0.3 * k + 3.0)).abs() < 1e-12, "{hi}");
+    }
+
+    #[test]
+    fn mitered_profile_beams_tile_the_corner() {
+        let i = w_section();
+        let area = i.properties(0.0).area;
+        let beams = [
+            section_input(i.clone(), DVec2::ZERO, DVec2::new(4.0, 0.0)),
+            section_input(i, DVec2::new(4.0, 0.0), DVec2::new(4.0, 3.0)),
+        ];
+        let g = resolve_beams(&beams, &[]);
+        assert!(!g[0].is_square() && !g[1].is_square());
+        for b in &g {
+            let mut s = solid();
+            b.add_to(&mut s);
+            assert!(is_closed(&s));
+            assert!((s.volume() - b.volume()).abs() < 1e-9, "{} vs {}", s.volume(), b.volume());
+        }
+        // A symmetric I mitered on its axis keeps exactly area x axis length.
+        let total: f64 = g.iter().map(|b| b.volume()).sum();
+        assert!((total - area * 7.0).abs() < 1e-9, "{total}");
     }
 
     #[test]
