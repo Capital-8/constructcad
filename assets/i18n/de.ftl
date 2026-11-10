@@ -3028,3 +3028,17 @@ comp-door-operation-tip = Wie die Flügel der Tür öffnen: Grundrisse zeichnen 
 door-op-left = Drehtür, Anschlag links
 door-op-right = Drehtür, Anschlag rechts
 door-op-double = Drehtür, 2 Flügel
+
+# OBJ import
+action-import-obj = OBJ importieren…
+cmd-desc-import-obj = Ein Wavefront-OBJ-Modell (.obj) in das Projekt einfügen: Jedes Objekt wird eine Komponente auf der Ebene der aktiven Ansicht, gefärbt nach seiner .mtl-Datei.
+file-filter-obj = OBJ-Modell
+job-importing-obj = OBJ wird importiert
+msg-obj-imported = Importiert aus { $path }: { $count } Komponenten
+tx-import-obj = OBJ importieren
+err-obj-too-large = das OBJ-Modell ist zu groß für den Import
+err-obj-empty = die OBJ-Datei hat keine Flächen
+dlg-import-obj = OBJ importieren
+label-obj-units = Einheiten der Datei
+label-obj-up = Hochachse
+label-obj-merge = Als eine einzige Komponente importieren

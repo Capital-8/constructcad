@@ -3028,3 +3028,17 @@ comp-door-operation-tip = 门扇如何开启：平面图为每扇门绘制开启
 door-op-left = 平开，铰链在左
 door-op-right = 平开，铰链在右
 door-op-double = 双扇平开
+
+# OBJ import
+action-import-obj = 导入 OBJ…
+cmd-desc-import-obj = 将 Wavefront OBJ 模型 (.obj) 插入项目：每个对象成为当前视图楼层上的构件，颜色取自其 .mtl 文件。
+file-filter-obj = OBJ 模型
+job-importing-obj = 正在导入 OBJ
+msg-obj-imported = 已从 { $path } 导入：{ $count } 个构件
+tx-import-obj = 导入 OBJ
+err-obj-too-large = OBJ 模型太大，无法导入
+err-obj-empty = OBJ 文件没有任何面
+dlg-import-obj = 导入 OBJ
+label-obj-units = 文件单位
+label-obj-up = 向上轴
+label-obj-merge = 作为单个构件导入

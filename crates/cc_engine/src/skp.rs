@@ -100,14 +100,14 @@ fn loop_vertices(def: &Definition, lp: &[cc_skp::CoEdge]) -> Vec<EntityId> {
 
 /// Faces of one piece, with vertices shared by position.
 #[derive(Default)]
-struct MeshBuild {
+pub(crate) struct MeshBuild {
     vertices: Vec<[f64; 3]>,
     index: HashMap<[i64; 3], u32>,
     faces: Vec<Vec<u32>>,
 }
 
 impl MeshBuild {
-    fn add(&mut self, face: &[DVec3]) {
+    pub(crate) fn add(&mut self, face: &[DVec3]) {
         let mut f: Vec<u32> = Vec::with_capacity(face.len());
         for p in face {
             // Snap to 1/100 mm so shared corners share a vertex.
@@ -242,23 +242,7 @@ impl<'a> Converter<'a> {
 
     /// A component definition of `pieces` (none when nothing was drawn).
     fn definition(&self, name: &str, pieces: BTreeMap<Option<usize>, MeshBuild>) -> Option<ComponentDef> {
-        let items: Vec<ComponentItem> = pieces
-            .into_iter()
-            .filter(|(_, m)| !m.faces.is_empty())
-            .map(|(material, m)| {
-                let material = material.and_then(|i| self.out.materials.get(i)).map(|(n, _)| n.clone());
-                ComponentItem {
-                    name: material.clone().unwrap_or_else(|| name.to_string()),
-                    shape: ComponentShape::Mesh { vertices: m.vertices, faces: m.faces },
-                    material: material.unwrap_or_default(),
-                    in_plan: true,
-                    void: false,
-                    plan_only: false,
-                    detail: Default::default(),
-                }
-            })
-            .collect();
-        (!items.is_empty()).then(|| ComponentDef { kind: ComponentKind::Generic, items, ..Default::default() })
+        mesh_definition(name, pieces, &self.out.materials)
     }
 
     fn add_type(&mut self, name: String, def: ComponentDef) -> Result<usize, SkpError> {
@@ -339,6 +323,33 @@ impl<'a> Converter<'a> {
         }
         Ok(self.out)
     }
+}
+
+/// A component definition of fixed mesh pieces, one per entry of `pieces`
+/// (keyed by the index in `materials`; `None` takes no material and is
+/// named `name`); none when nothing was drawn.
+pub(crate) fn mesh_definition(
+    name: &str,
+    pieces: BTreeMap<Option<usize>, MeshBuild>,
+    materials: &[(String, [u8; 3])],
+) -> Option<ComponentDef> {
+    let items: Vec<ComponentItem> = pieces
+        .into_iter()
+        .filter(|(_, m)| !m.faces.is_empty())
+        .map(|(material, m)| {
+            let material = material.and_then(|i| materials.get(i)).map(|(n, _)| n.clone());
+            ComponentItem {
+                name: material.clone().unwrap_or_else(|| name.to_string()),
+                shape: ComponentShape::Mesh { vertices: m.vertices, faces: m.faces },
+                material: material.unwrap_or_default(),
+                in_plan: true,
+                void: false,
+                plan_only: false,
+                detail: Default::default(),
+            }
+        })
+        .collect();
+    (!items.is_empty()).then(|| ComponentDef { kind: ComponentKind::Generic, items, ..Default::default() })
 }
 
 /// Every placed component and group of `model` as an element of a

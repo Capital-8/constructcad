@@ -3028,3 +3028,17 @@ comp-door-operation-tip = Jak otwierają się skrzydła drzwi: rzuty rysują otw
 door-op-left = Rozwierane, zawiasy z lewej
 door-op-right = Rozwierane, zawiasy z prawej
 door-op-double = Rozwierane, 2 skrzydła
+
+# OBJ import
+action-import-obj = Importuj OBJ…
+cmd-desc-import-obj = Wstaw model Wavefront OBJ (.obj) do projektu: każdy obiekt staje się komponentem na poziomie aktywnego widoku, w kolorach z pliku .mtl.
+file-filter-obj = Model OBJ
+job-importing-obj = Importowanie OBJ
+msg-obj-imported = Zaimportowano z { $path }: { $count } komponentów
+tx-import-obj = Importuj OBJ
+err-obj-too-large = model OBJ jest zbyt duży, aby go zaimportować
+err-obj-empty = plik OBJ nie ma ścian
+dlg-import-obj = Importuj OBJ
+label-obj-units = Jednostki pliku
+label-obj-up = Oś pionowa
+label-obj-merge = Importuj jako jeden komponent

@@ -3028,3 +3028,17 @@ comp-door-operation-tip = Cómo abren las hojas de la puerta: las plantas dibuja
 door-op-left = Abatible, bisagra a la izquierda
 door-op-right = Abatible, bisagra a la derecha
 door-op-double = Abatible, 2 hojas
+
+# OBJ import
+action-import-obj = Importar OBJ…
+cmd-desc-import-obj = Insertar un modelo Wavefront OBJ (.obj) en el proyecto: cada objeto se convierte en un componente en el nivel de la vista activa, con los colores de su archivo .mtl.
+file-filter-obj = Modelo OBJ
+job-importing-obj = Importando OBJ
+msg-obj-imported = Importado de { $path }: { $count } componentes
+tx-import-obj = Importar OBJ
+err-obj-too-large = el modelo OBJ es demasiado grande para importarlo
+err-obj-empty = el archivo OBJ no tiene caras
+dlg-import-obj = Importar OBJ
+label-obj-units = Unidades del archivo
+label-obj-up = Eje vertical
+label-obj-merge = Importar como un solo componente

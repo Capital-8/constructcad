@@ -3028,3 +3028,17 @@ comp-door-operation-tip = ドアの扉の開き方：平面図に扉ごとの開
 door-op-left = 開き戸、左吊り元
 door-op-right = 開き戸、右吊り元
 door-op-double = 両開き
+
+# OBJ import
+action-import-obj = OBJ をインポート…
+cmd-desc-import-obj = Wavefront OBJ モデル (.obj) をプロジェクトに挿入します: 各オブジェクトはアクティブなビューのレベル上のコンポーネントになり、.mtl ファイルの色が付きます。
+file-filter-obj = OBJ モデル
+job-importing-obj = OBJ を読み込んでいます
+msg-obj-imported = { $path } からインポートしました: { $count } 個のコンポーネント
+tx-import-obj = OBJ をインポート
+err-obj-too-large = OBJ モデルが大きすぎてインポートできません
+err-obj-empty = OBJ ファイルに面がありません
+dlg-import-obj = OBJ をインポート
+label-obj-units = ファイルの単位
+label-obj-up = 上方向の軸
+label-obj-merge = 1 つのコンポーネントとしてインポート
