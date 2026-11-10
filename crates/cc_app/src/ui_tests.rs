@@ -2957,3 +2957,41 @@ fn graphics_dialog_hides_imported_cad() {
     assert!(!harness.state().project().view(plan).unwrap().graphics.category(cc_core::Category::CadImport).visible);
     assert!(!drawn(harness.state_mut()));
 }
+
+/// Zooming in until an input node's field passes the canvas edge leaves the editor's panel its size.
+#[test]
+fn zooming_the_graph_keeps_its_panel_size() {
+    // Where the toolbar stands in a panel of the default size: with an empty graph, then zoomed in
+    // until input nodes' fields pass the canvas's bottom edge.
+    fn toolbar_top(graph: Option<serde_json::Value>) -> f32 {
+        let mut state = sample_state();
+        if let Some(graph) = graph {
+            state.graph.graph = cc_engine::graph::Graph::from_value(graph).unwrap().0;
+            state.graph.set_view_for_test(2.0, egui::vec2(0.0, -35.0));
+        }
+        state.graph.open = true;
+        let mut harness = themed_harness(state, egui::vec2(1200.0, 800.0), egui::Theme::Light, |ui, state| {
+            egui::Panel::bottom("graph")
+                .resizable(true)
+                .default_size(300.0)
+                .size_range(160.0..=900.0)
+                .show(ui, |ui| crate::graph_ui::show(ui, state));
+        });
+        for _ in 0..5 {
+            harness.run();
+        }
+        harness.get_by_role_and_label(Role::Button, &t!("graph-run")).rect().top()
+    }
+    let zoomed = toolbar_top(Some(serde_json::json!({
+        "uid": "00000000000000000000000000000abd",
+        "nodes": [
+            {"id": 1, "kind": {"builtin": "number"}, "values": {"value": 8}, "pos": [0, 0]},
+            {"id": 2, "kind": {"builtin": "slider"}, "values": {"value": 0.3}, "pos": [250, 112]},
+            {"id": 3, "kind": {"builtin": "text"}, "values": {"value": "abc"}, "pos": [500, 122]},
+            {"id": 4, "kind": {"builtin": "number"}, "values": {"value": 1}, "pos": [750, 130]}
+        ],
+        "wires": []
+    })));
+    let empty = toolbar_top(None);
+    assert!((zoomed - empty).abs() < 0.5, "the toolbar moved from {empty} to {zoomed}");
+}
