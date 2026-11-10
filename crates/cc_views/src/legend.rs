@@ -38,8 +38,9 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
         });
         // Door swings and tall component outlines extend above the row; leave room for them.
         let hinges = t.window_operation().hinges();
+        let door_hinges = t.door_operation().hinges();
         let above = match opening {
-            Some(width) if t.category() == Category::Door => width + 0.075,
+            Some(width) if t.category() == Category::Door => width / door_hinges.len().max(1) as f64 + 0.075,
             Some(width) if !hinges.is_empty() => width / hinges.len() as f64 + 0.075,
             _ => plan_bounds.map_or(0.0, |(lo, hi)| (hi.y - lo.y) / 2.0),
         };
@@ -75,9 +76,13 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 };
                 jamb(&mut d, 0.0, 0.2);
                 jamb(&mut d, 0.2 + width, 0.4 + width);
-                let hinge = o + DVec2::new(0.2, h);
-                d.line(hinge, hinge + DVec2::Y * *width, LineStyle::Projection, None);
-                d.arc(hinge, *width, std::f64::consts::FRAC_PI_2, 0.0, LineStyle::Thin, None);
+                let leaf = width / door_hinges.len().max(1) as f64;
+                for &(at, toward) in door_hinges {
+                    let hinge = o + DVec2::new(0.2 + at * width, h);
+                    let a1 = if toward > 0.0 { 0.0 } else { std::f64::consts::PI };
+                    d.line(hinge, hinge + DVec2::Y * leaf, LineStyle::Projection, None);
+                    d.arc(hinge, leaf, std::f64::consts::FRAC_PI_2, a1, LineStyle::Thin, None);
+                }
             }
             _ if opening.is_some() => {
                 let h = 0.075;

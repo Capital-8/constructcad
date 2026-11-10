@@ -686,9 +686,14 @@ fn draw_openings(
         let side = if host.flip_facing { -1.0 } else { 1.0 };
         match e.kind {
             ElementKind::Door(_) if !ceiling => {
-                let (hinge_u, toward) = if host.flip_hand { (o.u1, -1.0) } else { (o.u0, 1.0) };
-                let arc = LineStyle::Thin;
-                swing(d, g, (o.u0 + o.u1) * 0.5, (hinge_u, toward), (width, arc, scale), side, id);
+                // A swing per leaf: a double door's two meet in the middle.
+                let hinges = opening.map(|o| o.door_operation).unwrap_or_default().hinges();
+                let leaf = width / hinges.len().max(1) as f64;
+                for &(at, toward) in hinges {
+                    let (at, toward) = if host.flip_hand { (1.0 - at, -toward) } else { (at, toward) };
+                    let hinge = (o.u0 + at * width, toward);
+                    swing(d, g, (o.u0 + o.u1) * 0.5, hinge, (leaf, LineStyle::Thin, scale), side, id);
+                }
             }
             ElementKind::Window(_) => {
                 let operation = opening.map(|o| o.operation).unwrap_or_default();

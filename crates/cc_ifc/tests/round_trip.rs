@@ -994,6 +994,76 @@ fn window_operations_round_trip() {
     }
 }
 
+/// Doors keep how their leaves swing (#249): `IfcDoor` and `IfcDoorType`
+/// carry the operation type (a flipped single door the other hand) and the
+/// type its `IfcDoorPanelProperties`; import reads them back into a project
+/// that has no such door type, flipping the hand of the mirrored one.
+#[test]
+fn door_operations_round_trip() {
+    use cc_core::{Document, DoorOperation, Hosted, Wall};
+    let mut doc = Document::new(Project::from_template());
+    let doors = [("Porta 80x210", false), ("Porta-janela 80x220", true), ("Porta-janela 2 folhas 140x220", false)];
+    doc.edit("doors", |e| {
+        let level = e.project().levels[0].id;
+        let add = |e: &mut cc_core::EditCtx, type_id, kind| {
+            let id = cc_core::ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        };
+        let wall_type = e.project().default_type(Category::Wall).unwrap();
+        let wall = Wall { start: DVec2::new(0.0, 0.0), end: DVec2::new(12.0, 0.0), ..Default::default() };
+        let host = add(e, wall_type, ElementKind::Wall(wall));
+        for (i, (name, flip_hand)) in doors.iter().enumerate() {
+            let ty = e.project().types_of(Category::Door).find(|t| t.name == *name).unwrap().id;
+            let at = Hosted {
+                host,
+                offset: 2.0 + 3.0 * i as f64,
+                sill_height: 0.0,
+                flip_facing: false,
+                flip_hand: *flip_hand,
+            };
+            add(e, ty, ElementKind::Door(at));
+        }
+    });
+    let original = doc.project;
+    let text =
+        export(&original, &ExportOptions { time_stamp: Some("2026-01-01T00:00:00".into()), file_name: "t.ifc".into() });
+    let doors_with = |op: &str| text.lines().filter(|l| l.contains("IFCDOOR(") && l.contains(op)).count();
+    assert_eq!(doors_with(".SINGLE_SWING_LEFT."), 1, "the plain door");
+    assert_eq!(doors_with(".SINGLE_SWING_RIGHT."), 1, "the flipped French door");
+    assert_eq!(doors_with(".DOUBLE_DOOR_SINGLE_SWING."), 1, "the double French door");
+    let types_with = |op: &str| text.lines().filter(|l| l.contains("IFCDOORTYPE(") && l.contains(op)).count();
+    assert_eq!(types_with(".DOUBLE_DOOR_SINGLE_SWING."), 1);
+    assert_eq!(types_with(".SINGLE_SWING_LEFT."), 2, "the plain and the French door");
+    assert!(!text.lines().any(|l| l.contains("IFCDOORTYPE(") && l.contains(".SINGLE_SWING_RIGHT.")));
+    // A panel per leaf of every door type placed: a plain door, a French door and a double one.
+    assert_eq!(text.matches("IFCDOORPANELPROPERTIES(").count(), 4);
+    assert!(text.contains(".SWINGING."));
+    let mut base = Project::from_template();
+    base.types.retain(|_, t| t.category() != Category::Door);
+    let (imported, _) = import(&text, base).unwrap();
+    let lookup = by_uid(&imported);
+    for e in original.elements.values().filter(|e| e.category() == Category::Door) {
+        let i = lookup.get(&e.uid).unwrap();
+        let (a, b) = (original.element_type(e.type_id).unwrap(), imported.element_type(i.type_id).unwrap());
+        assert_eq!(b.door_operation(), a.door_operation(), "{}", a.name);
+        assert_eq!(b.opening_size(), a.opening_size());
+        assert_eq!(i.as_hosted().map(|h| h.flip_hand), e.as_hosted().map(|h| h.flip_hand), "{}", a.name);
+    }
+    assert!(imported.types_of(Category::Door).any(|t| t.door_operation() == DoorOperation::DoubleDoor));
+}
+
 /// Occurrences of an IFC type whose name a different project type has
 /// import as one renamed type, not one type each (#247), and the types an
 /// import adds keep unique uids.

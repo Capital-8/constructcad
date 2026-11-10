@@ -802,22 +802,22 @@ fn the_showcase_macro_builds_its_project() {
     assert_eq!([count(&mut s, "wall"), count(&mut s, "door"), count(&mut s, "room")], [13, 5, 5]);
     assert!(count(&mut s, "rebar") > 0 && count(&mut s, "pipe") > 0 && count(&mut s, "conduit") > 0);
     let get = |s: &mut Session, id: u64| run(s, "element_get", json!({"id": id}));
-    assert!(get(&mut s, 102)["params"]["bulge"].as_f64().unwrap() > 0.0, "the arc wall");
+    assert!(get(&mut s, 104)["params"]["bulge"].as_f64().unwrap() > 0.0, "the arc wall");
     // Its strip footing follows the arc (#22).
     let foundations = run(&mut s, "elements_list", json!({"category": "foundation"}));
     let ids: Vec<u64> = foundations.as_array().unwrap().iter().map(|f| f["id"].as_u64().unwrap()).collect();
     assert!(ids.iter().any(|&f| get(&mut s, f)["params"]["shape"]["Strip"]["bulge"].as_f64().is_some_and(|b| b > 0.0)));
-    assert!(get(&mut s, 121)["params"]["shape"]["Hip"].is_object(), "the hip roof");
-    assert_eq!(get(&mut s, 99)["phase_demolished"]["id"], 86, "the demolished partition");
-    assert_eq!(get(&mut s, 252)["type"]["id"], 62, "the distribution board");
+    assert!(get(&mut s, 123)["params"]["shape"]["Hip"].is_object(), "the hip roof");
+    assert_eq!(get(&mut s, 101)["phase_demolished"]["id"], 86, "the demolished partition");
+    assert_eq!(get(&mut s, 254)["type"]["id"], 62, "the distribution board");
     let views = run(&mut s, "views_list", json!({}));
     let view = |id: u64| views.as_array().unwrap().iter().find(|v| v["id"] == id).map(|v| v["name"].clone());
-    assert_eq!(view(339), Some(json!("Board diagram")));
-    assert_eq!(view(347), Some(json!("3D North-east")));
-    let loads = run(&mut s, "circuit_loads", json!({"panel": 252}));
+    assert_eq!(view(341), Some(json!("Board diagram")));
+    assert_eq!(view(349), Some(json!("3D North-east")));
+    let loads = run(&mut s, "circuit_loads", json!({"panel": 254}));
     assert!(loads.to_string().contains("Kitchen and bath outlets"));
-    for filter in [346, 348] {
-        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 345}))["count"].as_u64().unwrap() > 0);
+    for filter in [348, 350] {
+        assert!(run(&mut s, "filter_elements", json!({"filter": filter, "view": 347}))["count"].as_u64().unwrap() > 0);
     }
 }
 
