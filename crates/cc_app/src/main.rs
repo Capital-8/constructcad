@@ -36,6 +36,7 @@ mod library;
 mod line_styles_dialog;
 mod lps_cabling_ui;
 mod material_browser;
+mod mcp_bridge;
 mod modify;
 mod modify3d;
 mod obj_ui;
@@ -78,10 +79,14 @@ mod view3d;
 mod view_cube;
 
 fn main() -> eframe::Result<()> {
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(args) = mcp_bridge::mcp_args(&raw) {
+        std::process::exit(mcp_bridge::run(args));
+    }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     // Panics are logged to the crash log (release builds on Windows have no console).
     recovery::install_panic_hook();
-    let args = parse_args(std::env::args().skip(1));
+    let args = parse_args(raw.into_iter());
     let viewport = egui::ViewportBuilder::default()
         .with_inner_size([1440.0, 900.0])
         .with_min_inner_size([900.0, 600.0])
@@ -147,9 +152,20 @@ fn parse_args(args: impl Iterator<Item = String>) -> app::Args {
             "--view" => out.views.extend(args.next()),
             "--graph" => out.graph = args.next().map(std::path::PathBuf::from),
             "--lang" => out.language = args.next().and_then(|c| i18n::Language::from_code(&c)),
+            // An unknown option is not a project path.
+            _ if arg.starts_with("--") => log::warn!("unknown option {arg}"),
             _ if out.path.is_none() => out.path = Some(std::path::PathBuf::from(arg)),
             _ => {}
         }
     }
     out
+}
+
+#[cfg(test)]
+mod args_tests {
+    #[test]
+    fn unknown_options_are_not_project_paths() {
+        let args = super::parse_args(["--stdio", "house.ccad", "--lang", "en"].into_iter().map(String::from));
+        assert_eq!(args.path, Some(std::path::PathBuf::from("house.ccad")));
+    }
 }

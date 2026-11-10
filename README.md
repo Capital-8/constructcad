@@ -183,7 +183,7 @@ To use it from an MCP client (Claude Desktop, Claude Code, IDEs), register `ccad
 { "mcpServers": { "constructcad": { "command": "ccad", "args": ["mcp"] } } }
 ```
 
-or, in Claude Code, `claude mcp add constructcad -- ccad mcp`. One project is open per server session (`project_open`, `project_new`, `ifc_import`, `project_save`).
+or, in Claude Code, `claude mcp add constructcad -- ccad mcp`. On Windows, if `ccad` is not on the client's PATH, use its full path, by default `C:\Program Files\ConstructCraft\ccad.exe` (see [MCP server](docs/automation.md#mcp-server)). One project is open per server session (`project_open`, `project_new`, `ifc_import`, `project_save`).
 
 The desktop app runs on the same commands: its drawing tools, property panel and dialogs change the model through the engine. *Manage → Macros* records what you do as a macro (a script of commands, saved as `.ccmacro`) and plays macros back; `ccad script` runs the same files.
 

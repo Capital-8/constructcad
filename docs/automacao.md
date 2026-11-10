@@ -529,6 +529,18 @@ claude mcp add constructcad -- ccad mcp -p /caminho/para/casa.ccad
 }
 ```
 
+No Windows, o `ccad.exe` é instalado ao lado do aplicativo, por padrão em `C:\Program Files\ConstructCraft` (no JSON as barras invertidas são dobradas):
+
+```json
+{
+  "mcpServers": {
+    "constructcad": { "command": "C:\\Program Files\\ConstructCraft\\ccad.exe", "args": ["mcp", "--lang", "pt-BR"] }
+  }
+}
+```
+
+A opção *Add ccad to the PATH* do instalador (marcada por padrão) permite que os clientes achem só `ccad`, mas apenas clientes abertos depois da instalação enxergam o PATH novo; o caminho completo sempre funciona. Apontado para o próprio aplicativo (`constructcraft mcp` ou `constructcraft --mcp`), o cliente recebe o mesmo servidor: o aplicativo executa o `ccad` ao lado dele, na mesma entrada e saída padrão.
+
 Exemplos de pedidos que um agente resolve com essas ferramentas: *"abra casa.ccad, liste as portas sem marca e numere-as"*, *"importe modelo.ifc e diga o volume das paredes de concreto"*, *"crie um pavimento superior 3 m acima do térreo com as mesmas paredes externas"*, *"exporte a folha A101 em PDF"*.
 
 Observações:

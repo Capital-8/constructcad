@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- An MCP client pointed at the app (`constructcraft mcp` or `--mcp`) gets the MCP server instead of a window that never answers (#265): the app runs the `ccad` next to it on the same standard input and output, or exits with a message when it is missing; unknown options are no longer taken for a project path. The automation guide and the README give the full path of `ccad.exe` on Windows for clients that do not see it on the PATH.
 - IFC import no longer makes one type per element when an IFC type shares its name with a different project type (#247): the type it adds (`<name> (IFC)`) is reused by the following occurrences, a type that already carries the IFC type's GlobalId is reused, and types made from one IFC type with occurrences of different sizes keep unique ids.
 - A property set back to its empty value in the properties palette or a dialog now changes (#225): a plan's *Underlay → Plan below/above* set back to *None* went back to the level it had, and the same happened to any value returning to none, an empty list or off (an option of a view, a type or an element). The edit now clears what it leaves out.
 - The properties palette and the view template manager now set a plan's *Underlay → Plan below/above* back to *None* (#235). The fix for #225 covered the generic property edits, but these two send the underlay through their own patch, which left a cleared plan out (and failed when both were cleared); they now clear it the same way.
