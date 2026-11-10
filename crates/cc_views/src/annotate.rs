@@ -162,7 +162,8 @@ pub fn structure_tags(
                     continue;
                 };
                 let outline = cc_geom::column_outline(project, data, c.position, c.rotation_deg);
-                let hi = outline.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
+                // A section that fails has no outline: tag the column's point.
+                let hi = outline.iter().fold(c.position, |a, p| a.max(*p));
                 let p = hi + DVec2::splat(1.0 * mm);
                 let half = text_half(&text, 2.5, 0.0, mm);
                 let offset = place_tag(d, offsets, e.id, p + half, half, c.position);
@@ -486,5 +487,67 @@ mod tests {
             dimension_layout(&dim((0.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Ordinate { dir: DVec2::X }), 50)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn a_column_whose_profile_fails_is_tagged_at_its_point() {
+        use cc_core::structural_profile::{ProfileDef, ProfileMaterial, ProfileShape};
+        use cc_core::{Category, Column, Document, Element, ElementId, ProfileId, WallTop};
+        let mut p = Project::from_template();
+        // A root radius that does not fit: the profile has no outline.
+        let shape = ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.0056, tf: 0.0085, r: 0.5 };
+        assert!(shape.outline().is_err());
+        let pid = ProfileId(p.alloc_id());
+        let def = ProfileDef {
+            id: pid,
+            uid: Default::default(),
+            name: "Broken".into(),
+            material: ProfileMaterial::Steel,
+            shape,
+            catalog: None,
+            description: String::new(),
+        };
+        p.profiles.insert(pid, def);
+        let type_id = p.default_type(Category::Column).unwrap();
+        if let Some(TypeData::Column { profile, .. }) = p.types.get_mut(&type_id).map(|t| &mut t.data) {
+            *profile = Some(pid);
+        }
+        let level = p.levels[0].id;
+        let mut doc = Document::new(p);
+        doc.edit("column", |e| {
+            let id = ElementId(e.alloc_id());
+            let column = Column {
+                position: DVec2::new(1.0, 2.0),
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: WallTop::Unconnected,
+                structural: true,
+            };
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: "P1".into(),
+                comments: String::new(),
+                kind: ElementKind::Column(column),
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        });
+        assert!(doc.project.type_section(&doc.project.types[&type_id].data).is_none());
+        let geom = ModelGeometry::build(&doc.project);
+        let mut d = Drawing2D::default();
+        structure_tags(&mut d, &doc.project, &geom, level, 50, &TagOffsets::new());
+        let texts: Vec<DVec2> = d
+            .prims
+            .iter()
+            .filter_map(|p| if let crate::Prim::Text { pos, .. } = p { Some(*pos) } else { None })
+            .collect();
+        assert!(!texts.is_empty(), "the column is tagged");
+        assert!(texts.iter().all(|p| p.is_finite()), "{texts:?}");
     }
 }

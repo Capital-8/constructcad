@@ -552,7 +552,8 @@ impl ModelGeometry {
                 (ElementKind::Column(c), Some(data @ TypeData::Column { .. })) if c.structural => {
                     columns.push(ColumnInput {
                         element: e.id,
-                        outline: column_outline(project, data, c.position, c.rotation_deg),
+                        // Beams frame into the hull: the box of an I, C or L.
+                        outline: polygon::convex_hull(&column_outline(project, data, c.position, c.rotation_deg)),
                         z_range: project.column_span(e, c),
                     });
                 }

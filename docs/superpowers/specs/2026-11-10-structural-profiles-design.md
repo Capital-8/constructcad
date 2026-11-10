@@ -95,7 +95,7 @@ Each row is a designation plus the shape's dimensions taken from public dimensio
 
 ### Geometry — `cc_geom::section`
 
-`column_parts`/`column_loops` and the beam builder take the profile outline instead of `ColumnSection`/`SectionShape`. The section's rotation and mirror apply. Beam joins in `beam.rs` keep using the section's bounding box.
+`column_parts`/`column_loops` and the beam builder take the profile outline instead of `ColumnSection`/`SectionShape`. The section's rotation and mirror apply. Beam joins in `beam.rs` use the convex hull of the placed section.
 
 Detail levels:
 - **Coarse**: bounding rectangle in plans and sections, a single line for cold-formed sections.

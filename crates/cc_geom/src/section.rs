@@ -114,6 +114,9 @@ pub fn column_loops(section: ColumnSection, position: DVec2, rotation_deg: f64) 
 /// of an arc, drawn as one smooth surface.
 const SMOOTH_TURN_DEG: f64 = 30.0;
 
+/// A smooth side is at most this many times as long as its shorter neighbor.
+const SMOOTH_LENGTH_RATIO: f64 = 2.0;
+
 /// The section of a column or beam type at a detail level: Fine the outline
 /// with radii, Medium without (arcs replaced by their chords' corners:
 /// rebuild the profile with r/ri/ro = 0), Coarse its bounding rectangle.
@@ -145,16 +148,28 @@ pub fn column_body(section: &SectionOutline, position: DVec2, rotation_deg: f64)
 }
 
 /// Whether each side of a closed ring (from point `i` to `i + 1`) is a facet
-/// of an arc: the ring turns by less than [`SMOOTH_TURN_DEG`] at both ends.
+/// of an arc: the ring turns by less than [`SMOOTH_TURN_DEG`] at both ends,
+/// and the side is at most [`SMOOTH_LENGTH_RATIO`] times as long as the
+/// shorter of its neighbors (so a long flat side between two fillets stays
+/// flat).
 pub fn smooth_sides(ring: &[DVec2]) -> Vec<bool> {
     let n = ring.len();
     if n < 3 {
         return vec![false; n];
     }
-    let dir = |i: usize| (ring[(i + 1) % n] - ring[i % n]).normalize_or_zero();
+    let side = |i: usize| ring[(i + 1) % n] - ring[i % n];
+    let dir = |i: usize| side(i).normalize_or_zero();
+    let len = |i: usize| side(i).length();
     let gentle =
         |a: DVec2, b: DVec2| a != DVec2::ZERO && b != DVec2::ZERO && a.dot(b) > SMOOTH_TURN_DEG.to_radians().cos();
-    (0..n).map(|i| gentle(dir(i + n - 1), dir(i)) && gentle(dir(i), dir(i + 1))).collect()
+    (0..n)
+        .map(|i| {
+            let (prev, next) = (i + n - 1, i + 1);
+            gentle(dir(prev), dir(i))
+                && gentle(dir(i), dir(next))
+                && len(i) <= SMOOTH_LENGTH_RATIO * len(prev).min(len(next))
+        })
+        .collect()
 }
 
 /// Add a column body from `base` to `top` to `s`; the sides of a `curved`
@@ -311,5 +326,21 @@ mod tests {
         assert_eq!(smooth_sides(&rect), vec![false; 4]);
         let circle = circle(1.0);
         assert!(smooth_sides(&circle).iter().all(|s| *s));
+        // The long flat sides between an IPE's fillets (its web) stay flat.
+        let ring = &section.outline.outer;
+        let flags = smooth_sides(ring);
+        let longest = (0..ring.len())
+            .max_by(|&a, &b| {
+                let l = |i: usize| ring[i].distance(ring[(i + 1) % ring.len()]);
+                l(a).total_cmp(&l(b))
+            })
+            .unwrap();
+        assert!(!flags[longest], "the web side is flat");
+        assert!(flags.iter().any(|s| *s), "the fillet facets are smooth");
+        // A round tube is smooth all round, outside and in.
+        use cc_core::structural_profile::ProfileShape;
+        let tube = ProfileShape::RoundTube { d: 0.2, t: 0.01 }.outline().unwrap();
+        assert!(smooth_sides(&tube.outer).iter().all(|s| *s));
+        assert!(tube.holes.iter().all(|h| smooth_sides(h).iter().all(|s| *s)));
     }
 }
