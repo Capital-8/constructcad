@@ -22,9 +22,13 @@ const FRAME: f64 = 0.05;
 pub struct OpeningNames {
     pub door: String,
     pub window: String,
-    /// The template's side-hung windows: one panel and two.
+    /// The components of windows that open (see [`Self::window_for`]).
     pub casement: String,
     pub double_casement: String,
+    pub top_hung: String,
+    pub pivot_horizontal: String,
+    pub pivot_vertical: String,
+    pub sliding: String,
     pub width: String,
     pub height: String,
     pub sill: String,
@@ -59,6 +63,10 @@ impl OpeningNames {
             window: n("tpl-comp-window"),
             casement: n("tpl-comp-window-casement"),
             double_casement: n("tpl-comp-window-double"),
+            top_hung: n("tpl-comp-window-top-hung"),
+            pivot_horizontal: n("tpl-comp-window-pivot-h"),
+            pivot_vertical: n("tpl-comp-window-pivot-v"),
+            sliding: n("tpl-comp-window-sliding"),
             width: param("tpl-param-width"),
             height: param("tpl-param-height"),
             sill: param("tpl-param-sill"),
@@ -67,6 +75,21 @@ impl OpeningNames {
             sash: n("tpl-piece-sash"),
             glass: n("tpl-piece-glass"),
             sill_board: n("tpl-piece-sill-board"),
+        }
+    }
+}
+
+impl OpeningNames {
+    /// The component of windows that open as `operation` says.
+    pub fn window_for(&self, operation: WindowOperation) -> &String {
+        match operation {
+            WindowOperation::Fixed => &self.window,
+            WindowOperation::SideHungLeft | WindowOperation::SideHungRight => &self.casement,
+            WindowOperation::DoubleSideHung => &self.double_casement,
+            WindowOperation::TopHung => &self.top_hung,
+            WindowOperation::PivotHorizontal => &self.pivot_horizontal,
+            WindowOperation::PivotVertical => &self.pivot_vertical,
+            WindowOperation::Sliding => &self.sliding,
         }
     }
 }
@@ -157,8 +180,10 @@ pub fn window_def(names: &OpeningNames, width: f64, height: f64, sill: f64, mate
 }
 
 /// A window whose panels open as `operation` says: [`window_def`] with,
-/// for two panels, a stile where they meet and a pane in each.
-pub fn casement_window_def(
+/// for two side-hung panels, a stile where they meet and a pane in each,
+/// and for sliding ones two panels on either side of the wall's middle,
+/// overlapping by a stile.
+pub fn operable_window_def(
     names: &OpeningNames,
     (width, height, sill): (f64, f64, f64),
     material: &str,
@@ -168,19 +193,36 @@ pub fn casement_window_def(
     if let Some(o) = def.opening.as_mut() {
         o.operation = operation;
     }
-    if operation == WindowOperation::DoubleSideHung {
-        let (w, h) = (&names.width, &names.height);
-        let s = |text: &str| text.replace("{W}", w).replace("{H}", h).replace("{F}", &FRAME.to_string());
-        def.items.retain(|i| i.name != names.glass);
-        def.items.push(piece(
-            &names.sash,
-            "",
-            [s("-{F}"), s("-0.04"), s("{F}"), s("2 * {F}"), s("0.08"), s("{H} - 2 * {F}")],
-        ));
-        for x in [s("-{W} / 2 + {F}"), s("{F}")] {
-            let pane = [x, s("-0.006"), s("{F}"), s("{W} / 2 - 2 * {F}"), s("0.012"), s("{H} - 2 * {F}")];
-            def.items.push(piece(&names.glass, material, pane));
+    let (w, h) = (&names.width, &names.height);
+    let s = |text: &str| text.replace("{W}", w).replace("{H}", h).replace("{F}", &FRAME.to_string());
+    let tall = s("{H} - 2 * {F}");
+    match operation {
+        WindowOperation::DoubleSideHung => {
+            def.items.retain(|i| i.name != names.glass);
+            let stile = [s("-{F}"), s("-0.04"), s("{F}"), s("2 * {F}"), s("0.08"), tall.clone()];
+            def.items.push(piece(&names.sash, "", stile));
+            for x in [s("-{W} / 2 + {F}"), s("{F}")] {
+                let pane = [x, s("-0.006"), s("{F}"), s("{W} / 2 - 2 * {F}"), s("0.012"), tall.clone()];
+                def.items.push(piece(&names.glass, material, pane));
+            }
         }
+        WindowOperation::Sliding => {
+            def.items.retain(|i| i.name != names.glass);
+            // Each panel is half the inner width plus half a stile, on its own track.
+            for (stiles, glass_x, track) in [
+                ([s("-{W} / 2 + {F}"), s("-{F} / 2")], s("-{W} / 2 + 2 * {F}"), -0.035),
+                ([s("-{F} / 2"), s("{W} / 2 - 2 * {F}")], s("{F} / 2"), 0.005),
+            ] {
+                for x in stiles {
+                    let stile = [x, track.to_string(), s("{F}"), s("{F}"), "0.03".into(), tall.clone()];
+                    def.items.push(piece(&names.sash, "", stile));
+                }
+                let y = (track + 0.009).to_string();
+                let pane = [glass_x, y, s("{F}"), s("{W} / 2 - 5 * {F} / 2"), "0.012".into(), tall.clone()];
+                def.items.push(piece(&names.glass, material, pane));
+            }
+        }
+        _ => {}
     }
     def
 }
@@ -231,16 +273,22 @@ mod tests {
     fn casement_windows_resolve_and_map_to_ifc_panels() {
         let names = names();
         for op in WindowOperation::ALL {
-            let def = casement_window_def(&names, (1.2, 1.2, 1.0), "Vidro", op);
+            let def = operable_window_def(&names, (1.2, 1.2, 1.0), "Vidro", op);
             let (parts, errors) = def.resolve_in(&Default::default(), &[(WALL_THICKNESS, 0.15)]);
             assert!(errors.is_empty(), "{op:?}: {errors:?}");
             let panes = def.items.iter().filter(|i| i.name == names.glass).count();
-            assert_eq!(panes, if op == WindowOperation::DoubleSideHung { 2 } else { 1 });
+            let two = matches!(op, WindowOperation::DoubleSideHung | WindowOperation::Sliding);
+            assert_eq!(panes, if two { 2 } else { 1 });
             assert!(!parts.is_empty());
             assert_eq!(def.opening.as_ref().map(|o| o.operation), Some(op));
             let panels: Vec<&str> = op.ifc_panels().iter().map(|(o, _)| *o).collect();
             assert_eq!(WindowOperation::from_ifc_panels(&panels), Some(op));
-            assert_eq!(op.hinges().len(), if op == WindowOperation::Fixed { 0 } else { panels.len() });
+            let side_hung = matches!(
+                op,
+                WindowOperation::SideHungLeft | WindowOperation::SideHungRight | WindowOperation::DoubleSideHung
+            );
+            assert_eq!(op.hinges().len(), if side_hung { panels.len() } else { 0 });
+            assert_eq!(op.elevation_lines(1.2, 1.2).is_empty(), op == WindowOperation::Fixed);
         }
         assert_eq!(WindowOperation::from_ifc_panels(&["TILTANDTURNLEFTHAND"]), None);
         // Fixed windows keep files as they were: no operation is written.

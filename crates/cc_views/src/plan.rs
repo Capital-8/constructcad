@@ -130,7 +130,7 @@ pub fn plan_of(
         if let Some(g) = geom.walls.get(&e.id) {
             draw_wall(&mut d, project, g, cut_z, spacing, detail);
             if !structural {
-                draw_openings(&mut d, project, geom, g, ceiling, detail);
+                draw_openings(&mut d, project, geom, g, (ceiling, cut_z), (detail, scale));
             }
         }
     }
@@ -660,8 +660,8 @@ fn draw_openings(
     project: &Project,
     geom: &ModelGeometry,
     g: &WallGeom,
-    ceiling: bool,
-    detail: DetailLevel,
+    (ceiling, cut_z): (bool, f64),
+    (detail, scale): (DetailLevel, u32),
 ) {
     for o in &g.openings {
         let Some(e) = project.element(o.element) else { continue };
@@ -687,22 +687,42 @@ fn draw_openings(
         match e.kind {
             ElementKind::Door(_) if !ceiling => {
                 let (hinge_u, toward) = if host.flip_hand { (o.u1, -1.0) } else { (o.u0, 1.0) };
-                swing(d, g, (o.u0 + o.u1) * 0.5, (hinge_u, toward), width, side, id);
+                let arc = LineStyle::Thin;
+                swing(d, g, (o.u0 + o.u1) * 0.5, (hinge_u, toward), (width, arc, scale), side, id);
             }
             ElementKind::Window(_) => {
-                for v in [-0.01, 0.01] {
-                    d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Thin, id);
+                let operation = opening.map(|o| o.operation).unwrap_or_default();
+                // A window above the cut is seen from below through the wall: dashed, jambs too.
+                if !ceiling && o.z0 > cut_z {
+                    for v in [-0.01, 0.01] {
+                        d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Hidden, id);
+                    }
+                    for u in [o.u0, o.u1] {
+                        d.line(g.world(u, -g.half), g.world(u, g.half), LineStyle::Hidden, id);
+                    }
+                    continue;
+                }
+                if operation == cc_core::WindowOperation::Sliding {
+                    // Two panels on their tracks, overlapping in the middle.
+                    let (mid, lap) = ((o.u0 + o.u1) * 0.5, SLIDING_LAP.min(width / 4.0));
+                    let (first, second) = if host.flip_hand { (0.02, -0.02) } else { (-0.02, 0.02) };
+                    d.polyline(&g.path(o.u0, mid + lap, first), false, LineStyle::Thin, id);
+                    d.polyline(&g.path(mid - lap, o.u1, second), false, LineStyle::Thin, id);
+                } else {
+                    for v in [-0.01, 0.01] {
+                        d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Thin, id);
+                    }
                 }
                 if ceiling {
                     continue;
                 }
                 // Side-hung panels, open square to the wall on the side the window opens to.
-                let operation = opening.map(|o| o.operation).unwrap_or_default();
                 let hinges = operation.hinges();
                 let leaf = width / hinges.len().max(1) as f64;
                 for &(at, toward) in hinges {
                     let (at, toward) = if host.flip_hand { (1.0 - at, -toward) } else { (at, toward) };
-                    swing(d, g, (o.u0 + o.u1) * 0.5, (o.u0 + at * width, toward), leaf, side, id);
+                    let hinge = (o.u0 + at * width, toward);
+                    swing(d, g, (o.u0 + o.u1) * 0.5, hinge, (leaf, LineStyle::Hidden, scale), side, id);
                 }
             }
             _ => {}
@@ -710,16 +730,19 @@ fn draw_openings(
     }
 }
 
+/// How far the panels of a sliding window overlap past the middle in plan, meters.
+const SLIDING_LAP: f64 = 0.05;
+
 /// A swing in plan: a leaf `width` long from the hinge at `hinge_u` on the
 /// wall's face on `side`, square to the wall at `center_u` (an arc wall's
-/// chord), and the arc its free end runs back to the wall `toward` the
-/// opening's other end (+1 along the wall).
+/// chord), and the arc (in style `arc`: windows dash it) its free end runs
+/// back to the wall `toward` the opening's other end (+1 along the wall).
 fn swing(
     d: &mut Drawing2D,
     g: &WallGeom,
     center_u: f64,
     (hinge_u, toward): (f64, f64),
-    width: f64,
+    (width, arc, scale): (f64, LineStyle, u32),
     side: f64,
     id: Option<cc_core::ElementId>,
 ) {
@@ -734,7 +757,11 @@ fn swing(
     } else if a0 - a1 > PI {
         a1 += TAU;
     }
-    d.arc(hinge, width, a0, a1, LineStyle::Thin, id);
+    if arc.dashes().is_empty() {
+        d.arc(hinge, width, a0, a1, arc, id);
+    } else {
+        d.dashed_arc(hinge, width, (a0, a1), arc, id, scale);
+    }
 }
 
 fn ceiling_grid(d: &mut Drawing2D, boundary: &[DVec2], id: cc_core::ElementId) {

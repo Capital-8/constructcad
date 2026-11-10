@@ -1676,12 +1676,8 @@ impl<'a> Importer<'a> {
                 || {
                     let names = cc_core::openings::OpeningNames::default();
                     let def =
-                        cc_core::openings::casement_window_def(&names, (width, height, sill), &material, operation);
-                    let component = match operation {
-                        WindowOperation::Fixed => names.window,
-                        WindowOperation::DoubleSideHung => names.double_casement,
-                        _ => names.casement,
-                    };
+                        cc_core::openings::operable_window_def(&names, (width, height, sill), &material, operation);
+                    let component = names.window_for(operation).clone();
                     TypeData::Component { component, def }
                 },
             );

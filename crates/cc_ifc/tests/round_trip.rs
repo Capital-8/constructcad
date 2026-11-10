@@ -933,7 +933,13 @@ fn site_location_round_trips() {
 fn window_operations_round_trip() {
     use cc_core::{Document, Hosted, Wall, WindowOperation};
     let mut doc = Document::new(Project::from_template());
-    let names = ["Janela 120x120", "Janela de abrir 60x100", "Janela de abrir 2 folhas 120x120"];
+    let names = [
+        "Janela 120x120",
+        "Janela de abrir 60x100",
+        "Janela de abrir 2 folhas 120x120",
+        "Janela maxim-ar 60x60",
+        "Janela de correr 150x120",
+    ];
     doc.edit("windows", |e| {
         let level = e.project().levels[0].id;
         let add = |e: &mut cc_core::EditCtx, type_id, kind| {
@@ -953,7 +959,7 @@ fn window_operations_round_trip() {
             })
         };
         let wall_type = e.project().default_type(Category::Wall).unwrap();
-        let wall = Wall { start: DVec2::new(0.0, 0.0), end: DVec2::new(10.0, 0.0), ..Default::default() };
+        let wall = Wall { start: DVec2::new(0.0, 0.0), end: DVec2::new(16.0, 0.0), ..Default::default() };
         let host = add(e, wall_type, ElementKind::Wall(wall));
         for (i, name) in names.iter().enumerate() {
             let ty = e.project().types_of(Category::Window).find(|t| t.name == *name).unwrap().id;
@@ -965,10 +971,17 @@ fn window_operations_round_trip() {
     let original = doc.project;
     let text =
         export(&original, &ExportOptions { time_stamp: Some("2026-01-01T00:00:00".into()), file_name: "t.ifc".into() });
-    for literal in [".FIXEDCASEMENT.", ".SIDEHUNGLEFTHAND.", ".SIDEHUNGRIGHTHAND.", ".DOUBLE_PANEL_VERTICAL."] {
+    for literal in [
+        ".FIXEDCASEMENT.",
+        ".SIDEHUNGLEFTHAND.",
+        ".SIDEHUNGRIGHTHAND.",
+        ".TOPHUNG.",
+        ".SLIDINGHORIZONTAL.",
+        ".DOUBLE_PANEL_VERTICAL.",
+    ] {
         assert!(text.contains(literal), "{literal}");
     }
-    assert_eq!(text.matches("IFCWINDOWPANELPROPERTIES(").count(), 4);
+    assert_eq!(text.matches("IFCWINDOWPANELPROPERTIES(").count(), 7);
     let mut base = Project::from_template();
     base.types.retain(|_, t| t.window_operation() == WindowOperation::Fixed);
     let (imported, _) = import(&text, base).unwrap();

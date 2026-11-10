@@ -532,10 +532,41 @@ pub enum WindowOperation {
     SideHungRight,
     /// Two panels hinged on either jamb, meeting in the middle.
     DoubleSideHung,
+    /// One panel hinged at its head, projecting out at the bottom.
+    TopHung,
+    /// One panel turning about a horizontal axis at mid height.
+    PivotHorizontal,
+    /// One panel turning about a vertical axis in the middle.
+    PivotVertical,
+    /// Two panels sliding past each other along the wall.
+    Sliding,
+}
+
+/// A line of a window's elevation symbol: its ends `(x, z)` and how it is drawn.
+pub type SymbolSegment = ((f64, f64), (f64, f64), SymbolLine);
+
+/// How a line of a window's elevation symbol is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolLine {
+    /// The opening direction (dashed).
+    Opening,
+    /// A pivot axis (dash-dot).
+    Axis,
+    /// A plain thin line (a sliding panel's arrow).
+    Plain,
 }
 
 impl WindowOperation {
-    pub const ALL: [Self; 4] = [Self::Fixed, Self::SideHungLeft, Self::SideHungRight, Self::DoubleSideHung];
+    pub const ALL: [Self; 8] = [
+        Self::Fixed,
+        Self::SideHungLeft,
+        Self::SideHungRight,
+        Self::DoubleSideHung,
+        Self::TopHung,
+        Self::PivotHorizontal,
+        Self::PivotVertical,
+        Self::Sliding,
+    ];
 
     pub fn is_fixed(&self) -> bool {
         *self == Self::Fixed
@@ -548,6 +579,10 @@ impl WindowOperation {
             Self::SideHungLeft => "window-op-left",
             Self::SideHungRight => "window-op-right",
             Self::DoubleSideHung => "window-op-double",
+            Self::TopHung => "window-op-top-hung",
+            Self::PivotHorizontal => "window-op-pivot-h",
+            Self::PivotVertical => "window-op-pivot-v",
+            Self::Sliding => "window-op-sliding",
         }
     }
 
@@ -559,13 +594,17 @@ impl WindowOperation {
             Self::SideHungLeft => &[("SIDEHUNGLEFTHAND", "MIDDLE")],
             Self::SideHungRight => &[("SIDEHUNGRIGHTHAND", "MIDDLE")],
             Self::DoubleSideHung => &[("SIDEHUNGLEFTHAND", "LEFT"), ("SIDEHUNGRIGHTHAND", "RIGHT")],
+            Self::TopHung => &[("TOPHUNG", "MIDDLE")],
+            Self::PivotHorizontal => &[("PIVOTHORIZONTAL", "MIDDLE")],
+            Self::PivotVertical => &[("PIVOTVERTICAL", "MIDDLE")],
+            Self::Sliding => &[("SLIDINGHORIZONTAL", "LEFT"), ("SLIDINGHORIZONTAL", "RIGHT")],
         }
     }
 
     /// The IFC partitioning of a window type with these panels.
     pub fn ifc_partitioning(self) -> &'static str {
-        match self {
-            Self::DoubleSideHung => "DOUBLE_PANEL_VERTICAL",
+        match self.ifc_panels().len() {
+            2 => "DOUBLE_PANEL_VERTICAL",
             _ => "SINGLE_PANEL",
         }
     }
@@ -573,24 +612,62 @@ impl WindowOperation {
     /// The operation of IFC panels (operations in order along the window);
     /// `None` for combinations it has no value for.
     pub fn from_ifc_panels(panels: &[&str]) -> Option<Self> {
-        match panels {
-            ["FIXEDCASEMENT"] => Some(Self::Fixed),
-            ["SIDEHUNGLEFTHAND"] => Some(Self::SideHungLeft),
-            ["SIDEHUNGRIGHTHAND"] => Some(Self::SideHungRight),
-            ["SIDEHUNGLEFTHAND", "SIDEHUNGRIGHTHAND"] => Some(Self::DoubleSideHung),
-            _ => None,
-        }
+        Self::ALL.into_iter().find(|op| op.ifc_panels().iter().map(|(o, _)| *o).eq(panels.iter().copied()))
     }
 
     /// The hinges in plan: for each side-hung panel, where its hinge stands
     /// as a fraction of the opening's width from its start, and which way
-    /// along the wall the panel closes (+1 towards the end). Fixed: none.
+    /// along the wall the panel closes (+1 towards the end). Others: none.
     pub fn hinges(self) -> &'static [(f64, f64)] {
         match self {
-            Self::Fixed => &[],
             Self::SideHungLeft => &[(0.0, 1.0)],
             Self::SideHungRight => &[(1.0, -1.0)],
             Self::DoubleSideHung => &[(0.0, 1.0), (1.0, -1.0)],
+            _ => &[],
+        }
+    }
+
+    /// The lines of its elevation symbol on an opening `width` wide and
+    /// `height` tall, as `(x, z)` from its bottom left (the start of the
+    /// opening along the wall): the opening direction as a triangle whose
+    /// apex points at the hinge or the axis, pivot axes running past the
+    /// frame, and a sliding window's arrows.
+    pub fn elevation_lines(self, width: f64, height: f64) -> Vec<SymbolSegment> {
+        use SymbolLine::{Axis, Opening, Plain};
+        let (w, h) = (width, height);
+        let past = (0.1 * w.min(h)).min(0.15);
+        let vee = |from: (f64, f64), apex: (f64, f64), to: (f64, f64)| [(from, apex, Opening), (apex, to, Opening)];
+        match self {
+            Self::Fixed => Vec::new(),
+            Self::SideHungLeft => vee((w, h), (0.0, h / 2.0), (w, 0.0)).to_vec(),
+            Self::SideHungRight => vee((0.0, h), (w, h / 2.0), (0.0, 0.0)).to_vec(),
+            Self::DoubleSideHung => {
+                let mut lines = vee((w / 2.0, h), (0.0, h / 2.0), (w / 2.0, 0.0)).to_vec();
+                lines.extend(vee((w / 2.0, h), (w, h / 2.0), (w / 2.0, 0.0)));
+                lines
+            }
+            Self::TopHung => vee((0.0, 0.0), (w / 2.0, h), (w, 0.0)).to_vec(),
+            Self::PivotHorizontal => vec![
+                ((0.0, 0.0), (w, h), Opening),
+                ((0.0, h), (w, 0.0), Opening),
+                ((-past, h / 2.0), (w + past, h / 2.0), Axis),
+            ],
+            Self::PivotVertical => {
+                let mut lines = vec![((w / 2.0, -past), (w / 2.0, h + past), Axis)];
+                lines.extend(vee((w, h), (w / 2.0, h / 2.0), (w, 0.0)));
+                lines
+            }
+            Self::Sliding => {
+                let (z, head) = (h / 2.0, (0.25 * past).max(0.01));
+                let mut lines = Vec::new();
+                for (from, to) in [(0.0, -past), (w, w + past)] {
+                    let back = if to > from { -head } else { head };
+                    lines.push(((from, z), (to, z), Plain));
+                    lines.push(((to, z), (to + back, z + head), Plain));
+                    lines.push(((to, z), (to + back, z - head), Plain));
+                }
+                lines
+            }
         }
     }
 }
