@@ -73,7 +73,7 @@ All lengths are in meters. Field names follow the usual section notation:
 - `ProfileDef::outline() -> Result<SectionOutline, ProfileError>` returns the outline and its openings in meters, centered on the centroid. Arcs are chorded at `ARC_STEP`. Errors are values: a non-closed or crossing outline, thicknesses that do not fit, or a bad expression. The outline is bounded by `MAX_POINTS`, `MAX_OPENINGS` and `MIN_THICKNESS`.
 - `ProfileDef::properties(density)` returns `SectionProperties`: area, linear mass, centroid, Ix, Iy, Wx, Wy, rx, ry, approximate J and painted perimeter. They are computed by polygon (Green's theorem) integration over the outline and openings. Tests check them against closed-form formulas.
 - Types: `TypeData::Column` and `TypeData::Beam` gain `profile: Option<ProfileId>`, `profile_rotation_deg` and `profile_mirror` (serde defaults). When `profile` is set, it replaces `section`/`shape`.
-- Migration (format 27): each distinct `ColumnSection`/`SectionShape` + size becomes one profile (deduplicated, named after the type's section), and the types point to it. Old fields are still read but no longer written.
+- Migration (format 27): each distinct `ColumnSection`/`SectionShape` + size becomes one profile (deduplicated, named after the type's section), and the types point to it. Old fields stay in files as the profile's bounding box, kept in step by `sync_profiles`, so code that only needs a size keeps working; geometry, properties and IFC read the profile through `Project::type_section`.
 - Repair (`repair_profiles`):
   - drops profiles whose outline fails;
   - fixes duplicate names and ids;

@@ -794,8 +794,84 @@ impl<'a> EditCtx<'a> {
         &mut self.project.units
     }
 
+    /// Column and beam types with a profile keep their legacy section as the
+    /// profile's bounding box (a legacy section that is exactly the profile
+    /// stays as it is); types whose profile is gone drop the reference and
+    /// keep the box. Runs when this edit touched settings (profiles live
+    /// there) or a column or beam type, and writes only what changes.
+    fn sync_profiles(&mut self) {
+        const TOL: f64 = 1e-9;
+        let settings = self.tx.settings.is_some();
+        let ids: Vec<ElementTypeId> = self
+            .project
+            .types
+            .values()
+            .filter(|t| {
+                matches!(
+                    t.data,
+                    crate::TypeData::Column { profile: Some(_), .. } | crate::TypeData::Beam { profile: Some(_), .. }
+                ) && (settings || self.tx.types.contains_key(&t.id))
+            })
+            .map(|t| t.id)
+            .collect();
+        for id in ids {
+            let Some(data) = self.project.types.get(&id).map(|t| &t.data) else { continue };
+            let gone = match data {
+                crate::TypeData::Column { profile: Some(p), .. } | crate::TypeData::Beam { profile: Some(p), .. } => {
+                    self.project.profile(*p).is_none()
+                }
+                _ => continue,
+            };
+            if gone {
+                if let Some(crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. }) =
+                    self.type_mut(id).map(|t| &mut t.data)
+                {
+                    *profile = None;
+                }
+                continue;
+            }
+            if self.project.legacy_is_profile(data) {
+                continue;
+            }
+            let Some(section) = self.project.type_section(data) else { continue };
+            let (lo, hi) = section.outline.bbox();
+            let size = hi - lo;
+            if !(size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0) {
+                continue;
+            }
+            let rewrite = match data {
+                crate::TypeData::Column { section, .. } => {
+                    !matches!(section, crate::ColumnSection::Rectangular { width, depth }
+                        if (width - size.x).abs() < TOL && (depth - size.y).abs() < TOL)
+                }
+                crate::TypeData::Beam { width, height, shape, .. } => {
+                    *shape != crate::SectionShape::Solid
+                        || (width - size.x).abs() >= TOL
+                        || (height - size.y).abs() >= TOL
+                }
+                _ => false,
+            };
+            if !rewrite {
+                continue;
+            }
+            match self.type_mut(id).map(|t| &mut t.data) {
+                Some(crate::TypeData::Column { section, .. }) => {
+                    *section = crate::ColumnSection::Rectangular { width: size.x, depth: size.y };
+                }
+                Some(crate::TypeData::Beam { width, height, shape, .. }) => {
+                    *width = size.x;
+                    *height = size.y;
+                    *shape = crate::SectionShape::Solid;
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Fill in "after" states and drop no-op entries.
     fn finish(mut self) -> Transaction {
+        // Legacy sections follow their profiles first, so what reads them below sees the new size.
+        self.sync_profiles();
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_shafts();
         self.sync_pads();

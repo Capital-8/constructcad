@@ -2331,7 +2331,7 @@ impl<'a> Importer<'a> {
             fallback,
             uid,
             |d| matches!(d, TypeData::Column { section, .. } if same(section)),
-            || TypeData::Column { section, material },
+            || TypeData::Column { section, material, profile: None, profile_rotation_deg: 0.0, profile_mirror: false },
         );
         let column = Column {
             position: center,
@@ -2739,7 +2739,7 @@ impl<'a> Importer<'a> {
             format!("{:.0} x {:.0}", width * 100.0, height * 100.0),
             uid,
             |d| matches!(d, TypeData::Beam { width: a, height: b, shape: SectionShape::Solid, .. } if (a - width).abs() < TYPE_TOL && (b - height).abs() < TYPE_TOL),
-            || TypeData::Beam { width, height, material, shape: SectionShape::Solid },
+            || TypeData::Beam { width, height, material, shape: SectionShape::Solid, profile: None, profile_rotation_deg: 0.0, profile_mirror: false },
         );
         let beam = Beam::new(start, end, z1 - elevation);
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Beam(beam));

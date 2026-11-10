@@ -301,11 +301,20 @@ impl Project {
                 TypeData::Column {
                     section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
                     material: n("tpl-mat-concrete"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
                 &n("tpl-type-column-round"),
-                TypeData::Column { section: ColumnSection::Round { diameter: 0.3 }, material: n("tpl-mat-concrete") },
+                TypeData::Column {
+                    section: ColumnSection::Round { diameter: 0.3 },
+                    material: n("tpl-mat-concrete"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
+                },
             ),
             (
                 &n("tpl-type-beam"),
@@ -314,6 +323,9 @@ impl Project {
                     height: 0.4,
                     material: n("tpl-mat-concrete"),
                     shape: SectionShape::Solid,
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -325,6 +337,9 @@ impl Project {
                         shape: SectionShape::I { web: 0.009, flange: 0.015 },
                     },
                     material: n("tpl-mat-steel"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -336,6 +351,9 @@ impl Project {
                         shape: SectionShape::Tube { wall: 0.006 },
                     },
                     material: n("tpl-mat-steel"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -345,6 +363,9 @@ impl Project {
                     height: 0.3,
                     material: n("tpl-mat-steel"),
                     shape: SectionShape::I { web: 0.0071, flange: 0.0107 },
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (&n("tpl-type-rebar-5"), TypeData::Rebar { diameter: 0.005, material: n("tpl-mat-steel") }),
@@ -488,6 +509,8 @@ impl Project {
         p.ensure_phases(&n);
         p.add_french_doors(&names, &n);
         p.ensure_uids();
+        // Last, so the ids of everything above stay as they were.
+        p.convert_sections_to_profiles(&n);
         p
     }
 
@@ -567,6 +590,9 @@ impl Project {
                 TypeData::Column {
                     section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
                     material: template_default("tpl-mat-concrete").to_string(),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -577,6 +603,9 @@ impl Project {
                     height: 0.4,
                     material: template_default("tpl-mat-concrete").to_string(),
                     shape: SectionShape::Solid,
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (

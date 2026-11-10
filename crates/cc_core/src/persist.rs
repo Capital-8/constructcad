@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 26;
+pub const FORMAT_VERSION: u32 = 27;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
@@ -68,7 +68,8 @@ pub fn from_ron_with_repairs_localized(
     // (older files: the standard title block on every sheet); version 23 adds
     // design options (older files have none, everything in the main model);
     // version 24 adds material textures and painted faces (older files have none);
-    // version 25 adds custom fill patterns (older files have none).
+    // version 25 adds custom fill patterns (older files have none); version 27 adds
+    // structural profiles (older files: one per distinct column and beam section).
     let mut project = file.project;
     if file.format_version < 11 {
         project.ensure_phases(&|key| crate::project::template_default(key).to_string());
@@ -82,6 +83,11 @@ pub fn from_ron_with_repairs_localized(
     }
     project.ensure_uids();
     project.ensure_annotation_types();
+    // After repair, so types whose profile was gone get one again, and after
+    // the annotation types, which may add a column or beam type.
+    project.convert_sections_to_profiles(&|k| {
+        translate(k).unwrap_or_else(|| crate::project::template_default(k).to_string())
+    });
     Ok((project, repairs))
 }
 
@@ -279,6 +285,40 @@ mod tests {
         let (q, repairs) = from_ron_with_repairs(&old).unwrap();
         assert_eq!(q.element(id).unwrap().kind, ElementKind::Foundation(strip(0.0)));
         assert_eq!(repairs, 0);
+    }
+
+    #[test]
+    fn format_26_sections_load_as_profiles() {
+        let mut p = Project::from_template();
+        for t in p.types.values_mut() {
+            if let crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. } = &mut t.data {
+                *profile = None;
+            }
+        }
+        p.profiles.clear();
+        let text = to_ron(&p).unwrap().replacen("format_version: 27", "format_version: 26", 1);
+        let back = from_ron(&text).unwrap();
+        assert!(!back.profiles.is_empty());
+        assert!(back.types.values().all(|t| !matches!(
+            t.data,
+            crate::TypeData::Column { profile: None, .. } | crate::TypeData::Beam { profile: None, .. }
+        )));
+    }
+
+    #[test]
+    fn dangling_profile_reference_is_repaired() {
+        let mut p = Project::from_template();
+        p.profiles.clear();
+        let text = to_ron(&p).unwrap();
+        let (back, repairs) = from_ron_with_repairs(&text).unwrap();
+        assert!(repairs > 0);
+        for t in back.types.values() {
+            if let crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. } = &t.data {
+                let id = profile.expect("re-converted to a profile");
+                assert!(back.profile(id).is_some());
+                assert!(back.type_section(&t.data).is_some());
+            }
+        }
     }
 
     #[test]
