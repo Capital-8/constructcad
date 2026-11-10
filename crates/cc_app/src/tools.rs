@@ -811,10 +811,14 @@ pub(crate) fn snap_at(
 const SNAP_PX: f64 = 10.0;
 
 /// Snap features of the imported drawings and detail lines shown in the
-/// active view near `raw`.
-fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
+/// active view near `raw`, and of the lines of its underlay (the other
+/// levels' plans drawn under it).
+pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
     let mut out = cc_core::cad::CadSnap::default();
     let Some(view) = state.active_view else { return out };
+    if let Some(drawing) = state.drawing(view) {
+        underlay_snap(&drawing, raw, r, &mut out);
+    }
     let ids: Vec<ElementId> = state
         .project()
         .elements
@@ -848,6 +852,21 @@ fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad::CadSnap {
         }
     }
     out
+}
+
+/// Lines of `drawing`'s underlay passing within `r` of `raw`, with their
+/// ends and midpoints (the underlay has no arcs: plans draw them as chords).
+pub(crate) fn underlay_snap(drawing: &Drawing2D, raw: DVec2, r: f64, out: &mut cc_core::cad::CadSnap) {
+    let Some(under) = drawing.prims.get(..drawing.underlay) else { return };
+    for prim in under {
+        let cc_views::Prim::Line { a, b, .. } = prim else { continue };
+        if a.distance(*b) < 1e-9 || polygon::closest_on_segment(*a, *b, raw).0.distance(raw) > r {
+            continue;
+        }
+        out.ends.extend([*a, *b]);
+        out.mids.push((*a + *b) * 0.5);
+        out.lines.push((*a, *b));
+    }
 }
 
 /// Increment for rounding free coordinates at the current zoom.
@@ -1178,11 +1197,11 @@ pub(crate) fn label(painter: &Painter, pos: Pos2, text: String) {
 }
 
 /// Color of temporary dimensions.
-const TEMP_DIM: Color32 = Color32::from_rgb(40, 110, 200);
+pub(crate) const TEMP_DIM: Color32 = Color32::from_rgb(40, 110, 200);
 
 /// Text on a light background, centered at `pos` and rotated by `angle`
 /// (radians, screen orientation), kept upright.
-fn dim_text(painter: &Painter, pos: Pos2, text: String, angle: f32, strong: bool) {
+pub(crate) fn dim_text(painter: &Painter, pos: Pos2, text: String, angle: f32, strong: bool) {
     let angle =
         if angle.abs() > std::f32::consts::FRAC_PI_2 { angle - angle.signum() * std::f32::consts::PI } else { angle };
     let font =
@@ -3262,22 +3281,37 @@ fn hosted_tool(
     let Some(ty) = project.element_type(type_id) else { return };
     let Some((width, _)) = ty.opening_size() else { return };
     let sill = ty.default_sill();
-    let Some((host, u, v)) = wall_under(project, state.session.geom(), level, raw, 12.0 / xf.scale) else {
+    // Some reach off the wall, to aim at marks of a drawing beside it (issue #251).
+    let Some((host, u, v)) = wall_under(project, state.session.geom(), level, raw, 30.0 / xf.scale) else {
         painter.circle_stroke(xf.to_screen(raw), 4.0, Stroke::new(1.0, Color32::GRAY));
         return;
     };
-    let g = &state.session.geom().walls[&host];
-    let Some(offset) = opening_offset(g, width, u) else {
+    let r = SNAP_PX / xf.scale;
+    let features = cad_snap(state, raw, width * 0.5 + 2.0 * r);
+    let Some(g) = state.session.geom().walls.get(&host) else { return };
+    let Some(placed) = crate::opening_place::place(g, width, (u, v), &features, r, &state.typed) else {
         label(painter, xf.to_screen(raw), t!("msg-wall-too-short"));
         return;
     };
+    let offset = placed.offset;
     let flip_facing = v < 0.0;
+    let side = if flip_facing { -1.0 } else { 1.0 };
+    crate::opening_place::paint_dimensions(painter, xf, g, offset, side, &state.typed);
+    if let Some(s) = placed.snapped {
+        let at = match s.part {
+            crate::opening_place::Part::Center => offset,
+            crate::opening_place::Part::StartEdge => offset - width * 0.5,
+            crate::opening_place::Part::EndEdge => offset + width * 0.5,
+        };
+        let line = [xf.to_screen(s.point), xf.to_screen(g.world(at, 0.0))];
+        painter.extend(egui::Shape::dashed_line(&line, Stroke::new(1.0, TEMP_DIM), 4.0, 3.0));
+        draw_snap(painter, xf, Snap::plain(s.point, true));
+    }
     let (u0, u1) = (offset - width * 0.5, offset + width * 0.5);
     let rect = g.outline((u0, u1), (u0, u1));
     let pts: Vec<Pos2> = rect.iter().map(|p| xf.to_screen(*p)).collect();
     painter.add(egui::Shape::closed_line(pts, Stroke::new(2.0, PREVIEW)));
     if category == Category::Door {
-        let side = if flip_facing { -1.0 } else { 1.0 };
         let hinge_u = if state.interaction.flip_hand { u1 } else { u0 };
         let hinge = g.world(hinge_u, side * g.half);
         let normal = g.normal_at(offset);
@@ -3286,10 +3320,19 @@ fn hosted_tool(
             Stroke::new(1.5, PREVIEW),
         );
     }
-    label(painter, xf.to_screen(raw), format!("{} {}", t!("label-offset"), format::meters(offset)));
+    if placed.outside {
+        label(painter, xf.to_screen(raw), t!("msg-opening-past-wall-end"));
+    }
 
-    if resp.clicked() {
+    // A click, or Enter after a typed distance (issue #250).
+    let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !state.typed.is_empty();
+    if resp.clicked() || enter {
+        if placed.outside {
+            state.message = t!("msg-opening-past-wall-end");
+            return;
+        }
         let flip_hand = state.interaction.flip_hand;
+        state.typed.clear();
         create_opening(state, category, type_id, host, offset, sill, flip_facing, flip_hand);
     }
 }
@@ -3297,8 +3340,7 @@ fn hosted_tool(
 /// Center of an opening `width` wide near `u` along wall `g`, kept inside
 /// the wall (`None` when the wall is too short).
 fn opening_offset(g: &cc_geom::WallGeom, width: f64, u: f64) -> Option<f64> {
-    let margin = 0.01;
-    (g.length >= width + 2.0 * margin).then(|| u.clamp(width * 0.5 + margin, g.length - width * 0.5 - margin))
+    crate::opening_place::center_range(g, width).map(|(lo, hi)| u.clamp(lo, hi))
 }
 
 #[allow(clippy::too_many_arguments)]

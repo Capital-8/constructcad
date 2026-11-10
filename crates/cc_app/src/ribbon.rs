@@ -1140,6 +1140,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Hosted { .. } => {
                 ui.checkbox(&mut state.interaction.flip_hand, t!("prop-flip-hand"));
                 ui.label(theme::muted(t!("hint-hosted")));
+                ui.label(theme::muted(t!("hint-hosted-distance")));
             }
             Tool::Sketch { .. } => crate::sketch_mode::options(ui, state),
             Tool::Section => {
