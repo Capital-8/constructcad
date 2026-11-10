@@ -482,8 +482,39 @@ impl Project {
         let tb = p.add_standard_title_block(&n);
         p.give_sheets_title_block(tb);
         p.ensure_phases(&n);
+        p.add_french_doors(&names, &n);
         p.ensure_uids();
         p
+    }
+
+    /// The template's French doors (glazed, from the floor), of one leaf
+    /// and of two, shown in its legend. Added last, so the ids of what came
+    /// before stay as they were.
+    fn add_french_doors(&mut self, names: &crate::openings::OpeningNames, n: &dyn Fn(&str) -> String) {
+        use crate::DoorOperation as D;
+        let (wood, glass) = (n("tpl-mat-wood"), n("tpl-mat-glass"));
+        let mut added = Vec::new();
+        for (key, size, op) in [
+            ("tpl-type-french-door-80", (0.8, 2.2), D::SingleSwingLeft),
+            ("tpl-type-french-door-double-140", (1.4, 2.2), D::DoubleDoor),
+        ] {
+            let def = crate::openings::french_door_def(
+                names,
+                (size.0, size.1, crate::openings::BOTTOM_RAIL),
+                (&wood, &glass),
+                op,
+            );
+            let data = TypeData::Component { component: names.door_for(op, true).clone(), def };
+            let id = ElementTypeId(self.alloc_id());
+            self.types
+                .insert(id, ElementType { id, name: n(key), data, info: Default::default(), uid: Default::default() });
+            added.push(id);
+        }
+        for view in self.views.values_mut() {
+            if let ViewKind::Legend { types } = &mut view.kind {
+                types.extend(added.iter().copied());
+            }
+        }
     }
 
     /// Add the standard title block type (named by `n`) and return its id.
@@ -1249,6 +1280,12 @@ pub fn template_default(key: &str) -> &'static str {
         "tpl-type-window-top-hung-60" => "Janela maxim-ar 60x60",
         "tpl-type-window-sliding-150" => "Janela de correr 150x120",
         "tpl-comp-door" => "Porta de giro",
+        "tpl-comp-door-double" => "Porta de giro 2 folhas",
+        "tpl-comp-french-door" => "Porta-janela",
+        "tpl-comp-french-door-double" => "Porta-janela 2 folhas",
+        "tpl-param-bottom-rail" => "Rodapé",
+        "tpl-type-french-door-80" => "Porta-janela 80x220",
+        "tpl-type-french-door-double-140" => "Porta-janela 2 folhas 140x220",
         "tpl-conn-sewer" => "Esgoto",
         "tpl-conn-cold-water" => "Água fria",
         "tpl-conn-hot-water" => "Água quente",

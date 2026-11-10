@@ -18,6 +18,7 @@ pub mod design_options;
 pub mod detail;
 pub mod detail_component;
 pub mod devices;
+pub mod doors;
 pub mod edit;
 pub mod fill_patterns;
 pub mod foundation;

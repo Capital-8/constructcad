@@ -308,9 +308,12 @@ impl Command for TypeDelete {
 /// `plan_only: true` is a plan symbol (a door's swing), drawn in plans and
 /// not a solid. A `kind` of
 /// `Door` or `Window` with an `opening` {width, height, sill, own_symbol,
-/// operation} (expressions, then a window's `operation`: `Fixed`,
-/// `SideHungLeft`, `SideHungRight` or `DoubleSideHung`, drawn as swings in
-/// plans and written as IFC panel properties) makes a door or window type,
+/// operation, door_operation} (expressions, then a window's `operation`:
+/// `Fixed`, `SideHungLeft`, `SideHungRight` or `DoubleSideHung`, drawn as
+/// swings in plans and written as IFC panel properties, and a door's
+/// `door_operation`: `SingleSwingLeft` (default), `SingleSwingRight` or
+/// `DoubleDoor`, one swing per leaf in plans and the IFC operation type;
+/// `door_type_create` makes the built-in ones) makes a door or window type,
 /// placed with `door_create` or `window_create`: it cuts that opening in its
 /// wall; its frame has x along the wall from the opening's center, y across
 /// it (towards the side a door or window opens to), z up from the sill, and

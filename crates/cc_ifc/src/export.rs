@@ -1663,13 +1663,40 @@ impl<'a> Exporter<'a> {
                     }
                     base[5] = Value::List(sets);
                 }
+                // A native door's leaves: how they swing, on the type and as panel properties.
+                let door = (layout == TypeLayout::Door && def.ifc.is_none())
+                    .then(|| def.opening.as_ref().map(|o| o.door_operation))
+                    .flatten();
+                if let Some(op) = door {
+                    let mut sets: Vec<Value> = match std::mem::replace(&mut base[5], Value::Null) {
+                        Value::List(sets) => sets,
+                        _ => Vec::new(),
+                    };
+                    for (i, (position, share)) in op.ifc_panels().iter().enumerate() {
+                        let gid = self.guid(&format!("door-panel-{type_id}-{i}"));
+                        let args = args![
+                            gid,
+                            Value::Null,
+                            format!("Panel {}", i + 1),
+                            Value::Null,
+                            Value::Null,
+                            Value::Enum("SWINGING"),
+                            *share,
+                            Value::Enum(position),
+                            Value::Null
+                        ];
+                        sets.push(Value::Ref(self.w.add("IFCDOORPANELPROPERTIES", args)));
+                    }
+                    base[5] = Value::List(sets);
+                }
+                let door_operation = Value::Enum(door.map_or("NOTDEFINED", |op| op.ifc_operation()));
                 let partitioning = Value::Enum(operation.map_or("NOTDEFINED", |op| op.ifc_partitioning()));
                 let extra = match layout {
                     TypeLayout::Predefined => vec![predefined],
                     TypeLayout::Plain => Vec::new(),
                     // Furniture types also state where they are assembled.
                     TypeLayout::Furniture => vec![Value::Enum("NOTDEFINED"), predefined],
-                    TypeLayout::Door => vec![predefined, Value::Enum("NOTDEFINED"), Value::Null, Value::Null],
+                    TypeLayout::Door => vec![predefined, door_operation, Value::Null, Value::Null],
                     TypeLayout::Window => vec![predefined, partitioning, Value::Null, Value::Null],
                 };
                 (entity, extra)
@@ -2144,8 +2171,12 @@ impl<'a> Exporter<'a> {
         let mut attrs = self.element_args(e, fill_placement, shape);
         attrs.extend(args![type_h, type_w]);
         let (entity, set_name) = match e.kind {
-            ElementKind::Door(_) => {
-                attrs.extend(args![Value::Enum("DOOR"), Value::Enum("NOTDEFINED"), Value::Null]);
+            ElementKind::Door(ref host) => {
+                // The hand as placed: a flipped hand swaps it.
+                let operation = native_door(ty)
+                    .map(|op| if host.flip_hand { op.mirrored() } else { op })
+                    .map_or("NOTDEFINED", |op| op.ifc_operation());
+                attrs.extend(args![Value::Enum("DOOR"), Value::Enum(operation), Value::Null]);
                 ("IFCDOOR", "Qto_DoorBaseQuantities")
             }
             _ => {
@@ -2702,6 +2733,17 @@ impl WrittenClass {
         } else {
             Value::EnumName(self.value.clone())
         }
+    }
+}
+
+/// How the leaves of a native door type (one this program made, not an
+/// imported class) swing; `None` for anything else.
+fn native_door(ty: &cc_core::ElementType) -> Option<cc_core::DoorOperation> {
+    match &ty.data {
+        TypeData::Component { def, .. } if def.kind == cc_core::ComponentKind::Door && def.ifc.is_none() => {
+            def.opening.as_ref().map(|o| o.door_operation)
+        }
+        _ => None,
     }
 }
 

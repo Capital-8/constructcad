@@ -916,6 +916,16 @@ impl ElementType {
         }
     }
 
+    /// How the leaves of a door type swing (one leaf hinged on the left for anything else).
+    pub fn door_operation(&self) -> crate::DoorOperation {
+        match &self.data {
+            TypeData::Component { def, .. } if def.kind == crate::ComponentKind::Door => {
+                def.opening.as_ref().map(|o| o.door_operation).unwrap_or_default()
+            }
+            _ => crate::DoorOperation::SingleSwingLeft,
+        }
+    }
+
     /// Sill height of new elements of a door or window type.
     pub fn default_sill(&self) -> f64 {
         match &self.data {

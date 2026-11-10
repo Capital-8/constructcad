@@ -1251,7 +1251,7 @@ fn cores_match(layers: &[(f64, f64, String)], core: (f64, f64), host: &[(f64, f6
 
 /// The elevation symbol of door or window `e` in opening `o` of `wall`, on
 /// both faces: a window's by its operation, a swing door's (unless it draws
-/// its own symbol) as a side-hung panel hinged where its plan swing is.
+/// its own symbol) as side-hung panels hinged where its plan swings are.
 fn opening_symbols(
     project: &Project,
     e: &cc_core::Element,
@@ -1266,7 +1266,7 @@ fn opening_symbols(
     let (w, h) = (o.u1 - o.u0, o.z1 - o.z0);
     let (host, lines) = match &e.kind {
         ElementKind::Window(host) => (host, ty.window_operation().elevation_lines(w, h)),
-        ElementKind::Door(host) if !own_symbol => (host, cc_core::WindowOperation::SideHungLeft.elevation_lines(w, h)),
+        ElementKind::Door(host) if !own_symbol => (host, ty.door_operation().elevation_lines(w, h)),
         _ => return Vec::new(),
     };
     if lines.is_empty() || !(w > 0.0 && h > 0.0) {

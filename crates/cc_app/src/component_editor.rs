@@ -259,6 +259,7 @@ fn opening(ui: &mut Ui, ed: &mut Editor) {
             sill: String::new(),
             own_symbol: false,
             operation: Default::default(),
+            door_operation: Default::default(),
         })
     });
     let window = ed.def.kind == ComponentKind::Window;
@@ -289,6 +290,21 @@ fn opening(ui: &mut Ui, ed: &mut Editor) {
         });
     } else {
         o.operation = Default::default();
+    }
+    if ed.def.kind == ComponentKind::Door {
+        ui.horizontal(|ui| {
+            ui.label(theme::muted(t!("comp-door-operation"))).on_hover_text(t!("comp-door-operation-tip"));
+            egui::ComboBox::from_id_salt("comp-door-operation")
+                .selected_text(tr(o.door_operation.key()))
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for op in cc_core::DoorOperation::ALL {
+                        ui.selectable_value(&mut o.door_operation, op, tr(op.key()));
+                    }
+                });
+        });
+    } else {
+        o.door_operation = Default::default();
     }
     ui.label(theme::muted(t!("comp-opening-hint", "name" => cc_core::component::WALL_THICKNESS)).size(11.5));
 }

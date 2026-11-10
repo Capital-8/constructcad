@@ -514,6 +514,101 @@ pub struct HostOpening {
     /// the IFC panel properties.
     #[serde(default, skip_serializing_if = "WindowOperation::is_fixed")]
     pub operation: WindowOperation,
+    /// How a door's leaves swing (windows ignore it): the plan swings,
+    /// the elevation symbol and the IFC operation type.
+    #[serde(default, skip_serializing_if = "DoorOperation::is_single_left")]
+    pub door_operation: DoorOperation,
+}
+
+/// How the leaves of a swing door open, after IFC's door operation types:
+/// each leaf swings about a vertical hinge towards the side the door opens
+/// to, with the hand of [`WindowOperation`] (left is the start of the
+/// opening along the wall, swapped by the element's hand flip).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum DoorOperation {
+    /// One leaf hinged on the left.
+    #[default]
+    SingleSwingLeft,
+    /// One leaf hinged on the right.
+    SingleSwingRight,
+    /// Two leaves hinged on either jamb, meeting in the middle (a double door).
+    DoubleDoor,
+}
+
+impl DoorOperation {
+    pub const ALL: [Self; 3] = [Self::SingleSwingLeft, Self::SingleSwingRight, Self::DoubleDoor];
+
+    pub fn is_single_left(&self) -> bool {
+        *self == Self::SingleSwingLeft
+    }
+
+    /// The interface key of its name.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::SingleSwingLeft => "door-op-left",
+            Self::SingleSwingRight => "door-op-right",
+            Self::DoubleDoor => "door-op-double",
+        }
+    }
+
+    /// How many leaves the door has.
+    pub fn leaves(self) -> usize {
+        match self {
+            Self::DoubleDoor => 2,
+            _ => 1,
+        }
+    }
+
+    /// The window panels that open the same way (plan swings and elevation symbols are alike).
+    fn as_window(self) -> WindowOperation {
+        match self {
+            Self::SingleSwingLeft => WindowOperation::SideHungLeft,
+            Self::SingleSwingRight => WindowOperation::SideHungRight,
+            Self::DoubleDoor => WindowOperation::DoubleSideHung,
+        }
+    }
+
+    /// The same door with its hand swapped (a flipped element).
+    pub fn mirrored(self) -> Self {
+        match self {
+            Self::SingleSwingLeft => Self::SingleSwingRight,
+            Self::SingleSwingRight => Self::SingleSwingLeft,
+            Self::DoubleDoor => Self::DoubleDoor,
+        }
+    }
+
+    /// Its `IfcDoorTypeOperationEnum` value.
+    pub fn ifc_operation(self) -> &'static str {
+        match self {
+            Self::SingleSwingLeft => "SINGLE_SWING_LEFT",
+            Self::SingleSwingRight => "SINGLE_SWING_RIGHT",
+            Self::DoubleDoor => "DOUBLE_DOOR_SINGLE_SWING",
+        }
+    }
+
+    /// The operation of an IFC door operation type; `None` for those it has no value for.
+    pub fn from_ifc(operation: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|op| op.ifc_operation() == operation)
+    }
+
+    /// The leaves from the start of the opening: each one's IFC panel
+    /// position (`IfcDoorPanelPositionEnum`) and share of the width.
+    pub fn ifc_panels(self) -> &'static [(&'static str, f64)] {
+        match self {
+            Self::DoubleDoor => &[("LEFT", 0.5), ("RIGHT", 0.5)],
+            _ => &[("MIDDLE", 1.0)],
+        }
+    }
+
+    /// The hinges in plan, as [`WindowOperation::hinges`].
+    pub fn hinges(self) -> &'static [(f64, f64)] {
+        self.as_window().hinges()
+    }
+
+    /// The lines of its elevation symbol, as [`WindowOperation::elevation_lines`].
+    pub fn elevation_lines(self, width: f64, height: f64) -> Vec<SymbolSegment> {
+        self.as_window().elevation_lines(width, height)
+    }
 }
 
 /// How the panels of a window open, after IFC's window panel operations:

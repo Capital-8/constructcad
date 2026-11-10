@@ -11,7 +11,6 @@
 use crate::geometry::{Extrusion, Geometry, ProfileKind, Solid, affine, clean_loop};
 use crate::guid;
 use crate::parse::{Entity, Param, ParseError, StepFile, parse};
-use cc_core::WindowOperation;
 use cc_core::component::IfcClass;
 use cc_core::component::convex_hull;
 use cc_core::curtain::{CurtainEdits, CurtainPanel, CurtainSystem};
@@ -22,6 +21,7 @@ use cc_core::{
     LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, TypeData, Uid, View, ViewId,
     ViewKind, Wall, WallFunction, WallTop,
 };
+use cc_core::{DoorOperation, WindowOperation};
 use cc_core::{Foundation, FoundationKind, FoundationShape};
 use cc_geom::polygon;
 use glam::{DAffine3, DVec2, DVec3};
@@ -350,6 +350,14 @@ fn window_operation(d: &TypeData) -> WindowOperation {
     match d {
         TypeData::Component { def, .. } => def.opening.as_ref().map(|o| o.operation).unwrap_or_default(),
         _ => WindowOperation::Fixed,
+    }
+}
+
+/// How the leaves of a door type swing.
+fn door_operation(d: &TypeData) -> DoorOperation {
+    match d {
+        TypeData::Component { def, .. } => def.opening.as_ref().map(|o| o.door_operation).unwrap_or_default(),
+        _ => DoorOperation::SingleSwingLeft,
     }
 }
 
@@ -1227,6 +1235,26 @@ impl<'a> Importer<'a> {
         WindowOperation::from_ifc_panels(&operations).unwrap_or_default()
     }
 
+    /// How the leaves of door `e` (product `id`) swing, and whether it is
+    /// placed mirrored: the operation type of its type (`IfcDoorType`, or
+    /// an IFC2X3 `IfcDoorStyle`), else its own; a door whose own operation
+    /// is its type's with the other hand is that type flipped. Doors of
+    /// operations no [`DoorOperation`] stands for swing on the left.
+    fn door_operation(&self, id: u32, e: &Entity) -> (DoorOperation, bool) {
+        let typed = self.type_entity(id).and_then(|t| match t.name.as_str() {
+            "IFCDOORTYPE" => t.arg(10).as_enum(),
+            "IFCDOORSTYLE" => t.arg(8).as_enum(),
+            _ => None,
+        });
+        let typed = typed.and_then(DoorOperation::from_ifc);
+        let own = e.arg(11).as_enum().and_then(DoorOperation::from_ifc);
+        match (typed, own) {
+            (Some(t), Some(o)) => (t, o != t && o == t.mirrored()),
+            (Some(op), None) | (None, Some(op)) => (op, false),
+            (None, None) => (DoorOperation::SingleSwingLeft, false),
+        }
+    }
+
     fn type_uid(&self, id: u32) -> Option<Uid> {
         self.type_entity(id).and_then(|t| t.arg(0).as_str()).and_then(guid::decode).map(Uid)
     }
@@ -1671,17 +1699,21 @@ impl<'a> Importer<'a> {
         let same = move |w: f64, h: f64| (w - width).abs() < TYPE_TOL && (h - height).abs() < TYPE_TOL;
         let uid = self.type_uid(id);
         let fallback = format!("{:.0} x {:.0}", width * 100.0, height * 100.0);
+        let (operation, flip_hand) = if door { self.door_operation(id, e) } else { Default::default() };
         let (category, type_id) = if door {
             let type_id = self.find_or_add_type(
                 Category::Door,
                 name,
                 fallback,
                 uid,
-                |d| is_opening_type(d, Category::Door).is_some_and(|(w, h)| same(w, h)),
+                |d| {
+                    is_opening_type(d, Category::Door).is_some_and(|(w, h)| same(w, h))
+                        && door_operation(d) == operation
+                },
                 || {
                     let names = cc_core::openings::OpeningNames::default();
-                    let def = cc_core::openings::door_def(&names, width, height, &material);
-                    TypeData::Component { component: names.door, def }
+                    let def = cc_core::openings::operable_door_def(&names, (width, height), &material, operation);
+                    TypeData::Component { component: names.door_for(operation, false).clone(), def }
                 },
             );
             (Category::Door, type_id)
@@ -1706,7 +1738,7 @@ impl<'a> Importer<'a> {
             );
             (Category::Window, type_id)
         };
-        let hosted = Hosted { host, offset, sill_height: sill, flip_facing: false, flip_hand: false };
+        let hosted = Hosted { host, offset, sill_height: sill, flip_facing: false, flip_hand };
         let kind = if category == Category::Door { ElementKind::Door(hosted) } else { ElementKind::Window(hosted) };
         self.add_element(id, e, host_element.level, type_id, Self::tag(e), kind);
         true

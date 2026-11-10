@@ -153,6 +153,7 @@ registry![
         curtain::CurtainGridSet,
         curtain::CurtainPanelSet,
         create::DoorCreate,
+        doors::DoorTypeCreate,
         create::WindowCreate,
         create::FloorCreate,
         create::FloorOpeningAdd,
