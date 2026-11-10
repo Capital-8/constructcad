@@ -859,10 +859,13 @@ fn canvas(ui: &mut Ui, state: &mut AppState) {
             PALETTE.text_faint,
         );
     }
-    // Inline editors of input nodes (drawn over the canvas, so they get the clicks).
+    // Inline editors of input nodes (drawn over the canvas, so they get the clicks), only where the
+    // whole field shows: a widget past the canvas would make the panel grow to hold it.
     if view.zoom >= 0.6 {
         for (id, kind, field) in inline {
-            inline_editor(ui, state, id, &kind, field, view.zoom);
+            if rect.contains_rect(field) {
+                inline_editor(ui, state, id, &kind, field, view.zoom);
+            }
         }
     }
     search(ui, state, &view);
@@ -1457,4 +1460,12 @@ fn input_field(ui: &mut Ui, state: &mut AppState, node: &Node, port: &Port) {
 #[cfg(test)]
 pub(crate) fn open_search(state: &mut AppState, at: Pos2, screen: Pos2) {
     state.graph.search = Some(Search { at, screen, query: String::new(), focus: true });
+}
+
+#[cfg(test)]
+impl GraphEditor {
+    pub fn set_view_for_test(&mut self, zoom: f32, pan: Vec2) {
+        self.zoom = zoom;
+        self.pan = pan;
+    }
 }
