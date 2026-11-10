@@ -51,6 +51,8 @@ enum Value {
     Money(f64),
     /// Kilograms.
     Weight(f64),
+    /// Kilograms per meter.
+    LinearMass(f64),
     /// Volt-amperes.
     Power(f64),
     /// A plain quantity (fixture units).
@@ -69,6 +71,7 @@ impl Value {
             Value::Money(v) => Cell::Text(format::money(*v)),
             Value::Volume(v) => Cell::Text(format::volume(*v)),
             Value::Weight(v) => Cell::Text(format!("{} kg", format::number(*v, 2))),
+            Value::LinearMass(v) => Cell::Text(format!("{} kg/m", format::number(*v, 2))),
             Value::Power(v) => Cell::Text(format!("{} VA", format::number(*v, 0))),
             Value::Number(v) => Cell::Text(format::number(*v, 1)),
             Value::Missing => Cell::Text(String::new()),
@@ -83,6 +86,7 @@ impl Value {
             | Value::Volume(v)
             | Value::Money(v)
             | Value::Weight(v)
+            | Value::LinearMass(v)
             | Value::Power(v)
             | Value::Number(v) => Some(*v),
             _ => None,
@@ -109,6 +113,16 @@ fn compare(a: &Value, b: &Value) -> Ordering {
 
 fn text_of(v: &Value) -> String {
     v.cell().raw().to_string()
+}
+
+/// Mass per meter of a column or beam type: its section's area times the
+/// material's density. Empty when the material has no usable density.
+fn linear_mass(project: &Project, data: &TypeData) -> Value {
+    let (TypeData::Column { material, .. } | TypeData::Beam { material, .. }) = data else { return Value::Missing };
+    let density = project.material(material).and_then(|m| m.physical.density).filter(|d| d.is_finite() && *d > 0.0);
+    let (Some(density), Some(section)) = (density, project.type_section(data)) else { return Value::Missing };
+    let mass = section.outline.properties(density).linear_mass;
+    if mass.is_finite() && mass > 0.0 { Value::LinearMass(mass) } else { Value::Missing }
 }
 
 /// Whether a field's values add up in the totals row.
@@ -329,6 +343,14 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             }
             _ => Value::Missing,
         },
+        F::Profile => ty
+            .and_then(|t| match &t.data {
+                TypeData::Column { profile, .. } | TypeData::Beam { profile, .. } => profile.as_ref(),
+                _ => None,
+            })
+            .and_then(|id| project.profile(*id))
+            .map_or(Value::Missing, |p| Value::Text(p.name.clone())),
+        F::LinearMass => ty.map_or(Value::Missing, |t| linear_mass(project, &t.data)),
         F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
         F::Diameter => {

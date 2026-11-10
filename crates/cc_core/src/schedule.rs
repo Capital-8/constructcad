@@ -39,6 +39,10 @@ pub enum ScheduleField {
     ComponentKind,
     /// Section size of a column or beam.
     Section,
+    /// Name of the profile of a column or beam type.
+    Profile,
+    /// Mass per meter of a column or beam, kg/m.
+    LinearMass,
     /// Length of a beam's body after its joins.
     CutLength,
     /// Main material of the type.
@@ -123,6 +127,8 @@ impl ScheduleField {
             ScheduleField::ComponentName => "col-component",
             ScheduleField::ComponentKind => "col-component-kind",
             ScheduleField::Section => "col-section",
+            ScheduleField::Profile => "col-profile",
+            ScheduleField::LinearMass => "col-linear-mass",
             ScheduleField::CutLength => "col-cut-length",
             ScheduleField::Material => "col-material",
             ScheduleField::Diameter => "col-diameter",
@@ -183,8 +189,10 @@ impl ScheduleField {
                 F::FramingLength,
                 F::FramingVolume,
             ],
-            Category::Column => &[F::Section, F::Height, F::Volume, F::Material, F::Structural],
-            Category::Beam => &[F::Section, F::Length, F::CutLength, F::Volume, F::Material],
+            Category::Column => {
+                &[F::Section, F::Profile, F::LinearMass, F::Height, F::Volume, F::Material, F::Structural]
+            }
+            Category::Beam => &[F::Section, F::Profile, F::LinearMass, F::Length, F::CutLength, F::Volume, F::Material],
             Category::Foundation => &[F::Section, F::Length, F::Area, F::Thickness, F::Volume, F::Material],
             Category::Rebar => &[F::Host, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material],
             Category::Stair => &[F::Width, F::Risers, F::RiserHeight, F::Run, F::Volume],

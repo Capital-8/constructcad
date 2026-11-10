@@ -106,9 +106,17 @@ fn cm(meters: f64) -> String {
     if (v - v.round()).abs() < 1e-6 { format!("{v:.0}") } else { format!("{v:.1}") }
 }
 
-/// A section's size in centimeters (inches in imperial units): `15×40`, `Ø30`.
-pub fn section_label(data: &TypeData) -> Option<String> {
+/// A steel or cold-formed profile's name (`IPE 200`), else the section's size in
+/// centimeters (inches in imperial units): `15×40`, `Ø30`.
+pub fn section_label(project: &Project, data: &TypeData) -> Option<String> {
     use cc_core::ColumnSection as C;
+    use cc_core::structural_profile::ProfileMaterial as M;
+    if let TypeData::Column { profile: Some(id), .. } | TypeData::Beam { profile: Some(id), .. } = data
+        && let Some(def) = project.profile(*id)
+        && matches!(def.material, M::Steel | M::ColdFormed)
+    {
+        return Some(def.name.clone());
+    }
     Some(match data {
         TypeData::Beam { width, height, .. } => format!("{}×{}", cm(*width), cm(*height)),
         TypeData::Column { section: C::Round { diameter } | C::Pipe { diameter, .. }, .. } => {
@@ -138,7 +146,9 @@ pub fn structure_tags(
 ) {
     let mm = mm(scale);
     for e in project.elements.values().filter(|e| e.level == level) {
-        let Some(section) = project.element_type(e.type_id).and_then(|t| section_label(&t.data)) else { continue };
+        let Some(section) = project.element_type(e.type_id).and_then(|t| section_label(project, &t.data)) else {
+            continue;
+        };
         let text = if e.mark.is_empty() { section } else { format!("{} {section}", e.mark) };
         match &e.kind {
             ElementKind::Beam(_) => {

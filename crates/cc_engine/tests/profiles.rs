@@ -220,3 +220,42 @@ fn beams_with_w_profiles_meet_in_a_mitered_l() {
         2.0 * area * length
     );
 }
+
+/// The linear-mass cell of the only beam of a beams schedule.
+fn beam_schedule_cells(s: &mut Session) -> Vec<String> {
+    let schedule = run(s, "view_create", json!({"kind": "schedule", "category": "beam"}));
+    run(
+        s,
+        "view_set",
+        json!({"view": schedule["id"], "params": {"def": {"fields": ["Type", "Profile", "LinearMass"]}}}),
+    );
+    let table = run(s, "schedule_table", json!({"view": schedule["id"]}));
+    let rows = table["rows"].as_array().unwrap();
+    rows[0]["cells"].as_array().unwrap().iter().map(|c| c.to_string()).collect()
+}
+
+#[test]
+fn schedules_show_the_profile_and_its_linear_mass() {
+    let (mut s, _) = with_ipe_column_type();
+    let tid = add_beam_type(&mut s, W310);
+    // Give the beam type the template's steel.
+    let mut p = s.project().clone();
+    let steel = p.materials.iter().find(|m| m.identity.class == cc_core::MaterialClass::Metal).unwrap().name.clone();
+    let TypeData::Beam { material, .. } = &mut p.types.get_mut(&tid).unwrap().data else { panic!("not a beam") };
+    *material = steel.clone();
+    let mut s = Session::new(Document::new(p));
+    run(&mut s, "beam_create", json!({"type": tid.0, "start": [0.0, 0.0], "end": [4.0, 0.0]}));
+    // The template's steel has no density: nothing is guessed.
+    let cells = beam_schedule_cells(&mut s);
+    assert!(cells[1].contains("W 310x38.7"), "{cells:?}");
+    assert_eq!(cells[2], "\"\"", "{cells:?}");
+
+    let mut p = s.project().clone();
+    p.materials.iter_mut().find(|m| m.name == steel).unwrap().physical.density = Some(7850.0);
+    let mut s = Session::new(Document::new(p));
+    let cells = beam_schedule_cells(&mut s);
+    let expected = W310.outline().unwrap().properties(7850.0).linear_mass;
+    let shown = cells[2].trim_matches('"').trim_end_matches(" kg/m").replace(',', ".");
+    let got: f64 = shown.parse().unwrap_or_else(|_| panic!("{cells:?}"));
+    assert!((got - expected).abs() / expected < 0.01, "{got} vs {expected}");
+}
