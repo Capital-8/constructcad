@@ -41,6 +41,43 @@ fn catalog_is_well_formed() {
     }
 }
 
+/// The places in a schema that JSON Schema 2020-12 (which MCP clients and model APIs validate
+/// tool schemas against) rejects although draft 7 accepts them: `items` as an array (tuples) and
+/// `additionalItems`.
+fn not_2020_12(path: &str, v: &Value, found: &mut Vec<String>) {
+    match v {
+        Value::Object(o) => {
+            for (k, child) in o {
+                let at = format!("{path}/{k}");
+                // A `properties` map's keys are parameter names, not keywords.
+                if k != "properties"
+                    && ((k == "items" && !(child.is_object() || child.is_boolean())) || k == "additionalItems")
+                {
+                    found.push(at.clone());
+                }
+                not_2020_12(&at, child, found);
+            }
+        }
+        Value::Array(a) => {
+            for (i, child) in a.iter().enumerate() {
+                not_2020_12(&format!("{path}/{i}"), child, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Every parameter schema is valid under JSON Schema 2020-12 as well as draft 7, so MCP clients
+/// load every tool (tuples once made `curtain_grid_set` invalid).
+#[test]
+fn schemas_are_valid_under_2020_12() {
+    let mut found = Vec::new();
+    for c in catalog() {
+        not_2020_12(&c.name, &c.input_schema, &mut found);
+    }
+    assert!(found.is_empty(), "schemas 2020-12 rejects: {found:#?}");
+}
+
 /// Every command answers empty or wrong arguments with an error value, never a panic.
 #[test]
 fn every_command_survives_bad_arguments() {
