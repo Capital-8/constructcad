@@ -228,6 +228,10 @@ impl Project {
             component: names.window.clone(),
             def: crate::openings::window_def(&names, w, h, sill, m),
         };
+        let operable = |size: (f64, f64, f64), m: &str, op: crate::WindowOperation| TypeData::Component {
+            component: names.window_for(op).clone(),
+            def: crate::openings::operable_window_def(&names, size, m, op),
+        };
         let types = [
             (
                 &n("tpl-type-masonry-15"),
@@ -265,6 +269,22 @@ impl Project {
             (&n("tpl-type-door-90"), door(0.9, 2.1, &n("tpl-mat-wood"))),
             (&n("tpl-type-window-120"), window(1.2, 1.2, 1.0, &n("tpl-mat-glass"))),
             (&n("tpl-type-window-150"), window(1.5, 1.0, 1.1, &n("tpl-mat-glass"))),
+            (
+                &n("tpl-type-window-casement-60"),
+                operable((0.6, 1.0, 1.1), &n("tpl-mat-glass"), crate::WindowOperation::SideHungLeft),
+            ),
+            (
+                &n("tpl-type-window-double-120"),
+                operable((1.2, 1.2, 1.0), &n("tpl-mat-glass"), crate::WindowOperation::DoubleSideHung),
+            ),
+            (
+                &n("tpl-type-window-top-hung-60"),
+                operable((0.6, 0.6, 1.5), &n("tpl-mat-glass"), crate::WindowOperation::TopHung),
+            ),
+            (
+                &n("tpl-type-window-sliding-150"),
+                operable((1.5, 1.2, 1.0), &n("tpl-mat-glass"), crate::WindowOperation::Sliding),
+            ),
             (
                 &n("tpl-type-slab-12"),
                 TypeData::Floor {
@@ -1218,6 +1238,16 @@ pub fn template_default(key: &str) -> &'static str {
         "tpl-type-door-90" => "Porta 90x210",
         "tpl-type-window-120" => "Janela 120x120",
         "tpl-type-window-150" => "Janela 150x100",
+        "tpl-type-window-casement-60" => "Janela de abrir 60x100",
+        "tpl-type-window-double-120" => "Janela de abrir 2 folhas 120x120",
+        "tpl-comp-window-casement" => "Janela de abrir",
+        "tpl-comp-window-double" => "Janela de abrir 2 folhas",
+        "tpl-comp-window-top-hung" => "Janela maxim-ar",
+        "tpl-comp-window-pivot-h" => "Janela basculante",
+        "tpl-comp-window-pivot-v" => "Janela pivotante",
+        "tpl-comp-window-sliding" => "Janela de correr",
+        "tpl-type-window-top-hung-60" => "Janela maxim-ar 60x60",
+        "tpl-type-window-sliding-150" => "Janela de correr 150x120",
         "tpl-comp-door" => "Porta de giro",
         "tpl-conn-sewer" => "Esgoto",
         "tpl-conn-cold-water" => "Água fria",

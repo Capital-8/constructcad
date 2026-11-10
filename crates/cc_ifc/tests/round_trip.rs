@@ -925,3 +925,71 @@ fn site_location_round_trips() {
     let (imported, _) = round_trip(&Project::from_template());
     assert!(imported.info.site.is_none());
 }
+
+/// Windows keep how their panels open (#239): the type's
+/// `IfcWindowPanelProperties` and partitioning, read back into a project
+/// that has no such window type.
+#[test]
+fn window_operations_round_trip() {
+    use cc_core::{Document, Hosted, Wall, WindowOperation};
+    let mut doc = Document::new(Project::from_template());
+    let names = [
+        "Janela 120x120",
+        "Janela de abrir 60x100",
+        "Janela de abrir 2 folhas 120x120",
+        "Janela maxim-ar 60x60",
+        "Janela de correr 150x120",
+    ];
+    doc.edit("windows", |e| {
+        let level = e.project().levels[0].id;
+        let add = |e: &mut cc_core::EditCtx, type_id, kind| {
+            let id = cc_core::ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        };
+        let wall_type = e.project().default_type(Category::Wall).unwrap();
+        let wall = Wall { start: DVec2::new(0.0, 0.0), end: DVec2::new(16.0, 0.0), ..Default::default() };
+        let host = add(e, wall_type, ElementKind::Wall(wall));
+        for (i, name) in names.iter().enumerate() {
+            let ty = e.project().types_of(Category::Window).find(|t| t.name == *name).unwrap().id;
+            let at =
+                Hosted { host, offset: 2.0 + 3.0 * i as f64, sill_height: 1.0, flip_facing: false, flip_hand: false };
+            add(e, ty, ElementKind::Window(at));
+        }
+    });
+    let original = doc.project;
+    let text =
+        export(&original, &ExportOptions { time_stamp: Some("2026-01-01T00:00:00".into()), file_name: "t.ifc".into() });
+    for literal in [
+        ".FIXEDCASEMENT.",
+        ".SIDEHUNGLEFTHAND.",
+        ".SIDEHUNGRIGHTHAND.",
+        ".TOPHUNG.",
+        ".SLIDINGHORIZONTAL.",
+        ".DOUBLE_PANEL_VERTICAL.",
+    ] {
+        assert!(text.contains(literal), "{literal}");
+    }
+    assert_eq!(text.matches("IFCWINDOWPANELPROPERTIES(").count(), 7);
+    let mut base = Project::from_template();
+    base.types.retain(|_, t| t.window_operation() == WindowOperation::Fixed);
+    let (imported, _) = import(&text, base).unwrap();
+    let lookup = by_uid(&imported);
+    for e in original.elements.values().filter(|e| e.category() == Category::Window) {
+        let i = lookup.get(&e.uid).unwrap();
+        let (a, b) = (original.element_type(e.type_id).unwrap(), imported.element_type(i.type_id).unwrap());
+        assert_eq!(b.window_operation(), a.window_operation(), "{}", a.name);
+        assert_eq!(b.opening_size(), a.opening_size());
+    }
+}

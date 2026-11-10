@@ -130,7 +130,7 @@ pub fn plan_of(
         if let Some(g) = geom.walls.get(&e.id) {
             draw_wall(&mut d, project, g, cut_z, spacing, detail);
             if !structural {
-                draw_openings(&mut d, project, geom, g, ceiling, detail);
+                draw_openings(&mut d, project, geom, g, (ceiling, cut_z), (detail, scale));
             }
         }
     }
@@ -660,18 +660,19 @@ fn draw_openings(
     project: &Project,
     geom: &ModelGeometry,
     g: &WallGeom,
-    ceiling: bool,
-    detail: DetailLevel,
+    (ceiling, cut_z): (bool, f64),
+    (detail, scale): (DetailLevel, u32),
 ) {
     for o in &g.openings {
         let Some(e) = project.element(o.element) else { continue };
         let Some(host) = e.as_hosted() else { continue };
         let id = Some(e.id);
         // A door or window component may draw its own symbol: its pieces marked for plans.
-        let own_symbol = match project.element_type(e.type_id).map(|t| &t.data) {
-            Some(cc_core::TypeData::Component { def, .. }) => def.opening.as_ref().is_some_and(|o| o.own_symbol),
-            _ => false,
+        let opening = match project.element_type(e.type_id).map(|t| &t.data) {
+            Some(cc_core::TypeData::Component { def, .. }) => def.opening.as_deref(),
+            _ => None,
         };
+        let own_symbol = opening.is_some_and(|o| o.own_symbol);
         if own_symbol {
             if !ceiling {
                 let shown = |p: &&cc_core::component::ComponentPart| p.in_plan && !p.void && p.detail.shows(detail);
@@ -681,32 +682,85 @@ fn draw_openings(
             }
             continue;
         }
+        let width = o.u1 - o.u0;
+        let side = if host.flip_facing { -1.0 } else { 1.0 };
         match e.kind {
             ElementKind::Door(_) if !ceiling => {
-                let width = o.u1 - o.u0;
-                let side = if host.flip_facing { -1.0 } else { 1.0 };
                 let (hinge_u, toward) = if host.flip_hand { (o.u1, -1.0) } else { (o.u0, 1.0) };
-                let hinge = g.world(hinge_u, side * g.half);
-                // Square to the wall at the opening's center (an arc wall's chord).
-                let (_, dir, normal) = g.frame_at((o.u0 + o.u1) * 0.5);
-                let leaf_dir = normal * side;
-                d.line(hinge, hinge + leaf_dir * width, LineStyle::Projection, id);
-                let a0 = leaf_dir.to_angle();
-                let mut a1 = (dir * toward).to_angle();
-                if a1 - a0 > PI {
-                    a1 -= TAU;
-                } else if a0 - a1 > PI {
-                    a1 += TAU;
-                }
-                d.arc(hinge, width, a0, a1, LineStyle::Thin, id);
+                let arc = LineStyle::Thin;
+                swing(d, g, (o.u0 + o.u1) * 0.5, (hinge_u, toward), (width, arc, scale), side, id);
             }
             ElementKind::Window(_) => {
-                for v in [-0.01, 0.01] {
-                    d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Thin, id);
+                let operation = opening.map(|o| o.operation).unwrap_or_default();
+                // A window above the cut is seen from below through the wall: dashed, jambs too.
+                if !ceiling && o.z0 > cut_z {
+                    for v in [-0.01, 0.01] {
+                        d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Hidden, id);
+                    }
+                    for u in [o.u0, o.u1] {
+                        d.line(g.world(u, -g.half), g.world(u, g.half), LineStyle::Hidden, id);
+                    }
+                    continue;
+                }
+                if operation == cc_core::WindowOperation::Sliding {
+                    // Two panels on their tracks, overlapping in the middle.
+                    let (mid, lap) = ((o.u0 + o.u1) * 0.5, SLIDING_LAP.min(width / 4.0));
+                    let (first, second) = if host.flip_hand { (0.02, -0.02) } else { (-0.02, 0.02) };
+                    d.polyline(&g.path(o.u0, mid + lap, first), false, LineStyle::Thin, id);
+                    d.polyline(&g.path(mid - lap, o.u1, second), false, LineStyle::Thin, id);
+                } else {
+                    for v in [-0.01, 0.01] {
+                        d.polyline(&g.path(o.u0, o.u1, v), false, LineStyle::Thin, id);
+                    }
+                }
+                if ceiling {
+                    continue;
+                }
+                // Side-hung panels, open square to the wall on the side the window opens to.
+                let hinges = operation.hinges();
+                let leaf = width / hinges.len().max(1) as f64;
+                for &(at, toward) in hinges {
+                    let (at, toward) = if host.flip_hand { (1.0 - at, -toward) } else { (at, toward) };
+                    let hinge = (o.u0 + at * width, toward);
+                    swing(d, g, (o.u0 + o.u1) * 0.5, hinge, (leaf, LineStyle::Hidden, scale), side, id);
                 }
             }
             _ => {}
         }
+    }
+}
+
+/// How far the panels of a sliding window overlap past the middle in plan, meters.
+const SLIDING_LAP: f64 = 0.05;
+
+/// A swing in plan: a leaf `width` long from the hinge at `hinge_u` on the
+/// wall's face on `side`, square to the wall at `center_u` (an arc wall's
+/// chord), and the arc (in style `arc`: windows dash it) its free end runs
+/// back to the wall `toward` the opening's other end (+1 along the wall).
+fn swing(
+    d: &mut Drawing2D,
+    g: &WallGeom,
+    center_u: f64,
+    (hinge_u, toward): (f64, f64),
+    (width, arc, scale): (f64, LineStyle, u32),
+    side: f64,
+    id: Option<cc_core::ElementId>,
+) {
+    let hinge = g.world(hinge_u, side * g.half);
+    let (_, dir, normal) = g.frame_at(center_u);
+    let leaf_dir = normal * side;
+    d.line(hinge, hinge + leaf_dir * width, LineStyle::Projection, id);
+    let a0 = leaf_dir.to_angle();
+    let mut a1 = (dir * toward).to_angle();
+    if a1 - a0 > PI {
+        a1 -= TAU;
+    } else if a0 - a1 > PI {
+        a1 += TAU;
+    }
+    if arc.dashes().is_empty() {
+        d.arc(hinge, width, a0, a1, arc, id);
+    } else {
+        d.dashed_arc(hinge, width, (a0, a1), arc, id, scale);
     }
 }
 

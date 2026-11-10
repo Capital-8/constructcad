@@ -165,6 +165,16 @@ struct ProjectedFace {
     solid: usize,
     face: usize,
     edges: Vec<(DVec2, DVec2)>,
+    /// Symbol lines drawn on the face (a window's opening), in their styles.
+    marks: Vec<(DVec2, DVec2, LineStyle)>,
+}
+
+fn symbol_style(line: cc_core::SymbolLine) -> LineStyle {
+    match line {
+        cc_core::SymbolLine::Opening => LineStyle::Hidden,
+        cc_core::SymbolLine::Axis => LineStyle::Center,
+        cc_core::SymbolLine::Plain => LineStyle::Thin,
+    }
 }
 
 /// How section cuts are filled: the project's materials at a hatch spacing.
@@ -222,8 +232,43 @@ pub fn render(
                 solid: index,
                 face: face_index,
                 edges,
+                marks: Vec::new(),
             });
         }
+    }
+    // Windows' opening symbols: unfilled faces just off their walls, so
+    // whatever stands in front hides them like any face.
+    for symbol in &geom.opening_symbols {
+        if symbol.normal.dot(frame.forward) > -1e-6 && style.fills() {
+            continue;
+        }
+        let mut verts = symbol.outline.to_vec();
+        for &(p, n) in &planes {
+            verts = clip_polygon(&verts, p, n);
+        }
+        if verts.len() < 3 {
+            continue;
+        }
+        let marks = symbol
+            .lines
+            .iter()
+            .filter_map(|&(a, b, line)| {
+                let (a, b) = planes.iter().try_fold((a, b), |(a, b), &(p, n)| clip_segment(a, b, p, n))?;
+                Some((frame.project(a), frame.project(b), symbol_style(line)))
+            })
+            .collect();
+        faces.push(ProjectedFace {
+            depth: verts.iter().map(|v| frame.depth(*v)).sum::<f64>() / verts.len() as f64,
+            normal: symbol.normal,
+            point: verts[0],
+            pts: verts.iter().map(|v| frame.project(*v)).collect(),
+            color: None,
+            element: symbol.element,
+            solid: usize::MAX,
+            face: 0,
+            edges: Vec::new(),
+            marks,
+        });
     }
     let mut d = Drawing2D::default();
     if style.fills() {
@@ -243,12 +288,18 @@ pub fn render(
             for (a, b) in f.edges {
                 d.line(a, b, LineStyle::Projection, Some(f.element));
             }
+            for (a, b, style) in f.marks {
+                d.line(a, b, style, Some(f.element));
+            }
         }
     } else {
         // Every edge, in no particular order: nothing hides anything.
         for f in faces {
             for (a, b) in f.edges {
                 d.line(a, b, LineStyle::Projection, Some(f.element));
+            }
+            for (a, b, style) in f.marks {
+                d.line(a, b, style, Some(f.element));
             }
         }
     }
@@ -715,6 +766,7 @@ mod tests {
                 solid: 0,
                 face: 0,
                 edges: Vec::new(),
+                marks: Vec::new(),
             }
         };
         // The large face rises along x: 4.25 to 5.75 m high over the members.

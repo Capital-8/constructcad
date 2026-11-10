@@ -37,8 +37,10 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             Some(acc.map_or((*p, *p), |(lo, hi)| (lo.min(*p), hi.max(*p))))
         });
         // Door swings and tall component outlines extend above the row; leave room for them.
+        let hinges = t.window_operation().hinges();
         let above = match opening {
             Some(width) if t.category() == Category::Door => width + 0.075,
+            Some(width) if !hinges.is_empty() => width / hinges.len() as f64 + 0.075,
             _ => plan_bounds.map_or(0.0, |(lo, hi)| (hi.y - lo.y) / 2.0),
         };
         y -= above;
@@ -92,8 +94,21 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 for v in [-h, h] {
                     d.line(o + DVec2::new(0.2, v), o + DVec2::new(0.2 + width, v), LineStyle::Projection, None);
                 }
-                for v in [-0.01, 0.01] {
-                    d.line(o + DVec2::new(0.2, v), o + DVec2::new(0.2 + width, v), LineStyle::Thin, None);
+                if t.window_operation() == cc_core::WindowOperation::Sliding {
+                    let (mid, lap) = (0.2 + width / 2.0, (width / 4.0).min(0.05));
+                    d.line(o + DVec2::new(0.2, -0.02), o + DVec2::new(mid + lap, -0.02), LineStyle::Thin, None);
+                    d.line(o + DVec2::new(mid - lap, 0.02), o + DVec2::new(0.2 + width, 0.02), LineStyle::Thin, None);
+                } else {
+                    for v in [-0.01, 0.01] {
+                        d.line(o + DVec2::new(0.2, v), o + DVec2::new(0.2 + width, v), LineStyle::Thin, None);
+                    }
+                }
+                let leaf = width / hinges.len().max(1) as f64;
+                for &(at, toward) in hinges {
+                    let hinge = o + DVec2::new(0.2 + at * width, h);
+                    let a1 = if toward > 0.0 { 0.0 } else { std::f64::consts::PI };
+                    d.line(hinge, hinge + DVec2::Y * leaf, LineStyle::Projection, None);
+                    d.dashed_arc(hinge, leaf, (std::f64::consts::FRAC_PI_2, a1), LineStyle::Hidden, None, scale);
                 }
             }
             TypeData::Ceiling { thickness, .. } => {

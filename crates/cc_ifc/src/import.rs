@@ -11,6 +11,7 @@
 use crate::geometry::{Extrusion, Geometry, ProfileKind, Solid, affine, clean_loop};
 use crate::guid;
 use crate::parse::{Entity, Param, ParseError, StepFile, parse};
+use cc_core::WindowOperation;
 use cc_core::component::IfcClass;
 use cc_core::component::convex_hull;
 use cc_core::curtain::{CurtainEdits, CurtainPanel, CurtainSystem};
@@ -30,6 +31,8 @@ use std::collections::{BTreeMap, HashMap};
 const MAX_PROPERTY_DEPTH: usize = 8;
 /// Most openings cut from one product.
 const MAX_OPENINGS: usize = 1000;
+/// Window panels read from one type.
+const MAX_PANELS: usize = 16;
 const MAX_PARENT_DEPTH: usize = 16;
 /// Most construction phases read from a file.
 const MAX_PHASES: usize = 100;
@@ -336,6 +339,14 @@ fn is_opening_type(d: &TypeData, category: Category) -> Option<(f64, f64)> {
         TypeData::Window { width, height, .. } if category == Category::Window => Some((*width, *height)),
         TypeData::Component { def, .. } if def.category() == category => def.opening_size(),
         _ => None,
+    }
+}
+
+/// How the panels of a window type open.
+fn window_operation(d: &TypeData) -> WindowOperation {
+    match d {
+        TypeData::Component { def, .. } => def.opening.as_ref().map(|o| o.operation).unwrap_or_default(),
+        _ => WindowOperation::Fixed,
     }
 }
 
@@ -1169,6 +1180,30 @@ impl<'a> Importer<'a> {
         id
     }
 
+    /// How the panels of product `id` open: the `IfcWindowPanelProperties`
+    /// among its type's property sets, from the left; fixed when it has none
+    /// or panels no [`WindowOperation`] stands for.
+    fn window_operation(&self, id: u32) -> WindowOperation {
+        let Some(t) = self.type_entity(id) else { return WindowOperation::Fixed };
+        let rank = |position: &str| match position {
+            "LEFT" | "TOP" => 0,
+            "RIGHT" | "BOTTOM" => 2,
+            _ => 1,
+        };
+        let mut panels: Vec<(u8, &str)> = t
+            .arg(5)
+            .as_list()
+            .iter()
+            .filter_map(|p| self.f.get(p.as_ref()?))
+            .filter(|e| e.name == "IFCWINDOWPANELPROPERTIES")
+            .take(MAX_PANELS)
+            .filter_map(|e| Some((rank(e.arg(5).as_enum().unwrap_or_default()), e.arg(4).as_enum()?)))
+            .collect();
+        panels.sort_by_key(|(rank, _)| *rank);
+        let operations: Vec<&str> = panels.into_iter().map(|(_, op)| op).collect();
+        WindowOperation::from_ifc_panels(&operations).unwrap_or_default()
+    }
+
     fn type_uid(&self, id: u32) -> Option<Uid> {
         self.type_entity(id).and_then(|t| t.arg(0).as_str()).and_then(guid::decode).map(Uid)
     }
@@ -1628,16 +1663,22 @@ impl<'a> Importer<'a> {
             );
             (Category::Door, type_id)
         } else {
+            let operation = self.window_operation(id);
             let type_id = self.find_or_add_type(
                 Category::Window,
                 name,
                 fallback,
                 uid,
-                |d| is_opening_type(d, Category::Window).is_some_and(|(w, h)| same(w, h)),
+                |d| {
+                    is_opening_type(d, Category::Window).is_some_and(|(w, h)| same(w, h))
+                        && window_operation(d) == operation
+                },
                 || {
                     let names = cc_core::openings::OpeningNames::default();
-                    let def = cc_core::openings::window_def(&names, width, height, sill, &material);
-                    TypeData::Component { component: names.window, def }
+                    let def =
+                        cc_core::openings::operable_window_def(&names, (width, height, sill), &material, operation);
+                    let component = names.window_for(operation).clone();
+                    TypeData::Component { component, def }
                 },
             );
             (Category::Window, type_id)

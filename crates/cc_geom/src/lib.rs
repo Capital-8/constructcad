@@ -37,7 +37,7 @@ mod wall;
 
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{
-    BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, WorldConnector, column_outline,
+    BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, OpeningSymbol, WorldConnector, column_outline,
     component_connectors, component_parts, hosted_parts, opening_parts,
 };
 pub use component::{instance_errors, resolve_component, resolve_component_in, resolve_instance, resolve_pieces};

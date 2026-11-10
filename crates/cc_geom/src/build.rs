@@ -119,6 +119,18 @@ pub fn hosted_parts(data: &TypeData, width: f64, height: f64, half: f64) -> Vec<
     }
 }
 
+/// A window's elevation symbol on one face of its wall (see
+/// [`cc_core::WindowOperation::elevation_lines`]): the opening's outline
+/// just off the face, facing out along `normal`, and the symbol's lines on
+/// it, drawn by elevations and sections where nothing stands in front.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OpeningSymbol {
+    pub element: ElementId,
+    pub outline: [DVec3; 4],
+    pub normal: DVec3,
+    pub lines: Vec<(DVec3, DVec3, cc_core::SymbolLine)>,
+}
+
 /// All derived geometry of a project.
 #[derive(Debug, Clone, Default)]
 pub struct ModelGeometry {
@@ -147,6 +159,8 @@ pub struct ModelGeometry {
     pub components: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
     /// Pieces of each door and window in the world (see [`opening_parts`]).
     pub opening_fills: BTreeMap<ElementId, Vec<cc_core::component::ComponentPart>>,
+    /// The elevation symbols of windows that open, on both faces of their walls.
+    pub opening_symbols: Vec<OpeningSymbol>,
     /// Conceptual masses: body, volume and mass floors.
     pub masses: BTreeMap<ElementId, crate::mass::MassGeom>,
     /// Roofs: their framing members and covering figures.
@@ -932,9 +946,11 @@ impl ModelGeometry {
 
     fn build_hosted(&mut self, project: &Project) {
         let mut fills = BTreeMap::new();
+        let mut symbols = Vec::new();
         for wall in self.walls.values() {
             for o in &wall.openings {
                 let Some(e) = project.element(o.element) else { continue };
+                symbols.extend(opening_symbols(project, e, wall, o));
                 let parts = opening_parts(project, e, o.u1 - o.u0, o.z1 - o.z0, wall.half);
                 // In an arc wall the pieces are square to the wall at the opening's center.
                 let (origin, dir, normal) = wall.frame_at((o.u0 + o.u1) * 0.5);
@@ -974,6 +990,7 @@ impl ModelGeometry {
             }
         }
         self.opening_fills = fills;
+        self.opening_symbols = symbols;
     }
 
     fn build_slabs(&mut self, project: &Project) {
@@ -1231,6 +1248,53 @@ fn cores_match(layers: &[(f64, f64, String)], core: (f64, f64), host: &[(f64, f6
         .filter(|(from, to, _)| *from <= core.0 + 1e-6 && *to >= core.1 - 1e-6)
         .all(|(_, _, material)| material == host_material)
 }
+
+/// The elevation symbol of door or window `e` in opening `o` of `wall`, on
+/// both faces: a window's by its operation, a swing door's (unless it draws
+/// its own symbol) as a side-hung panel hinged where its plan swing is.
+fn opening_symbols(
+    project: &Project,
+    e: &cc_core::Element,
+    wall: &WallGeom,
+    o: &crate::wall::Opening,
+) -> Vec<OpeningSymbol> {
+    let Some(ty) = project.element_type(e.type_id) else { return Vec::new() };
+    let own_symbol = match &ty.data {
+        TypeData::Component { def, .. } => def.opening.as_ref().is_some_and(|o| o.own_symbol),
+        _ => false,
+    };
+    let (w, h) = (o.u1 - o.u0, o.z1 - o.z0);
+    let (host, lines) = match &e.kind {
+        ElementKind::Window(host) => (host, ty.window_operation().elevation_lines(w, h)),
+        ElementKind::Door(host) if !own_symbol => (host, cc_core::WindowOperation::SideHungLeft.elevation_lines(w, h)),
+        _ => return Vec::new(),
+    };
+    if lines.is_empty() || !(w > 0.0 && h > 0.0) {
+        return Vec::new();
+    }
+    // Square to the wall at the opening's center, as its pieces are.
+    let (origin, dir, normal) = wall.frame_at((o.u0 + o.u1) * 0.5);
+    [1.0, -1.0]
+        .into_iter()
+        .map(|side: f64| {
+            // Just off the face, so the wall around the opening never covers it.
+            let v = side * (wall.half + SYMBOL_OFFSET);
+            let at = |(x, z): (f64, f64)| {
+                let x = if host.flip_hand { w - x } else { x };
+                (origin + dir * (o.u0 + x) + normal * v).extend(o.z0 + z)
+            };
+            OpeningSymbol {
+                element: e.id,
+                outline: [at((0.0, 0.0)), at((w, 0.0)), at((w, h)), at((0.0, h))],
+                normal: (normal * side).extend(0.0),
+                lines: lines.iter().map(|&(a, b, style)| (at(a), at(b), style)).collect(),
+            }
+        })
+        .collect()
+}
+
+/// How far off the wall's face a window's elevation symbol stands, meters.
+const SYMBOL_OFFSET: f64 = 1e-3;
 
 #[cfg(test)]
 mod tests {

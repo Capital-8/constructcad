@@ -906,6 +906,16 @@ impl ElementType {
         }
     }
 
+    /// How the panels of a window type open (fixed for anything else).
+    pub fn window_operation(&self) -> crate::WindowOperation {
+        match &self.data {
+            TypeData::Component { def, .. } if def.kind == crate::ComponentKind::Window => {
+                def.opening.as_ref().map(|o| o.operation).unwrap_or_default()
+            }
+            _ => crate::WindowOperation::Fixed,
+        }
+    }
+
     /// Sill height of new elements of a door or window type.
     pub fn default_sill(&self) -> f64 {
         match &self.data {

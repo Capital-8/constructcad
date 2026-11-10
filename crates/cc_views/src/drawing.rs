@@ -350,6 +350,49 @@ impl Drawing2D {
         self.polyline(&pts, false, style, element);
     }
 
+    /// A circular arc in a dashed `style` at `1:scale`, its dashes laid
+    /// along the whole arc (each a few chords, the gaps left empty), so the
+    /// pattern shows however short the chords of [`Self::arc`] would be.
+    #[allow(clippy::too_many_arguments)]
+    pub fn dashed_arc(
+        &mut self,
+        center: DVec2,
+        radius: f64,
+        (a0, a1): (f64, f64),
+        style: LineStyle,
+        element: Option<ElementId>,
+        scale: u32,
+    ) {
+        let k = f64::from(scale.max(1)) / 1000.0;
+        let dashes: Vec<f64> = style.dashes().iter().map(|d| d * k).collect();
+        let length = radius * (a1 - a0).abs();
+        if dashes.len() < 2
+            || dashes.iter().any(|d| *d <= 0.0)
+            || !length.is_finite()
+            || length <= 0.0
+            || length / k > 1e5
+        {
+            self.arc(center, radius, a0, a1, style, element);
+            return;
+        }
+        let at = |s: f64| {
+            let a = a0 + (a1 - a0) * (s / length).clamp(0.0, 1.0);
+            center + DVec2::new(a.cos(), a.sin()) * radius
+        };
+        let (mut s, mut i) = (0.0, 0);
+        while s < length {
+            let step = dashes[i % dashes.len()];
+            if i % 2 == 0 {
+                let end = (s + step).min(length);
+                let n = ((end - s) / (radius * 0.1).max(1e-6)).ceil().clamp(1.0, 8.0) as usize;
+                let pts: Vec<DVec2> = (0..=n).map(|j| at(s + (end - s) * j as f64 / n as f64)).collect();
+                self.polyline(&pts, false, style, element);
+            }
+            s += step;
+            i += 1;
+        }
+    }
+
     /// Bounding box of geometry (text anchors included).
     pub fn bounds(&self) -> Option<(DVec2, DVec2)> {
         let mut it = self.prims.iter().flat_map(|p| match p {

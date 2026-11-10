@@ -64,7 +64,8 @@ pub mod wall_ops;
 pub use cad::{CadColorMode, CadDrawing, CadImport, CadLayer, CadPrim, CadUnit};
 pub use callout::{Callout, CropBox};
 pub use component::{
-    ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind, ResolveCtx,
+    ComponentDef, ComponentItem, ComponentKind, ComponentParam, ComponentShape, ParamKind, ResolveCtx, SymbolLine,
+    WindowOperation,
 };
 pub use component_ref::{PlaneAxis, RefDimension, RefEqual, RefLine, RefPlane};
 pub use component_script::{Hotspot, HotspotShape, ParamChoice, ScriptEval, ScriptInput, ScriptOwner, ScriptResult};
