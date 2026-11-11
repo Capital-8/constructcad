@@ -117,7 +117,8 @@ struct Exporter<'a> {
     /// Roof framing: an `IfcMemberType` per roof type and member name, with its members.
     member_types: BTreeMap<(ElementTypeId, &'static str), (Id, Vec<Id>)>,
     contained: BTreeMap<LevelId, Vec<Id>>,
-    usage_objects: BTreeMap<Id, Vec<Id>>,
+    /// Material usages with the GlobalId tag of their association and the products using them.
+    usage_objects: BTreeMap<Id, (String, Vec<Id>)>,
     /// Storey and its placement per level.
     storeys: BTreeMap<LevelId, (Id, Id)>,
     /// Elements whose `Status` went into a common property set of their own.
@@ -750,7 +751,11 @@ impl<'a> Exporter<'a> {
                 usage
             }
         };
-        self.usage_objects.entry(usage).or_default().push(product);
+        self.usage_objects
+            .entry(usage)
+            .or_insert_with(|| (format!("mat-usage-profile-{type_id}"), Vec::new()))
+            .1
+            .push(product);
     }
 
     /// Whether joined elements cut part of the element's body away (walls,
@@ -915,6 +920,50 @@ impl<'a> Exporter<'a> {
         Some(self.w.add("IFCPOLYGONALFACESET", args![points, Value::Null, ifc_faces, Value::Null]))
     }
 
+    /// A column's body: its type's profile extruded up in the column's
+    /// rotated frame; when the type has no section to sweep, the body as
+    /// built, else the type's legacy box. `None` when there is nothing to write.
+    fn column_product(&mut self, e: &Element, c: &cc_core::Column, level_z: f64) -> Option<StructureProduct> {
+        let project = self.project;
+        let data = &project.element_type(e.type_id)?.data;
+        let TypeData::Column { section, .. } = data else { return None };
+        let (base, top) = project.column_span(e, c);
+        let turn = if c.rotation_deg.is_finite() { c.rotation_deg.to_radians() } else { 0.0 };
+        let length = Quantity::Length(top - base);
+        let (items, volume, brep) = match self.type_profile(e.type_id) {
+            Some(profile) => {
+                let frame = Frame::horizontal(c.position.extend(base - level_z), DVec2::from_angle(turn));
+                let position = self.placement3(frame);
+                let item = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, top - base]);
+                (vec![item], section_area(project, data) * (top - base), false)
+            }
+            None => {
+                let body = self.cut_body(e.id, level_z);
+                if body.is_empty() {
+                    let (width, depth) = section.size();
+                    if !(width.is_finite() && depth.is_finite() && width > 0.0 && depth > 0.0) {
+                        return None;
+                    }
+                    let u = DVec2::from_angle(turn);
+                    let part = cc_geom::BoxPart {
+                        origin: c.position,
+                        u,
+                        v: u.perp(),
+                        u_range: (-width / 2.0, width / 2.0),
+                        v_range: (-depth / 2.0, depth / 2.0),
+                        z_range: (base, top),
+                    };
+                    (vec![self.oriented_box(&part, level_z)], width * depth * (top - base), false)
+                } else {
+                    (body, self.geom.volume(e.id), true)
+                }
+            }
+        };
+        let q = vec![("Length", length), ("NetVolume", Quantity::Volume(volume))];
+        let product = StructureProduct::new("IFCCOLUMN", "COLUMN", items).quantities("Qto_ColumnBaseQuantities", q);
+        Some(if brep { product.brep() } else { product })
+    }
+
     /// Columns, beams, stairs, ramps and railings.
     fn write_structure(&mut self) {
         let project = self.project;
@@ -927,16 +976,8 @@ impl<'a> Exporter<'a> {
             let mut axis = None;
             let product: StructureProduct = match (&e.kind, &ty.data) {
                 (ElementKind::Column(c), TypeData::Column { .. }) => {
-                    let (base, top) = project.column_span(e, c);
-                    // The type's profile in the column's rotated frame, extruded up.
-                    let Some(profile) = self.type_profile(e.type_id) else { continue };
-                    let turn = if c.rotation_deg.is_finite() { c.rotation_deg.to_radians() } else { 0.0 };
-                    let frame = Frame::horizontal(c.position.extend(base - level_z), DVec2::from_angle(turn));
-                    let position = self.placement3(frame);
-                    let item = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, top - base]);
-                    let volume = section_area(project, &ty.data) * (top - base);
-                    let q = vec![("Length", Quantity::Length(top - base)), ("NetVolume", Quantity::Volume(volume))];
-                    StructureProduct::new("IFCCOLUMN", "COLUMN", vec![item]).quantities("Qto_ColumnBaseQuantities", q)
+                    let Some(product) = self.column_product(e, c, level_z) else { continue };
+                    product
                 }
                 (ElementKind::Beam(_), TypeData::Beam { .. }) => {
                     // The body as framed into columns and other beams.
@@ -1630,7 +1671,11 @@ impl<'a> Exporter<'a> {
                 usage
             }
         };
-        self.usage_objects.entry(usage).or_default().push(product);
+        self.usage_objects
+            .entry(usage)
+            .or_insert_with(|| (format!("mat-usage-layer-{type_id}"), Vec::new()))
+            .1
+            .push(product);
     }
 
     /// The IFC type object for `type_id`, created with its material on first use.
@@ -1813,7 +1858,11 @@ impl<'a> Exporter<'a> {
                 Some(self.material(def.main_material()))
             }
             TypeData::Component { .. } => None,
-            TypeData::Column { .. } | TypeData::Beam { .. } => self.profile_set(type_id),
+            // A type whose section fails keeps its plain material.
+            TypeData::Column { .. } | TypeData::Beam { .. } => self.profile_set(type_id).or_else(|| {
+                let m = ty.main_material();
+                (!m.is_empty()).then(|| self.material(m))
+            }),
             _ => self.layer_set(type_id),
         };
         if let Some(m) = material {
@@ -2599,8 +2648,8 @@ impl<'a> Exporter<'a> {
             let gid = self.guid(&format!("deftype-member-{type_id}-{name}"));
             self.w.add("IFCRELDEFINESBYTYPE", args![gid, n.clone(), n.clone(), n.clone(), objects, ty]);
         }
-        for (i, (usage, objects)) in std::mem::take(&mut self.usage_objects).into_iter().enumerate() {
-            self.associate_material(&format!("mat-usage-{i}"), objects, usage);
+        for (usage, (tag, objects)) in std::mem::take(&mut self.usage_objects) {
+            self.associate_material(&tag, objects, usage);
         }
         for (level, objects) in std::mem::take(&mut self.contained) {
             let Some(&(storey, _)) = self.storeys.get(&level) else { continue };

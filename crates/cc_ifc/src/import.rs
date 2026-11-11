@@ -2318,6 +2318,14 @@ impl<'a> Importer<'a> {
         let name = self.type_name(id, e);
         let material = self.main_material(id, e);
         let profile = self.profile_for(&read, &material);
+        // Without a profile (the project has no room for more) only a box or a round is held exactly.
+        let held = matches!(
+            read.shape,
+            ProfileShape::Rect { chamfer: 0.0, .. } | ProfileShape::Round { .. } | ProfileShape::RoundTube { .. }
+        );
+        if profile.is_none() && (!held || read.rotation_deg != 0.0) {
+            return false;
+        }
         let turn = read.rotation_deg;
         let mut data = TypeData::Column {
             section: ColumnSection::Rectangular { width: 1.0, depth: 1.0 },
@@ -2366,7 +2374,7 @@ impl<'a> Importer<'a> {
 
     /// The section of a column or beam extrusion: the parametric shape of
     /// its profile definition when one holds it (and makes a valid outline),
-    /// else the profile's outline as a sketch, else its bounding box. Its
+    /// else the profile's outline as a sketch (`None` when neither holds it). Its
     /// name is the definition's `ProfileName`, else the name of the material
     /// profile that holds the definition in the material profile set of the
     /// product or its type.
@@ -2892,6 +2900,12 @@ impl<'a> Importer<'a> {
         }
         let material = self.main_material(id, e);
         let profile = self.profile_for(&read, &material);
+        // Without a profile (the project has no room for more) only a box is held exactly.
+        if profile.is_none()
+            && (!matches!(read.shape, ProfileShape::Rect { chamfer: 0.0, .. }) || read.rotation_deg != 0.0)
+        {
+            return false;
+        }
         let turn = read.rotation_deg;
         let mut data = TypeData::Beam {
             width: 1.0,
@@ -2944,8 +2958,9 @@ struct ReadSection {
 }
 
 /// A section drawn as `outer` with `holes`: a sketch of those points
-/// (centered on their box) when it makes a valid outline, else the box.
-/// `None` when neither does (or a point is not finite).
+/// (centered on their box). `None` when it does not make a valid outline,
+/// has more points or openings than a sketch holds, or a point is not
+/// finite: the product then keeps its exact mesh as a component.
 fn loose_section(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Option<ReadSection> {
     let (lo, hi) = polygon_bounds(outer.iter().copied())?;
     let center = (lo + hi) * 0.5;
@@ -2960,8 +2975,7 @@ fn loose_section(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Option<ReadSection> {
             openings: holes.iter().map(|h| ring(h)).collect(),
         })
     });
-    let rect = ProfileShape::Rect { b: hi.x - lo.x, h: hi.y - lo.y, chamfer: 0.0 };
-    let shape = sketch.filter(|s| s.outline().is_ok()).or_else(|| rect.outline().is_ok().then_some(rect))?;
+    let shape = sketch.filter(|s| s.outline().is_ok())?;
     Some(ReadSection { shape, name: None, rotation_deg: 0.0, center })
 }
 
@@ -3400,19 +3414,51 @@ END-ISO-10303-21;
         assert_eq!(again.repair(), 0);
     }
 
-    /// An outline of more points than a sketch holds comes in as its box,
-    /// one with a point that is not a number not at all.
+    /// An outline of more points than a sketch holds (or with a point that is
+    /// not a number) gives no section: the column stays a component.
     #[test]
-    fn oversized_outlines_fall_back_to_their_box() {
+    fn oversized_outlines_become_components() {
         let n = MAX_SKETCH_POINTS + 1;
         let circle: Vec<DVec2> =
-            (0..n).map(|i| DVec2::from_angle(std::f64::consts::TAU * i as f64 / n as f64) * 0.1 + 1.0).collect();
-        let read = loose_section(&circle, &[]).unwrap();
-        assert!(matches!(read.shape, ProfileShape::Rect { .. }), "{:?}", read.shape);
-        assert!(read.center.distance(DVec2::splat(1.0)) < 1e-6);
+            (0..n).map(|i| DVec2::from_angle(std::f64::consts::TAU * i as f64 / n as f64) * 0.1).collect();
+        assert!(loose_section(&circle, &[]).is_none());
         let mut bad = circle[..8].to_vec();
         bad[3] = DVec2::new(f64::NAN, 0.0);
         assert!(loose_section(&bad, &[]).is_none());
+
+        // A column extruded from that outline keeps its exact mesh.
+        let mut text = String::from(
+            "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Foreign',$,$,$,$,(#2),#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#24=IFCDIRECTION((0.,0.,1.));
+#40=IFCRELCONTAINEDINSPATIALSTRUCTURE('3XvctVUKr0kugbFTf53O9L',$,$,$,(#50),#10);
+#50=IFCCOLUMN('4XvctVUKr0kugbFTf53O9L',$,'Round',$,$,#11,#51,$);
+#51=IFCPRODUCTDEFINITIONSHAPE($,$,(#52));
+#52=IFCSHAPEREPRESENTATION(#2,'Body','SweptSolid',(#53));
+#53=IFCEXTRUDEDAREASOLID(#54,$,#24,3.);
+#54=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,'Many',#55);
+",
+        );
+        let ids: Vec<String> = (0..n).map(|i| format!("#{}", 100 + i)).collect();
+        text.push_str(&format!("#55=IFCPOLYLINE(({},#100));\n", ids.join(",")));
+        for (i, p) in circle.iter().enumerate() {
+            text.push_str(&format!("#{}=IFCCARTESIANPOINT(({:.9},{:.9}));\n", 100 + i, p.x, p.y));
+        }
+        text.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
+        let (p, report) = import(&text, Project::from_template()).unwrap();
+        assert_eq!(report.imported.get(&Category::Column), None, "{report:?}");
+        assert_eq!(report.imported.get(&Category::Component), Some(&1), "{report:?}");
+        assert!(p.profiles.values().all(|f| f.name != "Many"));
     }
 
     /// Geometry a hostile file can throw at the importer: cyclic booleans and

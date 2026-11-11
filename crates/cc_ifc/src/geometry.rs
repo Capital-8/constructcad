@@ -803,13 +803,13 @@ impl<'a> Geometry<'a> {
                 let h = len(3)?;
                 ProfileShape::Angle { h, b: len(4).unwrap_or(h), t: len(5)?, r: opt(6) }
             }
+            // A girth no longer than the wall is no lip a lipped channel holds: drawn as its outline.
             "IFCCSHAPEPROFILEDEF" => {
                 let (d, bf, t, lip, ri) = (len(3)?, len(4)?, len(5)?, opt(6), opt(7));
-                if lip > t {
-                    ProfileShape::ColdLippedU { d, bf, lip, t, ri }
-                } else {
-                    ProfileShape::ColdU { d, bf, t, ri }
+                if lip <= t {
+                    return None;
                 }
+                ProfileShape::ColdLippedU { d, bf, lip, t, ri }
             }
             "IFCRECTANGLEHOLLOWPROFILEDEF" => {
                 let (b, h, t, inner, ro) = (len(3)?, len(4)?, len(5)?, opt(6), opt(7));
