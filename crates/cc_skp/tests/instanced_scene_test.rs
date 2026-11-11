@@ -8,7 +8,7 @@
 // front/back materials, textures, holes, mirrors - has to come out the same
 // either way.
 
-mod common;
+use crate::common;
 
 use cc_skp::{GltfMaterial, InstanceNode, InstancedNode, InstancedScene, ParseOptions, Scene, SkpFile};
 use common::fixture;

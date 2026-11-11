@@ -11,7 +11,7 @@
 // first capturing everything a scene can (flags 0x1FF), so the second is only
 // found if the first was read to its last byte. No private content.
 
-mod common;
+use crate::common;
 
 use cc_skp::{ParseOptions, SkpFile, SkpModel};
 use common::{assert_near, fixture};

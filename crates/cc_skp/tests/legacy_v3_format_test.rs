@@ -15,7 +15,7 @@
 // phantom layer and no root instances - so these tests assert the parsed
 // structure and cross-check it against the V6 file from the same source.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, BTreeSet};
 

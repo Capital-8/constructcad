@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // Face normals and planar-face triangulation (`triangulator_test.cpp`).
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeMap;
 

@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "cc_ifc"
 description = "ConstructCraft IFC export: STEP physical file writer and IFC4 mapping of the BIM model"
 version.workspace = true
@@ -14,3 +15,7 @@ glam.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

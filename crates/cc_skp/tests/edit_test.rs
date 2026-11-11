@@ -8,7 +8,7 @@
 //! tests in `src/edit.rs`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-mod common;
+use crate::common;
 
 use std::path::PathBuf;
 

@@ -4,7 +4,7 @@
 // list wrapped in a single outer record (tag 0x6400); tag 0x6D00 carries the
 // units string as plain text.
 
-mod common;
+use crate::common;
 
 use cc_skp::internal::read_meta_units;
 use common::{bytes, tlv};

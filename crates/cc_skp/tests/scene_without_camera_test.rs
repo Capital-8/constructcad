@@ -2,7 +2,7 @@
 // A scene saved without its camera ("Camera Location" unticked) is still a
 // scene: it keeps its name and hidden layers, with eye/target/up unset.
 
-mod common;
+use crate::common;
 
 use cc_skp::{ParseOptions, SkpFile, SkpModel};
 

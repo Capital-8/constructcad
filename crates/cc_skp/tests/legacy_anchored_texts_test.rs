@@ -18,7 +18,7 @@
 // Synthetic bytes only. A vertex stands in for the anchored instance: its record is short, and
 // the list's bookkeeping does not depend on the class.
 
-mod common;
+use crate::common;
 
 use std::collections::HashMap;
 

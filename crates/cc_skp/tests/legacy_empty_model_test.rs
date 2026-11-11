@@ -9,7 +9,7 @@
 // file was rejected with an invalid definition count. The same file is a fixture of the other
 // ports. No private content.
 
-mod common;
+use crate::common;
 
 use cc_skp::internal::find_empty_root_after_v20_filler;
 use cc_skp::{ParseOptions, SkpFile};
