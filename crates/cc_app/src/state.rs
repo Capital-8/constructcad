@@ -107,6 +107,8 @@ pub struct AppState {
     pub session: Session,
     /// The multi-selection rows' copy of the selected elements, per revision and selection.
     pub multi_summary: Option<std::sync::Arc<crate::properties::MultiSummary>>,
+    /// The model's snap candidates (document revision, level, candidates).
+    pub snap_cache: Option<(u64, Option<LevelId>, std::sync::Arc<crate::tools::ModelSnaps>)>,
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
@@ -235,6 +237,7 @@ impl AppState {
             session,
             selection: BTreeSet::new(),
             multi_summary: None,
+            snap_cache: None,
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),
