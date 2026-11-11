@@ -118,6 +118,11 @@ impl Session {
         self.geom = ModelGeometry::build(&self.doc.project);
         self.geom_revision = Some(rev);
         self.phase_geoms.retain(|_, (r, _)| *r == rev);
+        // Drop what is kept for views that are gone.
+        let views = &self.doc.project.views;
+        self.drawings.retain(|v, _| views.contains_key(v));
+        self.sheets.retain(|v, _| views.contains_key(v));
+        self.schedules.retain(|v, _| views.contains_key(v));
         true
     }
 
