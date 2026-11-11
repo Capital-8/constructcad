@@ -74,3 +74,14 @@ panic = "deny"
 todo = "deny"
 unimplemented = "deny"
 unreachable = "deny"
+
+# Dependencies (geometry, wgpu, egui, image decoding) are optimized in debug builds so the app and the
+# tests run at a usable speed; the workspace crates keep the default level and compile quickly.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Release builds trade build time for a smaller, faster binary. Panics still unwind (AGENTS.md:
+# `actions::guard` turns a panic while opening, saving or exporting into an error message).
+[profile.release]
+lto = "thin"
+codegen-units = 1
