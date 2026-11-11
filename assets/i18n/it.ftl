@@ -783,6 +783,7 @@ err-io = errore di lettura/scrittura ({ $detail })
 err-parse = il file non è un progetto ConstructCraft valido ({ $detail })
 err-serialize = impossibile scrivere il file ({ $detail })
 err-version = il file usa la versione di formato { $version }; questa versione del programma supporta fino alla { $max }
+err-project-too-large = il file del progetto supera { $max } MB
 
 # Modello di nuovo progetto (nomi di livelli, materiali, tipi e viste)
 tpl-project-name = Nuovo progetto

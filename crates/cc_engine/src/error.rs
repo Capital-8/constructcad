@@ -70,6 +70,7 @@ impl From<cc_core::PersistError> for EngineError {
             E::Parse(e) => t!("err-parse", "detail" => e),
             E::Serialize(e) => t!("err-serialize", "detail" => e),
             E::Version(v) => t!("err-version", "version" => v, "max" => cc_core::FORMAT_VERSION),
+            E::TooLarge(max) => t!("err-project-too-large", "max" => max >> 20),
         })
     }
 }

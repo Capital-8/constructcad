@@ -783,6 +783,7 @@ err-io = 读写错误（{ $detail }）
 err-parse = 该文件不是有效的 ConstructCraft 项目（{ $detail }）
 err-serialize = 无法写入文件（{ $detail }）
 err-version = 该文件使用格式版本 { $version }；此版本的程序最高支持 { $max }
+err-project-too-large = 项目文件超过 { $max } MB
 
 # New project template (level, material, type and view names)
 tpl-project-name = 新项目
