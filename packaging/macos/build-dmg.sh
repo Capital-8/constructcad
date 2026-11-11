@@ -41,4 +41,16 @@ codesign --force --deep --sign - "$app"
 
 ln -s /Applications "$root/Applications"
 mkdir -p "$(dirname "$out")"
-hdiutil create -volname ConstructCraft -srcfolder "$root" -ov -format UDZO "$out"
+# hdiutil sizes the image from the folder and now and then fails on CI
+# runners with "No space left on device" (the 0.11.0 build did): give it the
+# size with room to spare, and try again a few times.
+size_mb=$(( $(du -sm "$root" | cut -f1) + 64 ))
+for attempt in 1 2 3; do
+    if hdiutil create -volname ConstructCraft -srcfolder "$root" -size "${size_mb}m" -ov -format UDZO "$out"; then
+        exit 0
+    fi
+    echo "hdiutil create failed (attempt $attempt), retrying" >&2
+    sleep 10
+done
+echo "hdiutil create failed" >&2
+exit 1
