@@ -2467,22 +2467,26 @@ No parameters.
 
 ### `level_create`
 
-*edit* — Add a level (default: 3 m above the highest, named "Level n") with its floor and ceiling plans.
+*edit* — Add a level (default: 3 m above the highest, named "Level n") with its floor and ceiling plans. With `above` or `below` it is a new storey next to that level: the levels beyond it move away by the new storey's height, so the other storeys keep theirs and the order of the levels stays.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `elevation` | number | optional | Elevation in meters. |
+| `above` | id or name | optional | Add the level above this one; the levels above it move up by `height`. |
+| `below` | id or name | optional | Add the level below this one; the levels below it move down by `height`. |
+| `elevation` | number | optional | Elevation in meters (not with `above` or `below`). |
+| `height` | number | optional | With `above` or `below`: the distance to that level, meters (default: the height of the storey next to it on that side, else 3 m). |
 | `name` | string | optional | Level name (default: "Level n"). |
 | `plans` | boolean | optional | Also create its floor and ceiling plans (default true). |
 
 ### `level_set`
 
-*edit* — Rename a level or change its elevation (what is attached to it moves along). Renaming it renames, in the same undo step, its plans (floor, ceiling, structural and MEP plans) that bore its old name.
+*edit* — Rename a level, change its elevation or the height up to the next level (what is attached to a moved level moves along). A new `height` moves every level above it by the difference, so the levels keep their order and the other storeys their heights. Renaming it renames, in the same undo step, its plans (floor, ceiling, structural and MEP plans) that bore its old name.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `level` | id or name | required | A level, type, view or material: its numeric id or its name. |
-| `elevation` | number | optional | New elevation, meters. |
+| `elevation` | number | optional | New elevation, meters (not with `height`). |
+| `height` | number | optional | New height from this level up to the next one, meters; the levels above move along. Refused for the highest level. |
 | `name` | string | optional | New name. |
 
 ### `level_delete`
