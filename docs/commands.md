@@ -2480,7 +2480,7 @@ No parameters.
 
 ### `level_set`
 
-*edit* — Rename a level, change its elevation or the height up to the next level (what is attached to a moved level moves along). A new `height` moves every level above it by the difference, so the levels keep their order and the other storeys their heights. Renaming it renames, in the same undo step, its plans (floor, ceiling, structural and MEP plans) that bore its old name.
+*edit* — Rename a level, change its elevation or the height up to the next level (what is attached to a moved level moves along). A new `height` moves every level above it by the difference, so the levels keep their order and the other storeys their heights. Renaming it leaves its plans' names as they are: a level and its views are named apart.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2523,11 +2523,10 @@ No parameters.
 | `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
 | `crop` | [[x, y], [x, y]] | optional | Crop rectangle: two opposite corners in the view's drawing coordinates (plans, sections and elevations draw nothing of the model outside it), or `null` to show everything. For a detail view this is its callout in the parent; for a drafting view a callout points to, it moves that callout. |
 | `detail` | string | optional | Detail level: `coarse` (layered elements cut as one plain region; component pieces set for it), `medium` or `fine`. |
-| `name` | string | optional | New name. A plan named after its level renames the level too, with the level's other plans of that name, unless `rename_level` is false. |
+| `name` | string | optional | New name. A plan's name is its own: its level and the level's other plans keep theirs. |
 | `params` | JSON | optional | Fields of the view's parameters to change, shaped like `params` in `view_get`. |
 | `phase` | id or name | optional | Phase the view shows (id or name; plans, elevations, sections, 3D views, schedules). |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none (every status by category). |
-| `rename_level` | boolean | optional | Whether renaming a plan named after its level renames the level and its other plans of that name (default true). |
 | `scale` | integer | optional | Scale denominator (e.g. 100 for 1:100). |
 | `visual_style` | string | optional | Visual style: `wireframe` (every edge, no faces), `hidden_line` (white faces), `shaded`, `consistent_colors` (material colors, unlit), `textures` (appearance colors and surface patterns), or `default` (plans hidden line, other views shaded). |
 
