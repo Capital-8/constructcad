@@ -350,8 +350,11 @@ their names. `graph_nodes` lists every node with its ports and types.
 - **Errors are per node.** A failing node shows its message, the nodes after
   it are skipped, the others run, and its elements stay as they were.
 - A graph never runs `project_new`, `project_open`, `undo`, `redo`,
-  `language_set` or graphs, and runs file commands only when its
-  `allow_files` is set (and never when a plugin runs it).
+  `language_set` or graphs, and runs file commands only when whoever runs it allows them: `graph_run`'s
+  `allow_files`, `ccad --allow-files graph`, or the editor's *Allow file
+  commands* checkbox, which lasts until another graph is opened. A graph
+  file cannot allow them itself (an `allow_files` field in it is ignored),
+  and a graph a plugin runs never may.
 
 ```sh
 ccad --save-as house.ccad graph examples/graphs/house.ccgraph width=12 depth=8

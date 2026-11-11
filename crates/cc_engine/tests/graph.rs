@@ -209,6 +209,29 @@ fn nodes_that_cannot_run_say_why() {
 }
 
 #[test]
+fn a_graph_file_cannot_grant_itself_files() {
+    let dir = std::env::temp_dir().join(format!("ccad-graph-files-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("saved.ccad");
+    let _ = std::fs::remove_file(&out);
+    let g = json!({
+        "allow_files": true,
+        "nodes": [{"id": 1, "kind": {"command": "project_save"}, "values": {"path": out}}]
+    });
+    let mut s = Session::default();
+    let r = run(&mut s, "graph_run", json!({"graph": g}));
+    assert!(r["nodes"]["1"]["error"].as_str().unwrap().contains("files"), "{r}");
+    assert!(!out.exists());
+    let check = run(&mut s, "graph_check", json!({"graph": g}));
+    assert_eq!(check["problems"].as_array().unwrap().len(), 1, "{check}");
+    // The caller grants it.
+    let r = run(&mut s, "graph_run", json!({"graph": g, "allow_files": true}));
+    assert_eq!(r["errors"], 0, "{r}");
+    assert!(out.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn every_command_is_a_node() {
     let mut s = Session::default();
     let nodes = run(&mut s, "graph_nodes", json!({}));

@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
-/// The graph a command works on: a file or the graph itself.
-fn load(session: &Session, path: Option<&str>, graph: Option<&Value>) -> Result<(Graph, usize)> {
+/// The graph a command works on: a file or the graph itself; its commands
+/// may work with files only when the caller allows it (`allow_files`).
+fn load(session: &Session, path: Option<&str>, graph: Option<&Value>, allow_files: bool) -> Result<(Graph, usize)> {
     let (mut g, repairs) = match (path, graph) {
         (_, Some(v)) => Graph::from_value(v.clone()).map_err(EngineError::invalid)?,
         (Some(p), None) => {
@@ -27,10 +28,9 @@ fn load(session: &Session, path: Option<&str>, graph: Option<&Value>) -> Result<
         }
         (None, None) => return Err(EngineError::invalid("give the graph's `path` or the `graph` itself")),
     };
-    // A command run by another command (a plugin's) has no say over files.
-    if session.called_by_command() {
-        g.allow_files = false;
-    }
+    // The graph cannot grant itself files (the field is never read from it);
+    // a command run by another command (a plugin's) has no say over them.
+    g.allow_files = allow_files && !session.called_by_command();
     Ok((g, repairs.total()))
 }
 
@@ -63,13 +63,18 @@ pub struct GraphRun {
     /// Leave each node's outputs out of the result (only errors, outputs and counts).
     #[serde(default)]
     pub brief: bool,
+    /// Let the graph's commands read and write files (open, save, import,
+    /// export). Off by default; a graph file cannot turn it on, and it stays
+    /// off when another command (a plugin's) runs the graph.
+    #[serde(default)]
+    pub allow_files: bool,
 }
 
 impl Command for GraphRun {
     const NAME: &'static str = "graph_run";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let (graph, repairs) = load(s, self.path.as_deref(), self.graph.as_ref())?;
+        let (graph, repairs) = load(s, self.path.as_deref(), self.graph.as_ref(), self.allow_files)?;
         let report = Evaluator::new().run(s, &graph, &self.inputs);
         let mut v = serde_json::to_value(&report).map_err(|e| EngineError::invalid(e.to_string()))?;
         if self.brief
@@ -103,13 +108,17 @@ pub struct GraphCheck {
     /// The graph itself, instead of `path`.
     #[serde(default)]
     pub graph: Option<Value>,
+    /// Check it as `graph_run` with `allow_files` would run it (file
+    /// commands are then no problem).
+    #[serde(default)]
+    pub allow_files: bool,
 }
 
 impl Command for GraphCheck {
     const NAME: &'static str = "graph_check";
     const KIND: CommandKind = CommandKind::Query;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let (graph, repairs) = load(s, self.path.as_deref(), self.graph.as_ref())?;
+        let (graph, repairs) = load(s, self.path.as_deref(), self.graph.as_ref(), self.allow_files)?;
         Ok(
             json!({ "problems": problems(s, &graph), "repairs": repairs, "nodes": graph.nodes.len(), "wires": graph.wires.len() }),
         )

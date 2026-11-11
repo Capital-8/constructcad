@@ -155,8 +155,11 @@ pub struct Graph {
     pub name: String,
     #[serde(default)]
     pub run_mode: RunMode,
-    /// Whether its commands may read and write files.
-    #[serde(default)]
+    /// Whether its commands may read and write files: a grant of the run
+    /// (`graph_run`'s `allow_files`, the editor's checkbox), never read from
+    /// or written to a file, so a graph cannot give itself file access. Old
+    /// files that hold the field load with it ignored.
+    #[serde(skip)]
     pub allow_files: bool,
     #[serde(default)]
     pub nodes: Vec<Node>,
@@ -408,6 +411,17 @@ mod tests {
         assert_eq!(g.order(), vec![1, 2, 3]);
         assert!(Graph::from_json("[").is_err());
         assert!(Graph::from_json(r#"{"format": 99}"#).is_err());
+    }
+
+    #[test]
+    fn files_cannot_grant_file_access() {
+        let (g, _) = Graph::from_json(r#"{"allow_files": true, "nodes": []}"#).unwrap();
+        assert!(!g.allow_files);
+        let (g, _) = Graph::from_value(serde_json::json!({"allow_files": true})).unwrap();
+        assert!(!g.allow_files);
+        let mut g = Graph::new("t");
+        g.allow_files = true;
+        assert!(!g.to_json().contains("allow_files"));
     }
 
     #[test]

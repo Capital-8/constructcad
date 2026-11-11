@@ -351,8 +351,11 @@ lista todos os nós com suas portas e tipos.
 - **Erros são por nó.** Um nó que falha mostra a mensagem, os nós depois
   dele são pulados, os demais rodam, e os elementos dele ficam como estavam.
 - Um grafo nunca roda `project_new`, `project_open`, `undo`, `redo`,
-  `language_set` nem grafos, e só roda comandos de arquivo quando tem
-  `allow_files` (e nunca quando um plugin o executa).
+  `language_set` nem grafos, e só roda comandos de arquivo quando quem o executa permite: o
+  `allow_files` de `graph_run`, `ccad --allow-files graph`, ou a caixa
+  *Permitir comandos de arquivo* do editor, que vale até outro grafo ser
+  aberto. O arquivo do grafo não pode permitir sozinho (um campo
+  `allow_files` nele é ignorado), e um grafo que um plugin executa nunca pode.
 
 ```sh
 ccad --save-as casa.ccad graph examples/graphs/house.ccgraph width=12 depth=8
