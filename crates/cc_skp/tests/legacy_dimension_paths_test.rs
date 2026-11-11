@@ -14,7 +14,7 @@
 // Synthetic bytes only: the real file that exposed this (a SketchUp 2017
 // cabinet, 21 of 96 root instances lost) is private and is not committed.
 
-mod common;
+use crate::common;
 
 use cc_skp::internal::{Error, ErrorKind, legacy_connection_paths};
 use common::concat;

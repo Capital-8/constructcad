@@ -7,7 +7,7 @@
 // shift (type 2, colorized, colorize mode tint 1 and shift 0) and tint_half (a tint at opacity
 // 0.5). The same file is a fixture of the other ports. No private content.
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeMap;
 

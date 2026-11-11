@@ -17,7 +17,7 @@
 // still count right - so each is paired with a relation the file itself
 // forces.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, BTreeSet};
 

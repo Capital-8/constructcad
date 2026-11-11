@@ -3,7 +3,7 @@
 // Untitled.skp (13 linear dimensions); scenes on a synthetic 0702 record
 // shaped like the real ones.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, HashMap};
 

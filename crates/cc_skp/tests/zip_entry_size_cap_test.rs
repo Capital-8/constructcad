@@ -7,7 +7,7 @@
 // crate's own DEFLATE encoder stands in for miniz's writer) and exercise the
 // guard end-to-end through full_parse().
 
-mod common;
+use crate::common;
 
 use cc_skp::ParseOptions;
 use cc_skp::internal::full_parse;

@@ -9,7 +9,7 @@
 // path. The last two cases write dimensions placed by an offset vector
 // (`add_dimension_with_offset_vector`), at the root and inside a component definition.
 
-mod common;
+use crate::common;
 
 use cc_skp::create::{DefinitionOptions, GuideOptions, InstanceOptions, Point3, create};
 use cc_skp::internal::read_u16;

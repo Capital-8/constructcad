@@ -3,7 +3,7 @@
 // three fixtures hold the same drawing (a quarter arc r=10 at x=0, a full
 // circle r=5 at x=50, a half arc r=8 at x=100) saved as 2017, 2020 and 2021.
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeMap;
 use std::f64::consts::PI;

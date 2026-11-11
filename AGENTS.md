@@ -18,6 +18,8 @@ cargo run -p cc_cli -- reference > docs/commands.md   # regenerate the command r
 
 cargo test --workspace                                # all tests
 cargo test -p cc_geom rooms                           # tests of one crate matching a name
+cargo check --tests                                   # type errors without building test binaries
+cargo test -p cc_engine --test main macros           # integration tests matching a name (one binary per crate)
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check                            # max_width = 120 (rustfmt.toml)
 CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots      # compare UI screenshots (tests/snapshots)
@@ -92,6 +94,7 @@ Rust workspace (edition 2024). Dependency direction: `cc_core` ← `cc_geom` ←
 - **Bound recursion and loops** over model references with visited sets or limits (hosting can be cyclic in a crafted file; see `EditCtx::remove_element`).
 - **Last-resort guard:** opening, saving and exporting run inside `actions::guard` (`catch_unwind`); a panic becomes an error message and the open document is kept. Keep `panic = "unwind"` (the default profile).
 - **Prove it:** every crash fix comes with a small synthetic regression test that failed before the fix.
+- **Integration tests are one binary per crate**: `cc_engine`, `cc_ifc`, `cc_plugins` and `cc_skp` set `autotests = false` and build only `tests/main.rs`, which declares each file of `tests/` as a module; a new test file needs its `mod` line there (`every_test_file_is_a_module` fails otherwise).
 
 ## Project policies
 

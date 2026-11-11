@@ -15,7 +15,7 @@
 // Plus the SketchUp 2018 zero-material layout with a custom tag listed ahead
 // of Layer0 (`legacy_zero_material_custom_layer_test.cpp`).
 
-mod common;
+use crate::common;
 
 use cc_skp::{ParseOptions, SkpFile, SkpModel};
 use common::fixture;

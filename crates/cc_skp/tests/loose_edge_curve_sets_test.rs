@@ -9,7 +9,7 @@
 //   caller then emits the chords the file stores. Every test expecting an arc
 //   is paired with one expecting `None` for a similar-looking case.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
