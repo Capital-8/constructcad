@@ -25,6 +25,7 @@ pub struct Session {
     phase_geoms: HashMap<GeomKey, (u64, ModelGeometry)>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
     sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
+    schedules: HashMap<ViewId, (u64, Rc<cc_views::Table>)>,
     /// Elements temporarily hidden or isolated per view: display state, not
     /// part of the model (not saved, not undone).
     temporary: HashMap<ViewId, cc_core::TemporaryVisibility>,
@@ -77,6 +78,7 @@ impl Session {
             phase_geoms: HashMap::new(),
             drawings: HashMap::new(),
             sheets: HashMap::new(),
+            schedules: HashMap::new(),
             temporary: HashMap::new(),
             temporary_revision: 0,
             extension: None,
@@ -122,6 +124,11 @@ impl Session {
         self.geom = ModelGeometry::build(&self.doc.project);
         self.geom_revision = Some(rev);
         self.phase_geoms.retain(|_, (r, _)| *r == rev);
+        // Drop what is kept for views that are gone.
+        let views = &self.doc.project.views;
+        self.drawings.retain(|v, _| views.contains_key(v));
+        self.sheets.retain(|v, _| views.contains_key(v));
+        self.schedules.retain(|v, _| views.contains_key(v));
         true
     }
 
@@ -297,6 +304,7 @@ impl Session {
     pub fn invalidate_drawings(&mut self) {
         self.drawings.clear();
         self.sheets.clear();
+        self.schedules.clear();
     }
 
     /// Composition of a sheet in paper millimeters (cached per revision).
@@ -322,8 +330,14 @@ impl Session {
     }
 
     /// A schedule table of a schedule view, with the project's units: the
-    /// elements its phase and phase filter show.
-    pub fn schedule(&mut self, view: ViewId) -> Option<cc_views::Table> {
+    /// elements its phase and phase filter show (cached per revision).
+    pub fn schedule(&mut self, view: ViewId) -> Option<Rc<cc_views::Table>> {
+        let rev = self.doc.revision();
+        if let Some((r, t)) = self.schedules.get(&view)
+            && *r == rev
+        {
+            return Some(t.clone());
+        }
         let (category, def) = match &self.doc.project.view(view)?.kind {
             ViewKind::Schedule { category, def } => (*category, def.clone()),
             _ => return None,
@@ -334,9 +348,11 @@ impl Session {
         let v = p.view(view)?;
         let phase = cc_views::graphics::PhaseView::of(p, v);
         let options = p.shown_options(Some(v));
-        Some(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| {
+        let table = Rc::new(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| {
             p.option_shows(e, &options) && phase.is_none_or(|ph| ph.shows(p, e))
-        }))
+        }));
+        self.schedules.insert(view, (rev, table.clone()));
+        Some(table)
     }
 
     /// Run a typed command (the way the GUI calls the engine): it goes
