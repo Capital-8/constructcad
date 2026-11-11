@@ -2185,10 +2185,11 @@ fn beam_tool(
     let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(a) = state.interaction.anchor {
-        let width = match state.project().element_type(type_id).map(|t| &t.data) {
-            Some(cc_core::TypeData::Beam { width, .. }) => *width,
-            _ => 0.15,
-        };
+        // As wide as the type's section (its profile turned in the type).
+        let project = state.project();
+        let section = project.element_type(type_id).and_then(|t| project.type_section(&t.data));
+        let width = section.map(|s| s.outline.bbox()).map_or(0.15, |(lo, hi)| hi.x - lo.x);
+        let width = if width.is_finite() && width > 0.0 { width } else { 0.15 };
         let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
         let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
         painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));

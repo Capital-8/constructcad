@@ -21,7 +21,7 @@ use crate::tools::{Snap, Tool, TypedInput, dimension_line, draw_snap, snap_at, t
 use cc_core::arc::Arc;
 use cc_core::sketch::{JOIN_TOL, Sketch, SketchCurve, SketchError};
 use cc_core::sketch_edit;
-use cc_core::{Category, ElementId, ElementTypeId, LevelId, PlanTransform};
+use cc_core::{Category, ElementId, ElementTypeId, LevelId, PlanTransform, ProfileId};
 use cc_engine::Ref;
 use cc_engine::commands::sketch::CurveArg;
 use egui::{Color32, Painter, Response, Stroke, Ui};
@@ -46,6 +46,9 @@ pub enum Target {
     Piece,
     /// The profile of a sweep type (*Edit Profile*, see [`crate::profile_sketch`]).
     Profile { type_id: ElementTypeId },
+    /// A sketched structural profile (*Edit sketch* in the Profile Manager,
+    /// see [`crate::profile_sketch`]).
+    Section { profile: ProfileId },
     /// Lines of a title block on its Sheet view (see [`crate::title_block_env`]).
     Sheet,
     /// Detail lines being drawn (see [`crate::detail_ui`]): each curve
@@ -560,6 +563,11 @@ pub fn takes_points(state: &AppState) -> bool {
 /// Leave the sketch without changing the model.
 pub fn cancel(state: &mut AppState) {
     let keep_tool = state.sketch.as_ref().is_some_and(|s| s.piece.is_some() || s.target == Target::Sheet);
+    // A structural profile's sketch goes back to the Profile Manager.
+    if let Some(Target::Section { profile }) = state.sketch.as_ref().map(|s| s.target) {
+        crate::profile_sketch::leave_section(state, profile);
+        return;
+    }
     state.sketch = None;
     if let Some(ed) = state.component_env.as_mut().and_then(|e| e.sheet.as_mut()) {
         ed.editing = None;
@@ -584,6 +592,10 @@ pub fn finish(state: &mut AppState) {
             return;
         }
         Target::Profile { .. } => false,
+        Target::Section { .. } => {
+            crate::profile_sketch::finish_section(state);
+            return;
+        }
         Target::Sheet => {
             crate::title_block_env::finish_stroke(state);
             return;
@@ -637,7 +649,7 @@ pub fn finish(state: &mut AppState) {
             }
             return;
         }
-        Target::Piece | Target::Sheet | Target::Detail => None,
+        Target::Piece | Target::Section { .. } | Target::Sheet | Target::Detail => None,
     };
     if let Some(id) = out {
         state.sketch = None;
@@ -763,7 +775,10 @@ pub fn pick_walls(state: &mut AppState) {
     let category = match state.sketch.as_ref().map(|s| s.target) {
         Some(Target::New { category, .. }) => category,
         Some(Target::Edit { id }) => state.project().element(id).map_or(Category::Floor, |e| e.category()),
-        Some(Target::Piece | Target::Profile { .. } | Target::Sheet | Target::Detail) | None => return,
+        Some(Target::Piece | Target::Profile { .. } | Target::Section { .. } | Target::Sheet | Target::Detail)
+        | None => {
+            return;
+        }
     };
     let outward = if category == Category::Ceiling { -1.0 } else { 1.0 };
     match crate::tools::walls_loop(state.project(), level, outward) {
@@ -1401,6 +1416,10 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             let name = state.project().element_type(type_id).map(|t| t.name.clone()).unwrap_or_default();
             t!("sketch-title-profile", "type" => name)
         }
+        (Some(Target::Section { profile }), _) => {
+            let name = state.project().profile(profile).map(|p| p.name.clone()).unwrap_or_default();
+            t!("sketch-title-profile", "type" => name)
+        }
         (Some(Target::Sheet), _) => t!("sketch-title-sheet"),
         _ => t!("sketch-title-new", "category" => what),
     };
@@ -1428,7 +1447,8 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
             &[&[Move, CopyElements, Rotate], &[MirrorPick, MirrorDraw, Offset], &[TrimCorner, TrimExtend, Split]],
         );
         // Walls are picked in plans only.
-        let profile = matches!(state.sketch.as_ref().map(|s| s.target), Some(Target::Profile { .. }));
+        let profile =
+            matches!(state.sketch.as_ref().map(|s| s.target), Some(Target::Profile { .. } | Target::Section { .. }));
         let sheet = matches!(state.sketch.as_ref().map(|s| s.target), Some(Target::Sheet));
         let tools: &[_] = if piece.is_some() || profile || sheet { &[Delete] } else { &[SketchPickWalls, Delete] };
         if takes_points(state) {

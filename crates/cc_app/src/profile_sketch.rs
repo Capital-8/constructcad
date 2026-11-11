@@ -4,6 +4,12 @@
 //! The sketch is the same as for outlines in plans (its ribbon, tools,
 //! grips, properties and undo); *Finish* runs `sweep_profile_set` with its
 //! curves, so every sweep of the type follows in one undo step.
+//!
+//! *Edit sketch* in the Profile Manager opens a sketched structural profile
+//! the same way, around the axes x = 0 and y = 0 of its sketch, with no
+//! level: *Finish* writes its outline and openings with `profile_set`,
+//! keeping the expressions of the points that did not move, and both
+//! *Finish* and *Cancel* go back to the manager.
 
 use crate::paint::{PREVIEW, Xf};
 use crate::sketch_mode::{Session, Target};
@@ -11,8 +17,10 @@ use crate::state::AppState;
 use crate::t;
 use crate::theme::PALETTE;
 use crate::tools::{Snap, Tool};
+use cc_core::profile::{self, ProfilePoint, Segment};
 use cc_core::sketch::{Sketch, SketchCurve};
-use cc_core::{Category, ElementTypeId, TypeData};
+use cc_core::structural_profile::ParamSketch;
+use cc_core::{Category, ElementTypeId, ParamKind, ProfileId, ProfileShape, Project, TypeData};
 use egui::{Sense, Stroke, Ui};
 use glam::DVec2;
 
@@ -57,9 +65,172 @@ pub fn edit_selected(state: &mut AppState) {
     }
 }
 
-/// Whether the open sketch is a profile (which then takes the central area).
+/// Whether the open sketch is a sweep's or a structural profile (which then
+/// takes the central area).
 pub fn is_open(state: &AppState) -> bool {
-    state.sketch.as_ref().is_some_and(|s| matches!(s.target, Target::Profile { .. }))
+    state.sketch.as_ref().is_some_and(|s| matches!(s.target, Target::Profile { .. } | Target::Section { .. }))
+}
+
+/// The sketch of a sketched structural profile.
+fn param_sketch(project: &Project, id: ProfileId) -> Option<&ParamSketch> {
+    match &project.profile(id)?.shape {
+        ProfileShape::Sketch(s) => Some(s),
+        _ => None,
+    }
+}
+
+/// The value of a sketch's numeric parameter, as its points read it.
+fn param_value(sketch: &ParamSketch, name: &str) -> Option<f64> {
+    let numeric = |p: &&cc_core::ComponentParam| {
+        p.name == name && !matches!(p.kind, ParamKind::Text | ParamKind::Choice | ParamKind::Material)
+    };
+    sketch.params.iter().find(numeric).map(|p| p.value)
+}
+
+/// The loops of a structural profile's sketch (outline first, then the
+/// openings), each as its vertices in the sketch's own coordinates.
+fn section_loops(sketch: &ParamSketch) -> Option<Vec<Vec<(DVec2, Segment)>>> {
+    let lookup = |name: &str| param_value(sketch, name);
+    std::iter::once(&sketch.outline).chain(&sketch.openings).map(|l| profile::vertices(l, &lookup).ok()).collect()
+}
+
+/// The curves that draw a sketched structural profile: its outline's, then
+/// each opening's.
+pub fn section_curves(project: &Project, id: ProfileId) -> Option<Vec<SketchCurve>> {
+    let loops = section_loops(param_sketch(project, id)?)?;
+    Some(loops.iter().flat_map(|v| profile::to_curves(v, true)).collect())
+}
+
+/// Open a sketched structural profile in a sketch (*Edit sketch*).
+pub fn open_section(state: &mut AppState, id: ProfileId) {
+    let Some(curves) = section_curves(state.project(), id) else {
+        state.message = t!("sketch-piece-unreadable");
+        return;
+    };
+    state.set_tool(Tool::Select);
+    let mut session = Session::new(Target::Section { profile: id }, curves);
+    session.draw = crate::sketch_mode::Draw::Select;
+    state.sketch = Some(session);
+    state.message = t!("hint-section-sketch");
+}
+
+/// The profile points of one loop of the sketch: a point that did not move
+/// (at the same place, with the same segment) keeps what it was written as;
+/// others are numbers rounded to the micrometer.
+fn loop_points(vertices: &[(DVec2, Segment)], old: &[(ProfilePoint, DVec2, Segment)]) -> Vec<ProfilePoint> {
+    use crate::component_sketch::um;
+    vertices
+        .iter()
+        .map(|&(p, s)| {
+            if let Some((kept, _, _)) =
+                old.iter().find(|(_, q, t)| q.distance(p) < 1e-6 && crate::component_sketch::same(*t, s))
+            {
+                return kept.clone();
+            }
+            match s {
+                Segment::Line => ProfilePoint::new(um(p.x), um(p.y)),
+                Segment::Arc { radius } => {
+                    // Rounded up, so it still spans the rounded ends.
+                    let r = (radius.abs() * 1e6).ceil() / 1e6;
+                    ProfilePoint::arc(um(p.x), um(p.y), um(r * radius.signum()))
+                }
+                Segment::Ellipse { .. } => {
+                    profile::written(&[(p, s)]).pop().unwrap_or_else(|| ProfilePoint::new(um(p.x), um(p.y)))
+                }
+            }
+        })
+        .collect()
+}
+
+/// The outline and openings `curves` draw for `sketch`, or why not: the
+/// largest loop is the outline; loops keep the order they are drawn in.
+fn section_points(
+    sketch: &ParamSketch,
+    curves: &[SketchCurve],
+) -> Result<(Vec<ProfilePoint>, Vec<Vec<ProfilePoint>>), String> {
+    let as_sketch = Sketch { curves: curves.to_vec() };
+    as_sketch.profile().map_err(|e| crate::sketch_mode::error_text(&e))?;
+    // The curves of each loop, from the first curve not yet in one.
+    let mut used = vec![false; curves.len()];
+    let mut loops: Vec<Vec<SketchCurve>> = Vec::new();
+    for i in 0..curves.len() {
+        if used.get(i).copied().unwrap_or(true) {
+            continue;
+        }
+        let (links, _) = cc_core::sketch_edit::chain(curves, i);
+        let mut group = Vec::with_capacity(links.len());
+        for (k, _) in links {
+            if let (Some(u), Some(c)) = (used.get_mut(k), curves.get(k)) {
+                *u = true;
+                group.push(*c);
+            }
+        }
+        loops.push(group);
+    }
+    let area = |group: &[SketchCurve]| {
+        Sketch { curves: group.to_vec() }.outline().map_or(0.0, |o| cc_geom::polygon::area(&o).abs())
+    };
+    let outer = (0..loops.len()).max_by(|&a, &b| area(&loops[a]).total_cmp(&area(&loops[b])));
+    let outer = outer.ok_or_else(|| crate::sketch_mode::error_text(&cc_core::sketch::SketchError::Empty))?;
+    let old: Vec<(ProfilePoint, DVec2, Segment)> = section_loops(sketch)
+        .map(|loops| {
+            let points = std::iter::once(&sketch.outline).chain(&sketch.openings).flatten();
+            points.cloned().zip(loops.into_iter().flatten()).map(|(p, (at, s))| (p, at, s)).collect()
+        })
+        .unwrap_or_default();
+    let mut outline = Vec::new();
+    let mut openings = Vec::new();
+    for (i, group) in loops.iter().enumerate() {
+        let vertices = profile::from_curves(group, true).map_err(|e| crate::sketch_mode::error_text(&e))?;
+        let points = loop_points(&vertices, &old);
+        if i == outer {
+            outline = points;
+        } else {
+            openings.push(points);
+        }
+    }
+    Ok((outline, openings))
+}
+
+/// *Finish* on a structural profile's sketch: its outline and openings
+/// written with `profile_set` (nothing when they are as they were), then
+/// back to the Profile Manager; a sketch that makes no profile stays open
+/// with the reason.
+pub fn finish_section(state: &mut AppState) {
+    let Some(Target::Section { profile: id }) = state.sketch.as_ref().map(|s| s.target) else { return };
+    let curves = state.sketch.as_ref().map(|s| s.curves.clone()).unwrap_or_default();
+    let Some(sketch) = param_sketch(state.project(), id).cloned() else {
+        leave_section(state, id);
+        return;
+    };
+    let (outline, openings) = match section_points(&sketch, &curves) {
+        Ok(points) => points,
+        Err(message) => {
+            state.message = message;
+            return;
+        }
+    };
+    if outline != sketch.outline || openings != sketch.openings {
+        let command = cc_engine::commands::profiles::ProfileSet {
+            profile: cc_engine::Ref::Id(id.0),
+            sketch: Some(serde_json::json!({ "outline": outline, "openings": openings })),
+            ..Default::default()
+        };
+        if crate::actions::run_command(state, command).is_none() {
+            return;
+        }
+    }
+    leave_section(state, id);
+}
+
+/// Close a structural profile's sketch and go back to the Profile Manager on it.
+pub fn leave_section(state: &mut AppState, id: ProfileId) {
+    state.sketch = None;
+    state.set_tool(Tool::Select);
+    crate::profiles_dialog::open(state);
+    if let Some(d) = state.dialogs.profiles.as_mut() {
+        d.selected = Some(id);
+    }
 }
 
 /// The view of the profile: where the camera looks and how near.
@@ -112,11 +283,23 @@ fn snap(s: &Session, raw: DVec2, tol: f64, shift: bool) -> Snap {
 /// the sketch and its tools; middle or right drag pans, the wheel zooms, a
 /// middle double click fits.
 pub fn central(ui: &mut Ui, state: &mut AppState) {
-    let Some(Target::Profile { type_id }) = state.sketch.as_ref().map(|s| s.target) else { return };
+    // A sweep type's profile (with its path) or a structural profile, and its name.
+    let (id, sweep, name) = match state.sketch.as_ref().map(|s| s.target) {
+        Some(Target::Profile { type_id }) => (
+            egui::Id::new(("sweep-profile-camera", type_id.0)),
+            true,
+            state.project().element_type(type_id).map(|t| t.name.clone()),
+        ),
+        Some(Target::Section { profile }) => (
+            egui::Id::new(("section-profile-camera", profile.0)),
+            false,
+            state.project().profile(profile).map(|p| p.name.clone()),
+        ),
+        _ => return,
+    };
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, PALETTE.paper);
-    let id = egui::Id::new(("sweep-profile-camera", type_id.0));
     let curves = state.sketch.as_ref().map(|s| s.curves.clone()).unwrap_or_default();
     let mut cam = ui.ctx().data(|d| d.get_temp::<Camera>(id)).unwrap_or_else(|| fit(&curves, rect));
     if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) {
@@ -142,7 +325,7 @@ pub fn central(ui: &mut Ui, state: &mut AppState) {
     ui.ctx().data_mut(|d| d.insert_temp(id, cam));
     let xf = Xf { screen: rect.center(), origin: cam.center, scale: cam.scale };
 
-    // The axes through the path's point: the path's height (x) and the path (y).
+    // The axes through the origin: for a sweep, the path's height (x) and the path (y).
     let axis = Stroke::new(1.0, egui::Color32::from_gray(160));
     let o = xf.to_screen(DVec2::ZERO);
     painter.line_segment([egui::pos2(rect.left(), o.y), egui::pos2(rect.right(), o.y)], axis);
@@ -151,10 +334,12 @@ pub fn central(ui: &mut Ui, state: &mut AppState) {
     let font = egui::FontId::proportional(12.0);
     let note =
         |at: egui::Pos2, align, text: String| painter.text(at, align, text, font.clone(), INK.gamma_multiply(0.7));
-    note(o + egui::vec2(8.0, 6.0), egui::Align2::LEFT_TOP, t!("profile-sketch-path"));
-    note(egui::pos2(rect.right() - 8.0, o.y - 4.0), egui::Align2::RIGHT_BOTTOM, t!("profile-sketch-across"));
-    note(egui::pos2(o.x + 6.0, rect.top() + 8.0), egui::Align2::LEFT_TOP, t!("profile-sketch-up"));
-    if let Some(name) = state.project().element_type(type_id).map(|t| t.name.clone()) {
+    if sweep {
+        note(o + egui::vec2(8.0, 6.0), egui::Align2::LEFT_TOP, t!("profile-sketch-path"));
+        note(egui::pos2(rect.right() - 8.0, o.y - 4.0), egui::Align2::RIGHT_BOTTOM, t!("profile-sketch-across"));
+        note(egui::pos2(o.x + 6.0, rect.top() + 8.0), egui::Align2::LEFT_TOP, t!("profile-sketch-up"));
+    }
+    if let Some(name) = name {
         painter.text(rect.left_top() + egui::vec2(10.0, 8.0), egui::Align2::LEFT_TOP, name, font, INK);
     }
 
@@ -217,6 +402,44 @@ mod tests {
         crate::sketch_mode::cancel(&mut state);
         assert!(state.sketch.is_none());
         assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    }
+
+    /// A structural profile's sketch: points that stay keep their
+    /// expressions, a moved one is written as numbers, and a loop inside
+    /// the outline is an opening.
+    #[test]
+    fn a_section_sketch_keeps_the_expressions_of_points_that_stay() {
+        let sketch = ParamSketch::square(0.1, 0.2);
+        let loops = section_loops(&sketch).unwrap();
+        let mut curves = profile::to_curves(&loops[0], true);
+        // Unchanged: the same points.
+        let (outline, openings) = section_points(&sketch, &curves).unwrap();
+        assert_eq!(outline, sketch.outline);
+        assert!(openings.is_empty());
+        // The top right corner (b/2, h/2) moved 10 mm right; a hole drawn inside.
+        let corner = DVec2::new(0.05, 0.1);
+        let moved = DVec2::new(0.06, 0.1);
+        for c in &mut curves {
+            if let SketchCurve::Line { a, b } = c {
+                for p in [a, b] {
+                    if p.distance(corner) < 1e-9 {
+                        *p = moved;
+                    }
+                }
+            }
+        }
+        let hole = [DVec2::new(-0.01, -0.01), DVec2::new(0.01, -0.01), DVec2::new(0.01, 0.01), DVec2::new(-0.01, 0.01)];
+        curves.extend(Sketch::from_polygons(&hole, &[]).curves);
+        let (outline, openings) = section_points(&sketch, &curves).unwrap();
+        assert_eq!(outline.len(), 4);
+        assert!(outline.contains(&ProfilePoint::new("0.06", "0.1")), "{outline:?}");
+        let kept = outline.iter().filter(|p| sketch.outline.contains(p)).count();
+        assert_eq!(kept, 3, "the other corners keep b/2 and h/2");
+        assert_eq!(openings.len(), 1);
+        assert_eq!(openings[0].len(), 4);
+        // An open sketch is refused with the reason.
+        curves.truncate(3);
+        assert!(section_points(&sketch, &curves).is_err());
     }
 
     #[test]

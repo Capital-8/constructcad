@@ -709,3 +709,23 @@ fn profile_command_inputs_are_bounded() {
     let err = run_err(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam", "name": long}));
     assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
 }
+
+/// The path Type Properties takes: the template's beam type pointed to an
+/// imported IPE 200 by id (`type_set`); a beam of it builds a body of the
+/// I's area along its length.
+#[test]
+fn a_template_beam_type_switched_to_ipe_200_builds_its_body() {
+    let mut s = Session::default();
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let pid = run(&mut s, "profile_get", json!({"profile": "IPE 200"}))["id"].clone();
+    let t = s.project().default_type(cc_core::Category::Beam).unwrap();
+    run(&mut s, "type_set", json!({"type": t.0, "params": {"profile": pid}}));
+    assert_eq!(run(&mut s, "type_get", json!({"type": t.0}))["params"]["profile"], "IPE 200");
+    let beam = run(&mut s, "beam_create", json!({"type": t.0, "start": [0.0, 0.0], "end": [4.0, 0.0]}))["id"].clone();
+    let id = ElementId(beam.as_u64().unwrap());
+    let geom = s.geometry();
+    let faces: usize = geom.body_of(id).map(|b| b.faces.len()).sum();
+    assert!(faces > 0, "a body");
+    let volume: f64 = geom.body_of(id).map(cc_geom::Solid::volume).sum();
+    assert!((volume - 0.00285 * 4.0).abs() / (0.00285 * 4.0) < 0.03, "{volume}");
+}

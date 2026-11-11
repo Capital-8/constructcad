@@ -33,6 +33,11 @@ pub fn shape_key(code: &str) -> String {
     format!("profile-shape-{}", code.replace('_', "-"))
 }
 
+/// The i18n key of what a shape parameter measures (`profile-param-bf-top`).
+pub fn param_key(name: &str) -> String {
+    format!("profile-param-{}", name.replace('_', "-"))
+}
+
 /// A shape's name in the interface language.
 fn shape_label(code: &str) -> String {
     tr(&shape_key(code))
@@ -75,6 +80,9 @@ pub struct ProfilesDialog {
     /// The last refused change, shown under the parameters.
     error: Option<String>,
     pub(crate) catalog: Option<Catalog>,
+    /// *Edit sketch* was pressed: the dialog closes (keeping its edits)
+    /// and the selected profile opens in a sketch.
+    edit_sketch: bool,
     cache: Cache,
     edits: Edits,
 }
@@ -89,6 +97,8 @@ pub struct Catalog {
     series_list: Vec<(String, String)>,
     /// The designations shown, for (series, filter).
     rows: Option<(String, String, Vec<String>)>,
+    /// Why the last *Add* was refused, shown in the catalog itself.
+    error: Option<String>,
 }
 
 pub fn open(state: &mut AppState) {
@@ -99,6 +109,7 @@ pub fn open(state: &mut AppState) {
         replace_with: None,
         error: None,
         catalog: None,
+        edit_sketch: false,
         cache: Cache::default(),
         edits,
     });
@@ -202,6 +213,14 @@ pub fn show(ctx: &Context, state: &mut AppState) {
         },
     );
     catalog_dialog(ctx, state, &mut d);
+    if std::mem::take(&mut d.edit_sketch)
+        && let Some(id) = d.selected
+    {
+        // The sketch's Finish and Cancel open the manager again.
+        d.edits.finish(state, true);
+        crate::profile_sketch::open_section(state, id);
+        return;
+    }
     let close = match response.clicked {
         Some(i) => Some(i == ok),
         None if response.dismissed && d.catalog.is_none() => Some(false),
@@ -374,7 +393,9 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
             // Lengths in millimeters; the Z section's lip angle in degrees.
             let degrees = param == "angle";
             let mut shown = if degrees { value } else { value * 1000.0 };
-            let r = table::row(ui, &param, |ui| {
+            // The symbol stays the label; what it measures is its tooltip.
+            let tip = crate::i18n::try_tr(&param_key(&param));
+            let r = table::row_tip(ui, &param, tip.as_deref(), |ui| {
                 let suffix = if degrees { "°" } else { " mm" };
                 ui.add(egui::DragValue::new(&mut shown).speed(0.5).range(0.0..=f64::MAX).max_decimals(2).suffix(suffix))
             });
@@ -419,9 +440,15 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
     });
     if detail["shape"] == "sketch" {
         ui.add_space(6.0);
-        // Drawing the sketch comes with the profile sketch editor.
-        ui.add_enabled(false, egui::Button::new(t!("profiles-edit-sketch")))
-            .on_disabled_hover_text(t!("profiles-edit-sketch-later"));
+        // The sketch takes the central area, so it opens from the manager
+        // alone (not over Type Properties).
+        let free = d.edits.owns();
+        let button = ui
+            .add_enabled(free, egui::Button::new(t!("profiles-edit-sketch")))
+            .on_disabled_hover_text(t!("profiles-edit-sketch-nested"));
+        if button.clicked() {
+            d.edit_sketch = true;
+        }
     }
     if failed {
         // Read the profile back, so a refused value shows what it is.
@@ -515,8 +542,14 @@ fn open_catalog(state: &mut AppState, d: &mut ProfilesDialog) {
         })
         .collect();
     let Some((first, _)) = series_list.first().cloned() else { return };
-    d.catalog =
-        Some(Catalog { series: first, filter: String::new(), picked: BTreeSet::new(), series_list, rows: None });
+    d.catalog = Some(Catalog {
+        series: first,
+        filter: String::new(),
+        picked: BTreeSet::new(),
+        series_list,
+        rows: None,
+        error: None,
+    });
 }
 
 /// The designations of the catalog's series that pass its filter, read again
@@ -569,6 +602,7 @@ fn catalog_dialog(ctx: &Context, state: &mut AppState, d: &mut ProfilesDialog) {
                     for designation in rows {
                         let mut on = c.picked.contains(designation);
                         if ui.checkbox(&mut on, designation).changed() {
+                            c.error = None;
                             if on {
                                 c.picked.insert(designation.clone());
                             } else {
@@ -578,6 +612,12 @@ fn catalog_dialog(ctx: &Context, state: &mut AppState, d: &mut ProfilesDialog) {
                     }
                 });
             });
+            // Nothing picked yet, or why the import was refused.
+            if let Some(e) = &c.error {
+                ui.label(RichText::new(e).color(PALETTE.danger));
+            } else if c.picked.is_empty() {
+                ui.label(theme::muted(t!("profiles-catalog-none")));
+            }
         },
         |f| {
             add = f.primary(t!("profiles-catalog-add"));
@@ -594,7 +634,7 @@ fn catalog_dialog(ctx: &Context, state: &mut AppState, d: &mut ProfilesDialog) {
                     designations: c.picked.iter().cloned().collect(),
                     on_clash: None,
                 };
-                match run(state, &mut d.error, None, command) {
+                match run(state, &mut c.error, None, command) {
                     Some(out) => {
                         if let Some(id) = profile_id(&out["imported"][0]) {
                             d.selected = Some(id);

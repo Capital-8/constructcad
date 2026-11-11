@@ -48,6 +48,11 @@ pub fn section(ui: &mut Ui, id: &str, title: String, add: impl FnOnce(&mut Ui)) 
 
 /// One table row: a label cell and a value cell filled by `add`.
 pub fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
+    row_tip(ui, label, None, add)
+}
+
+/// [`row`] whose label shows `tip` when hovered (else the label itself).
+pub fn row_tip<R>(ui: &mut Ui, label: &str, tip: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
     let width = ui.available_width();
     let row_h = row_height();
     let (rect, _) = ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
@@ -66,7 +71,7 @@ pub fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
         PALETTE.text_muted,
     );
     let label_hover = ui.interact(label_rect, ui.id().with(("prop-label", label)), Sense::hover());
-    label_hover.on_hover_text(label);
+    label_hover.on_hover_text(tip.unwrap_or(label));
 
     let value_rect = Rect::from_min_max(egui::pos2(split + 2.0, rect.top() + 1.0), rect.max - vec2(2.0, 2.0));
     let builder = UiBuilder::new().max_rect(value_rect).layout(Layout::left_to_right(Align::Center));

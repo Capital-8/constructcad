@@ -3014,3 +3014,91 @@ fn profile_manager_imports_and_cancels() {
     assert!(harness.state().project().profile(ipe).is_some(), "Cancel undoes the deletion");
     assert_eq!(users(&harness), vec![beam]);
 }
+
+/// Type Properties of the template beam: the profile picked in the combo
+/// box (IPE 200, imported first) is the type's after OK, as `type_get` shows.
+#[test]
+fn type_properties_pick_a_profile() {
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::ProfileImport;
+    let mut state = sample_state();
+    let import = ProfileImport { series: "IPE".into(), designations: vec!["200".into()], on_clash: None };
+    state.session.run(import).unwrap();
+    let beam = state.project().default_type(cc_core::Category::Beam).unwrap();
+    let shown = match &state.project().element_type(beam).unwrap().data {
+        cc_core::TypeData::Beam { profile, .. } => {
+            profile.and_then(|p| state.project().profile(p)).map_or("—".to_string(), |p| p.name.clone())
+        }
+        _ => panic!("not a beam type"),
+    };
+    state.dialogs.type_editor = Some(beam);
+    let mut harness = app_harness(state);
+    harness.run();
+    let combo = harness.query_all_by_role(Role::ComboBox).find(|n| n.value().as_deref() == Some(shown.as_str()));
+    combo.expect("the profile combo shows the type's profile").click();
+    harness.run();
+    harness.get_by_label("IPE 200").click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.type_editor.is_none());
+    let out = harness.state_mut().session.run(cc_engine::commands::query::TypeGet { type_ref: Ref::Id(beam.0) });
+    assert_eq!(out.unwrap()["params"]["profile"], "IPE 200");
+}
+
+fn sketch_harness(state: AppState) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(1400.0, 900.0), egui::Theme::Light, |ui, state| {
+        egui::Panel::top("ribbon").show(ui, |ui| {
+            if state.sketch.is_some() {
+                crate::sketch_mode::ribbon(ui, state)
+            } else {
+                crate::ribbon::ribbon(ui, state)
+            }
+        });
+        egui::CentralPanel::default().show(ui, |ui| {
+            if crate::profile_sketch::is_open(state) {
+                crate::profile_sketch::central(ui, state);
+            }
+        });
+        crate::dialogs::show(ui.ctx(), state);
+    })
+}
+
+/// *Edit sketch* in the Profile Manager opens a sketched profile; Finish
+/// without changes leaves it as it was (its expressions kept) and goes back
+/// to the manager, as Cancel does.
+#[test]
+fn a_sketched_profile_is_edited_and_kept() {
+    use cc_engine::commands::profiles::ProfileCreate;
+    let mut state = sample_state();
+    let command = ProfileCreate { material: "steel".into(), shape: Some("sketch".into()), ..Default::default() };
+    let id = cc_core::ProfileId(state.session.run(command).unwrap()["id"].as_u64().unwrap());
+    let before = state.project().profile(id).unwrap().shape.clone();
+    assert!(matches!(before, cc_core::ProfileShape::Sketch(_)));
+    crate::profiles_dialog::open(&mut state);
+    state.dialogs.profiles.as_mut().unwrap().selected = Some(id);
+    let depth = state.session.doc.undo_depth();
+    let mut harness = sketch_harness(state);
+    harness.run();
+    harness.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none(), "the manager makes way for the sketch");
+    assert!(crate::profile_sketch::is_open(harness.state()));
+    assert_eq!(harness.state().sketch.as_ref().unwrap().curves.len(), 4, "the square's sides");
+    harness.get_by_role_and_label(Role::Button, &t!("sketch-finish-mode")).click();
+    harness.run();
+    assert!(harness.state().sketch.is_none(), "{}", harness.state().message);
+    assert_eq!(harness.state().project().profile(id).unwrap().shape, before, "unchanged");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth);
+    let back = harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected);
+    assert_eq!(back, Some(id), "back in the manager, on the profile");
+
+    // Cancel goes back to the manager too.
+    harness.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+    harness.run();
+    assert!(crate::profile_sketch::is_open(harness.state()));
+    harness.get_by_role_and_label(Role::Button, &t!("sketch-cancel-mode")).click();
+    harness.run();
+    assert!(harness.state().sketch.is_none());
+    assert_eq!(harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected), Some(id));
+}
