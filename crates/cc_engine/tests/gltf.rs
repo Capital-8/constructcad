@@ -247,3 +247,70 @@ fn bad_gltf_files_are_errors() {
     let out = run(&mut s, "gltf_import", json!({ "path": short }));
     assert!(out["faces"].as_u64().unwrap() < 36, "{out}");
 }
+
+/// A 2 x 2 PNG, two red pixels over two blue ones.
+fn png() -> Vec<u8> {
+    let img = image::RgbaImage::from_fn(2, 2, |_, y| {
+        if y == 0 { image::Rgba([255, 0, 0, 255]) } else { image::Rgba([0, 0, 255, 255]) }
+    });
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+    out.into_inner()
+}
+
+/// A textured, half-clear 2 x 4 m quad standing up (glTF x, y), its texture
+/// repeated twice across and once up, the picture in the binary chunk.
+#[test]
+fn textures_colors_and_opacity_come_in() {
+    let mut bin = Vec::new();
+    for p in [[0.0f32, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 4.0, 0.0], [0.0, 4.0, 0.0]] {
+        p.iter().for_each(|v| bin.extend_from_slice(&v.to_le_bytes()));
+    }
+    for t in [[0.0f32, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 1.0]] {
+        t.iter().for_each(|v| bin.extend_from_slice(&v.to_le_bytes()));
+    }
+    for i in [0u16, 1, 2, 0, 2, 3] {
+        bin.extend_from_slice(&i.to_le_bytes());
+    }
+    let image_at = bin.len();
+    let picture = png();
+    bin.extend_from_slice(&picture);
+    let json = json!({
+        "asset": { "version": "2.0" },
+        "scenes": [{ "nodes": [0] }],
+        "nodes": [{ "name": "Panel", "mesh": 0 }],
+        "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0, "TEXCOORD_0": 1 }, "indices": 2, "material": 0 }] }],
+        "materials": [{
+            "name": "Tiles",
+            "alphaMode": "BLEND",
+            "pbrMetallicRoughness": { "baseColorFactor": [1.0, 1.0, 1.0, 0.5], "baseColorTexture": { "index": 0 } }
+        }],
+        "textures": [{ "source": 0 }],
+        "images": [{ "bufferView": 3, "mimeType": "image/png" }],
+        "buffers": [{ "byteLength": bin.len() }],
+        "bufferViews": [
+            { "buffer": 0, "byteOffset": 0, "byteLength": 48 },
+            { "buffer": 0, "byteOffset": 48, "byteLength": 32 },
+            { "buffer": 0, "byteOffset": 80, "byteLength": 12 },
+            { "buffer": 0, "byteOffset": image_at, "byteLength": picture.len() }
+        ],
+        "accessors": [
+            { "bufferView": 0, "componentType": 5126, "count": 4, "type": "VEC3" },
+            { "bufferView": 1, "componentType": 5126, "count": 4, "type": "VEC2" },
+            { "bufferView": 2, "componentType": 5123, "count": 6, "type": "SCALAR" }
+        ]
+    });
+    let path = scratch("textured.glb");
+    std::fs::write(&path, glb(&json, &bin)).unwrap();
+    let mut s = Session::default();
+    run(&mut s, "gltf_import", json!({ "path": path }));
+    let m = s.project().materials.iter().find(|m| m.name == "Tiles").unwrap();
+    // The color is the picture's average (half red, half blue, in linear light).
+    let half = cc_engine::import_material::to_srgb(0.5);
+    assert_eq!(m.color, [half, 0, half]);
+    assert!((m.graphics.transparency - 0.5).abs() < 1e-12);
+    let texture = m.appearance.texture.as_ref().expect("the picture is the texture");
+    assert_eq!((texture.image.width, texture.image.height, texture.image.data.clone()), (2, 2, picture));
+    // Twice across 2 m, once up 4 m.
+    assert!(close(texture.width, 1.0) && close(texture.height, 4.0), "{} {}", texture.width, texture.height);
+}

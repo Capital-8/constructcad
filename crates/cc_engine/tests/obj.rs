@@ -138,3 +138,23 @@ fn bad_obj_files_are_errors() {
     let out = run(&mut s, "obj_import", json!({ "path": outside }));
     assert_eq!(out["elements"].as_array().unwrap().len(), 1);
 }
+
+/// The material library's picture becomes the texture, `Kd` tints it and
+/// `d` makes it partly clear; the repeat comes from `vt`.
+#[test]
+fn obj_textures_and_opacity() {
+    let img = image::RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255]));
+    img.save(scratch("leaf texture.png")).unwrap();
+    std::fs::write(scratch("leaf.mtl"), "newmtl Leaf\nKd 1 1 1\nd 0.25\nmap_Kd -s 1 1 1 leaf texture.png\n").unwrap();
+    // A 3 x 1.5 m quad lying flat (Z up), the texture repeated three times across and once along.
+    let text = "mtllib leaf.mtl\nusemtl Leaf\nv 0 0 0\nv 3 0 0\nv 3 1.5 0\nv 0 1.5 0\nvt 0 0\nvt 3 0\nvt 3 1\nvt 0 1\nf 1/1 2/2 3/3 4/4\n";
+    let path = scratch("leaf.obj");
+    std::fs::write(&path, text).unwrap();
+    let mut s = Session::default();
+    run(&mut s, "obj_import", json!({ "path": path, "z_up": true }));
+    let m = s.project().materials.iter().find(|m| m.name == "Leaf").unwrap();
+    assert_eq!(m.color, [0, 255, 0]);
+    assert!((m.graphics.transparency - 0.75).abs() < 1e-12);
+    let texture = m.appearance.texture.as_ref().expect("map_Kd is the texture");
+    assert!(close(texture.width, 1.0) && close(texture.height, 1.5), "{} {}", texture.width, texture.height);
+}

@@ -308,9 +308,9 @@ fn unique_type_name(p: &cc_core::Project, name: &str, taken: &mut std::collectio
 /// Add the converted materials (those the project lacks) and types; returns the type ids.
 fn add_skp_types(e: &mut cc_core::EditCtx, conv: crate::skp::Converted) -> (Vec<ElementTypeId>, usize) {
     let mut added = 0;
-    for (name, color) in conv.materials {
-        if !e.project().materials.iter().any(|m| m.name == name) {
-            e.materials_mut().push(cc_core::Material::new(name, color));
+    for m in conv.materials {
+        if !e.project().materials.iter().any(|x| x.name == m.name) {
+            e.materials_mut().push(m.to_material());
             added += 1;
         }
     }
@@ -335,8 +335,8 @@ fn too_large(_: crate::skp::SkpError) -> EngineError {
 /// that differ only by a move or a plan rotation share a type, anything
 /// else in their transform (tilt, scale, mirror) is built into the type.
 /// Faces outside any component make one more element at the file's origin.
-/// Missing materials are added by name and color; hidden objects and those
-/// on hidden layers are left out.
+/// Missing materials are added by name, color, opacity and texture; hidden
+/// objects and those on hidden layers are left out.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SkpImport {
@@ -419,9 +419,11 @@ impl ObjUnits {
 /// in a file without objects, each group) becomes a component element on
 /// `level`, of a component type holding its faces as fixed mesh pieces, one
 /// per material, inserted at the center of its footprint and the bottom of
-/// its extent. Colors come from the `.mtl` libraries next to the file
-/// (`Kd`); missing materials are added by name. Faces not flat are split
-/// into triangles; lines, points, textures and normals are ignored.
+/// its extent. Materials come from the `.mtl` libraries next to the file:
+/// color (`Kd`), opacity (`d`, `Tr`) and texture (`map_Kd`, the picture next
+/// to the file, repeating as the faces' `vt` coordinates say); missing
+/// materials are added by name. Faces not flat are split into triangles;
+/// lines, points and normals are ignored.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ObjImport {
@@ -477,9 +479,11 @@ impl Command for ObjImport {
 /// everything below it, becomes a component element on `level`, of a
 /// component type holding its triangles as fixed mesh pieces, one per
 /// material, inserted at the center of its footprint and the bottom of its
-/// extent. glTF is in meters with Y up. Colors come from the materials' base
-/// color; missing materials are added by name. Textures, lines and points
-/// are ignored, and compressed meshes (Draco, meshopt) are refused.
+/// extent. glTF is in meters with Y up. Materials take their base color
+/// times its texture's average, the texture itself (repeating as the
+/// texture coordinates say) and, when blended, their opacity; missing
+/// materials are added by name. Lines and points are ignored, and
+/// compressed meshes (Draco, meshopt) are refused.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GltfImport {

@@ -143,7 +143,7 @@ No parameters.
 
 ### `skp_import`
 
-*edit* — Import a SketchUp model (.skp) into the project. Each placed component or group becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces (one per material): placements that differ only by a move or a plan rotation share a type, anything else in their transform (tilt, scale, mirror) is built into the type. Faces outside any component make one more element at the file's origin. Missing materials are added by name and color; hidden objects and those on hidden layers are left out.
+*edit* — Import a SketchUp model (.skp) into the project. Each placed component or group becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces (one per material): placements that differ only by a move or a plan rotation share a type, anything else in their transform (tilt, scale, mirror) is built into the type. Faces outside any component make one more element at the file's origin. Missing materials are added by name, color, opacity and texture; hidden objects and those on hidden layers are left out.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -162,7 +162,7 @@ No parameters.
 
 ### `obj_import`
 
-*edit* — Import a Wavefront OBJ model (.obj) into the project. Each object (or, in a file without objects, each group) becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent. Colors come from the `.mtl` libraries next to the file (`Kd`); missing materials are added by name. Faces not flat are split into triangles; lines, points, textures and normals are ignored.
+*edit* — Import a Wavefront OBJ model (.obj) into the project. Each object (or, in a file without objects, each group) becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent. Materials come from the `.mtl` libraries next to the file: color (`Kd`), opacity (`d`, `Tr`) and texture (`map_Kd`, the picture next to the file, repeating as the faces' `vt` coordinates say); missing materials are added by name. Faces not flat are split into triangles; lines, points and normals are ignored.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -176,7 +176,7 @@ No parameters.
 
 ### `gltf_import`
 
-*edit* — Import a glTF 2.0 model (.glb, or .gltf with its buffers embedded or in files next to it) into the project. Each node of the scene's root, with everything below it, becomes a component element on `level`, of a component type holding its triangles as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent. glTF is in meters with Y up. Colors come from the materials' base color; missing materials are added by name. Textures, lines and points are ignored, and compressed meshes (Draco, meshopt) are refused.
+*edit* — Import a glTF 2.0 model (.glb, or .gltf with its buffers embedded or in files next to it) into the project. Each node of the scene's root, with everything below it, becomes a component element on `level`, of a component type holding its triangles as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent. glTF is in meters with Y up. Materials take their base color times its texture's average, the texture itself (repeating as the texture coordinates say) and, when blended, their opacity; missing materials are added by name. Lines and points are ignored, and compressed meshes (Draco, meshopt) are refused.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
