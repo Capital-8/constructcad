@@ -206,12 +206,15 @@ fn valve_pipe<'a>(project: &'a Project, e: &Element) -> Option<&'a Element> {
     }
 }
 
+/// A component type, or one element of it when it has overrides.
+type ExtentKey = (cc_core::ElementTypeId, Option<cc_core::ElementId>);
+
 /// What one schedule works out once and reads for many cells: components'
 /// extents, per type for elements without overrides (they resolve alike),
 /// else per element; and the doors and windows of each wall.
 #[derive(Default)]
 struct Memo {
-    extents: std::collections::HashMap<(cc_core::ElementTypeId, Option<cc_core::ElementId>), Option<(f64, f64, f64)>>,
+    extents: std::collections::HashMap<ExtentKey, Option<(f64, f64, f64)>>,
     hosted: Option<std::collections::HashMap<cc_core::ElementId, Vec<cc_core::ElementId>>>,
 }
 

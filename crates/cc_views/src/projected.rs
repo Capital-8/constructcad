@@ -918,7 +918,7 @@ mod tests {
             let z = if k % 7 == 0 { 1.0 } else { rand() * 5.0 };
             let tilt = (rand() - 0.5) * 0.8;
             let at = |px: f64, py: f64| DVec3::new(px, py, z + tilt * (px - x));
-            let verts = vec![at(x, y), at(x + w, y), at(x + w, y + h), at(x, y + h)];
+            let verts = [at(x, y), at(x + w, y), at(x + w, y + h), at(x, y + h)];
             let normal = (verts[1] - verts[0]).cross(verts[2] - verts[0]).normalize();
             faces.push(ProjectedFace {
                 depth: verts.iter().map(|v| frame.depth(*v)).sum::<f64>() / verts.len() as f64,
