@@ -18,6 +18,11 @@ const MAX_DEPTH: usize = 32;
 pub const MAX_FACES: usize = 2_000_000;
 /// Distinct types an import may make.
 const MAX_TYPES: usize = 20_000;
+/// Most work over the whole import: each definition read costs one plus its
+/// faces and instances, every time it is placed. Faces count only when
+/// drawn, so without this a chain of faceless definitions each placing the
+/// next several times would cost its count to the power of the depth.
+const MAX_WORK: usize = 10_000_000;
 
 /// A component type to add: its name and definition.
 #[derive(Debug, Clone)]
@@ -80,6 +85,11 @@ struct Converter<'a> {
     out: Converted,
     keys: HashMap<TypeKey, usize>,
     materials: HashMap<EntityId, Option<usize>>,
+    /// Work done ([`MAX_WORK`]).
+    work: usize,
+    /// The definitions being gathered, outermost first (a definition that
+    /// places itself, directly or not, is not followed again).
+    path: Vec<EntityId>,
 }
 
 /// An instance's 13-value matrix (row-major 3x3, translation, scale term) in inches.
@@ -145,7 +155,15 @@ impl MeshBuild {
 impl<'a> Converter<'a> {
     fn new(model: &'a SkpModel) -> Self {
         let hidden_layers = model.layers.iter().filter(|l| l.hidden).map(|l| l.name.as_str()).collect();
-        Self { model, hidden_layers, out: Converted::default(), keys: HashMap::new(), materials: HashMap::new() }
+        Self {
+            model,
+            hidden_layers,
+            out: Converted::default(),
+            keys: HashMap::new(),
+            materials: HashMap::new(),
+            work: 0,
+            path: Vec::new(),
+        }
     }
 
     fn layer_hidden(&self, layer: &str) -> bool {
@@ -184,9 +202,28 @@ impl<'a> Converter<'a> {
         depth: usize,
         pieces: &mut BTreeMap<Option<usize>, MeshBuild>,
     ) -> Result<(), SkpError> {
-        if depth > MAX_DEPTH {
+        if depth > MAX_DEPTH || self.path.contains(&def.id) {
             return Ok(());
         }
+        self.work = self.work.saturating_add(1 + def.faces.len() + def.instances.len());
+        if self.work > MAX_WORK {
+            return Err(SkpError::TooLarge);
+        }
+        self.path.push(def.id);
+        let gathered = self.gather_in(def, to_type, inherited, depth, pieces);
+        self.path.pop();
+        gathered
+    }
+
+    /// The body of [`Self::gather`], with `def` on the path.
+    fn gather_in(
+        &mut self,
+        def: &Definition,
+        to_type: DMat4,
+        inherited: Option<EntityId>,
+        depth: usize,
+        pieces: &mut BTreeMap<Option<usize>, MeshBuild>,
+    ) -> Result<(), SkpError> {
         self.faces(def, to_type, inherited, pieces)?;
         for instance in &def.instances {
             if instance.hidden || self.layer_hidden(&instance.layer) {
