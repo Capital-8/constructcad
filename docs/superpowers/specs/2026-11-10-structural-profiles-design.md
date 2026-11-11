@@ -107,10 +107,10 @@ Section cuts hatch in the type's material. Curved facets are marked `Face::smoot
 ### IFC — `cc_ifc`
 
 - **Export**: each standard shape is written as its `Ifc*ProfileDef`:
-  - I → `IShape`, Channel → `UShape`, T → `TShape`, Angle → `LShape`, ColdZ → `ZShape`;
+  - I → `IShape`, Channel → `UShape`, T → `TShape`, Angle → `LShape`;
   - ColdLippedU → `CShape`;
   - RectTube → `RectangleHollow`, RoundTube → `CircleHollow`, Rect → `Rectangle`, Round → `Circle`;
-  - the cold shapes without an IFC equivalent, asymmetric I, concrete T/L and sketches → `IfcArbitraryClosedProfileDef`/`IfcArbitraryProfileDefWithVoids`.
+  - the cold shapes without an IFC equivalent (including ColdZ, as `IfcZShapeProfileDef` has no lips), asymmetric I, concrete T/L and sketches → `IfcArbitraryClosedProfileDef`/`IfcArbitraryProfileDefWithVoids`.
 
   Each column and beam type gets an `IfcMaterialProfileSet` naming the profile.
 - **Import**: reads those profile definitions and `IfcMaterialProfileSet`s, creates profiles by name (reusing one with the same name and shape) and points the types to them.
@@ -140,7 +140,7 @@ The manager opens from *Structure → Profiles* and *Manage → Profiles*. It is
 - **Left**: the project's profiles grouped by material, with search and *New*, *Duplicate*, *Delete* (with a replacement picker) and *Import from catalog*.
 - **Center**: a to-scale preview, dimensioned with the parameter names, showing centroid and axes.
 - **Right**: the parameter table (`table.rs`) and live section properties.
-- **Free sketch**: *Edit sketch* opens a sketch session (`sketch_mode`, `Target::Profile`) with reference planes. Dimensions become parameters and points keep expressions, as in the component environment.
+- **Free sketch**: *Edit sketch* opens a sketch session (`sketch_mode`, `Target::Section`) with reference planes. Dimensions become parameters and points keep expressions, as in the component environment.
 - **Catalog import**: series selector, a filterable list, multi-select.
 - **Type Properties** of columns and beams: a searchable profile picker replaces the section fields.
 
