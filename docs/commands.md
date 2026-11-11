@@ -1939,7 +1939,7 @@ No parameters.
 
 ### `type_set`
 
-*edit* — Change a type: its name, its parameters (`params`, merged into what `type_get` shows: layers, sizes, materials, a component's `def`…) and its identity data (`info`: type mark, description, manufacturer, cost…). A column or beam type takes `profile` (a structural profile's name or id, or null to keep only its own section), `profile_rotation_deg` and `profile_mirror`. With a profile, `width`/`height` are its box; changing them alone re-points the type to a profile of that section. Changing a component's definition updates every type of that component, each keeping its own parameter values.
+*edit* — Change a type: its name, its parameters (`params`, merged into what `type_get` shows: layers, sizes, materials, a component's `def`…) and its identity data (`info`: type mark, description, manufacturer, cost…). A column or beam type takes `profile` (a structural profile's name or id; null is refused: these types always point to a profile), `profile_rotation_deg` and `profile_mirror`. `width`/`height` are the box of the turned profile; changing them alone re-points the type to a profile of that section, unturned and unmirrored. Changing a component's definition updates every type of that component, each keeping its own parameter values.
 
 | Parameter | Type | | Description |
 |---|---|---|---|

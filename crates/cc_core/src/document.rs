@@ -829,10 +829,15 @@ impl<'a> EditCtx<'a> {
                 let legacy = self.project.legacy_profile(data);
                 self.touch_settings();
                 let pid = legacy.and_then(|(material, shape)| self.project.section_profile(material, shape));
-                if let Some(crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. }) =
-                    self.type_mut(id).map(|t| &mut t.data)
+                // The new section is already placed: it is the profile as is.
+                if let Some(
+                    crate::TypeData::Column { profile, profile_rotation_deg, profile_mirror, .. }
+                    | crate::TypeData::Beam { profile, profile_rotation_deg, profile_mirror, .. },
+                ) = self.type_mut(id).map(|t| &mut t.data)
                 {
                     *profile = pid;
+                    *profile_rotation_deg = 0.0;
+                    *profile_mirror = false;
                 }
                 continue;
             }

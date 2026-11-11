@@ -587,7 +587,7 @@ fn profile_types_take_a_material_of_their_class_and_a_free_name() {
 }
 
 #[test]
-fn type_set_takes_and_clears_a_profile() {
+fn type_set_takes_a_profile_but_never_none() {
     let mut s = Session::default();
     run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
     let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}))["id"].clone();
@@ -601,15 +601,13 @@ fn type_set_takes_and_clears_a_profile() {
     assert_eq!(ty["params"]["profile_mirror"], true);
     assert!((ty["params"]["width"].as_f64().unwrap() - 0.2).abs() < 1e-9, "turned: {ty}");
     run(&mut s, "type_set", json!({"type": t, "params": {"profile_rotation_deg": 0.0}}));
-    run(&mut s, "type_set", json!({"type": t, "params": {"profile": null}}));
-    let ty = run(&mut s, "type_get", json!({"type": t}));
-    assert!(ty["params"]["profile"].is_null(), "{ty}");
-    assert!((ty["params"]["height"].as_f64().unwrap() - 0.2).abs() < 1e-9, "the legacy box stays");
-    // A type without a profile still has a section.
-    let beam = run(&mut s, "beam_create", json!({"type": t, "start": [0.0, 0.0], "end": [3.0, 0.0]}))["id"].clone();
-    let e = run(&mut s, "element_get", json!({"id": beam}));
-    assert!(e["derived"]["section"]["profile"].is_null(), "{e}");
-    assert!(e["derived"]["section"]["area"].as_f64().unwrap() > 0.0, "{e}");
+    // Types always point to a profile: null is refused, without an undo step.
+    let steps = s.doc.undo_depth();
+    let err = run_err(&mut s, "type_set", json!({"type": t, "params": {"profile": null}}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    assert!(err.message.contains("must point to a profile"), "{}", err.message);
+    assert_eq!(s.doc.undo_depth(), steps);
+    assert_eq!(run(&mut s, "type_get", json!({"type": t}))["params"]["profile"], "IPE 200");
     // By id too.
     let pid = run(&mut s, "profile_get", json!({"profile": "IPE 200"}))["id"].clone();
     run(&mut s, "type_set", json!({"type": t, "params": {"profile": pid}}));
@@ -776,4 +774,24 @@ fn schedules_tags_and_legends_read_profile_made_sections() {
     let d = cc_views::legend(s.project(), &[ElementTypeId(t)], 20);
     let cut = d.prims.iter().filter(|p| matches!(p, Prim::Line { style: LineStyle::Cut, .. })).count();
     assert!(cut > 4, "an I outline, not a box: {cut} cut lines");
+}
+
+#[test]
+fn resizing_a_turned_type_keeps_the_typed_box() {
+    let mut s = Session::default();
+    let p =
+        run(&mut s, "profile_create", json!({"material": "concrete", "shape": "rect", "params": {"b": 0.2, "h": 0.5}}));
+    let t = run(&mut s, "profile_type_create", json!({"profile": p["id"], "category": "beam"}))["id"].clone();
+    run(&mut s, "type_set", json!({"type": t, "params": {"profile_rotation_deg": 90.0, "profile_mirror": true}}));
+    let ty = run(&mut s, "type_get", json!({"type": t}));
+    assert!((ty["params"]["width"].as_f64().unwrap() - 0.5).abs() < 1e-9, "turned: {ty}");
+    // A new width re-points the type to a profile of the typed box, as is.
+    run(&mut s, "type_set", json!({"type": t, "params": {"width": 0.6}}));
+    let ty = run(&mut s, "type_get", json!({"type": t}));
+    let (w, h) = (ty["params"]["width"].as_f64().unwrap(), ty["params"]["height"].as_f64().unwrap());
+    assert!((w - 0.6).abs() < 1e-9 && (h - 0.2).abs() < 1e-9, "{w} x {h}: {ty}");
+    assert!(ty["params"]["profile_rotation_deg"].as_f64().unwrap_or(0.0) == 0.0, "{ty}");
+    assert!(!ty["params"]["profile_mirror"].as_bool().unwrap_or(false), "{ty}");
+    assert_ne!(ty["params"]["profile"], p["name"], "{ty}");
+    // The section drawn is the typed box too.    let data = &s.project().element_type(ElementTypeId(t.as_u64().unwrap())).unwrap().data;    let (lo, hi) = s.project().type_section(data).unwrap().outline.bbox();    assert!(((hi - lo) - glam::DVec2::new(0.6, 0.2)).abs().max_element() < 1e-9, "{:?}", hi - lo);
 }

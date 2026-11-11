@@ -63,7 +63,7 @@ pub(crate) fn validate(def: &ComponentDef) -> Result<()> {
 }
 
 /// A column or beam type's params patch with its `profile` (a name or id, as
-/// `type_get` shows it, or null for none) turned into the profile's id.
+/// `type_get` shows it) turned into the profile's id; null is refused.
 fn profile_patch(p: &cc_core::Project, data: &TypeData, patch: &Value) -> Result<Value> {
     let mut patch = patch.clone();
     if !matches!(data, TypeData::Column { .. } | TypeData::Beam { .. }) {
@@ -71,10 +71,14 @@ fn profile_patch(p: &cc_core::Project, data: &TypeData, patch: &Value) -> Result
     }
     let Some(slot) = patch.as_object_mut().and_then(|o| o.get_mut("profile")) else { return Ok(patch) };
     let r = match slot {
-        Value::Null => return Ok(patch),
+        Value::Null => {
+            return Err(EngineError::invalid(
+                "profile: a column or beam type must point to a profile; give another profile instead of null",
+            ));
+        }
         Value::String(n) => Ref::Name(n.clone()),
         Value::Number(n) => Ref::Id(n.as_u64().ok_or_else(|| EngineError::invalid("profile: not a profile id"))?),
-        _ => return Err(EngineError::invalid("profile: a profile name or id, or null")),
+        _ => return Err(EngineError::invalid("profile: a profile name or id")),
     };
     let id = refs::profile(p, &r).map_err(|e| EngineError::invalid(format!("profile: {}", e.message)))?;
     *slot = json!(id.0);
@@ -88,10 +92,11 @@ pub(crate) fn type_out(s: &Session, id: ElementTypeId) -> Value {
 /// Change a type: its name, its parameters (`params`, merged into what
 /// `type_get` shows: layers, sizes, materials, a component's `def`…) and its
 /// identity data (`info`: type mark, description, manufacturer, cost…).
-/// A column or beam type takes `profile` (a structural profile's name or
-/// id, or null to keep only its own section), `profile_rotation_deg` and
-/// `profile_mirror`. With a profile, `width`/`height` are its box; changing
-/// them alone re-points the type to a profile of that section.
+/// A column or beam type takes `profile` (a structural profile's name or id;
+/// null is refused: these types always point to a profile),
+/// `profile_rotation_deg` and `profile_mirror`. `width`/`height` are the box of
+/// the turned profile; changing them alone re-points the type to a profile of
+/// that section, unturned and unmirrored.
 /// Changing a component's definition updates every type of that component,
 /// each keeping its own parameter values.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
