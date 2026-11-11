@@ -3,7 +3,9 @@
 //! view scale, so annotations read the same at any scale.
 
 use crate::drawing::Anchor;
-use crate::{Drawing2D, LineStyle, format};
+use crate::notes::{self, SymbolPens};
+use crate::{Drawing2D, LineStyle, Pen, format};
+use cc_core::dim_style::DimensionStyle;
 use cc_core::{Dimension, DimensionKind, ElementKind, LevelId, Project, TypeData, ViewId};
 use cc_geom::{ModelGeometry, polygon};
 use glam::DVec2;
@@ -247,6 +249,14 @@ fn opening_tags(
     }
 }
 
+/// The text size and style of a dimension type (the defaults for a missing one).
+pub fn dimension_type(project: &Project, type_id: cc_core::ElementTypeId) -> (f64, DimensionStyle) {
+    match project.element_type(type_id).map(|t| &t.data) {
+        Some(TypeData::Dimension { text_size, style }) => (*text_size, style.clone()),
+        _ => (2.5, DimensionStyle::default()),
+    }
+}
+
 /// Dimensions placed in `view`, in its drawing coordinates.
 pub fn dimensions(d: &mut Drawing2D, project: &Project, view: ViewId, scale: u32) {
     for e in project.elements.values() {
@@ -254,33 +264,103 @@ pub fn dimensions(d: &mut Drawing2D, project: &Project, view: ViewId, scale: u32
         if dim.view != view {
             continue;
         }
-        let text_size = match project.element_type(e.type_id).map(|t| &t.data) {
-            Some(TypeData::Dimension { text_size }) => *text_size,
-            _ => 2.5,
-        };
-        let Some(layout) = dimension_layout(dim, scale) else { continue };
-        let id = Some(e.id);
-        for (a, b, style) in layout.lines {
-            d.line(a, b, style, id);
-        }
-        d.tag_text(layout.text_pos, layout.text, text_size, Anchor::CenterBottom, layout.text_angle, id);
+        let (text_size, style) = dimension_type(project, e.type_id);
+        let Some(layout) = dimension_layout(dim, scale, &style) else { continue };
+        draw_dimension(d, &layout, &style, text_size, scale, Some(e.id));
     }
+}
+
+/// The pen of a style's lines, if it sets any.
+fn line_pen(style: &DimensionStyle) -> Option<Pen> {
+    (style.line_weight.is_some() || style.color.is_some()).then_some(Pen {
+        color: style.color,
+        weight: style.line_weight,
+        ..Pen::default()
+    })
+}
+
+/// Draw a laid-out dimension: lines, marks, the box behind an opaque
+/// text, and the text.
+pub fn draw_dimension(
+    d: &mut Drawing2D,
+    layout: &DimensionLayout,
+    style: &DimensionStyle,
+    text_size: f64,
+    scale: u32,
+    id: Option<cc_core::ElementId>,
+) {
+    let pen = line_pen(style);
+    for (a, b, line) in &layout.lines {
+        d.line_pen(*a, *b, *line, pen, id);
+    }
+    draw_marks(d, layout, style, scale, id);
+    if style.opaque_text {
+        d.fill(text_box(layout, text_size, scale), OPAQUE, id);
+    }
+    d.tag_text(layout.text_pos, layout.text.clone(), text_size, Anchor::CenterBottom, layout.text_angle, id);
+}
+
+/// White behind an opaque dimension text.
+const OPAQUE: [u8; 4] = [255, 255, 255, 255];
+
+/// The marks at the ends of a laid-out dimension line.
+pub fn draw_marks(
+    d: &mut Drawing2D,
+    layout: &DimensionLayout,
+    style: &DimensionStyle,
+    scale: u32,
+    id: Option<cc_core::ElementId>,
+) {
+    let mark_pen = Pen { color: style.color, weight: style.mark_weight, ..Pen::default() };
+    let pens = SymbolPens {
+        stroke: (
+            LineStyle::Annotation,
+            line_pen(&DimensionStyle { line_weight: style.mark_weight.or(style.line_weight), ..style.clone() }),
+        ),
+        // Ticks are heavy unless the style gives them a width.
+        tick: (
+            if style.mark_weight.is_some() { LineStyle::Annotation } else { LineStyle::Cut },
+            (mark_pen != Pen::default()).then_some(mark_pen),
+        ),
+        fill: notes::symbol_fill(style.color),
+    };
+    for (end, u) in &layout.marks {
+        notes::symbol_at(d, style.mark, *u, *end, style.mark_size * mm(scale), pens, id);
+    }
+}
+
+/// The box an opaque text hides, a little larger than the text.
+fn text_box(layout: &DimensionLayout, size: f64, scale: u32) -> Vec<DVec2> {
+    let mm = mm(scale);
+    let (half, height, pad) = (layout.text.chars().count() as f64 * 0.6 * size * mm / 2.0, size * mm, 0.4 * mm);
+    let (along, up) = (DVec2::from_angle(layout.text_angle), DVec2::from_angle(layout.text_angle).perp());
+    let c = layout.text_pos;
+    let (w, lo, hi) = (along * (half + pad), up * -pad, up * (height + pad));
+    vec![c - w + lo, c + w + lo, c + w + hi, c - w + hi]
 }
 
 /// Linework and text of a dimension, in its view's drawing coordinates.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DimensionLayout {
     pub lines: Vec<(DVec2, DVec2, LineStyle)>,
+    /// Where the dimension line ends at a mark, and the direction (a unit
+    /// vector) it arrives there in.
+    pub marks: Vec<(DVec2, DVec2)>,
+    /// The value with the style's prefix and suffix.
     pub text: String,
     /// Bottom center of the text, which is rotated by `text_angle` (radians).
     pub text_pos: DVec2,
     pub text_angle: f64,
 }
 
-/// Lay out a dimension at a view `scale`; `None` when it measures nothing.
-pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> {
+/// Lay out a dimension at a view `scale` as `style` says; `None` when it measures nothing.
+pub fn dimension_layout(dim: &Dimension, scale: u32, style: &DimensionStyle) -> Option<DimensionLayout> {
     let mm = mm(scale);
+    let (gap, extension) = (style.witness_gap * mm, style.witness_extension * mm);
+    let (overrun, text_offset) = (style.line_extension * mm, style.text_offset * mm);
+    let line = LineStyle::Annotation;
     let mut lines = Vec::new();
+    let mut marks = Vec::new();
     let (text, text_pos, text_angle) = match dim.kind {
         DimensionKind::Aligned | DimensionKind::Linear { .. } => {
             let dir = dim.direction()?;
@@ -291,23 +371,19 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
             }
             let pa = dim.a + n * dim.offset;
             let pb = pa + dir * measured;
-            // Witness lines leave a small gap at the measured points and pass the dimension line.
+            // Witness lines leave a gap at the measured points and pass the dimension line.
             let side = if dim.offset >= 0.0 { 1.0 } else { -1.0 };
             for (p, q) in [(dim.a, pa), (dim.b, pb)] {
                 let v = q - p;
                 let out = v.try_normalize().unwrap_or(n * side);
-                let from = p + out * (1.0 * mm).min(v.length());
-                lines.push((from, q + out * 1.5 * mm, LineStyle::Annotation));
+                let from = p + out * gap.min(v.length());
+                lines.push((from, q + out * extension, line));
             }
             let u = dir * measured.signum();
-            lines.push((pa - u * 1.5 * mm, pb + u * 1.5 * mm, LineStyle::Annotation));
-            // Architectural ticks.
-            let tick = (u + u.perp()) * std::f64::consts::FRAC_1_SQRT_2 * 1.3 * mm;
-            for p in [pa, pb] {
-                lines.push((p - tick, p + tick, LineStyle::Cut));
-            }
+            lines.push((pa - u * overrun, pb + u * overrun, line));
+            marks.extend([(pa, -u), (pb, u)]);
             let (angle, up) = upright(u);
-            (format::meters(dim.value()), (pa + pb) / 2.0 + up * 0.8 * mm, angle)
+            (format::meters(dim.value()), (pa + pb) / 2.0 + up * text_offset, angle)
         }
         DimensionKind::Ordinate { .. } => {
             let dir = dim.direction()?;
@@ -324,26 +400,26 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
                 let v = q - p;
                 let out = v.try_normalize().unwrap_or(n * side);
                 out_b = out;
-                let from = p + out * (1.0 * mm).min(v.length());
-                lines.push((from, q + out * 1.5 * mm, LineStyle::Annotation));
+                let from = p + out * gap.min(v.length());
+                lines.push((from, q + out * extension, line));
             }
             // The origin is a small circle; the line runs from it to an arrow at the point.
             let r = 1.0 * mm;
             let steps = 16;
             let at = |i: usize| pa + DVec2::from_angle(std::f64::consts::TAU * i as f64 / steps as f64) * r;
             for i in 0..steps {
-                lines.push((at(i), at(i + 1), LineStyle::Annotation));
+                lines.push((at(i), at(i + 1), line));
             }
             let u = dir * measured.signum();
-            lines.push((pa + u * r, pb, LineStyle::Annotation));
+            lines.push((pa + u * r, pb, line));
             for s in [-1.0, 1.0] {
-                lines.push((pb, pb + DVec2::from_angle(s * 0.3).rotate(-u) * 2.5 * mm, LineStyle::Annotation));
+                lines.push((pb, pb + DVec2::from_angle(s * 0.3).rotate(-u) * 2.5 * mm, line));
             }
             // The running total reads along the witness line, past the dimension line.
             let text = format::meters(measured.abs());
             let (angle, up) = upright(out_b);
-            let width = text.chars().count() as f64 * 0.6 * 2.5 * mm;
-            let pos = pb + out_b * (2.0 * mm + width / 2.0) - up * 1.25 * mm;
+            let width = style.label(&text).chars().count() as f64 * 0.6 * 2.5 * mm;
+            let pos = pb + out_b * (extension + 0.5 * mm + width / 2.0) - up * 1.25 * mm;
             (text, pos, angle)
         }
         DimensionKind::Angular { vertex, .. } => {
@@ -356,28 +432,23 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
             let at = |t: f64| vertex + DVec2::from_angle(sweep * t).rotate(r1) * radius;
             let steps = 32;
             for i in 0..steps {
-                lines.push((at(i as f64 / steps as f64), at((i + 1) as f64 / steps as f64), LineStyle::Annotation));
+                lines.push((at(i as f64 / steps as f64), at((i + 1) as f64 / steps as f64), line));
             }
             // Witness lines along the rays when the arc lies beyond the measured points.
             for (r, p) in [(r1, dim.a), (r2, dim.b)] {
                 let reach = (p - vertex).length();
-                if radius > reach + 1.0 * mm {
-                    lines.push((
-                        vertex + r * (reach + 1.0 * mm),
-                        vertex + r * (radius + 1.5 * mm),
-                        LineStyle::Annotation,
-                    ));
+                if radius > reach + gap {
+                    lines.push((vertex + r * (reach + gap), vertex + r * (radius + extension), line));
                 }
             }
-            for (r, t) in [(r1, 0.0), (r2, 1.0)] {
-                let p = at(t);
-                let tick = (r + r.perp()) * std::f64::consts::FRAC_1_SQRT_2 * 1.3 * mm;
-                lines.push((p - tick, p + tick, LineStyle::Cut));
-            }
+            // The arc arrives at each end along its tangent.
+            let turn = sweep.signum();
+            let end_ray = DVec2::from_angle(sweep).rotate(r1);
+            marks.extend([(at(0.0), -r1.perp() * turn), (at(1.0), end_ray.perp() * turn)]);
             let mid = DVec2::from_angle(sweep / 2.0).rotate(r1);
             let (angle, up) = upright(mid.perp());
             // The text sits outside the arc.
-            let out = if up.dot(mid) >= 0.0 { 0.8 * mm } else { 0.8 * mm + 2.5 * mm };
+            let out = if up.dot(mid) >= 0.0 { text_offset } else { text_offset + 2.5 * mm };
             (format::angle(dim.value().to_degrees()), vertex + mid * (radius + out), angle)
         }
         DimensionKind::Radial | DimensionKind::Diameter => {
@@ -386,7 +457,7 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
             let u = (dim.b - center).try_normalize()?;
             let diameter = matches!(dim.kind, DimensionKind::Diameter);
             let start = if diameter { center - u * r } else { center };
-            lines.push((start, dim.b, LineStyle::Annotation));
+            lines.push((start, dim.b, line));
             let mut tips = vec![(dim.b, u)];
             if diameter {
                 tips.push((start, -u));
@@ -394,20 +465,20 @@ pub fn dimension_layout(dim: &Dimension, scale: u32) -> Option<DimensionLayout> 
             for (tip, dir) in tips {
                 for side in [-1.0, 1.0] {
                     let back = DVec2::from_angle(side * 0.33).rotate(-dir) * 2.5 * mm;
-                    lines.push((tip, tip + back, LineStyle::Annotation));
+                    lines.push((tip, tip + back, line));
                 }
             }
             // Center mark.
             let c = 1.0 * mm;
-            lines.push((center - DVec2::X * c, center + DVec2::X * c, LineStyle::Annotation));
-            lines.push((center - DVec2::Y * c, center + DVec2::Y * c, LineStyle::Annotation));
+            lines.push((center - DVec2::X * c, center + DVec2::X * c, line));
+            lines.push((center - DVec2::Y * c, center + DVec2::Y * c, line));
             let (angle, up) = upright(u);
             let prefix = if diameter { "\u{d8}" } else { "R" };
             let mid = if diameter { center + u * r * 0.5 } else { (center + dim.b) / 2.0 };
-            (format!("{prefix} {}", format::meters(dim.value())), mid + up * 0.8 * mm, angle)
+            (format!("{prefix} {}", format::meters(dim.value())), mid + up * text_offset, angle)
         }
     };
-    Some(DimensionLayout { lines, text, text_pos, text_angle })
+    Some(DimensionLayout { lines, marks, text: style.label(&text), text_pos, text_angle })
 }
 
 /// Text angle that keeps text along `u` upright, and the side "above" it.
@@ -443,11 +514,16 @@ mod tests {
         assert!((d.value() - 3.0).abs() < 1e-12);
         let d = dim((0.0, 0.0), (3.0, 4.0), 1.0, DimensionKind::Linear { dir: DVec2::Y });
         assert!((d.value() - 4.0).abs() < 1e-12);
-        let layout = dimension_layout(&d, 100).unwrap();
+        let layout = dimension_layout(&d, 100, &DimensionStyle::default()).unwrap();
         // The dimension line is vertical, one meter to the left of the points (x = -1).
         assert!(layout.lines.iter().any(|(a, b, _)| (a.x + 1.0).abs() < 1e-9 && (b.x + 1.0).abs() < 1e-9));
         assert!(
-            dimension_layout(&dim((0.0, 0.0), (0.0, 4.0), 1.0, DimensionKind::Linear { dir: DVec2::X }), 100).is_none()
+            dimension_layout(
+                &dim((0.0, 0.0), (0.0, 4.0), 1.0, DimensionKind::Linear { dir: DVec2::X }),
+                100,
+                &DimensionStyle::default()
+            )
+            .is_none()
         );
     }
 
@@ -456,13 +532,13 @@ mod tests {
         let d =
             dim((2.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Angular { vertex: DVec2::ZERO, rays: Default::default() });
         assert!((d.value().to_degrees() - 90.0).abs() < 1e-9);
-        assert!(dimension_layout(&d, 50).is_some_and(|l| l.lines.len() > 30));
+        assert!(dimension_layout(&d, 50, &DimensionStyle::default()).is_some_and(|l| l.lines.len() > 30));
         let r = dim((1.0, 1.0), (1.0, 3.0), 0.0, DimensionKind::Radial);
         assert!((r.value() - 2.0).abs() < 1e-12);
-        assert!(dimension_layout(&r, 50).unwrap().text.starts_with('R'));
+        assert!(dimension_layout(&r, 50, &DimensionStyle::default()).unwrap().text.starts_with('R'));
         let d = Dimension { kind: DimensionKind::Diameter, ..r };
         assert!((d.value() - 4.0).abs() < 1e-12);
-        assert!(dimension_layout(&d, 50).unwrap().text.starts_with('\u{d8}'));
+        assert!(dimension_layout(&d, 50, &DimensionStyle::default()).unwrap().text.starts_with('\u{d8}'));
     }
 
     #[test]
@@ -471,7 +547,7 @@ mod tests {
         let d = dim((0.0, 0.0), (2.4, 0.3), -1.0, DimensionKind::Ordinate { dir: DVec2::X });
         assert!((d.value() - 2.4).abs() < 1e-12);
         let mm = 0.05;
-        let layout = dimension_layout(&d, 50).unwrap();
+        let layout = dimension_layout(&d, 50, &DimensionStyle::default()).unwrap();
         assert_eq!(layout.text, format::meters(2.4));
         // The dimension line runs from the origin's circle to the point, at y = -1.
         assert!(layout.lines.iter().any(|(a, b, _)| (a.x - mm).abs() < 1e-9
@@ -483,8 +559,74 @@ mod tests {
         assert!(layout.text_pos.y < -1.0 && (layout.text_pos.x - 2.4).abs() < 0.1, "{:?}", layout.text_pos);
         // A point at the origin measures nothing.
         assert!(
-            dimension_layout(&dim((0.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Ordinate { dir: DVec2::X }), 50)
-                .is_none()
+            dimension_layout(
+                &dim((0.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Ordinate { dir: DVec2::X }),
+                50,
+                &DimensionStyle::default()
+            )
+            .is_none()
         );
+    }
+
+    #[test]
+    fn the_style_sets_lengths_marks_pens_and_text() {
+        use crate::Prim;
+        // At 1:100 a paper millimeter is 0.1 m.
+        let d = dim((0.0, 0.0), (4.0, 0.0), 1.0, DimensionKind::Linear { dir: DVec2::X });
+        let default = DimensionStyle::default();
+        let mut plain = Drawing2D::default();
+        let layout = dimension_layout(&d, 100, &default).unwrap();
+        draw_dimension(&mut plain, &layout, &default, 2.5, 100, None);
+        // Two heavy ticks, the dimension line 1.5 mm past the witness lines.
+        let cut = plain.prims.iter().filter(|p| matches!(p, Prim::Line { style: LineStyle::Cut, .. })).count();
+        assert_eq!(cut, 2);
+        assert!(layout.lines.iter().any(|(a, b, _)| (a.x + 0.15).abs() < 1e-9 && (b.x - 4.15).abs() < 1e-9));
+
+        let style = DimensionStyle {
+            mark: cc_core::LeaderSymbol::Arrow,
+            line_weight: Some(0.35),
+            color: Some([200, 0, 0]),
+            witness_gap: 0.0,
+            witness_extension: 3.0,
+            line_extension: 0.0,
+            text_offset: 2.0,
+            prefix: "~".into(),
+            suffix: " m".into(),
+            opaque_text: true,
+            ..DimensionStyle::default()
+        };
+        let layout = dimension_layout(&d, 100, &style).unwrap();
+        assert_eq!(layout.text, format!("~{} m", format::meters(4.0)));
+        assert!((layout.text_pos.y - 1.2).abs() < 1e-9);
+        // Witness lines from the points to 3 mm past the line; the line stops at them.
+        assert!(layout.lines.iter().any(|(a, b, _)| a.y.abs() < 1e-9 && (b.y - 1.3).abs() < 1e-9));
+        assert!(layout.lines.iter().any(|(a, b, _)| a.x.abs() < 1e-9 && (b.x - 4.0).abs() < 1e-9));
+        let mut out = Drawing2D::default();
+        draw_dimension(&mut out, &layout, &style, 2.5, 100, None);
+        let pens: Vec<_> =
+            out.prims.iter().filter_map(|p| if let Prim::Line { pen, .. } = p { Some(*pen) } else { None }).collect();
+        assert!(
+            !pens.is_empty()
+                && pens.iter().all(|p| p.is_some_and(|p| p.weight == Some(0.35) && p.color == Some([200, 0, 0])))
+        );
+        let fills: Vec<_> = out
+            .prims
+            .iter()
+            .filter_map(|p| if let Prim::Fill { color, .. } = p { Some(*color) } else { None })
+            .collect();
+        // Two red arrows, then the white box behind the text, drawn before it.
+        assert_eq!(fills, vec![[200, 0, 0, 255], [200, 0, 0, 255], OPAQUE]);
+        assert!(matches!(out.prims.last(), Some(Prim::Text { .. })));
+    }
+
+    #[test]
+    fn angular_marks_follow_the_arc() {
+        let d =
+            dim((2.0, 0.0), (0.0, 2.0), 1.0, DimensionKind::Angular { vertex: DVec2::ZERO, rays: Default::default() });
+        let layout = dimension_layout(&d, 50, &DimensionStyle::default()).unwrap();
+        // The arc runs counter-clockwise from (1, 0) to (0, 1): it arrives at its ends going -Y and -X.
+        let [(p0, u0), (p1, u1)] = layout.marks[..] else { panic!("{:?}", layout.marks) };
+        assert!(p0.distance(DVec2::X) < 1e-9 && u0.distance(-DVec2::Y) < 1e-9);
+        assert!(p1.distance(DVec2::Y) < 1e-9 && u1.distance(-DVec2::X) < 1e-9);
     }
 }

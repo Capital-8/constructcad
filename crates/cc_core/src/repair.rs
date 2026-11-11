@@ -192,7 +192,9 @@ impl Project {
                 }
                 TypeData::Ceiling { thickness, .. } => repairs += usize::from(fix_positive(thickness, 0.02)),
                 TypeData::Grid { bubble } => repairs += usize::from(fix_positive(bubble, 8.0)),
-                TypeData::Dimension { text_size } => repairs += usize::from(fix_positive(text_size, 2.5)),
+                TypeData::Dimension { text_size, style } => {
+                    repairs += usize::from(fix_positive(text_size, 2.5)) + style.repair()
+                }
                 TypeData::Text { size, .. } => repairs += usize::from(fix_positive(size, 2.5)),
                 TypeData::LevelMark { text_size, datum, .. } => {
                     repairs += crate::level_mark::repair_type(text_size, datum)

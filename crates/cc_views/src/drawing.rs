@@ -295,6 +295,13 @@ impl Drawing2D {
         }
     }
 
+    /// A line with its own pen (view graphics still override what they set).
+    pub fn line_pen(&mut self, a: DVec2, b: DVec2, style: LineStyle, pen: Option<Pen>, element: Option<ElementId>) {
+        if a.distance_squared(b) > 1e-14 {
+            self.prims.push(Prim::Line { a, b, style, element, pen });
+        }
+    }
+
     pub fn polyline(&mut self, pts: &[DVec2], closed: bool, style: LineStyle, element: Option<ElementId>) {
         for w in pts.windows(2) {
             self.line(w[0], w[1], style, element);

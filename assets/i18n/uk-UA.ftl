@@ -2682,6 +2682,17 @@ prop-level-mark-datum = Базовий рівень (значення нуля)
 prop-level-mark-finished-suffix = Суфікс чистового рівня
 prop-level-mark-raw-suffix = Суфікс чорнового рівня
 prop-text-size = Розмір тексту
+prop-dim-mark = Позначка розміру
+prop-dim-mark-size = Розмір позначки
+prop-dim-mark-weight = Товщина позначки
+prop-dim-line-weight = Товщина лінії
+prop-dim-witness-gap = Відступ виносної лінії
+prop-dim-witness-extension = Подовження виносної лінії
+prop-dim-line-extension = Подовження розмірної лінії
+prop-dim-text-offset = Відступ тексту
+prop-dim-prefix = Префікс
+prop-dim-suffix = Суфікс
+prop-dim-opaque-text = Непрозоре тло тексту
 
 # Detail components
 tx-new-detail-component = Новий компонент деталі

@@ -2681,6 +2681,17 @@ prop-level-mark-datum = Nível de referência (cota do zero)
 prop-level-mark-finished-suffix = Sufixo do nível acabado
 prop-level-mark-raw-suffix = Sufixo do nível osso
 prop-text-size = Tamanho do texto
+prop-dim-mark = Marca de cota
+prop-dim-mark-size = Tamanho da marca
+prop-dim-mark-weight = Espessura da marca
+prop-dim-line-weight = Espessura da linha
+prop-dim-witness-gap = Afastamento da linha de chamada
+prop-dim-witness-extension = Extensão da linha de chamada
+prop-dim-line-extension = Extensão da linha de cota
+prop-dim-text-offset = Afastamento do texto
+prop-dim-prefix = Prefixo
+prop-dim-suffix = Sufixo
+prop-dim-opaque-text = Fundo do texto opaco
 
 # Detail components
 tx-new-detail-component = Novo componente de detalhe

@@ -2681,6 +2681,17 @@ prop-level-mark-datum = 基準高程（零點數值）
 prop-level-mark-finished-suffix = 完成面後綴
 prop-level-mark-raw-suffix = 結構面後綴
 prop-text-size = 文字大小
+prop-dim-mark = 尺寸標記
+prop-dim-mark-size = 標記大小
+prop-dim-mark-weight = 標記線寬
+prop-dim-line-weight = 線寬
+prop-dim-witness-gap = 延伸線間隙
+prop-dim-witness-extension = 延伸線延伸
+prop-dim-line-extension = 尺寸線延伸
+prop-dim-text-offset = 文字偏移
+prop-dim-prefix = 前綴
+prop-dim-suffix = 後綴
+prop-dim-opaque-text = 文字背景不透明
 
 # Detail components
 tx-new-detail-component = 新增詳圖元件

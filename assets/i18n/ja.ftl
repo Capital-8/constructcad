@@ -2681,6 +2681,17 @@ prop-level-mark-datum = 基準レベル（ゼロの値）
 prop-level-mark-finished-suffix = 仕上レベルの接尾辞
 prop-level-mark-raw-suffix = 躯体レベルの接尾辞
 prop-text-size = 文字サイズ
+prop-dim-mark = 寸法記号
+prop-dim-mark-size = 記号のサイズ
+prop-dim-mark-weight = 記号の線幅
+prop-dim-line-weight = 線幅
+prop-dim-witness-gap = 補助線の間隔
+prop-dim-witness-extension = 補助線の延長
+prop-dim-line-extension = 寸法線の延長
+prop-dim-text-offset = 文字の間隔
+prop-dim-prefix = 接頭辞
+prop-dim-suffix = 接尾辞
+prop-dim-opaque-text = 文字の背景を不透明にする
 
 # Detail components
 tx-new-detail-component = 新しい詳細コンポーネント

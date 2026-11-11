@@ -2681,6 +2681,17 @@ prop-level-mark-datum = 基准标高（零点数值）
 prop-level-mark-finished-suffix = 建筑标高后缀
 prop-level-mark-raw-suffix = 结构标高后缀
 prop-text-size = 文字大小
+prop-dim-mark = 尺寸标记
+prop-dim-mark-size = 标记大小
+prop-dim-mark-weight = 标记线宽
+prop-dim-line-weight = 线宽
+prop-dim-witness-gap = 尺寸界线间隙
+prop-dim-witness-extension = 尺寸界线延伸
+prop-dim-line-extension = 尺寸线延伸
+prop-dim-text-offset = 文字偏移
+prop-dim-prefix = 前缀
+prop-dim-suffix = 后缀
+prop-dim-opaque-text = 文字背景不透明
 
 # Detail components
 tx-new-detail-component = 新建详图构件

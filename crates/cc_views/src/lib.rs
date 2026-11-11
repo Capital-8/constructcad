@@ -34,7 +34,7 @@ mod sheet;
 pub mod sheet_fields;
 mod topography;
 
-pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout};
+pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout, dimension_type, draw_dimension, draw_marks};
 pub use component_view::{ComponentView, ComponentViewKind, ViewConnector, component_view};
 pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, SectionHandle, TagHandle, halftone};
 pub use legend::legend;

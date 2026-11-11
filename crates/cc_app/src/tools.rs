@@ -2693,6 +2693,7 @@ fn dimension_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let scale = view.scale.max(1);
+    let style = cc_views::dimension_type(state.project(), type_id).1;
     let tol = 6.0 / xf.scale;
     let points = state.interaction.points.clone();
     let place = |state: &mut AppState, dim: cc_core::Dimension| {
@@ -2779,7 +2780,7 @@ fn dimension_tool(
                 };
                 match next.and_then(|dims| dims.into_iter().next()) {
                     Some(d) => {
-                        paint_dimension(painter, xf, &d, scale);
+                        paint_dimension(painter, xf, &d, scale, &style);
                         if resp.clicked() && place_chain(state, type_id, &chain, s.point, offset) && !ordinate {
                             state.interaction.dim_chain = Some(DimChain { last: s.point, ..chain });
                         }
@@ -2832,7 +2833,7 @@ fn dimension_tool(
                         }
                         None => d,
                     };
-                    paint_dimension(painter, xf, &d, scale);
+                    paint_dimension(painter, xf, &d, scale, &style);
                     if resp.clicked() {
                         if d.value() > 1e-6 && continuous {
                             // The first dimension of a chain.
@@ -2879,7 +2880,7 @@ fn dimension_tool(
                         (raw - vertex).length(),
                         DimensionKind::Angular { vertex, rays: Default::default() },
                     );
-                    paint_dimension(painter, xf, &d, scale);
+                    paint_dimension(painter, xf, &d, scale, &style);
                     if resp.clicked() && d.value() > 1e-6 {
                         place(state, d);
                     }
@@ -2918,7 +2919,7 @@ fn dimension_tool(
             if points.is_empty() {
                 painter.circle_stroke(xf.to_screen(center), (r * xf.scale) as f32, Stroke::new(2.5, PREVIEW));
             }
-            paint_dimension(painter, xf, &d, scale);
+            paint_dimension(painter, xf, &d, scale, &style);
             if resp.clicked() {
                 if points.is_empty() {
                     // Keep the arc while the leader is placed.
@@ -2998,11 +2999,32 @@ fn draw_line_guide(painter: &Painter, xf: &Xf, reference: DVec2, point: DVec2) {
 }
 
 /// Paint a dimension being placed, as it will be drawn.
-fn paint_dimension(painter: &Painter, xf: &Xf, d: &cc_core::Dimension, scale: u32) {
-    let Some(layout) = cc_views::dimension_layout(d, scale) else { return };
+fn paint_dimension(
+    painter: &Painter,
+    xf: &Xf,
+    d: &cc_core::Dimension,
+    scale: u32,
+    style: &cc_core::dim_style::DimensionStyle,
+) {
+    let Some(layout) = cc_views::dimension_layout(d, scale, style) else { return };
     let stroke = Stroke::new(1.25, PREVIEW);
     for (a, b, _) in &layout.lines {
         painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], stroke);
+    }
+    // The type's marks, in the preview color.
+    let mut marks = Drawing2D::default();
+    cc_views::draw_marks(&mut marks, &layout, style, scale, None);
+    for prim in &marks.prims {
+        match prim {
+            cc_views::Prim::Line { a, b, .. } => {
+                painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], stroke);
+            }
+            cc_views::Prim::Fill { pts, .. } => {
+                let pts = pts.iter().map(|p| xf.to_screen(*p)).collect();
+                painter.add(egui::Shape::convex_polygon(pts, PREVIEW, Stroke::NONE));
+            }
+            _ => {}
+        }
     }
     let up = DVec2::from_angle(layout.text_angle).perp();
     let at = xf.to_screen(layout.text_pos + up * (2.0 * scale as f64 / 1000.0));

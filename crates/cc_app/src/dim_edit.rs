@@ -134,11 +134,8 @@ fn text_box(
         return None;
     }
     let scale = state.project().view(view)?.scale.max(1);
-    let layout = cc_views::dimension_layout(d, scale)?;
-    let text_size = match state.project().element_type(el.type_id).map(|t| &t.data) {
-        Some(cc_core::TypeData::Dimension { text_size }) => *text_size,
-        _ => 2.5,
-    };
+    let (text_size, style) = cc_views::dimension_type(state.project(), el.type_id);
+    let layout = cc_views::dimension_layout(d, scale, &style)?;
     let px = (text_size * px_per_mm).max(9.0) as f32;
     let size = painter.layout_no_wrap(layout.text, egui::FontId::proportional(px), egui::Color32::BLACK).size();
     // The text sits on its anchor (bottom center); screen Y points down.
