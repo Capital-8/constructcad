@@ -11,6 +11,7 @@
 //! never a panic.
 
 use crate::parse::{Entity, Param, StepFile};
+use cc_core::sketch::SketchCurve;
 use cc_geom::polygon;
 use glam::{DAffine3, DMat3, DVec2, DVec3};
 use std::f64::consts::TAU;
@@ -40,6 +41,10 @@ pub struct Profile {
     pub kind: ProfileKind,
     /// False for open profiles (a curve swept into a surface).
     pub closed: bool,
+    /// The outline and voids as lines, arcs and circles in the profile's
+    /// plane, when every one of them reads so and some are curved (see
+    /// `plan_curves`): `pts` and `holes` split the curves.
+    pub curves: Option<Vec<SketchCurve>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,7 +65,7 @@ pub enum ProfileKind {
 
 impl Profile {
     fn poly(pts: Vec<DVec2>) -> Self {
-        Self { pts, holes: Vec::new(), kind: ProfileKind::Poly, closed: true }
+        Self { pts, holes: Vec::new(), kind: ProfileKind::Poly, closed: true, curves: None }
     }
 
     /// Exact rectangle or circle, else the bounding rectangle of the outline.
@@ -98,6 +103,7 @@ impl Profile {
             }
             _ => ProfileKind::Poly,
         };
+        self.curves = self.curves.and_then(|c| map_curves(&c, xf));
         if xf.matrix3.determinant() < 0.0 {
             self.pts.reverse();
             self.holes.iter_mut().for_each(|h| h.reverse());
@@ -131,6 +137,16 @@ impl Extrusion {
         let zs = self.profile.pts.iter().map(|p| self.plane_point(*p).z);
         zs.flat_map(|z| [z, z + self.vector.z])
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), z| (lo.min(z), hi.max(z)))
+    }
+
+    /// [`Extrusion::footprint`] and its voids as lines, arcs and circles,
+    /// when the profile has them and lies level.
+    pub fn footprint_curves(&self) -> Option<Vec<SketchCurve>> {
+        let level = |v: DVec3| v.z.abs() < 1e-9 * v.length().max(1.0);
+        if !(level(self.xf.matrix3.x_axis) && level(self.xf.matrix3.y_axis)) {
+            return None;
+        }
+        map_curves(self.profile.curves.as_deref()?, &self.xf)
     }
 
     /// World XY of the profile's voids, like [`Extrusion::footprint`].
@@ -236,6 +252,31 @@ fn clean3(pts: Vec<DVec3>) -> Vec<DVec3> {
 /// Number of facets for an arc of `angle` radians.
 fn arc_segments(angle: f64) -> usize {
     ((angle.abs() / TAU * CIRCLE_SEGMENTS as f64).ceil() as usize).clamp(2, CIRCLE_SEGMENTS * 4)
+}
+
+/// Plan curves through the plan part of `xf`, a similarity (uniform scale,
+/// turn, maybe a mirror); `None` for anything else or ellipses.
+fn map_curves(curves: &[SketchCurve], xf: &DAffine3) -> Option<Vec<SketchCurve>> {
+    let (x, y) = (xf.matrix3.x_axis.truncate(), xf.matrix3.y_axis.truncate());
+    let scale = x.length();
+    if scale < 1e-12 || (y.length() - scale).abs() > 1e-9 * scale || x.dot(y).abs() > 1e-9 * scale * scale {
+        return None;
+    }
+    let mirrored = x.perp_dot(y) < 0.0;
+    let t = |p: DVec2| xf.transform_point3(p.extend(0.0)).truncate();
+    curves
+        .iter()
+        .map(|c| match *c {
+            SketchCurve::Line { a, b } => Some(SketchCurve::Line { a: t(a), b: t(b) }),
+            SketchCurve::Arc { a, b, bulge } => {
+                Some(SketchCurve::Arc { a: t(a), b: t(b), bulge: if mirrored { -bulge } else { bulge } })
+            }
+            SketchCurve::Circle { center, radius } => {
+                Some(SketchCurve::Circle { center: t(center), radius: radius * scale })
+            }
+            SketchCurve::Ellipse { .. } => None,
+        })
+        .collect()
 }
 
 /// Points of an arc from `a` through `b` to `c` (a straight segment when collinear).
@@ -614,6 +655,102 @@ impl<'a> Geometry<'a> {
         out
     }
 
+    /// A 2D curve as lines, arcs and circles in its own coordinates (polylines,
+    /// indexed poly curves, composite curves of those, circles and trimmed
+    /// circles and lines); `None` when any part is something else (ellipses,
+    /// splines, offsets) or the curves are too many for a sketch.
+    pub fn plan_curves(&self, param: &Param, depth: usize) -> Option<Vec<SketchCurve>> {
+        let f = self.f;
+        let e = f.deref(param)?;
+        if depth > MAX_DEPTH {
+            return None;
+        }
+        let lines = |pts: &[DVec3]| -> Vec<SketchCurve> {
+            pts.windows(2)
+                .filter(|w| w[0].truncate().distance(w[1].truncate()) > cc_core::sketch::JOIN_TOL)
+                .map(|w| SketchCurve::Line { a: w[0].truncate(), b: w[1].truncate() })
+                .collect()
+        };
+        // An arc through sampled points, in halves so each turns less than half a circle.
+        let arcs = |pts: &[DVec3]| -> Option<Vec<SketchCurve>> {
+            let n = pts.len().checked_sub(1).filter(|n| *n >= 2)?;
+            let cuts: Vec<usize> = if n >= 4 { vec![0, n / 2, n] } else { vec![0, n] };
+            cuts.windows(2)
+                .map(|w| {
+                    let (a, b) = (pts.get(w[0])?.truncate(), pts.get(w[1])?.truncate());
+                    let m = pts.get((w[0] + w[1]) / 2)?.truncate();
+                    let bulge = cc_core::arc::Arc::bulge_through(a, m, b)?;
+                    Some(SketchCurve::Arc { a, b, bulge })
+                })
+                .collect()
+        };
+        let curves = match e.name.as_str() {
+            "IFCPOLYLINE" => {
+                let pts: Vec<DVec3> = e.arg(0).as_list().iter().filter_map(|p| self.point(p)).collect();
+                lines(&pts)
+            }
+            "IFCINDEXEDPOLYCURVE" => {
+                let list = f.deref(e.arg(0))?;
+                let points: Vec<Option<DVec3>> = list.arg(0).as_list().iter().map(|c| self.coords(c)).collect();
+                let at = |i: &Param| -> Option<DVec3> {
+                    let i = i.as_f64()? as usize;
+                    *points.get(i.checked_sub(1)?)?
+                };
+                let segments = e.arg(1).as_list();
+                if segments.is_empty() {
+                    lines(&points.iter().copied().collect::<Option<Vec<_>>>()?)
+                } else {
+                    let mut out = Vec::new();
+                    for seg in segments {
+                        let Param::Typed(kind, inner) = seg else { return None };
+                        let idx: Vec<DVec3> = inner.as_list().iter().map(at).collect::<Option<_>>()?;
+                        match (kind.as_str(), idx.as_slice()) {
+                            ("IFCARCINDEX", [a, m, b]) => {
+                                let (a, m, b) = (a.truncate(), m.truncate(), b.truncate());
+                                match cc_core::arc::Arc::bulge_through(a, m, b) {
+                                    Some(bulge) => out.push(SketchCurve::Arc { a, b, bulge }),
+                                    None => out.extend(lines(&[a.extend(0.0), b.extend(0.0)])),
+                                }
+                            }
+                            ("IFCLINEINDEX", _) => out.extend(lines(&idx)),
+                            _ => return None,
+                        }
+                        if out.len() > cc_core::sketch::MAX_CURVES {
+                            return None;
+                        }
+                    }
+                    out
+                }
+            }
+            "IFCCOMPOSITECURVE" | "IFCBOUNDARYCURVE" | "IFCOUTERBOUNDARYCURVE" => {
+                let mut out: Vec<SketchCurve> = Vec::new();
+                for seg in e.arg(0).as_list() {
+                    let seg = f.deref(seg)?;
+                    let mut part = self.plan_curves(seg.arg(2), depth + 1)?;
+                    if seg.arg(1).as_bool() == Some(false) {
+                        part = part.iter().rev().map(SketchCurve::reversed).collect();
+                    }
+                    out.extend(part);
+                    if out.len() > cc_core::sketch::MAX_CURVES {
+                        return None;
+                    }
+                }
+                out
+            }
+            "IFCTRIMMEDCURVE" => match f.deref(e.arg(0))?.name.as_str() {
+                "IFCCIRCLE" => arcs(&self.trimmed(e, depth))?,
+                "IFCLINE" => lines(&self.trimmed(e, depth)),
+                _ => return None,
+            },
+            "IFCCIRCLE" => {
+                let center = self.axis_placement(e.arg(0)).transform_point3(DVec3::ZERO).truncate();
+                vec![SketchCurve::Circle { center, radius: self.positive(e.arg(1))? }]
+            }
+            _ => return None,
+        };
+        (curves.len() <= cc_core::sketch::MAX_CURVES && curves.iter().all(SketchCurve::is_valid)).then_some(curves)
+    }
+
     /// Point of an `IfcCircle` / `IfcEllipse` at angle `t` (radians).
     fn conic_point(&self, e: &Entity, t: f64) -> Option<DVec3> {
         let xf = self.axis_placement(e.arg(0));
@@ -810,6 +947,7 @@ impl<'a> Geometry<'a> {
                     holes: Vec::new(),
                     kind: ProfileKind::Rect { center: DVec2::ZERO, x: DVec2::X, w, h },
                     closed: true,
+                    curves: None,
                 }
             }
             "IFCROUNDEDRECTANGLEPROFILEDEF" => {
@@ -845,14 +983,18 @@ impl<'a> Geometry<'a> {
                     holes: Vec::new(),
                     kind: ProfileKind::Circle { center: DVec2::ZERO, r },
                     closed: true,
+                    curves: Some(vec![SketchCurve::Circle { center: DVec2::ZERO, radius: r }]),
                 }
             }
             "IFCCIRCLEHOLLOWPROFILEDEF" => {
                 let (r, t) = (len(3)?, len(4)?);
                 let mut p = Profile::poly(ellipse(r, r));
+                let mut curves = vec![SketchCurve::Circle { center: DVec2::ZERO, radius: r }];
                 if t < r {
                     p.holes.push(ellipse(r - t, r - t).into_iter().rev().collect());
+                    curves.push(SketchCurve::Circle { center: DVec2::ZERO, radius: r - t });
                 }
+                p.curves = Some(curves);
                 p
             }
             "IFCELLIPSEPROFILEDEF" => Profile::poly(ellipse(len(3)?, len(4)?)),
@@ -960,11 +1102,18 @@ impl<'a> Geometry<'a> {
                     .map(|c| clean2(self.curve(c, 0).into_iter().map(|p| p.truncate()).collect()))
                     .filter(|h| h.len() >= 3)
                     .collect();
+                // The curves too, when every loop reads as lines, arcs and circles.
+                let mut curves = self.plan_curves(e.arg(2), 0);
+                for c in e.arg(3).as_list() {
+                    curves = curves.zip(self.plan_curves(c, 0)).map(|(mut all, more)| {
+                        all.extend(more);
+                        all
+                    });
+                }
+                let curves = curves.filter(|c| c.iter().any(SketchCurve::is_curved));
                 // Arbitrary profiles are already in the profile plane: no position.
-                return Some(Profile { pts: outer, holes, kind: rect_kind_of(&[]), closed: true }).map(|mut p| {
-                    p.kind = rect_kind_of(&p.pts);
-                    p
-                });
+                let kind = rect_kind_of(&outer);
+                return Some(Profile { pts: outer, holes, kind, closed: true, curves });
             }
             "IFCARBITRARYOPENPROFILEDEF" => {
                 let pts: Vec<DVec2> = self.curve(e.arg(2), 0).into_iter().map(|p| p.truncate()).collect();
@@ -973,6 +1122,7 @@ impl<'a> Geometry<'a> {
                     holes: Vec::new(),
                     kind: ProfileKind::Poly,
                     closed: false,
+                    curves: None,
                 });
             }
             "IFCCENTERLINEPROFILEDEF" => {
@@ -1705,7 +1855,7 @@ mod tests {
     #[test]
     fn extrusion_with_hole_has_exact_volume() {
         let sq = |h: f64| vec![DVec2::new(-h, -h), DVec2::new(h, -h), DVec2::new(h, h), DVec2::new(-h, h)];
-        let p = Profile { pts: sq(1.0), holes: vec![sq(0.5)], kind: ProfileKind::Poly, closed: true };
+        let p = Profile { pts: sq(1.0), holes: vec![sq(0.5)], kind: ProfileKind::Poly, closed: true, curves: None };
         let mesh = extrude(&p, &DAffine3::IDENTITY, DVec3::Z * 3.0);
         assert!((volume(&mesh) - (4.0 - 1.0) * 3.0).abs() < 1e-9, "{}", volume(&mesh));
         // Extruding downwards still yields an outward mesh.

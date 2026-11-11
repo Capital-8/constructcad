@@ -15,6 +15,7 @@ use cc_core::component::IfcClass;
 use cc_core::component::convex_hull;
 use cc_core::curtain::{CurtainEdits, CurtainPanel, CurtainSystem};
 use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
+use cc_core::sketch::Sketch;
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
@@ -1771,12 +1772,18 @@ impl<'a> Importer<'a> {
     /// vertical extrusion: the openings are the voids of its profile and the
     /// openings voiding it that pass through it vertically. `None` when the
     /// slab or an opening is anything else, or an opening is not inside the
-    /// outline and apart from the others (natives could not show it).
+    /// outline and apart from the others (natives could not show it). When
+    /// the profile is drawn with arcs or circles, also the sketch of the
+    /// outline and openings, which then come from it (#264).
     #[allow(clippy::type_complexity)]
-    fn slab_sketch(&self, id: u32, body: &Body) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64)> {
+    fn slab_sketch(
+        &self,
+        id: u32,
+        body: &Body,
+    ) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64, Option<Sketch>)> {
         let (ex, cuts) = body.slab_extrusion().filter(|(e, _)| e.is_vertical())?;
         let (z0, z1) = ex.z_range();
-        let outline = clean_polygon(ex.footprint());
+        let mut outline = clean_polygon(ex.footprint());
         if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
             return None;
         }
@@ -1802,6 +1809,25 @@ impl<'a> Importer<'a> {
                 openings.push(footprint);
             }
         }
+        // The profile's curves, with the other openings as lines: the outline
+        // and openings are then the sketch's (arcs split as natives split them).
+        let voids = ex.profile.holes.len();
+        let sketch = ex.footprint_curves().and_then(|mut curves| {
+            for o in openings.iter().skip(voids) {
+                curves.extend(Sketch::from_polygons(o, &[]).curves);
+            }
+            let sketch = Sketch { curves };
+            let p = sketch.profile().ok()?;
+            (p.openings.len() == openings.len()).then_some((sketch, p))
+        });
+        let sketch = sketch.map(|(sketch, p)| {
+            outline = p.outline;
+            openings = p.openings;
+            sketch
+        });
+        if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
+            return None;
+        }
         openings.iter().all(|o| openings_fit(&outline, o)).then_some(())?;
         for (i, a) in openings.iter().enumerate() {
             for b in openings.iter().skip(i + 1) {
@@ -1810,13 +1836,13 @@ impl<'a> Importer<'a> {
                 }
             }
         }
-        Some((outline, openings, z0, z1, ex.vector.z.abs()))
+        Some((outline, openings, z0, z1, ex.vector.z.abs(), sketch))
     }
 
     fn import_slab(&mut self, id: u32, e: &Entity) -> bool {
         let kind = e.arg(8).as_enum().unwrap_or("NOTDEFINED");
         let (_, body) = self.product(e);
-        let Some((boundary, openings, z0, z1, thickness)) = self.slab_sketch(id, &body) else { return false };
+        let Some((boundary, openings, z0, z1, thickness, sketch)) = self.slab_sketch(id, &body) else { return false };
         match kind {
             "ROOF" => return self.add_roof_with_holes(id, e, boundary, openings, z0, thickness, RoofShape::Flat),
             // A foundation slab, if it is shaped like one: piles and pile
@@ -1842,6 +1868,7 @@ impl<'a> Importer<'a> {
         );
         let mut floor = Floor::new(boundary, z1 - elevation);
         floor.openings = openings;
+        floor.sketch = sketch;
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Floor(floor));
         true
     }
@@ -3181,6 +3208,128 @@ END-ISO-10303-21;
             })
             .count();
         assert!(slab_components >= 1);
+    }
+
+    /// Slabs drawn with circles and arcs come in as floors with the curves as
+    /// their sketch, so areas and volumes are those of the true curves (#264):
+    /// a round slab with a square shaft, a slab with a half-round end (a
+    /// composite curve with a trimmed circle) and a square slab with a round
+    /// void.
+    #[test]
+    fn round_slabs_keep_their_curves() {
+        use std::f64::consts::PI;
+        let text = "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Round',$,$,$,$,$,#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#14=IFCDIRECTION((0.,0.,1.));
+#15=IFCAXIS2PLACEMENT3D(#16,$,$);
+#16=IFCCARTESIANPOINT((0.,0.,-200.));
+#100=IFCSLAB('2XvctVUKr0kugbFTf53O9L',$,'Round slab',$,$,#101,#102,'1',.FLOOR.);
+#101=IFCLOCALPLACEMENT(#11,#12);
+#102=IFCPRODUCTDEFINITIONSHAPE($,$,(#103));
+#103=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#104));
+#104=IFCEXTRUDEDAREASOLID(#105,#15,#14,200.);
+#105=IFCCIRCLEPROFILEDEF(.AREA.,$,#106,2000.);
+#106=IFCAXIS2PLACEMENT2D(#107,$);
+#107=IFCCARTESIANPOINT((5000.,5000.));
+#110=IFCOPENINGELEMENT('3XvctVUKr0kugbFTf53O9L',$,'Shaft',$,$,#111,#112,$,.OPENING.);
+#111=IFCLOCALPLACEMENT(#101,#12);
+#112=IFCPRODUCTDEFINITIONSHAPE($,$,(#113));
+#113=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#114));
+#114=IFCEXTRUDEDAREASOLID(#115,#15,#14,200.);
+#115=IFCRECTANGLEPROFILEDEF(.AREA.,$,#106,400.,400.);
+#118=IFCRELVOIDSELEMENT('4XvctVUKr0kugbFTf53O9L',$,$,$,#100,#110);
+#200=IFCSLAB('5XvctVUKr0kugbFTf53O9L',$,'Half-round end',$,$,#201,#202,'2',.FLOOR.);
+#201=IFCLOCALPLACEMENT(#11,#203);
+#203=IFCAXIS2PLACEMENT3D(#204,$,$);
+#204=IFCCARTESIANPOINT((20000.,0.,0.));
+#202=IFCPRODUCTDEFINITIONSHAPE($,$,(#205));
+#205=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#206));
+#206=IFCEXTRUDEDAREASOLID(#207,#15,#14,200.);
+#207=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#208);
+#208=IFCCOMPOSITECURVE((#209,#210,#211),.F.);
+#209=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#212);
+#210=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#213);
+#211=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#214);
+#212=IFCPOLYLINE((#220,#221));
+#213=IFCTRIMMEDCURVE(#215,(#221),(#222),.T.,.CARTESIAN.);
+#214=IFCPOLYLINE((#222,#223,#220));
+#215=IFCCIRCLE(#216,2000.);
+#216=IFCAXIS2PLACEMENT2D(#217,$);
+#217=IFCCARTESIANPOINT((4000.,2000.));
+#220=IFCCARTESIANPOINT((0.,0.));
+#221=IFCCARTESIANPOINT((4000.,0.));
+#222=IFCCARTESIANPOINT((4000.,4000.));
+#223=IFCCARTESIANPOINT((0.,4000.));
+#300=IFCSLAB('6XvctVUKr0kugbFTf53O9L',$,'Round void',$,$,#301,#302,'3',.FLOOR.);
+#301=IFCLOCALPLACEMENT(#11,#303);
+#303=IFCAXIS2PLACEMENT3D(#304,$,$);
+#304=IFCCARTESIANPOINT((40000.,0.,0.));
+#302=IFCPRODUCTDEFINITIONSHAPE($,$,(#305));
+#305=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#306));
+#306=IFCEXTRUDEDAREASOLID(#307,#15,#14,200.);
+#307=IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,#308,(#309));
+#308=IFCPOLYLINE((#220,#310,#311,#312,#220));
+#309=IFCCIRCLE(#313,1000.);
+#310=IFCCARTESIANPOINT((6000.,0.));
+#311=IFCCARTESIANPOINT((6000.,6000.));
+#312=IFCCARTESIANPOINT((0.,6000.));
+#313=IFCAXIS2PLACEMENT2D(#314,$);
+#314=IFCCARTESIANPOINT((3000.,3000.));
+#500=IFCRELCONTAINEDINSPATIALSTRUCTURE('CXvctVUKr0kugbFTf53O9L',$,$,$,(#100,#200,#300),#10);
+ENDSEC;
+END-ISO-10303-21;
+";
+        let (p, report) = import(text, Project::from_template()).unwrap();
+        let geom = cc_geom::ModelGeometry::build(&p);
+        let floors: Vec<(cc_core::ElementId, &cc_core::Floor)> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Floor(f) => Some((e.id, f)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(floors.len(), 3, "{report:?}");
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+        let at = |x: f64| floors.iter().find(|(_, f)| f.boundary.iter().all(|q| q.x >= x - 1e-6 && q.x < x + 15.0));
+        // Round: pi R^2 less the 0.4 x 0.4 shaft, 0.2 m thick.
+        let (id, round) = at(0.0).unwrap();
+        let sketch = round.sketch.as_ref().expect("the circle is kept");
+        assert!(
+            sketch
+                .curves
+                .iter()
+                .any(|c| matches!(c, cc_core::sketch::SketchCurve::Circle { radius, .. } if near(*radius, 2.0)))
+        );
+        assert_eq!(round.openings.len(), 1);
+        let area = PI * 4.0 - 0.16;
+        assert!(near(round.area(), area), "{} != {area}", round.area());
+        assert!(near(geom.volume(*id), area * 0.2), "{}", geom.volume(*id));
+        // The outline follows the circle as closely as natives do (well inside 1 %).
+        let drawn = polygon::area(&round.boundary) - 0.16;
+        assert!((area - drawn) / area < 1e-3, "{drawn}");
+        // Half-round end: 4 x 4 plus half a circle of radius 2.
+        let (id, half) = at(20.0).unwrap();
+        assert!(half.sketch.as_ref().is_some_and(|s| s.is_curved()));
+        let area = 16.0 + 2.0 * PI;
+        assert!(near(half.area(), area), "{} != {area}", half.area());
+        assert!(near(geom.volume(*id), area * 0.2), "{}", geom.volume(*id));
+        // Square with a round void.
+        let (id, voided) = at(40.0).unwrap();
+        assert_eq!(voided.openings.len(), 1);
+        let area = 36.0 - PI;
+        assert!(near(voided.area(), area), "{} != {area}", voided.area());
+        assert!(near(geom.volume(*id), area * 0.2), "{}", geom.volume(*id));
     }
 
     /// Geometry a hostile file can throw at the importer: cyclic booleans and

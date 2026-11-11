@@ -575,8 +575,14 @@ impl Floor {
         self.openings.iter().chain(&self.cuts)
     }
 
-    /// Plan area: the boundary less its openings.
+    /// Plan area: the boundary less its openings, exact along the arcs,
+    /// circles and ellipses of its sketch (the boundary's points are chords).
     pub fn area(&self) -> f64 {
+        if let Some(drawn) = self.sketch.as_ref().filter(|s| s.is_curved()).and_then(|s| s.area().ok()) {
+            // The sketch draws the boundary and its openings (it is dropped when
+            // they change without it); shafts cut the rest.
+            return (drawn - self.cuts.iter().map(|o| polygon_area(o)).sum::<f64>()).max(0.0);
+        }
         (polygon_area(&self.boundary) - self.all_openings().map(|o| polygon_area(o)).sum::<f64>()).max(0.0)
     }
 }
