@@ -7,7 +7,7 @@ use crate::state::AppState;
 use crate::t;
 use crate::theme::{self, PALETTE};
 use crate::tools::Tool;
-use cc_core::{Category, ViewCategory, ViewId, ViewKind};
+use cc_core::{Category, Project, ViewCategory, ViewId, ViewKind};
 use egui::{Rect, Response, Sense, Ui, vec2};
 
 /// A view dragged from the browser (dropped on a sheet, it is placed there).
@@ -127,30 +127,26 @@ fn tree_row(
     response
 }
 
-fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
-    let mut views: Vec<(ViewId, String)> = state
-        .project()
+/// The views of `category` with their labels, in the browser's order:
+/// plans by their level's elevation, then by label; the rest by label.
+pub fn ordered(project: &Project, category: ViewCategory) -> Vec<(ViewId, String)> {
+    let mut views: Vec<(f64, ViewId, String)> = project
         .views_of(category)
         .map(|v| {
             let label = match &v.kind {
                 ViewKind::Sheet { number, .. } => format!("{number} - {}", v.name),
                 _ => v.name.clone(),
             };
-            (v.id, label)
+            let elevation = v.level().map_or(0.0, |l| project.level_elevation(l));
+            (elevation, v.id, label)
         })
         .collect();
-    if matches!(category, ViewCategory::FloorPlan | ViewCategory::CeilingPlan) {
-        // Order plans by level elevation like the levels themselves.
-        let project = state.project();
-        views.sort_by(|a, b| {
-            let elev =
-                |id: ViewId| project.view(id).and_then(|v| v.level()).map_or(0.0, |l| project.level_elevation(l));
-            elev(a.0).total_cmp(&elev(b.0)).then(a.1.cmp(&b.1))
-        });
-    } else {
-        views.sort_by(|a, b| a.1.cmp(&b.1));
-    }
+    views.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.2.cmp(&b.2)).then(a.1.cmp(&b.1)));
+    views.into_iter().map(|(_, id, label)| (id, label)).collect()
+}
 
+fn category_items(ui: &mut Ui, state: &mut AppState, category: ViewCategory) {
+    let views = ordered(state.project(), category);
     let n = views.len();
     for (i, (id, label)) in views.into_iter().enumerate() {
         if let Some((rid, text)) = state.rename.as_mut().filter(|(rid, _)| *rid == id) {
@@ -324,4 +320,41 @@ fn add_button(ui: &mut Ui, state: &mut AppState, category: ViewCategory, row: &R
         _ => {}
     }
     used || r.clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cc_engine::Session;
+    use serde_json::json;
+
+    fn names(s: &Session, category: ViewCategory) -> Vec<String> {
+        ordered(s.project(), category).into_iter().map(|(_, n)| n).collect()
+    }
+
+    /// Plans are listed by their level's elevation, whatever their names
+    /// (issue #274), and follow a level moved below another.
+    #[test]
+    fn plans_are_ordered_by_level_elevation() {
+        let mut s = Session::default();
+        for (name, elevation) in [("A top", 90.0), ("Z bottom", -30.0)] {
+            s.execute("level_create", json!({ "name": name, "elevation": elevation })).unwrap();
+        }
+        for category in [ViewCategory::FloorPlan, ViewCategory::CeilingPlan] {
+            let p = s.project();
+            let elevations: Vec<f64> = ordered(p, category)
+                .iter()
+                .map(|(id, _)| p.view(*id).and_then(|v| v.level()).map_or(f64::NAN, |l| p.level_elevation(l)))
+                .collect();
+            assert!(
+                elevations.len() >= 3 && elevations.windows(2).all(|w| w[0] <= w[1]),
+                "{category:?}: {elevations:?}"
+            );
+            let names = names(&s, category);
+            assert_eq!(names.first().map(String::as_str), Some("Z bottom"));
+            assert_eq!(names.last().map(String::as_str), Some("A top"));
+        }
+        s.execute("level_set", json!({ "level": "A top", "elevation": -100.0 })).unwrap();
+        assert_eq!(names(&s, ViewCategory::FloorPlan).first().map(String::as_str), Some("A top"));
+    }
 }
