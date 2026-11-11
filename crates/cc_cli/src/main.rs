@@ -19,7 +19,8 @@ Usage:
   ccad [options] schema <command>     the JSON Schema of a command's parameters
   ccad reference                      the command reference in Markdown
   ccad [options] run <command> [args] run one command
-  ccad [options] script <file|->      run a script of commands
+  ccad [options] script <file|-> [level=<id|name>]
+                                      run a script of commands
   ccad [options] lua <file|-> [args]  run a Lua script
   ccad [options] graph <file> [inputs] run a visual programming graph (.ccgraph)
   ccad [options] plugins              list the plugins loaded with --plugins
@@ -32,7 +33,9 @@ key=value pairs whose values are JSON or plain text, e.g.
   ccad -p house.ccad --save run wall_create start=[0,0] end=[5,0] height=2.8
 
 A script is a JSON array of {\"command\": ..., \"args\": {...}} objects, or one
-such object per line; it stops at the first error.
+such object per line; it stops at the first error. {\"$step\": n} in its
+arguments is the id step n created (n from 1), {\"$level\": \"active\"} the
+level given as level=<id|name> (default: the lowest level).
 
 A graph (.ccgraph) takes its named input nodes as key=value pairs, e.g.
   ccad --save-as row.ccad graph examples/graphs/house.ccgraph width=12
@@ -288,10 +291,26 @@ fn main() -> ExitCode {
                 Ok(s) => s,
                 Err(e) => return usage_error(&format!("invalid script: {e}")),
             };
+            let level = match rest.get(1..).unwrap_or_default() {
+                [] => None,
+                [arg] => match arg.strip_prefix("level=") {
+                    Some(v) => {
+                        Some(v.parse::<u64>().map_or_else(|_| cc_engine::Ref::Name(v.into()), cc_engine::Ref::Id))
+                    }
+                    None => return usage_error(&format!("unknown script argument {arg} (expected level=<id|name>)")),
+                },
+                _ => return usage_error("script takes a file and at most level=<id|name>"),
+            };
             let mut s = match session(&o) {
                 Ok(s) => s,
                 Err(e) => return fail(&e),
             };
+            if let Some(level) = level {
+                match s.level(&level) {
+                    Ok(id) => s.set_active_level(Some(id)),
+                    Err(e) => return fail(&e),
+                }
+            }
             let results = cc_engine::script::run(&mut s, &steps);
             flush_messages(&mut s);
             let results = match results {

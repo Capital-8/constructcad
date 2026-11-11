@@ -137,7 +137,8 @@ ccad [opções] commands             lista os comandos
 ccad [opções] schema <comando>     o esquema JSON dos parâmetros de um comando
 ccad reference                     a referência de comandos em Markdown
 ccad [opções] run <comando> [args] executa um comando
-ccad [opções] script <arquivo|->   executa um script de comandos
+ccad [opções] script <arquivo|-> [level=<id|nome>]
+                                   executa um script de comandos
 ccad [opções] lua <arquivo|-> [args] executa um script Lua
 ccad [opções] plugins              lista os plugins carregados com --plugins
 ccad plugins install <zip> <pasta>  instala um arquivo de plugin numa pasta de plugins
@@ -266,7 +267,18 @@ Um carimbo é um componente cujas peças 2D desenham a folha inteira, em milíme
 {"command": "sheet_fields", "args": {"sheet": "Plantas gerais"}}
 ```
 
-Scripts não têm variáveis: um passo não usa o id criado por um passo anterior. Os comandos ajudam aceitando posições onde isso importa (`door_create` e `window_create` encontram a parede mais próxima de `point`; pisos, forros e telhados acompanham as paredes com `from_walls`). Para lógica entre passos, escreva um [script Lua](#scripts-lua), chame `ccad run` a partir de um script de shell ou use um agente via MCP.
+**Referências entre passos.** Scripts não têm variáveis, mas um argumento pode tomar um valor do resultado de um passo anterior: `{"$step": n}` é o `id` que o passo `n` (contado a partir de 1) devolveu, e `{"$step": n, "path": "/created/0"}` qualquer valor do seu resultado, indicado por um [ponteiro JSON](https://www.rfc-editor.org/rfc/rfc6901). `{"$level": "active"}` é o nível ativo: no app, o nível da planta ativa; no `ccad script`, o nível dado como `level=<id|nome>`; sem nenhum dos dois, o nível mais baixo. Uma referência a um passo que ainda não rodou, ou a um valor que o seu resultado não tem, para o script com um erro `invalid_arguments`.
+
+```text
+{"command": "wall_create", "args": {"level": {"$level": "active"}, "start": [0, 0], "end": [6, 0]}}
+{"command": "window_create", "args": {"wall": {"$step": 1}, "offset": 2, "sill": 1}}
+```
+
+```sh
+ccad -p casa.ccad --save script paredes.ccmacro level="Pavimento 1"
+```
+
+Os comandos também ajudam aceitando posições onde isso importa (`door_create` e `window_create` encontram a parede mais próxima de `point`; pisos, forros e telhados acompanham as paredes com `from_walls`). Para lógica entre passos, escreva um [script Lua](#scripts-lua), chame `ccad run` a partir de um script de shell ou use um agente via MCP.
 
 ## Scripts Lua
 
@@ -499,7 +511,8 @@ Um material citado por um parâmetro conta como usado: não pode ser excluído, 
 
 - Só edições são gravadas: abrir, salvar e exportar ficam de fora, então reproduzir nunca sobrescreve arquivos.
 - Um valor arrastado nas propriedades é gravado uma vez, com o valor final; alterações feitas num diálogo cancelado não são gravadas.
-- Os passos gravados se referem a elementos pelo id. No projeto em que foi gravada (ou numa cópia dele como estava no início da gravação), a macro reproduz as mesmas alterações; em outro projeto, passos que indicam elementos pelo id podem falhar ou atingir outros elementos.
+- Elementos, tipos, vistas e níveis criados durante a gravação são escritos como [referências](#scripts) ao passo que os criou (`{"$step": n}`), de modo que a macro usa o que ela mesma cria a cada execução. O nível da planta em que você grava é escrito como `{"$level": "active"}`: a macro roda no nível da planta ativa quando você a executa (os outros níveis ficam como gravados).
+- Os demais passos se referem a elementos pelo id. No projeto em que foi gravada (ou numa cópia dele como estava no início da gravação), a macro reproduz as mesmas alterações; em outro projeto, passos que indicam elementos existentes pelo id podem falhar ou atingir outros elementos.
 
 ## Paleta de comandos no aplicativo
 

@@ -137,7 +137,8 @@ ccad [options] commands             list the commands
 ccad [options] schema <command>     the JSON Schema of a command's parameters
 ccad reference                      the command reference in Markdown
 ccad [options] run <command> [args] run one command
-ccad [options] script <file|->      run a script of commands
+ccad [options] script <file|-> [level=<id|name>]
+                                    run a script of commands
 ccad [options] lua <file|-> [args]  run a Lua script
 ccad [options] plugins              list the plugins loaded with --plugins
 ccad plugins install <zip> <folder> install a plugin archive into a plugins folder
@@ -266,7 +267,18 @@ A title block is a component whose 2D pieces draw the whole sheet, in millimeter
 {"command": "sheet_fields", "args": {"sheet": "Plans"}}
 ```
 
-Scripts have no variables: a step cannot use an id created by an earlier one. Commands help by accepting positions where it matters (`door_create` and `window_create` find the wall nearest `point`; floors, ceilings and roofs follow the walls with `from_walls`). For logic between steps, write a [Lua script](#lua-scripts), call `ccad run` from a shell script or use an agent over MCP.
+**References between steps.** Scripts have no variables, but an argument can take a value from the result of an earlier step: `{"$step": n}` is the `id` that step `n` (counted from 1) returned, and `{"$step": n, "path": "/created/0"}` any value of its result, named by a [JSON pointer](https://www.rfc-editor.org/rfc/rfc6901). `{"$level": "active"}` is the active level: in the app, the level of the active plan; with `ccad script`, the level given as `level=<id|name>`; without either, the lowest level. A reference to a step that has not run yet, or to a value its result does not have, stops the script with an `invalid_arguments` error.
+
+```text
+{"command": "wall_create", "args": {"level": {"$level": "active"}, "start": [0, 0], "end": [6, 0]}}
+{"command": "window_create", "args": {"wall": {"$step": 1}, "offset": 2, "sill": 1}}
+```
+
+```sh
+ccad -p house.ccad --save script walls.ccmacro level="Level 1"
+```
+
+Commands also help by accepting positions where it matters (`door_create` and `window_create` find the wall nearest `point`; floors, ceilings and roofs follow the walls with `from_walls`). For logic between steps, write a [Lua script](#lua-scripts), call `ccad run` from a shell script or use an agent over MCP.
 
 ## Lua scripts
 
@@ -499,7 +511,8 @@ A material a parameter names counts as used: it cannot be deleted, and renaming 
 
 - Only edits are recorded: opening, saving and exporting are left out, so replaying never overwrites files.
 - A value dragged in the properties is recorded once, with its final value; changes made in a dialog that you cancel are not recorded.
-- Recorded steps refer to elements by id. Played on the project it was recorded on (or on a copy of it as it was when recording started) a macro reproduces the same changes; on another project, steps that name elements by id may fail or reach other elements.
+- Elements, types, views and levels created while recording are written as [references](#scripts) to the step that created them (`{"$step": n}`), so the macro uses what it creates each time it runs. The level of the plan you record in is written as `{"$level": "active"}`: the macro plays on the level of the plan active when you run it (other levels stay as recorded).
+- Other steps refer to elements by id. Played on the project it was recorded on (or on a copy of it as it was when recording started) a macro reproduces the same changes; on another project, steps that name existing elements by id may fail or reach other elements.
 
 ## Command palette in the app
 
