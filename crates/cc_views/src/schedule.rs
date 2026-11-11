@@ -151,9 +151,22 @@ fn summable(field: ScheduleField) -> bool {
 }
 
 /// Net side area of a wall: length x height minus its openings.
-fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall) -> f64 {
-    let openings: f64 = project
-        .hosted_by(e.id)
+fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall, cache: &mut Memo) -> f64 {
+    // Every wall's doors and windows, in element order, found in one pass.
+    let hosted = cache.hosted.get_or_insert_with(|| {
+        let mut by_host: std::collections::HashMap<cc_core::ElementId, Vec<cc_core::ElementId>> = Default::default();
+        for h in project.elements.values() {
+            if let Some(x) = h.as_hosted() {
+                by_host.entry(x.host).or_default().push(h.id);
+            }
+        }
+        by_host
+    });
+    let openings: f64 = hosted
+        .get(&e.id)
+        .into_iter()
+        .flatten()
+        .filter_map(|h| project.element(*h))
         .filter_map(|h| project.element_type(h.type_id)?.opening_size())
         .map(|(w, h)| w * h)
         .sum();
@@ -193,15 +206,20 @@ fn valve_pipe<'a>(project: &'a Project, e: &Element) -> Option<&'a Element> {
     }
 }
 
-/// Components' extents already worked out by one schedule: per type for
-/// elements without overrides (they resolve alike), else per element.
-type Extents = std::collections::HashMap<(cc_core::ElementTypeId, Option<cc_core::ElementId>), Option<(f64, f64, f64)>>;
+/// What one schedule works out once and reads for many cells: components'
+/// extents, per type for elements without overrides (they resolve alike),
+/// else per element; and the doors and windows of each wall.
+#[derive(Default)]
+struct Memo {
+    extents: std::collections::HashMap<(cc_core::ElementTypeId, Option<cc_core::ElementId>), Option<(f64, f64, f64)>>,
+    hosted: Option<std::collections::HashMap<cc_core::ElementId, Vec<cc_core::ElementId>>>,
+}
 
 /// [`component_extents`] through `cache`.
-fn cached_extents(project: &Project, e: &Element, cache: &mut Extents) -> Option<(f64, f64, f64)> {
+fn cached_extents(project: &Project, e: &Element, cache: &mut Memo) -> Option<(f64, f64, f64)> {
     let ElementKind::Component(c) = &e.kind else { return None };
     let key = (e.type_id, (!c.overrides.is_empty()).then_some(e.id));
-    *cache.entry(key).or_insert_with(|| component_extents(project, e))
+    *cache.extents.entry(key).or_insert_with(|| component_extents(project, e))
 }
 
 /// Width (X), depth (Y) and height of a component's pieces in its own frame.
@@ -222,17 +240,11 @@ fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> 
 }
 
 fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField) -> Value {
-    value_cached(project, geom, e, field, &mut Extents::default())
+    value_cached(project, geom, e, field, &mut Memo::default())
 }
 
 /// [`value`], with the extents of components kept in `cache`.
-fn value_cached(
-    project: &Project,
-    geom: &ModelGeometry,
-    e: &Element,
-    field: ScheduleField,
-    cache: &mut Extents,
-) -> Value {
+fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField, cache: &mut Memo) -> Value {
     use ScheduleField as F;
     let ty = project.element_type(e.type_id);
     let info = ty.map(|t| &t.info);
@@ -319,7 +331,7 @@ fn value_cached(
             _ => Value::Missing,
         },
         F::Area => match &e.kind {
-            ElementKind::Wall(w) => Value::Area(wall_area(project, e, w)),
+            ElementKind::Wall(w) => Value::Area(wall_area(project, e, w, cache)),
             ElementKind::Room(_) => room_boundary.map_or(Value::Missing, |b| Value::Area(polygon::area(b))),
             ElementKind::Foundation(_) => geom.foundations.get(&e.id).map_or(Value::Missing, |g| Value::Area(g.area())),
             ElementKind::Roof(r) => Value::Area(r.area()),
@@ -553,7 +565,7 @@ pub fn schedule_where(
     let mut elements: Vec<&Element> = project.elements_of(category).filter(|e| keep(e)).collect();
     elements.sort_by(|a, b| default_order(a, b));
 
-    let mut cache = Extents::default();
+    let mut cache = Memo::default();
     let mut rows: Vec<(&Element, Vec<Value>)> = elements
         .into_iter()
         .map(|e| (e, fields.iter().map(|&f| value_cached(project, geom, e, f, &mut cache)).collect()))

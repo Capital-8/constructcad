@@ -172,6 +172,37 @@ pub struct ModelGeometry {
     /// Exact volumes of floors sketched with arcs, circles or ellipses, whose
     /// solids mesh the curves with chords (see [`Self::volume`]).
     pub curved_volumes: BTreeMap<ElementId, f64>,
+    /// Where each element's solids are in `solids`, made at the end of a
+    /// build (see [`SolidIndex`]).
+    pub solid_index: SolidIndex,
+}
+
+/// The positions of each element's solids in [`ModelGeometry::solids`], in
+/// order, so that finding an element's solids does not scan them all. It is
+/// used only while `solids` has the length it was made for; geometry put
+/// together by hand (or changed after the build) is scanned instead.
+#[derive(Debug, Clone, Default)]
+pub struct SolidIndex {
+    of: std::collections::HashMap<ElementId, Vec<usize>>,
+    len: usize,
+}
+
+impl SolidIndex {
+    fn new(solids: &[Solid]) -> Self {
+        let mut of: std::collections::HashMap<ElementId, Vec<usize>> = std::collections::HashMap::new();
+        for (i, s) in solids.iter().enumerate() {
+            of.entry(s.element).or_default().push(i);
+        }
+        Self { of, len: solids.len() }
+    }
+
+    /// The positions of `id`'s solids, or `None` when the index does not fit `solids`.
+    fn get(&self, solids: &[Solid], id: ElementId) -> Option<&[usize]> {
+        if self.len != solids.len() {
+            return None;
+        }
+        Some(self.of.get(&id).map_or(&[], Vec::as_slice))
+    }
 }
 
 /// A foundation's body: a vertical prism.
@@ -345,6 +376,7 @@ impl ModelGeometry {
         geom.apply_joins(project);
         geom.build_rooms(project);
         crate::paint::apply(project, &mut geom.solids);
+        geom.solid_index = SolidIndex::new(&geom.solids);
         geom
     }
 
@@ -384,6 +416,11 @@ impl ModelGeometry {
     /// plan and joints are analytic: their shared volume is deducted from
     /// their quantity instead, and views merge the outlines.
     fn apply_joins(&mut self, project: &Project) {
+        if project.joins.is_empty() {
+            return;
+        }
+        // Joins add and remove no solids: the index holds throughout.
+        self.solid_index = SolidIndex::new(&self.solids);
         for &(cutting, cut) in &project.joins {
             let cutters = self.closed_meshes(cutting);
             if self.walls.contains_key(&cut) {
@@ -401,7 +438,12 @@ impl ModelGeometry {
                 *self.join_deductions.entry(cut).or_default() += shared;
                 continue;
             }
-            for solid in self.solids.iter_mut().filter(|s| s.element == cut && !s.secondary) {
+            let positions = self.solid_index.get(&self.solids, cut).map(<[usize]>::to_vec).unwrap_or_default();
+            for i in positions {
+                let Some(solid) = self.solids.get_mut(i) else { continue };
+                if solid.element != cut || solid.secondary {
+                    continue;
+                }
                 for cutter in &cutters {
                     let body: Vec<Vec<DVec3>> = solid.faces.iter().map(|f| f.verts.clone()).collect();
                     if !crate::csg::bounds_overlap(&body, cutter) {
@@ -726,6 +768,11 @@ impl ModelGeometry {
             .filter(|(_, w)| w.bulge.abs() < 1e-9)
             .filter_map(|(e, w)| Some((e.id, w.attach_top?)))
             .collect();
+        if attached.is_empty() {
+            return;
+        }
+        // Tops change faces only: the index holds throughout.
+        self.solid_index = SolidIndex::new(&self.solids);
         for (wall, target) in attached {
             // Curtain walls keep their grid under a flat top.
             let Some(g) = self.walls.get(&wall).filter(|g| g.curtain.is_none()) else { continue };
@@ -733,9 +780,7 @@ impl ModelGeometry {
             // reaching half the wall further, with their planes.
             let reach = g.half + 0.01;
             let planes: Vec<(Vec<DVec2>, DVec3, DVec3)> = self
-                .solids
-                .iter()
-                .filter(|s| s.element == target && !s.secondary)
+                .body_of(target)
                 .flat_map(|s| s.faces.iter())
                 .filter(|f| f.normal.z < -1e-6 && f.verts.len() >= 3)
                 .map(|f| {
@@ -808,7 +853,13 @@ impl ModelGeometry {
             let openings = g.openings.clone();
             g.set_openings(openings.into_iter().filter(|o| o.z1 <= low).collect());
             g.set_top_profile(profile);
-            if let Some(s) = self.solids.iter_mut().find(|s| s.element == wall && s.category == Category::Wall) {
+            let found = self.solid_index.get(&self.solids, wall).and_then(|positions| {
+                positions
+                    .iter()
+                    .copied()
+                    .find(|&i| self.solids.get(i).is_some_and(|s| s.element == wall && s.category == Category::Wall))
+            });
+            if let Some(s) = found.and_then(|i| self.solids.get_mut(i)) {
                 s.faces = g.to_solid(s.color).faces;
             }
             self.walls.insert(wall, g);
@@ -821,6 +872,13 @@ impl ModelGeometry {
         for (e, w) in project.walls() {
             if w.length() > 1e-6 {
                 by_level.entry(e.level).or_default().push((e, w));
+            }
+        }
+        // Doors and windows by host, in element order.
+        let mut hosted_by: BTreeMap<ElementId, Vec<&cc_core::Element>> = BTreeMap::new();
+        for h in project.elements.values() {
+            if let Some(x) = h.as_hosted() {
+                hosted_by.entry(x.host).or_default().push(h);
             }
         }
         for walls in by_level.values() {
@@ -901,7 +959,7 @@ impl ModelGeometry {
                     }
                 }
                 // Curtain walls host no doors or windows: their panels are the openings.
-                let hosted = project.hosted_by(e.id).filter(|_| curtains[i].is_none());
+                let hosted = hosted_by.get(&e.id).into_iter().flatten().copied().filter(|_| curtains[i].is_none());
                 let mut openings: Vec<Opening> = hosted
                     .filter_map(|h| {
                         let host = h.as_hosted()?;
@@ -1124,7 +1182,10 @@ impl ModelGeometry {
     }
 
     pub fn solids_of(&self, id: ElementId) -> impl Iterator<Item = &Solid> {
-        self.solids.iter().filter(move |s| s.element == id)
+        let indexed = self.solid_index.get(&self.solids, id);
+        let scan = indexed.is_none().then(|| self.solids.iter()).into_iter().flatten();
+        let found = indexed.into_iter().flatten().filter_map(|i| self.solids.get(*i));
+        found.chain(scan).filter(move |s| s.element == id)
     }
 
     /// The solids of an element's body: its solids without secondary parts
