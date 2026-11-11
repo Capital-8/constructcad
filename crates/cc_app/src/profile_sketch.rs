@@ -101,17 +101,19 @@ pub fn section_curves(project: &Project, id: ProfileId) -> Option<Vec<SketchCurv
     Some(loops.iter().flat_map(|v| profile::to_curves(v, true)).collect())
 }
 
-/// Open a sketched structural profile in a sketch (*Edit sketch*).
-pub fn open_section(state: &mut AppState, id: ProfileId) {
+/// Open a sketched structural profile in a sketch (*Edit sketch*);
+/// Whether it opened (a profile whose points do not evaluate does not).
+pub fn open_section(state: &mut AppState, id: ProfileId) -> bool {
     let Some(curves) = section_curves(state.project(), id) else {
-        state.message = t!("sketch-piece-unreadable");
-        return;
+        state.message = t!("profiles-sketch-unreadable");
+        return false;
     };
     state.set_tool(Tool::Select);
     let mut session = Session::new(Target::Section { profile: id }, curves);
     session.draw = crate::sketch_mode::Draw::Select;
     state.sketch = Some(session);
     state.message = t!("hint-section-sketch");
+    true
 }
 
 /// The profile points of one loop of the sketch: a point that did not move
@@ -193,7 +195,8 @@ fn section_points(
 }
 
 /// *Finish* on a structural profile's sketch: its outline and openings
-/// written with `profile_set` (nothing when they are as they were), then
+/// written with `profile_set` (nothing when they draw the same loops, from
+/// any start and either way round), then
 /// back to the Profile Manager; a sketch that makes no profile stays open
 /// with the reason.
 pub fn finish_section(state: &mut AppState) {
@@ -210,7 +213,8 @@ pub fn finish_section(state: &mut AppState) {
             return;
         }
     };
-    if outline != sketch.outline || openings != sketch.openings {
+    let changed = outline != sketch.outline || openings != sketch.openings;
+    if changed && !same_shape(&sketch, &curves) {
         let command = cc_engine::commands::profiles::ProfileSet {
             profile: cc_engine::Ref::Id(id.0),
             sketch: Some(serde_json::json!({ "outline": outline, "openings": openings })),
@@ -223,14 +227,21 @@ pub fn finish_section(state: &mut AppState) {
     leave_section(state, id);
 }
 
-/// Close a structural profile's sketch and go back to the Profile Manager on it.
+/// Whether `curves` draw the loops `sketch` already makes: the same points
+/// from any start and either way round.
+fn same_shape(sketch: &ParamSketch, curves: &[SketchCurve]) -> bool {
+    let Some(loops) = section_loops(sketch) else { return false };
+    let old: Vec<SketchCurve> = loops.iter().flat_map(|v| profile::to_curves(v, true)).collect();
+    let Ok(old) = Sketch { curves: old }.profile() else { return false };
+    Sketch { curves: curves.to_vec() }.makes(&old.outline, &old.openings)
+}
+
+/// Close a structural profile's sketch and go back to the Profile Manager on
+/// it, with the manager's edits from before the sketch.
 pub fn leave_section(state: &mut AppState, id: ProfileId) {
     state.sketch = None;
     state.set_tool(Tool::Select);
-    crate::profiles_dialog::open(state);
-    if let Some(d) = state.dialogs.profiles.as_mut() {
-        d.selected = Some(id);
-    }
+    crate::profiles_dialog::resume(state, id);
 }
 
 /// The view of the profile: where the camera looks and how near.
@@ -440,6 +451,19 @@ mod tests {
         // An open sketch is refused with the reason.
         curves.truncate(3);
         assert!(section_points(&sketch, &curves).is_err());
+    }
+
+    /// The same loop drawn from another corner and the other way round is
+    /// no change; a moved corner is.
+    #[test]
+    fn a_loop_from_another_start_or_way_round_is_the_same_shape() {
+        let sketch = ParamSketch::square(0.1, 0.2);
+        let mut v = section_loops(&sketch).unwrap().remove(0);
+        v.rotate_left(1);
+        v.reverse();
+        assert!(same_shape(&sketch, &profile::to_curves(&v, true)));
+        v[0].0.x += 0.01;
+        assert!(!same_shape(&sketch, &profile::to_curves(&v, true)));
     }
 
     #[test]

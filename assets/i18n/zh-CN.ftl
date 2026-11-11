@@ -3046,6 +3046,7 @@ profiles-used-by = 使用者
 profiles-edit-sketch = 编辑草图
 profiles-edit-sketch-nested = 请先关闭类型属性再编辑草图
 profiles-catalog-none = 勾选要添加的规格
+profiles-sketch-unreadable = 此型材草图的点无法求值，因此无法打开草图。
 type-profile-manage = 管理…
 type-profile-size = d × bf
 hint-section-sketch = 绘制截面的闭合轮廓及其开口；轴线通过 x = 0 和 y = 0。完成后，使用该型材的所有类型都会更新。

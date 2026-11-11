@@ -3046,6 +3046,7 @@ profiles-used-by = Used by
 profiles-edit-sketch = Edit sketch
 profiles-edit-sketch-nested = Close Type Properties to edit the sketch
 profiles-catalog-none = Tick the designations to add
+profiles-sketch-unreadable = The points of this profile's sketch do not evaluate, so its sketch cannot be opened.
 type-profile-manage = Manage…
 type-profile-size = d × bf
 hint-section-sketch = Draw the closed outline of the section and its openings; the axes run through x = 0 and y = 0. Finish applies the profile to every type using it.

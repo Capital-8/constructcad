@@ -2978,6 +2978,9 @@ fn profile_manager_imports_and_cancels() {
     let catalog = harness.state_mut().dialogs.profiles.as_mut().and_then(|d| d.catalog.as_mut());
     catalog.expect("the catalog opens").series = "IPE".into();
     harness.run();
+    let add = t!("profiles-catalog-add");
+    let disabled = harness.get_by_role_and_label(Role::Button, &add).accesskit_node().is_disabled();
+    assert!(disabled, "Add waits for a ticked designation");
     harness.get_by_role_and_label(Role::CheckBox, "200").click();
     harness.get_by_role_and_label(Role::CheckBox, "220").click();
     harness.run();
@@ -3101,4 +3104,70 @@ fn a_sketched_profile_is_edited_and_kept() {
     harness.run();
     assert!(harness.state().sketch.is_none());
     assert_eq!(harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected), Some(id));
+}
+
+/// The Profile Manager's session spans *Edit sketch*: a parameter changed
+/// before it and a point moved in it are both undone by the manager's
+/// Cancel and both kept by its OK.
+#[test]
+fn the_profile_managers_cancel_undoes_its_sketch() {
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::{ProfileCreate, ProfileSet};
+    let mut state = sample_state();
+    let command = ProfileCreate { material: "steel".into(), shape: Some("sketch".into()), ..Default::default() };
+    let id = cc_core::ProfileId(state.session.run(command).unwrap()["id"].as_u64().unwrap());
+    let original = state.project().profile(id).unwrap().shape.clone();
+    let mut harness = sketch_harness(state);
+    let edit = |h: &mut Harness<'static, AppState>| {
+        crate::profiles_dialog::open(h.state_mut());
+        h.state_mut().dialogs.profiles.as_mut().unwrap().selected = Some(id);
+        h.run();
+        // A dimension changed in the manager (as its field would).
+        let set = ProfileSet {
+            profile: Ref::Id(id.0),
+            params: Some([("b".to_string(), 0.12)].into_iter().collect()),
+            ..Default::default()
+        };
+        h.state_mut().session.run(set).unwrap();
+        h.run();
+        h.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+        h.run();
+        assert!(h.state().dialogs.edit_start.is_some(), "the manager's session stays open");
+        // The top right corner (b/2, h/2) moves 2 cm right.
+        let corner = glam::DVec2::new(0.06, 0.05);
+        for c in &mut h.state_mut().sketch.as_mut().unwrap().curves {
+            if let cc_core::sketch::SketchCurve::Line { a, b } = c {
+                for p in [a, b] {
+                    if p.distance(corner) < 1e-9 {
+                        *p = glam::DVec2::new(0.08, 0.05);
+                    }
+                }
+            }
+        }
+        h.get_by_role_and_label(Role::Button, &t!("sketch-finish-mode")).click();
+        h.run();
+        assert!(h.state().sketch.is_none(), "{}", h.state().message);
+        let label = t!("profiles-edit-sketch");
+        let button = h.get_by_role_and_label(Role::Button, &label);
+        assert!(!button.accesskit_node().is_disabled(), "the manager is not nested");
+    };
+    let outline = |h: &Harness<'static, AppState>| match &h.state().project().profile(id).unwrap().shape {
+        cc_core::ProfileShape::Sketch(s) => s.outline.clone(),
+        _ => panic!("not a sketch"),
+    };
+    edit(&mut harness);
+    assert!(outline(&harness).contains(&cc_core::profile::ProfilePoint::new("0.08", "0.05")));
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none());
+    assert!(harness.state().dialogs.edit_start.is_none());
+    assert_eq!(harness.state().project().profile(id).unwrap().shape, original, "Cancel undoes both");
+
+    edit(&mut harness);
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.edit_start.is_none());
+    assert!(outline(&harness).contains(&cc_core::profile::ProfilePoint::new("0.08", "0.05")), "OK keeps the sketch");
+    let b = harness.state().project().profile(id).unwrap().shape.params();
+    assert!(b.iter().any(|(n, v)| n == "b" && (*v - 0.12).abs() < 1e-12), "OK keeps the dimension: {b:?}");
 }

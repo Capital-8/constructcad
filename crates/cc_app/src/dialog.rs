@@ -65,6 +65,8 @@ pub fn styled_button(ui: &mut Ui, label: &str, style: Style) -> egui::Response {
 pub struct Footer {
     actions: Vec<(String, Style)>,
     extras: Vec<String>,
+    /// Actions shown greyed out (see [`Footer::disable`]).
+    disabled: Vec<usize>,
 }
 
 impl Footer {
@@ -79,6 +81,12 @@ impl Footer {
 
     pub fn danger(&mut self, label: impl Into<String>) -> usize {
         self.push(label, Style::Danger)
+    }
+
+    /// Grey out the action `index` (as returned by [`Footer::primary`] and
+    /// the others): it cannot be clicked and Enter does not press it.
+    pub fn disable(&mut self, index: usize) {
+        self.disabled.push(index);
     }
 
     /// An auxiliary button on the left side. Its index follows the actions'.
@@ -203,7 +211,8 @@ impl Dialog {
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             for (i, (label, style)) in buttons.actions.iter().enumerate().rev() {
-                                if styled_button(ui, label, *style).clicked() {
+                                let enabled = !buttons.disabled.contains(&i);
+                                if ui.add_enabled_ui(enabled, |ui| styled_button(ui, label, *style)).inner.clicked() {
                                     clicked = Some(i);
                                 }
                             }
@@ -218,7 +227,11 @@ impl Dialog {
         let top = modal.is_top_modal;
         let no_text_focus = !focus_before && ctx.memory(|m| m.focused().is_none());
         if top && clicked.is_none() && no_text_focus && ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-            clicked = buttons.actions.iter().position(|(_, s)| *s == Style::Primary);
+            clicked = buttons
+                .actions
+                .iter()
+                .enumerate()
+                .position(|(i, (_, s))| *s == Style::Primary && !buttons.disabled.contains(&i));
         }
         let escape = top && ctx.input(|i| i.key_pressed(egui::Key::Escape));
         DialogResponse { clicked, dismissed: close_clicked || escape }

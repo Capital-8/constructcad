@@ -3046,6 +3046,7 @@ profiles-used-by = Usato da
 profiles-edit-sketch = Modifica schizzo
 profiles-edit-sketch-nested = Chiudi Proprietà del tipo per modificare lo schizzo
 profiles-catalog-none = Seleziona le designazioni da aggiungere
+profiles-sketch-unreadable = I punti dello schizzo di questo profilo non si possono valutare, quindi lo schizzo non può essere aperto.
 type-profile-manage = Gestisci…
 type-profile-size = d × bf
 hint-section-sketch = Disegna il contorno chiuso della sezione e le sue aperture; gli assi passano per x = 0 e y = 0. Fine applica il profilo a tutti i tipi che lo usano.

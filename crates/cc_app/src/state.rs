@@ -93,6 +93,10 @@ pub struct Dialogs {
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
     /// The Profile Manager.
     pub profiles: Option<crate::profiles_dialog::ProfilesDialog>,
+    /// The Profile Manager's edits while one of its profiles is in a
+    /// sketch (*Edit sketch*): Finish and Cancel open it again with them, so
+    /// its Cancel still undoes everything.
+    pub profiles_resume: Option<crate::graphics_dialog::Edits>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
     /// The Preferences window.

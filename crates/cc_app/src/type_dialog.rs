@@ -963,7 +963,7 @@ fn profile_rows(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         }
         let mut r = rotation;
         let resp = row(ui, &t!("prop-rotation"), |ui| {
-            ui.add(DragValue::new(&mut r).speed(1.0).range(-360.0..=360.0).max_decimals(2).suffix("°"))
+            ui.add(DragValue::new(&mut r).speed(1.0).range(-180.0..=180.0).max_decimals(2).suffix("°"))
         });
         if resp.changed() {
             update(state, tid, "profile-rotation", |t| set_profile(t, |_, angle, _| *angle = r));

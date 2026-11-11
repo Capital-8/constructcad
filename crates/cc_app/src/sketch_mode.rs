@@ -46,7 +46,7 @@ pub enum Target {
     Piece,
     /// The profile of a sweep type (*Edit Profile*, see [`crate::profile_sketch`]).
     Profile { type_id: ElementTypeId },
-    /// A sketched structural profile (*Edit sketch* in the Profile Manager,
+    /// Section = a structural profile's sketch (*Edit sketch* in the Profile Manager,
     /// see [`crate::profile_sketch`]).
     Section { profile: ProfileId },
     /// Lines of a title block on its Sheet view (see [`crate::title_block_env`]).

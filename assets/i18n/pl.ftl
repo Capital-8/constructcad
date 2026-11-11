@@ -3046,6 +3046,7 @@ profiles-used-by = Używany przez
 profiles-edit-sketch = Edytuj szkic
 profiles-edit-sketch-nested = Zamknij Właściwości typu, aby edytować szkic
 profiles-catalog-none = Zaznacz oznaczenia do dodania
+profiles-sketch-unreadable = Punktów szkicu tego profilu nie można obliczyć, więc szkicu nie można otworzyć.
 type-profile-manage = Zarządzaj…
 type-profile-size = d × bf
 hint-section-sketch = Narysuj zamknięty obrys przekroju i jego otwory; osie przechodzą przez x = 0 i y = 0. Zakończ stosuje profil do wszystkich typów, które go używają.

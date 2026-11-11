@@ -3046,6 +3046,7 @@ profiles-used-by = Verwendet von
 profiles-edit-sketch = Skizze bearbeiten
 profiles-edit-sketch-nested = Schließen Sie die Typeigenschaften, um die Skizze zu bearbeiten
 profiles-catalog-none = Kreuzen Sie die hinzuzufügenden Bezeichnungen an
+profiles-sketch-unreadable = Die Punkte der Skizze dieses Profils lassen sich nicht auswerten, daher kann die Skizze nicht geöffnet werden.
 type-profile-manage = Verwalten…
 type-profile-size = d × bf
 hint-section-sketch = Zeichnen Sie den geschlossenen Umriss des Querschnitts und seine Öffnungen; die Achsen verlaufen durch x = 0 und y = 0. Fertig stellen wendet das Profil auf alle Typen an, die es verwenden.

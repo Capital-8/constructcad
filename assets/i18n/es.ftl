@@ -3046,6 +3046,7 @@ profiles-used-by = Usado por
 profiles-edit-sketch = Editar boceto
 profiles-edit-sketch-nested = Cierre Propiedades de tipo para editar el boceto
 profiles-catalog-none = Marque las designaciones que desea añadir
+profiles-sketch-unreadable = Los puntos del boceto de este perfil no se pueden evaluar, así que el boceto no se puede abrir.
 type-profile-manage = Gestionar…
 type-profile-size = d × bf
 hint-section-sketch = Dibuje el contorno cerrado de la sección y sus aberturas; los ejes pasan por x = 0 e y = 0. Finalizar aplica el perfil a todos los tipos que lo usan.

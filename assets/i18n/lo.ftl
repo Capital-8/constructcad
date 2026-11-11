@@ -3048,6 +3048,7 @@ profiles-used-by = ໃຊ້ໂດຍ
 profiles-edit-sketch = ແກ້ໄຂແບບຮ່າງ
 profiles-edit-sketch-nested = ປິດຄຸນລັກສະນະປະເພດກ່ອນເພື່ອແກ້ໄຂແບບຮ່າງ
 profiles-catalog-none = ໝາຍເອົາລະຫັດທີ່ຈະເພີ່ມ
+profiles-sketch-unreadable = ບໍ່ສາມາດຄຳນວນຈຸດຂອງແບບຮ່າງໂປຣໄຟລ໌ນີ້ໄດ້, ຈຶ່ງເປີດແບບຮ່າງບໍ່ໄດ້.
 type-profile-manage = ຈັດການ…
 type-profile-size = d × bf
 hint-section-sketch = ແຕ້ມເສັ້ນຂອບປິດຂອງໜ້າຕັດ ແລະ ຊ່ອງເປີດຂອງມັນ; ແກນຜ່ານ x = 0 ແລະ y = 0. ສຳເລັດຈະນຳໃຊ້ໂປຣໄຟລ໌ກັບທຸກປະເພດທີ່ໃຊ້ມັນ.

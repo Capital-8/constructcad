@@ -103,6 +103,22 @@ pub struct Catalog {
 
 pub fn open(state: &mut AppState) {
     let edits = Edits::begin(state);
+    open_with(state, edits);
+}
+
+/// Open the manager again on profile `id` after its sketch closes, with the
+/// edits it had when the sketch opened (a fresh start if there are none).
+pub fn resume(state: &mut AppState, id: ProfileId) {
+    match state.dialogs.profiles_resume.take() {
+        Some(edits) => open_with(state, edits),
+        None => open(state),
+    }
+    if let Some(d) = state.dialogs.profiles.as_mut() {
+        d.selected = Some(id);
+    }
+}
+
+fn open_with(state: &mut AppState, edits: Edits) {
     state.dialogs.profiles = Some(ProfilesDialog {
         selected: None,
         search: String::new(),
@@ -216,10 +232,13 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     if std::mem::take(&mut d.edit_sketch)
         && let Some(id) = d.selected
     {
-        // The sketch's Finish and Cancel open the manager again.
-        d.edits.finish(state, true);
-        crate::profile_sketch::open_section(state, id);
-        return;
+        // The manager's session stays open: the sketch's Finish and Cancel
+        // open it again with these edits, so its Cancel undoes the sketch too.
+        state.session.doc.break_merge();
+        if crate::profile_sketch::open_section(state, id) {
+            state.dialogs.profiles_resume = Some(d.edits);
+            return;
+        }
     }
     let close = match response.clicked {
         Some(i) => Some(i == ok),
@@ -572,6 +591,7 @@ fn catalog_rows(state: &mut AppState, c: &mut Catalog) {
 fn catalog_dialog(ctx: &Context, state: &mut AppState, d: &mut ProfilesDialog) {
     let Some(mut c) = d.catalog.take() else { return };
     catalog_rows(state, &mut c);
+    let nothing_picked = c.picked.is_empty();
     let mut add = 0;
     let response = Dialog::new("profiles-catalog", t!("profiles-catalog-title")).width(440.0).show(
         ctx,
@@ -621,6 +641,9 @@ fn catalog_dialog(ctx: &Context, state: &mut AppState, d: &mut ProfilesDialog) {
         },
         |f| {
             add = f.primary(t!("profiles-catalog-add"));
+            if nothing_picked {
+                f.disable(add);
+            }
             f.secondary(t!("action-cancel"));
         },
     );

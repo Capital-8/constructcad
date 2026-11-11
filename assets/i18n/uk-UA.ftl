@@ -3047,6 +3047,7 @@ profiles-used-by = Використовується в
 profiles-edit-sketch = Редагувати ескіз
 profiles-edit-sketch-nested = Закрийте Властивості типу, щоб редагувати ескіз
 profiles-catalog-none = Позначте позначення, які треба додати
+profiles-sketch-unreadable = Точки ескізу цього профілю не обчислюються, тому ескіз не можна відкрити.
 type-profile-manage = Керувати…
 type-profile-size = d × bf
 hint-section-sketch = Накресліть замкнений контур перерізу та його отвори; осі проходять через x = 0 і y = 0. Завершити застосовує профіль до всіх типів, що його використовують.

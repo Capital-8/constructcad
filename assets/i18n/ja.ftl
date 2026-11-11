@@ -3046,6 +3046,7 @@ profiles-used-by = 使用中のタイプ
 profiles-edit-sketch = スケッチを編集
 profiles-edit-sketch-nested = スケッチを編集するにはタイププロパティを閉じてください
 profiles-catalog-none = 追加する規格にチェックを入れてください
+profiles-sketch-unreadable = この断面のスケッチの点を評価できないため、スケッチを開けません。
 type-profile-manage = 管理…
 type-profile-size = d × bf
 hint-section-sketch = 断面の閉じた外形と開口を描きます。軸は x = 0 と y = 0 を通ります。完了すると、この断面を使うすべてのタイプに適用されます。
