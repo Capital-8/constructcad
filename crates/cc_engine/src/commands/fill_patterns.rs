@@ -487,9 +487,11 @@ pub struct FillPatternImport {
 impl Command for FillPatternImport {
     const NAME: &'static str = "fill_pattern_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         let text = match (&self.path, self.text) {
             (Some(path), None) => {
+                s.require_files("path")?;
                 let len = std::fs::metadata(path)?.len();
                 if len > pat::MAX_PAT_BYTES as u64 {
                     return Err(EngineError::invalid(format!(

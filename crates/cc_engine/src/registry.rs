@@ -24,6 +24,10 @@ pub enum CommandKind {
 pub trait Command: DeserializeOwned + JsonSchema {
     const NAME: &'static str;
     const KIND: CommandKind;
+    /// Whether it may read a file named by one of its parameters (an import
+    /// of an edit or query command); it then refuses the path when the run
+    /// may not work with files ([`Session::require_files`]).
+    const READS_FILES: bool = false;
     fn run(self, session: &mut Session) -> Result<Value>;
 }
 
@@ -37,6 +41,9 @@ pub struct CommandInfo {
     pub description: String,
     /// JSON Schema of the parameters object: no references, valid under draft 7 and 2020-12.
     pub input_schema: Value,
+    /// May read a file named by a parameter (besides `File` commands, which
+    /// all work with files).
+    pub reads_files: bool,
 }
 
 fn info<C: Command>(group: &'static str) -> CommandInfo {
@@ -59,7 +66,14 @@ fn info<C: Command>(group: &'static str) -> CommandInfo {
         o.remove("description");
         o.entry("properties").or_insert_with(|| serde_json::json!({}));
     }
-    CommandInfo { name: C::NAME.to_string(), kind: C::KIND, group: group.to_string(), description, input_schema }
+    CommandInfo {
+        name: C::NAME.to_string(),
+        kind: C::KIND,
+        group: group.to_string(),
+        description,
+        input_schema,
+        reads_files: C::READS_FILES,
+    }
 }
 
 /// Rewrites draft 7 tuples (`items` as an array, which JSON Schema 2020-12 rejects, and with it MCP

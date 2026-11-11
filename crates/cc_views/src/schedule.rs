@@ -571,7 +571,10 @@ pub fn schedule_where(
 pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cell) -> String) -> String {
     let sep = if format::number(0.5, 1).contains(',') { ';' } else { ',' };
     let quote = |s: &str| {
-        if s.contains(sep) || s.contains('"') || s.contains('\n') {
+        if formula_like(s) {
+            // A spreadsheet would run it as a formula: kept as text.
+            format!("\"'{}\"", s.replace('"', "\"\""))
+        } else if s.contains(sep) || s.contains('"') || s.contains('\n') || s.contains('\r') {
             format!("\"{}\"", s.replace('"', "\"\""))
         } else {
             s.to_string()
@@ -590,6 +593,27 @@ pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cel
         line(table.totals.clone());
     }
     out
+}
+
+/// Whether a spreadsheet would read the cell `s` as a formula: it starts
+/// with `=`, `@`, a tab or a carriage return, or with `+` or `-` and is not
+/// a number (with its unit, such as `-3.50 m`).
+fn formula_like(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some('=' | '@' | '\t' | '\r') => true,
+        Some('+' | '-') => {
+            let rest = chars.as_str();
+            let number = rest.starts_with(|c: char| c.is_ascii_digit())
+                && rest.chars().all(|c| {
+                    c.is_ascii_digit()
+                        || c.is_alphabetic()
+                        || matches!(c, '.' | ',' | ' ' | '\u{a0}' | '\u{202f}' | '²' | '³' | '°' | '%' | '\'' | '"')
+                });
+            !number
+        }
+        _ => false,
+    }
 }
 
 /// A roof's covering (from its type) and its framing figures.
@@ -791,6 +815,37 @@ mod tests {
         };
         let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
         assert_eq!(csv, "A;B\r\n\"x;y\";k\r\n1;\r\n");
+    }
+
+    #[test]
+    fn csv_keeps_formulas_as_text() {
+        let text = |s: &str| Cell::Text(s.into());
+        let table = Table {
+            headers: vec!["a", "b", "c", "d", "e", "f"],
+            rows: vec![Row {
+                element: cc_core::ElementId(1),
+                cells: vec![
+                    text("=1+1"),
+                    text("+cmd|' /C calc'!A0"),
+                    text("-2+3"),
+                    text("@SUM(A1)"),
+                    text("-3.50 m"),
+                    text("\t=1"),
+                ],
+            }],
+            totals: vec!["-12".into()],
+        };
+        let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
+        let row = csv.lines().nth(1).unwrap();
+        let cells: Vec<&str> = row.split(';').collect();
+        assert_eq!(cells[0], "\"'=1+1\"");
+        assert!(cells[1].starts_with("\"'+cmd|"), "{row}");
+        assert_eq!(cells[2], "\"'-2+3\"");
+        assert_eq!(cells[3], "\"'@SUM(A1)\"");
+        // Numbers, also negative and with their unit, stay as they are.
+        assert_eq!(cells[4], "-3.50 m");
+        assert_eq!(cells.last().unwrap(), &"\"'\t=1\"");
+        assert!(csv.ends_with("\r\n-12\r\n"), "{csv}");
     }
 
     /// A schedule drawn for a sheet: title, headers, a row per element and

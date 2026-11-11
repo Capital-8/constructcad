@@ -282,12 +282,13 @@ pub struct DetailComponentCreate {
 impl Command for DetailComponentCreate {
     const NAME: &'static str = "detail_component_create";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
         let name = new_name(p, &self.name)?;
         let mut pieces: Vec<SheetItem> = Vec::new();
         for (i, arg) in self.pieces.iter().enumerate() {
-            pieces.push(SheetItem { name: format!("Piece{}", i + 1), shape: arg.shape()? });
+            pieces.push(SheetItem { name: format!("Piece{}", i + 1), shape: arg.shape(s)? });
         }
         let ids: Vec<ElementId> = self.elements.iter().map(|i| ElementId(*i)).collect();
         let mut placed: Option<(ViewId, cc_core::LevelId, DVec2)> = None;

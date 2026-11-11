@@ -79,6 +79,11 @@ ccad.command {
 }
 
 ccad.command {
+  name = "call",
+  run = function(a) return ccad.run(a.name, a.args) end,
+}
+
+ccad.command {
   name = "undo_it",
   run = function() return ccad.run("undo", {}) end,
 }
@@ -188,8 +193,10 @@ fn the_sandbox_has_no_files_or_code_loading() {
 #[test]
 fn runaway_scripts_stop() {
     let mut s = Session::default();
-    let small =
-        ScriptOptions { limits: Limits { instructions: 2_000_000, memory: 16 * 1024 * 1024 }, ..Default::default() };
+    let small = ScriptOptions {
+        limits: Limits { instructions: 2_000_000, memory: 16 * 1024 * 1024, ..Limits::default() },
+        ..Default::default()
+    };
     let run = |s: &mut Session, src: &str| run_script(s, src, "t.lua", json!({}), small).result.unwrap_err();
     for src in [
         "while true do end",
@@ -274,6 +281,29 @@ fn plugins_only_do_what_they_may() {
     assert_eq!(e.code, ErrorCode::Rejected);
     assert_eq!(walls(&mut s), 1);
     assert_eq!(s.execute("room_tools__nothing", json!({})).unwrap_err().code, ErrorCode::UnknownCommand);
+}
+
+#[test]
+fn plugins_without_files_cannot_import_by_path() {
+    let dir = room_tools("imports");
+    let mut s = session_with(&dir, Permissions::NONE);
+    let by_path = [
+        ("cad_import", json!({"path": "nothing.dxf"})),
+        ("image_import", json!({"path": "nothing.png"})),
+        ("fill_pattern_import", json!({"path": "nothing.pat"})),
+        ("graph_check", json!({"path": "nothing.ccgraph"})),
+    ];
+    for (name, args) in by_path {
+        let e = s.execute("room_tools__call", json!({"name": name, "args": args})).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Rejected, "{name}: {e:?}");
+        assert!(e.message.contains("files"), "{name}: {}", e.message);
+    }
+    // The inline variants work.
+    let text = "*Diag, diagonal\n45, 0,0, 0,3\n";
+    let args = json!({"name": "fill_pattern_import", "args": {"text": text}});
+    s.execute("room_tools__call", args).unwrap();
+    // The user's own commands keep their files.
+    assert!(s.files_allowed());
 }
 
 #[test]
@@ -399,7 +429,8 @@ fn bad_plugins_are_refused() {
     ];
     for (name, files, expected) in cases {
         let dir = plugin_dir(name, files);
-        let e = Plugin::load(&dir, Limits { instructions: 1_000_000, memory: 16 * 1024 * 1024 }).unwrap_err();
+        let e = Plugin::load(&dir, Limits { instructions: 1_000_000, memory: 16 * 1024 * 1024, ..Limits::default() })
+            .unwrap_err();
         assert!(e.message.contains(expected), "{name}: {}", e.message);
     }
 }
@@ -408,7 +439,9 @@ fn bad_plugins_are_refused() {
 fn a_folder_of_plugins_loads_each_once() {
     let root = std::env::temp_dir().join(format!("ccad-lua-{}-folder", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    for sub in ["one", "two"] {
+    // A leftover of an interrupted install sorts first and is skipped; a
+    // folder named after another id is refused.
+    for sub in [".same.old", ".same.installing", "same", "two"] {
         let d = root.join(sub);
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), "id = \"same\"\nname = \"x\"\nversion = \"1\"\n").unwrap();
@@ -418,8 +451,10 @@ fn a_folder_of_plugins_loads_each_once() {
     let mut host = PluginHost::new();
     let errors = host.load_folder(&root, Limits::default(), |m| Some(m.requested()));
     assert_eq!(host.plugins().len(), 1);
-    assert_eq!(errors.len(), 1);
-    assert!(errors[0].message.contains("already loaded"));
+    assert_eq!(host.plugins()[0].dir, root.join("same"));
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].message.contains("must be named"));
+    assert_eq!(errors[0].dir, root.join("two"));
 }
 
 fn examples() -> PathBuf {

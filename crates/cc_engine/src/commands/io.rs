@@ -261,7 +261,9 @@ pub struct ComponentLoad {
 impl Command for ComponentLoad {
     const NAME: &'static str = "component_load";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let file = guard(|| cc_core::component_file::load(&self.path))??;
         let ids = edit(s, t!("tx-load-component"), |e| {
             let wanted = file.types.len() + file.nested.len();
@@ -356,7 +358,9 @@ pub struct SkpImport {
 impl Command for SkpImport {
     const NAME: &'static str = "skp_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let level = refs::level_or_first(s.project(), self.level.as_ref())?;
         let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
         let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
@@ -452,7 +456,9 @@ pub struct ObjImport {
 impl Command for ObjImport {
     const NAME: &'static str = "obj_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let level = refs::level_or_first(s.project(), self.level.as_ref())?;
         let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
         let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
@@ -506,7 +512,9 @@ pub struct GltfImport {
 impl Command for GltfImport {
     const NAME: &'static str = "gltf_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         use crate::gltf::GltfError;
         let level = refs::level_or_first(s.project(), self.level.as_ref())?;
         let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
@@ -578,7 +586,9 @@ pub struct SkpComponentLoad {
 impl Command for SkpComponentLoad {
     const NAME: &'static str = "skp_component_load";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let model = read_skp(&self.path)?;
         let name = file_stem(&self.path);
         let conv = guard(|| crate::skp::convert_single(&model, &name))?.map_err(too_large)?;
