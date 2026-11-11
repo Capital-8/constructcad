@@ -451,7 +451,7 @@ A dica, a habilitação, o item da paleta e um atalho de duas letras saem todos 
 
 ### Ícones
 
-Os ícones são arquivos SVG em `assets/icons/ui`, numa grade de 24 unidades. Eles usam traços brancos (`stroke-width` 1.75, pontas e junções arredondadas) e preenchimentos suaves escritos como `fill="#fff" fill-opacity=".2"`. O `icons.rs` separa cada ícone em duas camadas por esses atributos: os traços e as marcas sólidas formam a tinta, e os preenchimentos suaves formam o tom. Cada camada é rasterizada pelo resvg no tamanho exato em pixels e pintada nas cores do tema (`icons::Tones`). Acrescente o novo ícone a `Icon`, `Icon::ALL` e `Icon::source`. `ICON_SHEET=folha.png cargo test -p cc_app icon_sheet` grava todos os ícones em vários tamanhos para revisão.
+Os ícones são arquivos SVG em `assets/icons/ui`, numa grade de 24 unidades. Eles usam traços brancos (`stroke-width` 1.75, pontas e junções arredondadas) e preenchimentos suaves escritos como `fill="#fff" fill-opacity=".2"`. O `icons.rs` separa cada ícone em duas camadas por esses atributos: os traços e as marcas sólidas formam a tinta, e os preenchimentos suaves formam o tom. Cada camada é rasterizada pelo resvg no tamanho exato em pixels e pintada nas cores do tema (`icons::Tones`). Acrescente o novo ícone a `Icon`, `Icon::ALL` e `Icon::source`. `ICON_SHEET=folha.png cargo nextest run -p cc_app icon_sheet` grava todos os ícones em vários tamanhos para revisão.
 
 ### Tema
 
@@ -462,8 +462,8 @@ As cores são tokens de `theme::Palette`: `PALETTE` (claro) e `DARK`, com um tes
 O `crates/cc_app/src/ui_tests.rs` roda o ribbon e a paleta sem janela, com o [egui_kittest](https://crates.io/crates/egui_kittest). Os testes clicam e digitam pela árvore de acessibilidade, então widgets próprios precisam chamar `Response::widget_info`. As capturas de referência ficam em `crates/cc_app/tests/snapshots`. Elas cobrem cada aba do ribbon, o ribbon estreito e o recolhido, uma dica completa, a paleta, cada página da janela de Preferências e uma galeria de ícones nos dois temas. Placas de vídeo renderizam com pequenas diferenças, então a comparação das capturas roda sob demanda:
 
 ```sh
-CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots     # compara com as referências
-UPDATE_SNAPSHOTS=1 cargo test -p cc_app snapshots    # regrava após uma mudança intencional
+CC_UI_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots     # compara com as referências
+UPDATE_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots    # regrava após uma mudança intencional
 ```
 
 Revise as imagens novas antes do commit. Quando há diferença, o kittest grava `*.new.png` e `*.diff.png` ao lado das referências; o Git ignora esses arquivos.

@@ -66,7 +66,7 @@ Run the same checks as CI. All of them must pass:
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo nextest run --workspace   # install once: cargo install cargo-nextest --locked
 ```
 
 ## Project rules
@@ -94,7 +94,7 @@ cargo test --workspace
 1. Copy `assets/i18n/en.ftl` to `assets/i18n/<locale>.ftl` (for example `nl.ftl`).
 2. Translate the values, keeping keys and `{ $placeholders }` unchanged.
 3. Register the language in `Language` in `crates/cc_engine/src/i18n.rs` (`ALL`, `code`, `native_name`, `from_code`, `source`, and `decimal_comma` if it uses a decimal point).
-4. Run `cargo test --workspace` to verify keys and placeholders.
+4. Run `cargo nextest run --workspace` to verify keys and placeholders.
 
 ## License
 
