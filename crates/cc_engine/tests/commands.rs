@@ -1201,7 +1201,12 @@ fn sloped_beams_and_steel_sections() {
 fn editing_a_legacy_section_repoints_the_profile() {
     let mut s = Session::default();
     let ty = run(&mut s, "type_duplicate", json!({"type": "Viga 15 x 40 cm", "name": "Perfil I"}));
-    let profile_of = |s: &mut Session| run(s, "type_get", json!({"type": ty["id"]}))["params"]["profile"].clone();
+    // `type_get` shows the profile by name; its id comes from `profile_get`.
+    let profile_of = |s: &mut Session| {
+        let name = run(s, "type_get", json!({"type": ty["id"]}))["params"]["profile"].clone();
+        assert!(name.is_string(), "the beam type has a profile: {name}");
+        run(s, "profile_get", json!({"profile": name}))["id"].clone()
+    };
     let before = profile_of(&mut s);
     assert!(before.is_u64(), "the template beam has a profile: {before}");
     run(&mut s, "type_set", json!({"type": ty["id"], "params": {"shape": {"I": {"web": 0.01, "flange": 0.02}}}}));

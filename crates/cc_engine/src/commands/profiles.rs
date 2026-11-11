@@ -16,7 +16,10 @@ use crate::session::Session;
 use crate::t;
 use cc_core::component::{ComponentParam, ParamKind};
 use cc_core::structural_profile::{MAX_NAME, MAX_PROFILES, MAX_SKETCH_PARAMS, ParamSketch};
-use cc_core::{Material, ProfileDef, ProfileId, ProfileMaterial, ProfilePoint, ProfileShape, Project, Uid};
+use cc_core::{
+    Category, ElementType, ElementTypeId, Material, ProfileDef, ProfileId, ProfileMaterial, ProfilePoint, ProfileShape,
+    Project, TypeData, Uid, profile_catalog,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -82,6 +85,29 @@ fn density(m: ProfileMaterial) -> f64 {
     let mut probe = Material::new("", [0, 0, 0]);
     cc_core::material::template_properties(&mut probe, m.material_class());
     probe.physical.density.unwrap_or(0.0)
+}
+
+/// The section of a column or beam type as element and analytical queries show it.
+pub(crate) struct TypeSectionInfo {
+    /// The profile's name; `None` for a type drawn from its own section.
+    pub profile: Option<String>,
+    /// Properties with the density of the type's material.
+    pub properties: cc_core::section_props::SectionProperties,
+    /// Whether the type's material has a usable density (else `linear_mass` is 0).
+    pub has_density: bool,
+}
+
+/// The section of a column or beam type: its profile's (turned and mirrored),
+/// or its own legacy section's when it has none.
+pub(crate) fn section(p: &Project, data: &TypeData) -> Option<TypeSectionInfo> {
+    let (TypeData::Column { material, .. } | TypeData::Beam { material, .. }) = data else { return None };
+    let sec = p.type_section(data)?;
+    let density = p.material(material).and_then(|m| m.physical.density).filter(|d| d.is_finite() && *d > 0.0);
+    Some(TypeSectionInfo {
+        profile: sec.profile.and_then(|id| p.profile(id)).map(|f| f.name.clone()),
+        properties: sec.outline.properties(density.unwrap_or(0.0)),
+        has_density: density.is_some(),
+    })
 }
 
 fn pt(p: glam::DVec2) -> [f64; 2] {
@@ -476,5 +502,239 @@ impl Command for ProfileDelete {
             Ok(())
         })?;
         Ok(json!({ "deleted": id.0, "moved": users.len() }))
+    }
+}
+
+/// A catalog series by code, ignoring case.
+fn series_arg(code: &str) -> Result<&'static profile_catalog::Series> {
+    let code = code.trim();
+    profile_catalog::catalog().iter().find(|s| s.code.eq_ignore_ascii_case(code)).ok_or_else(|| {
+        let codes: Vec<&str> = profile_catalog::catalog().iter().map(|s| s.code).collect();
+        EngineError::not_found(format!("no catalog series '{code}' ({})", codes.join(", ")))
+    })
+}
+
+/// A series' name in the interface language (its code until translated).
+fn series_name(s: &profile_catalog::Series) -> String {
+    crate::i18n::try_tr(s.name_key).unwrap_or_else(|| s.code.to_string())
+}
+
+/// The built-in profile catalogs (standard steel, cold-formed, timber and
+/// hollow sections). Without `series`: each series' `code`, `name`,
+/// `material`, `shape` and row `count`. With it: the series' `code`,
+/// `name` and `rows`, each a `designation`, the `name` an imported profile
+/// gets and its `params` (meters; degrees for `angle`). Catalogs are not
+/// part of the project; `profile_import` copies rows in.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileCatalog {
+    /// Series code (`W`, `HP`, `IPE`, `HEA`, `HEB`, `NBR6355-Ue`, `SHS`…; ignoring case).
+    #[serde(default)]
+    pub series: Option<String>,
+    /// Only rows whose designation contains this text (ignoring case).
+    #[serde(default)]
+    pub search: Option<String>,
+}
+
+impl Command for ProfileCatalog {
+    const NAME: &'static str = "profile_catalog";
+    const KIND: CommandKind = CommandKind::Query;
+    fn run(self, _: &mut Session) -> Result<Value> {
+        let Some(code) = &self.series else {
+            let rows = profile_catalog::catalog()
+                .iter()
+                .map(|s| {
+                    json!({
+                        "code": s.code,
+                        "name": series_name(s),
+                        "material": s.material.code(),
+                        "shape": s.shape,
+                        "count": s.rows.len(),
+                    })
+                })
+                .collect();
+            return Ok(Value::Array(rows));
+        };
+        let series = series_arg(code)?;
+        let search = self.search.as_deref().map(|t| t.trim().to_lowercase()).unwrap_or_default();
+        let rows: Vec<Value> = series
+            .rows
+            .iter()
+            .filter(|r| r.designation.to_lowercase().contains(&search))
+            .filter_map(|r| {
+                let def = profile_catalog::row_to_def(series, r)?;
+                Some(json!({ "designation": r.designation, "name": def.name, "params": params_json(&def.shape) }))
+            })
+            .collect();
+        Ok(json!({ "code": series.code, "name": series_name(series), "rows": rows }))
+    }
+}
+
+/// Copy rows of a built-in catalog series into the project as profiles that
+/// remember their catalog entry, in one undo step (none when nothing is
+/// imported). A row whose profile name is taken keeps the existing profile
+/// (`on_clash: "keep"`, the default) or comes in under a free name
+/// (`"rename"`). Returns the `imported` profiles (`id`, `name`), the names
+/// `kept` and the designations the series does not have (`unknown`).
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileImport {
+    /// Series code (see `profile_catalog`).
+    pub series: String,
+    /// Designations to import, as `profile_catalog` lists them (ignoring case).
+    pub designations: Vec<String>,
+    /// `keep` (default) or `rename`.
+    #[serde(default)]
+    pub on_clash: Option<String>,
+}
+
+impl Command for ProfileImport {
+    const NAME: &'static str = "profile_import";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let series = series_arg(&self.series)?;
+        let rename = match self.on_clash.as_deref().map(str::trim) {
+            None | Some("keep") => false,
+            Some("rename") => true,
+            Some(other) => return Err(EngineError::invalid(format!("on_clash must be keep or rename, not '{other}'"))),
+        };
+        if self.designations.len() > MAX_PROFILES {
+            return Err(EngineError::invalid(format!("import at most {MAX_PROFILES} profiles at a time")));
+        }
+        let p = s.project();
+        let (mut new, mut kept, mut unknown): (Vec<ProfileDef>, Vec<String>, Vec<String>) = Default::default();
+        // The profile already named so: in the project or among those about to come in.
+        let taken = |new: &[ProfileDef], name: &str| {
+            p.profile_named(name).map(|f| f.name.clone()).or_else(|| {
+                let wanted = name.trim().to_lowercase();
+                new.iter().find(|f| f.name.trim().to_lowercase() == wanted).map(|f| f.name.clone())
+            })
+        };
+        for d in &self.designations {
+            let row = series.rows.iter().find(|r| r.designation.trim().eq_ignore_ascii_case(d.trim()));
+            let Some(mut def) = row.and_then(|r| profile_catalog::row_to_def(series, r)) else {
+                unknown.push(d.clone());
+                continue;
+            };
+            if let Some(existing) = taken(&new, &def.name) {
+                if !rename {
+                    kept.push(existing);
+                    continue;
+                }
+                // `name 2`, `name 3`…: bounded, as only the project's names and
+                // `new.len()` pending ones can be taken.
+                let base = def.name.clone();
+                let limit = p.profiles.len() + new.len() + 2;
+                def.name = (2..=limit)
+                    .map(|n| format!("{base} {n}"))
+                    .find(|n| taken(&new, n).is_none())
+                    .unwrap_or_else(|| p.free_profile_name(&base));
+            }
+            new.push(def);
+        }
+        if p.profiles.len() + new.len() > MAX_PROFILES {
+            return Err(EngineError::rejected(format!("a project has at most {MAX_PROFILES} profiles")));
+        }
+        let imported = if new.is_empty() {
+            Vec::new()
+        } else {
+            edit(s, t!("tx-profile-import"), |e| {
+                let mut out = Vec::with_capacity(new.len());
+                for mut def in new {
+                    let id = ProfileId(e.alloc_id());
+                    def.id = id;
+                    out.push(json!({ "id": id.0, "name": def.name }));
+                    e.profiles_mut().insert(id, def);
+                }
+                Ok(out)
+            })?
+        };
+        Ok(json!({ "imported": imported, "kept": kept, "unknown": unknown }))
+    }
+}
+
+/// The material a type made for a profile gets: the first project material
+/// of the profile's material class, else the template's concrete, else `fallback`.
+fn type_material(p: &Project, m: ProfileMaterial, fallback: &str) -> String {
+    let class = m.material_class();
+    if let Some(found) = p.materials.iter().find(|x| x.identity.class == class) {
+        return found.name.clone();
+    }
+    let concrete = t!("tpl-mat-concrete");
+    if p.material(&concrete).is_some() { concrete } else { fallback.to_string() }
+}
+
+/// Make a column or beam type of a structural profile: a copy of the
+/// category's first type given the profile, its width and height becoming
+/// the profile's bounding box. Returns its `id` and `name`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileTypeCreate {
+    /// Profile id or name.
+    pub profile: Ref,
+    /// `column` or `beam`.
+    pub category: String,
+    /// Type name (unique in its category; default: the profile's name, made unique).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Material name (default: the first project material of the profile's
+    /// class, metal, wood or concrete; else the template's concrete).
+    #[serde(default)]
+    pub material: Option<String>,
+}
+
+impl Command for ProfileTypeCreate {
+    const NAME: &'static str = "profile_type_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let category = refs::category(&self.category)?;
+        if !matches!(category, Category::Column | Category::Beam) {
+            return Err(EngineError::invalid(format!(
+                "a profile makes column or beam types, not {}",
+                refs::category_name(category)
+            )));
+        }
+        let pid = refs::profile(p, &self.profile)?;
+        let def = p.profile(pid).ok_or_else(|| EngineError::not_found("profile"))?;
+        let template = p.types_of(category).next().ok_or_else(|| {
+            EngineError::rejected(format!(
+                "the project has no {} type to copy; create one first",
+                refs::category_name(category)
+            ))
+        })?;
+        let taken = |n: &str| p.types_of(category).any(|t| t.name.trim().eq_ignore_ascii_case(n.trim()));
+        let name = match &self.name {
+            Some(n) if n.trim().is_empty() || taken(n) => {
+                return Err(EngineError::invalid(format!("the name '{n}' is empty or already used")));
+            }
+            Some(n) => n.trim().to_string(),
+            None => {
+                let base = def.name.trim().to_string();
+                // Bounded: no more names are taken than there are types.
+                (1..=p.types.len() + 1)
+                    .map(|k| if k == 1 { base.clone() } else { format!("{base} {k}") })
+                    .find(|n| !taken(n))
+                    .unwrap_or(base)
+            }
+        };
+        let mut data = template.data.clone();
+        let (TypeData::Column { material, profile, profile_rotation_deg, profile_mirror, .. }
+        | TypeData::Beam { material, profile, profile_rotation_deg, profile_mirror, .. }) = &mut data
+        else {
+            return Err(EngineError::invalid("not a column or beam type"));
+        };
+        *material = match &self.material {
+            Some(m) => refs::material(p, &Ref::Name(m.clone()))?,
+            None => type_material(p, def.material, material),
+        };
+        *profile = Some(pid);
+        *profile_rotation_deg = 0.0;
+        *profile_mirror = false;
+        let id = edit(s, t!("tx-profile-type-create"), |e| {
+            let id = ElementTypeId(e.alloc_id());
+            Ok(e.add_type(ElementType { id, name: name.clone(), data, info: Default::default(), uid: Uid::generate() }))
+        })?;
+        Ok(json!({ "id": id.0, "name": name }))
     }
 }

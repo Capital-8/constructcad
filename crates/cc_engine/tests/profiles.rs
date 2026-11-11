@@ -470,3 +470,215 @@ fn a_new_material_leaves_the_catalog_entry() {
     run(&mut s, "profile_set", json!({"profile": id, "material": "timber"}));
     assert_eq!(run(&mut s, "profile_get", json!({"profile": id}))["catalog"], Value::Null);
 }
+
+#[test]
+fn import_from_catalog_and_make_types() {
+    let mut s = Session::default();
+    let series = run(&mut s, "profile_catalog", json!({}));
+    assert!(series.as_array().unwrap().iter().any(|x| x["code"] == "IPE"));
+    let rows = run(&mut s, "profile_catalog", json!({"series": "IPE", "search": "20"}));
+    assert!(rows["rows"].as_array().unwrap().iter().any(|r| r["designation"] == "200"));
+
+    let out = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200", "270", "999"]}));
+    assert_eq!(out["imported"].as_array().unwrap().len(), 2);
+    assert_eq!(out["unknown"][0], "999");
+    let again = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    assert_eq!(again["kept"][0], "IPE 200");
+
+    let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}));
+    let ty = run(&mut s, "type_get", json!({"type": t["id"]}));
+    assert_eq!(ty["params"]["profile"], "IPE 200");
+    assert!((ty["params"]["height"].as_f64().unwrap() - 0.2).abs() < 1e-9, "bbox cached");
+
+    let beam =
+        run(&mut s, "beam_create", json!({"type": t["id"], "start": [0.0, 0.0], "end": [6.0, 0.0]}))["id"].clone();
+    let e = run(&mut s, "element_get", json!({"id": beam}));
+    assert!((e["derived"]["section"]["area"].as_f64().unwrap() - 0.00285).abs() / 0.00285 < 0.02);
+
+    run(&mut s, "profile_import", json!({"series": "HEB", "designations": ["200"]}));
+    run(&mut s, "type_set", json!({"type": t["id"], "params": {"profile": "HEB 200"}}));
+    let ty = run(&mut s, "type_get", json!({"type": t["id"]}));
+    assert!((ty["params"]["width"].as_f64().unwrap() - 0.2).abs() < 1e-9);
+
+    // `analytical_export` writes `analytical_model`'s document to a file.
+    let a = run(&mut s, "analytical_model", json!({}));
+    let text = a.to_string();
+    assert!(text.contains("HEB 200"), "members carry their section");
+    let member = a["members"].as_array().unwrap().iter().find(|m| m["element"] == beam).unwrap();
+    let sec = &member["section"];
+    assert_eq!(sec["profile"], "HEB 200");
+    for k in ["area", "ix", "iy", "j"] {
+        assert!(sec[k].as_f64().unwrap() > 0.0, "{k}: {sec}");
+    }
+}
+
+#[test]
+fn catalog_import_options_and_undo() {
+    let mut s = Session::default();
+    let err = run_err(&mut s, "profile_catalog", json!({"series": "nope"}));
+    assert_eq!(err.code, cc_engine::ErrorCode::NotFound);
+    let ipe = run(&mut s, "profile_catalog", json!({"series": "ipe"}));
+    assert_eq!(ipe["code"], "IPE");
+    let row = ipe["rows"].as_array().unwrap().iter().find(|r| r["designation"] == "200").unwrap().clone();
+    assert_eq!(row["name"], "IPE 200");
+    assert!((row["params"]["d"].as_f64().unwrap() - 0.2).abs() < 1e-9, "{row}");
+    let all = run(&mut s, "profile_catalog", json!({}));
+    let entry = all.as_array().unwrap().iter().find(|x| x["code"] == "IPE").unwrap().clone();
+    assert_eq!(entry["material"], "steel");
+    assert_eq!(entry["shape"], "i");
+    assert_eq!(entry["count"].as_u64().unwrap() as usize, ipe["rows"].as_array().unwrap().len());
+
+    let steps = s.doc.undo_depth();
+    let out = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200", "220", "200"]}));
+    assert_eq!(out["imported"].as_array().unwrap().len(), 2, "{out}");
+    assert_eq!(out["kept"][0], "IPE 200", "a repeated designation is kept");
+    assert_eq!(s.doc.undo_depth(), steps + 1, "one undo step");
+    let got = run(&mut s, "profile_get", json!({"profile": "IPE 200"}));
+    assert_eq!(got["catalog"]["series"], "IPE");
+    assert_eq!(got["catalog"]["designation"], "200");
+    // Nothing new: no undo step.
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200", "nope"]}));
+    assert_eq!(s.doc.undo_depth(), steps + 1);
+    let renamed =
+        run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"], "on_clash": "rename"}));
+    assert_eq!(renamed["imported"][0]["name"], "IPE 200 2");
+    let err = run_err(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"], "on_clash": "x"}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    run(&mut s, "undo", json!({}));
+    run(&mut s, "undo", json!({}));
+    for id in out["imported"].as_array().unwrap() {
+        assert!(s.project().profile(ProfileId(id["id"].as_u64().unwrap())).is_none());
+    }
+}
+
+/// Import the first row of a catalog series; the new profile's name.
+fn import_first(s: &mut Session, series: &str) -> Value {
+    let first = run(s, "profile_catalog", json!({"series": series}))["rows"][0]["designation"].clone();
+    run(s, "profile_import", json!({"series": series, "designations": [first]}))["imported"][0]["name"].clone()
+}
+
+#[test]
+fn profile_types_take_a_material_of_their_class_and_a_free_name() {
+    let mut s = Session::default();
+    let name = import_first(&mut s, "Glulam");
+    let a = run(&mut s, "profile_type_create", json!({"profile": name, "category": "column"}));
+    let b = run(&mut s, "profile_type_create", json!({"profile": name, "category": "column"}));
+    assert_eq!(a["name"], name);
+    assert_ne!(a["name"], b["name"]);
+    let ty = run(&mut s, "type_get", json!({"type": a["id"]}));
+    let material = ty["params"]["material"].as_str().unwrap().to_string();
+    let class = s.project().material(&material).unwrap().identity.class;
+    assert_eq!(class, cc_core::MaterialClass::Wood, "{material}");
+    let named = run(&mut s, "profile_type_create", json!({"profile": name, "category": "beam", "name": "Viga"}));
+    assert_eq!(named["name"], "Viga");
+    let err = run_err(&mut s, "profile_type_create", json!({"profile": name, "category": "beam", "name": "Viga"}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    let err = run_err(&mut s, "profile_type_create", json!({"profile": name, "category": "wall"}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    let err = run_err(&mut s, "profile_type_create", json!({"profile": "nope", "category": "beam"}));
+    assert_eq!(err.code, cc_engine::ErrorCode::NotFound);
+
+    // A project without beam types: a clear error.
+    let mut p = s.project().clone();
+    p.types.retain(|_, t| !matches!(t.data, TypeData::Beam { .. }));
+    let mut s = Session::new(Document::new(p));
+    let err = run_err(&mut s, "profile_type_create", json!({"profile": name, "category": "beam"}));
+    assert!(err.message.contains("beam"), "{}", err.message);
+}
+
+#[test]
+fn type_set_takes_and_clears_a_profile() {
+    let mut s = Session::default();
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}))["id"].clone();
+    let steps = s.doc.undo_depth();
+    let err = run_err(&mut s, "type_set", json!({"type": t, "params": {"profile": "nope"}}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    assert_eq!(s.doc.undo_depth(), steps);
+    run(&mut s, "type_set", json!({"type": t, "params": {"profile_rotation_deg": 90.0, "profile_mirror": true}}));
+    let ty = run(&mut s, "type_get", json!({"type": t}));
+    assert_eq!(ty["params"]["profile_rotation_deg"], 90.0);
+    assert_eq!(ty["params"]["profile_mirror"], true);
+    assert!((ty["params"]["width"].as_f64().unwrap() - 0.2).abs() < 1e-9, "turned: {ty}");
+    run(&mut s, "type_set", json!({"type": t, "params": {"profile_rotation_deg": 0.0}}));
+    run(&mut s, "type_set", json!({"type": t, "params": {"profile": null}}));
+    let ty = run(&mut s, "type_get", json!({"type": t}));
+    assert!(ty["params"]["profile"].is_null(), "{ty}");
+    assert!((ty["params"]["height"].as_f64().unwrap() - 0.2).abs() < 1e-9, "the legacy box stays");
+    // A type without a profile still has a section.
+    let beam = run(&mut s, "beam_create", json!({"type": t, "start": [0.0, 0.0], "end": [3.0, 0.0]}))["id"].clone();
+    let e = run(&mut s, "element_get", json!({"id": beam}));
+    assert!(e["derived"]["section"]["profile"].is_null(), "{e}");
+    assert!(e["derived"]["section"]["area"].as_f64().unwrap() > 0.0, "{e}");
+    // By id too.
+    let pid = run(&mut s, "profile_get", json!({"profile": "IPE 200"}))["id"].clone();
+    run(&mut s, "type_set", json!({"type": t, "params": {"profile": pid}}));
+    assert_eq!(run(&mut s, "type_get", json!({"type": t}))["params"]["profile"], "IPE 200");
+}
+
+#[test]
+fn element_section_mass_needs_a_density() {
+    let mut s = Session::default();
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "column"}))["id"].clone();
+    let col = run(&mut s, "column_create", json!({"type": t, "position": [0.0, 0.0]}))["id"].clone();
+    let e = run(&mut s, "element_get", json!({"id": col}));
+    let sec = &e["derived"]["section"];
+    assert_eq!(sec["profile"], "IPE 200");
+    let area = sec["area"].as_f64().unwrap();
+    assert!((sec["linear_mass"].as_f64().unwrap() - area * 7850.0).abs() < 1e-6, "{sec}");
+    for k in ["ix", "iy", "wx", "wy"] {
+        assert!(sec[k].as_f64().unwrap() > 0.0, "{k}: {sec}");
+    }
+    let material = run(&mut s, "type_get", json!({"type": t}))["params"]["material"].as_str().unwrap().to_string();
+    let mut p = s.project().clone();
+    p.materials.iter_mut().find(|m| m.name == material).unwrap().physical.density = None;
+    let mut s = Session::new(Document::new(p));
+    let e = run(&mut s, "element_get", json!({"id": col}));
+    assert!(e["derived"]["section"]["linear_mass"].is_null(), "{e}");
+}
+
+#[test]
+fn a_type_without_a_profile_reads_its_legacy_section() {
+    // As IFC import or a raw file may leave it.
+    let (mut s, tid) = with_ipe_column_type();
+    let mut p = s.project().clone();
+    let TypeData::Column { profile, .. } = &mut p.types.get_mut(&tid).unwrap().data else { panic!("not a column") };
+    *profile = None;
+    s = Session::new(Document::new(p));
+    let ty = run(&mut s, "type_get", json!({"type": tid.0}));
+    assert!(ty["params"]["profile"].is_null(), "{ty}");
+    let col = run(&mut s, "column_create", json!({"type": tid.0, "position": [0.0, 0.0]}))["id"].clone();
+    let e = run(&mut s, "element_get", json!({"id": col}));
+    let area = e["derived"]["section"]["area"].as_f64().unwrap();
+    let legacy = 2.0 * 0.1 * 0.0085 + (0.2 - 0.017) * 0.0056;
+    assert!((area - legacy).abs() < 1e-9, "{area} vs {legacy}");
+}
+
+#[test]
+fn truss_posts_prefer_a_steel_profile_column_type() {
+    let mut s = Session::default();
+    // Only plain rectangular column types, no profiles.
+    let mut p = s.project().clone();
+    for t in p.types.values_mut() {
+        if let TypeData::Column { section, profile, .. } = &mut t.data {
+            *section = ColumnSection::Rectangular { width: 0.2, depth: 0.2 };
+            *profile = None;
+        }
+    }
+    s = Session::new(Document::new(p));
+    let name = import_first(&mut s, "NBR6355-Ue");
+    let t = run(&mut s, "profile_type_create", json!({"profile": name, "category": "column"}))["id"].as_u64().unwrap();
+    let out = run(&mut s, "truss_create", json!({"start": [0, 0], "end": [6, 0], "height": 1.0, "panels": 4}));
+    let posts: Vec<u64> = out["created"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_u64().unwrap())
+        .filter(|i| matches!(s.project().element(ElementId(*i)).unwrap().kind, ElementKind::Column(_)))
+        .collect();
+    assert!(!posts.is_empty());
+    for post in posts {
+        assert_eq!(s.project().element(ElementId(post)).unwrap().type_id.0, t);
+    }
+}

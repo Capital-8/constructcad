@@ -62,6 +62,25 @@ pub(crate) fn validate(def: &ComponentDef) -> Result<()> {
     Ok(())
 }
 
+/// A column or beam type's params patch with its `profile` (a name or id, as
+/// `type_get` shows it, or null for none) turned into the profile's id.
+fn profile_patch(p: &cc_core::Project, data: &TypeData, patch: &Value) -> Result<Value> {
+    let mut patch = patch.clone();
+    if !matches!(data, TypeData::Column { .. } | TypeData::Beam { .. }) {
+        return Ok(patch);
+    }
+    let Some(slot) = patch.as_object_mut().and_then(|o| o.get_mut("profile")) else { return Ok(patch) };
+    let r = match slot {
+        Value::Null => return Ok(patch),
+        Value::String(n) => Ref::Name(n.clone()),
+        Value::Number(n) => Ref::Id(n.as_u64().ok_or_else(|| EngineError::invalid("profile: not a profile id"))?),
+        _ => return Err(EngineError::invalid("profile: a profile name or id, or null")),
+    };
+    let id = refs::profile(p, &r).map_err(|e| EngineError::invalid(format!("profile: {}", e.message)))?;
+    *slot = json!(id.0);
+    Ok(patch)
+}
+
 pub(crate) fn type_out(s: &Session, id: ElementTypeId) -> Value {
     super::query::type_json(s, id).unwrap_or_else(|| json!({ "id": id.0 }))
 }
@@ -69,6 +88,9 @@ pub(crate) fn type_out(s: &Session, id: ElementTypeId) -> Value {
 /// Change a type: its name, its parameters (`params`, merged into what
 /// `type_get` shows: layers, sizes, materials, a component's `def`…) and its
 /// identity data (`info`: type mark, description, manufacturer, cost…).
+/// A column or beam type takes `profile` (a structural profile's name or
+/// id, or null to keep only its own section), `profile_rotation_deg` and
+/// `profile_mirror`; its width and height follow the profile.
 /// Changing a component's definition updates every type of that component,
 /// each keeping its own parameter values.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -103,7 +125,8 @@ impl Command for TypeSet {
         {
             return Err(EngineError::invalid(format!("the name '{name}' is empty or already used")));
         }
-        let mut data = self.params.as_ref().map(|patch| patch_variant(&ty.data, patch)).transpose()?;
+        let params = self.params.as_ref().map(|patch| profile_patch(p, &ty.data, patch)).transpose()?;
+        let mut data = params.as_ref().map(|patch| patch_variant(&ty.data, patch)).transpose()?;
         // A new roof covering brings the framing it usually lies on, if none was chosen.
         if let (
             Some(TypeData::Roof { covering: Some(kind), framing, .. }),

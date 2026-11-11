@@ -112,6 +112,14 @@ pub(crate) fn type_json(s: &Session, id: cc_core::ElementTypeId) -> Option<Value
         }
         data => variant(to_json(data)).1,
     };
+    // A column or beam type shows its profile by name (null without one).
+    let mut params = params;
+    if let (cc_core::TypeData::Column { profile, .. } | cc_core::TypeData::Beam { profile, .. }, Some(o)) =
+        (&t.data, params.as_object_mut())
+    {
+        let name = profile.and_then(|id| s.project().profile(id)).map(|f| f.name.clone());
+        o.insert("profile".into(), json!(name));
+    }
     Some(json!({
         "id": t.id.0,
         "name": t.name,
@@ -319,6 +327,24 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         }
         _ => {}
     }
+    // A column's or beam's section: its profile and properties (mass with its material's density).
+    if matches!(e.kind, ElementKind::Column(_) | ElementKind::Beam(_))
+        && let Some(sec) = p.element_type(e.type_id).and_then(|t| super::profiles::section(p, &t.data))
+    {
+        let props = &sec.properties;
+        derived.insert(
+            "section".into(),
+            json!({
+                "profile": sec.profile,
+                "area": props.area,
+                "linear_mass": sec.has_density.then_some(props.linear_mass),
+                "ix": props.ix,
+                "iy": props.iy,
+                "wx": props.wx,
+                "wy": props.wy,
+            }),
+        );
+    }
     let pinned = p.is_pinned(id);
     let (phase_created, phase_demolished) = super::phases::element_phases_json(p, &e);
     let design_option = super::design_options::option_ref_json(p, e.design_option);
@@ -423,7 +449,8 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
 
 /// An element with all its parameters (`params`, editable with `element_set`) and derived values
 /// (length, height, thickness, volume, room area and perimeter; for beams the length after joins
-/// and what each end is framed into).
+/// and what each end is framed into; for columns and beams the `section`: profile name, area,
+/// mass per length with the material's density (null without one), `ix`, `iy`, `wx`, `wy`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementGet {

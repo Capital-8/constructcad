@@ -250,6 +250,19 @@ A curtain wall is a wall whose type has a curtain grid instead of layers: vertic
 {"command": "data_outlet_place", "args": {"position": [8, 3], "rack": 120, "ports": 2}}
 ```
 
+### Structural profiles
+
+Column and beam types are drawn and built with a structural profile: a standard parametric shape (`i`, `channel`, `rect_tube`, `cold_lipped_u`, `rect`…) of a material (`steel`, `cold_formed`, `timber`, `concrete`), or a sketch. `profile_catalog` lists the built-in series (W, HP, IPE, HEA, HEB, NBR 6355 cold-formed, sawn timber, glulam, SHS, RHS, CHS) and, with `series` (and `search`), their rows; `profile_import` copies rows into the project as profiles that remember their catalog entry (`on_clash`: `keep` the existing profile, the default, or `rename`). `profile_type_create` makes a column or beam type of a profile, with a material of its class; `type_set` changes a type's `profile` (a name, or `null` for its own section), `profile_rotation_deg` and `profile_mirror`. `profile_create`, `profile_set`, `profile_duplicate` and `profile_delete` (`replace_with`) edit profiles, whose types follow; `profile_get` gives the outline and section properties, `element_get` a column's or beam's `derived.section` (area, mass per meter, moments of inertia and moduli), and `analytical_model` each member's section.
+
+```text
+{"command": "profile_import", "args": {"series": "IPE", "designations": ["200"]}}
+{"command": "profile_type_create", "args": {"profile": "IPE 200", "category": "beam"}}
+{"command": "beam_create", "args": {"type": "IPE 200", "start": [0, 0], "end": [6, 0]}}
+{"command": "profile_set", "args": {"profile": "IPE 200", "name": "IPE 200 (roof)"}}
+{"command": "profile_get", "args": {"profile": "IPE 200 (roof)"}}
+{"command": "profiles_list", "args": {"material": "steel"}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).
