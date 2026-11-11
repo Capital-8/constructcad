@@ -20,6 +20,9 @@ const MAX_DEPTH: usize = 16;
 const MAX_PLACEMENT_DEPTH: usize = 64;
 /// Facets of a full circle.
 const CIRCLE_SEGMENTS: usize = 24;
+/// Segments of a full circle on center lines that are measured (the paths of
+/// reinforcing bars): 2° chords keep a length within 0.005% of the arc's.
+const FINE_CIRCLE_SEGMENTS: usize = 180;
 /// Most points sampled from one curve and faces produced by one item.
 const MAX_CURVE_POINTS: usize = 100_000;
 /// Most solids read for one product.
@@ -251,7 +254,12 @@ fn clean3(pts: Vec<DVec3>) -> Vec<DVec3> {
 
 /// Number of facets for an arc of `angle` radians.
 fn arc_segments(angle: f64) -> usize {
-    ((angle.abs() / TAU * CIRCLE_SEGMENTS as f64).ceil() as usize).clamp(2, CIRCLE_SEGMENTS * 4)
+    segments_of(angle, CIRCLE_SEGMENTS)
+}
+
+/// Number of chords for an arc of `angle` radians at `per_circle` chords a turn.
+fn segments_of(angle: f64, per_circle: usize) -> usize {
+    ((angle.abs() / TAU * per_circle as f64).ceil() as usize).clamp(2, per_circle * 4)
 }
 
 /// Plan curves through the plan part of `xf`, a similarity (uniform scale,
@@ -279,8 +287,9 @@ fn map_curves(curves: &[SketchCurve], xf: &DAffine3) -> Option<Vec<SketchCurve>>
         .collect()
 }
 
-/// Points of an arc from `a` through `b` to `c` (a straight segment when collinear).
-pub fn arc3(a: DVec3, b: DVec3, c: DVec3) -> Vec<DVec3> {
+/// Points of an arc from `a` through `b` to `c` (a straight segment when collinear),
+/// `segments` chords for an arc of a given angle.
+fn arc3(a: DVec3, b: DVec3, c: DVec3, segments: impl Fn(f64) -> usize) -> Vec<DVec3> {
     let (ab, ac) = (b - a, c - a);
     let n = ab.cross(ac);
     if n.length_squared() < 1e-18 {
@@ -297,7 +306,7 @@ pub fn arc3(a: DVec3, b: DVec3, c: DVec3) -> Vec<DVec3> {
     };
     let end = angle_of(c);
     let end = if end < 1e-9 { TAU } else { end };
-    let n = arc_segments(end);
+    let n = segments(end);
     (0..=n)
         .map(|i| {
             let t = end * i as f64 / n as f64;
@@ -444,11 +453,28 @@ pub struct Geometry<'a> {
     pub scale: f64,
     /// Radians per file plane angle unit.
     pub angle: f64,
+    /// Chords of a full circle while curves are sampled (finer for measured
+    /// center lines, see [`Geometry::measured_curve`]).
+    circle_segments: std::cell::Cell<usize>,
 }
 
 impl<'a> Geometry<'a> {
     pub fn new(f: &'a StepFile, scale: f64, angle: f64) -> Self {
-        Self { f, scale, angle }
+        Self { f, scale, angle, circle_segments: std::cell::Cell::new(CIRCLE_SEGMENTS) }
+    }
+
+    /// Chords for an arc of `angle` radians at the current sampling.
+    fn arc_chords(&self, angle: f64) -> usize {
+        segments_of(angle, self.circle_segments.get())
+    }
+
+    /// A curve whose length is measured (a bar's center line): its arcs are
+    /// sampled at 2° rather than at the facets of meshes.
+    pub fn measured_curve(&self, param: &Param) -> Vec<DVec3> {
+        let before = self.circle_segments.replace(FINE_CIRCLE_SEGMENTS);
+        let pts = self.curve(param, 0);
+        self.circle_segments.set(before);
+        pts
     }
 
     fn len(&self, p: &Param) -> Option<f64> {
@@ -608,7 +634,7 @@ impl<'a> Geometry<'a> {
             }
             "IFCTRIMMEDCURVE" => self.trimmed(e, depth),
             "IFCCIRCLE" | "IFCELLIPSE" => {
-                let n = CIRCLE_SEGMENTS;
+                let n = self.circle_segments.get();
                 let mut pts: Vec<DVec3> =
                     (0..=n).filter_map(|i| self.conic_point(e, i as f64 / n as f64 * TAU)).collect();
                 pts.pop();
@@ -645,7 +671,7 @@ impl<'a> Geometry<'a> {
             let Param::Typed(kind, inner) = seg else { continue };
             let idx: Vec<DVec3> = inner.as_list().iter().filter_map(at).collect();
             match (kind.as_str(), idx.as_slice()) {
-                ("IFCARCINDEX", [a, b, c]) => out.extend(arc3(*a, *b, *c)),
+                ("IFCARCINDEX", [a, b, c]) => out.extend(arc3(*a, *b, *c, |t| self.arc_chords(t))),
                 _ => out.extend(idx),
             }
             if out.len() > MAX_CURVE_POINTS {
@@ -803,7 +829,7 @@ impl<'a> Geometry<'a> {
                         b -= TAU;
                     }
                 }
-                let n = arc_segments(b - a);
+                let n = self.arc_chords(b - a);
                 (0..=n).filter_map(|i| self.conic_point(basis, a + (b - a) * i as f64 / n as f64)).collect()
             }
             "IFCLINE" => {
@@ -1219,7 +1245,9 @@ impl<'a> Geometry<'a> {
                 // A hollow disk (inner radius) is no bar.
                 let solid = e.arg(2).as_f64().is_none_or(|inner| inner <= 0.0);
                 if let Some(s) = out.get_mut(before).filter(|_| round && solid && scale > 1e-12) {
-                    s.disk = Some((path.iter().map(|p| xf.transform_point3(*p)).collect(), r * scale));
+                    // Sampled finer than the mesh: bar lengths and weights are read from it.
+                    let line = self.measured_curve(e.arg(0));
+                    s.disk = Some((line.iter().map(|p| xf.transform_point3(*p)).collect(), r * scale));
                 }
             }
             "IFCSURFACECURVESWEPTAREASOLID" | "IFCFIXEDREFERENCESWEPTAREASOLID" | "IFCDIRECTRIXCURVESWEPTAREASOLID" => {
@@ -1865,7 +1893,7 @@ mod tests {
 
     #[test]
     fn arcs_pass_through_their_points() {
-        let pts = arc3(DVec3::X, DVec3::Y, -DVec3::X);
+        let pts = arc3(DVec3::X, DVec3::Y, -DVec3::X, arc_segments);
         assert!(pts.iter().all(|p| (p.length() - 1.0).abs() < 1e-9));
         assert!(pts.last().is_some_and(|p| p.distance(-DVec3::X) < 1e-9));
         assert!(pts.iter().all(|p| p.y >= -1e-9));
