@@ -197,6 +197,8 @@ pub enum Next {
 
 fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
+        // No request, and no redirect, leaves https.
+        .https_only(true)
         .timeout_connect(Some(Duration::from_secs(15)))
         .timeout_recv_body(Some(READ_TIMEOUT))
         .user_agent(format!("ConstructCraft/{}", env!("CARGO_PKG_VERSION")))

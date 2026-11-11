@@ -523,6 +523,8 @@ impl Tiles {
 
 fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
+        // No request, and no redirect, leaves https.
+        .https_only(true)
         .timeout_global(Some(Duration::from_secs(90)))
         .user_agent(format!(
             "ConstructCraft/{} (+https://github.com/francisreboucas/constructcraft)",
