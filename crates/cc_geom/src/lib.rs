@@ -8,6 +8,7 @@ pub mod analytical;
 mod beam;
 mod build;
 pub mod component;
+pub mod coplanar;
 pub mod csg;
 pub mod curtain;
 mod cut;
