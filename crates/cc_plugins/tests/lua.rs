@@ -408,7 +408,9 @@ fn bad_plugins_are_refused() {
 fn a_folder_of_plugins_loads_each_once() {
     let root = std::env::temp_dir().join(format!("ccad-lua-{}-folder", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    for sub in ["one", "two"] {
+    // A leftover of an interrupted install sorts first and is skipped; a
+    // folder named after another id is refused.
+    for sub in [".same.old", ".same.installing", "same", "two"] {
         let d = root.join(sub);
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), "id = \"same\"\nname = \"x\"\nversion = \"1\"\n").unwrap();
@@ -418,8 +420,10 @@ fn a_folder_of_plugins_loads_each_once() {
     let mut host = PluginHost::new();
     let errors = host.load_folder(&root, Limits::default(), |m| Some(m.requested()));
     assert_eq!(host.plugins().len(), 1);
-    assert_eq!(errors.len(), 1);
-    assert!(errors[0].message.contains("already loaded"));
+    assert_eq!(host.plugins()[0].dir, root.join("same"));
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].message.contains("must be named"));
+    assert_eq!(errors[0].dir, root.join("two"));
 }
 
 fn examples() -> PathBuf {
