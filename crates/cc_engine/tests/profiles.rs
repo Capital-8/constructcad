@@ -793,5 +793,8 @@ fn resizing_a_turned_type_keeps_the_typed_box() {
     assert!(ty["params"]["profile_rotation_deg"].as_f64().unwrap_or(0.0) == 0.0, "{ty}");
     assert!(!ty["params"]["profile_mirror"].as_bool().unwrap_or(false), "{ty}");
     assert_ne!(ty["params"]["profile"], p["name"], "{ty}");
-    // The section drawn is the typed box too.    let data = &s.project().element_type(ElementTypeId(t.as_u64().unwrap())).unwrap().data;    let (lo, hi) = s.project().type_section(data).unwrap().outline.bbox();    assert!(((hi - lo) - glam::DVec2::new(0.6, 0.2)).abs().max_element() < 1e-9, "{:?}", hi - lo);
+    // The section drawn is the typed box too.
+    let data = &s.project().element_type(ElementTypeId(t.as_u64().unwrap())).unwrap().data;
+    let (lo, hi) = s.project().type_section(data).unwrap().outline.bbox();
+    assert!(((hi - lo) - glam::DVec2::new(0.6, 0.2)).abs().max_element() < 1e-9, "{:?}", hi - lo);
 }
