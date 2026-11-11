@@ -653,11 +653,6 @@ fn insert_tab(ui: &mut Ui, state: &mut AppState) {
     };
     group(ui, t!("group-import"), |ui| {
         command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportObj, ImportGltf, ImportImage]);
-        // An option of the imports, set apart from the buttons and in their label size.
-        ui.add_space(BUTTON_PAD);
-        let label = RichText::new(t!("label-cad-blocks")).size(12.0);
-        ui.checkbox(&mut state.cad_blocks, label).on_hover_text(t!("hint-cad-blocks"));
-        ui.add_space(BUTTON_PAD - 2.0);
     });
     group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportDxf]));
     group(ui, t!("group-library"), |ui| command_buttons(ui, state, &[LoadComponent, ComponentLibrary]));

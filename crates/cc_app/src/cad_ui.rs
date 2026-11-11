@@ -84,7 +84,7 @@ pub fn import_cad_path(state: &mut AppState, path: PathBuf) {
         scale: None,
         color_mode: None,
         halftone: None,
-        blocks: Some(state.cad_blocks),
+        blocks: Some(state.prefs.cad_blocks),
     };
     let run = move |s: &mut cc_engine::Session| s.run(command);
     let finish: crate::jobs::Finish = Box::new(|state, result, _| cad_imported(state, result));

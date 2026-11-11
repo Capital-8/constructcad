@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The ribbon's large buttons keep a least width and the same room at each side of their labels, so the icons of a group stand evenly apart, and labels also wrap after a slash or a hyphen. *Blocks as components* leaves the *Insert* tab for *Preferences → General → Import*, and is now kept between sessions.
+
 ## [0.11.0] - 2026-11-11
 
 ### Added
