@@ -251,3 +251,47 @@ fn other_bars_stay_components() {
     let (p, _) = import(&broken, Project::from_template()).unwrap();
     assert!(p.elements.values().filter(|e| matches!(e.kind, ElementKind::ShapedRebar(_))).count() >= 5);
 }
+
+/// A ring bar: half a circle of 2.166 m radius on its center line, a
+/// composite curve of one trimmed circle, as exporters write ring bars.
+const RING: &str = "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0RvctVUKr0kugbFTf53O9L',$,'Ring',$,$,$,$,(#2),#3);
+#2=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#12,$);
+#3=IFCUNITASSIGNMENT((#4,#5));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#5=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#10=IFCBUILDINGSTOREY('1RvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#14=IFCCARTESIANPOINT((0.,0.,350.));
+#15=IFCAXIS2PLACEMENT3D(#14,$,$);
+#20=IFCRELCONTAINEDINSPATIALSTRUCTURE('3RvctVUKr0kugbFTf53O9L',$,$,$,(#100),#10);
+#100=IFCREINFORCINGBAR('2RvctVUKr0kugbFTf53O9L',$,'Ring',$,$,#11,#101,'N1','CA-50',8.,50.3,6805.,.MAIN.,.TEXTURED.);
+#101=IFCPRODUCTDEFINITIONSHAPE($,$,(#102));
+#102=IFCSHAPEREPRESENTATION(#2,'Body','AdvancedSweptSolid',(#103));
+#103=IFCSWEPTDISKSOLID(#104,4.,$,$,$);
+#104=IFCCOMPOSITECURVE((#105),.F.);
+#105=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#106);
+#106=IFCTRIMMEDCURVE(#107,(IFCPARAMETERVALUE(0.)),(IFCPARAMETERVALUE(3.14159265358979)),.T.,.PARAMETER.);
+#107=IFCCIRCLE(#15,2166.);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// A ring bar's length is its arc's, not that of the facets its mesh is
+/// drawn with (24 a turn made a half ring 0.24% short in the schedules).
+#[test]
+fn ring_bars_measure_their_arc() {
+    let (p, report) = import(RING, Project::from_template()).unwrap();
+    assert_eq!(report.imported.get(&Category::Rebar), Some(&1), "{report:?}");
+    let (e, _) = shaped(&p, "N1");
+    let geom = cc_geom::ModelGeometry::build(&p);
+    let length = geom.rebar[&e.id].total_length();
+    let arc = std::f64::consts::PI * 2.166;
+    assert!((length - arc).abs() < 1e-4 * arc, "{length} vs {arc}");
+}
