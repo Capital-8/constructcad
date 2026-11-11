@@ -68,6 +68,30 @@ fn scripts_run_in_order_and_stop_at_errors() {
 }
 
 #[test]
+fn scripts_refer_to_earlier_steps_and_the_given_level() {
+    let script = r#"
+{"command": "level_create", "args": {"name": "Upper", "elevation": 3}}
+{"command": "wall_create", "args": {"level": {"$level": "active"}, "start": [0, 0], "end": [6, 0]}}
+{"command": "window_create", "args": {"wall": {"$step": 2}, "offset": 2, "sill": 1}}
+"#;
+    // No level given: the lowest.
+    let (code, out, err) = ccad(&["script", "-"], script);
+    assert_eq!(code, 0, "{err}");
+    let lowest = out[1]["result"]["level"]["name"].clone();
+    assert_eq!(out[2]["result"]["params"]["host"], out[1]["result"]["id"]);
+    // A level created before the script runs, by name.
+    let file = scratch("levels.ccad");
+    let (code, _, err) = ccad(&["--save-as", &file, "run", "level_create", "name=Upper", "elevation=3"], "");
+    assert_eq!(code, 0, "{err}");
+    let (code, out, err) = ccad(&["-p", &file, "script", "-", "level=Upper"], &script.replace("Upper", "Upper 2"));
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out[1]["result"]["level"]["name"], "Upper");
+    assert_ne!(lowest, "Upper");
+    assert_eq!(ccad(&["-p", &file, "script", "-", "level=Nowhere"], script).0, 1);
+    assert_eq!(ccad(&["script", "-", "oops"], script).0, 2);
+}
+
+#[test]
 fn catalog_and_schemas() {
     let (code, list, _) = ccad(&["commands"], "");
     assert_eq!(code, 0);

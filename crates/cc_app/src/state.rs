@@ -339,6 +339,8 @@ impl AppState {
             let phase = phase.map(|p| cc_engine::Ref::Id(p.0));
             let _ = self.session.run(cc_engine::commands::phases::PhaseCreationSet { phase, view: None });
         }
+        // Macros record and play steps on the active plan's level.
+        self.session.set_active_level(self.active_level());
         if self.session.sync() {
             let project = &self.session.doc.project;
             self.selection.retain(|id| project.elements.contains_key(id));
