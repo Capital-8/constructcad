@@ -159,6 +159,7 @@ registry![
         io::SkpImport,
         io::SkpComponentLoad,
         io::ObjImport,
+        io::GltfImport,
         io::IfcExport,
         io::SheetExport,
         io::ViewExport,

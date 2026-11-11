@@ -467,25 +467,97 @@ impl Command for ObjImport {
             return Err(EngineError::rejected(t!("err-obj-empty")));
         }
         let faces = conv.faces;
-        let placements = conv.placements.clone();
-        let rot = glam::DMat2::from_angle(turn.to_radians());
-        let (types, elements, materials) = edit(s, t!("tx-import-obj"), |e| {
-            let (types, materials) = add_skp_types(e, conv);
-            let mut elements = Vec::with_capacity(placements.len());
-            for p in &placements {
-                let Some(&type_id) = types.get(p.ty) else { continue };
-                let component = Component {
-                    position: origin + rot * p.position,
-                    rotation_deg: p.rotation_deg + turn,
-                    base_offset: p.z,
-                    ..Default::default()
-                };
-                elements.push(add_element(e, level, type_id, ElementKind::Component(component)).0);
-            }
-            Ok((types.iter().map(|t| t.0).collect::<Vec<_>>(), elements, materials))
-        })?;
+        let (types, elements, materials) = place_converted(s, conv, level, origin, turn, t!("tx-import-obj"))?;
         Ok(json!({ "types": types, "elements": elements, "materials": materials, "faces": faces }))
     }
+}
+
+/// Import a glTF 2.0 model (.glb, or .gltf with its buffers embedded or in
+/// files next to it) into the project. Each node of the scene's root, with
+/// everything below it, becomes a component element on `level`, of a
+/// component type holding its triangles as fixed mesh pieces, one per
+/// material, inserted at the center of its footprint and the bottom of its
+/// extent. glTF is in meters with Y up. Colors come from the materials' base
+/// color; missing materials are added by name. Textures, lines and points
+/// are ignored, and compressed meshes (Draco, meshopt) are refused.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GltfImport {
+    /// Path of the .glb or .gltf file.
+    pub path: PathBuf,
+    /// Level id or name (default: the lowest level); the file's zero height is at its elevation.
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Where the file's origin goes, in plan (default [0, 0]).
+    #[serde(default)]
+    pub position: Option<Point>,
+    /// Rotation of the whole model in plan, degrees counter-clockwise (default 0).
+    #[serde(default)]
+    pub rotation: Option<f64>,
+    /// Make the whole scene one component element, inserted at the file's origin.
+    #[serde(default)]
+    pub merge: bool,
+}
+
+impl Command for GltfImport {
+    const NAME: &'static str = "gltf_import";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        use crate::gltf::GltfError;
+        let level = refs::level_or_first(s.project(), self.level.as_ref())?;
+        let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
+        let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
+        if std::fs::metadata(&self.path)?.len() > crate::gltf::MAX_BYTES {
+            return Err(EngineError::rejected(t!("err-gltf-too-large")));
+        }
+        let bytes = std::fs::read(&self.path)?;
+        let name = file_stem(&self.path);
+        let dir = self.path.parent();
+        let conv = guard(|| crate::gltf::convert(&bytes, dir, &name, self.merge))?.map_err(|e| {
+            EngineError::rejected(match e {
+                GltfError::Invalid => t!("err-gltf-invalid"),
+                GltfError::Unsupported(ext) => t!("err-gltf-compressed", "ext" => ext),
+                GltfError::MissingBuffer(uri) => t!("err-gltf-buffer", "uri" => uri),
+                GltfError::TooLarge => t!("err-gltf-too-large"),
+            })
+        })?;
+        if conv.placements.is_empty() {
+            return Err(EngineError::rejected(t!("err-gltf-empty")));
+        }
+        let faces = conv.faces;
+        let (types, elements, materials) = place_converted(s, conv, level, origin, turn, t!("tx-import-gltf"))?;
+        Ok(json!({ "types": types, "elements": elements, "materials": materials, "faces": faces }))
+    }
+}
+
+/// Add the types of a converted model and an element per placement on
+/// `level`, the model moved to `origin` and turned by `turn` degrees, in one
+/// undo step named `tx`: the new types, elements and materials.
+fn place_converted(
+    s: &mut Session,
+    conv: crate::skp::Converted,
+    level: cc_core::LevelId,
+    origin: glam::DVec2,
+    turn: f64,
+    tx: String,
+) -> Result<(Vec<u64>, Vec<u64>, Value)> {
+    let placements = conv.placements.clone();
+    let rot = glam::DMat2::from_angle(turn.to_radians());
+    edit(s, tx, |e| {
+        let (types, materials) = add_skp_types(e, conv);
+        let mut elements = Vec::with_capacity(placements.len());
+        for p in &placements {
+            let Some(&type_id) = types.get(p.ty) else { continue };
+            let component = Component {
+                position: origin + rot * p.position,
+                rotation_deg: p.rotation_deg + turn,
+                base_offset: p.z,
+                ..Default::default()
+            };
+            elements.push(add_element(e, level, type_id, ElementKind::Component(component)).0);
+        }
+        Ok((types.iter().map(|t| t.0).collect::<Vec<_>>(), elements, json!(materials)))
+    })
 }
 
 /// Load a SketchUp model (.skp) as one component type, named after the
