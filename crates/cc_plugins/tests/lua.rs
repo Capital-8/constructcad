@@ -79,6 +79,11 @@ ccad.command {
 }
 
 ccad.command {
+  name = "call",
+  run = function(a) return ccad.run(a.name, a.args) end,
+}
+
+ccad.command {
   name = "undo_it",
   run = function() return ccad.run("undo", {}) end,
 }
@@ -274,6 +279,29 @@ fn plugins_only_do_what_they_may() {
     assert_eq!(e.code, ErrorCode::Rejected);
     assert_eq!(walls(&mut s), 1);
     assert_eq!(s.execute("room_tools__nothing", json!({})).unwrap_err().code, ErrorCode::UnknownCommand);
+}
+
+#[test]
+fn plugins_without_files_cannot_import_by_path() {
+    let dir = room_tools("imports");
+    let mut s = session_with(&dir, Permissions::NONE);
+    let by_path = [
+        ("cad_import", json!({"path": "nothing.dxf"})),
+        ("image_import", json!({"path": "nothing.png"})),
+        ("fill_pattern_import", json!({"path": "nothing.pat"})),
+        ("graph_check", json!({"path": "nothing.ccgraph"})),
+    ];
+    for (name, args) in by_path {
+        let e = s.execute("room_tools__call", json!({"name": name, "args": args})).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Rejected, "{name}: {e:?}");
+        assert!(e.message.contains("files"), "{name}: {}", e.message);
+    }
+    // The inline variants work.
+    let text = "*Diag, diagonal\n45, 0,0, 0,3\n";
+    let args = json!({"name": "fill_pattern_import", "args": {"text": text}});
+    s.execute("room_tools__call", args).unwrap();
+    // The user's own commands keep their files.
+    assert!(s.files_allowed());
 }
 
 #[test]

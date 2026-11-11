@@ -18,6 +18,7 @@ impl Extension for Walls {
             group: "Test".into(),
             description: "Walls".into(),
             input_schema: json!({"type": "object", "properties": {}}),
+            reads_files: false,
         }]
     }
 

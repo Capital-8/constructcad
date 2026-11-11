@@ -367,7 +367,14 @@ fn register(lua: &Lua, id: &str, requested: Permissions, spec: &Table) -> mlua::
         Some(t) if !t.trim().is_empty() && description.is_empty() => t,
         _ => description,
     };
-    let info = CommandInfo { name: full, kind, group: format!("Plugin: {id}"), description, input_schema: schema };
+    let info = CommandInfo {
+        name: full,
+        kind,
+        group: format!("Plugin: {id}"),
+        description,
+        input_schema: schema,
+        reads_files: false,
+    };
     Ok(PluginCommand { short, info, required, func })
 }
 

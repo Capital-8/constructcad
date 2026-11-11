@@ -166,15 +166,17 @@ fn tools(session: &Session) -> Vec<Value> {
         .commands()
         .into_iter()
         .map(|c| {
+            // Commands that work with files reach beyond the open project.
+            let files = c.kind == CommandKind::File || c.reads_files;
             json!({
                 "name": c.name,
                 "description": c.description,
                 "inputSchema": c.input_schema,
                 "annotations": {
-                    "readOnlyHint": c.kind == CommandKind::Query,
+                    "readOnlyHint": c.kind == CommandKind::Query && !files,
                     "destructiveHint": c.kind != CommandKind::Query && (c.name.contains("delete") || c.kind == CommandKind::File),
-                    "idempotentHint": c.kind == CommandKind::Query,
-                    "openWorldHint": false,
+                    "idempotentHint": c.kind == CommandKind::Query && !files,
+                    "openWorldHint": files,
                 },
             })
         })

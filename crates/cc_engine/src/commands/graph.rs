@@ -19,6 +19,7 @@ fn load(session: &Session, path: Option<&str>, graph: Option<&Value>, allow_file
     let (mut g, repairs) = match (path, graph) {
         (_, Some(v)) => Graph::from_value(v.clone()).map_err(EngineError::invalid)?,
         (Some(p), None) => {
+            session.require_files("path")?;
             let size = std::fs::metadata(p).map_err(|e| EngineError::invalid(format!("{p}: {e}")))?.len();
             if usize::try_from(size).map_or(true, |s| s > MAX_FILE) {
                 return Err(EngineError::invalid(format!("{p}: the graph file is too large")));
@@ -73,6 +74,7 @@ pub struct GraphRun {
 impl Command for GraphRun {
     const NAME: &'static str = "graph_run";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         let (graph, repairs) = load(s, self.path.as_deref(), self.graph.as_ref(), self.allow_files)?;
         let report = Evaluator::new().run(s, &graph, &self.inputs);
@@ -117,6 +119,7 @@ pub struct GraphCheck {
 impl Command for GraphCheck {
     const NAME: &'static str = "graph_check";
     const KIND: CommandKind = CommandKind::Query;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         let (graph, repairs) = load(s, self.path.as_deref(), self.graph.as_ref(), self.allow_files)?;
         Ok(
