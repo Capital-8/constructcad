@@ -704,14 +704,15 @@ impl ModelGeometry {
     /// they are created in.
     fn build_rooms(&mut self, project: &Project) {
         let phased = !project.phases.is_empty();
-        let mut footprints: BTreeMap<(cc_core::LevelId, usize), Vec<Vec<DVec2>>> = BTreeMap::new();
+        // One arrangement of the bounding walls per level and phase, shared by its rooms.
+        let mut arrangements: BTreeMap<(cc_core::LevelId, usize), crate::RoomArrangement> = BTreeMap::new();
         for e in project.elements.values() {
             let ElementKind::Room(room) = &e.kind else { continue };
             let phase = project.created_index(e);
-            let walls = footprints
-                .entry((e.level, phase))
-                .or_insert_with(|| self.bounding_footprints(project, e.level, phased.then_some(phase)));
-            if let Some(boundary) = crate::room_boundary(walls, room.position) {
+            let walls = arrangements.entry((e.level, phase)).or_insert_with(|| {
+                crate::RoomArrangement::new(self.bounding_footprints(project, e.level, phased.then_some(phase)))
+            });
+            if let Some(boundary) = walls.room_boundary(room.position) {
                 self.rooms.insert(e.id, boundary);
             }
         }
