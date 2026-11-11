@@ -458,8 +458,12 @@ impl Evaluator {
                 cc_script::convert::to_lua(lua, v.as_ref().unwrap_or(&Value::Null)).map_err(|e| e.to_string())?,
             );
         }
-        let returned: mlua::MultiValue =
-            lua.load(source).set_name(format!("=node {}", node.id)).call(args).map_err(|e| lua_message(&e))?;
+        let returned: mlua::MultiValue = lua
+            .load(source)
+            .set_name(format!("=node {}", node.id))
+            .set_mode(mlua::ChunkMode::Text)
+            .call(args)
+            .map_err(|e| lua_message(&e))?;
         let returned: Vec<mlua::Value> = returned.into_iter().collect();
         let mut out = Vec::with_capacity(node.outputs.len());
         // Several outputs: one value each, or a table with their names.

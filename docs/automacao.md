@@ -318,7 +318,7 @@ A tabela `ccad`:
 
 Argumentos e resultados são JSON: objetos são tabelas com chaves de texto, listas são sequências (`{ 0, 0 }` é um ponto), e `end`, palavra reservada do Lua, se escreve `["end"]`. Um número inteiro calculado com `/` (que em Lua sempre dá um número real) vai como inteiro, então `10 / 2` funciona onde se espera um id ou uma contagem.
 
-**O sandbox.** Os scripts rodam num Lua restrito: as bibliotecas `table`, `string`, `math`, `utf8` e `coroutine` e as funções básicas, sem `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` nem `loadfile`. Um script só chega ao projeto pelos comandos, e a arquivos só pelos comandos que os leem ou gravam. Cada execução tem um limite de 500 milhões de instruções Lua e 256 MB de memória; passando deles, ela para com um erro `script` (capturar esse erro com `pcall` não faz o script continuar). Cada comando que um script executa é um passo de desfazer.
+**O sandbox.** Os scripts rodam num Lua restrito: as bibliotecas `table`, `string`, `math`, `utf8` e `coroutine` e as funções básicas, sem `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` nem `loadfile`. Um script só chega ao projeto pelos comandos, e a arquivos só pelos comandos que os leem ou gravam. Cada execução tem um limite de 500 milhões de instruções Lua, 60 segundos e 256 MB de memória (as funções de texto contam pelo tamanho do texto, a busca de padrões pelos passos, e `string.rep` e `string.gsub` geram no máximo 16 MB); passando deles, ela para com um erro `script` (capturar esse erro com `pcall` não faz o script continuar). Cada comando que um script executa é um passo de desfazer.
 
 ## Grafos de programação visual
 
@@ -488,7 +488,7 @@ As declarações ficam no corpo do script, nunca dentro de `geometry`. Os ids s�
 | `blend` | `bottom, top, offset, depth`, `plane` |
 | `mesh` | `vertices` (`{x, y, z}`), `faces` (listas de números de vértice a partir de 1, no sentido anti-horário vistas de fora) |
 
-Os scripts rodam no [sandbox](#scripts-lua) com limites menores (20 milhões de instruções, 64 MB, 10.000 peças, um milhão de pontos), e `math.random` repete os mesmos números. Quando um script falha, o elemento mantém as últimas peças que funcionaram, e o erro, com a linha, aparece em `element_get` (`derived.script_errors`), na paleta de propriedades e em `component_params_get`; corrigir o script ou o valor o recupera.
+Os scripts rodam no [sandbox](#scripts-lua) com limites menores (20 milhões de instruções, 5 segundos, 64 MB, 10.000 peças, um milhão de pontos), e `math.random` repete os mesmos números. Quando um script falha, o elemento mantém as últimas peças que funcionaram, e o erro, com a linha, aparece em `element_get` (`derived.script_errors`), na paleta de propriedades e em `component_params_get`; corrigir o script ou o valor o recupera.
 
 Comandos:
 

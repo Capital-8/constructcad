@@ -193,8 +193,10 @@ fn the_sandbox_has_no_files_or_code_loading() {
 #[test]
 fn runaway_scripts_stop() {
     let mut s = Session::default();
-    let small =
-        ScriptOptions { limits: Limits { instructions: 2_000_000, memory: 16 * 1024 * 1024 }, ..Default::default() };
+    let small = ScriptOptions {
+        limits: Limits { instructions: 2_000_000, memory: 16 * 1024 * 1024, ..Limits::default() },
+        ..Default::default()
+    };
     let run = |s: &mut Session, src: &str| run_script(s, src, "t.lua", json!({}), small).result.unwrap_err();
     for src in [
         "while true do end",
@@ -427,7 +429,8 @@ fn bad_plugins_are_refused() {
     ];
     for (name, files, expected) in cases {
         let dir = plugin_dir(name, files);
-        let e = Plugin::load(&dir, Limits { instructions: 1_000_000, memory: 16 * 1024 * 1024 }).unwrap_err();
+        let e = Plugin::load(&dir, Limits { instructions: 1_000_000, memory: 16 * 1024 * 1024, ..Limits::default() })
+            .unwrap_err();
         assert!(e.message.contains(expected), "{name}: {}", e.message);
     }
 }

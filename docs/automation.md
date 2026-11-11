@@ -318,7 +318,7 @@ The `ccad` table:
 
 Arguments and results are JSON: objects are tables with string keys, arrays are sequences (`{ 0, 0 }` is a point), `end` is a Lua keyword and is written `["end"]`. A whole number computed with `/` (which always gives a float in Lua) is sent as an integer, so `10 / 2` works where an id or count is expected.
 
-**The sandbox.** Scripts run in a restricted Lua: the `table`, `string`, `math`, `utf8` and `coroutine` libraries and the base functions, without `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` or `loadfile`. A script reaches the project only through commands, and files only through the commands that read or write them. A run has a budget of 500 million Lua instructions and 256 MB of memory; past them it stops with a `script` error (catching that error with `pcall` does not keep the script going). Each command a script runs is its own undo step.
+**The sandbox.** Scripts run in a restricted Lua: the `table`, `string`, `math`, `utf8` and `coroutine` libraries and the base functions, without `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` or `loadfile`. A script reaches the project only through commands, and files only through the commands that read or write them. A run has a budget of 500 million Lua instructions, 60 seconds and 256 MB of memory (string functions count by the size of their text, pattern matching by its steps, and `string.rep` and `string.gsub` make at most 16 MB); past them it stops with a `script` error (catching that error with `pcall` does not keep the script going). Each command a script runs is its own undo step.
 
 ## Visual programming graphs
 
@@ -488,7 +488,7 @@ Declarations go at the script's top level, never inside `geometry`. Ids are name
 | `blend` | `bottom, top, offset, depth`, `plane` |
 | `mesh` | `vertices` (`{x, y, z}`), `faces` (lists of vertex numbers from 1, counter-clockwise seen from outside) |
 
-Scripts run in the [sandbox](#lua-scripts) with smaller limits (20 million instructions, 64 MB, 10,000 pieces, a million points), and `math.random` repeats the same numbers. When a script fails, the element keeps the last pieces that worked and the error, with its line, shows in `element_get` (`derived.script_errors`), in the properties palette and in `component_params_get`; fixing the script or the value brings it back.
+Scripts run in the [sandbox](#lua-scripts) with smaller limits (20 million instructions, 5 seconds, 64 MB, 10,000 pieces, a million points), and `math.random` repeats the same numbers. When a script fails, the element keeps the last pieces that worked and the error, with its line, shows in `element_get` (`derived.script_errors`), in the properties palette and in `component_params_get`; fixing the script or the value brings it back.
 
 Commands:
 
