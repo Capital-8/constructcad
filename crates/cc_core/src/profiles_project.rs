@@ -290,6 +290,63 @@ impl Project {
         Some(TypeSection { outline: place_outline(outline, s.rotation_deg, s.mirror), profile, material, curved })
     }
 
+    /// `data` with its legacy section fields rewritten as the bounding box of
+    /// its profile's placed outline (`Rectangular`, or `Solid` `width` x
+    /// `height`), when the type points to a valid profile and its fields
+    /// differ from that box; `None` when nothing needs to change (no
+    /// profile, the legacy section is exactly the profile, or the outline
+    /// fails).
+    pub(crate) fn profile_box(&self, data: &TypeData) -> Option<TypeData> {
+        const TOL: f64 = 1e-9;
+        section_data(data)?.profile.and_then(|id| self.profile(id))?;
+        if self.legacy_is_profile(data) {
+            return None;
+        }
+        let section = self.type_section(data)?;
+        let (lo, hi) = section.outline.bbox();
+        let size = hi - lo;
+        if !(size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0) {
+            return None;
+        }
+        let mut out = data.clone();
+        match &mut out {
+            TypeData::Column { section, .. } => {
+                if matches!(section, ColumnSection::Rectangular { width, depth }
+                    if (*width - size.x).abs() < TOL && (*depth - size.y).abs() < TOL)
+                {
+                    return None;
+                }
+                *section = ColumnSection::Rectangular { width: size.x, depth: size.y };
+            }
+            TypeData::Beam { width, height, shape, .. } => {
+                if *shape == SectionShape::Solid && (*width - size.x).abs() < TOL && (*height - size.y).abs() < TOL {
+                    return None;
+                }
+                *width = size.x;
+                *height = size.y;
+                *shape = SectionShape::Solid;
+            }
+            _ => return None,
+        }
+        Some(out)
+    }
+
+    /// Rewrite the legacy section fields of every type that points to a
+    /// valid profile as its box (see [`Self::profile_box`]), so what reads
+    /// them (beam depth, axes) cannot disagree with the profile in a loaded
+    /// file. Returns the number of types changed.
+    pub(crate) fn resync_profile_boxes(&mut self) -> usize {
+        let fixes: Vec<(ElementTypeId, TypeData)> =
+            self.types.values().filter_map(|t| Some((t.id, self.profile_box(&t.data)?))).collect();
+        let n = fixes.len();
+        for (id, data) in fixes {
+            if let Some(t) = self.types.get_mut(&id) {
+                t.data = data;
+            }
+        }
+        n
+    }
+
     /// Whether a type's legacy section is exactly its profile (unturned,
     /// unmirrored), so the legacy fields need no rewrite.
     pub(crate) fn legacy_is_profile(&self, data: &TypeData) -> bool {
@@ -702,5 +759,63 @@ mod tests {
         let msg = sk.resolve().unwrap_err().to_string();
         assert!(!msg.contains('{') && !msg.contains('}'), "{msg}");
         assert!(msg.contains("nope"), "{msg}");
+    }
+
+    fn loop_of(pts: &[(f64, f64)]) -> Vec<crate::profile::ProfilePoint> {
+        pts.iter().map(|(x, y)| crate::profile::ProfilePoint::new(x.to_string(), y.to_string())).collect()
+    }
+
+    fn sketch_err(sk: &ParamSketch) -> String {
+        match sk.resolve() {
+            Err(ProfileError::Sketch(m)) => m,
+            other => panic!("expected a sketch error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn crossing_sketches_are_refused() {
+        // A bow-tie with unequal lobes (its signed area is not zero).
+        let mut sk = ParamSketch::square(0.1, 0.1);
+        sk.outline = loop_of(&[(0.0, 0.0), (0.3, 0.2), (0.3, 0.0), (0.0, 0.1)]);
+        assert!(sketch_err(&sk).contains("crosses itself"));
+
+        // A U whose opening bridges the notch: every corner of the opening is
+        // inside the outline, but its edges cross it.
+        let u = [(0.0, 0.0), (0.3, 0.0), (0.3, 0.3), (0.2, 0.3), (0.2, 0.1), (0.1, 0.1), (0.1, 0.3), (0.0, 0.3)];
+        let mut sk = ParamSketch::square(0.1, 0.1);
+        sk.outline = loop_of(&u);
+        sk.openings = vec![loop_of(&[(0.05, 0.2), (0.25, 0.2), (0.25, 0.25), (0.05, 0.25)])];
+        assert!(sketch_err(&sk).contains("crosses the outline"));
+
+        // Two overlapping openings, and one inside another.
+        let mut sk = ParamSketch::square(0.1, 0.1);
+        sk.outline = loop_of(&[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        sk.openings = vec![
+            loop_of(&[(0.1, 0.1), (0.5, 0.1), (0.5, 0.5), (0.1, 0.5)]),
+            loop_of(&[(0.3, 0.3), (0.7, 0.3), (0.7, 0.7), (0.3, 0.7)]),
+        ];
+        assert!(sketch_err(&sk).contains("openings overlap"));
+        sk.openings[1] = loop_of(&[(0.2, 0.2), (0.3, 0.2), (0.3, 0.3), (0.2, 0.3)]);
+        assert!(sketch_err(&sk).contains("openings overlap"));
+
+        // Apart, they make a section.
+        sk.openings[1] = loop_of(&[(0.6, 0.6), (0.9, 0.6), (0.9, 0.9), (0.6, 0.9)]);
+        assert!(sk.resolve().is_ok());
+    }
+
+    #[test]
+    fn repair_drops_a_crossing_sketch_profile() {
+        let mut p = Project::from_template();
+        let base = p.max_id() + 1;
+        let mut bad = def(base, "Bow-tie");
+        let mut sk = ParamSketch::square(0.1, 0.1);
+        sk.outline = loop_of(&[(0.0, 0.0), (0.3, 0.2), (0.3, 0.0), (0.0, 0.1)]);
+        bad.shape = ProfileShape::Sketch(sk);
+        p.profiles.insert(ProfileId(base), bad);
+        let ron = crate::persist::to_ron(&p).unwrap();
+        let (loaded, repairs) = crate::persist::from_ron_with_repairs(&ron).unwrap();
+        assert!(repairs >= 1);
+        assert!(loaded.profile(ProfileId(base)).is_none());
+        assert_eq!(loaded.profiles.len(), p.profiles.len() - 1);
     }
 }

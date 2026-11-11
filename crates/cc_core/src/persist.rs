@@ -88,6 +88,9 @@ pub fn from_ron_with_repairs_localized(
     project.convert_sections_to_profiles(&|k| {
         translate(k).unwrap_or_else(|| crate::project::template_default(k).to_string())
     });
+    // The legacy fields of types that already had a profile are only its
+    // box: a file where they disagree gets the box back.
+    repairs += project.resync_profile_boxes();
     Ok((project, repairs))
 }
 
@@ -127,6 +130,36 @@ mod tests {
         let text = to_ron(&project).unwrap();
         let back = from_ron(&text).unwrap();
         assert_eq!(project, back);
+    }
+
+    #[test]
+    fn loading_resyncs_a_profiled_beam_box_that_disagrees() {
+        let mut project = Project::from_template();
+        let (tid, pid) = project
+            .types
+            .values()
+            .find_map(|t| match &t.data {
+                crate::TypeData::Beam { profile: Some(p), .. } => Some((t.id, *p)),
+                _ => None,
+            })
+            .unwrap();
+        // Turn the profile into an I so the legacy fields are its box, then
+        // write a height the profile does not have (a hostile file).
+        project.profiles.get_mut(&pid).unwrap().shape =
+            crate::structural_profile::ProfileShape::I { d: 0.3, bf: 0.15, tw: 0.007, tf: 0.01, r: 0.0 };
+        if let crate::TypeData::Beam { width, height, shape, .. } = &mut project.types.get_mut(&tid).unwrap().data {
+            *width = 0.15;
+            *height = 0.9;
+            *shape = crate::SectionShape::Solid;
+        }
+        let (back, repairs) = from_ron_with_repairs(&to_ron(&project).unwrap()).unwrap();
+        assert!(repairs >= 1);
+        let crate::TypeData::Beam { width, height, shape, profile, .. } = &back.types[&tid].data else { panic!() };
+        assert_eq!(*profile, Some(pid));
+        assert!((height - 0.3).abs() < 1e-9 && (width - 0.15).abs() < 1e-9, "{width} x {height}");
+        assert_eq!(*shape, crate::SectionShape::Solid);
+        // A clean file needs nothing.
+        assert_eq!(from_ron_with_repairs(&to_ron(&back).unwrap()).unwrap().1, 0);
     }
 
     #[test]

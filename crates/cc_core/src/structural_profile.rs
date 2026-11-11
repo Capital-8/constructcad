@@ -255,8 +255,93 @@ impl ParamSketch {
         if outer.iter().chain(holes.iter().flatten()).any(|p| !p.is_finite() || p.abs().max_element() > MAX_SIZE) {
             return Err(ProfileError::Sketch("a point is out of range".into()));
         }
+        if outer.len() + holes.iter().map(Vec::len).sum::<usize>() > MAX_POINTS {
+            return Err(ProfileError::TooBig);
+        }
+        if let Some(e) = crossing(&outer, &holes) {
+            return Err(ProfileError::Sketch(e.into()));
+        }
         finish(outer, holes)
     }
+}
+
+/// `poly` without points repeating the one before them (closing included).
+fn distinct(poly: &[DVec2]) -> Vec<DVec2> {
+    let mut out: Vec<DVec2> = Vec::with_capacity(poly.len());
+    for &p in poly {
+        if out.last().is_none_or(|q| q.distance_squared(p) > 1e-24) {
+            out.push(p);
+        }
+    }
+    while out.len() > 1 && out.first().zip(out.last()).is_some_and(|(a, b)| a.distance_squared(*b) <= 1e-24) {
+        out.pop();
+    }
+    out
+}
+
+/// Whether segments `a`-`b` and `c`-`d` touch or cross.
+fn segments_meet(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
+    let scale = (b - a).length().max((d - c).length()).max(1e-9);
+    let eps = 1e-12 * scale * scale;
+    let orient = |p: DVec2, q: DVec2, r: DVec2| {
+        let o = (q - p).perp_dot(r - p);
+        if o.abs() <= eps { 0.0 } else { o.signum() }
+    };
+    // `r`, collinear with `p`-`q`, lies within it.
+    let within = |p: DVec2, q: DVec2, r: DVec2| {
+        let (lo, hi) = (p.min(q) - DVec2::splat(1e-12), p.max(q) + DVec2::splat(1e-12));
+        r.cmpge(lo).all() && r.cmple(hi).all()
+    };
+    let (o1, o2, o3, o4) = (orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b));
+    if o1 * o2 < 0.0 && o3 * o4 < 0.0 {
+        return true;
+    }
+    (o1 == 0.0 && within(a, b, c))
+        || (o2 == 0.0 && within(a, b, d))
+        || (o3 == 0.0 && within(c, d, a))
+        || (o4 == 0.0 && within(c, d, b))
+}
+
+/// Why the loops of a sketch do not make a section: an outline or opening
+/// that crosses itself, an opening that crosses or touches the outline, or
+/// openings that cross, touch or lie in one another. The caller bounds the
+/// points by `MAX_POINTS`, so this is at most `MAX_POINTS`² segment pairs.
+fn crossing(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Option<&'static str> {
+    let loops: Vec<Vec<DVec2>> = std::iter::once(outer).chain(holes.iter().map(Vec::as_slice)).map(distinct).collect();
+    if loops.iter().any(|l| l.len() < 3) {
+        return Some("a loop needs at least 3 distinct points");
+    }
+    let seg = |l: &[DVec2], i: usize| (l[i], l[(i + 1) % l.len()]);
+    for (li, l) in loops.iter().enumerate() {
+        let n = l.len();
+        // The loop against itself, neighbouring segments left out.
+        for i in 0..n {
+            for j in i + 2..n {
+                if i == 0 && j == n - 1 {
+                    continue;
+                }
+                let ((a, b), (c, d)) = (seg(l, i), seg(l, j));
+                if segments_meet(a, b, c, d) {
+                    return Some(if li == 0 { "the outline crosses itself" } else { "an opening crosses itself" });
+                }
+            }
+        }
+        // Against the later loops.
+        for m in loops.iter().skip(li + 1) {
+            for i in 0..n {
+                for j in 0..m.len() {
+                    let ((a, b), (c, d)) = (seg(l, i), seg(m, j));
+                    if segments_meet(a, b, c, d) {
+                        return Some(if li == 0 { "an opening crosses the outline" } else { "two openings overlap" });
+                    }
+                }
+            }
+            if li > 0 && (inside(l, m[0]) || inside(m, l[0])) {
+                return Some("two openings overlap");
+            }
+        }
+    }
+    None
 }
 
 /// Even-odd test of a point against a loop.

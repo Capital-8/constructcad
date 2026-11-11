@@ -803,7 +803,6 @@ impl<'a> EditCtx<'a> {
     /// the profile wins. Runs when this edit touched settings (profiles live
     /// there) or a column or beam type, and writes only what changes.
     fn sync_profiles(&mut self) {
-        const TOL: f64 = 1e-9;
         let settings = self.tx.settings.is_some();
         let ids: Vec<ElementTypeId> = self
             .project
@@ -851,40 +850,9 @@ impl<'a> EditCtx<'a> {
                 }
                 continue;
             }
-            if self.project.legacy_is_profile(data) {
-                continue;
-            }
-            let Some(section) = self.project.type_section(data) else { continue };
-            let (lo, hi) = section.outline.bbox();
-            let size = hi - lo;
-            if !(size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0) {
-                continue;
-            }
-            let rewrite = match data {
-                crate::TypeData::Column { section, .. } => {
-                    !matches!(section, crate::ColumnSection::Rectangular { width, depth }
-                        if (width - size.x).abs() < TOL && (depth - size.y).abs() < TOL)
-                }
-                crate::TypeData::Beam { width, height, shape, .. } => {
-                    *shape != crate::SectionShape::Solid
-                        || (width - size.x).abs() >= TOL
-                        || (height - size.y).abs() >= TOL
-                }
-                _ => false,
-            };
-            if !rewrite {
-                continue;
-            }
-            match self.type_mut(id).map(|t| &mut t.data) {
-                Some(crate::TypeData::Column { section, .. }) => {
-                    *section = crate::ColumnSection::Rectangular { width: size.x, depth: size.y };
-                }
-                Some(crate::TypeData::Beam { width, height, shape, .. }) => {
-                    *width = size.x;
-                    *height = size.y;
-                    *shape = crate::SectionShape::Solid;
-                }
-                _ => {}
+            let Some(boxed) = self.project.profile_box(data) else { continue };
+            if let Some(t) = self.type_mut(id) {
+                t.data = boxed;
             }
         }
     }
