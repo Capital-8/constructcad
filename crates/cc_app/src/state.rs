@@ -105,6 +105,8 @@ pub struct Dialogs {
 pub struct AppState {
     /// The engine session: document, derived geometry, drawings and sheets.
     pub session: Session,
+    /// The multi-selection rows' copy of the selected elements, per revision and selection.
+    pub multi_summary: Option<std::sync::Arc<crate::properties::MultiSummary>>,
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
@@ -232,6 +234,7 @@ impl AppState {
         Self {
             session,
             selection: BTreeSet::new(),
+            multi_summary: None,
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),
