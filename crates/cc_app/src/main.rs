@@ -6,6 +6,7 @@
 mod actions;
 mod app;
 mod browser;
+mod browser_org_dialog;
 mod cad_ui;
 mod callout_ui;
 mod canvas;

@@ -36,6 +36,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::phases_dialog::show(ctx, state);
     crate::design_options_ui::show(ctx, state);
     crate::line_styles_dialog::show(ctx, state);
+    crate::browser_org_dialog::show(ctx, state);
     // After the material browser, type properties and graphics, which open it over themselves.
     crate::fill_patterns_dialog::show(ctx, state);
     crate::library::show(ctx, state);

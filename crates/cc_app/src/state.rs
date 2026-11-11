@@ -87,6 +87,8 @@ pub struct Dialogs {
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
     /// Design option sets and their options.
     pub design_options: Option<crate::design_options_ui::OptionsDialog>,
+    /// The project browser's organization schemes.
+    pub browser_org: Option<crate::browser_org_dialog::BrowserOrgDialog>,
     /// The project's line styles.
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The fill pattern manager.

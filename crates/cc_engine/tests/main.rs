@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod arc_strip_footings;
+mod browser_org;
 mod cad;
 mod cad_explode;
 mod callouts;

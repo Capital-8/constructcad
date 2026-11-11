@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Project browser organization (#278). *View → Browser Organization* (also in the menu of a group in the project browser) keeps named schemes that group the browser's views by view type, level, discipline or phase, nested in the order chosen: a scheme by view type and level puts each level's plans in a group under *Floor Plans* and *Ceiling Plans*, so the plans of a level stay together whatever their names. Views without a value for a criterion (a section has no level) stay beside its groups, groups fold and show how many views they hold, and the list by view type alone stays the default. The schemes are saved with the project; `browser_scheme_create`, `browser_scheme_set`, `browser_scheme_delete`, `browser_scheme_use`, `browser_schemes_list` and `browser_tree` do the same from the command line and MCP.
+
 ### Changed
 
 - The ribbon's large buttons keep a least width and the same room at each side of their labels, so the icons of a group stand evenly apart, and labels also wrap after a slash or a hyphen. *Blocks as components* leaves the *Insert* tab for *Preferences → General → Import*, and is now kept between sessions.
