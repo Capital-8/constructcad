@@ -332,8 +332,8 @@ mod tests {
         ordered(s.project(), category).into_iter().map(|(_, n)| n).collect()
     }
 
-    /// Plans are listed by their level's elevation, whatever their names
-    /// (issue #274), and follow a level moved below another.
+    /// Plans are listed by their level's elevation, whatever their names,
+    /// and follow a level moved below another.
     #[test]
     fn plans_are_ordered_by_level_elevation() {
         let mut s = Session::default();
