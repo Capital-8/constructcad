@@ -4,7 +4,7 @@ use crate::args;
 use crate::guid::{encode, guid};
 use crate::schema::{ElementClass, TypeLayout, element_class};
 use crate::step::{Header, Id, StepWriter, Value, opt_str, reals};
-use cc_core::structural_profile::{ProfileShape, SectionOutline};
+use cc_core::structural_profile::{ProfileMaterial, ProfileShape, SectionOutline};
 use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData, Uid};
 use cc_geom::{FRAME_COLOR, ModelGeometry, WallGeom, opening_parts, polygon};
 use glam::{DVec2, DVec3};
@@ -723,17 +723,19 @@ impl<'a> Exporter<'a> {
         let project = self.project;
         let ty = project.element_type(type_id)?;
         let profile = self.type_profile(type_id)?;
-        let name = project
-            .type_section(&ty.data)
-            .and_then(|s| s.profile)
-            .and_then(|p| project.profile(p))
-            .map_or(ty.name.as_str(), |d| d.name.as_str());
+        let def = project.type_section(&ty.data).and_then(|s| s.profile).and_then(|p| project.profile(p));
+        let name = def.map_or(ty.name.as_str(), |d| d.name.as_str());
+        // Cold-formed sections are told apart from rolled ones by the category.
+        let category = match def.map(|d| d.material) {
+            Some(ProfileMaterial::ColdFormed) => Value::Str(COLD_FORMED_CATEGORY.into()),
+            _ => Value::Null,
+        };
         let material = match ty.main_material() {
             "" => Value::Null,
             m => Value::Ref(self.material(m)),
         };
         let n = Value::Null;
-        let item = self.w.add("IFCMATERIALPROFILE", args![name, n.clone(), material, profile, n.clone(), n.clone()]);
+        let item = self.w.add("IFCMATERIALPROFILE", args![name, n.clone(), material, profile, n.clone(), category]);
         let set = self.w.add("IFCMATERIALPROFILESET", args![name, n.clone(), vec![item], n]);
         self.profile_sets.insert(type_id, set);
         Some(set)
@@ -2786,6 +2788,9 @@ pub const PHASING_PSET: &str = "ConstructCAD_Phasing";
 pub const CURTAIN_PSET: &str = "ConstructCAD_Curtain";
 /// Property set of a roof's covering and framing (see `write_roof_framing`).
 pub const ROOFING_PSET: &str = "ConstructCAD_Roofing";
+/// `Category` of the material profile of a cold-formed section (rolled and
+/// cold-formed steel share their materials).
+pub const COLD_FORMED_CATEGORY: &str = "ColdFormed";
 /// A terrain's points, boundary, base depth and type settings, for importers
 /// to rebuild it as terrain (points as `x y z` and the boundary as `x y`,
 /// separated by `;`).

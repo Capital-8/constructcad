@@ -95,6 +95,25 @@ fn place_outline(mut outline: SectionOutline, rotation_deg: f64, mirror: bool) -
 const RADII: [&str; 4] = ["r", "ri", "ro", "chamfer"];
 
 impl ProfileShape {
+    /// Whether two shapes are the same kind with every parameter within
+    /// `tol` (meters; degrees for angles), so float noise from a file does
+    /// not make a new profile. Sketches compare exactly.
+    pub fn close_to(&self, other: &ProfileShape, tol: f64) -> bool {
+        if matches!(self, Self::Sketch(_)) || matches!(other, Self::Sketch(_)) {
+            return self == other;
+        }
+        if self.code() != other.code() {
+            return false;
+        }
+        let (a, b) = (self.params(), other.params());
+        a.len() == b.len() && a.iter().zip(&b).all(|((n, x), (m, y))| n == m && (x - y).abs() <= tol)
+    }
+
+    /// Whether this is a cold-formed shape (bent from sheet).
+    pub fn is_cold_formed(&self) -> bool {
+        matches!(self, Self::ColdU { .. } | Self::ColdLippedU { .. } | Self::ColdZ { .. } | Self::ColdHat { .. })
+    }
+
     /// Whether the outline has arcs: a round, a radius above zero, or a
     /// sketch with arc or ellipse segments.
     pub fn has_arcs(&self) -> bool {

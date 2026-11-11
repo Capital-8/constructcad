@@ -1179,6 +1179,8 @@ fn profiles_project() -> Project {
             );
             let (pm, mat) = if concrete_shape {
                 (ProfileMaterial::Concrete, concrete.clone())
+            } else if shape.is_cold_formed() {
+                (ProfileMaterial::ColdFormed, steel.clone())
             } else {
                 (ProfileMaterial::Steel, steel.clone())
             };
@@ -1332,6 +1334,7 @@ fn profiles_round_trip() {
         };
         let bdef = imported.profile(*bid).unwrap();
         assert_eq!(bdef.name, def.name, "profile name of {}", t.name);
+        assert_eq!(bdef.material, def.material, "profile material of {}", t.name);
         let mirrored = def.name.ends_with("mirrored");
         if parametric.contains(&def.shape.code()) && !mirrored {
             assert_eq!(bdef.shape, def.shape, "shape of {}", t.name);
@@ -1508,4 +1511,54 @@ fn sloped_profile_beams_come_back_as_their_body() {
         (lo0 - lo1).abs().max_element() < 1e-5 && (hi0 - hi1).abs().max_element() < 1e-5,
         "{lo0} {hi0} vs {lo1} {hi1}"
     );
+}
+
+/// A file whose section differs from a project profile of the same name only
+/// by float noise reuses that profile instead of making "name 2".
+#[test]
+fn float_noise_reuses_the_profile_of_the_same_name() {
+    use cc_core::structural_profile::ProfileShape;
+    let shape = ProfileShape::I { d: 0.3, bf: 0.15, tw: 0.0071, tf: 0.0107, r: 0.0 };
+    let mut p = Project::from_template();
+    let tid = with_profile_type(&mut p, "Noisy", shape.clone(), |pid, m| TypeData::Beam {
+        width: 0.15,
+        height: 0.3,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    add_plain(&mut p, tid, ElementKind::Beam(cc_core::Beam::new(DVec2::ZERO, DVec2::new(4.0, 0.0), 3.0)));
+    let text = export(&p, &ExportOptions::default());
+    // The project imported into has "Noisy" a few nanometers off.
+    let mut base = Project::from_template();
+    let noisy = ProfileShape::I { d: 0.3 + 3e-9, bf: 0.15 - 2e-9, tw: 0.0071, tf: 0.0107 + 1e-9, r: 0.0 };
+    with_profile_type(&mut base, "Noisy", noisy, |pid, m| TypeData::Beam {
+        width: 0.15,
+        height: 0.3,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    let before = base.profiles.len();
+    let (imported, _) = import(&text, base).unwrap();
+    assert!(imported.profile_named("Noisy 2").is_none(), "{:?}", imported.profiles.values().map(|d| &d.name));
+    assert_eq!(imported.profiles.len(), before);
+    // A real difference still makes a new profile.
+    let mut base = Project::from_template();
+    let other = ProfileShape::I { d: 0.31, bf: 0.15, tw: 0.0071, tf: 0.0107, r: 0.0 };
+    with_profile_type(&mut base, "Noisy", other, |pid, m| TypeData::Beam {
+        width: 0.15,
+        height: 0.31,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    let (imported, _) = import(&text, base).unwrap();
+    assert!(imported.profile_named("Noisy 2").is_some());
 }

@@ -17,7 +17,7 @@ use cc_core::curtain::{CurtainEdits, CurtainPanel, CurtainSystem};
 use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
 use cc_core::structural_profile::{
     MAX_NAME, MAX_OPENINGS as MAX_SKETCH_OPENINGS, MAX_POINTS as MAX_SKETCH_POINTS, MAX_PROFILES, ParamSketch,
-    ProfileDef, ProfileShape,
+    ProfileDef, ProfileMaterial, ProfileShape,
 };
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
@@ -2317,7 +2317,7 @@ impl<'a> Importer<'a> {
         let (level, elevation) = self.level_for(id, z0);
         let name = self.type_name(id, e);
         let material = self.main_material(id, e);
-        let profile = self.profile_for(&read, &material);
+        let profile = self.profile_for(id, &read, &material);
         // Without a profile (the project has no room for more) only a box or a round is held exactly.
         let held = matches!(
             read.shape,
@@ -2422,6 +2422,18 @@ impl<'a> Importer<'a> {
         item.arg(0).as_str().map(clean_profile_name).filter(|n| !n.is_empty())
     }
 
+    /// Whether the material profile of product `id` (or its type) is marked
+    /// cold-formed ([`crate::export::COLD_FORMED_CATEGORY`]).
+    fn cold_formed(&self, id: u32) -> bool {
+        let f = self.f;
+        self.material_profile_set(id).is_some_and(|set| {
+            set.arg(2).as_list().iter().filter_map(|x| f.deref(x)).any(|i| {
+                i.name == "IFCMATERIALPROFILE"
+                    && i.arg(5).as_str().is_some_and(|c| c.eq_ignore_ascii_case(crate::export::COLD_FORMED_CATEGORY))
+            })
+        })
+    }
+
     /// The section of a beam written as a `width` x `height` box: the
     /// material profile of product `id` (or its type), with its name, when
     /// it is an unturned solid rectangle of that size; else that rectangle.
@@ -2459,16 +2471,25 @@ impl<'a> Importer<'a> {
     /// has the same shape, else a new one (named after the section, under a
     /// free name when another profile has it); without a name, one of the
     /// same material and shape. `None` when the project has no room for more.
-    fn profile_for(&mut self, read: &ReadSection, material: &str) -> Option<ProfileId> {
-        let class = self.p.profile_material_for(material);
+    fn profile_for(&mut self, id: u32, read: &ReadSection, material: &str) -> Option<ProfileId> {
+        // Float noise in a file reuses a profile rather than making "name 2".
+        const TOL: f64 = 1e-6;
+        let class = match self.p.profile_material_for(material) {
+            ProfileMaterial::Steel if read.shape.is_cold_formed() || self.cold_formed(id) => {
+                ProfileMaterial::ColdFormed
+            }
+            class => class,
+        };
         let name = match &read.name {
             Some(name) => match self.p.profile_named(name) {
-                Some(p) if p.shape == read.shape => return Some(p.id),
+                Some(p) if p.shape.close_to(&read.shape, TOL) => return Some(p.id),
                 Some(_) => self.p.free_profile_name(name),
                 None => name.clone(),
             },
             None => {
-                if let Some(p) = self.p.profiles.values().find(|p| p.material == class && p.shape == read.shape) {
+                if let Some(p) =
+                    self.p.profiles.values().find(|p| p.material == class && p.shape.close_to(&read.shape, TOL))
+                {
                     return Some(p.id);
                 }
                 self.p.free_profile_name(&cc_core::profiles_project::section_name(&read.shape, class))
@@ -2899,7 +2920,7 @@ impl<'a> Importer<'a> {
             return false;
         }
         let material = self.main_material(id, e);
-        let profile = self.profile_for(&read, &material);
+        let profile = self.profile_for(id, &read, &material);
         // Without a profile (the project has no room for more) only a box is held exactly.
         if profile.is_none()
             && (!matches!(read.shape, ProfileShape::Rect { chamfer: 0.0, .. }) || read.rotation_deg != 0.0)
@@ -3322,7 +3343,8 @@ END-ISO-10303-21;
     /// Profiles as other tools write them (IFC2X3, millimeters, no material
     /// profile sets): a named I column, an I whose root radius does not fit
     /// (its drawn outline comes in as a sketch), an angle thicker than its
-    /// legs, and a channel beam extruded along its axis.
+    /// legs (an outline that crosses itself: a component), and a channel beam
+    /// extruded along its axis.
     #[test]
     fn foreign_and_hostile_profiles() {
         let text = "ISO-10303-21;
@@ -3385,7 +3407,7 @@ END-ISO-10303-21;
             };
             p.profile(*id).unwrap().clone()
         };
-        assert_eq!(report.imported.get(&Category::Column), Some(&3), "{report:?}");
+        assert_eq!(report.imported.get(&Category::Column), Some(&2), "{report:?}");
         assert_eq!(report.imported.get(&Category::Beam), Some(&1), "{report:?}");
         let a = shape_of("A");
         assert_eq!(a.name, "IPE200");
@@ -3396,7 +3418,10 @@ END-ISO-10303-21;
         let b = shape_of("B");
         assert_eq!(b.name, "Bad");
         assert!(matches!(b.shape, ProfileShape::Sketch(_)), "{:?}", b.shape);
-        assert!(shape_of("C").outline().is_ok());
+        // Its drawn outline crosses itself: no profile, a component of its class.
+        let c = p.elements.values().find(|e| p.type_name(e.type_id) == "C").unwrap();
+        assert_eq!(c.category(), Category::Component);
+        assert_eq!(report.generic.get("IfcColumn"), Some(&1), "{report:?}");
         let d = shape_of("D");
         assert_eq!(d.name, "U100");
         assert!(matches!(d.shape, ProfileShape::Channel { .. }), "{:?}", d.shape);
