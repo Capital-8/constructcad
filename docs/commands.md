@@ -2441,7 +2441,7 @@ No parameters.
 
 ### `profile_set`
 
-*edit* — Change a structural profile: its name, material, parameter values or, for a sketched one, its sketch (a merge patch over the `sketch` that `profile_get` shows: `params`, `outline` and `openings`). A change that leaves no valid outline is refused. The column and beam types using it follow; a profile whose size changes is no longer its catalog entry.
+*edit* — Change a structural profile: its name, material, parameter values or, for a sketched one, its sketch (a merge patch over the `sketch` that `profile_get` shows: `params`, `outline` and `openings`). A change that leaves no valid outline is refused. The column and beam types using it follow; a profile whose size or material changes is no longer its catalog entry.
 
 | Parameter | Type | | Description |
 |---|---|---|---|

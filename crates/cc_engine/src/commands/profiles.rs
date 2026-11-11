@@ -212,24 +212,35 @@ fn loop_points(curves: &[CurveArg]) -> Result<Vec<ProfilePoint>> {
 }
 
 fn sketch_params(args: &[SketchParamArg]) -> Result<Vec<ComponentParam>> {
-    if args.len() > MAX_SKETCH_PARAMS {
+    let params: Vec<ComponentParam> =
+        args.iter().map(|a| ComponentParam::number(a.name.trim(), a.value, ParamKind::Length)).collect();
+    check_sketch_params(&params)?;
+    Ok(params)
+}
+
+/// The parameters a sketch declares, given by `profile_create` or patched by
+/// `profile_set`: at most `MAX_SKETCH_PARAMS`, valid and distinct names,
+/// numeric kinds and finite values.
+fn check_sketch_params(params: &[ComponentParam]) -> Result<()> {
+    if params.len() > MAX_SKETCH_PARAMS {
         return Err(EngineError::invalid(format!("a sketch has at most {MAX_SKETCH_PARAMS} parameters")));
     }
-    let mut out: Vec<ComponentParam> = Vec::with_capacity(args.len());
-    for a in args {
-        let name = a.name.trim();
+    for (i, p) in params.iter().enumerate() {
+        let name = p.name.as_str();
         if !cc_core::expr::is_valid_name(name) {
             return Err(EngineError::invalid(format!("'{name}' is not a valid parameter name")));
         }
-        if out.iter().any(|p| p.name == name) {
+        if params.iter().take(i).any(|q| q.name == name) {
             return Err(EngineError::invalid(format!("the parameter '{name}' is declared twice")));
         }
-        if !a.value.is_finite() {
+        if !ParamKind::ALL.contains(&p.kind) {
+            return Err(EngineError::invalid(format!("the parameter '{name}' must be a length, an angle or a number")));
+        }
+        if !p.value.is_finite() {
             return Err(EngineError::invalid(format!("the parameter '{name}' needs a number")));
         }
-        out.push(ComponentParam::number(name, a.value, ParamKind::Length));
     }
-    Ok(out)
+    Ok(())
 }
 
 /// Create a structural profile: a standard shape of a material (its default
@@ -327,7 +338,8 @@ impl Command for ProfileCreate {
 /// for a sketched one, its sketch (a merge patch over the `sketch` that
 /// `profile_get` shows: `params`, `outline` and `openings`). A change that
 /// leaves no valid outline is refused. The column and beam types using it
-/// follow; a profile whose size changes is no longer its catalog entry.
+/// follow; a profile whose size or material changes is no longer its
+/// catalog entry.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ProfileSet {
@@ -368,12 +380,13 @@ impl Command for ProfileSet {
             super::merge(&mut value, patch);
             *sk = serde_json::from_value::<ParamSketch>(value)
                 .map_err(|e| EngineError::invalid(format!("sketch: {e}")))?;
+            check_sketch_params(&sk.params)?;
         }
         if let Some(params) = &self.params {
             apply_params(&mut def.shape, params)?;
         }
         check_shape(&def.shape)?;
-        if p.profile(id).is_some_and(|old| old.shape != def.shape) {
+        if p.profile(id).is_some_and(|old| old.shape != def.shape || old.material != def.material) {
             def.catalog = None;
         }
         edit(s, t!("tx-profile-modify"), |e| {

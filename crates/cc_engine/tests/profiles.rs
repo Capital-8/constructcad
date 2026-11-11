@@ -397,3 +397,76 @@ fn types_follow_an_edited_profile() {
         assert!((w - 0.33).abs() < 1e-9 && (h - 0.55).abs() < 1e-9, "{w} x {h}");
     }
 }
+
+#[test]
+fn undoing_a_replacing_delete_restores_the_profile_and_its_users() {
+    let mut s = Session::default();
+    let list = run(&mut s, "profiles_list", json!({"shape": "rect"}));
+    let used = list.as_array().unwrap().iter().find(|p| p["users"].as_u64().unwrap() > 0).unwrap().clone();
+    let pid = ProfileId(used["id"].as_u64().unwrap());
+    let users = s.project().profile_users(pid);
+    let before: Vec<_> = users.iter().map(|t| type_box(&s, *t)).collect();
+    let other = run(
+        &mut s,
+        "profile_create",
+        json!({"material": "concrete", "shape": "rect", "name": "R", "params": {"b": 0.17, "h": 0.71}}),
+    )["id"]
+        .clone();
+    let steps = s.doc.undo_depth();
+    run(&mut s, "profile_delete", json!({"profile": pid.0, "replace_with": other}));
+    assert_eq!(s.doc.undo_depth(), steps + 1, "one undo step");
+    for t in &users {
+        let (_, w, h) = type_box(&s, *t);
+        assert!((w - 0.17).abs() < 1e-9 && (h - 0.71).abs() < 1e-9, "{w} x {h}");
+    }
+    run(&mut s, "undo", json!({}));
+    assert!(s.project().profile(pid).is_some(), "the profile is back");
+    let after: Vec<_> = users.iter().map(|t| type_box(&s, *t)).collect();
+    assert_eq!(after, before, "the users point to it again with their box");
+}
+
+#[test]
+fn hostile_profile_set_is_refused() {
+    let mut s = Session::default();
+    let rect = run(&mut s, "profile_create", json!({"material": "steel", "shape": "rect", "name": "A"}))["id"].clone();
+    let steps = s.doc.undo_depth();
+    let err = run_err(&mut s, "profile_set", json!({"profile": rect, "sketch": {"openings": []}}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+
+    let sk = run(
+        &mut s,
+        "profile_create",
+        json!({"material": "steel", "name": "Sk",
+            "curves": [{"kind": "rectangle", "corner": [-0.1, -0.1], "opposite": [0.1, 0.1]}]}),
+    )["id"]
+        .clone();
+    let steps = steps + 1;
+    assert_eq!(s.doc.undo_depth(), steps);
+    for patch in [
+        json!({"outline": 5}),
+        json!({"params": [{"name": "1bad", "value": 0.1}]}),
+        json!({"params": [{"name": "a", "value": 0.1}, {"name": "a", "value": 0.2}]}),
+        json!({"params": [{"name": "a", "value": 0.1, "kind": "Text"}]}),
+    ] {
+        let err = run_err(&mut s, "profile_set", json!({"profile": sk, "sketch": patch}));
+        assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments, "{patch}: {}", err.message);
+        assert_eq!(s.doc.undo_depth(), steps, "{patch} leaves no undo step");
+    }
+
+    let err = run_err(&mut s, "profile_set", json!({"profile": sk, "name": "a"}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    run(&mut s, "profile_set", json!({"profile": sk, "name": "SK"}));
+    assert_eq!(run(&mut s, "profile_get", json!({"profile": sk}))["name"], "SK");
+}
+
+#[test]
+fn a_new_material_leaves_the_catalog_entry() {
+    let mut s = Session::default();
+    let id = run(&mut s, "profile_create", json!({"material": "steel", "shape": "rect", "name": "A"}))["id"].clone();
+    let mut p = s.project().clone();
+    p.profiles.get_mut(&ProfileId(id.as_u64().unwrap())).unwrap().catalog =
+        Some(cc_core::structural_profile::CatalogRef { series: "X".into(), designation: "1".into() });
+    let mut s = Session::new(Document::new(p));
+    run(&mut s, "profile_set", json!({"profile": id, "material": "timber"}));
+    assert_eq!(run(&mut s, "profile_get", json!({"profile": id}))["catalog"], Value::Null);
+}
