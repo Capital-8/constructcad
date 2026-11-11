@@ -2683,6 +2683,17 @@ prop-level-mark-datum = ລະດັບອ້າງອີງ (ຄ່າທີ່
 prop-level-mark-finished-suffix = ຄຳຕໍ່ທ້າຍລະດັບສຳເລັດ
 prop-level-mark-raw-suffix = ຄຳຕໍ່ທ້າຍລະດັບໂຄງສ້າງ
 prop-text-size = ຂະໜາດຕົວອັກສອນ
+prop-dim-mark = ເຄື່ອງໝາຍຂະໜາດ
+prop-dim-mark-size = ຂະໜາດເຄື່ອງໝາຍ
+prop-dim-mark-weight = ຄວາມໜາເຄື່ອງໝາຍ
+prop-dim-line-weight = ຄວາມໜາເສັ້ນ
+prop-dim-witness-gap = ໄລຍະຫ່າງເສັ້ນອ້າງອີງ
+prop-dim-witness-extension = ສ່ວນຍື່ນເສັ້ນອ້າງອີງ
+prop-dim-line-extension = ສ່ວນຍື່ນເສັ້ນຂະໜາດ
+prop-dim-text-offset = ໄລຍະຫ່າງຂໍ້ຄວາມ
+prop-dim-prefix = ຄຳນຳໜ້າ
+prop-dim-suffix = ຄຳຕໍ່ທ້າຍ
+prop-dim-opaque-text = ພື້ນຫຼັງຂໍ້ຄວາມທຶບ
 
 # Detail components
 tx-new-detail-component = ອົງປະກອບລາຍລະອຽດໃໝ່

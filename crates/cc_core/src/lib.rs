@@ -17,6 +17,7 @@ pub mod detail;
 pub mod detail_component;
 pub mod dim_line;
 pub mod dim_refs;
+pub mod dim_style;
 mod document;
 mod element;
 pub mod expr;

@@ -402,7 +402,7 @@ impl Project {
             (&n("tpl-type-conduit-32"), TypeData::Conduit { diameter: 0.032, material: n("tpl-mat-pvc") }),
             (&n("tpl-type-room"), TypeData::Room {}),
             (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
-            (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
+            (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5, style: Default::default() }),
             (&n("tpl-type-text"), TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
             (&n("tpl-type-text-large"), TypeData::Text { size: 3.5, symbol: crate::LeaderSymbol::Arrow }),
             (
@@ -598,7 +598,11 @@ impl Project {
             ),
             (Category::Room, "tpl-type-room", TypeData::Room {}),
             (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
-            (Category::Dimension, "tpl-type-dimension", TypeData::Dimension { text_size: 2.5 }),
+            (
+                Category::Dimension,
+                "tpl-type-dimension",
+                TypeData::Dimension { text_size: 2.5, style: Default::default() },
+            ),
             (Category::Text, "tpl-type-text", TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
         ];
         for (category, key, data) in defaults {

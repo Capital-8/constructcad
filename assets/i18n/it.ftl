@@ -2681,6 +2681,17 @@ prop-level-mark-datum = Quota di riferimento (valore dello zero)
 prop-level-mark-finished-suffix = Suffisso della quota finita
 prop-level-mark-raw-suffix = Suffisso della quota grezza
 prop-text-size = Dimensione del testo
+prop-dim-mark = Simbolo di quota
+prop-dim-mark-size = Dimensione del simbolo
+prop-dim-mark-weight = Spessore del simbolo
+prop-dim-line-weight = Spessore della linea
+prop-dim-witness-gap = Distanza della linea di riferimento
+prop-dim-witness-extension = Estensione della linea di riferimento
+prop-dim-line-extension = Estensione della linea di quota
+prop-dim-text-offset = Distanza del testo
+prop-dim-prefix = Prefisso
+prop-dim-suffix = Suffisso
+prop-dim-opaque-text = Sfondo del testo opaco
 
 # Detail components
 tx-new-detail-component = Nuovo componente di dettaglio

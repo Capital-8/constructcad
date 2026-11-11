@@ -2681,6 +2681,17 @@ prop-level-mark-datum = Niveau de référence (valeur du zéro)
 prop-level-mark-finished-suffix = Suffixe du niveau fini
 prop-level-mark-raw-suffix = Suffixe du niveau brut
 prop-text-size = Taille du texte
+prop-dim-mark = Marque de cote
+prop-dim-mark-size = Taille de la marque
+prop-dim-mark-weight = Épaisseur de la marque
+prop-dim-line-weight = Épaisseur de ligne
+prop-dim-witness-gap = Écart de la ligne d'attache
+prop-dim-witness-extension = Prolongement de la ligne d'attache
+prop-dim-line-extension = Prolongement de la ligne de cote
+prop-dim-text-offset = Décalage du texte
+prop-dim-prefix = Préfixe
+prop-dim-suffix = Suffixe
+prop-dim-opaque-text = Fond du texte opaque
 
 # Detail components
 tx-new-detail-component = Nouveau composant de détail

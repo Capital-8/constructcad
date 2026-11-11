@@ -2681,6 +2681,17 @@ prop-level-mark-datum = Bezugshöhe (Wert bei null)
 prop-level-mark-finished-suffix = Suffix der Fertighöhe
 prop-level-mark-raw-suffix = Suffix der Rohhöhe
 prop-text-size = Textgröße
+prop-dim-mark = Maßbegrenzung
+prop-dim-mark-size = Größe der Begrenzung
+prop-dim-mark-weight = Linienstärke der Begrenzung
+prop-dim-line-weight = Linienstärke
+prop-dim-witness-gap = Abstand der Hilfslinie
+prop-dim-witness-extension = Überstand der Hilfslinie
+prop-dim-line-extension = Überstand der Maßlinie
+prop-dim-text-offset = Textabstand
+prop-dim-prefix = Präfix
+prop-dim-suffix = Suffix
+prop-dim-opaque-text = Deckender Texthintergrund
 
 # Detail components
 tx-new-detail-component = Neue Detailkomponente

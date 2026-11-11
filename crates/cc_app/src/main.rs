@@ -21,6 +21,7 @@ mod detail_ui;
 mod dialog;
 mod dialogs;
 mod dim_edit;
+mod dim_type_ui;
 mod engine_edit;
 mod fill_patterns_dialog;
 mod gestures;

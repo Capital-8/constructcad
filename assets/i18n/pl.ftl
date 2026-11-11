@@ -2681,6 +2681,17 @@ prop-level-mark-datum = Poziom odniesienia (wartość zera)
 prop-level-mark-finished-suffix = Przyrostek poziomu wykończenia
 prop-level-mark-raw-suffix = Przyrostek poziomu surowego
 prop-text-size = Rozmiar tekstu
+prop-dim-mark = Znak wymiarowy
+prop-dim-mark-size = Rozmiar znaku
+prop-dim-mark-weight = Grubość znaku
+prop-dim-line-weight = Grubość linii
+prop-dim-witness-gap = Odstęp linii pomocniczej
+prop-dim-witness-extension = Wydłużenie linii pomocniczej
+prop-dim-line-extension = Wydłużenie linii wymiarowej
+prop-dim-text-offset = Odsunięcie tekstu
+prop-dim-prefix = Przedrostek
+prop-dim-suffix = Przyrostek
+prop-dim-opaque-text = Nieprzezroczyste tło tekstu
 
 # Detail components
 tx-new-detail-component = Nowy komponent detalu

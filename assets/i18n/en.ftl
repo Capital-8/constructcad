@@ -2681,6 +2681,17 @@ prop-level-mark-datum = Datum (value at zero)
 prop-level-mark-finished-suffix = Finished level suffix
 prop-level-mark-raw-suffix = Raw level suffix
 prop-text-size = Text size
+prop-dim-mark = Dimension mark
+prop-dim-mark-size = Mark size
+prop-dim-mark-weight = Mark line weight
+prop-dim-line-weight = Line weight
+prop-dim-witness-gap = Witness line gap
+prop-dim-witness-extension = Witness line extension
+prop-dim-line-extension = Dimension line extension
+prop-dim-text-offset = Text offset
+prop-dim-prefix = Prefix
+prop-dim-suffix = Suffix
+prop-dim-opaque-text = Opaque text background
 
 # Detail components
 tx-new-detail-component = New detail component

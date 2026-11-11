@@ -137,6 +137,7 @@ pub fn component_view(
     let mut out = ComponentView::default();
     let extra = [(WALL_THICKNESS, PREVIEW_WALL)];
     let scope = def.scope(overrides, &extra);
+    let style = cc_core::dim_style::DimensionStyle::default();
     let mm = f64::from(scale.max(1)) / 1000.0;
 
     // Pieces: solids with voids cut, then the voids themselves, dashed.
@@ -262,7 +263,8 @@ pub fn component_view(
             kind: DimensionKind::Linear { dir },
             refs: Default::default(),
         };
-        let Some(layout) = crate::dimension_layout(&dim, scale) else { continue };
+        let Some(layout) = crate::dimension_layout(&dim, scale, &style) else { continue };
+        crate::draw_marks(&mut out.drawing, &layout, &style, scale, None);
         for (p, q, style) in layout.lines {
             out.drawing.line(p, q, style, None);
         }
@@ -306,7 +308,8 @@ pub fn component_view(
                 kind: DimensionKind::Linear { dir },
                 refs: Default::default(),
             };
-            let Some(layout) = crate::dimension_layout(&dim, scale) else { continue };
+            let Some(layout) = crate::dimension_layout(&dim, scale, &style) else { continue };
+            crate::draw_marks(&mut out.drawing, &layout, &style, scale, None);
             for (p, q2, style) in layout.lines {
                 out.drawing.line(p, q2, style, None);
             }
