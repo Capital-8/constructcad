@@ -309,6 +309,19 @@ pub fn fill_pattern(p: &Project, r: &Ref) -> Result<cc_core::FillPatternId> {
     }
 }
 
+/// A structural profile by id or name.
+pub fn profile(p: &Project, r: &Ref) -> Result<cc_core::ProfileId> {
+    match r {
+        Ref::Id(id) => {
+            let id = cc_core::ProfileId(*id);
+            p.profile(id).map(|_| id).ok_or_else(|| EngineError::not_found(format!("no profile with id {}", id.0)))
+        }
+        Ref::Name(n) => {
+            unique("profile", n, p.profiles.values().filter(|s| matches(&s.name, n)).map(|s| s.id).collect())
+        }
+    }
+}
+
 /// A phase filter by id or name.
 pub fn phase_filter(p: &Project, r: &Ref) -> Result<cc_core::PhaseFilterId> {
     match r {

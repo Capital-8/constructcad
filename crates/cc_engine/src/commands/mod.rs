@@ -37,6 +37,7 @@ pub mod modify;
 pub mod pad;
 pub mod paint;
 pub mod phases;
+pub mod profiles;
 pub mod project;
 pub mod query;
 pub mod ramp;

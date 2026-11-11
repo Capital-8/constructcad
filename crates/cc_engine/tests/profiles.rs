@@ -260,3 +260,140 @@ fn schedules_show_the_profile_and_its_linear_mass() {
     let cells = beam_schedule_cells(&mut s);
     assert_eq!(cells[2], "", "{cells:?}");
 }
+
+fn run_err(s: &mut Session, name: &str, args: Value) -> cc_engine::EngineError {
+    match s.execute(name, args) {
+        Ok(v) => panic!("{name} should fail, gave {v}"),
+        Err(e) => e,
+    }
+}
+
+#[test]
+fn create_get_set_delete() {
+    let mut s = Session::default();
+    let out = run(
+        &mut s,
+        "profile_create",
+        json!({"material": "steel", "shape": "i", "name": "PS 300",
+            "params": {"d": 0.3, "bf": 0.15, "tw": 0.008, "tf": 0.0125, "r": 0.0}}),
+    );
+    let id = out["id"].as_u64().unwrap();
+    let got = run(&mut s, "profile_get", json!({"profile": "ps 300"}));
+    assert_eq!(got["id"].as_u64(), Some(id));
+    assert_eq!(got["shape"], "i");
+    assert_eq!(got["material"], "steel");
+    let area = got["properties"]["area"].as_f64().unwrap();
+    assert!((area - (2.0 * 0.15 * 0.0125 + 0.275 * 0.008)).abs() < 1e-9);
+
+    let steps = s.doc.undo_depth();
+    let err = run_err(&mut s, "profile_set", json!({"profile": id, "params": {"tw": 0.5}}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    assert_eq!(s.doc.undo_depth(), steps, "a refused change leaves no undo step");
+    let err = run_err(&mut s, "profile_set", json!({"profile": id, "params": {"zz": 0.5}}));
+    assert!(err.message.contains("tw"), "{}", err.message);
+    run(&mut s, "profile_set", json!({"profile": id, "params": {"tw": 0.01}}));
+    assert_eq!(run(&mut s, "profile_get", json!({"profile": id}))["params"]["tw"], 0.01);
+
+    run(&mut s, "undo", json!({}));
+    assert_eq!(run(&mut s, "profile_get", json!({"profile": id}))["params"]["tw"], 0.008);
+    let list = run(&mut s, "profiles_list", json!({"shape": "I"}));
+    let row = list.as_array().unwrap().iter().find(|p| p["id"].as_u64() == Some(id)).unwrap();
+    assert!((row["linear_mass_steel"].as_f64().unwrap() - area * 7850.0).abs() < 1e-9);
+    assert!(list.as_array().unwrap().iter().all(|p| p["shape"] == "i"));
+    run(&mut s, "profile_delete", json!({"profile": id}));
+    let list = run(&mut s, "profiles_list", json!({}));
+    assert!(list.as_array().unwrap().iter().all(|p| p["id"].as_u64() != Some(id)));
+}
+
+#[test]
+fn create_checks_its_arguments() {
+    let mut s = Session::default();
+    let err = run_err(&mut s, "profile_create", json!({"material": "gold", "shape": "i"}));
+    assert!(err.message.contains("steel"), "{}", err.message);
+    let err = run_err(&mut s, "profile_create", json!({"material": "steel", "shape": "zz"}));
+    assert!(err.message.contains("cold_lipped_u"), "{}", err.message);
+    // Defaults, a name of its own, case-insensitive codes.
+    let a = run(&mut s, "profile_create", json!({"material": "Steel", "shape": "RECT"}));
+    let b = run(&mut s, "profile_create", json!({"material": "steel", "shape": "rect"}));
+    assert_ne!(a["name"], b["name"]);
+    let err = run_err(&mut s, "profile_create", json!({"material": "steel", "shape": "rect", "name": a["name"]}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    let dup = run(&mut s, "profile_duplicate", json!({"profile": a["id"]}));
+    assert_ne!(dup["id"], a["id"]);
+    assert_ne!(dup["name"], a["name"]);
+}
+
+#[test]
+fn sketch_profile_from_curves() {
+    let mut s = Session::default();
+    let out = run(
+        &mut s,
+        "profile_create",
+        json!({"material": "steel", "name": "Box",
+            "curves": [{"kind": "rectangle", "corner": [-0.1, -0.15], "opposite": [0.1, 0.15]}],
+            "openings": [[{"kind": "rectangle", "corner": [-0.09, -0.14], "opposite": [0.09, 0.14]}]],
+            "sketch_params": [{"name": "t", "value": 0.01}]}),
+    );
+    let got = run(&mut s, "profile_get", json!({"profile": out["id"]}));
+    assert_eq!(got["shape"], "sketch");
+    assert_eq!(got["outline"]["holes"].as_array().unwrap().len(), 1);
+    assert_eq!(got["params"]["t"], 0.01);
+    let area = got["properties"]["area"].as_f64().unwrap();
+    assert!((area - (0.2 * 0.3 - 0.18 * 0.28)).abs() < 1e-9, "{area}");
+    // The sketch is patched: no openings leaves the solid rectangle.
+    run(&mut s, "profile_set", json!({"profile": out["id"], "sketch": {"openings": []}}));
+    let got = run(&mut s, "profile_get", json!({"profile": out["id"]}));
+    assert!(got["outline"]["holes"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn deleting_a_used_profile_needs_a_replacement() {
+    let mut s = Session::default();
+    let used = run(&mut s, "profiles_list", json!({}))
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["users"].as_u64().unwrap() > 0)
+        .unwrap()
+        .clone();
+    let other =
+        run(&mut s, "profile_create", json!({"material": "concrete", "shape": "rect", "name": "R"}))["id"].clone();
+    let err = run_err(&mut s, "profile_delete", json!({"profile": used["id"]}));
+    assert!(err.message.contains("replace_with"), "{}", err.message);
+    run(&mut s, "profile_delete", json!({"profile": used["id"], "replace_with": other}));
+    let r = run(&mut s, "profile_get", json!({"profile": "R"}));
+    assert!(!r["used_by"].as_array().unwrap().is_empty());
+}
+
+/// The legacy box of a column or beam type: (profile, width, height).
+fn type_box(s: &Session, id: ElementTypeId) -> (Option<ProfileId>, f64, f64) {
+    match &s.project().types[&id].data {
+        TypeData::Beam { profile, width, height, .. } => (*profile, *width, *height),
+        TypeData::Column { profile, section, .. } => {
+            let (w, h) = match *section {
+                ColumnSection::Rectangular { width, depth } | ColumnSection::Profile { width, depth, .. } => {
+                    (width, depth)
+                }
+                ColumnSection::Round { diameter } | ColumnSection::Pipe { diameter, .. } => (diameter, diameter),
+            };
+            (*profile, w, h)
+        }
+        _ => panic!("not a column or beam type"),
+    }
+}
+
+#[test]
+fn types_follow_an_edited_profile() {
+    let mut s = Session::default();
+    let list = run(&mut s, "profiles_list", json!({"shape": "rect"}));
+    let used = list.as_array().unwrap().iter().find(|p| p["users"].as_u64().unwrap() > 0).unwrap().clone();
+    let pid = ProfileId(used["id"].as_u64().unwrap());
+    let users = s.project().profile_users(pid);
+    assert!(!users.is_empty());
+    run(&mut s, "profile_set", json!({"profile": pid.0, "params": {"b": 0.33, "h": 0.55}}));
+    for t in users {
+        let (profile, w, h) = type_box(&s, t);
+        assert_eq!(profile, Some(pid), "the type still points to the edited profile");
+        assert!((w - 0.33).abs() < 1e-9 && (h - 0.55).abs() < 1e-9, "{w} x {h}");
+    }
+}
