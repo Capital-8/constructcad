@@ -46,6 +46,7 @@ mod phases_dialog;
 mod plugins_ui;
 mod preferences;
 mod profile_sketch;
+mod profiles_dialog;
 mod properties;
 mod recovery;
 mod region_ui;

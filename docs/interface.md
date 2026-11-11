@@ -230,6 +230,15 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Curvature handle**: a selected arc strip shows a round handle at the middle of its arc, as arc walls do; dragging it bends the strip through the pointer, its ends staying (the radius and length show while dragging). While a strip type is chosen, the options bar names the tool *Strip Footing*.
 - **Views**: plans dash strips below the cut plane and hatch those it cuts, the arcs as short chords; sections cut the curved body; schedules list the length along the arc and the exact volume. IFC export writes an arc strip as an `IfcFooting` (`STRIP_FOOTING`) whose body is its outline of true arcs extruded. IFC import brings strip footings, straight or arc, back as components with their mesh, as before.
 
+## Structural profiles
+
+*Structure → Profiles* (also *Manage → Profiles*) opens the Profile Manager: the project's structural profiles, which column and beam types are drawn and built with, grouped by material (steel, cold-formed steel, timber, concrete) under a search box.
+
+- **New** makes a profile of a standard shape (I-section, channel, angle, cold-formed sections, tubes, rectangle, circle, concrete T and L, or a sketch) with its default dimensions and a name from its size; **Duplicate** copies the selected one; **Delete** removes it, and when column or beam types use it, the profile picked under the buttons takes its place in them in the same step.
+- **Import from catalog** lists the built-in series (W and HP, IPE, HEA, HEB, the NBR 6355 cold-formed sections, sawn timber and glulam, square, rectangular and circular hollow sections); tick designations, filter by text, and *Add* copies them in as profiles that remember their catalog entry.
+- The selected profile's outline is drawn to fit, with its centroid, axes and overall depth (d) and width (bf). Its name, material and dimensions are edited in the table (millimeters; a dragged value is one undo step); a value the profile cannot take is shown in red and the previous one comes back. The section properties follow: area (cm²), mass per meter (kg/m), Ix, Iy and J (cm⁴), Wx and Wy (cm³), rx and ry (cm), and the types using it.
+- Every change is a `profile_*` command; OK keeps them and Cancel undoes them all.
+
 ## Cable trays and valves
 
 *MEP → Electrical → Cable Tray* (`TY`) draws cable tray runs like conduits: click the ends of each run, one after the other; a new elevation while drawing adds a vertical run, and Backspace takes back the last segment. The options bar sets the circuit the trays carry and their elevation (by default 30 cm under the level above, or the height of the tray a run starts on). A project without a cable tray type gets one the first time (200 × 100 mm, ladder).

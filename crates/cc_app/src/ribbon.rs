@@ -662,6 +662,7 @@ fn massing_site_tab(ui: &mut Ui, state: &mut AppState) {
 
 fn structure_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
+    group(ui, t!("group-profiles"), |ui| command_button(ui, state, Profiles));
     group(ui, t!("group-structure"), |ui| {
         command_buttons(ui, state, &[place(Category::Column), place(Category::Beam), place(Category::Foundation)]);
     });
@@ -864,7 +865,7 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
 fn manage_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
     group(ui, t!("group-project"), |ui| {
-        command_buttons(ui, state, &[ProjectInfo, SiteLocation, Units, Levels, Materials, FillPatterns])
+        command_buttons(ui, state, &[ProjectInfo, SiteLocation, Units, Levels, Materials, FillPatterns, Profiles])
     });
     group(ui, t!("group-graphics"), |ui| command_buttons(ui, state, &[ViewTemplates, ViewFilters]));
     group(ui, t!("group-phasing"), |ui| command_button(ui, state, Phases));

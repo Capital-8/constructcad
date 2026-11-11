@@ -91,6 +91,8 @@ pub struct Dialogs {
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The fill pattern manager.
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
+    /// The Profile Manager.
+    pub profiles: Option<crate::profiles_dialog::ProfilesDialog>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
     /// The Preferences window.

@@ -230,6 +230,15 @@ Cortinas de vidro são paredes de um tipo cortina (um projeto sem tipo cortina g
 - **Alça de curvatura**: uma sapata em arco selecionada mostra uma alça redonda no meio do arco, como as paredes em arco; arrastá-la curva a sapata pelo ponteiro, mantendo as pontas (o raio e o comprimento aparecem durante o arrasto). Com um tipo de sapata corrida escolhido, a barra de opções chama a ferramenta de *Sapata corrida*.
 - **Vistas**: as plantas tracejam as sapatas abaixo do plano de corte e hachuram as que ele corta, com os arcos em cordas curtas; os cortes cortam o corpo curvo; as tabelas listam o comprimento ao longo do arco e o volume exato. A exportação IFC grava uma sapata em arco como `IfcFooting` (`STRIP_FOOTING`) cujo corpo é o seu contorno de arcos verdadeiros extrudado. A importação IFC traz as sapatas corridas, retas ou em arco, como componentes com a sua malha, como antes.
 
+## Perfis estruturais
+
+*Estrutura → Perfis* (também *Gerenciar → Perfis*) abre o Gerenciador de perfis: os perfis estruturais do projeto, com que os tipos de pilar e viga são desenhados e construídos, agrupados por material (aço, aço formado a frio, madeira, concreto) sob uma caixa de busca.
+
+- **Novo** cria um perfil de forma padrão (perfil I, U laminado, cantoneira, perfis formados a frio, tubos, retangular, circular, seções T e L de concreto ou esboço) com as dimensões padrão e um nome tirado do tamanho; **Duplicar** copia o selecionado; **Excluir** o remove e, quando tipos de pilar ou viga o usam, o perfil escolhido abaixo dos botões toma o seu lugar neles no mesmo passo.
+- **Importar do catálogo** lista as séries embutidas (W e HP, IPE, HEA, HEB, os perfis formados a frio da NBR 6355, madeira serrada e MLC, tubos quadrados, retangulares e circulares); marque designações, filtre por texto, e *Adicionar* as copia como perfis que lembram sua entrada do catálogo.
+- O contorno do perfil selecionado é desenhado ajustado, com o centroide, os eixos e a altura (d) e a largura (bf) totais. Nome, material e dimensões são editados na tabela (milímetros; um valor arrastado é um passo de desfazer); um valor que o perfil não aceita aparece em vermelho e o anterior volta. Seguem as propriedades da seção: área (cm²), massa por metro (kg/m), Ix, Iy e J (cm⁴), Wx e Wy (cm³), rx e ry (cm), e os tipos que o usam.
+- Cada mudança é um comando `profile_*`; OK as mantém e Cancelar desfaz todas.
+
 ## Eletrocalhas e registros
 
 *Instalações → Elétrica → Eletrocalha* (`TY`) desenha trechos de eletrocalha como os eletrodutos: clique as pontas de cada trecho, um depois do outro; uma nova elevação durante o desenho cria um trecho vertical, e Backspace desfaz o último segmento. A barra de opções define o circuito que as eletrocalhas levam e a sua elevação (por padrão 30 cm abaixo do nível de cima, ou a altura da eletrocalha onde o trecho começa). Um projeto sem tipo de eletrocalha ganha um na primeira vez (200 × 100 mm, leito).

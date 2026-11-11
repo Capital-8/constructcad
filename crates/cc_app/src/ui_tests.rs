@@ -2957,3 +2957,60 @@ fn graphics_dialog_hides_imported_cad() {
     assert!(!harness.state().project().view(plan).unwrap().graphics.category(cc_core::Category::CadImport).visible);
     assert!(!drawn(harness.state_mut()));
 }
+
+/// The Profile Manager (*Structure → Profiles*): *Import from catalog*
+/// brings IPE profiles in, which OK keeps as one undo step; deleting one a
+/// beam type uses, with another taking its place, is undone by Cancel.
+#[test]
+fn profile_manager_imports_and_cancels() {
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::ProfileTypeCreate;
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    let depth = state.session.doc.undo_depth();
+    let mut harness = app_harness(state);
+    harness.get_by_role_and_label(Role::Button, &t!("cmd-profiles")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_some());
+    harness.get_by_label(&t!("profiles-import")).click();
+    harness.run();
+    // The series combo box, as if IPE were picked in it.
+    let catalog = harness.state_mut().dialogs.profiles.as_mut().and_then(|d| d.catalog.as_mut());
+    catalog.expect("the catalog opens").series = "IPE".into();
+    harness.run();
+    harness.get_by_role_and_label(Role::CheckBox, "200").click();
+    harness.get_by_role_and_label(Role::CheckBox, "220").click();
+    harness.run();
+    harness.get_by_label(&t!("profiles-catalog-add")).click();
+    harness.run();
+    assert!(harness.state().project().profile_named("IPE 200").is_some());
+    assert!(harness.state().project().profile_named("IPE 220").is_some());
+    assert!(harness.state().dialogs.profiles.as_ref().is_some_and(|d| d.catalog.is_none()), "Add closes the catalog");
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none());
+    let ipe = harness.state().project().profile_named("IPE 200").map(|p| p.id).expect("OK keeps the import");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+
+    // A beam type of IPE 200; deleting the profile moves it to another one.
+    let command =
+        ProfileTypeCreate { profile: Ref::Name("IPE 200".into()), category: "beam".into(), ..Default::default() };
+    let beam = crate::actions::run_command(harness.state_mut(), command).and_then(|o| o["id"].as_u64());
+    let beam = cc_core::ElementTypeId(beam.expect("a beam type of IPE 200"));
+    let users = |h: &Harness<'static, AppState>| h.state().project().profile_users(ipe);
+    assert_eq!(users(&harness), vec![beam]);
+    harness.get_by_role_and_label(Role::Button, &t!("cmd-profiles")).click();
+    harness.run();
+    harness.get_by_label("IPE 200").click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected), Some(ipe));
+    harness.get_by_role_and_label(Role::Button, &t!("profiles-delete")).click();
+    harness.run();
+    assert!(harness.state().project().profile(ipe).is_none(), "{}", harness.state().message);
+    assert!(harness.state().project().profile_users(ipe).is_empty());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none());
+    assert!(harness.state().project().profile(ipe).is_some(), "Cancel undoes the deletion");
+    assert_eq!(users(&harness), vec![beam]);
+}
