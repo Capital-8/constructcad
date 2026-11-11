@@ -73,8 +73,9 @@ pub struct Dialogs {
     pub lps_check: bool,
     pub lps_class: cc_core::LpsClass,
     pub lps_result: Option<(cc_core::LpsClass, u64, serde_json::Value)>,
-    /// The structured cabling per rack.
+    /// The structured cabling per rack, with its last result (document revision, `cabling_list` output).
     pub cabling: bool,
+    pub cabling_result: Option<(u64, serde_json::Value)>,
     /// Visibility/Graphics of a view or view template.
     pub graphics: Option<crate::graphics_dialog::GraphicsDialog>,
     /// Graphic overrides of the selected elements in a view.
