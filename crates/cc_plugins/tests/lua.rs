@@ -288,8 +288,8 @@ fn plugins_without_files_cannot_import_by_path() {
     let dir = room_tools("imports");
     let mut s = session_with(&dir, Permissions::NONE);
     let by_path = [
-        ("cad_import", json!({"path": "nothing.dxf"})),
-        ("image_import", json!({"path": "nothing.png"})),
+        ("cad_import", json!({"path": "nothing.dxf", "view": "Plan"})),
+        ("image_import", json!({"path": "nothing.png", "view": "Plan"})),
         ("fill_pattern_import", json!({"path": "nothing.pat"})),
         ("graph_check", json!({"path": "nothing.ccgraph"})),
     ];

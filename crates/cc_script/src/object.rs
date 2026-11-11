@@ -895,7 +895,7 @@ end
             err("function geometry() while true do pcall(function() while true do end end) end end"),
             BUDGET_SPENT
         );
-        assert_eq!(err("local s = ('x'):rep(100 * 1024 * 1024)"), "the script used too much memory");
+        assert_eq!(err("local s = ('x'):rep(100 * 1024 * 1024)"), "string.rep: the result would be larger than 16 MB");
         for name in ["io", "os", "require", "load", "dofile", "debug", "package", "ccad"] {
             let src = format!("assert({name} == nil, '{name}') function geometry() return {{}} end");
             assert!(evaluate(&src, &ScriptInput::default()).is_ok(), "{name} is reachable");

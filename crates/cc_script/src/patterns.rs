@@ -653,8 +653,8 @@ fn gsub(lua: &Lua, meter: &Meter, args: &MultiValue) -> R<MultiValue> {
         meter.charge(out.len() as u64 / 16)?;
         LuaValue::String(lua.create_string(&out)?)
     } else {
-        // Unchanged: the first argument itself (a number stays a number).
-        arg(args, 0)
+        // Unchanged: the subject as a string (Lua converts a number argument in place).
+        LuaValue::String(lua.create_string(src)?)
     };
     Ok(MultiValue::from_iter([result, LuaValue::Integer(n)]))
 }
@@ -732,8 +732,8 @@ mod tests {
             r#"return ("^x"):match("[x^]+")"#,
             r#"return ("A1b2"):gsub("[^%d]", "")"#,
             r#"return ("A1 b2\t"):gsub("[%u%s]", "_")"#,
-            r#"return (12345):gsub("3", "x")"#,
-            r#"return (12345):gsub("9", "x")"#,
+            r#"return string.gsub(12345, "3", "x")"#,
+            r#"return string.gsub(12345, "9", "x")"#,
             r#"return ("a,b,,c"):gsub(",", ";", 2)"#,
             r#"return string.find("abc", "b", 1.0)"#,
             r#"return string.match("abc", "^b")"#,
@@ -747,7 +747,7 @@ mod tests {
             r#"return ("a"):find("%")"#,
             r#"return ("a"):find("[a")"#,
             r#"return ("a"):find("(a")"#,
-            r#"return ("a"):find("a)")"#,
+            r#"return ("a"):match("a)")"#,
             r#"return ("a"):gsub("a", "%2")"#,
             r#"return ("a"):gsub("a", "%x")"#,
             r#"return ("a"):find("%1")"#,

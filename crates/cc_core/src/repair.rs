@@ -880,7 +880,7 @@ fn type_for_repair(ty: &crate::ElementType) -> crate::ElementType {
         params: params.clone(),
         items,
         ifc: ifc.clone(),
-        mep: mep.clone(),
+        mep: *mep,
         opening: opening.clone(),
         connectors: connectors.clone(),
         ref_planes: ref_planes.clone(),

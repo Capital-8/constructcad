@@ -236,7 +236,7 @@ fn imports_by_path_need_the_runs_file_access() {
     let pat = "*Diag, diagonal\n45, 0,0, 0,3\n";
     let g = json!({
         "nodes": [
-            {"id": 1, "kind": {"command": "cad_import"}, "values": {"path": "no/such/drawing.dxf"}},
+            {"id": 1, "kind": {"command": "cad_import"}, "values": {"path": "no/such/drawing.dxf", "view": "Plan"}},
             {"id": 2, "kind": {"command": "fill_pattern_import"}, "values": {"path": "no/such/file.pat"}},
             {"id": 3, "kind": {"command": "fill_pattern_import"}, "values": {"text": pat}}
         ]

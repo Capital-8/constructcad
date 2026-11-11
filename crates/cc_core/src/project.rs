@@ -994,7 +994,7 @@ impl Project {
             templates: templates.clone(),
             phases: phases.clone(),
             phase_filters: phase_filters.clone(),
-            phase_graphics: phase_graphics.clone(),
+            phase_graphics: *phase_graphics,
             graph_bindings: graph_bindings.clone(),
             line_styles: line_styles.clone(),
             fill_patterns: fill_patterns.clone(),
