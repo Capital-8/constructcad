@@ -30,6 +30,11 @@ use std::collections::{BTreeMap, HashMap};
 
 /// Deepest nesting of complex properties.
 const MAX_PROPERTY_DEPTH: usize = 8;
+/// Largest IFC file imported, bytes: the parsed instances take many times
+/// the file's size in memory.
+pub const MAX_IFC_BYTES: u64 = 512 << 20;
+/// Most properties (nested ones included) read from one property set.
+const MAX_SET_PROPERTIES: usize = 10_000;
 /// Most openings cut from one product.
 const MAX_OPENINGS: usize = 1000;
 /// Window panels read from one type.
@@ -87,7 +92,16 @@ impl std::fmt::Display for ImportError {
 impl std::error::Error for ImportError {}
 
 /// Import the IFC file at `path` into `base` (see [`import`]).
+/// Files larger than [`MAX_IFC_BYTES`] are refused before they are read
+/// (an [`ImportError::Io`] of kind `FileTooLarge`).
 pub fn import_file(path: &std::path::Path, base: Project) -> Result<(Project, ImportReport), ImportError> {
+    let len = std::fs::metadata(path).map_err(ImportError::Io)?.len();
+    if len > MAX_IFC_BYTES {
+        return Err(ImportError::Io(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            format!("the IFC file is larger than {} MB", MAX_IFC_BYTES >> 20),
+        )));
+    }
     let bytes = std::fs::read(path).map_err(ImportError::Io)?;
     import(&String::from_utf8_lossy(&bytes), base)
 }
@@ -2502,7 +2516,10 @@ impl<'a> Importer<'a> {
             }
             let (quantities, properties) = match set.name.as_str() {
                 "IFCPROPERTYSET" => {
-                    (false, set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, 0)).collect::<Vec<_>>())
+                    let (mut path, mut left) = (Vec::new(), MAX_SET_PROPERTIES);
+                    let properties =
+                        set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, &mut path, &mut left));
+                    (false, properties.collect::<Vec<_>>())
                 }
                 "IFCELEMENTQUANTITY" => (true, set.arg(5).as_list().iter().filter_map(|q| self.quantity(q)).collect()),
                 // Predefined property sets (door linings…) and others.
@@ -2520,8 +2537,14 @@ impl<'a> Importer<'a> {
         out
     }
 
-    fn read_property(&self, param: &Param, depth: usize) -> Option<Property> {
-        let p = self.f.deref(param)?;
+    /// A property of a set. Complex properties nest at most
+    /// [`MAX_PROPERTY_DEPTH`] deep (`path` holds those being read, and one
+    /// already on it is refused) and a set reads at most `left` properties
+    /// in all, so shared nested properties cannot multiply.
+    fn read_property(&self, param: &Param, path: &mut Vec<u32>, left: &mut usize) -> Option<Property> {
+        let id = param.as_ref()?;
+        *left = left.checked_sub(1)?;
+        let p = self.f.get(id)?;
         let name = p.arg(0).as_str()?.to_string();
         let values = |i: usize, unit: &Param| -> Vec<IfcValue> {
             p.arg(i).as_list().iter().filter_map(|v| self.ifc_value(v, unit)).collect()
@@ -2538,10 +2561,12 @@ impl<'a> Importer<'a> {
             "IFCPROPERTYTABLEVALUE" => {
                 PropertyValue::Table { defining: values(2, p.arg(5)), defined: values(3, p.arg(6)) }
             }
-            "IFCCOMPLEXPROPERTY" if depth < MAX_PROPERTY_DEPTH => PropertyValue::Complex {
-                usage: p.arg(2).as_str().unwrap_or_default().to_string(),
-                properties: p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, depth + 1)).collect(),
-            },
+            "IFCCOMPLEXPROPERTY" if path.len() < MAX_PROPERTY_DEPTH && !path.contains(&id) => {
+                path.push(id);
+                let properties = p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, path, left)).collect();
+                path.pop();
+                PropertyValue::Complex { usage: p.arg(2).as_str().unwrap_or_default().to_string(), properties }
+            }
             _ => return None,
         };
         Some(Property { name, value })
@@ -3336,6 +3361,83 @@ END-ISO-10303-21;
     /// Geometry a hostile file can throw at the importer: cyclic booleans and
     /// mapped items, out-of-range and negative indices, absurd knot
     /// multiplicities and angles, empty paths. Nothing may panic or hang.
+    #[test]
+    fn files_past_the_size_limit_are_refused_unread() {
+        let dir = std::env::temp_dir().join(format!("ccad-ifc-size-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("huge.ifc");
+        std::fs::File::create(&path).unwrap().set_len(MAX_IFC_BYTES + 1).unwrap();
+        let err = import_file(&path, Project::empty()).unwrap_err();
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(matches!(&err, ImportError::Io(e) if e.kind() == std::io::ErrorKind::FileTooLarge), "{err}");
+    }
+
+    /// Complex properties that contain themselves, or that fan out through
+    /// distinct ones, are read once and within a budget, not 10^8 times.
+    #[test]
+    fn complex_properties_that_cycle_or_fan_out_are_bounded() {
+        // #100 holds itself ten times; #101..#108 each hold the next ten times.
+        let mut props = format!("#100=IFCCOMPLEXPROPERTY('Self',$,'u',({}));", ["#100"; 10].join(","));
+        for k in 101..=108 {
+            let inner = if k == 108 { "#109".to_string() } else { vec![format!("#{}", k + 1); 10].join(",") };
+            props += &format!("#{k}=IFCCOMPLEXPROPERTY('Fan',$,'u',({inner}));");
+        }
+        props += "#109=IFCPROPERTYSINGLEVALUE('Leaf',$,IFCLABEL('x'),$);";
+        let text = format!(
+            "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'P',$,$,$,$,$,#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#20=IFCFURNISHINGELEMENT('5XvctVUKr0kugbFTf53O9L',$,'Chair',$,$,#11,#30,$);
+#30=IFCPRODUCTDEFINITIONSHAPE($,$,(#31));
+#31=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#32));
+#32=IFCBLOCK(#12,1.,1.,1.);
+#40=IFCRELCONTAINEDINSPATIALSTRUCTURE('3XvctVUKr0kugbFTf53O9L',$,$,$,(#20),#10);
+#50=IFCPROPERTYSET('6XvctVUKr0kugbFTf53O9L',$,'Pset_Bomb',$,(#100,#101));
+#51=IFCRELDEFINESBYPROPERTIES('7XvctVUKr0kugbFTf53O9L',$,$,$,(#20),#50);
+{props}
+ENDSEC;
+END-ISO-10303-21;
+"
+        );
+        let (p, _) = import(&text, Project::from_template()).unwrap();
+        fn count(props: &[cc_core::properties::Property]) -> usize {
+            props
+                .iter()
+                .map(|p| match &p.value {
+                    cc_core::properties::PropertyValue::Complex { properties, .. } => 1 + count(properties),
+                    _ => 1,
+                })
+                .sum()
+        }
+        let sets: Vec<_> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Component(c) => Some(&c.properties),
+                _ => None,
+            })
+            .flatten()
+            .filter(|s| s.name == "Pset_Bomb")
+            .collect();
+        let [set] = sets.as_slice() else { panic!("{sets:?}") };
+        let total = count(&set.properties);
+        assert!(total <= MAX_SET_PROPERTIES, "{total}");
+        // The self-holding property is read once, with nothing inside.
+        let first = set.properties.first().unwrap();
+        assert!(
+            matches!(&first.value, cc_core::properties::PropertyValue::Complex { properties, .. } if properties.is_empty())
+        );
+    }
+
     #[test]
     fn hostile_geometry_is_survived() {
         let text = "ISO-10303-21;

@@ -66,3 +66,16 @@ fn allows_a_tiny_entry_regardless_of_ratio() {
     let skp = skp_with_model(&zeros, 10);
     full_parse(&skp, &ParseOptions::default()).expect("tiny entry must parse");
 }
+
+#[test]
+fn rejects_a_model_past_its_own_ceiling() {
+    // 2 MB of stored data that the central directory says inflates to
+    // 1.5 GiB: a plausible ratio (750x), but more than any model needs.
+    let content = vec![7u8; 2 * 1024 * 1024];
+    let mut zip = build_zip(&[ZipEntry { name: "model.dat", data: &content, level: 0 }]);
+    let cdh = zip.windows(4).position(|w| w == [0x50, 0x4b, 0x01, 0x02]).unwrap();
+    zip[cdh + 24..cdh + 28].copy_from_slice(&(1536u32 * 1024 * 1024).to_le_bytes());
+    zip[cdh + 10..cdh + 12].copy_from_slice(&8u16.to_le_bytes());
+    let err = full_parse(&wrap_vff(&zip, 16), &ParseOptions::default()).expect_err("expected a rejection");
+    assert!(err.to_string().contains("safety ceiling"), "{err}");
+}
