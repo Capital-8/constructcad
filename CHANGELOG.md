@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-11
+
 ### Added
 
 - Project browser organization (#278). *View → Browser Organization* (also in the menu of a group in the project browser) keeps named schemes that group the browser's views by view type, level, discipline or phase, nested in the order chosen: a scheme by view type and level puts each level's plans in a group under *Floor Plans* and *Ceiling Plans*, so the plans of a level stay together whatever their names. Views without a value for a criterion (a section has no level) stay beside its groups, groups fold and show how many views they hold, and the list by view type alone stays the default. The schemes are saved with the project; `browser_scheme_create`, `browser_scheme_set`, `browser_scheme_delete`, `browser_scheme_use`, `browser_schemes_list` and `browser_tree` do the same from the command line and MCP.
@@ -482,7 +484,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcraft/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcraft/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/francisreboucas/constructcraft/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/francisreboucas/constructcraft/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/francisreboucas/constructcraft/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/francisreboucas/constructcad/compare/v0.9.0...v0.9.1
