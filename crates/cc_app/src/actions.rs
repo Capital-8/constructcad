@@ -142,9 +142,12 @@ pub fn remove_viewport(state: &mut AppState, sheet: ViewId, index: usize) {
     state.sheet_selection = None;
 }
 
-/// Add a level above the highest one, with its floor and ceiling plans.
-pub fn add_level(state: &mut AppState) {
-    run(state, levels::LevelCreate { name: None, elevation: None, plans: None });
+/// Add a level as a new storey above (or below) `level`, with its plans; the
+/// levels beyond it move away, so the order of the levels stays.
+pub fn add_level_beside(state: &mut AppState, level: LevelId, above: bool) -> Option<LevelId> {
+    let beside = Some(Ref::Id(level.0));
+    let (above, below) = if above { (beside, None) } else { (None, beside) };
+    run(state, levels::LevelCreate { above, below, ..Default::default() })?["id"].as_u64().map(LevelId)
 }
 
 /// Delete a level and its plan views; refused while elements use it.
@@ -1135,7 +1138,7 @@ mod tests {
         let mut state = AppState::new(Document::new(new_project()));
         let levels = state.project().levels.len();
         state.session.start_recording();
-        add_level(&mut state);
+        run_command(&mut state, levels::LevelCreate::default());
         let wall = run_command(
             &mut state,
             cc_engine::commands::create::WallCreate { start: [0.0, 0.0], end: [5.0, 0.0], ..Default::default() },

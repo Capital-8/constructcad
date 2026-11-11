@@ -57,6 +57,8 @@ pub struct Dialogs {
     pub type_layers_open: bool,
     /// Undo depth when the open data dialog started editing (see `dialog::session`).
     pub edit_start: Option<usize>,
+    /// Level picked in the levels dialog: the one a level is added above or below.
+    pub level_selected: Option<LevelId>,
     /// Level waiting for delete confirmation.
     pub delete_level: Option<LevelId>,
     /// Schedule whose definition dialog is open.

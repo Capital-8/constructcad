@@ -27,6 +27,7 @@ mod gltf;
 mod graph;
 mod graphics;
 mod image;
+mod level_heights;
 mod level_rename;
 mod lightning_cabling;
 mod macros;

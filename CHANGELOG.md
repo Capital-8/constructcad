@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- *Manage → Levels* edits levels by storey height and adds levels next to one (#297). Each level shows the *Height to Next Level*: a new height moves every level above by the difference, so the other storeys keep theirs. An elevation moves its level alone and stays between the level below and the level above, and both values are taken when the field is left, so a number being typed no longer reorders the list under the cursor. *Add Above* and *Add Below* add a storey beside the picked level, of the height of the storey next to it, with its plans, pushing the levels beyond it away. `level_set` takes `height`, and `level_create` takes `above` or `below` with `height`.
+- A level and its views are named apart (#278). Renaming a level no longer renames the plans that had its name, and renaming a plan no longer renames its level: a level may have many views, and the plans made with it only start with its name. `view_set` no longer takes `rename_level`.
 - The ribbon's large buttons keep a least width and the same room at each side of their labels, so the icons of a group stand evenly apart, and labels also wrap after a slash or a hyphen. *Blocks as components* leaves the *Insert* tab for *Preferences → General → Import*, and is now kept between sessions.
 
 ## [0.11.0] - 2026-11-11

@@ -3038,3 +3038,39 @@ fn the_browser_groups_views_by_the_scheme_in_use() {
     harness.run();
     assert!(harness.query_all_by_label(&level).count() < flat);
 }
+
+/// The levels dialog adds a level above or below the picked one, pushing
+/// the levels beyond it away, so the others keep their order (issue #297).
+#[test]
+fn the_levels_dialog_adds_a_level_above_or_below_the_picked_one() {
+    let mut state = sample_state();
+    state.dialogs.levels = true;
+    let before: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.elevation)).collect();
+    let (lowest, base) = before[0];
+    state.dialogs.level_selected = Some(lowest);
+    let mut harness = app_harness(state);
+    harness.run();
+    harness.get_by_label(&t!("level-add-above")).click();
+    harness.run();
+    let levels = harness.state().project().levels.clone();
+    assert_eq!(levels.len(), before.len() + 1);
+    let added = levels[1].id;
+    assert!(before.iter().all(|(id, _)| *id != added), "the new level stands right above the picked one");
+    assert_eq!(harness.state().dialogs.level_selected, Some(added), "and is picked");
+    let storey = levels[1].elevation - base;
+    assert!(storey > 0.0);
+    // The levels that were above moved up by the new storey, in their order.
+    let after: Vec<_> = levels.iter().filter(|l| l.id != added).map(|l| (l.id, l.elevation)).collect();
+    for ((id, old), (new_id, new)) in before.iter().zip(&after) {
+        assert_eq!(id, new_id);
+        let moved = if *id == lowest { 0.0 } else { storey };
+        assert!((new - old - moved).abs() < 1e-9);
+    }
+    harness.get_by_label(&t!("level-add-below")).click();
+    harness.run();
+    let levels = harness.state().project().levels.clone();
+    assert_eq!(levels.len(), before.len() + 2);
+    assert_eq!(levels[2].id, added, "the level under it went in between");
+    assert_eq!(levels[0].id, lowest);
+    assert!(levels[0].elevation < base, "and pushed the lowest level down");
+}
