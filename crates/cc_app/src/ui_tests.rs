@@ -2995,3 +2995,32 @@ fn zooming_the_graph_keeps_its_panel_size() {
     let empty = toolbar_top(None);
     assert!((zoomed - empty).abs() < 0.5, "the toolbar moved from {empty} to {zoomed}");
 }
+
+/// A schedule lays out only the rows in sight, under its header, and a click on a row selects its element.
+#[test]
+fn schedule_shows_visible_rows_and_selects() {
+    fn first_schedule(state: &AppState) -> Option<cc_core::ViewId> {
+        let project = state.project();
+        project.views.values().find(|v| matches!(v.kind, cc_core::ViewKind::Schedule { .. })).map(|v| v.id)
+    }
+    let mut state = sample_state();
+    let view = first_schedule(&state).unwrap();
+    let table = state.session.schedule(view).unwrap();
+    assert!(table.rows.len() > 1, "the sample's first schedule has rows");
+    let mut harness = themed_harness(state, egui::vec2(900.0, 400.0), egui::Theme::Light, |ui, state| {
+        if let Some(view) = first_schedule(state) {
+            crate::schedule_ui::show(ui, state, view);
+        }
+    });
+    harness.run();
+    let header = crate::i18n::tr(table.headers[0]);
+    assert!(harness.query_by_label(&header).is_some(), "header {header}");
+    let row = &table.rows[0];
+    let first = match &row.cells[0] {
+        cc_views::Cell::Text(s) => s.clone(),
+        cc_views::Cell::Key(k) => crate::i18n::tr(k),
+    };
+    harness.query_all_by_label(&first).next().unwrap().click();
+    harness.run();
+    assert!(harness.state().selection.contains(&row.element));
+}
