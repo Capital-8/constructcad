@@ -395,7 +395,7 @@ ccad --plugins examples/plugins run quick_rooms__rectangle_room width=4 depth=3 
 claude mcp add constructcad -- ccad mcp --plugins /path/to/plugins
 ```
 
-`--plugins` takes a plugin's folder or a folder of plugin folders, and can be repeated. A plugin that fails to load is reported on standard error and left out; what plugins print also goes to standard error.
+`--plugins` takes a plugin's folder or a folder of plugin folders, and can be repeated. In a folder of plugins, each plugin's folder is named after its id (as installs name them); hidden folders (starting with `.`) are skipped. A plugin that fails to load is reported on standard error and left out; what plugins print also goes to standard error.
 
 ### Writing a plugin
 

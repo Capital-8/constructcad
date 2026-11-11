@@ -396,7 +396,7 @@ ccad --plugins examples/plugins run quick_rooms__rectangle_room width=4 depth=3 
 claude mcp add constructcad -- ccad mcp --plugins /caminho/para/plugins
 ```
 
-`--plugins` recebe a pasta de um plugin ou uma pasta de pastas de plugins, e pode ser repetido. Um plugin que não carrega é informado na saída de erro e fica de fora; o que os plugins imprimem também vai para a saída de erro.
+`--plugins` recebe a pasta de um plugin ou uma pasta de pastas de plugins, e pode ser repetido. Numa pasta de plugins, a pasta de cada plugin tem o nome do id dele (como as instalações a nomeiam); pastas ocultas (começando com `.`) são ignoradas. Um plugin que não carrega é informado na saída de erro e fica de fora; o que os plugins imprimem também vai para a saída de erro.
 
 ### Escrevendo um plugin
 
