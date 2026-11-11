@@ -17,8 +17,8 @@ const FORMAT: u32 = 2;
 /// The analytical model as JSON: nodes (`id`, `x`, `y`, `z` in meters,
 /// `support` at column bases) and members (`element`, `kind`, `start` and
 /// `end` nodes, `length`, `type`, `section` and `material`). A section is
-/// the `profile`'s name (null for a type drawn from its own section), its
-/// `area` (m²), second moments `ix`, `iy` and torsion constant `j` (m⁴), and
+/// the `profile`'s name (null for a type drawn from its own section), the
+/// type's `width` and `height` (m, the profile's box), its `area` (m²), second moments `ix`, `iy` and torsion constant `j` (m⁴), and
 /// a column's `rotation` (degrees).
 fn model_json(s: &mut Session) -> Value {
     let geom = s.geometry().clone();
@@ -39,8 +39,15 @@ fn model_json(s: &mut Session) -> Value {
             let section = match super::profiles::section(p, &ty.data) {
                 Some(sec) => {
                     let props = &sec.properties;
+                    let (width, height) = match &ty.data {
+                        TypeData::Column { section, .. } => section.size(),
+                        TypeData::Beam { width, height, .. } => (*width, *height),
+                        _ => (0.0, 0.0),
+                    };
                     let mut out = json!({
                         "profile": sec.profile,
+                        "width": width,
+                        "height": height,
                         "area": props.area,
                         "ix": props.ix,
                         "iy": props.iy,
@@ -87,7 +94,7 @@ fn model_json(s: &mut Session) -> Value {
 /// members along their center lines between shared nodes. Beams framed into
 /// columns end on the column axis, beams ending on beams end on their line,
 /// and members are split where others connect. Each member carries its
-/// `section`: the profile's name, `area` (m²), `ix`, `iy` and `j` (m⁴).
+/// `section`: the profile's name, `width` and `height` (m), `area` (m²), `ix`, `iy` and `j` (m⁴).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct AnalyticalModelGet {}

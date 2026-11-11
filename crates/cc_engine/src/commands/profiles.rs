@@ -556,6 +556,9 @@ impl Command for ProfileCatalog {
             return Ok(Value::Array(rows));
         };
         let series = series_arg(code)?;
+        if self.search.as_deref().is_some_and(|t| t.chars().count() > MAX_NAME) {
+            return Err(EngineError::invalid(format!("a search has at most {MAX_NAME} characters")));
+        }
         let search = self.search.as_deref().map(|t| t.trim().to_lowercase()).unwrap_or_default();
         let rows: Vec<Value> = series
             .rows
@@ -600,6 +603,9 @@ impl Command for ProfileImport {
         };
         if self.designations.len() > MAX_PROFILES {
             return Err(EngineError::invalid(format!("import at most {MAX_PROFILES} profiles at a time")));
+        }
+        if self.designations.iter().any(|d| d.chars().count() > MAX_NAME) {
+            return Err(EngineError::invalid(format!("a designation has at most {MAX_NAME} characters")));
         }
         let p = s.project();
         let (mut new, mut kept, mut unknown): (Vec<ProfileDef>, Vec<String>, Vec<String>) = Default::default();
@@ -705,6 +711,9 @@ impl Command for ProfileTypeCreate {
         })?;
         let taken = |n: &str| p.types_of(category).any(|t| t.name.trim().eq_ignore_ascii_case(n.trim()));
         let name = match &self.name {
+            Some(n) if n.trim().chars().count() > MAX_NAME => {
+                return Err(EngineError::invalid(format!("a type name has at most {MAX_NAME} characters")));
+            }
             Some(n) if n.trim().is_empty() || taken(n) => {
                 return Err(EngineError::invalid(format!("the name '{n}' is empty or already used")));
             }

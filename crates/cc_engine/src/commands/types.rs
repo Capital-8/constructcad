@@ -90,7 +90,8 @@ pub(crate) fn type_out(s: &Session, id: ElementTypeId) -> Value {
 /// identity data (`info`: type mark, description, manufacturer, cost…).
 /// A column or beam type takes `profile` (a structural profile's name or
 /// id, or null to keep only its own section), `profile_rotation_deg` and
-/// `profile_mirror`; its width and height follow the profile.
+/// `profile_mirror`. With a profile, `width`/`height` are its box; changing
+/// them alone re-points the type to a profile of that section.
 /// Changing a component's definition updates every type of that component,
 /// each keeping its own parameter values.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]

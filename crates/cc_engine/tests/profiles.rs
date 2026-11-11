@@ -682,3 +682,30 @@ fn truss_posts_prefer_a_steel_profile_column_type() {
         assert_eq!(s.project().element(ElementId(post)).unwrap().type_id.0, t);
     }
 }
+
+#[test]
+fn analytical_members_carry_the_type_box() {
+    let mut s = Session::default();
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}));
+    let beam =
+        run(&mut s, "beam_create", json!({"type": t["id"], "start": [0.0, 0.0], "end": [6.0, 0.0]}))["id"].clone();
+    let a = run(&mut s, "analytical_model", json!({}));
+    let member = a["members"].as_array().unwrap().iter().find(|m| m["element"] == beam).unwrap();
+    let sec = &member["section"];
+    assert!((sec["width"].as_f64().unwrap() - 0.1).abs() < 1e-9, "{sec}");
+    assert!((sec["height"].as_f64().unwrap() - 0.2).abs() < 1e-9, "{sec}");
+}
+
+#[test]
+fn profile_command_inputs_are_bounded() {
+    let mut s = Session::default();
+    let long = "x".repeat(cc_core::structural_profile::MAX_NAME + 1);
+    let err = run_err(&mut s, "profile_catalog", json!({"series": "IPE", "search": long}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    let err = run_err(&mut s, "profile_import", json!({"series": "IPE", "designations": [long]}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let err = run_err(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam", "name": long}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+}

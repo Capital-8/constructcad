@@ -742,7 +742,7 @@ No parameters.
 
 ### `analytical_model`
 
-*query* — The analytical model of the structure: structural columns and beams as members along their center lines between shared nodes. Beams framed into columns end on the column axis, beams ending on beams end on their line, and members are split where others connect. Each member carries its `section`: the profile's name, `area` (m²), `ix`, `iy` and `j` (m⁴).
+*query* — The analytical model of the structure: structural columns and beams as members along their center lines between shared nodes. Beams framed into columns end on the column axis, beams ending on beams end on their line, and members are split where others connect. Each member carries its `section`: the profile's name, `width` and `height` (m), `area` (m²), `ix`, `iy` and `j` (m⁴).
 
 No parameters.
 
@@ -1939,7 +1939,7 @@ No parameters.
 
 ### `type_set`
 
-*edit* — Change a type: its name, its parameters (`params`, merged into what `type_get` shows: layers, sizes, materials, a component's `def`…) and its identity data (`info`: type mark, description, manufacturer, cost…). A column or beam type takes `profile` (a structural profile's name or id, or null to keep only its own section), `profile_rotation_deg` and `profile_mirror`; its width and height follow the profile. Changing a component's definition updates every type of that component, each keeping its own parameter values.
+*edit* — Change a type: its name, its parameters (`params`, merged into what `type_get` shows: layers, sizes, materials, a component's `def`…) and its identity data (`info`: type mark, description, manufacturer, cost…). A column or beam type takes `profile` (a structural profile's name or id, or null to keep only its own section), `profile_rotation_deg` and `profile_mirror`. With a profile, `width`/`height` are its box; changing them alone re-points the type to a profile of that section. Changing a component's definition updates every type of that component, each keeping its own parameter values.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
