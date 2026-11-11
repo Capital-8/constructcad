@@ -456,11 +456,69 @@ pub struct Geometry<'a> {
     /// Chords of a full circle while curves are sampled (finer for measured
     /// center lines, see [`Geometry::measured_curve`]).
     circle_segments: std::cell::Cell<usize>,
+    /// The instances being read, outermost first ([`Geometry::enter`]).
+    path: std::cell::Cell<Vec<u32>>,
+    /// Instances the current walk (from an empty path) may still read.
+    walk_left: std::cell::Cell<usize>,
+    /// What `walk_left` starts at ([`MAX_WALK_VISITS`]; smaller in tests).
+    max_walk_visits: usize,
+    /// Instances the whole file may still read.
+    file_left: std::cell::Cell<usize>,
+}
+
+/// Most instances one walk over items, curves and profiles reads: their
+/// references may fan out (twenty mapped items of one representation,
+/// each mapping it again) faster than the depth bound helps.
+const MAX_WALK_VISITS: usize = 1_000_000;
+/// Most instances the walks of one file read in all.
+const MAX_FILE_VISITS: usize = 50_000_000;
+
+/// An instance on the current path, taken off when dropped.
+struct Visit<'g, 'a> {
+    g: &'g Geometry<'a>,
+}
+
+impl Drop for Visit<'_, '_> {
+    fn drop(&mut self) {
+        let mut path = self.g.path.take();
+        path.pop();
+        self.g.path.set(path);
+    }
 }
 
 impl<'a> Geometry<'a> {
     pub fn new(f: &'a StepFile, scale: f64, angle: f64) -> Self {
-        Self { f, scale, angle, circle_segments: std::cell::Cell::new(CIRCLE_SEGMENTS) }
+        Self {
+            f,
+            scale,
+            angle,
+            circle_segments: std::cell::Cell::new(CIRCLE_SEGMENTS),
+            path: std::cell::Cell::new(Vec::new()),
+            walk_left: std::cell::Cell::new(MAX_WALK_VISITS),
+            max_walk_visits: MAX_WALK_VISITS,
+            file_left: std::cell::Cell::new(MAX_FILE_VISITS),
+        }
+    }
+
+    /// Start reading instance `param` within a walk: `None` when it is
+    /// being read already (a cycle) or the walk or the file has read too
+    /// many instances; else a guard that keeps it on the path.
+    fn enter(&self, param: &Param) -> Option<Visit<'_, 'a>> {
+        let id = param.as_ref()?;
+        let mut path = self.path.take();
+        if path.is_empty() {
+            self.walk_left.set(self.max_walk_visits);
+        }
+        let (walk, file) = (self.walk_left.get(), self.file_left.get());
+        if walk == 0 || file == 0 || path.contains(&id) {
+            self.path.set(path);
+            return None;
+        }
+        self.walk_left.set(walk - 1);
+        self.file_left.set(file - 1);
+        path.push(id);
+        self.path.set(path);
+        Some(Visit { g: self })
     }
 
     /// Chords for an arc of `angle` radians at the current sampling.
@@ -615,6 +673,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH {
             return Vec::new();
         }
+        let Some(_visit) = self.enter(param) else { return Vec::new() };
         let mut pts = match e.name.as_str() {
             "IFCPOLYLINE" => e.arg(0).as_list().iter().filter_map(|p| self.point(p)).collect(),
             "IFCINDEXEDPOLYCURVE" => self.indexed_curve(e),
@@ -691,6 +750,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH {
             return None;
         }
+        let _visit = self.enter(param)?;
         let lines = |pts: &[DVec3]| -> Vec<SketchCurve> {
             pts.windows(2)
                 .filter(|w| w[0].truncate().distance(w[1].truncate()) > cc_core::sketch::JOIN_TOL)
@@ -931,6 +991,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH {
             return Vec::new();
         }
+        let Some(_visit) = self.enter(param) else { return Vec::new() };
         match e.name.as_str() {
             "IFCCOMPOSITEPROFILEDEF" => e.arg(2).as_list().iter().flat_map(|p| self.profiles(p, depth + 1)).collect(),
             "IFCDERIVEDPROFILEDEF" => {
@@ -1180,6 +1241,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH || out.len() > MAX_SOLIDS {
             return;
         }
+        let Some(_visit) = self.enter(param) else { return };
         let world = |mesh: Vec<Polygon>| -> Vec<Polygon> {
             let flip = xf.matrix3.determinant() < 0.0;
             mesh.into_iter()
@@ -1921,6 +1983,65 @@ mod tests {
         let v = volume(&mesh);
         // Facets of 24 segments: within 2 % of the exact volume.
         assert!((v - exact).abs() / exact < 0.02, "{v} vs {exact}");
+    }
+
+    /// `levels` representations of `fan` mapped items each, every item of
+    /// one mapping the next representation; the last holds `last` (STEP).
+    fn mapped_fan(levels: u32, fan: usize, last: &str) -> String {
+        let mut s = String::from("#1=IFCCARTESIANPOINT((0.,0.,0.));#2=IFCAXIS2PLACEMENT3D(#1,$,$);");
+        s += "#3=IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,#1,$,$);";
+        // Level k: representation #(10k), map #(10k+1), mapped item #(10k+2) mapping it.
+        for k in 1..=levels {
+            let items =
+                if k == levels { last.to_string() } else { vec![format!("#{}", 10 * (k + 1) + 2); fan].join(",") };
+            s += &format!("#{}=IFCSHAPEREPRESENTATION($,'Body','MappedRepresentation',({items}));", 10 * k);
+            s += &format!("#{}=IFCREPRESENTATIONMAP(#2,#{});", 10 * k + 1, 10 * k);
+            s += &format!("#{}=IFCMAPPEDITEM(#{},#3);", 10 * k + 2, 10 * k + 1);
+        }
+        s
+    }
+
+    #[test]
+    fn mapped_items_that_fan_out_or_cycle_are_bounded() {
+        // 20 items at each of 17 levels: 20^16 visits unbounded, none with geometry.
+        let f = step(&mapped_fan(17, 20, "#1"));
+        let mut g = Geometry::new(&f, 1.0, 1.0);
+        g.max_walk_visits = 20_000;
+        let mut out = Vec::new();
+        g.items(&Param::Ref(12), DAffine3::IDENTITY, &mut out);
+        assert!(MAX_FILE_VISITS - g.file_left.get() <= 20_000);
+        assert!(g.path.take().is_empty());
+        // A representation that maps itself twenty times is read once.
+        let items = format!("{},#5", vec!["#12"; 20].join(","));
+        let f = step(&format!("{}#5=IFCBLOCK(#2,1.,1.,1.);", mapped_fan(1, 1, &items)));
+        let g = Geometry::new(&f, 1.0, 1.0);
+        let mut out = Vec::new();
+        g.items(&Param::Ref(12), DAffine3::IDENTITY, &mut out);
+        assert_eq!(out.len(), 1);
+        assert!(MAX_FILE_VISITS - g.file_left.get() <= 25);
+    }
+
+    #[test]
+    fn composite_curves_and_profiles_that_fan_out_are_bounded() {
+        // Composite curves of 20 segments, each the next composite, 17 deep;
+        // composite profiles likewise.
+        let mut s = String::new();
+        for k in 1..=17 {
+            let next = if k == 17 { "#999".to_string() } else { format!("#{}", 10 * (k + 1)) };
+            s += &format!("#{}=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,{next});", 10 * k + 1);
+            let segments = vec![format!("#{}", 10 * k + 1); 20].join(",");
+            s += &format!("#{}=IFCCOMPOSITECURVE(({segments}),.F.);", 10 * k);
+            let profiles =
+                if k == 17 { "#999".to_string() } else { vec![format!("#{}", 10 * (k + 1) + 5); 20].join(",") };
+            s += &format!("#{}=IFCCOMPOSITEPROFILEDEF(.AREA.,$,({profiles}),$);", 10 * k + 5);
+        }
+        let f = step(&s);
+        let mut g = Geometry::new(&f, 1.0, 1.0);
+        g.max_walk_visits = 20_000;
+        assert!(g.curve(&Param::Ref(10), 0).is_empty());
+        assert!(g.plan_curves(&Param::Ref(10), 0).is_none_or(|c| c.is_empty()));
+        assert!(g.profiles(&Param::Ref(15), 0).is_empty());
+        assert!(MAX_FILE_VISITS - g.file_left.get() <= 3 * 20_000);
     }
 
     #[test]
