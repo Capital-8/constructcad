@@ -169,6 +169,9 @@ pub struct ModelGeometry {
     pub topographies: BTreeMap<ElementId, crate::topography::TopoGeom>,
     /// Building pads graded into their terrains (see [`crate::pad`]).
     pub pads: BTreeMap<ElementId, crate::pad::PadGeom>,
+    /// Exact volumes of floors sketched with arcs, circles or ellipses, whose
+    /// solids mesh the curves with chords (see [`Self::volume`]).
+    pub curved_volumes: BTreeMap<ElementId, f64>,
 }
 
 /// A foundation's body: a vertical prism.
@@ -1017,6 +1020,9 @@ impl ModelGeometry {
                     } else {
                         s.add_prism_with_holes(&polygon::ccw(&f.boundary), &holes, |_| top - thk, |_| top);
                     }
+                    if f.sketch.as_ref().is_some_and(|k| k.is_curved()) {
+                        self.curved_volumes.insert(e.id, f.area() * thk);
+                    }
                 }
                 ElementKind::Ceiling(c) => {
                     let bottom = level_z + c.height_offset;
@@ -1170,9 +1176,12 @@ impl ModelGeometry {
         if let Some(t) = self.topographies.get(&id) {
             return t.volume;
         }
-        // Exact for arc strips (their solids mesh the arcs with chords).
+        // Exact for arc strips and curved floors (their solids mesh the arcs with chords).
         if let Some(f) = self.foundations.get(&id).filter(|f| f.arc.is_some()) {
             return f.volume();
+        }
+        if let Some(v) = self.curved_volumes.get(&id) {
+            return *v;
         }
         self.body_of(id).map(Solid::volume).sum()
     }
