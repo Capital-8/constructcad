@@ -48,6 +48,8 @@ pub enum UiCommand {
     ImportSkp,
     /// Insert a Wavefront OBJ model into the open project.
     ImportObj,
+    /// Insert a glTF model (.glb, .gltf) into the open project.
+    ImportGltf,
     ExportIfc,
     ExportPdf,
     ExportSvg,
@@ -290,6 +292,7 @@ impl UiCommand {
             ImportImage,
             ImportSkp,
             ImportObj,
+            ImportGltf,
             ExportIfc,
             ExportPdf,
             ExportSvg,
@@ -452,7 +455,7 @@ impl UiCommand {
         match self {
             Home => Icon::Home,
             New => Icon::New,
-            Open | ImportIfc | ImportSkp | ImportObj => Icon::Open,
+            Open | ImportIfc | ImportSkp | ImportObj | ImportGltf => Icon::Open,
             Save => Icon::Save,
             SaveAs => Icon::SaveAs,
             CloseProject => Icon::CloseProject,
@@ -639,7 +642,9 @@ impl UiCommand {
             | PanelDiagram
             | NewTitleBlock
             | CreateDetailComponent => Some(Badge::New),
-            ImportIfc | ImportCad | ImportImage | ImportSkp | ImportObj | LoadComponent => Some(Badge::Import),
+            ImportIfc | ImportCad | ImportImage | ImportSkp | ImportObj | ImportGltf | LoadComponent => {
+                Some(Badge::Import)
+            }
             ExportPdf | ExportSvg | ExportImage | ExportDxf | AnalyticalExport => Some(Badge::Export),
             Delete | DetachTop | RemovePaint => Some(Badge::Remove),
             _ => None,
@@ -661,6 +666,7 @@ impl UiCommand {
             ImportImage => t!("action-import-image"),
             ImportSkp => t!("action-import-skp"),
             ImportObj => t!("action-import-obj"),
+            ImportGltf => t!("action-import-gltf"),
             ExportIfc => t!("action-export-ifc"),
             ExportPdf => t!("action-export-pdf"),
             ExportSvg => t!("action-export-svg"),
@@ -863,6 +869,7 @@ impl UiCommand {
             ImportImage => t!("cmd-desc-import-image"),
             ImportSkp => t!("cmd-desc-import-skp"),
             ImportObj => t!("cmd-desc-import-obj"),
+            ImportGltf => t!("cmd-desc-import-gltf"),
             ExportIfc => t!("cmd-desc-export-ifc"),
             ExportPdf => t!("cmd-desc-export-pdf"),
             ExportSvg => t!("cmd-desc-export-svg"),
@@ -1169,6 +1176,7 @@ impl UiCommand {
             ImportImage => "image_import",
             ImportSkp => "skp_import",
             ImportObj => "obj_import",
+            ImportGltf => "gltf_import",
             ExportIfc => "ifc_export",
             ExportPdf | ExportSvg => "sheet_export",
             ExportImage | ExportDxf => "view_export",
@@ -1766,6 +1774,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         ImportImage => crate::cad_ui::import_image(state),
         ImportSkp => actions::import_skp(state),
         ImportObj => crate::obj_ui::import_obj(state),
+        ImportGltf => crate::obj_ui::import_gltf(state),
         ExportIfc => actions::export_ifc(state),
         ExportPdf => actions::export_sheet(state, actions::SheetFormat::Pdf),
         ExportSvg => actions::export_sheet(state, actions::SheetFormat::Svg),

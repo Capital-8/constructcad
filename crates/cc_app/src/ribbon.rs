@@ -616,10 +616,11 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
 /// Files brought into the project or written from it, and components to load.
 fn insert_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::{
-        ComponentLibrary, ExportDxf, ExportIfc, ImportCad, ImportIfc, ImportImage, ImportObj, ImportSkp, LoadComponent,
+        ComponentLibrary, ExportDxf, ExportIfc, ImportCad, ImportGltf, ImportIfc, ImportImage, ImportObj, ImportSkp,
+        LoadComponent,
     };
     group(ui, t!("group-import"), |ui| {
-        command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportObj, ImportImage]);
+        command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportObj, ImportGltf, ImportImage]);
         ui.checkbox(&mut state.cad_blocks, t!("label-cad-blocks")).on_hover_text(t!("hint-cad-blocks"));
     });
     group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportDxf]));
