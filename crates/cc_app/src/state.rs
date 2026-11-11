@@ -216,8 +216,6 @@ pub struct AppState {
     pub detail_component: crate::detail_component_ui::PlaceOptions,
     /// Options of the Callout tool (scale, drafting view pointed to).
     pub callout: crate::callout_ui::CalloutOptions,
-    /// Import CAD brings a drawing's blocks in as detail components.
-    pub cad_blocks: bool,
     /// The visual programming editor (see [`crate::graph_ui`]).
     pub graph: crate::graph_ui::GraphEditor,
     /// Selection seen last frame (see [`AppState::follow_selection`]).
@@ -292,7 +290,6 @@ impl AppState {
             detail_draw: None,
             detail_component: Default::default(),
             callout: Default::default(),
-            cad_blocks: false,
         }
     }
 
