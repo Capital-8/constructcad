@@ -819,16 +819,18 @@ impl<'a> Geometry<'a> {
                     let from_value = v.map(|v| v * self.angle);
                     if prefer_points { from_point.or(from_value) } else { from_value.or(from_point) }
                 };
-                let (Some(a), Some(mut b)) = (param(t1), param(t2)) else { return Vec::new() };
-                if sense {
-                    while b <= a + 1e-12 {
-                        b += TAU;
-                    }
-                } else {
-                    while b >= a - 1e-12 {
-                        b -= TAU;
-                    }
+                let (Some(a), Some(b)) = (param(t1), param(t2)) else { return Vec::new() };
+                // The turn from `a` to `b` along the sense, within one full
+                // turn (an equal end is a full turn).
+                let turn = |d: f64| match d.rem_euclid(TAU) {
+                    d if d <= 1e-12 => TAU,
+                    d => d,
+                };
+                let sweep = if sense { turn(b - a) } else { -turn(a - b) };
+                if !(a.is_finite() && b.is_finite() && sweep.is_finite()) {
+                    return Vec::new();
                 }
+                let b = a + sweep;
                 let n = self.arc_chords(b - a);
                 (0..=n).filter_map(|i| self.conic_point(basis, a + (b - a) * i as f64 / n as f64)).collect()
             }
@@ -1928,6 +1930,37 @@ mod tests {
         let v = volume(&mesh);
         let exact = std::f64::consts::PI * 0.01 * 7.0;
         assert!((v - exact).abs() / exact < 0.05, "{v} vs {exact}");
+    }
+
+    fn step(data: &str) -> crate::parse::StepFile {
+        crate::parse::parse(&format!(
+            "ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}\nENDSEC;\nEND-ISO-10303-21;\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn trimmed_circles_with_huge_or_infinite_parameters_end() {
+        let base = "#1=IFCCARTESIANPOINT((0.,0.));#2=IFCAXIS2PLACEMENT2D(#1,$);#3=IFCCIRCLE(#2,1.);";
+        for (t1, t2, sense) in
+            [("0.", "1.E30", ".F."), ("1.E30", "0.", ".T."), ("0.", "1.E999", ".T."), ("-1.E999", "0.", ".F.")]
+        {
+            let f = step(&format!(
+                "{base}#4=IFCTRIMMEDCURVE(#3,(IFCPARAMETERVALUE({t1})),(IFCPARAMETERVALUE({t2})),{sense},.PARAMETER.);"
+            ));
+            let g = Geometry::new(&f, 1.0, 1.0);
+            let pts = g.curve(&Param::Ref(4), 0);
+            assert!(pts.len() <= 4 * CIRCLE_SEGMENTS + 1 && pts.iter().all(|p| p.is_finite()), "{t1} {t2}");
+        }
+        // A quarter turn either way, as before.
+        let f = step(&format!(
+            "{base}#4=IFCTRIMMEDCURVE(#3,(IFCPARAMETERVALUE(0.)),(IFCPARAMETERVALUE(1.5707963267948966)),.F.,.PARAMETER.);"
+        ));
+        let pts = Geometry::new(&f, 1.0, 1.0).curve(&Param::Ref(4), 0);
+        // Clockwise from (1, 0) the long way round to (0, 1), through (0, -1).
+        assert!(pts.first().is_some_and(|p| p.distance(DVec3::X) < 1e-9));
+        assert!(pts.last().is_some_and(|p| p.distance(DVec3::Y) < 1e-9));
+        assert!(pts.iter().any(|p| p.distance(-DVec3::Y) < 1e-9));
     }
 
     #[test]
