@@ -35,8 +35,13 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
+      - run: cargo nextest run --workspace --locked --profile ci
+      # nextest does not run doctests
+      - run: cargo test --workspace --doc --locked
 
   ifc:
     name: IFC validation (IfcOpenShell)

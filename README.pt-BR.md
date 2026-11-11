@@ -199,10 +199,10 @@ Toda alteração passa por `Document::edit`, que registra uma `Transaction` reve
 ## Desenvolvimento
 
 ```sh
-cargo test --workspace
+cargo nextest run --workspace   # install once: cargo install cargo-nextest --locked
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots    # capturas da interface (veja docs/interface.pt-BR.md)
+CC_UI_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots    # capturas da interface (veja docs/interface.pt-BR.md)
 ```
 
 Os arquivos IFC exportados são validados na CI com o [IfcOpenShell](https://ifcopenshell.org/), uma referência independente e de código aberto usada apenas nos testes:

@@ -451,7 +451,7 @@ The tooltip, enabling, the palette entry and a two-letter shortcut all follow fr
 
 ### Icons
 
-Icons are SVG files in `assets/icons/ui` on a 24-unit grid. They use white strokes (`stroke-width` 1.75, round caps and joins) and soft fills written as `fill="#fff" fill-opacity=".2"`. `icons.rs` splits each icon into two layers by those attributes: the strokes and solid marks form the ink, and the soft fills form the tint. Each layer is rasterized with resvg at the exact pixel size and painted in the theme's colors (`icons::Tones`). Add the new icon to `Icon`, `Icon::ALL` and `Icon::source`. `ICON_SHEET=sheet.png cargo test -p cc_app icon_sheet` writes every icon at several sizes for review.
+Icons are SVG files in `assets/icons/ui` on a 24-unit grid. They use white strokes (`stroke-width` 1.75, round caps and joins) and soft fills written as `fill="#fff" fill-opacity=".2"`. `icons.rs` splits each icon into two layers by those attributes: the strokes and solid marks form the ink, and the soft fills form the tint. Each layer is rasterized with resvg at the exact pixel size and painted in the theme's colors (`icons::Tones`). Add the new icon to `Icon`, `Icon::ALL` and `Icon::source`. `ICON_SHEET=sheet.png cargo nextest run -p cc_app icon_sheet` writes every icon at several sizes for review.
 
 ### Theme
 
@@ -462,8 +462,8 @@ Colors are tokens of `theme::Palette`: `PALETTE` (light) and `DARK`, with a test
 `crates/cc_app/src/ui_tests.rs` runs the ribbon and the palette headlessly with [egui_kittest](https://crates.io/crates/egui_kittest). The tests click and type through the accessibility tree, so custom widgets must call `Response::widget_info`. Screenshot references live in `crates/cc_app/tests/snapshots`. They cover each ribbon tab, the narrow and collapsed ribbon, a rich tooltip, the palette, each page of the Preferences window, and an icon gallery in both themes. GPUs render slightly differently, so the screenshot comparisons run on request:
 
 ```sh
-CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots     # compare with the references
-UPDATE_SNAPSHOTS=1 cargo test -p cc_app snapshots    # rewrite them after an intended change
+CC_UI_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots     # compare with the references
+UPDATE_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots    # rewrite them after an intended change
 ```
 
 Review the new images before committing them. On a mismatch, kittest writes `*.new.png` and `*.diff.png` next to the references; Git ignores those files.

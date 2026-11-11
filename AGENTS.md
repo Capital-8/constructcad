@@ -16,14 +16,15 @@ cargo run -p cc_cli -- lua examples/small_house.lua width=10   # a Lua script
 cargo run -p cc_cli -- --plugins examples/plugins commands     # the catalog with the example plugin's commands
 cargo run -p cc_cli -- reference > docs/commands.md   # regenerate the command reference (a test checks it)
 
-cargo test --workspace                                # all tests
-cargo test -p cc_geom rooms                           # tests of one crate matching a name
+cargo nextest run --workspace                          # all tests (cargo-nextest)
+cargo test --workspace --doc                          # doctests (nextest does not run them)
+cargo nextest run -p cc_geom rooms                     # tests of one crate matching a name
 cargo check --tests                                   # type errors without building test binaries
-cargo test -p cc_engine --test main macros           # integration tests matching a name (one binary per crate)
+cargo nextest run -p cc_engine --test main macros     # integration tests matching a name (one binary per crate)
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check                            # max_width = 120 (rustfmt.toml)
-CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots      # compare UI screenshots (tests/snapshots)
-UPDATE_SNAPSHOTS=1 cargo test -p cc_app snapshots     # rewrite them after an intended UI change
+CC_UI_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots # compare UI screenshots (tests/snapshots)
+UPDATE_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots # rewrite them after an intended UI change
 
 # IFC validation (CI only; IfcOpenShell is never a build/runtime dependency)
 pip install -r scripts/requirements-ifc.txt
@@ -31,7 +32,7 @@ cargo run -p cc_ifc --example export_ifc -- examples/casa_simples.ccad out.ifc
 python scripts/validate_ifc.py out.ifc
 ```
 
-CI (`.github/workflows/ci.yml`) runs fmt, clippy + tests on Linux (x86_64 and arm64)/Windows/macOS, the IFC validation job (exports `examples/casa_simples.ccad`, `crates/cc_ifc/tests/fixtures/features.ccad`, `structure.ccad`, `mep.ccad`, `arcs.ccad`, `roofs.ccad`, `phases.ccad`, `topography.ccad` and `curtains.ccad`), and a DCO check on PRs: commits must be signed off (`git commit -s`).
+CI (`.github/workflows/ci.yml`) runs fmt, clippy + tests (`cargo nextest run --profile ci`, then the doctests with `cargo test --doc`) on Linux (x86_64 and arm64)/Windows/macOS, the IFC validation job (exports `examples/casa_simples.ccad`, `crates/cc_ifc/tests/fixtures/features.ccad`, `structure.ccad`, `mep.ccad`, `arcs.ccad`, `roofs.ccad`, `phases.ccad`, `topography.ccad` and `curtains.ccad`), and a DCO check on PRs: commits must be signed off (`git commit -s`).
 
 ## Architecture
 
@@ -93,6 +94,7 @@ Rust workspace (edition 2024). Dependency direction: `cc_core` ← `cc_geom` ←
 - **Files are hostile input.** `.ccad` files pass through `Project::repair` on load (`persist::from_ron_with_repairs`): invalid numbers and dangling references are removed or reset and the app reports how many. Use `get()` for indices that come from files, selections or arithmetic on them; guard divisions by zero and NaN/inf.
 - **Bound recursion and loops** over model references with visited sets or limits (hosting can be cyclic in a crafted file; see `EditCtx::remove_element`).
 - **Last-resort guard:** opening, saving and exporting run inside `actions::guard` (`catch_unwind`); a panic becomes an error message and the open document is kept. Keep `panic = "unwind"` (the default profile).
+- **Tests run with cargo-nextest** (`cargo nextest run`; install it with `cargo install cargo-nextest --locked`), in every session and in CI; doctests still need `cargo test --doc`. Settings live in `.config/nextest.toml` (the CI uses its `ci` profile).
 - **Prove it:** every crash fix comes with a small synthetic regression test that failed before the fix.
 - **Integration tests are one binary per crate**: `cc_engine`, `cc_ifc`, `cc_plugins` and `cc_skp` set `autotests = false` and build only `tests/main.rs`, which declares each file of `tests/` as a module; a new test file needs its `mod` line there (`every_test_file_is_a_module` fails otherwise).
 

@@ -210,10 +210,10 @@ Every change goes through `Document::edit`, which records a reversible `Transact
 ## Development
 
 ```sh
-cargo test --workspace
+cargo nextest run --workspace   # install once: cargo install cargo-nextest --locked
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots    # interface screenshots (see docs/interface.md)
+CC_UI_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots    # interface screenshots (see docs/interface.md)
 ```
 
 IFC exports are validated in CI with [IfcOpenShell](https://ifcopenshell.org/), an independent open-source reference used only for testing:
