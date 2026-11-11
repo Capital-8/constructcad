@@ -35,6 +35,22 @@ pub fn opening_parts(
     height: f64,
     half: f64,
 ) -> Vec<cc_core::component::ComponentPart> {
+    opening_parts_with(project, element, width, height, half, &mut OpeningMemo::default())
+}
+
+/// Door and window components resolved once per type and wall thickness by
+/// one build (scripted ones are each element's own).
+type OpeningMemo = std::collections::HashMap<(cc_core::ElementTypeId, u64), Vec<cc_core::component::ComponentPart>>;
+
+/// [`opening_parts`], resolving components through `memo`.
+fn opening_parts_with(
+    project: &Project,
+    element: &cc_core::Element,
+    width: f64,
+    height: f64,
+    half: f64,
+    memo: &mut OpeningMemo,
+) -> Vec<cc_core::component::ComponentPart> {
     let Some(ty) = project.element_type(element.type_id) else { return Vec::new() };
     let TypeData::Component { def, .. } = &ty.data else {
         return hosted_parts(&ty.data, width, height, half)
@@ -59,7 +75,15 @@ pub fn opening_parts(
             .collect();
     };
     let thickness = [(cc_core::component::WALL_THICKNESS, 2.0 * half)];
-    let parts = crate::resolve_instance(ty, def, element, None, &thickness);
+    // The pieces depend on the type and the thickness only, unless a script
+    // makes them (a failing one keeps each element's last pieces).
+    let parts = if def.has_script() {
+        crate::resolve_instance(ty, def, element, None, &thickness)
+    } else {
+        memo.entry((element.type_id, half.to_bits()))
+            .or_insert_with(|| crate::resolve_instance(ty, def, element, None, &thickness))
+            .clone()
+    };
     let (fx, fy) = match element.as_hosted() {
         Some(h) => (if h.flip_hand { -1.0 } else { 1.0 }, if h.flip_facing { -1.0 } else { 1.0 }),
         None => (1.0, 1.0),
@@ -1009,11 +1033,12 @@ impl ModelGeometry {
     fn build_hosted(&mut self, project: &Project) {
         let mut fills = BTreeMap::new();
         let mut symbols = Vec::new();
+        let mut memo = OpeningMemo::default();
         for wall in self.walls.values() {
             for o in &wall.openings {
                 let Some(e) = project.element(o.element) else { continue };
                 symbols.extend(opening_symbols(project, e, wall, o));
-                let parts = opening_parts(project, e, o.u1 - o.u0, o.z1 - o.z0, wall.half);
+                let parts = opening_parts_with(project, e, o.u1 - o.u0, o.z1 - o.z0, wall.half, &mut memo);
                 // In an arc wall the pieces are square to the wall at the opening's center.
                 let (origin, dir, normal) = wall.frame_at((o.u0 + o.u1) * 0.5);
                 let world = |p: DVec2| origin + dir * (o.u0 + p.x) + normal * p.y;
