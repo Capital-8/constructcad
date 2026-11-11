@@ -147,10 +147,17 @@ impl BeamGeom {
     /// Add the body to `s`: the section swept between the start and end
     /// faces, following the slope. Faces are the cap triangles (start, then
     /// end, for each triangle), then one side per edge of each ring; sides
-    /// on the arcs of a curved section are smooth.
+    /// on the arcs of a curved section are smooth. Nothing when the
+    /// section makes no cap triangles.
     pub fn add_to(&self, s: &mut crate::Solid) {
         let rings = self.rings();
-        for t in self.cap_triangles(&rings) {
+        let caps = self.cap_triangles(&rings);
+        // A section that makes no cap (degenerate) adds nothing: sides alone
+        // would be an open shell.
+        if caps.is_empty() {
+            return;
+        }
+        for t in caps {
             s.add_polygons([t.iter().rev().map(|p| self.point(false, *p)).collect::<Vec<_>>()]);
             s.add_polygons([t.iter().map(|p| self.point(true, *p)).collect::<Vec<_>>()]);
         }
@@ -406,6 +413,17 @@ mod tests {
 
     fn close(a: (f64, f64), b: (f64, f64)) -> bool {
         (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9
+    }
+
+    #[test]
+    fn a_degenerate_section_adds_no_faces() {
+        let mut b = beam(1, (0.0, 0.0), (5.0, 0.0));
+        // Every point on one line: no area, no cap triangles.
+        b.section.outer = vec![DVec2::new(-0.1, 0.0), DVec2::new(0.0, 0.0), DVec2::new(0.1, 0.0)];
+        let g = &resolve_beams(&[b], &[])[0];
+        let mut s = crate::Solid::new(ElementId(1), cc_core::Category::Beam, [0; 3]);
+        g.add_to(&mut s);
+        assert!(s.faces.is_empty(), "{} faces", s.faces.len());
     }
 
     #[test]
