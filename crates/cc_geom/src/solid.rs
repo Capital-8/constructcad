@@ -45,11 +45,19 @@ impl Face {
 
     /// Triangles as index triples into `verts`.
     pub fn triangulate(&self) -> Vec<[usize; 3]> {
-        if self.verts.len() == 4 {
-            return vec![[0, 1, 2], [0, 2, 3]];
-        }
         let (u, v) = self.basis();
         let flat: Vec<DVec2> = self.verts.iter().map(|p| DVec2::new(p.dot(u), p.dot(v))).collect();
+        // A quad splits along a diagonal inside it (merged faces need not be convex).
+        if let [a, b, c, d] = flat[..] {
+            let turn = |p: DVec2, q: DVec2, r: DVec2| (q - p).perp_dot(r - p);
+            let ccw = turn(a, b, c) + turn(a, c, d) >= 0.0;
+            let inside = |p: DVec2, q: DVec2, r: DVec2| (turn(p, q, r) >= 0.0) == ccw;
+            return if inside(a, b, c) && inside(a, c, d) {
+                vec![[0, 1, 2], [0, 2, 3]]
+            } else {
+                vec![[1, 2, 3], [1, 3, 0]]
+            };
+        }
         polygon::triangulate(&flat)
     }
 
@@ -610,6 +618,23 @@ fn ray_triangle(ray: Ray, a: DVec3, b: DVec3, c: DVec3) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A concave quad (a dart) splits along the diagonal inside it: the
+    /// triangles cover its area exactly, whichever corner is the reflex one.
+    #[test]
+    fn concave_quads_split_inside() {
+        let dart = [DVec2::new(0.0, 0.0), DVec2::new(2.0, 1.0), DVec2::new(0.0, 2.0), DVec2::new(0.5, 1.0)];
+        for shift in 0..4 {
+            let verts: Vec<DVec3> = (0..4).map(|k| dart[(k + shift) % 4].extend(0.0)).collect();
+            let face = Face::new(verts.clone(), DVec3::Z);
+            let area: f64 = face
+                .triangulate()
+                .iter()
+                .map(|t| (verts[t[1]] - verts[t[0]]).cross(verts[t[2]] - verts[t[0]]).z.abs() / 2.0)
+                .sum();
+            assert!((area - face.area()).abs() < 1e-12, "shift {shift}: {area} vs {}", face.area());
+        }
+    }
 
     /// Regression (issue #51): a prism over a footprint with no area (its
     /// points on one line) has caps without a normal; triangulating them for

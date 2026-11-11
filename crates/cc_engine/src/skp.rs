@@ -340,7 +340,10 @@ pub(crate) fn mesh_definition(
             let material = material.and_then(|i| materials.get(i)).map(|(n, _)| n.clone());
             ComponentItem {
                 name: material.clone().unwrap_or_else(|| name.to_string()),
-                shape: ComponentShape::Mesh { vertices: m.vertices, faces: m.faces },
+                shape: ComponentShape::Mesh {
+                    faces: cc_geom::coplanar::merge(&m.vertices, m.faces),
+                    vertices: m.vertices,
+                },
                 material: material.unwrap_or_default(),
                 in_plan: true,
                 void: false,

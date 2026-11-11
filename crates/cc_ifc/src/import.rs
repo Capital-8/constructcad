@@ -2899,6 +2899,7 @@ fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
             faces.push(f);
         }
     }
+    let faces = cc_geom::coplanar::merge(&vertices, faces);
     (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
 }
 
