@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Project browser organization (#278). *View → Browser Organization* (also in the menu of a group in the project browser) keeps named schemes that group the browser's views by view type, level, discipline or phase, nested in the order chosen: a scheme by view type and level puts each level's plans in a group under *Floor Plans* and *Ceiling Plans*, so the plans of a level stay together whatever their names. Views without a value for a criterion (a section has no level) stay beside its groups, groups fold and show how many views they hold, and the list by view type alone stays the default. The schemes are saved with the project; `browser_scheme_create`, `browser_scheme_set`, `browser_scheme_delete`, `browser_scheme_use`, `browser_schemes_list` and `browser_tree` do the same from the command line and MCP.
+
 ### Changed
 
 - *Manage → Levels* edits levels by storey height and adds levels next to one (#297). Each level shows the *Height to Next Level*: a new height moves every level above by the difference, so the other storeys keep theirs. An elevation moves its level alone and stays between the level below and the level above, and both values are taken when the field is left, so a number being typed no longer reorders the list under the cursor. *Add Above* and *Add Below* add a storey beside the picked level, of the height of the storey next to it, with its plans, pushing the levels beyond it away. `level_set` takes `height`, and `level_create` takes `above` or `below` with `height`.

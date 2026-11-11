@@ -103,6 +103,9 @@ pub struct Project {
     /// Design option sets (see [`crate::design_option`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_sets: Vec<crate::OptionSet>,
+    /// How the project browser groups the views (see [`crate::browser`]).
+    #[serde(default, skip_serializing_if = "crate::browser::BrowserOrganization::is_default")]
+    pub browser: crate::browser::BrowserOrganization,
     /// The design option new elements go into and views without a choice of
     /// their own show for its set: session state, not saved nor undone (set
     /// through [`crate::Document::set_active_option`]).
@@ -143,6 +146,7 @@ impl Project {
             line_styles: BTreeMap::new(),
             fill_patterns: BTreeMap::new(),
             option_sets: Vec::new(),
+            browser: Default::default(),
             active_option: None,
             next_id: 1,
         }
@@ -973,6 +977,7 @@ impl Project {
         let fill_patterns = self.fill_patterns.keys().map(|k| k.0);
         let option_sets = self.option_sets.iter().map(|s| s.id.0);
         let options = self.option_sets.iter().flat_map(|s| s.options.iter().map(|o| o.id.0));
+        let schemes = self.browser.schemes.iter().map(|s| s.id.0);
         levels
             .chain(phases)
             .chain(types)
@@ -987,6 +992,7 @@ impl Project {
             .chain(fill_patterns)
             .chain(option_sets)
             .chain(options)
+            .chain(schemes)
             .max()
             .unwrap_or(0)
     }

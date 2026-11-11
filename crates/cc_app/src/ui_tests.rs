@@ -2996,6 +2996,49 @@ fn zooming_the_graph_keeps_its_panel_size() {
     assert!((zoomed - empty).abs() < 0.5, "the toolbar moved from {empty} to {zoomed}");
 }
 
+/// The project browser follows the organization scheme in use (issue #278):
+/// a scheme by view type and level nests the plans under their levels, and
+/// the Browser Organization dialog undoes its changes on Cancel.
+#[test]
+fn the_browser_groups_views_by_the_scheme_in_use() {
+    use crate::commands::UiCommand;
+    use crate::i18n::tr;
+    let mut state = sample_state();
+    let level = state.project().levels.first().map(|l| l.name.clone()).unwrap();
+    let plans = tr(cc_core::ViewCategory::FloorPlan.key());
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::BrowserOrganization);
+    assert!(state.dialogs.browser_org.is_some());
+    let create = cc_engine::commands::browser::BrowserSchemeCreate { name: "By level".into(), ..Default::default() };
+    crate::actions::run_command(&mut state, create);
+    if let Some(d) = state.dialogs.browser_org.take() {
+        d.edits_finish(&mut state, false);
+    }
+    assert!(state.project().browser.is_default(), "Cancel undoes the new scheme");
+
+    let mut harness = themed_harness(state, egui::vec2(400.0, 1200.0), egui::Theme::Light, |ui, state| {
+        egui::ScrollArea::vertical().show(ui, |ui| crate::browser::show(ui, state));
+    });
+    harness.run();
+    // By type alone: the level's name is only its plans'.
+    let flat = harness.query_all_by_label(&level).count();
+    assert!(flat >= 1);
+    assert!(harness.query_by_label(&format!("{level}  ")).is_none(), "no level group");
+
+    let create = cc_engine::commands::browser::BrowserSchemeCreate { name: "By level".into(), ..Default::default() };
+    crate::actions::run_command(harness.state_mut(), create);
+    harness.run();
+    // The level is now a group under each plan type that has plans on it.
+    assert!(harness.query_all_by_label(&format!("{level}  ")).count() >= 1, "a level group");
+    assert!(harness.query_by_label(&format!("{plans}  ")).is_some());
+    // Its plans are still there, one row each.
+    assert_eq!(harness.query_all_by_label(&level).count(), flat);
+
+    // A click on the level group folds its plans away.
+    harness.query_all_by_label(&format!("{level}  ")).next().unwrap().click();
+    harness.run();
+    assert!(harness.query_all_by_label(&level).count() < flat);
+}
+
 /// The levels dialog adds a level above or below the picked one, pushing
 /// the levels beyond it away, so the others keep their order (issue #297).
 #[test]
