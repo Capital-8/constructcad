@@ -100,10 +100,31 @@ fn natural(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn compare(a: &Value, b: &Value) -> Ordering {
-    match (a.number(), b.number()) {
-        (Some(x), Some(y)) => x.total_cmp(&y),
-        _ => natural(&text_of(a), &text_of(b)),
+/// What rows are sorted by, worked out once per row: a value's number, and
+/// its text with the number [`natural`] reads from it.
+struct SortKey {
+    number: Option<f64>,
+    text: String,
+    text_number: Option<f64>,
+}
+
+impl SortKey {
+    fn of(v: &Value) -> Self {
+        let text = text_of(v);
+        Self { number: v.number(), text_number: text.trim().parse::<f64>().ok(), text }
+    }
+
+    /// Numbers numerically, else the texts in [`natural`] order.
+    fn compare(&self, other: &Self) -> Ordering {
+        match (self.number, other.number) {
+            (Some(x), Some(y)) => x.total_cmp(&y),
+            _ => match (self.text_number, other.text_number) {
+                (Some(x), Some(y)) => x.total_cmp(&y),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                _ => self.text.cmp(&other.text),
+            },
+        }
     }
 }
 
@@ -172,6 +193,17 @@ fn valve_pipe<'a>(project: &'a Project, e: &Element) -> Option<&'a Element> {
     }
 }
 
+/// Components' extents already worked out by one schedule: per type for
+/// elements without overrides (they resolve alike), else per element.
+type Extents = std::collections::HashMap<(cc_core::ElementTypeId, Option<cc_core::ElementId>), Option<(f64, f64, f64)>>;
+
+/// [`component_extents`] through `cache`.
+fn cached_extents(project: &Project, e: &Element, cache: &mut Extents) -> Option<(f64, f64, f64)> {
+    let ElementKind::Component(c) = &e.kind else { return None };
+    let key = (e.type_id, (!c.overrides.is_empty()).then_some(e.id));
+    *cache.entry(key).or_insert_with(|| component_extents(project, e))
+}
+
 /// Width (X), depth (Y) and height of a component's pieces in its own frame.
 fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> {
     let ElementKind::Component(c) = &e.kind else { return None };
@@ -190,6 +222,17 @@ fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> 
 }
 
 fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField) -> Value {
+    value_cached(project, geom, e, field, &mut Extents::default())
+}
+
+/// [`value`], with the extents of components kept in `cache`.
+fn value_cached(
+    project: &Project,
+    geom: &ModelGeometry,
+    e: &Element,
+    field: ScheduleField,
+    cache: &mut Extents,
+) -> Value {
     use ScheduleField as F;
     let ty = project.element_type(e.type_id);
     let info = ty.map(|t| &t.info);
@@ -246,7 +289,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             }
             (_, Some(TypeData::Railing { height, .. } | TypeData::CableTray { height, .. })) => Value::Length(*height),
             (ElementKind::Component(_), _) => {
-                component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.2))
+                cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.2))
             }
             _ => Value::Missing,
         },
@@ -257,9 +300,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. } | TypeData::CableTray { width, .. }) => {
                 Value::Length(*width)
             }
-            _ => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.0)),
+            _ => cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.0)),
         },
-        F::Depth => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.1)),
+        F::Depth => cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.1)),
         F::ComponentName => match ty.map(|t| &t.data) {
             Some(TypeData::Component { component, .. }) => text(component),
             _ => Value::Missing,
@@ -510,21 +553,36 @@ pub fn schedule_where(
     let mut elements: Vec<&Element> = project.elements_of(category).filter(|e| keep(e)).collect();
     elements.sort_by(|a, b| default_order(a, b));
 
-    let mut rows: Vec<(&Element, Vec<Value>)> =
-        elements.into_iter().map(|e| (e, fields.iter().map(|&f| value(project, geom, e, f)).collect())).collect();
+    let mut cache = Extents::default();
+    let mut rows: Vec<(&Element, Vec<Value>)> = elements
+        .into_iter()
+        .map(|e| (e, fields.iter().map(|&f| value_cached(project, geom, e, f, &mut cache)).collect()))
+        .collect();
+    // A field's value in a row: the column's when the field is shown.
+    let mut field_of = |e: &Element, values: &[Value], field: ScheduleField| match fields
+        .iter()
+        .position(|f| *f == field)
+        .and_then(|i| values.get(i))
+    {
+        Some(v) => v.clone(),
+        None => value_cached(project, geom, e, field, &mut cache),
+    };
 
     if let Some((field, needle)) = &def.filter {
         let needle = needle.trim().to_lowercase();
         if !needle.is_empty() {
-            rows.retain(|(e, _)| text_of(&value(project, geom, e, *field)).to_lowercase().contains(&needle));
+            rows.retain(|(e, values)| text_of(&field_of(e, values, *field)).to_lowercase().contains(&needle));
         }
     }
     if let Some(field) = def.sort_by {
-        // Stable: ties keep the default order.
-        rows.sort_by(|(a, _), (b, _)| {
-            let order = compare(&value(project, geom, a, field), &value(project, geom, b, field));
+        // Each row's key once; stable: ties keep the default order.
+        let mut keyed: Vec<(SortKey, (&Element, Vec<Value>))> =
+            rows.into_iter().map(|(e, values)| (SortKey::of(&field_of(e, &values, field)), (e, values))).collect();
+        keyed.sort_by(|(a, _), (b, _)| {
+            let order = a.compare(b);
             if def.descending { order.reverse() } else { order }
         });
+        rows = keyed.into_iter().map(|(_, row)| row).collect();
     }
 
     let totals = if def.hide_totals {
@@ -757,6 +815,36 @@ mod tests {
         let t = schedule(&project, &geom, Category::Window, &filtered);
         assert_eq!(t.rows.len(), 1);
         assert_eq!(t.totals[0], "1");
+    }
+
+    /// Rows sort by keys worked out once per row in the order comparing the
+    /// values themselves gives, by any field, shown or not.
+    #[test]
+    fn sorting_by_keys_matches_comparing_values() {
+        let (project, geom) = sample();
+        let compare = |a: &Value, b: &Value| match (a.number(), b.number()) {
+            (Some(x), Some(y)) => x.total_cmp(&y),
+            _ => natural(&text_of(a), &text_of(b)),
+        };
+        for category in Category::ALL {
+            let mut shown = ScheduleField::available(category);
+            shown.truncate(3);
+            for field in ScheduleField::available(category) {
+                for (fields, descending) in [(vec![ScheduleField::Mark], false), (shown.clone(), true)] {
+                    let def = ScheduleDef { fields, sort_by: Some(field), descending, ..Default::default() };
+                    let t = schedule(&project, &geom, category, &def);
+                    let mut expected: Vec<&Element> = project.elements_of(category).collect();
+                    expected.sort_by(|a, b| default_order(a, b));
+                    expected.sort_by(|a, b| {
+                        let order = compare(&value(&project, &geom, a, field), &value(&project, &geom, b, field));
+                        if descending { order.reverse() } else { order }
+                    });
+                    let got: Vec<_> = t.rows.iter().map(|r| r.element).collect();
+                    let expected: Vec<_> = expected.iter().map(|e| e.id).collect();
+                    assert_eq!(got, expected, "{category:?} by {field:?}");
+                }
+            }
+        }
     }
 
     #[test]
