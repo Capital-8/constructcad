@@ -408,44 +408,100 @@ fn paint_order(frame: &Frame, faces: &[ProjectedFace]) -> Vec<usize> {
     // `before[i]` lists the faces that must be painted after face `i`.
     let mut before: Vec<Vec<usize>> = vec![Vec::new(); n];
     let mut pending = vec![0usize; n];
-    for i in 0..n {
-        for j in i + 1..n {
-            let (a, b) = (boxes[i], boxes[j]);
-            if a.0.x >= b.1.x || b.0.x >= a.1.x || a.0.y >= b.1.y || b.0.y >= a.1.y {
-                continue;
+    let mut compare = |i: usize, j: usize| {
+        let (a, b) = (boxes[i], boxes[j]);
+        if a.0.x >= b.1.x || b.0.x >= a.1.x || a.0.y >= b.1.y || b.0.y >= a.1.y {
+            return;
+        }
+        let Some(s) = overlap_point(&tris[i], &tris[j]) else { return };
+        let (di, dj) = (depth_at(frame, &faces[i], s), depth_at(frame, &faces[j], s));
+        if (di - dj).abs() < DEPTH_TOL {
+            return;
+        }
+        let (back, front) = if di > dj { (i, j) } else { (j, i) };
+        before[back].push(front);
+        pending[front] += 1;
+    };
+    // Each pair whose boxes may overlap is compared once, the lower index
+    // first: a sweep along X over the boxes sorted by their left side meets
+    // only faces whose X ranges overlap. Boxes that are not finite are
+    // compared with every face, as their tests may not fail.
+    let finite = |k: usize| boxes[k].0.is_finite() && boxes[k].1.is_finite();
+    let (mut sweep, odd): (Vec<usize>, Vec<usize>) = (0..n).partition(|&k| finite(k));
+    sweep.sort_by(|&a, &b| boxes[a].0.x.total_cmp(&boxes[b].0.x).then(a.cmp(&b)));
+    for (p, &i) in sweep.iter().enumerate() {
+        for &j in &sweep[p + 1..] {
+            // This box and every later one start where this one ends or after.
+            if boxes[j].0.x >= boxes[i].1.x {
+                break;
             }
-            let Some(s) = overlap_point(&tris[i], &tris[j]) else { continue };
-            let (di, dj) = (depth_at(frame, &faces[i], s), depth_at(frame, &faces[j], s));
-            if (di - dj).abs() < DEPTH_TOL {
-                continue;
-            }
-            let (back, front) = if di > dj { (i, j) } else { (j, i) };
-            before[back].push(front);
-            pending[front] += 1;
+            compare(i.min(j), i.max(j));
         }
     }
-    // Kahn's algorithm, taking the farthest ready face first. On a cycle the
-    // face waiting on the fewest others is forced (the farthest among them):
-    // forcing the farthest instead lets a large face, such as a roof with
-    // many members under it, be painted before most of what it hides.
+    for &i in &odd {
+        for j in (0..n).filter(|&j| j != i && (finite(j) || j > i)) {
+            compare(i.min(j), i.max(j));
+        }
+    }
+    // Kahn's algorithm, taking the farthest ready face first (the last of
+    // equally far ones). On a cycle the face waiting on the fewest others is
+    // forced (the farthest among them): forcing the farthest instead lets a
+    // large face, such as a roof with many members under it, be painted
+    // before most of what it hides.
+    let mut ready: std::collections::BinaryHeap<(Depth, usize)> =
+        (0..n).filter(|&k| pending[k] == 0).map(|k| (Depth(faces[k].depth), k)).collect();
     let mut done = vec![false; n];
     let mut order = Vec::with_capacity(n);
     for _ in 0..n {
-        let ready =
-            (0..n).filter(|&k| !done[k] && pending[k] == 0).max_by(|&x, &y| faces[x].depth.total_cmp(&faces[y].depth));
+        let mut next = None;
+        while let Some((_, k)) = ready.pop() {
+            if !done[k] {
+                next = Some(k);
+                break;
+            }
+        }
         let forced = || {
             (0..n)
                 .filter(|&k| !done[k])
                 .min_by(|&x, &y| pending[x].cmp(&pending[y]).then(faces[y].depth.total_cmp(&faces[x].depth)))
         };
-        let Some(k) = ready.or_else(forced) else { break };
+        let Some(k) = next.or_else(forced) else { break };
         done[k] = true;
         order.push(k);
         for &f in &before[k] {
-            pending[f] = pending[f].saturating_sub(1);
+            if pending[f] > 0 {
+                pending[f] -= 1;
+                if pending[f] == 0 && !done[f] {
+                    ready.push((Depth(faces[f].depth), f));
+                }
+            }
         }
     }
     order
+}
+
+/// A depth ordered by [`f64::total_cmp`], for the queue of faces ready to paint.
+#[derive(Debug, Clone, Copy)]
+struct Depth(f64);
+
+impl PartialEq for Depth {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.total_cmp(&other.0).is_eq()
+    }
+}
+
+impl Eq for Depth {}
+
+impl PartialOrd for Depth {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Depth {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
 }
 
 /// Join segments end-to-end into closed loops.
@@ -796,6 +852,88 @@ mod tests {
         let order = paint_order(&frame, &faces);
         assert_eq!(order.len(), 4);
         assert_eq!(order.last(), Some(&0), "the large face hides the members: painted last, {order:?}");
+    }
+
+    /// The order found with a queue of ready faces and a sweep over their
+    /// boxes is the one comparing every pair and scanning every face gives,
+    /// with overlaps, ties in depth and cycles among many tilted faces.
+    #[test]
+    fn paint_order_matches_comparing_every_pair() {
+        fn reference(frame: &Frame, faces: &[ProjectedFace]) -> Vec<usize> {
+            let n = faces.len();
+            let boxes: Vec<(DVec2, DVec2)> = faces
+                .iter()
+                .map(|f| f.pts.iter().fold((f.pts[0], f.pts[0]), |(lo, hi), p| (lo.min(*p), hi.max(*p))))
+                .collect();
+            let tris: Vec<Vec<[DVec2; 3]>> = faces.iter().map(|f| triangles(&f.pts)).collect();
+            let mut before: Vec<Vec<usize>> = vec![Vec::new(); n];
+            let mut pending = vec![0usize; n];
+            for i in 0..n {
+                for j in i + 1..n {
+                    let (a, b) = (boxes[i], boxes[j]);
+                    if a.0.x >= b.1.x || b.0.x >= a.1.x || a.0.y >= b.1.y || b.0.y >= a.1.y {
+                        continue;
+                    }
+                    let Some(s) = overlap_point(&tris[i], &tris[j]) else { continue };
+                    let (di, dj) = (depth_at(frame, &faces[i], s), depth_at(frame, &faces[j], s));
+                    if (di - dj).abs() < 1e-6 {
+                        continue;
+                    }
+                    let (back, front) = if di > dj { (i, j) } else { (j, i) };
+                    before[back].push(front);
+                    pending[front] += 1;
+                }
+            }
+            let mut done = vec![false; n];
+            let mut order = Vec::with_capacity(n);
+            for _ in 0..n {
+                let ready = (0..n)
+                    .filter(|&k| !done[k] && pending[k] == 0)
+                    .max_by(|&x, &y| faces[x].depth.total_cmp(&faces[y].depth));
+                let forced = || {
+                    (0..n)
+                        .filter(|&k| !done[k])
+                        .min_by(|&x, &y| pending[x].cmp(&pending[y]).then(faces[y].depth.total_cmp(&faces[x].depth)))
+                };
+                let Some(k) = ready.or_else(forced) else { break };
+                done[k] = true;
+                order.push(k);
+                for &f in &before[k] {
+                    pending[f] = pending[f].saturating_sub(1);
+                }
+            }
+            order
+        }
+        let frame = Frame::looking(DVec3::new(0.0, 0.0, 50.0), -DVec3::Z);
+        let mut seed = 12345u64;
+        let mut rand = move || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut faces = Vec::new();
+        for k in 0..300 {
+            let (x, y) = (rand() * 20.0, rand() * 20.0);
+            let (w, h) = (0.5 + rand() * 4.0, 0.5 + rand() * 4.0);
+            // Some faces share a depth; tilted faces cross one another.
+            let z = if k % 7 == 0 { 1.0 } else { rand() * 5.0 };
+            let tilt = (rand() - 0.5) * 0.8;
+            let at = |px: f64, py: f64| DVec3::new(px, py, z + tilt * (px - x));
+            let verts = vec![at(x, y), at(x + w, y), at(x + w, y + h), at(x, y + h)];
+            let normal = (verts[1] - verts[0]).cross(verts[2] - verts[0]).normalize();
+            faces.push(ProjectedFace {
+                depth: verts.iter().map(|v| frame.depth(*v)).sum::<f64>() / verts.len() as f64,
+                normal,
+                point: verts[0],
+                pts: verts.iter().map(|v| frame.project(*v)).collect(),
+                color: Some([0; 4]),
+                element: ElementId(1),
+                solid: 0,
+                face: 0,
+                edges: Vec::new(),
+                marks: Vec::new(),
+            });
+        }
+        assert_eq!(paint_order(&frame, &faces), reference(&frame, &faces));
     }
 
     #[test]
