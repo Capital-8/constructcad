@@ -99,8 +99,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends dpkg-dev desktop-file-utils \
+          # Retries, and other mirrors when the runner's cannot be reached.
+          packaging/linux/apt-install.sh dpkg-dev desktop-file-utils \
             patchelf libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 libxcursor1 libxi6
           desktop-file-validate packaging/linux/constructcraft.desktop
           arch=${{ matrix.arch }}
