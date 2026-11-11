@@ -187,8 +187,10 @@ pub struct Progress {
 pub enum Next {
     /// The new version replaced this one: start this program when the app closes.
     Restart(PathBuf),
-    /// Run this installer (`.msi`) when the app closes, then start the app.
-    Installer(PathBuf),
+    /// Run this installer (`.msi`) when the app closes, then start the app. The SHA-256 it was
+    /// verified with at download is checked again just before it runs: it waits in the temporary
+    /// folder, where another program could replace it.
+    Installer(PathBuf, String),
     /// The disk image was opened: the user finishes in the Finder.
     Opened,
 }
@@ -276,18 +278,26 @@ pub fn install(kind: &InstallKind, package: &Asset, sums_url: &str, progress: &P
     if actual != expected {
         return Err(fail(format!("{} does not match {SUMS}: the download was not installed", package.name)));
     }
-    put_in_place(kind, &part).map_err(fail)
+    put_in_place(kind, &part, &expected).map_err(fail)
 }
 
-/// Put a verified package in place for `kind`.
-fn put_in_place(kind: &InstallKind, package: &Path) -> Result<Next, String> {
+/// The SHA-256 of the file at `path`, as lowercase hex.
+fn file_sha256(path: &Path) -> Result<String, String> {
+    let mut file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(hex(&hasher.finalize()))
+}
+
+/// Put a verified package (whose SHA-256 is `sha256`) in place for `kind`.
+fn put_in_place(kind: &InstallKind, package: &Path, sha256: &str) -> Result<Next, String> {
     match kind {
         InstallKind::AppImage(target) => {
             make_executable(package)?;
             std::fs::rename(package, target).map_err(|e| format!("{}: {e}", target.display()))?;
             Ok(Next::Restart(target.clone()))
         }
-        InstallKind::Msi => Ok(Next::Installer(package.to_path_buf())),
+        InstallKind::Msi => Ok(Next::Installer(package.to_path_buf(), sha256.to_string())),
         InstallKind::Portable(exe) => {
             let dir = package.with_extension("unpacked");
             unzip(package, &dir)?;
@@ -395,11 +405,25 @@ pub fn installer_command(msi: &Path, exe: &Path) -> (String, Vec<String>) {
     ("powershell".into(), vec!["-NoProfile".into(), "-WindowStyle".into(), "Hidden".into(), "-Command".into(), script])
 }
 
+/// Whether the installer at `msi` is still the file verified at download (SHA-256 `sha256`).
+fn check_installer(msi: &Path, sha256: &str) -> Result<(), String> {
+    let actual = file_sha256(msi)?;
+    if !actual.eq_ignore_ascii_case(sha256) {
+        let _ = std::fs::remove_file(msi);
+        return Err(format!("{} changed after it was verified", msi.display()));
+    }
+    Ok(())
+}
+
 /// Start what an update left to do, as the app closes.
 pub fn finish(next: &Next) {
     let started = match next {
         Next::Restart(program) => std::process::Command::new(program).spawn().map(|_| ()),
-        Next::Installer(msi) => {
+        Next::Installer(msi, sha256) => {
+            if let Err(e) = check_installer(msi, sha256) {
+                log::warn!("the update was not installed: {e}");
+                return;
+            }
             let exe = std::env::current_exe().unwrap_or_default();
             let (program, args) = installer_command(msi, &exe);
             std::process::Command::new(program).args(args).spawn().map(|_| ())
@@ -578,6 +602,23 @@ mod tests {
         // The new file is missing: the old executable comes back.
         assert!(swap_executable(&exe, &dir.join("missing.exe")).is_err());
         assert_eq!(std::fs::read(&exe).unwrap(), b"new");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_installer_changed_after_download_is_refused() {
+        let dir = std::env::temp_dir().join(format!("ccad-msi-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let msi = dir.join("setup.msi");
+        std::fs::write(&msi, b"verified").unwrap();
+        let sha256 = file_sha256(&msi).unwrap();
+        assert!(check_installer(&msi, &sha256).is_ok());
+        assert!(check_installer(&msi, &sha256.to_uppercase()).is_ok());
+        // Another program swaps the file while it waits for the app to close.
+        std::fs::write(&msi, b"swapped").unwrap();
+        assert!(check_installer(&msi, &sha256).is_err());
+        assert!(!msi.exists(), "the changed file is removed");
+        assert!(check_installer(&msi, &sha256).is_err(), "a missing file is refused");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
