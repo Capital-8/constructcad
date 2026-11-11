@@ -178,6 +178,24 @@ fn section_text(section: cc_core::ColumnSection) -> String {
     }
 }
 
+/// A profile's section as a schedule shows it: the legacy wording for the
+/// shapes legacy sections had (`Ø 300`, `I 100 × 200 × 5.6 / 8.5`), the
+/// profile's name otherwise.
+fn profile_text(def: &cc_core::structural_profile::ProfileDef) -> String {
+    use cc_core::structural_profile::ProfileShape as P;
+    let l = format::length;
+    match def.shape {
+        P::Rect { b, h, .. } => format!("{} × {}", l(b), l(h)),
+        P::Round { d } => format!("Ø {}", l(d)),
+        P::RoundTube { d, t } => format!("Ø {} × {}", l(d), l(t)),
+        P::I { d, bf, tw, tf, .. } => format!("I {} × {} × {} / {}", l(bf), l(d), l(tw), l(tf)),
+        P::Channel { d, bf, tw, tf, .. } => format!("U {} × {} × {} / {}", l(bf), l(d), l(tw), l(tf)),
+        P::Angle { h, b, t, .. } => format!("L {} × {} × {}", l(b), l(h), l(t)),
+        P::RectTube { h, b, t, .. } => format!("□ {} × {} × {}", l(b), l(h), l(t)),
+        _ => def.name.clone(),
+    }
+}
+
 /// The pipe a valve sits on (`None` for other elements).
 fn valve_pipe<'a>(project: &'a Project, e: &Element) -> Option<&'a Element> {
     match &e.kind {
@@ -330,6 +348,10 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ => Value::Missing,
         },
         F::Section => match ty.map(|t| &t.data) {
+            // A profile-made type's legacy fields are only its box.
+            Some(data) if project.type_profile_def(data).is_some() => {
+                project.type_profile_def(data).map_or(Value::Missing, |def| Value::Text(profile_text(def)))
+            }
             Some(TypeData::Column { section, .. }) => Value::Text(section_text(*section)),
             Some(TypeData::Beam { width, height, shape, .. }) => {
                 let section = cc_core::ColumnSection::Profile { width: *width, depth: *height, shape: *shape };

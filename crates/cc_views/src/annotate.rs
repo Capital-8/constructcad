@@ -110,12 +110,18 @@ fn cm(meters: f64) -> String {
 /// centimeters (inches in imperial units): `15×40`, `Ø30`.
 pub fn section_label(project: &Project, data: &TypeData) -> Option<String> {
     use cc_core::ColumnSection as C;
-    use cc_core::structural_profile::ProfileMaterial as M;
+    use cc_core::structural_profile::{ProfileMaterial as M, ProfileShape};
     if let TypeData::Column { profile: Some(id), .. } | TypeData::Beam { profile: Some(id), .. } = data
         && let Some(def) = project.profile(*id)
         && matches!(def.material, M::Steel | M::ColdFormed)
     {
         return Some(def.name.clone());
+    }
+    // A round profile (the legacy fields of a profile-made type are its box).
+    if let Some(def) = project.type_profile_def(data)
+        && let ProfileShape::Round { d } | ProfileShape::RoundTube { d, .. } = def.shape
+    {
+        return Some(format!("Ø{}", cm(d)));
     }
     Some(match data {
         TypeData::Beam { width, height, .. } => format!("{}×{}", cm(*width), cm(*height)),
@@ -615,5 +621,20 @@ mod section_label_tests {
         assert_eq!(section_label(&p, &beam(Some(id))).as_deref(), Some("15×40"));
         assert_eq!(section_label(&p, &beam(Some(ProfileId(9999)))).as_deref(), Some("15×40"));
         assert_eq!(section_label(&p, &beam(None)).as_deref(), Some("15×40"));
+    }
+
+    #[test]
+    fn a_round_concrete_profile_column_is_tagged_with_its_diameter() {
+        let (mut p, id) = with_profile(ProfileMaterial::Concrete);
+        p.profiles.get_mut(&id).unwrap().shape = ProfileShape::Round { d: 0.3 };
+        // The legacy fields of a profile-made type are its box.
+        let column = TypeData::Column {
+            section: ColumnSection::Rectangular { width: 0.3, depth: 0.3 },
+            material: "m".into(),
+            profile: Some(id),
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        };
+        assert_eq!(section_label(&p, &column).as_deref(), Some("Ø30"));
     }
 }

@@ -729,3 +729,51 @@ fn a_template_beam_type_switched_to_ipe_200_builds_its_body() {
     let volume: f64 = geom.body_of(id).map(cc_geom::Solid::volume).sum();
     assert!((volume - 0.00285 * 4.0).abs() / (0.00285 * 4.0) < 0.03, "{volume}");
 }
+
+/// A concrete column type on a new profile of `shape` (`params` its values).
+fn concrete_column_type(s: &mut Session, shape: &str, params: Value) -> Value {
+    let p = run(s, "profile_create", json!({"material": "concrete", "shape": shape, "params": params}));
+    run(s, "profile_type_create", json!({"profile": p["id"], "category": "column"}))["id"].clone()
+}
+
+#[test]
+fn round_profile_columns_get_round_rebar() {
+    for (shape, params) in [("round", json!({"d": 0.4})), ("round_tube", json!({"d": 0.4, "t": 0.1}))] {
+        let mut s = Session::default();
+        let t = concrete_column_type(&mut s, shape, params);
+        let col = run(&mut s, "column_create", json!({"type": t, "position": [0.0, 0.0], "height": 3.0}))["id"].clone();
+        let out = run(&mut s, "rebar_typical", json!({"elements": [col]}));
+        let sets: Vec<Value> =
+            out["created"].as_array().unwrap().iter().map(|i| run(&mut s, "element_get", json!({"id": i}))).collect();
+        let bars = sets.iter().find(|x| x["params"]["layout"]["Longitudinal"].is_object()).unwrap();
+        assert_eq!(bars["params"]["layout"]["Longitudinal"]["count"], json!(6), "{shape}: {bars}");
+        // Bars on a circle and round ties.
+        let geom = s.geometry();
+        let id = |x: &Value| ElementId(x["id"].as_u64().unwrap());
+        let ties = sets.iter().find(|x| x["params"]["layout"]["Stirrups"].is_object()).unwrap();
+        let tie = &geom.rebar[&id(ties)].bars[0];
+        assert!(tie.points.len() > 4, "{shape}: a round tie, {} points", tie.points.len());
+        let r: Vec<f64> = geom.rebar[&id(bars)].bars.iter().map(|b| b.points[0].truncate().length()).collect();
+        assert!(r.iter().all(|v| (v - r[0]).abs() < 1e-9), "{shape}: on a circle {r:?}");
+    }
+}
+
+#[test]
+fn schedules_tags_and_legends_read_profile_made_sections() {
+    let mut s = Session::default();
+    let round = concrete_column_type(&mut s, "round", json!({"d": 0.3}));
+    let col = run(&mut s, "column_create", json!({"type": round, "position": [0.0, 0.0]}))["id"].as_u64().unwrap();
+    let p = s.project().clone();
+    let geom = s.geometry().clone();
+    let e = p.element(ElementId(col)).unwrap();
+    let section = cc_views::field_value(&p, &geom, e, cc_core::ScheduleField::Section).unwrap().0;
+    assert!(section.starts_with('Ø'), "{section}");
+
+    // A beam on an I profile is drawn in legends as an I, not its box.
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let t =
+        run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}))["id"].as_u64().unwrap();
+    let d = cc_views::legend(s.project(), &[ElementTypeId(t)], 20);
+    let cut = d.prims.iter().filter(|p| matches!(p, Prim::Line { style: LineStyle::Cut, .. })).count();
+    assert!(cut > 4, "an I outline, not a box: {cut} cut lines");
+}

@@ -232,6 +232,20 @@ impl Project {
         self.profiles.values().find(|p| p.name.trim().to_lowercase() == wanted)
     }
 
+    /// The profile a column or beam type points to, when it exists.
+    pub fn type_profile_def(&self, data: &TypeData) -> Option<&ProfileDef> {
+        type_profile(data).and_then(|id| self.profile(id))
+    }
+
+    /// Whether a column or beam type's section is round (a solid or hollow
+    /// circle): its profile's shape, else its legacy section. The legacy
+    /// fields of a profile-made type are only its box, so readers ask this.
+    pub fn section_is_round(&self, data: &TypeData) -> bool {
+        let Some(s) = section_data(data) else { return false };
+        let shape = s.profile.and_then(|id| self.profile(id)).map_or(&s.legacy, |d| &d.shape);
+        matches!(shape, ProfileShape::Round { .. } | ProfileShape::RoundTube { .. })
+    }
+
     /// The column and beam types that use a profile.
     pub fn profile_users(&self, id: ProfileId) -> Vec<ElementTypeId> {
         self.types
