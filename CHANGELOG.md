@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-11
+
 ### Added
 
 - glTF import. *Insert → Import glTF…* brings a glTF 2.0 model (`.glb`, or `.gltf` with its buffers embedded or in files next to it) into the project on the active view's level: each node of the scene's root, with everything below it, becomes a component element whose type holds its triangles as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent; node transforms (matrices or translation, rotation and scale) are followed down the hierarchy, and mirrored placements keep their faces outward. glTF is in meters with Y up, so the dialog only asks whether to bring the whole scene in as one component. Colors come from the materials' base color, and missing materials are added by name. Files that require compressed meshes (Draco, meshopt) are refused with the extension's name. The import is one undo step. Command: `gltf_import` (`merge`).
@@ -466,7 +468,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Closing the last open view tab crashed the application.
 - Per-wall volumes in schedules were wrong for walls joined at corners; they are now computed exactly.
 
-[Unreleased]: https://github.com/francisreboucas/constructcraft/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/francisreboucas/constructcraft/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/francisreboucas/constructcraft/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/francisreboucas/constructcraft/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/francisreboucas/constructcad/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/francisreboucas/constructcad/compare/v0.8.0...v0.9.0
