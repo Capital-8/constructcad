@@ -6,7 +6,7 @@ use crate::refs::{self, Ref, finite};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
-use cc_core::{ElementKind, Level, LevelId, View, ViewId, ViewKind, WallTop};
+use cc_core::{EditCtx, ElementKind, Level, LevelId, View, ViewId, ViewKind, WallTop};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -64,6 +64,8 @@ impl Command for LevelCreate {
 }
 
 /// Rename a level or change its elevation (what is attached to it moves along).
+/// Renaming it renames, in the same undo step, its plans (floor, ceiling,
+/// structural and MEP plans) that bore its old name.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LevelSet {
@@ -88,19 +90,38 @@ impl Command for LevelSet {
             return Err(EngineError::invalid("the name is empty"));
         }
         edit(s, t!("tx-modify-level"), |e| {
+            if let Some(n) = &self.name {
+                rename(e, id, n.trim());
+            }
             let levels = e.levels_mut();
-            if let Some(l) = levels.iter_mut().find(|l| l.id == id) {
-                if let Some(n) = self.name {
-                    l.name = n.trim().to_string();
-                }
-                if let Some(z) = elevation {
-                    l.elevation = z;
-                }
+            if let Some(l) = levels.iter_mut().find(|l| l.id == id)
+                && let Some(z) = elevation
+            {
+                l.elevation = z;
             }
             levels.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
             Ok(())
         })?;
         Ok(level_out(s, id))
+    }
+}
+
+/// Rename level `id` to `name`, and with it the plans of the level that bore
+/// its old name, so a level and its plans keep one name (issue #274).
+pub(crate) fn rename(e: &mut EditCtx, id: LevelId, name: &str) {
+    let Some(old) = e.project().level(id).map(|l| l.name.clone()) else { return };
+    if old == name {
+        return;
+    }
+    let plans: Vec<ViewId> =
+        e.project().views.values().filter(|v| v.level() == Some(id) && v.name == old).map(|v| v.id).collect();
+    for plan in plans {
+        if let Some(v) = e.view_mut(plan) {
+            v.name = name.to_string();
+        }
+    }
+    if let Some(l) = e.levels_mut().iter_mut().find(|l| l.id == id) {
+        l.name = name.to_string();
     }
 }
 
