@@ -20,6 +20,7 @@ pub mod extension;
 pub mod gltf;
 pub mod graph;
 pub mod i18n;
+pub mod import_material;
 pub mod obj;
 pub mod osm;
 pub mod reference;

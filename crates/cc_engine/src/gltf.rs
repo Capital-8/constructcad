@@ -3,12 +3,16 @@
 //! root, with everything below it, becomes a type of fixed mesh pieces, one
 //! per material, placed by an element at the center of its footprint and the
 //! bottom of its extent. glTF lengths are meters and its Y axis points up,
-//! so nothing needs asking.
+//! so nothing needs asking. Materials take their base color and its
+//! texture (a picture in a buffer, a data URI or a file next to the model),
+//! repeating as the texture coordinates say (see [`crate::import_material`]),
+//! and their opacity when blended.
 //!
 //! Files are hostile input: every index, offset and count is checked, the
 //! node graph is walked with a depth limit and a visited set, and the sizes
 //! read are bounded. Compressed meshes (Draco, meshopt) are not read.
 
+use crate::import_material::{ImportedMaterial, UvScale};
 use crate::skp::{Converted, MeshBuild, SkpPlacement, SkpType, mesh_definition};
 use glam::{DMat4, DQuat, DVec2, DVec3};
 use serde_json::Value;
@@ -120,9 +124,43 @@ fn percent_decode(uri: &str) -> String {
 struct Doc {
     json: Value,
     buffers: Vec<Option<Vec<u8>>>,
+    /// Where files the model names are looked for.
+    dir: Option<std::path::PathBuf>,
 }
 
 impl Doc {
+    /// The bytes of image `index`: a buffer view, a data URI or a file next
+    /// to the model (by name only).
+    fn image(&self, index: Option<&Value>) -> Option<Vec<u8>> {
+        let image = self.item("images", index)?;
+        let limit = cc_core::material::MAX_TEXTURE_BYTES;
+        if let Some(view) = self.item("bufferViews", image.get("bufferView")) {
+            let buffer = self.buffers.get(usize::try_from(view.get("buffer")?.as_u64()?).ok()?)?.as_ref()?;
+            let start = usize::try_from(view.get("byteOffset").and_then(Value::as_u64).unwrap_or(0)).ok()?;
+            let len = usize::try_from(view.get("byteLength")?.as_u64()?).ok().filter(|l| *l <= limit)?;
+            return buffer.get(start..start.checked_add(len)?).map(<[u8]>::to_vec);
+        }
+        let uri = image.get("uri")?.as_str()?;
+        if let Some(data) = uri.strip_prefix("data:") {
+            let (_, encoded) = data.split_once(";base64,")?;
+            return cc_core::raster::base64_decode(encoded).filter(|b| b.len() <= limit);
+        }
+        let decoded = percent_decode(uri);
+        let path = self.dir.as_ref()?.join(Path::new(&decoded).file_name()?);
+        let small = std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() <= limit as u64);
+        small.then(|| std::fs::read(&path).ok()).flatten()
+    }
+
+    /// The base color texture of a material: its image (the texture's
+    /// source, or a WebP source) and the texture coordinate set it reads.
+    fn base_texture(&self, material: &Value) -> Option<(Option<&Value>, u64)> {
+        let info = material.get("pbrMetallicRoughness")?.get("baseColorTexture")?;
+        let texture = self.item("textures", info.get("index"))?;
+        let webp = texture.get("extensions").and_then(|e| e.get("EXT_texture_webp")).and_then(|w| w.get("source"));
+        let set = info.get("texCoord").and_then(Value::as_u64).unwrap_or(0);
+        Some((texture.get("source").or(webp), set))
+    }
+
     fn array(&self, key: &str) -> &[Value] {
         self.json.get(key).and_then(Value::as_array).map_or(&[], Vec::as_slice)
     }
@@ -228,6 +266,8 @@ struct Walker<'a> {
     doc: &'a Doc,
     visits: usize,
     faces: usize,
+    /// Texture repeats of the file's materials.
+    scales: Vec<UvScale>,
 }
 
 impl Walker<'_> {
@@ -294,6 +334,15 @@ impl Walker<'_> {
                 None => (0..points.len()).collect(),
             };
             let material = primitive.get("material").and_then(Value::as_u64).and_then(|m| usize::try_from(m).ok());
+            // The texture coordinates the material's base color reads.
+            let set = material.and_then(|m| self.doc.array("materials").get(m)).and_then(|m| self.doc.base_texture(m));
+            let uvs: Vec<glam::DVec2> = set
+                .and_then(|(_, set)| {
+                    let attributes = primitive.get("attributes")?;
+                    self.doc.accessor(attributes.get(format!("TEXCOORD_{set}")), 2)
+                })
+                .map(|v| v.as_chunks::<2>().0.iter().map(|t| glam::DVec2::new(t[0], t[1])).collect())
+                .unwrap_or_default();
             let corners: Vec<[usize; 3]> = match mode {
                 4 => indices.as_chunks::<3>().0.to_vec(),
                 // Strips alternate their winding.
@@ -304,7 +353,8 @@ impl Walker<'_> {
                     .collect(),
                 _ => indices.get(1..).unwrap_or_default().windows(2).map(|t| [indices[0], t[0], t[1]]).collect(),
             };
-            for [a, b, c] in corners {
+            for corner in corners {
+                let [a, b, c] = corner;
                 let (Some(a), Some(b), Some(c)) = (points.get(a), points.get(b), points.get(c)) else { continue };
                 if !(a.is_finite() && b.is_finite() && c.is_finite())
                     || (*b - *a).cross(*c - *a).length_squared() == 0.0
@@ -314,6 +364,14 @@ impl Walker<'_> {
                 self.faces += 1;
                 if self.faces > crate::skp::MAX_FACES {
                     return Err(GltfError::TooLarge);
+                }
+                if let (Some(scale), Some(ta), Some(tb), Some(tc)) = (
+                    material.and_then(|m| self.scales.get_mut(m)),
+                    uvs.get(corner[0]),
+                    uvs.get(corner[1]),
+                    uvs.get(corner[2]),
+                ) {
+                    scale.add([*a, *b, *c], [*ta, *tb, *tc]);
                 }
                 out.triangles.push((material, if flip { [*a, *c, *b] } else { [*a, *b, *c] }));
             }
@@ -326,18 +384,10 @@ fn name_of(v: &Value) -> String {
     v.get("name").and_then(Value::as_str).map(|n| n.trim().to_string()).unwrap_or_default()
 }
 
-/// A linear color component (0 to 1) as an sRGB byte.
-fn srgb(v: f64) -> u8 {
-    if !v.is_finite() {
-        return 200;
-    }
-    let v = v.clamp(0.0, 1.0);
-    let s = if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 };
-    (s * 255.0).round() as u8
-}
-
-/// The file's materials: name (or `<name> material n`) and base color.
-fn materials(doc: &Doc, name: &str) -> Vec<(String, [u8; 3])> {
+/// The file's materials: name (or `<name> material n`), base color times
+/// its texture's average, the texture repeating as `scales` say, and the
+/// opacity of blended ones.
+fn materials(doc: &Doc, name: &str, scales: &[UvScale]) -> Vec<ImportedMaterial> {
     doc.array("materials")
         .iter()
         .enumerate()
@@ -345,11 +395,18 @@ fn materials(doc: &Doc, name: &str) -> Vec<(String, [u8; 3])> {
             let own = name_of(m);
             let label = if own.is_empty() { format!("{name} material {}", i + 1) } else { own };
             let factor = m.get("pbrMetallicRoughness").and_then(|p| p.get("baseColorFactor")).and_then(Value::as_array);
-            let color = match factor.map(|f| f.iter().map(Value::as_f64).collect::<Vec<_>>()).as_deref() {
-                Some([Some(r), Some(g), Some(b), ..]) => [srgb(*r), srgb(*g), srgb(*b)],
-                _ => [200, 200, 200],
+            let factor: Vec<f64> = factor.map(|f| f.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+            let [r, g, b, a] = match factor[..] {
+                [r, g, b, a] if [r, g, b, a].iter().all(|v| v.is_finite()) => [r, g, b, a].map(|v| v.clamp(0.0, 1.0)),
+                _ => [1.0; 4],
             };
-            (label, color)
+            let blended = m.get("alphaMode").and_then(Value::as_str) == Some("BLEND");
+            let image = doc
+                .base_texture(m)
+                .and_then(|(source, _)| doc.image(source))
+                .and_then(crate::import_material::texture_image);
+            let repeat = scales.get(i).and_then(UvScale::repeat);
+            crate::import_material::textured(label, [r, g, b], if blended { a } else { 1.0 }, image, repeat)
         })
         .collect()
 }
@@ -379,7 +436,7 @@ pub fn convert(bytes: &[u8], dir: Option<&Path>, name: &str, merge: bool) -> Res
         .enumerate()
         .map(|(i, b)| load_buffer(b, i, bin, dir).map_err(|e| missing.get_or_insert(e).clone()).ok())
         .collect();
-    let doc = Doc { json, buffers };
+    let doc = Doc { json, buffers, dir: dir.map(Path::to_path_buf) };
     // The scene's roots; without scenes, the nodes no other node holds.
     let scene = doc.item("scenes", doc.json.get("scene")).or_else(|| doc.array("scenes").first());
     let roots: Vec<usize> = match scene {
@@ -400,7 +457,8 @@ pub fn convert(bytes: &[u8], dir: Option<&Path>, name: &str, merge: bool) -> Res
             (0..doc.array("nodes").len()).filter(|i| !held.contains(&(*i as u64))).collect()
         }
     };
-    let mut walker = Walker { doc: &doc, visits: 0, faces: 0 };
+    let scales = vec![UvScale::default(); doc.array("materials").len()];
+    let mut walker = Walker { doc: &doc, visits: 0, faces: 0, scales };
     let mut objects: Vec<Object> = Vec::new();
     for root in roots {
         let mut object =
@@ -423,7 +481,7 @@ pub fn convert(bytes: &[u8], dir: Option<&Path>, name: &str, merge: bool) -> Res
         let triangles = objects.drain(..).flat_map(|o| o.triangles).collect();
         objects.push(Object { name: String::new(), triangles });
     }
-    let mut out = Converted { materials: materials(&doc, name), ..Default::default() };
+    let mut out = Converted { materials: materials(&doc, name, &walker.scales), ..Default::default() };
     let single = objects.len() == 1;
     for (i, object) in objects.iter().enumerate() {
         let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
@@ -467,14 +525,6 @@ mod tests {
     fn uris_are_percent_decoded() {
         assert_eq!(percent_decode("my%20model.bin"), "my model.bin");
         assert_eq!(percent_decode("bad%zz%2"), "bad%zz%2");
-    }
-
-    #[test]
-    fn colors_are_encoded_as_srgb() {
-        assert_eq!(srgb(0.0), 0);
-        assert_eq!(srgb(1.0), 255);
-        assert_eq!(srgb(0.215_861), 128);
-        assert_eq!(srgb(f64::NAN), 200);
     }
 
     #[test]

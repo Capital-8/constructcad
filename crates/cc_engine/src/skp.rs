@@ -41,8 +41,8 @@ pub struct SkpPlacement {
 pub struct Converted {
     pub types: Vec<SkpType>,
     pub placements: Vec<SkpPlacement>,
-    /// Materials (name, color) the pieces use.
-    pub materials: Vec<(String, [u8; 3])>,
+    /// Materials the pieces use (keyed by index).
+    pub materials: Vec<crate::import_material::ImportedMaterial>,
     /// Hidden instances and faces (or on hidden layers) left out.
     pub hidden: usize,
     pub faces: usize,
@@ -52,6 +52,22 @@ pub struct Converted {
 pub enum SkpError {
     /// More faces than [`MAX_FACES`], or more types than the import makes.
     TooLarge,
+}
+
+/// A SketchUp material: its color (already the texture's average for a
+/// textured one), opacity and texture, whose tile size SketchUp keeps in
+/// inches.
+fn skp_material(name: String, m: &cc_skp::Material) -> crate::import_material::ImportedMaterial {
+    let color = [m.color[0], m.color[1], m.color[2]];
+    let opacity = if m.transparency.is_finite() { m.transparency.clamp(0.0, 1.0) } else { 1.0 };
+    let texture = m.texture.as_ref().and_then(|t| {
+        let image = crate::import_material::texture_image(t.data.clone()?)?;
+        let size = |inches: f64| if inches.is_finite() && inches > 0.0 { inches * INCH } else { 1.0 };
+        let mut texture = cc_core::material::MaterialTexture::new(image, size(t.width), size(t.height));
+        texture.repair();
+        Some(texture)
+    });
+    crate::import_material::ImportedMaterial { name, color, opacity, texture }
 }
 
 /// Same type: the placed definition, what is left of its transform after
@@ -145,11 +161,10 @@ impl<'a> Converter<'a> {
         let found = self.model.material_by_id(id).map(|m| {
             let name = m.name.trim();
             let name = if name.is_empty() { format!("SketchUp {id}") } else { name.to_string() };
-            let color = [m.color[0], m.color[1], m.color[2]];
-            match self.out.materials.iter().position(|(n, _)| *n == name) {
+            match self.out.materials.iter().position(|x| x.name == name) {
                 Some(i) => i,
                 None => {
-                    self.out.materials.push((name, color));
+                    self.out.materials.push(skp_material(name, m));
                     self.out.materials.len() - 1
                 }
             }
@@ -331,13 +346,13 @@ impl<'a> Converter<'a> {
 pub(crate) fn mesh_definition(
     name: &str,
     pieces: BTreeMap<Option<usize>, MeshBuild>,
-    materials: &[(String, [u8; 3])],
+    materials: &[crate::import_material::ImportedMaterial],
 ) -> Option<ComponentDef> {
     let items: Vec<ComponentItem> = pieces
         .into_iter()
         .filter(|(_, m)| !m.faces.is_empty())
         .map(|(material, m)| {
-            let material = material.and_then(|i| materials.get(i)).map(|(n, _)| n.clone());
+            let material = material.and_then(|i| materials.get(i)).map(|m| m.name.clone());
             ComponentItem {
                 name: material.clone().unwrap_or_else(|| name.to_string()),
                 shape: ComponentShape::Mesh {

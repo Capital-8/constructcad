@@ -24,3 +24,6 @@ sys-locale.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+image.workspace = true
