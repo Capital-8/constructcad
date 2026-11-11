@@ -293,7 +293,7 @@ impl SceneMesh {
     pub fn build_rebar(geom: &ModelGeometry, tess: &Tessellation, selected: &BTreeSet<ElementId>) -> Self {
         let mut mesh = Self::faint(tess);
         for set in geom.rebar.values() {
-            let sel = selected.contains(&set.element) || selected.contains(&set.host);
+            let sel = selected.contains(&set.element) || set.host.is_some_and(|h| selected.contains(&h));
             let color = if sel { [0.02, 0.15, 0.6, 1.0] } else { [0.55, 0.06, 0.04, 1.0] };
             for bar in &set.bars {
                 let n = bar.points.len();

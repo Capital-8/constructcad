@@ -216,7 +216,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
         F::Length => match &e.kind {
             ElementKind::Wall(w) => Value::Length(project.wall_length(e, w)),
             ElementKind::Beam(b) => Value::Length(b.true_length()),
-            ElementKind::Rebar(_) => geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.total_length())),
+            ElementKind::Rebar(_) | ElementKind::ShapedRebar(_) => {
+                geom.rebar.get(&e.id).map_or(Value::Missing, |r| Value::Length(r.total_length()))
+            }
             ElementKind::Foundation(f) => match &f.shape {
                 shape @ cc_core::FoundationShape::Strip { .. } => Value::Length(shape.strip_length()),
                 _ => Value::Missing,

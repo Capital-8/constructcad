@@ -1,15 +1,17 @@
 //! Reinforcing bars as other tools write them (IFC2X3, no type objects,
-//! swept disk bodies): identical bars share one component type, whether
-//! their geometry is written in a local placement or in world coordinates,
-//! and bars of different shapes do not.
+//! swept disk bodies) become native shaped bars of the reinforcement
+//! category, one type per diameter and grade (#263). Objects of other
+//! classes with the same geometry come in as components: identical ones
+//! share one component type, whether their geometry is written in a local
+//! placement or in world coordinates, and ones of different shapes do not.
 
 // Test helpers outside #[test] functions may fail loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use cc_core::Component;
-use cc_core::properties::{Atom, IfcValue, PropertyValue};
-use cc_core::{Element, ElementKind, Project, TypeData};
-use cc_ifc::import;
+use cc_core::properties::{Atom, IfcValue, PropertySet, PropertyValue};
+use cc_core::{Category, Element, ElementKind, Project, ShapedRebar, TypeData};
+use cc_ifc::{ExportOptions, export, import};
 
 /// Bars A and B: the same L shape written in world coordinates (their
 /// placement is the storey's) at two places; C: another shape with A's
@@ -103,16 +105,21 @@ fn bar<'a>(p: &'a Project, mark: &str) -> (&'a Element, &'a Component) {
         .unwrap_or_else(|| panic!("no bar {mark}"))
 }
 
-fn partition(c: &Component) -> Option<String> {
-    c.properties.iter().filter(|s| s.name == "Custom").flat_map(|s| &s.properties).find_map(|p| match &p.value {
+fn partition(sets: &[PropertySet]) -> Option<String> {
+    sets.iter().filter(|s| s.name == "Custom").flat_map(|s| &s.properties).find_map(|p| match &p.value {
         PropertyValue::Single(Some(IfcValue { value: Atom::Text(t), .. })) => Some(t.clone()),
         _ => None,
     })
 }
 
+/// The bars as objects of a class with no native element (proxies).
+fn proxies() -> String {
+    BARS.replace("IFCREINFORCINGBAR(", "IFCBUILDINGELEMENTPROXY(")
+}
+
 #[test]
-fn identical_bars_share_one_type() {
-    let (p, report) = import(BARS, Project::from_template()).unwrap();
+fn identical_objects_share_one_type() {
+    let (p, report) = import(&proxies(), Project::from_template()).unwrap();
     assert_eq!(report.generic.values().sum::<usize>(), 6, "{report:?}");
     let (a, ca) = bar(&p, "A");
     let (b, cb) = bar(&p, "B");
@@ -139,15 +146,15 @@ fn identical_bars_share_one_type() {
     assert!((ch.position - glam::DVec2::new(7.0, 10.0)).length() < 1e-6, "{}", ch.position);
     assert!((ch.rotation_deg - cg.rotation_deg - 90.0).abs() < 1e-6);
     // Per-bar property sets stay on the bars.
-    assert_eq!(partition(ca).as_deref(), Some("P1"));
-    assert_eq!(partition(cb).as_deref(), Some("P2"));
+    assert_eq!(partition(&ca.properties).as_deref(), Some("P1"));
+    assert_eq!(partition(&cb.properties).as_deref(), Some("P2"));
     // The shared type keeps the class.
     let Some(TypeData::Component { def, .. }) = p.element_type(a.type_id).map(|t| &t.data) else { panic!() };
-    assert_eq!(def.ifc.as_ref().map(|c| c.entity.as_str()), Some("IFCREINFORCINGBAR"));
+    assert_eq!(def.ifc.as_ref().map(|c| c.entity.as_str()), Some("IFCBUILDINGELEMENTPROXY"));
     let bar_types = p
         .types
         .values()
-        .filter(|t| matches!(&t.data, TypeData::Component { def, .. } if def.ifc.as_ref().is_some_and(|c| c.entity == "IFCREINFORCINGBAR")))
+        .filter(|t| matches!(&t.data, TypeData::Component { def, .. } if def.ifc.as_ref().is_some_and(|c| c.entity == "IFCBUILDINGELEMENTPROXY")))
         .count();
     assert_eq!(bar_types, 4);
     // Geometry survives: each bar's volume is its swept disk's.
@@ -156,4 +163,91 @@ fn identical_bars_share_one_type() {
     let expected = std::f64::consts::PI * 0.006 * 0.006 * 1.3;
     assert!((va - expected).abs() < 0.05 * expected, "{va} vs {expected}");
     assert!((va - vb).abs() < 1e-9);
+}
+
+fn shaped<'a>(p: &'a Project, mark: &str) -> (&'a Element, &'a ShapedRebar) {
+    p.elements
+        .values()
+        .find_map(|e| match &e.kind {
+            ElementKind::ShapedRebar(r) if e.mark == mark => Some((e, r)),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no bar {mark}"))
+}
+
+fn diameter(p: &Project, e: &Element) -> f64 {
+    match p.element_type(e.type_id).map(|t| &t.data) {
+        Some(TypeData::Rebar { diameter, .. }) => *diameter,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Reinforcing bars become native shaped bars: one type per diameter and
+/// grade, their center lines where the file puts them, their lengths and
+/// weights in the reinforcement figures, their property sets kept; export
+/// writes them back as bars, which import again the same.
+#[test]
+fn bars_become_native_reinforcement() {
+    let (p, report) = import(BARS, Project::from_template()).unwrap();
+    assert!(report.generic.is_empty(), "{report:?}");
+    assert_eq!(report.imported.get(&Category::Rebar), Some(&6), "{report:?}");
+    let marks = ["A", "B", "C", "F", "G", "H"];
+    let bars: Vec<(&Element, &ShapedRebar)> = marks.iter().map(|m| shaped(&p, m)).collect();
+    // Ø12 CA-50 and Ø10 CA-50: two types, whatever the shapes.
+    for (e, _) in &bars[..3] {
+        assert_eq!(e.type_id, bars[0].0.type_id);
+        assert!((diameter(&p, e) - 0.012).abs() < 1e-9);
+    }
+    for (e, _) in &bars[3..] {
+        assert_eq!(e.type_id, bars[3].0.type_id);
+        assert!((diameter(&p, e) - 0.010).abs() < 1e-9);
+    }
+    let ty = p.element_type(bars[0].0.type_id).unwrap();
+    assert_eq!(ty.name, "Ø 12.0 mm CA-50");
+    assert!(matches!(&ty.data, TypeData::Rebar { material, .. } if material == "CA-50"));
+    // H: G's U turned a quarter in plan, 0.5 m up.
+    let (_, h) = bars[5];
+    let expected = [(7.005, 10.0), (6.705, 10.0), (6.705, 11.0), (7.005, 11.0)];
+    for (q, (x, y)) in h.bars[0].iter().zip(expected) {
+        assert!((q.x - x).abs() < 1e-9 && (q.y - y).abs() < 1e-9 && (q.z - 0.5).abs() < 1e-9, "{q}");
+    }
+    // Lengths and weights as the reinforcement schedules read them.
+    let geom = cc_geom::ModelGeometry::build(&p);
+    let a = &geom.rebar[&bars[0].0.id];
+    assert!((a.total_length() - 1.3).abs() < 1e-9 && a.count() == 1 && a.host.is_none());
+    let weight = std::f64::consts::PI * 0.006 * 0.006 * 1.3 * cc_geom::rebar::STEEL_DENSITY;
+    assert!((a.weight() - weight).abs() < 1e-9, "{}", a.weight());
+    assert!((geom.rebar[&bars[5].0.id].total_length() - 1.6).abs() < 1e-9);
+    // Per-bar property sets stay on the bars.
+    assert_eq!(partition(&bars[0].1.properties).as_deref(), Some("P1"));
+    assert_eq!(partition(&bars[1].1.properties).as_deref(), Some("P2"));
+
+    // Round trip.
+    let text = export(&p, &ExportOptions::default());
+    let (again, report) = import(&text, Project::from_template()).unwrap();
+    assert!(report.generic.is_empty(), "{report:?}");
+    let geom2 = cc_geom::ModelGeometry::build(&again);
+    for (mark, (e, r)) in marks.iter().zip(&bars) {
+        let (e2, r2) = shaped(&again, mark);
+        assert_eq!(e2.uid, e.uid);
+        assert!((diameter(&again, e2) - diameter(&p, e)).abs() < 1e-9);
+        let (l, l2) = (geom.rebar[&e.id].total_length(), geom2.rebar[&e2.id].total_length());
+        assert!((l - l2).abs() < 1e-6, "{mark}: {l} vs {l2}");
+        assert_eq!(partition(&r2.properties), partition(&r.properties));
+    }
+    let types = again.types_of(Category::Rebar).filter(|t| t.name.starts_with("Ø")).count();
+    assert_eq!(types, 2);
+}
+
+/// A bar with a hollow disk or of another shape stays a component; one
+/// crafted with a huge or broken path cannot panic.
+#[test]
+fn other_bars_stay_components() {
+    let hollow = BARS.replace("#103=IFCSWEPTDISKSOLID(#104,6.,$,$,$);", "#103=IFCSWEPTDISKSOLID(#104,6.,3.,$,$);");
+    let (p, report) = import(&hollow, Project::from_template()).unwrap();
+    assert_eq!(report.generic.values().sum::<usize>(), 1, "{report:?}");
+    assert!(matches!(p.elements.values().find(|e| e.mark == "A").map(|e| &e.kind), Some(ElementKind::Component(_))));
+    let broken = BARS.replace("#104=IFCPOLYLINE((#105,#106,#107));", "#104=IFCPOLYLINE((#105));");
+    let (p, _) = import(&broken, Project::from_template()).unwrap();
+    assert!(p.elements.values().filter(|e| matches!(e.kind, ElementKind::ShapedRebar(_))).count() >= 5);
 }

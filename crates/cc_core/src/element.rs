@@ -1,5 +1,5 @@
 use crate::{Category, ElementId, ElementTypeId, LevelId, Uid, ViewId};
-use glam::DVec2;
+use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 
 /// A model element instance. Coordinates are in meters; X east, Y north, Z up.
@@ -52,6 +52,9 @@ pub enum ElementKind {
     Component(Component),
     Foundation(Foundation),
     Rebar(Rebar),
+    /// Reinforcing bars bent to shapes of their own, placed by their center
+    /// lines (bars read from IFC files).
+    ShapedRebar(ShapedRebar),
     Pipe(crate::MepSegment),
     Conduit(crate::MepSegment),
     /// A cable tray run (a rectangular channel carrying circuits).
@@ -104,7 +107,7 @@ impl Element {
             ElementKind::Railing(_) => Category::Railing,
             ElementKind::Component(_) => Category::Component,
             ElementKind::Foundation(_) => Category::Foundation,
-            ElementKind::Rebar(_) => Category::Rebar,
+            ElementKind::Rebar(_) | ElementKind::ShapedRebar(_) => Category::Rebar,
             ElementKind::Pipe(_) => Category::Pipe,
             ElementKind::Conduit(_) => Category::Conduit,
             ElementKind::CableTray(_) => Category::CableTray,
@@ -345,6 +348,7 @@ impl Element {
             ElementKind::DetailLine(l) => l.curve.transform(&t),
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => r.points_mut().for_each(|p| *p += delta),
             ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
+            ElementKind::ShapedRebar(r) => r.points_mut().for_each(|p| *p += delta.extend(0.0)),
             // Placed by their hosts.
             ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
         }
@@ -1085,6 +1089,43 @@ pub struct Rebar {
     pub host: ElementId,
     pub layout: RebarLayout,
     pub cover: f64,
+}
+
+/// Reinforcing bars of any shape (bars bent to a schedule's shape codes,
+/// read from IFC files): each bar is its center line, in plan x/y and z
+/// above the element's level (meters), closed when its ends meet; the type
+/// gives the diameter. Unlike [`Rebar`] they have no host and keep their
+/// place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShapedRebar {
+    pub bars: Vec<Vec<DVec3>>,
+    /// Property and quantity sets read from an IFC file (shape code, bar
+    /// marks, grade), written back on export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<crate::properties::PropertySet>,
+}
+
+impl ShapedRebar {
+    /// At most this many bars in one element.
+    pub const MAX_BARS: usize = 1000;
+    /// At most this many points along one bar.
+    pub const MAX_POINTS: usize = 2000;
+
+    /// Every point of every bar.
+    pub fn points_mut(&mut self) -> impl Iterator<Item = &mut DVec3> {
+        self.bars.iter_mut().flatten()
+    }
+
+    /// Whether the bars are usable: one to [`Self::MAX_BARS`] of them, each
+    /// with two to [`Self::MAX_POINTS`] finite points and some length.
+    pub fn is_valid(&self) -> bool {
+        (1..=Self::MAX_BARS).contains(&self.bars.len())
+            && self.bars.iter().all(|b| {
+                (2..=Self::MAX_POINTS).contains(&b.len())
+                    && b.iter().all(|p| p.is_finite())
+                    && b.windows(2).any(|w| w[0].distance(w[1]) > 1e-6)
+            })
+    }
 }
 
 /// A stair starting at `start` (bottom of the first riser, center of the

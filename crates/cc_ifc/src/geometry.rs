@@ -167,12 +167,14 @@ pub struct Solid {
     /// Something other than those extrusions changed it (half spaces,
     /// intersections, cutters of other shapes).
     pub other_cut: bool,
+    /// The center line (world) and radius of a disk swept along it (bars).
+    pub disk: Option<(Vec<DVec3>, f64)>,
 }
 
 impl Solid {
     fn new(item: u32, mesh: Vec<Polygon>, extrusion: Option<Extrusion>) -> Self {
         let points = mesh.iter().flatten().copied().collect();
-        Self { extrusion, mesh, points, item, clipped: false, cuts: Vec::new(), other_cut: false }
+        Self { extrusion, mesh, points, item, clipped: false, cuts: Vec::new(), other_cut: false, disk: None }
     }
 
     /// Replace the faces by a cut version of them; a changed solid is
@@ -1057,7 +1059,18 @@ impl<'a> Geometry<'a> {
             "IFCSWEPTDISKSOLID" | "IFCSWEPTDISKSOLIDPOLYGONAL" => {
                 let Some(r) = self.positive(e.arg(1)) else { return };
                 let path = self.curve(e.arg(0), 0);
+                let before = out.len();
                 push(out, sweep_disk(&path, r));
+                // The center line too, through a placement that keeps disks round.
+                let (x, y, z) = (xf.matrix3.x_axis, xf.matrix3.y_axis, xf.matrix3.z_axis);
+                let scale = x.length();
+                let round = [y.length(), z.length()].iter().all(|l| (l - scale).abs() <= 1e-9 * scale.max(1.0))
+                    && x.dot(y).abs() + y.dot(z).abs() + z.dot(x).abs() <= 1e-9 * scale * scale;
+                // A hollow disk (inner radius) is no bar.
+                let solid = e.arg(2).as_f64().is_none_or(|inner| inner <= 0.0);
+                if let Some(s) = out.get_mut(before).filter(|_| round && solid && scale > 1e-12) {
+                    s.disk = Some((path.iter().map(|p| xf.transform_point3(*p)).collect(), r * scale));
+                }
             }
             "IFCSURFACECURVESWEPTAREASOLID" | "IFCFIXEDREFERENCESWEPTAREASOLID" | "IFCDIRECTRIXCURVESWEPTAREASOLID" => {
                 let position = self.axis_placement(e.arg(1));

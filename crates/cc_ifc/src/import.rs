@@ -18,8 +18,8 @@ use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
-    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, TypeData, Uid, View, ViewId,
-    ViewKind, Wall, WallFunction, WallTop,
+    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, ShapedRebar, TypeData, Uid,
+    View, ViewId, ViewKind, Wall, WallFunction, WallTop,
 };
 use cc_core::{DoorOperation, WindowOperation};
 use cc_core::{Foundation, FoundationKind, FoundationShape};
@@ -499,6 +499,7 @@ impl<'a> Importer<'a> {
                 "IFCGEOGRAPHICELEMENT" => self.import_topography(id, e),
                 "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => self.import_column(id, e),
                 "IFCBEAM" | "IFCBEAMSTANDARDCASE" => self.import_beam(id, e),
+                "IFCREINFORCINGBAR" => self.import_bar(id, e),
                 // The framing of a roof whose type now draws it again.
                 "IFCMEMBER" if self.parent.get(&id).is_some_and(|r| self.framed_roofs.contains(r)) => continue,
                 "IFCSPACE" => {
@@ -2350,6 +2351,80 @@ impl<'a> Importer<'a> {
 
     /// Any physical object without a native counterpart (or whose geometry
     /// a native element cannot hold): a component that keeps its IFC class.
+    /// A reinforcing bar drawn as disks swept along center lines becomes a
+    /// shaped bar set of the reinforcement category (#263), its type found or
+    /// made by diameter and steel (grade or material), so that bars of one
+    /// size share it. Its property sets stay with the element. `false` for
+    /// bars of other geometry (they come in as components).
+    fn import_bar(&mut self, id: u32, e: &Entity) -> bool {
+        let (_, body) = self.product(e);
+        let mut radius: Option<f64> = None;
+        let mut lines = Vec::new();
+        for s in &body.solids {
+            let Some((path, r)) = s.disk.as_ref().filter(|_| !s.clipped && !s.other_cut) else { return false };
+            // One diameter per set: the type holds it.
+            if radius.is_some_and(|r0| (r0 - r).abs() > 1e-6) {
+                return false;
+            }
+            radius = Some(*r);
+            lines.push(path.clone());
+        }
+        let Some(radius) = radius else { return false };
+        let z0 = lines.iter().flatten().map(|p| p.z).fold(f64::INFINITY, f64::min);
+        if !z0.is_finite() {
+            return false;
+        }
+        let (level, elevation) = self.level_for(id, z0);
+        let bars = lines.into_iter().map(|l| l.into_iter().map(|p| p - DVec3::Z * elevation).collect()).collect();
+        let rebar = ShapedRebar { bars, properties: self.property_sets(id) };
+        if !rebar.is_valid() {
+            return false;
+        }
+        // The nominal diameter, unless it is far from the drawn one.
+        let drawn = 2.0 * radius;
+        let diameter = e
+            .arg(9)
+            .as_f64()
+            .map(|d| d * self.scale)
+            .filter(|d| d.is_finite() && (d - drawn).abs() <= 0.25 * drawn)
+            .unwrap_or(drawn);
+        let grade = e.arg(8).as_str().map(clean_name).filter(|g| !g.is_empty());
+        let steel = grade.clone().or_else(|| self.materials(id).1);
+        let color = self.body_color(e);
+        let material = steel.as_ref().map(|m| self.material(m, color));
+        // Without a grade or material, any bar type of the size will do.
+        let existing = self.p.types_of(Category::Rebar).find_map(|t| match &t.data {
+            TypeData::Rebar { material, .. } => Some(material.clone()),
+            _ => None,
+        });
+        let fallback_material = match (&material, existing) {
+            (Some(m), _) => m.clone(),
+            (None, Some(m)) => m,
+            (None, None) => self.material("IFC", color),
+        };
+        let size = format!("Ø {:.1} mm", diameter * 1000.0);
+        let fallback = grade.map_or_else(|| size.clone(), |g| format!("{size} {g}"));
+        let name = self.type_entity(id).and_then(|t| t.arg(2).as_str()).map(clean_name).filter(|s| !s.is_empty());
+        let uid = self.type_uid(id);
+        let type_id = self.find_or_add_type(
+            Category::Rebar,
+            name,
+            fallback,
+            uid,
+            |t| match t {
+                TypeData::Rebar { diameter: d, material: m } => {
+                    (d - diameter).abs() <= 1e-5 && material.as_ref().is_none_or(|want| m == want)
+                }
+                _ => false,
+            },
+            || TypeData::Rebar { diameter, material: fallback_material },
+        );
+        // The bar mark: the tag, else the name.
+        let mark = Some(Self::tag(e)).filter(|t| !t.is_empty()).or_else(|| e.arg(2).as_str().map(clean_name));
+        self.add_element(id, e, level, type_id, mark.unwrap_or_default(), ElementKind::ShapedRebar(rebar));
+        true
+    }
+
     fn import_generic(&mut self, id: u32, e: &Entity) -> bool {
         let ok = self.import_component(id, e, kind_of_class(&e.name));
         if ok {

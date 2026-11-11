@@ -110,6 +110,10 @@ impl Element {
                 }
             }
             ElementKind::Room(r) => p(&mut r.position),
+            ElementKind::ShapedRebar(r) => r.points_mut().for_each(|q| {
+                let plan = t.apply(q.truncate());
+                (q.x, q.y) = (plan.x, plan.y);
+            }),
             // Bars follow their host.
             ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
