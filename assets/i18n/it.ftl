@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Esce dallo schizzo senza modificare il modello.
 cmd-desc-edit-boundary = Apre lo schizzo del solaio, controsoffitto, tetto o massa selezionato per cambiarne il contorno.
 cmd-desc-edit-profile = Apre in uno schizzo il profilo del tipo del profilo estruso selezionato; tutti i profili estrusi del tipo lo seguono.
 why-no-sketch = Solo con uno schizzo aperto
+why-profile-sketch-open = Termina o annulla prima lo schizzo del profilo
 why-select-outline = Seleziona un solaio, controsoffitto, tetto o massa
 why-select-sweep = Seleziona un profilo estruso
 sketch-empty = Lo schizzo non ha curve.

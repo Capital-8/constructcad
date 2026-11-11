@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Quitte l'esquisse sans modifier le modèle.
 cmd-desc-edit-boundary = Ouvre l'esquisse du sol, plafond, toit ou volume sélectionné pour changer son contour.
 cmd-desc-edit-profile = Ouvre dans une esquisse le profil du type du profil balayé sélectionné ; tous les profils balayés du type suivent.
 why-no-sketch = Uniquement pendant une esquisse
+why-profile-sketch-open = Terminez ou annulez d'abord l'esquisse du profilé
 why-select-outline = Sélectionnez un sol, plafond, toit ou volume
 why-select-sweep = Sélectionnez un profil balayé
 sketch-empty = L'esquisse n'a pas de courbes.

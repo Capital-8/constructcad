@@ -1364,6 +1364,7 @@ impl UiCommand {
             }
             EditBoundary if crate::sketch_mode::boundary_target(state).is_none() => Some(t!("why-select-outline")),
             EditProfile if crate::profile_sketch::target(state).is_none() => Some(t!("why-select-sweep")),
+            Profiles if crate::profiles_dialog::section_sketch_open(state) => Some(t!("why-profile-sketch-open")),
             TbLines | TbText | TbImage if !crate::title_block_env::is_open(state) => Some(t!("why-title-block-editor")),
             EditTitleBlock if crate::title_block_env::sheet_title_block(state).is_none() => {
                 Some(t!("why-sheet-title-block"))

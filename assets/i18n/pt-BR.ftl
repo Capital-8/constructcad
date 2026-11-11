@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Sai do esboço sem alterar o modelo.
 cmd-desc-edit-boundary = Abre o esboço do piso, forro, telhado ou massa selecionado para mudar seu contorno.
 cmd-desc-edit-profile = Abre o perfil do tipo do perfil varrido selecionado num esboço; todos os perfis varridos do tipo acompanham.
 why-no-sketch = Só com um esboço aberto
+why-profile-sketch-open = Conclua ou cancele antes o esboço do perfil
 why-select-outline = Selecione um piso, forro, telhado ou massa
 why-select-sweep = Selecione um perfil varrido
 sketch-empty = O esboço não tem curvas.

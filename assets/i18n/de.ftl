@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Verlässt die Skizze, ohne das Modell zu ändern.
 cmd-desc-edit-boundary = Öffnet die Skizze der gewählten Decke, Unterdecke, des Dachs oder der Masse, um den Umriss zu ändern.
 cmd-desc-edit-profile = Öffnet das Profil des Typs der gewählten Profilextrusion in einer Skizze; alle Profilextrusionen des Typs folgen.
 why-no-sketch = Nur bei geöffneter Skizze
+why-profile-sketch-open = Zuerst die Skizze des Profils abschließen oder abbrechen
 why-select-outline = Eine Decke, Unterdecke, ein Dach oder eine Masse wählen
 why-select-sweep = Eine Profilextrusion auswählen
 sketch-empty = Die Skizze hat keine Kurven.

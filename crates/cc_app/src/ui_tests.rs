@@ -3171,3 +3171,73 @@ fn the_profile_managers_cancel_undoes_its_sketch() {
     let b = harness.state().project().profile(id).unwrap().shape.params();
     assert!(b.iter().any(|(n, v)| n == "b" && (*v - 0.12).abs() < 1e-12), "OK keeps the dimension: {b:?}");
 }
+
+/// A profile's sketch left by another tool (or dropped any other way) ends
+/// the Profile Manager's session, keeping its edits, so a later dialog's
+/// Cancel undoes only its own; the manager cannot open over the sketch.
+#[test]
+fn leaving_a_profile_sketch_by_another_tool_ends_the_managers_session() {
+    use crate::commands::UiCommand;
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::{ProfileCreate, ProfileSet};
+    use cc_engine::commands::project::ProjectInfoSet;
+    let mut state = sample_state();
+    let command = ProfileCreate { material: "steel".into(), shape: Some("sketch".into()), ..Default::default() };
+    let id = cc_core::ProfileId(state.session.run(command).unwrap()["id"].as_u64().unwrap());
+    let mut harness = sketch_harness(state);
+    let to_sketch = |h: &mut Harness<'static, AppState>, v: f64| {
+        crate::profiles_dialog::open(h.state_mut());
+        h.state_mut().dialogs.profiles.as_mut().unwrap().selected = Some(id);
+        h.run();
+        let set = ProfileSet {
+            profile: Ref::Id(id.0),
+            params: Some([("b".to_string(), v)].into_iter().collect()),
+            ..Default::default()
+        };
+        h.state_mut().session.run(set).unwrap();
+        h.run();
+        h.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+        h.run();
+        assert!(crate::profile_sketch::is_open(h.state()));
+        assert!(h.state().dialogs.edit_start.is_some());
+        assert!(UiCommand::Profiles.unavailable(h.state()).is_some(), "no manager over its own sketch");
+        crate::profiles_dialog::open(h.state_mut());
+        assert!(h.state().dialogs.profiles.is_none());
+    };
+    let b = |h: &Harness<'static, AppState>| {
+        let params = h.state().project().profile(id).unwrap().shape.params();
+        params.iter().find(|(n, _)| n == "b").map(|(_, v)| *v)
+    };
+    let later_dialog_cancel_keeps = |h: &mut Harness<'static, AppState>, name: &str| {
+        let info = ProjectInfoSet {
+            name: Some(name.into()),
+            number: None,
+            client: None,
+            address: None,
+            author: None,
+            fields: None,
+        };
+        h.state_mut().session.run(info).unwrap();
+        crate::dialog::session::begin(h.state_mut());
+        crate::dialog::session::cancel(h.state_mut());
+        assert_eq!(h.state().project().info.name, name, "a later Cancel keeps unrelated edits");
+    };
+
+    // Another tool.
+    to_sketch(&mut harness, 0.12);
+    harness.state_mut().set_tool(crate::tools::Tool::Measure);
+    assert!(harness.state().sketch.is_none());
+    assert!(harness.state().dialogs.edit_start.is_none(), "the manager's session ended");
+    assert!(harness.state().dialogs.profiles_resume.is_none());
+    assert_eq!(b(&harness), Some(0.12), "the manager's edits are kept");
+    later_dialog_cancel_keeps(&mut harness, "Unrelated");
+
+    // Dropped directly: settled on the next frame.
+    harness.state_mut().set_tool(crate::tools::Tool::Select);
+    to_sketch(&mut harness, 0.14);
+    harness.state_mut().sketch = None;
+    harness.run();
+    assert!(harness.state().dialogs.edit_start.is_none());
+    assert!(harness.state().dialogs.profiles_resume.is_none());
+    later_dialog_cancel_keeps(&mut harness, "Unrelated 2");
+}

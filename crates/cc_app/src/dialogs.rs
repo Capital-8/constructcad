@@ -21,6 +21,8 @@ fn done(state: &mut AppState, r: &egui::Response) {
 }
 
 pub fn show(ctx: &Context, state: &mut AppState) {
+    // Before any dialog begins its edits over a session a dropped profile sketch left open.
+    crate::profiles_dialog::settle_abandoned(state);
     project_info(ctx, state);
     crate::site_ui::show(ctx, state);
     crate::units_dialog::show(ctx, state);

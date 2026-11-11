@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Leave the sketch without changing the model.
 cmd-desc-edit-boundary = Open the sketch of the selected floor, ceiling, roof or mass to change its outline.
 cmd-desc-edit-profile = Open the profile of the selected sweep's type in a sketch; every sweep of the type follows.
 why-no-sketch = Only while a sketch is open
+why-profile-sketch-open = Finish or cancel the profile's sketch first
 why-select-outline = Select one floor, ceiling, roof or mass
 why-select-sweep = Select one sweep
 sketch-empty = The sketch has no curves.

@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Zamyka szkic bez zmiany modelu.
 cmd-desc-edit-boundary = Otwiera szkic zaznaczonej podłogi, sufitu, dachu lub bryły, aby zmienić obrys.
 cmd-desc-edit-profile = Otwiera w szkicu profil typu zaznaczonego profilu przeciągniętego; wszystkie profile przeciągnięte tego typu się zmienią.
 why-no-sketch = Tylko przy otwartym szkicu
+why-profile-sketch-open = Najpierw zakończ lub anuluj szkic profilu
 why-select-outline = Zaznacz jedną podłogę, sufit, dach lub bryłę
 why-select-sweep = Zaznacz jeden profil przeciągnięty
 sketch-empty = Szkic nie ma krzywych.

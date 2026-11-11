@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = 離開草圖，不修改模型。
 cmd-desc-edit-boundary = 開啟所選樓板、天花板、屋頂或量體的草圖以修改邊界。
 cmd-desc-edit-profile = 在草圖中開啟所選掃掠輪廓類型的斷面；該類型的所有掃掠輪廓隨之更新。
 why-no-sketch = 僅在草圖開啟時可用
+why-profile-sketch-open = 請先完成或取消型材的草圖
 why-select-outline = 選取一個樓板、天花板、屋頂或量體
 why-select-sweep = 請選取一個掃掠輪廓
 sketch-empty = 草圖中沒有曲線。

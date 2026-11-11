@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = Sale del boceto sin cambiar el modelo.
 cmd-desc-edit-boundary = Abre el boceto del suelo, techo, cubierta o masa seleccionado para cambiar su contorno.
 cmd-desc-edit-profile = Abre en un boceto el perfil del tipo del perfil barrido seleccionado; todos los perfiles barridos del tipo lo siguen.
 why-no-sketch = Solo con un boceto abierto
+why-profile-sketch-open = Termine o cancele antes el boceto del perfil
 why-select-outline = Seleccione un suelo, techo, cubierta o masa
 why-select-sweep = Seleccione un perfil barrido
 sketch-empty = El boceto no tiene curvas.

@@ -430,6 +430,8 @@ impl AppState {
             }
             _ => self.sketch = None,
         }
+        // A profile's sketch dropped by another tool ends the manager's edits.
+        crate::profiles_dialog::settle_abandoned(self);
         self.detail_draw = None;
         self.tool = tool;
         self.interaction = Interaction::default();

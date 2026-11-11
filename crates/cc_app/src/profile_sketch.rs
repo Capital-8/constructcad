@@ -239,9 +239,11 @@ fn same_shape(sketch: &ParamSketch, curves: &[SketchCurve]) -> bool {
 /// Close a structural profile's sketch and go back to the Profile Manager on
 /// it, with the manager's edits from before the sketch.
 pub fn leave_section(state: &mut AppState, id: ProfileId) {
+    // Taken first, so changing the tool below does not settle them.
+    let edits = state.dialogs.profiles_resume.take();
     state.sketch = None;
     state.set_tool(Tool::Select);
-    crate::profiles_dialog::resume(state, id);
+    crate::profiles_dialog::resume(state, id, edits);
 }
 
 /// The view of the profile: where the camera looks and how near.

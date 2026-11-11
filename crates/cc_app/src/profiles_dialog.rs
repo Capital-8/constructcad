@@ -101,15 +101,39 @@ pub struct Catalog {
     error: Option<String>,
 }
 
+/// Open the Profile Manager; not while one of its profile sketches is open
+/// (the manager comes back when that sketch closes).
 pub fn open(state: &mut AppState) {
+    if section_sketch_open(state) {
+        state.message = t!("why-profile-sketch-open");
+        return;
+    }
     let edits = Edits::begin(state);
     open_with(state, edits);
 }
 
-/// Open the manager again on profile `id` after its sketch closes, with the
-/// edits it had when the sketch opened (a fresh start if there are none).
-pub fn resume(state: &mut AppState, id: ProfileId) {
-    match state.dialogs.profiles_resume.take() {
+/// Whether a structural profile's sketch is open (the manager waits for it).
+pub fn section_sketch_open(state: &AppState) -> bool {
+    matches!(state.sketch.as_ref().map(|s| s.target), Some(crate::sketch_mode::Target::Section { .. }))
+}
+
+/// Keep the manager's edits when its profile sketch closed without going
+/// back to it (another tool, a palette command…), so the shared dialog
+/// session ends and a later dialog's Cancel undoes only its own edits. The
+/// one place that settles them, run when the tool changes and every frame.
+pub fn settle_abandoned(state: &mut AppState) {
+    if state.dialogs.profiles.is_none()
+        && !section_sketch_open(state)
+        && let Some(edits) = state.dialogs.profiles_resume.take()
+    {
+        edits.finish(state, true);
+    }
+}
+
+/// Open the manager again on profile `id` after its sketch closes, with
+/// `edits`, the ones it had when the sketch opened (a fresh start if none).
+pub fn resume(state: &mut AppState, id: ProfileId, edits: Option<Edits>) {
+    match edits {
         Some(edits) => open_with(state, edits),
         None => open(state),
     }

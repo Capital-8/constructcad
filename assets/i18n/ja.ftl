@@ -2325,6 +2325,7 @@ cmd-desc-sketch-cancel-mode = モデルを変更せずにスケッチを終了�
 cmd-desc-edit-boundary = 選択した床、天井、屋根、またはマスのスケッチを開いてアウトラインを変更します。
 cmd-desc-edit-profile = 選択したスイープのタイプのプロファイルをスケッチで開きます。そのタイプのすべてのスイープが追従します。
 why-no-sketch = スケッチを開いているときのみ
+why-profile-sketch-open = 先に断面のスケッチを完了またはキャンセルしてください
 why-select-outline = 床、天井、屋根、またはマスを 1 つ選択してください
 why-select-sweep = スイープを 1 つ選択してください
 sketch-empty = スケッチに曲線がありません。
