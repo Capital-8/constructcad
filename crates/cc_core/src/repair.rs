@@ -67,6 +67,7 @@ fn element_is_valid(e: &Element) -> bool {
             };
             layout && r.cover.is_finite() && r.cover >= 0.0
         }
+        ElementKind::ShapedRebar(r) => r.is_valid(),
         ElementKind::Foundation(f) => {
             let shape = match &f.shape {
                 crate::FoundationShape::Pad { position, rotation_deg } => {

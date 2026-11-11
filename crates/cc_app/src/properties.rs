@@ -660,6 +660,16 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             reinforcement(ui, state, id);
         }
         ElementKind::Rebar(r) => rebar_props(ui, state, &el, r),
+        ElementKind::ShapedRebar(r) => {
+            rebar_dimensions(ui, state, id);
+            for (i, set) in r.properties.iter().enumerate() {
+                section(ui, &format!("bar-set-{i}"), set.name.clone(), |ui| {
+                    for p in &set.properties {
+                        property_rows(ui, &p.name, &p.value);
+                    }
+                });
+            }
+        }
         ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => segment_props(ui, state, &el, s),
         ElementKind::LightningConductor(c) => {
             segment_props(ui, state, &el, &c.run);
@@ -2125,6 +2135,11 @@ fn rebar_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Reb
             }
         });
     });
+    rebar_dimensions(ui, state, id);
+}
+
+/// Count, lengths and weight of a set of bars.
+fn rebar_dimensions(ui: &mut Ui, state: &mut AppState, id: cc_core::ElementId) {
     if let Some(set) = state.session.geom().rebar.get(&id).cloned() {
         section(ui, "dimensions", t!("section-dimensions"), |ui| {
             readonly_row(ui, &t!("col-bar-count"), set.count().to_string());

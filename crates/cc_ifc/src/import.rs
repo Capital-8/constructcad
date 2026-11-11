@@ -18,8 +18,8 @@ use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
-    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, TypeData, Uid, View, ViewId,
-    ViewKind, Wall, WallFunction, WallTop,
+    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, ShapedRebar, TypeData, Uid,
+    View, ViewId, ViewKind, Wall, WallFunction, WallTop,
 };
 use cc_core::{DoorOperation, WindowOperation};
 use cc_core::{Foundation, FoundationKind, FoundationShape};
@@ -38,6 +38,9 @@ const MAX_PARENT_DEPTH: usize = 16;
 const MAX_PHASES: usize = 100;
 /// Length tolerance when matching types (meters).
 const TYPE_TOL: f64 = 0.001;
+/// How far apart (m) the vertices of two imported pieces may be for the
+/// pieces to be the same (the mesh vertices are welded at 1/100 mm).
+const PIECE_TOL: f64 = 1e-5;
 
 /// What an import brought in.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -496,6 +499,7 @@ impl<'a> Importer<'a> {
                 "IFCGEOGRAPHICELEMENT" => self.import_topography(id, e),
                 "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => self.import_column(id, e),
                 "IFCBEAM" | "IFCBEAMSTANDARDCASE" => self.import_beam(id, e),
+                "IFCREINFORCINGBAR" => self.import_bar(id, e),
                 // The framing of a roof whose type now draws it again.
                 "IFCMEMBER" if self.parent.get(&id).is_some_and(|r| self.framed_roofs.contains(r)) => continue,
                 "IFCSPACE" => {
@@ -2347,6 +2351,80 @@ impl<'a> Importer<'a> {
 
     /// Any physical object without a native counterpart (or whose geometry
     /// a native element cannot hold): a component that keeps its IFC class.
+    /// A reinforcing bar drawn as disks swept along center lines becomes a
+    /// shaped bar set of the reinforcement category (#263), its type found or
+    /// made by diameter and steel (grade or material), so that bars of one
+    /// size share it. Its property sets stay with the element. `false` for
+    /// bars of other geometry (they come in as components).
+    fn import_bar(&mut self, id: u32, e: &Entity) -> bool {
+        let (_, body) = self.product(e);
+        let mut radius: Option<f64> = None;
+        let mut lines = Vec::new();
+        for s in &body.solids {
+            let Some((path, r)) = s.disk.as_ref().filter(|_| !s.clipped && !s.other_cut) else { return false };
+            // One diameter per set: the type holds it.
+            if radius.is_some_and(|r0| (r0 - r).abs() > 1e-6) {
+                return false;
+            }
+            radius = Some(*r);
+            lines.push(path.clone());
+        }
+        let Some(radius) = radius else { return false };
+        let z0 = lines.iter().flatten().map(|p| p.z).fold(f64::INFINITY, f64::min);
+        if !z0.is_finite() {
+            return false;
+        }
+        let (level, elevation) = self.level_for(id, z0);
+        let bars = lines.into_iter().map(|l| l.into_iter().map(|p| p - DVec3::Z * elevation).collect()).collect();
+        let rebar = ShapedRebar { bars, properties: self.property_sets(id) };
+        if !rebar.is_valid() {
+            return false;
+        }
+        // The nominal diameter, unless it is far from the drawn one.
+        let drawn = 2.0 * radius;
+        let diameter = e
+            .arg(9)
+            .as_f64()
+            .map(|d| d * self.scale)
+            .filter(|d| d.is_finite() && (d - drawn).abs() <= 0.25 * drawn)
+            .unwrap_or(drawn);
+        let grade = e.arg(8).as_str().map(clean_name).filter(|g| !g.is_empty());
+        let steel = grade.clone().or_else(|| self.materials(id).1);
+        let color = self.body_color(e);
+        let material = steel.as_ref().map(|m| self.material(m, color));
+        // Without a grade or material, any bar type of the size will do.
+        let existing = self.p.types_of(Category::Rebar).find_map(|t| match &t.data {
+            TypeData::Rebar { material, .. } => Some(material.clone()),
+            _ => None,
+        });
+        let fallback_material = match (&material, existing) {
+            (Some(m), _) => m.clone(),
+            (None, Some(m)) => m,
+            (None, None) => self.material("IFC", color),
+        };
+        let size = format!("Ø {:.1} mm", diameter * 1000.0);
+        let fallback = grade.map_or_else(|| size.clone(), |g| format!("{size} {g}"));
+        let name = self.type_entity(id).and_then(|t| t.arg(2).as_str()).map(clean_name).filter(|s| !s.is_empty());
+        let uid = self.type_uid(id);
+        let type_id = self.find_or_add_type(
+            Category::Rebar,
+            name,
+            fallback,
+            uid,
+            |t| match t {
+                TypeData::Rebar { diameter: d, material: m } => {
+                    (d - diameter).abs() <= 1e-5 && material.as_ref().is_none_or(|want| m == want)
+                }
+                _ => false,
+            },
+            || TypeData::Rebar { diameter, material: fallback_material },
+        );
+        // The bar mark: the tag, else the name.
+        let mark = Some(Self::tag(e)).filter(|t| !t.is_empty()).or_else(|| e.arg(2).as_str().map(clean_name));
+        self.add_element(id, e, level, type_id, mark.unwrap_or_default(), ElementKind::ShapedRebar(rebar));
+        true
+    }
+
     fn import_generic(&mut self, id: u32, e: &Entity) -> bool {
         let ok = self.import_component(id, e, kind_of_class(&e.name));
         if ok {
@@ -2497,10 +2575,22 @@ impl<'a> Importer<'a> {
         self.cut_openings(id, &mut body);
         let x = world.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X);
         let rotation = x.y.atan2(x.x);
-        let origin = world.translation;
+        let mut origin = world.translation;
         // Plan frame of the component: origin and rotation in plan, Z up.
-        let frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
-        let inv = frame.inverse();
+        let mut frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+        let mut inv = frame.inverse();
+        // Geometry written in world coordinates (a placement away from the
+        // body) with no type object: the origin goes to the bottom center of
+        // the body, so that identical objects at different places (bars, say)
+        // have the same pieces and share a type.
+        if !self.type_of.contains_key(&id)
+            && let Some((lo, hi)) = local_bounds(&body.solids, &inv)
+            && !((lo - TYPE_TOL).cmple(DVec3::ZERO).all() && (hi + TYPE_TOL).cmpge(DVec3::ZERO).all())
+        {
+            origin = frame.transform_point3(DVec3::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0, lo.z));
+            frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+            inv = frame.inverse();
+        }
         let main = self.main_material(id, e);
         let n = |v: f64| literal(v);
         let base_name = self.type_name(id, e).unwrap_or_else(|| crate::schema::display_name(&e.name));
@@ -2583,8 +2673,14 @@ impl<'a> Importer<'a> {
         let fallback = format!("{} {}", crate::schema::display_name(&e.name), id);
         let uid = self.type_uid(id);
         let component = name.clone().unwrap_or_else(|| fallback.clone());
-        // Same name and same size: the existing (possibly parametric) type.
+        // Same name and same size: the existing parametric type. A type
+        // imported before as fixed pieces must have the same pieces and class
+        // (equal bounds are not the same shape).
+        let new_def = def.clone();
         let same = move |d: &TypeData| match d {
+            TypeData::Component { def, .. } if def.params.is_empty() && def.ifc.is_some() => {
+                def.ifc == new_def.ifc && same_items(&def.items, &new_def.items)
+            }
             TypeData::Component { def, .. } => def_bounds(def, &check)
                 .is_some_and(|(a, b)| (a - lo).abs().max_element() < 1e-3 && (b - hi).abs().max_element() < 1e-3),
             _ => false,
@@ -2777,6 +2873,54 @@ fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
         }
     }
     (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
+}
+
+/// Bounds of the solids' vertices in the frame `inv` maps to.
+fn local_bounds(solids: &[Solid], inv: &DAffine3) -> Option<(DVec3, DVec3)> {
+    solids
+        .iter()
+        .flat_map(|s| s.mesh.iter().flatten())
+        .map(|p| inv.transform_point3(*p))
+        .filter(|p| p.is_finite())
+        .fold(None, |acc, p| Some(acc.map_or((p, p), |(lo, hi): (DVec3, DVec3)| (lo.min(p), hi.max(p)))))
+}
+
+/// Pieces imported from two objects are the same (within [`PIECE_TOL`]):
+/// same shapes, materials and flags. Only fixed meshes and literal
+/// extrusions are compared by value; other shapes must be equal.
+fn same_items(a: &[ComponentItem], b: &[ComponentItem]) -> bool {
+    let num = |x: &str, y: &str| match (x.parse::<f64>(), y.parse::<f64>()) {
+        (Ok(x), Ok(y)) => (x - y).abs() <= PIECE_TOL,
+        _ => x == y,
+    };
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(a, b)| {
+            a.material == b.material
+                && a.in_plan == b.in_plan
+                && a.void == b.void
+                && a.plan_only == b.plan_only
+                && a.detail == b.detail
+                && match (&a.shape, &b.shape) {
+                    (
+                        ComponentShape::Mesh { vertices: va, faces: fa },
+                        ComponentShape::Mesh { vertices: vb, faces: fb },
+                    ) => {
+                        fa == fb
+                            && va.len() == vb.len()
+                            && va.iter().zip(vb).all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
+                    }
+                    (
+                        ComponentShape::Extrusion { points: pa, z: za, height: ha },
+                        ComponentShape::Extrusion { points: pb, z: zb, height: hb },
+                    ) => {
+                        num(za, zb)
+                            && num(ha, hb)
+                            && pa.len() == pb.len()
+                            && pa.iter().zip(pb).all(|(p, q)| num(&p.0, &q.0) && num(&p.1, &q.1))
+                    }
+                    (sa, sb) => sa == sb,
+                }
+        })
 }
 
 /// A number as an expression literal.

@@ -41,7 +41,8 @@ impl Bar {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RebarGeom {
     pub element: ElementId,
-    pub host: ElementId,
+    /// The beam or column the set is laid out in (none for shaped bars).
+    pub host: Option<ElementId>,
     pub diameter: f64,
     pub bars: Vec<Bar>,
 }
@@ -159,9 +160,29 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
             }
             _ => continue,
         };
-        out.insert(e.id, RebarGeom { element: e.id, host: r.host, diameter: d, bars });
+        out.insert(e.id, RebarGeom { element: e.id, host: Some(r.host), diameter: d, bars });
+    }
+    // Shaped bars stand where they are drawn.
+    for e in project.elements.values() {
+        let ElementKind::ShapedRebar(r) = &e.kind else { continue };
+        let Some(d) = diameter(project, e) else { continue };
+        let z = project.level_elevation(e.level);
+        let bars = r.bars.iter().filter_map(|b| shaped_bar(b, z)).collect();
+        out.insert(e.id, RebarGeom { element: e.id, host: None, diameter: d, bars });
     }
     out
+}
+
+/// A shaped bar in the model, `z` up (its level's elevation): closed when its
+/// ends meet (the last point dropped); `None` with less than two points apart.
+fn shaped_bar(points: &[DVec3], z: f64) -> Option<Bar> {
+    let mut points: Vec<DVec3> = points.iter().filter(|p| p.is_finite()).map(|p| *p + DVec3::Z * z).collect();
+    points.dedup_by(|a, b| a.distance(*b) < 1e-9);
+    let closed = points.len() > 3 && points.first().zip(points.last()).is_some_and(|(a, b)| a.distance(*b) < 1e-6);
+    if closed {
+        points.pop();
+    }
+    (points.len() >= 2).then_some(Bar { points, closed })
 }
 
 /// Bars along a beam: longitudinal bars from end to end inside the cover,
