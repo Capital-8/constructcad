@@ -21,7 +21,7 @@ pub mod ports;
 use cc_core::Uid;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 pub use eval::{Evaluator, NodeResult, RunReport};
 pub use lace::Lacing;
@@ -271,12 +271,19 @@ impl Graph {
         let before = self.wires.len();
         let wires = std::mem::take(&mut self.wires);
         let mut inputs = BTreeSet::new();
+        let candidates: Vec<(u64, u64)> = wires
+            .iter()
+            .filter(|w| w.from.0 != w.to.0 && ids.contains(&w.from.0) && ids.contains(&w.to.0))
+            .map(|w| (w.from.0, w.to.0))
+            .collect();
+        let mut dag = Dag::new(self.nodes.iter().map(|n| n.id), &candidates);
         for w in wires {
+            // Wires that would close a cycle are dropped, in file order.
             let ok = w.from.0 != w.to.0
                 && ids.contains(&w.from.0)
                 && ids.contains(&w.to.0)
                 && !inputs.contains(&w.to)
-                && !self.reaches(w.to.0, w.from.0);
+                && dag.add(w.from.0, w.to.0);
             if ok {
                 inputs.insert(w.to.clone());
                 self.wires.push(w);
@@ -304,21 +311,13 @@ impl Graph {
         self.wires.iter().find(|w| w.to.0 == node && w.to.1 == input)
     }
 
-    /// Whether `to` can be reached from `from` along wires (bounded by the
-    /// node count).
+    /// Whether `to` can be reached from `from` along wires.
     pub fn reaches(&self, from: u64, to: u64) -> bool {
-        let mut seen = BTreeSet::new();
-        let mut pending = vec![from];
-        while let Some(n) = pending.pop() {
-            if n == to {
-                return true;
-            }
-            if !seen.insert(n) || seen.len() > MAX_NODES {
-                continue;
-            }
-            pending.extend(self.wires.iter().filter(|w| w.from.0 == n).map(|w| w.to.0));
+        let mut next: HashMap<u64, Vec<u64>> = HashMap::new();
+        for w in &self.wires {
+            next.entry(w.from.0).or_default().push(w.to.0);
         }
-        false
+        reaches_in(&next, from, to)
     }
 
     /// Join an output to an input, replacing the input's wire; refused when
@@ -377,6 +376,123 @@ impl Graph {
     }
 }
 
+/// The wires `repair` keeps, with an order of the nodes in which every wire
+/// runs forward, kept as wires are added (Pearce and Kelly's dynamic
+/// topological order): a wire that agrees with the order costs nothing, one
+/// that does not searches only the nodes between its ends. The order starts
+/// as a depth-first order of all the wires, so only wires that close a cycle
+/// among them search at all.
+struct Dag {
+    order: HashMap<u64, usize>,
+    after: HashMap<u64, Vec<u64>>,
+    before: HashMap<u64, Vec<u64>>,
+}
+
+impl Dag {
+    fn new(nodes: impl Iterator<Item = u64>, wires: &[(u64, u64)]) -> Self {
+        let mut next: HashMap<u64, Vec<u64>> = HashMap::new();
+        for (from, to) in wires {
+            next.entry(*from).or_default().push(*to);
+        }
+        // Reverse postorder of a depth-first search: wires run forward but
+        // for those that close cycles.
+        let mut seen = HashSet::new();
+        let mut post = Vec::new();
+        for root in nodes {
+            if !seen.insert(root) {
+                continue;
+            }
+            let mut stack = vec![(root, 0usize)];
+            while let Some((n, i)) = stack.last_mut().map(|(n, i)| {
+                *i += 1;
+                (*n, *i - 1)
+            }) {
+                match next.get(&n).and_then(|v| v.get(i)) {
+                    Some(&m) => {
+                        if seen.insert(m) {
+                            stack.push((m, 0));
+                        }
+                    }
+                    None => {
+                        post.push(n);
+                        stack.pop();
+                    }
+                }
+            }
+        }
+        let order = post.iter().rev().enumerate().map(|(i, n)| (*n, i)).collect();
+        Dag { order, after: HashMap::new(), before: HashMap::new() }
+    }
+
+    fn rank(&self, n: u64) -> usize {
+        self.order.get(&n).copied().unwrap_or(usize::MAX)
+    }
+
+    /// Add the wire `from` → `to` unless it closes a cycle; returns whether
+    /// it was added.
+    fn add(&mut self, from: u64, to: u64) -> bool {
+        let (lo, hi) = (self.rank(to), self.rank(from));
+        if from == to || lo == usize::MAX || hi == usize::MAX {
+            return false;
+        }
+        if hi > lo {
+            // `to` comes before `from`: what `to` leads to up to `from`'s
+            // place must move after what leads to `from` from `to`'s place.
+            let mut forward = Vec::new();
+            let mut seen = HashSet::new();
+            let mut pending = vec![to];
+            while let Some(n) = pending.pop() {
+                if n == from {
+                    return false;
+                }
+                if seen.insert(n) {
+                    forward.push(n);
+                    let next = self.after.get(&n).into_iter().flatten();
+                    pending.extend(next.copied().filter(|m| self.rank(*m) <= hi && !seen.contains(m)));
+                }
+            }
+            let mut backward = Vec::new();
+            seen.clear();
+            pending.push(from);
+            while let Some(n) = pending.pop() {
+                if seen.insert(n) {
+                    backward.push(n);
+                    let next = self.before.get(&n).into_iter().flatten();
+                    pending.extend(next.copied().filter(|m| self.rank(*m) >= lo && !seen.contains(m)));
+                }
+            }
+            forward.sort_by_key(|n| self.rank(*n));
+            backward.sort_by_key(|n| self.rank(*n));
+            let mut places: Vec<usize> = forward.iter().chain(&backward).map(|n| self.rank(*n)).collect();
+            places.sort_unstable();
+            for (n, place) in backward.iter().chain(&forward).zip(places) {
+                self.order.insert(*n, place);
+            }
+        }
+        self.after.entry(from).or_default().push(to);
+        self.before.entry(to).or_default().push(from);
+        true
+    }
+}
+
+/// Whether `to` can be reached from `from` over `next` (the nodes each
+/// node is wired into); each node is visited once.
+fn reaches_in(next: &HashMap<u64, Vec<u64>>, from: u64, to: u64) -> bool {
+    let mut seen = HashSet::new();
+    let mut pending = vec![from];
+    while let Some(n) = pending.pop() {
+        if n == to {
+            return true;
+        }
+        if seen.insert(n)
+            && let Some(after) = next.get(&n)
+        {
+            pending.extend(after.iter().copied().filter(|m| !seen.contains(m)));
+        }
+    }
+    false
+}
+
 fn dedup_names(names: &mut Vec<String>) {
     let mut seen = BTreeSet::new();
     names.retain(|n| !n.is_empty() && n.len() <= 64 && seen.insert(n.clone()));
@@ -411,6 +527,30 @@ mod tests {
         assert_eq!(g.order(), vec![1, 2, 3]);
         assert!(Graph::from_json("[").is_err());
         assert!(Graph::from_json(r#"{"format": 99}"#).is_err());
+    }
+
+    #[test]
+    fn large_graphs_are_repaired_quickly() {
+        // A chain of 5,000 nodes, each also wired to the next two, listed
+        // backwards (each wire disagrees with the node order), and one wire
+        // closing a cycle.
+        let n = 5_000u64;
+        let nodes: Vec<Node> = (1..=n).map(|id| Node::new(id, NodeKind::Builtin("add".into()), [0.0, 0.0])).collect();
+        let mut wires = Vec::new();
+        for (step, input) in [(1, "a"), (2, "b"), (3, "c")] {
+            for id in (1..=n.saturating_sub(step)).rev() {
+                wires.push(Wire { from: (id, "result".into()), to: (id + step, input.into()) });
+            }
+        }
+        wires.insert(wires.len() / 2, Wire { from: (n, "result".into()), to: (1, "d".into()) });
+        let mut g = Graph { nodes, wires, ..Graph::new("big") };
+        g.nodes.reverse();
+        let start = std::time::Instant::now();
+        let repairs = g.repair().unwrap();
+        assert!(start.elapsed() < std::time::Duration::from_secs(10), "{:?}", start.elapsed());
+        assert_eq!(repairs.wires, 1);
+        assert_eq!(g.wires.len(), 3 * 5_000 - 6);
+        assert_eq!(g.order().len(), 5_000);
     }
 
     #[test]
