@@ -134,6 +134,10 @@ pub fn plan_of(
             }
         }
     }
+    // Columns over the walls they stand in (issue 276).
+    if !ceiling {
+        draw_columns(&mut d, project, level, cut_z, spacing, structural);
+    }
 
     if !ceiling && let Some((lo, hi)) = geom.bounds() {
         // Markers stay outside the grid lines too, which usually extend past the model.
@@ -182,7 +186,6 @@ fn elevation_mark(d: &mut Drawing2D, lo: DVec2, hi: DVec2, look: DVec2, name: &s
     d.text(c + DVec2::new(r + 0.08, -r - 0.05), name, 2.5);
 }
 
-/// Columns, beams, stairs, ramps and railings of `level` as seen from the cut plane.
 /// Outlines of component pieces marked for plans: in floor plans the pieces
 /// starting below the cut (pieces above it dashed), in ceiling plans only
 /// the pieces above the cut (light fixtures and the like). Swept profiles
@@ -267,6 +270,8 @@ fn draw_mesh(d: &mut Drawing2D, faces: &[Vec<glam::DVec3>], cut_z: f64, ceiling:
     plan.above.iter().for_each(|&(a, b)| d.line(a, b, LineStyle::Hidden, id));
 }
 
+/// Foundations, beams, stairs, ramps and railings of `level` as seen from the
+/// cut plane (columns: [`draw_columns`]).
 fn draw_structure(
     d: &mut Drawing2D,
     project: &Project,
@@ -280,24 +285,6 @@ fn draw_structure(
         let id = Some(e.id);
         let data = project.element_type(e.type_id).map(|t| &t.data);
         match (&e.kind, data) {
-            (ElementKind::Column(c), Some(TypeData::Column { section, .. })) => {
-                let loops = cc_geom::section::column_loops(*section, c.position, c.rotation_deg);
-                let (base, top) = project.column_span(e, c);
-                let style = if base <= cut_z && cut_z <= top {
-                    let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
-                    for part in cc_geom::section::column_parts(*section, c.position, c.rotation_deg) {
-                        crate::cut::cut_fill(d, project, material, part, spacing, id);
-                    }
-                    LineStyle::Cut
-                } else if base > cut_z {
-                    LineStyle::Hidden
-                } else {
-                    LineStyle::Projection
-                };
-                for outline in &loops {
-                    d.polyline(outline, true, style, id);
-                }
-            }
             (ElementKind::Foundation(_), Some(TypeData::Foundation { .. })) => {
                 // Foundations lie under the floor: dashed, unless the cut plane passes through them.
                 let Some(g) = geom.foundations.get(&e.id) else { continue };
@@ -342,6 +329,37 @@ fn draw_structure(
                 d.polyline(&path, false, LineStyle::Projection, id);
             }
             _ => {}
+        }
+    }
+}
+
+/// Columns of `level` as seen from the cut plane. They are drawn after the
+/// walls, so a column standing in or crossing a wall shows whole over the
+/// wall's cut; a wall joined with an architectural column still cuts it, as
+/// [`crate::joins::merge`] paints the cutting element over the one it cuts.
+fn draw_columns(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, spacing: f64, structural: bool) {
+    for e in project.elements.values().filter(|e| e.level == level && (!structural || is_structural(e))) {
+        let id = Some(e.id);
+        let (ElementKind::Column(c), Some(TypeData::Column { section, .. })) =
+            (&e.kind, project.element_type(e.type_id).map(|t| &t.data))
+        else {
+            continue;
+        };
+        let loops = cc_geom::section::column_loops(*section, c.position, c.rotation_deg);
+        let (base, top) = project.column_span(e, c);
+        let style = if base <= cut_z && cut_z <= top {
+            let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
+            for part in cc_geom::section::column_parts(*section, c.position, c.rotation_deg) {
+                crate::cut::cut_fill(d, project, material, part, spacing, id);
+            }
+            LineStyle::Cut
+        } else if base > cut_z {
+            LineStyle::Hidden
+        } else {
+            LineStyle::Projection
+        };
+        for outline in &loops {
+            d.polyline(outline, true, style, id);
         }
     }
 }
@@ -976,6 +994,84 @@ mod tests {
     use super::*;
     use crate::Prim;
     use cc_core::{Category, Document, Element, ElementId, Hosted, Wall};
+
+    /// A wall with a column standing in it, cut by the plan; the column is
+    /// joined with the wall when `joined` (the wall cutting an architectural one).
+    fn wall_and_column(structural: bool, joined: bool) -> (Drawing2D, ElementId, ElementId) {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let element = |id, type_id, kind| Element {
+            id,
+            level,
+            type_id,
+            mark: String::new(),
+            comments: String::new(),
+            uid: Default::default(),
+            kind,
+            phase_created: Default::default(),
+            phase_demolished: None,
+            design_option: None,
+            paints: Vec::new(),
+        };
+        let (wall, column) = doc.edit("t", |e| {
+            let wall_t = e.project().default_type(Category::Wall).unwrap();
+            let column_t = e.project().default_type(Category::Column).unwrap();
+            let w = ElementId(e.alloc_id());
+            let kind = ElementKind::Wall(Wall { end: DVec2::new(5.0, 0.0), height: 3.0, ..Default::default() });
+            e.add_element(element(w, wall_t, kind));
+            let c = ElementId(e.alloc_id());
+            let kind = ElementKind::Column(cc_core::Column {
+                position: DVec2::new(2.5, 0.0),
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: Default::default(),
+                structural,
+            });
+            e.add_element(element(c, column_t, kind));
+            if joined {
+                e.set_joined(w, c, true);
+            }
+            (w, c)
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let mut d = plan(&doc.project, &geom, level, 1.2, false, 50);
+        crate::joins::merge(&doc.project, &mut d);
+        (d, wall, column)
+    }
+
+    /// Indices of the cut fills of `id`.
+    fn fills_of(d: &Drawing2D, id: ElementId) -> Vec<usize> {
+        let fill = |p: &Prim| matches!(p, Prim::Fill { element: Some(e), cut: true, .. } if *e == id);
+        d.prims.iter().enumerate().filter(|(_, p)| fill(p)).map(|(i, _)| i).collect()
+    }
+
+    /// Issue 276: a column standing in a wall is drawn over the wall's cut,
+    /// fills and outline, unless it is an architectural column the wall cuts.
+    #[test]
+    fn columns_show_over_the_walls_they_stand_in() {
+        for structural in [true, false] {
+            let (d, wall, column) = wall_and_column(structural, false);
+            let wall_fills = fills_of(&d, wall);
+            let last_wall_fill = *wall_fills.iter().max().unwrap();
+            let cut = |p: &Prim| match p {
+                Prim::Fill { element: Some(e), cut: true, .. } => *e == column,
+                Prim::Line { style: LineStyle::Cut, element: Some(e), .. } => *e == column,
+                _ => false,
+            };
+            let column_cut: Vec<usize> = d.prims.iter().enumerate().filter(|(_, p)| cut(p)).map(|(i, _)| i).collect();
+            assert!(!column_cut.is_empty());
+            assert!(
+                column_cut.iter().all(|&i| i > last_wall_fill),
+                "the column's cut is painted after the wall's (structural: {structural})"
+            );
+            assert_eq!(d.hit_test(DVec2::new(2.5, 0.0), 0.001), Some(column));
+        }
+        // A wall joined with an architectural column cuts it: the wall stays on top.
+        let (d, wall, column) = wall_and_column(false, true);
+        let first_wall_fill = *fills_of(&d, wall).iter().min().unwrap();
+        assert!(fills_of(&d, column).iter().all(|&i| i < first_wall_fill));
+    }
 
     #[test]
     fn plan_cuts_wall_and_gaps_at_door() {
