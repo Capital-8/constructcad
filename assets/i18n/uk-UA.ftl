@@ -3199,3 +3199,5 @@ msg-grid-frame-created = Розміщено колон: { $columns }, балок
 
 # Steel building
 category-steel-building = Сталеві будівлі
+tpl-type-steel-building = Сталева будівля
+tx-steel-building = Створити сталеву будівлю

@@ -3198,3 +3198,5 @@ msg-grid-frame-created = Umieszczono słupy: { $columns }, belki: { $beams }, be
 
 # Steel building
 category-steel-building = Hale stalowe
+tpl-type-steel-building = Hala stalowa
+tx-steel-building = Utwórz halę stalową

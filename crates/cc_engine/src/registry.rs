@@ -409,6 +409,7 @@ registry![
         profiles::ProfileImport,
         profiles::ProfileTypeCreate,
         structure_material::StructuralTypeFor,
+        steel_building::SteelBuildingCreate,
         paint::Paint,
         paint::PaintRemove,
         paint::PaintsList,

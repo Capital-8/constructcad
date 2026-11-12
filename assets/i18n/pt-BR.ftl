@@ -3198,3 +3198,5 @@ msg-grid-frame-created = { $columns } pilares, { $beams } vigas e { $secondary }
 
 # Steel building
 category-steel-building = Galpões metálicos
+tpl-type-steel-building = Galpão metálico
+tx-steel-building = Criar galpão metálico

@@ -3198,3 +3198,5 @@ msg-grid-frame-created = 柱 { $columns } 本、梁 { $beams } 本、小梁 { $s
 
 # Steel building
 category-steel-building = 鉄骨建屋
+tpl-type-steel-building = 鉄骨建屋
+tx-steel-building = 鉄骨建屋を作成

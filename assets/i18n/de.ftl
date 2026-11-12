@@ -3198,3 +3198,5 @@ msg-grid-frame-created = { $columns } Stützen, { $beams } Träger und { $second
 
 # Steel building
 category-steel-building = Stahlhallen
+tpl-type-steel-building = Stahlhalle
+tx-steel-building = Stahlhalle erstellen

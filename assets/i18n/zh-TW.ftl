@@ -3198,3 +3198,5 @@ msg-grid-frame-created = 已放置 { $columns } 根柱、{ $beams } 根梁及 { 
 
 # Steel building
 category-steel-building = 鋼構建築
+tpl-type-steel-building = 鋼構建築
+tx-steel-building = 建立鋼構建築

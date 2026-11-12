@@ -3198,3 +3198,5 @@ msg-grid-frame-created = { $columns } poteaux, { $beams } poutres et { $secondar
 
 # Steel building
 category-steel-building = Bâtiments métalliques
+tpl-type-steel-building = Bâtiment métallique
+tx-steel-building = Créer un bâtiment métallique

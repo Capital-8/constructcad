@@ -3198,3 +3198,5 @@ msg-grid-frame-created = { $columns } columns, { $beams } beams and { $secondary
 
 # Steel building
 category-steel-building = Steel buildings
+tpl-type-steel-building = Steel building
+tx-steel-building = Create steel building
