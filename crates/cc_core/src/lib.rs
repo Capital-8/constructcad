@@ -57,6 +57,7 @@ pub mod site;
 pub mod sketch;
 pub mod sketch_edit;
 pub mod stair;
+pub mod structural_material;
 pub mod structural_profile;
 pub mod sweep;
 pub mod title_block;
@@ -114,6 +115,7 @@ pub use stair::{
     LandingBeams, LandingPosts, PostAt, StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout,
     StairRailing, StairRules, StairShape, StairSide, Stringers, TreadRule, Turn, stair_steps,
 };
+pub use structural_material::StructuralMaterial;
 pub use structural_profile::{ProfileDef, ProfileMaterial, ProfileShape, SectionOutline};
 pub use transform::PlanTransform;
 pub use types::{
