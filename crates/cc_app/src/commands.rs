@@ -114,6 +114,8 @@ pub enum UiCommand {
     Select,
     SelectInstances,
     ColumnsAtGrids,
+    /// Opens the Grid Frame dialog.
+    GridFrame,
     AlignGridEnds,
     BeamsOnGrids,
     BeamsBetweenColumns,
@@ -346,7 +348,7 @@ impl UiCommand {
             TbText,
             TbImage,
         ]);
-        all.extend([AlignGridEnds, ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
+        all.extend([AlignGridEnds, ColumnsAtGrids, GridFrame, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
@@ -513,6 +515,7 @@ impl UiCommand {
             Select => Icon::Select,
             SelectInstances => Icon::SelectInstances,
             ColumnsAtGrids => Icon::ColumnsAtGrids,
+            GridFrame => Icon::GridFrame,
             AlignGridEnds => Icon::AlignGridEnds,
             BeamsOnGrids => Icon::BeamsOnGrids,
             BeamsBetweenColumns => Icon::BeamsBetweenColumns,
@@ -725,6 +728,7 @@ impl UiCommand {
             Select => t!("tool-select"),
             SelectInstances => t!("action-select-instances"),
             ColumnsAtGrids => t!("action-columns-at-grids"),
+            GridFrame => t!("action-grid-frame"),
             AlignGridEnds => t!("action-align-grid-ends"),
             BeamsOnGrids => t!("action-beams-on-grids"),
             BeamsBetweenColumns => t!("action-beams-between-columns"),
@@ -930,6 +934,7 @@ impl UiCommand {
             Select => t!("cmd-desc-select"),
             SelectInstances => t!("cmd-desc-select-instances"),
             ColumnsAtGrids => t!("cmd-desc-columns-at-grids"),
+            GridFrame => t!("cmd-desc-grid-frame"),
             AlignGridEnds => t!("cmd-desc-align-grid-ends"),
             BeamsOnGrids => t!("cmd-desc-beams-on-grids"),
             BeamsBetweenColumns => t!("cmd-desc-beams-between-columns"),
@@ -1195,6 +1200,7 @@ impl UiCommand {
             Undo => "undo",
             SelectInstances => "elements_list",
             ColumnsAtGrids => "columns_at_grids",
+            GridFrame => "grid_frame_create",
             AlignGridEnds => "grids_align_ends",
             BeamsOnGrids => "beams_on_grids",
             BeamsBetweenColumns => "beams_between_columns",
@@ -1443,7 +1449,7 @@ impl UiCommand {
             Pin | Unpin | Delete | Cut | ClipboardCopy | SelectInstances if !has_sel => Some(t!("msg-select-first")),
             SelectInstances if state.active_view.is_none() => Some(t!("why-no-view")),
             Group if state.selection.len() < 2 => Some(t!("msg-group-two")),
-            ColumnsAtGrids if crate::actions::grids_for(state).len() < 2 => Some(t!("msg-grids-two")),
+            ColumnsAtGrids | GridFrame if crate::actions::grids_for(state).len() < 2 => Some(t!("msg-grids-two")),
             AlignGridEnds if crate::actions::reference_grid(state).is_none() => Some(t!("why-select-one-grid")),
             BeamsOnGrids if crate::actions::grids_for(state).is_empty() => Some(t!("why-no-grids")),
             BeamsBetweenColumns if crate::actions::selected_columns(state).len() < 2 => Some(t!("msg-columns-two")),
@@ -1885,6 +1891,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         SelectInstances => crate::actions::select_instances(state),
         Group => crate::actions::group_selection(state),
         ColumnsAtGrids => crate::actions::columns_at_grids(state),
+        GridFrame => crate::grid_frame_ui::open(state),
         AlignGridEnds => crate::actions::align_grid_ends(state),
         BeamsOnGrids => crate::actions::beams_on_grids(state),
         BeamsBetweenColumns => crate::actions::beams_between_columns(state),

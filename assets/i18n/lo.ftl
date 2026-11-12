@@ -3184,3 +3184,16 @@ tx-grid-frame = ສ້າງໂຄງສ້າງຕາມກຣິດ
 
 # Structure tab material and grid frame
 group-structure-material = ວັດສະດຸ
+
+# Structure tab material and grid frame
+action-grid-frame = ໂຄງສ້າງຕາມກຣິດ
+cmd-desc-grid-frame = ວາງເສົາຢູ່ຈຸດຕັດຂອງເສັ້ນກຣິດ ແລະ ຄານຕາມເສັ້ນກຣິດໃນທຸກຊັ້ນຂອງຊ່ວງລະດັບ, ພ້ອມຄານຮອງຖ້າຕ້ອງການ, ໃນຂັ້ນຕອນດຽວ.
+dlg-grid-frame = ໂຄງສ້າງຕາມກຣິດ
+label-base-level = ລະດັບຖານ
+label-top-level = ລະດັບເທິງ
+label-column-type = ປະເພດເສົາ
+label-beam-type = ປະເພດຄານ
+label-secondary-beams = ຄານຮອງ
+label-parallel-to = ຂະໜານກັບ
+label-spacing = ໄລຍະຫ່າງ
+msg-grid-frame-created = ວາງເສົາ { $columns }, ຄານ { $beams } ແລະ ຄານຮອງ { $secondary }; ຂ້າມ { $skipped }.

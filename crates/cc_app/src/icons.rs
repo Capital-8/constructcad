@@ -79,6 +79,7 @@ pub enum Icon {
     Column,
     Beam,
     ColumnsAtGrids,
+    GridFrame,
     AlignGridEnds,
     BeamsOnGrids,
     BeamsBetweenColumns,
@@ -195,7 +196,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 180] = [
+    pub const ALL: [Icon; 181] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -264,6 +265,7 @@ impl Icon {
         Icon::Column,
         Icon::Beam,
         Icon::ColumnsAtGrids,
+        Icon::GridFrame,
         Icon::AlignGridEnds,
         Icon::BeamsOnGrids,
         Icon::BeamsBetweenColumns,
@@ -449,6 +451,7 @@ impl Icon {
             Icon::Column => include_str!("../../../assets/icons/ui/column.svg"),
             Icon::Beam => include_str!("../../../assets/icons/ui/beam.svg"),
             Icon::ColumnsAtGrids => include_str!("../../../assets/icons/ui/columns-at-grids.svg"),
+            Icon::GridFrame => include_str!("../../../assets/icons/ui/grid-frame.svg"),
             Icon::AlignGridEnds => include_str!("../../../assets/icons/ui/align-grid-ends.svg"),
             Icon::BeamsOnGrids => include_str!("../../../assets/icons/ui/beams-on-grids.svg"),
             Icon::BeamsBetweenColumns => include_str!("../../../assets/icons/ui/beams-between-columns.svg"),

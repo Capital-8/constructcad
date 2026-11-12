@@ -722,16 +722,14 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
         }
         M::Steel => {
             group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam, BracesX]));
-            // Task 7 adds GridFrame to the second stack.
             group(ui, t!("group-framing"), |ui| {
-                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[Truss]]);
+                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
             });
         }
         M::Timber => {
             group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam]));
-            // Task 7 adds GridFrame here.
             group(ui, t!("group-framing"), |ui| {
-                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns]]);
+                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame]]);
             });
         }
     }

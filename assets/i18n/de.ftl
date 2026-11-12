@@ -3182,3 +3182,16 @@ tx-grid-frame = Rasterskelett erstellen
 
 # Structure tab material and grid frame
 group-structure-material = Material
+
+# Structure tab material and grid frame
+action-grid-frame = Rasterskelett
+cmd-desc-grid-frame = Setzt Stützen an die Rasterschnittpunkte und Träger entlang der Achsen in jedem Geschoss eines Ebenenbereichs, auf Wunsch mit Nebenträgern, in einem Schritt.
+dlg-grid-frame = Rasterskelett
+label-base-level = Basisebene
+label-top-level = Oberste Ebene
+label-column-type = Stützentyp
+label-beam-type = Trägertyp
+label-secondary-beams = Nebenträger
+label-parallel-to = Parallel zu
+label-spacing = Abstand
+msg-grid-frame-created = { $columns } Stützen, { $beams } Träger und { $secondary } Nebenträger gesetzt; { $skipped } übersprungen.

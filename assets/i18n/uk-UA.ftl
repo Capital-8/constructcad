@@ -3183,3 +3183,16 @@ tx-grid-frame = Створити каркас за сіткою осей
 
 # Structure tab material and grid frame
 group-structure-material = Матеріал
+
+# Structure tab material and grid frame
+action-grid-frame = Каркас за сіткою
+cmd-desc-grid-frame = Розміщує колони на перетинах осей і балки вздовж осей на кожному поверсі діапазону рівнів, за потреби з другорядними балками, за один крок.
+dlg-grid-frame = Каркас за сіткою
+label-base-level = Базовий рівень
+label-top-level = Верхній рівень
+label-column-type = Тип колони
+label-beam-type = Тип балки
+label-secondary-beams = Другорядні балки
+label-parallel-to = Паралельно до
+label-spacing = Крок
+msg-grid-frame-created = Розміщено колон: { $columns }, балок: { $beams }, другорядних балок: { $secondary }; пропущено: { $skipped }.

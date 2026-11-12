@@ -3642,3 +3642,40 @@ fn structure_material_selector_swaps_groups() {
     assert!(harness.query_by_label(&braces).is_some());
     assert!(harness.query_by_label(&crate::commands::UiCommand::ColumnsAtGrids.label(harness.state())).is_some());
 }
+
+/// *Grid Frame* creates columns and beams on the grids for the chosen
+/// levels in one undo step; Cancel leaves the model as it was.
+#[test]
+fn grid_frame_dialog_creates_and_cancels() {
+    let mut state = sample_state();
+    let grids =
+        [([0.0, -1.0], [0.0, 7.0]), ([6.0, -1.0], [6.0, 7.0]), ([-1.0, 0.0], [7.0, 0.0]), ([-1.0, 6.0], [7.0, 6.0])];
+    // Selecting the new grids keeps the example's own out of the frame.
+    let mut created = Vec::new();
+    for (start, end) in grids {
+        let command = cc_engine::commands::create::GridCreate { start, end, ..Default::default() };
+        let out = crate::actions::run_command(&mut state, command).expect("grid");
+        created.push(cc_core::ElementId(out["id"].as_u64().expect("grid id")));
+    }
+    state.selection = created.into_iter().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let columns = |h: &Harness<'static, AppState>| h.state().project().elements_of(cc_core::Category::Column).count();
+    let mut harness = app_harness(state);
+    let before = columns(&harness);
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_some());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_none());
+    assert_eq!(harness.state().session.doc.undo_depth(), depth, "Cancel changes nothing");
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_none());
+    assert_eq!(columns(&harness), before + 4, "four intersections on the first storey");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+}
