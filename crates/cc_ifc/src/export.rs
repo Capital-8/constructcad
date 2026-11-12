@@ -2732,9 +2732,13 @@ fn directrix(bar: &cc_geom::rebar::Bar, diameter: f64) -> Vec<DVec3> {
     std::iter::once(mid).chain(pts[1..].iter().copied()).chain([a, mid + back]).collect()
 }
 
-/// Area of a column or beam type's section as its body draws it (0 when the section fails).
+/// The area of a type's section: exact for round sections, which export
+/// writes as circle profiles; otherwise its outline's.
 fn section_area(project: &Project, data: &TypeData) -> f64 {
-    project.type_section(data).map_or(0.0, |s| s.outline.properties(0.0).area)
+    project
+        .round_section_area(data)
+        .or_else(|| project.type_section(data).map(|s| s.outline.properties(0.0).area))
+        .unwrap_or(0.0)
 }
 
 /// Whether a section is a plain rectangle square to its axes (written as a
@@ -3003,6 +3007,20 @@ mod tests {
     use super::*;
     use cc_core::Category;
     use std::collections::HashSet;
+
+    /// Round sections export their exact area (they are written as circle
+    /// profiles; their outlines are chorded), the column quantity with it.
+    #[test]
+    fn round_sections_export_their_exact_area() {
+        let p = cc_core::from_ron(include_str!("../tests/fixtures/structure.ccad")).unwrap();
+        let mut round = 0;
+        for ty in p.types.values() {
+            let Some(exact) = p.round_section_area(&ty.data) else { continue };
+            round += 1;
+            assert!((section_area(&p, &ty.data) - exact).abs() < 1e-12, "{}", ty.name);
+        }
+        assert!(round >= 2, "the fixture has a round column and a round tube");
+    }
 
     fn sample() -> Project {
         cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap()
