@@ -426,6 +426,8 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
+        // Steel buildings: numbers, types and members (after invalid elements went).
+        repairs += self.repair_steel_buildings();
         // Dimension ends referencing missing elements or bad numbers become free.
         let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
         let level_ids: Vec<_> = self.levels.iter().map(|l| l.id).collect();
