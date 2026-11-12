@@ -793,4 +793,124 @@ pub(crate) mod tests {
         });
         assert_eq!(truss(&doc, host).layout().len(), MAX_MEMBERS);
     }
+
+    fn member(t: &Truss, kind: TrussRoleKind, copy: u16, index: u16) -> ElementId {
+        let role = TrussRole { kind, copy, index };
+        t.members.iter().find(|m| m.role == role).map(|m| m.id).expect("member")
+    }
+
+    fn set(doc: &mut Document, host: ElementId, f: impl FnOnce(&mut Truss)) {
+        doc.edit("set", |e| {
+            if let Some(ElementKind::Truss(t)) = e.element_mut(host).map(|x| &mut x.kind) {
+                f(t);
+            }
+        });
+    }
+
+    #[test]
+    fn a_new_truss_gets_its_members() {
+        let (doc, host) = site_with(|_| {});
+        let t = truss(&doc, host);
+        assert_eq!(t.members.len(), 15);
+        let level = doc.project.element(host).map(|e| e.level);
+        for m in &t.members {
+            let e = doc.project.element(m.id).expect("the member exists");
+            assert!(m.role.fits(&e.kind));
+            assert_eq!(Some(e.level), level);
+        }
+        assert_eq!(doc.project.clone().repair(), 0, "a consistent model");
+    }
+
+    #[test]
+    fn new_panels_keep_the_ids_of_the_roles_that_stay_and_undo_in_one_step() {
+        let (mut doc, host) = site_with(|_| {});
+        let before = truss(&doc, host);
+        let start = doc.project.elements.clone();
+        let first = member(&before, TrussRoleKind::BottomChord, 0, 0);
+        set(&mut doc, host, |t| t.panels = 6);
+        let after = truss(&doc, host);
+        assert_eq!(after.members.len(), 12 + 5 + 6);
+        assert_eq!(member(&after, TrussRoleKind::BottomChord, 0, 0), first, "same id");
+        let Some(ElementKind::Beam(b)) = doc.project.element(first).map(|e| &e.kind) else { panic!("a beam") };
+        assert!(close(b.end, DVec2::new(1.0, 0.0)), "now a 1 m panel");
+        assert!(doc.undo());
+        assert_eq!(truss(&doc, host), before);
+        assert_eq!(doc.project.elements, start);
+    }
+
+    #[test]
+    fn a_detached_member_is_left_alone() {
+        let (mut doc, host) = site_with(|_| {});
+        let post = member(&truss(&doc, host), TrussRoleKind::Vertical, 0, 2);
+        doc.edit("move", |e| e.transform_elements(&[post], &PlanTransform::translate(DVec2::new(0.0, 1.0))));
+        let t = truss(&doc, host);
+        assert!(t.detached.contains(&TrussRole { kind: TrussRoleKind::Vertical, copy: 0, index: 2 }));
+        set(&mut doc, host, |t| t.height = 2.0);
+        let Some(ElementKind::Column(c)) = doc.project.element(post).map(|e| &e.kind) else { panic!("a column") };
+        assert!(close(c.position, DVec2::new(3.0, 1.0)) && (c.height - 1.0).abs() < 1e-9, "where the user left it");
+        assert_eq!(truss(&doc, host).members.len(), 14, "and not made again");
+    }
+
+    #[test]
+    fn deleting_the_truss_deletes_its_members() {
+        let (mut doc, host) = site_with(|t| t.copies = 2);
+        let ids = doc.project.host_members_of(host);
+        assert_eq!(ids.len(), 30);
+        doc.edit("delete", |e| e.remove_element(host));
+        assert!(ids.iter().all(|id| doc.project.element(*id).is_none()));
+        assert!(doc.undo());
+        assert!(ids.iter().all(|id| doc.project.element(*id).is_some()));
+    }
+
+    #[test]
+    fn a_copy_gets_its_own_members() {
+        let (mut doc, host) = site_with(|_| {});
+        let original = truss(&doc, host);
+        let ids: std::collections::BTreeSet<ElementId> = original.members.iter().map(|m| m.id).collect();
+        let mut selection = vec![host];
+        selection.extend(ids.iter().copied());
+        let before = doc.project.elements.len();
+        let copies =
+            doc.edit("copy", |e| e.copy_elements(&selection, &[PlanTransform::translate(DVec2::new(0.0, 10.0))]));
+        assert_eq!(copies.len(), 1, "only the truss is copied");
+        let copy = truss(&doc, copies[0]);
+        assert_eq!(copy.members.len(), 15);
+        assert!(copy.members.iter().all(|m| !ids.contains(&m.id)));
+        assert_eq!(doc.project.elements.len(), before + 16);
+        assert_eq!(truss(&doc, host), original);
+        assert!(doc.undo());
+        assert_eq!(doc.project.elements.len(), before);
+    }
+
+    #[test]
+    fn a_changed_post_type_regenerates() {
+        let (mut doc, host) = site_with(|_| {});
+        let t = truss(&doc, host);
+        let chord = member(&t, TrussRoleKind::TopChord, 0, 0);
+        doc.edit("type", |e| {
+            // Any edit of a type the truss uses rewrites its members.
+            if let Some(ty) = e.type_mut(t.post_type) {
+                ty.name = "Renamed".into();
+            }
+        });
+        assert_eq!(member(&truss(&doc, host), TrussRoleKind::TopChord, 0, 0), chord, "same ids");
+    }
+
+    #[test]
+    fn repair_resets_bad_values_and_drops_dangling_members() {
+        let (doc, host) = site_with(|_| {});
+        let t = truss(&doc, host);
+        let mut p = doc.project.clone();
+        p.elements.remove(&member(&t, TrussRoleKind::Diagonal, 0, 0));
+        if let Some(ElementKind::Truss(x)) = p.elements.get_mut(&host).map(|e| &mut e.kind) {
+            (x.shape, x.panels) = (TrussShape::Gable, 5);
+            x.post_type = x.web_type;
+        }
+        // Odd gable count, the missing member, the wrong post type.
+        assert_eq!(p.repair(), 3);
+        let Some(ElementKind::Truss(x)) = p.element(host).map(|e| &e.kind) else { panic!("kept") };
+        assert_eq!(x.panels, 6);
+        assert_eq!(p.element_type(x.post_type).map(|t| t.category()), Some(Category::Column));
+        assert_eq!(p.repair(), 0);
+    }
 }
