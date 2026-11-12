@@ -353,6 +353,9 @@ impl Project {
         // gone fall back to the thin built-in style.
         repairs += self.repair_line_styles();
 
+        // Browser schemes: distinct ids, names, bounded criteria, a scheme in use that exists.
+        repairs += self.browser.repair();
+
         // Fill patterns: valid patterns, and references to patterns that are gone dropped.
         repairs += self.repair_fill_patterns();
 

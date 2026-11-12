@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod arc_strip_footings;
+mod browser_org;
 mod cad;
 mod cad_explode;
 mod callouts;
@@ -26,6 +27,7 @@ mod gltf;
 mod graph;
 mod graphics;
 mod image;
+mod level_heights;
 mod level_rename;
 mod lightning_cabling;
 mod macros;

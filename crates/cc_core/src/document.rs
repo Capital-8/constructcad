@@ -27,6 +27,7 @@ struct Settings {
     line_styles: crate::detail::LineStyles,
     fill_patterns: crate::fill_pattern::FillPatterns,
     option_sets: Vec<crate::OptionSet>,
+    browser: crate::browser::BrowserOrganization,
 }
 
 impl Settings {
@@ -49,6 +50,7 @@ impl Settings {
             line_styles: p.line_styles.clone(),
             fill_patterns: p.fill_patterns.clone(),
             option_sets: p.option_sets.clone(),
+            browser: p.browser.clone(),
         }
     }
 
@@ -70,6 +72,7 @@ impl Settings {
         p.line_styles = self.line_styles;
         p.fill_patterns = self.fill_patterns;
         p.option_sets = self.option_sets;
+        p.browser = self.browser;
     }
 }
 
@@ -539,6 +542,12 @@ impl<'a> EditCtx<'a> {
                 *v = view;
             }
         }
+    }
+
+    /// The project browser's schemes and the one in use.
+    pub fn browser_mut(&mut self) -> &mut crate::browser::BrowserOrganization {
+        self.touch_settings();
+        &mut self.project.browser
     }
 
     /// The project's line styles.

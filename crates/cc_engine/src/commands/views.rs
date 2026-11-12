@@ -244,14 +244,10 @@ fn capitalized(s: &str) -> String {
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
     pub view: Ref,
-    /// New name. A plan named after its level renames the level too, with
-    /// the level's other plans of that name, unless `rename_level` is false.
+    /// New name. A plan's name is its own: its level and the level's other
+    /// plans keep theirs.
     #[serde(default)]
     pub name: Option<String>,
-    /// Whether renaming a plan named after its level renames the level and
-    /// its other plans of that name (default true).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rename_level: Option<bool>,
     /// Scale denominator (e.g. 100 for 1:100).
     #[serde(default)]
     pub scale: Option<u32>,
@@ -355,14 +351,7 @@ impl Command for ViewSet {
                 return Err(EngineError::rejected(t!("msg-controlled-by-template", "template" => t.name.clone())));
             }
         }
-        // A plan named after its level keeps that name with it (issue #274).
-        let level = view
-            .level()
-            .filter(|l| self.rename_level != Some(false) && p.level(*l).is_some_and(|l| l.name == view.name));
         edit(s, t!("tx-modify-view"), |e| {
-            if let (Some(n), Some(level)) = (&self.name, level) {
-                super::levels::rename(e, level, n.trim());
-            }
             let v = e.view_mut(id).ok_or_else(|| EngineError::not_found("view"))?;
             if let Some(n) = self.name {
                 v.name = n.trim().to_string();

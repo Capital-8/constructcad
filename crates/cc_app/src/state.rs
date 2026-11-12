@@ -57,6 +57,8 @@ pub struct Dialogs {
     pub type_layers_open: bool,
     /// Undo depth when the open data dialog started editing (see `dialog::session`).
     pub edit_start: Option<usize>,
+    /// Level picked in the levels dialog: the one a level is added above or below.
+    pub level_selected: Option<LevelId>,
     /// Level waiting for delete confirmation.
     pub delete_level: Option<LevelId>,
     /// Schedule whose definition dialog is open.
@@ -88,6 +90,8 @@ pub struct Dialogs {
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
     /// Design option sets and their options.
     pub design_options: Option<crate::design_options_ui::OptionsDialog>,
+    /// The project browser's organization schemes.
+    pub browser_org: Option<crate::browser_org_dialog::BrowserOrgDialog>,
     /// The project's line styles.
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The fill pattern manager.
@@ -221,8 +225,6 @@ pub struct AppState {
     pub detail_component: crate::detail_component_ui::PlaceOptions,
     /// Options of the Callout tool (scale, drafting view pointed to).
     pub callout: crate::callout_ui::CalloutOptions,
-    /// Import CAD brings a drawing's blocks in as detail components.
-    pub cad_blocks: bool,
     /// The visual programming editor (see [`crate::graph_ui`]).
     pub graph: crate::graph_ui::GraphEditor,
     /// Selection seen last frame (see [`AppState::follow_selection`]).
@@ -299,7 +301,6 @@ impl AppState {
             detail_draw: None,
             detail_component: Default::default(),
             callout: Default::default(),
-            cad_blocks: false,
         }
     }
 

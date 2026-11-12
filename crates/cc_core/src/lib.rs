@@ -5,6 +5,7 @@
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
 pub mod arc;
+pub mod browser;
 pub mod cad;
 pub mod callout;
 pub mod component;
@@ -86,8 +87,8 @@ pub use graphics::{
     LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
 };
 pub use ids::{
-    ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId, OptionSetId,
-    PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
+    BrowserSchemeId, ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId,
+    OptionSetId, PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
 };
 pub use lightning::{ConductorRole, LightningConductor, LpsClass};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};

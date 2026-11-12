@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "cc_app"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_core",
  "cc_engine",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "cc_cad"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "acadrust",
  "cc_core",
@@ -736,7 +736,7 @@ dependencies = [
 
 [[package]]
 name = "cc_cli"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_core",
  "cc_engine",
@@ -746,7 +746,7 @@ dependencies = [
 
 [[package]]
 name = "cc_core"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "glam",
  "ron",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "cc_engine"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_cad",
  "cc_core",
@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "cc_geom"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_core",
  "cc_script",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "cc_ifc"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_core",
  "cc_geom",
@@ -796,7 +796,7 @@ dependencies = [
 
 [[package]]
 name = "cc_plugins"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_engine",
  "cc_script",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "cc_render"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "bytemuck",
  "cc_core",
@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "cc_script"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_core",
  "glam",
@@ -833,11 +833,11 @@ dependencies = [
 
 [[package]]
 name = "cc_skp"
-version = "0.11.0"
+version = "0.11.1"
 
 [[package]]
 name = "cc_views"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "cc_core",
  "cc_geom",
