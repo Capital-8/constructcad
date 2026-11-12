@@ -281,6 +281,13 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "element_set", "args": {"id": 42, "params": {"span": 30}}}
 ```
 
+`truss_create` makes a parametric truss: a host element whose chords, diagonals and posts are ordinary beams and columns, made in one undo step and returned as `{id, members}`. `shape` is `flat`, `mono` or `gable`; `pattern` is `pratt`, `howe`, `warren`, or for gables `kingpost`, `queenpost` and `fink`; `copies` trusses stand `spacing` apart to the left of the span line; `material` (`steel` or `timber`) picks the catalog rows of the default types (concrete is refused). Like a steel building, its members are regenerated with their ids kept when `element_set` changes its parameters, and a member edited or deleted directly is detached.
+
+```text
+{"command": "truss_create", "args": {"start": [0, 0], "end": [12, 0], "height": 2, "shape": "gable", "pattern": "fink", "panels": 6, "copies": 5, "spacing": 1.2, "material": "timber"}}
+{"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).
