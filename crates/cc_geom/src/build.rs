@@ -272,20 +272,23 @@ impl BoxPart {
     }
 }
 
-/// Plan outline of a column section's bounding shape (counter-clockwise):
-/// its box, or its circle for round sections.
-pub fn column_outline(section: cc_core::ColumnSection, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
+/// Plan outline of a column type's section (counter-clockwise), placed at
+/// `position` and turned by `rotation_deg`: the outer boundary of its
+/// profile. Empty for other types or a section that fails.
+pub fn column_outline(project: &Project, data: &TypeData, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
+    project
+        .type_section(data)
+        .map(|s| crate::section::column_body(&s.outline, position, rotation_deg).0)
+        .unwrap_or_default()
+}
+
+/// A `width` x `depth` rectangle (counter-clockwise) centered at `position`,
+/// turned by `rotation_deg`: the footprint of a pad footing.
+pub fn rect_outline(width: f64, depth: f64, position: DVec2, rotation_deg: f64) -> Vec<DVec2> {
     let u = DVec2::from_angle(rotation_deg.to_radians());
     let v = u.perp();
-    match section {
-        cc_core::ColumnSection::Rectangular { width, depth } | cc_core::ColumnSection::Profile { width, depth, .. } => {
-            let (w, d) = (width / 2.0, depth / 2.0);
-            [(-w, -d), (w, -d), (w, d), (-w, d)].iter().map(|&(a, b)| position + u * a + v * b).collect()
-        }
-        cc_core::ColumnSection::Round { diameter } | cc_core::ColumnSection::Pipe { diameter, .. } => (0..24)
-            .map(|i| position + DVec2::from_angle(i as f64 / 24.0 * std::f64::consts::TAU) * (diameter / 2.0))
-            .collect(),
-    }
+    let (w, d) = (width / 2.0, depth / 2.0);
+    [(-w, -d), (w, -d), (w, d), (-w, d)].iter().map(|&(a, b)| position + u * a + v * b).collect()
 }
 
 /// Solid pieces of a placed component in world coordinates (voids cut
@@ -558,10 +561,16 @@ impl ModelGeometry {
             let Some(ty) = project.element_type(e.type_id) else { continue };
             let mut s = Solid::of_material(e.id, e.category(), project, ty.main_material());
             match (&e.kind, &ty.data) {
-                (ElementKind::Column(c), TypeData::Column { section, .. }) => {
+                (ElementKind::Column(c), TypeData::Column { .. }) => {
+                    let Some(section) = project.type_section(&ty.data) else { continue };
                     let (base, top) = project.column_span(e, c);
-                    for part in crate::section::column_parts(*section, c.position, c.rotation_deg) {
-                        s.add_prism(&part, |_| base, |_| top);
+                    let (outer, holes) = crate::section::column_body(&section.outline, c.position, c.rotation_deg);
+                    crate::section::add_column_body(&mut s, &outer, &holes, base, top, section.curved);
+                    // Exact for sections with arcs (the solid meshes them with chords).
+                    if section.curved
+                        && let Some(area) = project.exact_section_area(&ty.data)
+                    {
+                        self.curved_volumes.insert(e.id, area * (top - base).max(0.0));
                     }
                 }
                 (ElementKind::Beam(_), TypeData::Beam { .. }) => {
@@ -595,30 +604,34 @@ impl ModelGeometry {
         let mut columns = Vec::new();
         for e in project.elements.values() {
             match (&e.kind, project.element_type(e.type_id).map(|t| &t.data)) {
-                (ElementKind::Beam(b), Some(TypeData::Beam { width, height, shape, .. })) if b.length() > 1e-6 => {
+                (ElementKind::Beam(b), Some(data @ TypeData::Beam { width, height, .. })) if b.length() > 1e-6 => {
                     // Joins work on the body centerline, whatever the justification.
                     let (start, end) = project.beam_axis(e, b);
-                    let section = crate::section::shape_rects(*shape, *width, *height)
-                        .into_iter()
-                        .map(|(a, b)| (DVec2::new(a.x, a.y + height / 2.0), DVec2::new(b.x, b.y + height / 2.0)))
-                        .collect();
+                    // The profile's section, or the type's box when the profile fails.
+                    let (section, curved) = match project.type_section(data) {
+                        Some(s) => (s.outline, s.curved),
+                        None => (crate::beam::box_section(*width, *height), false),
+                    };
+                    let (section, half) = crate::beam::beam_section(&section);
                     beams.push(BeamInput {
                         element: e.id,
                         start,
                         end,
-                        half: width / 2.0,
+                        half,
                         z_range: project.beam_z(e, b),
                         slope: b.rise() / b.length(),
                         section,
+                        curved,
                         join_start: b.join_start,
                         join_end: b.join_end,
                         bulge: 0.0,
                     });
                 }
-                (ElementKind::Column(c), Some(TypeData::Column { section, .. })) if c.structural => {
+                (ElementKind::Column(c), Some(data @ TypeData::Column { .. })) if c.structural => {
                     columns.push(ColumnInput {
                         element: e.id,
-                        outline: column_outline(*section, c.position, c.rotation_deg),
+                        // Beams frame into the hull: the box of an I, C or L.
+                        outline: polygon::convex_hull(&column_outline(project, data, c.position, c.rotation_deg)),
                         z_range: project.column_span(e, c),
                     });
                 }
@@ -626,6 +639,18 @@ impl ModelGeometry {
             }
         }
         self.beams = resolve_beams(&beams, &columns).into_iter().map(|g| (g.element, g)).collect();
+        // Exact for sections with arcs: the swept volume scaled from the
+        // chorded outline's area to the section's.
+        for g in self.beams.values().filter(|g| g.curved) {
+            let Some(e) = project.element(g.element) else { continue };
+            let Some(exact) = project.element_type(e.type_id).and_then(|t| project.exact_section_area(&t.data)) else {
+                continue;
+            };
+            let chorded = g.section.properties(0.0).area;
+            if chorded > 0.0 {
+                self.curved_volumes.insert(g.element, g.volume() * exact / chorded);
+            }
+        }
     }
 
     /// Pads, strips (meeting at corners and tees like beams) and slabs.
@@ -642,8 +667,7 @@ impl ModelGeometry {
             let z_range = (top - thickness, top);
             let footprint = match &f.shape {
                 cc_core::FoundationShape::Pad { position, rotation_deg } => {
-                    let section = cc_core::ColumnSection::Rectangular { width: *width, depth: *length };
-                    column_outline(section, *position, *rotation_deg)
+                    rect_outline(*width, *length, *position, *rotation_deg)
                 }
                 cc_core::FoundationShape::Slab { boundary } => polygon::ccw(boundary),
                 cc_core::FoundationShape::Strip { start, end, bulge } => {
@@ -655,7 +679,8 @@ impl ModelGeometry {
                             half: width / 2.0,
                             z_range,
                             slope: 0.0,
-                            section: Vec::new(),
+                            section: crate::beam::box_section(*width, *thickness),
+                            curved: false,
                             join_start: true,
                             join_end: true,
                             bulge: *bulge,

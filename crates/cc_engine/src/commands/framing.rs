@@ -8,8 +8,8 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::{
-    Beam, BeamVertical, Category, Column, ColumnSection, ElementId, ElementKind, ElementTypeId, LevelId, Project,
-    TypeData, WallTop,
+    Beam, BeamVertical, Category, Column, ColumnSection, ElementId, ElementKind, ElementTypeId, LevelId,
+    ProfileMaterial, Project, TypeData, WallTop,
 };
 use glam::{DVec2, DVec3};
 use schemars::JsonSchema;
@@ -38,13 +38,26 @@ fn member(a: DVec3, b: DVec3) -> Result<Beam> {
     Ok(beam)
 }
 
-/// The column type for truss posts: `r`, else the first profile column type, else the default.
+/// The column type for truss posts: `r`, else the first column type of a
+/// steel or cold-formed profile, else the first with a legacy steel section
+/// (`Profile` or `Pipe`), else the default.
 fn post_type(p: &Project, r: Option<&Ref>) -> Result<ElementTypeId> {
     if r.is_some() {
         return refs::type_of(p, Category::Column, r);
     }
-    let profile = p.types_of(Category::Column).find(|t| {
-        matches!(t.data, TypeData::Column { section: ColumnSection::Profile { .. } | ColumnSection::Pipe { .. }, .. })
+    let steel = p.types_of(Category::Column).find(|t| match &t.data {
+        TypeData::Column { profile: Some(id), .. } => {
+            p.profile(*id).is_some_and(|f| matches!(f.material, ProfileMaterial::Steel | ProfileMaterial::ColdFormed))
+        }
+        _ => false,
+    });
+    let profile = steel.or_else(|| {
+        p.types_of(Category::Column).find(|t| {
+            matches!(
+                t.data,
+                TypeData::Column { section: ColumnSection::Profile { .. } | ColumnSection::Pipe { .. }, .. }
+            )
+        })
     });
     match profile {
         Some(t) => Ok(t.id),
@@ -164,7 +177,8 @@ pub struct TrussCreate {
     /// Beam type of the diagonals (default: the chord type).
     #[serde(default)]
     pub web_type: Option<Ref>,
-    /// Column type of the posts (default: the first profile column type).
+    /// Column type of the posts (default: the first column type of a steel or
+    /// cold-formed profile, else of a steel section).
     #[serde(default)]
     pub post_type: Option<Ref>,
 }

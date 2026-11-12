@@ -21,6 +21,8 @@ fn done(state: &mut AppState, r: &egui::Response) {
 }
 
 pub fn show(ctx: &Context, state: &mut AppState) {
+    // Before any dialog begins its edits over a session a dropped profile sketch left open.
+    crate::profiles_dialog::settle_abandoned(state);
     project_info(ctx, state);
     crate::site_ui::show(ctx, state);
     crate::units_dialog::show(ctx, state);
@@ -39,6 +41,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::browser_org_dialog::show(ctx, state);
     // After the material browser, type properties and graphics, which open it over themselves.
     crate::fill_patterns_dialog::show(ctx, state);
+    crate::profiles_dialog::show(ctx, state);
     crate::library::show(ctx, state);
     crate::obj_ui::show(ctx, state);
     crate::plugins_ui::drain_messages(state);

@@ -253,6 +253,19 @@ Uma cortina de vidro é uma parede cujo tipo tem uma grade de cortina em vez de 
 {"command": "data_outlet_place", "args": {"position": [8, 3], "rack": 120, "ports": 2}}
 ```
 
+### Perfis estruturais
+
+Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural: uma forma paramétrica padrão (`i`, `channel`, `rect_tube`, `cold_lipped_u`, `rect`…) de um material (`steel`, `cold_formed`, `timber`, `concrete`), ou um esboço. `profile_catalog` lista as séries embutidas (W, HP, IPE, HEA, HEB, perfis formados a frio da NBR 6355, madeira serrada, MLC, SHS, RHS, CHS) e, com `series` (e `search`), suas linhas; `profile_import` copia linhas para o projeto como perfis que lembram sua origem no catálogo (`on_clash`: `keep` mantém o perfil existente, o padrão, ou `rename`). `profile_type_create` cria um tipo de pilar ou de viga de um perfil, com um material da sua classe; `type_set` muda o `profile` de um tipo (um nome, ou `null` para a seção própria), `profile_rotation_deg` e `profile_mirror`. `profile_create`, `profile_set`, `profile_duplicate` e `profile_delete` (`replace_with`) editam perfis, e os tipos que os usam acompanham; `profile_get` dá o contorno e as propriedades da seção, `element_get` a `derived.section` de um pilar ou viga (área, massa por metro, momentos de inércia e módulos resistentes) e `analytical_model` a seção de cada barra.
+
+```text
+{"command": "profile_import", "args": {"series": "IPE", "designations": ["IPE 200"]}}
+{"command": "profile_type_create", "args": {"profile": "IPE 200", "category": "beam"}}
+{"command": "beam_create", "args": {"type": "IPE 200", "start": [0, 0], "end": [6, 0]}}
+{"command": "profile_set", "args": {"profile": "IPE 200", "name": "IPE 200 (cobertura)"}}
+{"command": "profile_get", "args": {"profile": "IPE 200 (cobertura)"}}
+{"command": "profiles_list", "args": {"material": "steel"}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).

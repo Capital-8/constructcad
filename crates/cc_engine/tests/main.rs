@@ -36,6 +36,7 @@ mod multi_edit;
 mod obj;
 mod pad;
 mod phases;
+mod profiles;
 mod regions;
 mod section_marks;
 mod shaft;

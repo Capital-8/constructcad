@@ -51,6 +51,8 @@ enum Value {
     Money(f64),
     /// Kilograms.
     Weight(f64),
+    /// Kilograms per meter.
+    LinearMass(f64),
     /// Volt-amperes.
     Power(f64),
     /// A plain quantity (fixture units).
@@ -69,6 +71,7 @@ impl Value {
             Value::Money(v) => Cell::Text(format::money(*v)),
             Value::Volume(v) => Cell::Text(format::volume(*v)),
             Value::Weight(v) => Cell::Text(format!("{} kg", format::number(*v, 2))),
+            Value::LinearMass(v) => Cell::Text(format!("{} kg/m", format::number(*v, 2))),
             Value::Power(v) => Cell::Text(format!("{} VA", format::number(*v, 0))),
             Value::Number(v) => Cell::Text(format::number(*v, 1)),
             Value::Missing => Cell::Text(String::new()),
@@ -83,6 +86,7 @@ impl Value {
             | Value::Volume(v)
             | Value::Money(v)
             | Value::Weight(v)
+            | Value::LinearMass(v)
             | Value::Power(v)
             | Value::Number(v) => Some(*v),
             _ => None,
@@ -130,6 +134,16 @@ impl SortKey {
 
 fn text_of(v: &Value) -> String {
     v.cell().raw().to_string()
+}
+
+/// Mass per meter of a column or beam type: its section's area times the
+/// material's density. Empty when the material has no usable density.
+fn linear_mass(project: &Project, data: &TypeData) -> Value {
+    let (TypeData::Column { material, .. } | TypeData::Beam { material, .. }) = data else { return Value::Missing };
+    let density = project.material(material).and_then(|m| m.physical.density).filter(|d| d.is_finite() && *d > 0.0);
+    let (Some(density), Some(section)) = (density, project.type_section(data)) else { return Value::Missing };
+    let mass = section.outline.properties(density).linear_mass;
+    if mass.is_finite() && mass > 0.0 { Value::LinearMass(mass) } else { Value::Missing }
 }
 
 /// Whether a field's values add up in the totals row.
@@ -195,6 +209,24 @@ fn section_text(section: cc_core::ColumnSection) -> String {
             };
             format!("{letter} {} × {} × {thickness}", l(width), l(depth))
         }
+    }
+}
+
+/// A profile's section as a schedule shows it: the legacy wording for the
+/// shapes legacy sections had (`Ø 300`, `I 100 × 200 × 5.6 / 8.5`), the
+/// profile's name otherwise.
+fn profile_text(def: &cc_core::structural_profile::ProfileDef) -> String {
+    use cc_core::structural_profile::ProfileShape as P;
+    let l = format::length;
+    match def.shape {
+        P::Rect { b, h, .. } => format!("{} × {}", l(b), l(h)),
+        P::Round { d } => format!("Ø {}", l(d)),
+        P::RoundTube { d, t } => format!("Ø {} × {}", l(d), l(t)),
+        P::I { d, bf, tw, tf, .. } => format!("I {} × {} × {} / {}", l(bf), l(d), l(tw), l(tf)),
+        P::Channel { d, bf, tw, tf, .. } => format!("U {} × {} × {} / {}", l(bf), l(d), l(tw), l(tf)),
+        P::Angle { h, b, t, .. } => format!("L {} × {} × {}", l(b), l(h), l(t)),
+        P::RectTube { h, b, t, .. } => format!("□ {} × {} × {}", l(b), l(h), l(t)),
+        _ => def.name.clone(),
     }
 }
 
@@ -376,6 +408,10 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             _ => Value::Missing,
         },
         F::Section => match ty.map(|t| &t.data) {
+            // A profile-made type's legacy fields are only its box.
+            Some(data) if project.type_profile_def(data).is_some() => {
+                project.type_profile_def(data).map_or(Value::Missing, |def| Value::Text(profile_text(def)))
+            }
             Some(TypeData::Column { section, .. }) => Value::Text(section_text(*section)),
             Some(TypeData::Beam { width, height, shape, .. }) => {
                 let section = cc_core::ColumnSection::Profile { width: *width, depth: *height, shape: *shape };
@@ -389,6 +425,14 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             }
             _ => Value::Missing,
         },
+        F::Profile => ty
+            .and_then(|t| match &t.data {
+                TypeData::Column { profile, .. } | TypeData::Beam { profile, .. } => profile.as_ref(),
+                _ => None,
+            })
+            .and_then(|id| project.profile(*id))
+            .map_or(Value::Missing, |p| Value::Text(p.name.clone())),
+        F::LinearMass => ty.map_or(Value::Missing, |t| linear_mass(project, &t.data)),
         F::CutLength => geom.beams.get(&e.id).map_or(Value::Missing, |b| Value::Length(b.cut_length())),
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
         F::Diameter => {

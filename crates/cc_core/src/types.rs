@@ -379,6 +379,16 @@ pub enum TypeData {
     Column {
         section: ColumnSection,
         material: String,
+        /// The structural profile of the section; when set, `section` is its
+        /// bounding box, kept in step.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<crate::ProfileId>,
+        /// Turn of the profile in its section plane, degrees counterclockwise.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        profile_rotation_deg: f64,
+        /// The profile mirrored across its vertical axis (before turning).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        profile_mirror: bool,
     },
     /// Beam section `width` x `height`, solid or a profile within that box.
     Beam {
@@ -387,6 +397,16 @@ pub enum TypeData {
         material: String,
         #[serde(default)]
         shape: SectionShape,
+        /// The structural profile of the section; when set, `width`, `height`
+        /// and `shape` are its bounding box, kept in step.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<crate::ProfileId>,
+        /// Turn of the profile in its section plane, degrees counterclockwise.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        profile_rotation_deg: f64,
+        /// The profile mirrored across its vertical axis (before turning).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        profile_mirror: bool,
     },
     /// Reinforcing bars of `diameter`.
     Rebar {
@@ -652,6 +672,10 @@ impl TypeData {
             | TypeData::Pad { .. } => {}
         }
     }
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 /// Cross-section of a column type.

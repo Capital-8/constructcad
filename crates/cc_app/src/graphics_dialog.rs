@@ -60,6 +60,12 @@ impl Edits {
         Self { start: state.session.doc.undo_depth(), owns }
     }
 
+    /// Whether these edits own the shared session (no other data dialog
+    /// was open when they began).
+    pub(crate) fn owns(&self) -> bool {
+        self.owns
+    }
+
     pub(crate) fn finish(self, state: &mut AppState, ok: bool) {
         state.session.doc.break_merge();
         match (ok, self.owns) {

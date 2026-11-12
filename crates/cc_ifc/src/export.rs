@@ -4,6 +4,7 @@ use crate::args;
 use crate::guid::{encode, guid};
 use crate::schema::{ElementClass, TypeLayout, element_class};
 use crate::step::{Header, Id, StepWriter, Value, opt_str, reals};
+use cc_core::structural_profile::{ProfileMaterial, ProfileShape, SectionOutline};
 use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData, Uid};
 use cc_geom::{FRAME_COLOR, ModelGeometry, WallGeom, opening_parts, polygon};
 use glam::{DVec2, DVec3};
@@ -106,13 +107,18 @@ struct Exporter<'a> {
     layer_sets: BTreeMap<ElementTypeId, Id>,
     types: BTreeMap<ElementTypeId, Id>,
     layer_usages: BTreeMap<ElementTypeId, Id>,
+    /// The profile definition, material profile set and its usage per column and beam type.
+    type_profiles: BTreeMap<ElementTypeId, Id>,
+    profile_sets: BTreeMap<ElementTypeId, Id>,
+    profile_usages: BTreeMap<ElementTypeId, Id>,
     products: BTreeMap<ElementId, Id>,
     // Relationship collectors, emitted at the end.
     typed: BTreeMap<ElementTypeId, Vec<Id>>,
     /// Roof framing: an `IfcMemberType` per roof type and member name, with its members.
     member_types: BTreeMap<(ElementTypeId, &'static str), (Id, Vec<Id>)>,
     contained: BTreeMap<LevelId, Vec<Id>>,
-    usage_objects: BTreeMap<Id, Vec<Id>>,
+    /// Material usages with the GlobalId tag of their association and the products using them.
+    usage_objects: BTreeMap<Id, (String, Vec<Id>)>,
     /// Storey and its placement per level.
     storeys: BTreeMap<LevelId, (Id, Id)>,
     /// Elements whose `Status` went into a common property set of their own.
@@ -146,6 +152,9 @@ impl<'a> Exporter<'a> {
             layer_sets: BTreeMap::new(),
             types: BTreeMap::new(),
             layer_usages: BTreeMap::new(),
+            type_profiles: BTreeMap::new(),
+            profile_sets: BTreeMap::new(),
+            profile_usages: BTreeMap::new(),
             products: BTreeMap::new(),
             usage_objects: BTreeMap::new(),
             typed: BTreeMap::new(),
@@ -649,44 +658,106 @@ impl<'a> Exporter<'a> {
         self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, z.1 - z.0])
     }
 
-    /// The profile of a column or beam section centered at the origin: the
-    /// parametric IFC profile when the shape has one, its solid box when its
-    /// walls fill it.
-    fn section_profile(&mut self, section: cc_core::ColumnSection) -> Id {
-        use cc_core::{ColumnSection as C, SectionShape as S};
-        let n = Value::Null;
-        let position = self.w.add("IFCAXIS2PLACEMENT2D", args![self.origin2, Value::Null]);
+    /// The `IfcProfileDef` of a column or beam section named `name`: the
+    /// parametric IFC profile of `shape` when it has one (its bounding box
+    /// centered on the position, as IFC4 places them and as the outlines are
+    /// centered; `rotation_deg` as the position's direction), else the placed
+    /// `outline` as an arbitrary profile, with voids for its holes. A
+    /// mirrored section is always written as its mirrored outline.
+    fn profile_def(
+        &mut self,
+        name: &str,
+        shape: Option<&ProfileShape>,
+        rotation_deg: f64,
+        mirror: bool,
+        outline: &SectionOutline,
+    ) -> Id {
         let area = Value::Enum("AREA");
-        match section {
-            C::Round { diameter } => self.w.add("IFCCIRCLEPROFILEDEF", args![area, n, position, diameter / 2.0]),
-            C::Pipe { diameter, wall } if 2.0 * wall < diameter => {
-                self.w.add("IFCCIRCLEHOLLOWPROFILEDEF", args![area, n, position, diameter / 2.0, wall])
-            }
-            C::Pipe { diameter, .. } => self.w.add("IFCCIRCLEPROFILEDEF", args![area, n, position, diameter / 2.0]),
-            C::Rectangular { width, depth } | C::Profile { width, depth, shape: S::Solid } => {
-                self.w.add("IFCRECTANGLEPROFILEDEF", args![area, n, position, width, depth])
-            }
-            C::Profile { width, depth, shape } => match shape.fitted(width, depth) {
-                S::I { web, flange } if web < width && 2.0 * flange < depth => self.w.add(
-                    "IFCISHAPEPROFILEDEF",
-                    args![area, n.clone(), position, width, depth, web, flange, n.clone(), n.clone(), n],
-                ),
-                S::Channel { web, flange } if web < width && 2.0 * flange < depth => self.w.add(
-                    "IFCUSHAPEPROFILEDEF",
-                    args![area, n.clone(), position, depth, width, web, flange, n.clone(), n.clone(), n],
-                ),
-                S::Angle { thickness } if thickness < width.min(depth) => self.w.add(
-                    "IFCLSHAPEPROFILEDEF",
-                    args![area, n.clone(), position, depth, width, thickness, n.clone(), n.clone(), n],
-                ),
-                S::Tube { wall } if 2.0 * wall < width.min(depth) => self.w.add(
-                    "IFCRECTANGLEHOLLOWPROFILEDEF",
-                    args![area, n.clone(), position, width, depth, wall, n.clone(), n],
-                ),
-                // The walls fill the box.
-                _ => self.w.add("IFCRECTANGLEPROFILEDEF", args![area, n, position, width, depth]),
-            },
+        if let Some((entity, values)) = shape.filter(|_| !mirror).and_then(parametric_profile) {
+            let turn = if rotation_deg.is_finite() { rotation_deg.to_radians() } else { 0.0 };
+            let direction = (turn != 0.0).then(|| {
+                let d = DVec2::from_angle(turn);
+                self.w.add("IFCDIRECTION", args![reals(&[d.x, d.y])])
+            });
+            let position = self.w.add("IFCAXIS2PLACEMENT2D", args![self.origin2, direction]);
+            let args = [area, Value::from(name), Value::Ref(position)].into_iter().chain(values).collect();
+            return self.w.add(entity, args);
         }
+        let curve = self.polyline(&outline.outer);
+        if outline.holes.is_empty() {
+            return self.w.add("IFCARBITRARYCLOSEDPROFILEDEF", args![area, name, curve]);
+        }
+        let inner: Vec<Id> = outline.holes.iter().map(|h| self.polyline(h)).collect();
+        self.w.add("IFCARBITRARYPROFILEDEFWITHVOIDS", args![area, name, curve, inner])
+    }
+
+    /// The profile definition of a column or beam type (written once): its
+    /// profile's, named after it, or for a type without one its own
+    /// section's, named after the type. `None` when the section fails.
+    fn type_profile(&mut self, type_id: ElementTypeId) -> Option<Id> {
+        if let Some(&id) = self.type_profiles.get(&type_id) {
+            return Some(id);
+        }
+        let project = self.project;
+        let ty = project.element_type(type_id)?;
+        let (TypeData::Column { profile_rotation_deg, profile_mirror, .. }
+        | TypeData::Beam { profile_rotation_deg, profile_mirror, .. }) = &ty.data
+        else {
+            return None;
+        };
+        let section = project.type_section(&ty.data)?;
+        let def = section.profile.and_then(|p| project.profile(p));
+        let name = def.map_or(ty.name.as_str(), |d| d.name.as_str());
+        let id =
+            self.profile_def(name, def.map(|d| &d.shape), *profile_rotation_deg, *profile_mirror, &section.outline);
+        self.type_profiles.insert(type_id, id);
+        Some(id)
+    }
+
+    /// The `IfcMaterialProfileSet` of a column or beam type: one material
+    /// profile of the type's material and profile, named after the profile.
+    fn profile_set(&mut self, type_id: ElementTypeId) -> Option<Id> {
+        if let Some(&id) = self.profile_sets.get(&type_id) {
+            return Some(id);
+        }
+        let project = self.project;
+        let ty = project.element_type(type_id)?;
+        let profile = self.type_profile(type_id)?;
+        let def = project.type_section(&ty.data).and_then(|s| s.profile).and_then(|p| project.profile(p));
+        let name = def.map_or(ty.name.as_str(), |d| d.name.as_str());
+        // Cold-formed sections are told apart from rolled ones by the category.
+        let category = match def.map(|d| d.material) {
+            Some(ProfileMaterial::ColdFormed) => Value::Str(COLD_FORMED_CATEGORY.into()),
+            _ => Value::Null,
+        };
+        let material = match ty.main_material() {
+            "" => Value::Null,
+            m => Value::Ref(self.material(m)),
+        };
+        let n = Value::Null;
+        let item = self.w.add("IFCMATERIALPROFILE", args![name, n.clone(), material, profile, n.clone(), category]);
+        let set = self.w.add("IFCMATERIALPROFILESET", args![name, n.clone(), vec![item], n]);
+        self.profile_sets.insert(type_id, set);
+        Some(set)
+    }
+
+    /// Assign the material profile set of `type_id` to `product` through
+    /// one usage shared per type.
+    fn profile_usage(&mut self, type_id: ElementTypeId, product: Id) {
+        let Some(set) = self.profile_set(type_id) else { return };
+        let usage = match self.profile_usages.get(&type_id) {
+            Some(&usage) => usage,
+            None => {
+                let usage = self.w.add("IFCMATERIALPROFILESETUSAGE", args![set, Value::Null, Value::Null]);
+                self.profile_usages.insert(type_id, usage);
+                usage
+            }
+        };
+        self.usage_objects
+            .entry(usage)
+            .or_insert_with(|| (format!("mat-usage-profile-{type_id}"), Vec::new()))
+            .1
+            .push(product);
     }
 
     /// Whether joined elements cut part of the element's body away (walls,
@@ -851,6 +922,50 @@ impl<'a> Exporter<'a> {
         Some(self.w.add("IFCPOLYGONALFACESET", args![points, Value::Null, ifc_faces, Value::Null]))
     }
 
+    /// A column's body: its type's profile extruded up in the column's
+    /// rotated frame; when the type has no section to sweep, the body as
+    /// built, else the type's legacy box. `None` when there is nothing to write.
+    fn column_product(&mut self, e: &Element, c: &cc_core::Column, level_z: f64) -> Option<StructureProduct> {
+        let project = self.project;
+        let data = &project.element_type(e.type_id)?.data;
+        let TypeData::Column { section, .. } = data else { return None };
+        let (base, top) = project.column_span(e, c);
+        let turn = if c.rotation_deg.is_finite() { c.rotation_deg.to_radians() } else { 0.0 };
+        let length = Quantity::Length(top - base);
+        let (items, volume, brep) = match self.type_profile(e.type_id) {
+            Some(profile) => {
+                let frame = Frame::horizontal(c.position.extend(base - level_z), DVec2::from_angle(turn));
+                let position = self.placement3(frame);
+                let item = self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, top - base]);
+                (vec![item], section_area(project, data) * (top - base), false)
+            }
+            None => {
+                let body = self.cut_body(e.id, level_z);
+                if body.is_empty() {
+                    let (width, depth) = section.size();
+                    if !(width.is_finite() && depth.is_finite() && width > 0.0 && depth > 0.0) {
+                        return None;
+                    }
+                    let u = DVec2::from_angle(turn);
+                    let part = cc_geom::BoxPart {
+                        origin: c.position,
+                        u,
+                        v: u.perp(),
+                        u_range: (-width / 2.0, width / 2.0),
+                        v_range: (-depth / 2.0, depth / 2.0),
+                        z_range: (base, top),
+                    };
+                    (vec![self.oriented_box(&part, level_z)], width * depth * (top - base), false)
+                } else {
+                    (body, self.geom.volume(e.id), true)
+                }
+            }
+        };
+        let q = vec![("Length", length), ("NetVolume", Quantity::Volume(volume))];
+        let product = StructureProduct::new("IFCCOLUMN", "COLUMN", items).quantities("Qto_ColumnBaseQuantities", q);
+        Some(if brep { product.brep() } else { product })
+    }
+
     /// Columns, beams, stairs, ramps and railings.
     fn write_structure(&mut self) {
         let project = self.project;
@@ -862,73 +977,43 @@ impl<'a> Exporter<'a> {
             let style = self.material_style(ty.main_material());
             let mut axis = None;
             let product: StructureProduct = match (&e.kind, &ty.data) {
-                (ElementKind::Column(c), TypeData::Column { section, .. }) => {
-                    let (base, top) = project.column_span(e, c);
-                    let item = match *section {
-                        cc_core::ColumnSection::Rectangular { width, depth } => {
-                            let part = cc_geom::BoxPart {
-                                origin: c.position,
-                                u: DVec2::from_angle(c.rotation_deg.to_radians()),
-                                v: DVec2::from_angle(c.rotation_deg.to_radians()).perp(),
-                                u_range: (-width / 2.0, width / 2.0),
-                                v_range: (-depth / 2.0, depth / 2.0),
-                                z_range: (base, top),
-                            };
-                            self.oriented_box(&part, level_z)
-                        }
-                        cc_core::ColumnSection::Round { diameter } => {
-                            let center = self.point2(c.position);
-                            let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
-                            let profile = self.w.add(
-                                "IFCCIRCLEPROFILEDEF",
-                                args![Value::Enum("AREA"), Value::Null, position2, diameter / 2.0],
-                            );
-                            let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, base - level_z)));
-                            self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, top - base])
-                        }
-                        cc_core::ColumnSection::Profile { .. } | cc_core::ColumnSection::Pipe { .. } => {
-                            // The profile in the column's rotated frame, extruded up.
-                            let profile = self.section_profile(*section);
-                            let u = DVec2::from_angle(c.rotation_deg.to_radians());
-                            let frame = Frame::horizontal(c.position.extend(base - level_z), u);
-                            let position = self.placement3(frame);
-                            self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, top - base])
-                        }
-                    };
-                    let volume = section_area(*section) * (top - base);
-                    let q = vec![("Length", Quantity::Length(top - base)), ("NetVolume", Quantity::Volume(volume))];
-                    StructureProduct::new("IFCCOLUMN", "COLUMN", vec![item]).quantities("Qto_ColumnBaseQuantities", q)
+                (ElementKind::Column(c), TypeData::Column { .. }) => {
+                    let Some(product) = self.column_product(e, c, level_z) else { continue };
+                    product
                 }
                 (ElementKind::Beam(_), TypeData::Beam { .. }) => {
                     // The body as framed into columns and other beams.
                     let Some(g) = self.geom.beams.get(&e.id) else { continue };
-                    let TypeData::Beam { width, height, shape, .. } = ty.data else { continue };
-                    let solid = matches!(shape, cc_core::SectionShape::Solid);
+                    // The section the body is swept from (the type's box when its profile fails).
+                    let section = project.type_section(&ty.data).map(|s| s.outline);
+                    let rect = section.as_ref().is_none_or(is_box);
                     let level = g.slope.abs() < 1e-12;
-                    let brep = !level || (!solid && !g.is_square());
-                    let items = if brep {
-                        // Sloped, or a profile with cut ends: each part as a closed shell.
-                        g.parts()
-                            .into_iter()
-                            .map(|(footprint, (z0, z1))| {
-                                let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
-                                let (origin, dir, slope, base) = (g.origin, g.dir, g.slope, g.z_range.0);
-                                let z = move |p: DVec2| base + slope * (p - origin).dot(dir);
-                                s.add_prism(&footprint, |p| z(p) + z0, |p| z(p) + z1);
-                                self.faceted_brep(&s.faces, level_z)
-                            })
-                            .collect()
-                    } else if !solid {
-                        // A profile square at both ends: the section swept along the axis.
-                        let profile =
-                            self.section_profile(cc_core::ColumnSection::Profile { width, depth: height, shape });
-                        let start = g.world(g.start_ext.0, 0.0);
-                        let center = (g.z_range.0 + g.z_range.1) * 0.5 - level_z;
-                        let frame =
-                            Frame { origin: start.extend(center), x: g.normal.extend(0.0), z: g.dir.extend(0.0) };
+                    // A level profile square at both ends: the section swept along the axis.
+                    let swept = match &section {
+                        Some(outline) if level && !rect && g.is_square() => {
+                            self.type_profile(e.type_id).map(|profile| (profile, outline.bbox()))
+                        }
+                        _ => None,
+                    };
+                    let brep = swept.is_none() && (!level || !rect);
+                    // A swept profile is written exact; other bodies as their chords run.
+                    let volume = match swept {
+                        Some(_) => section_area(project, &ty.data) * (g.end_ext.0 - g.start_ext.0),
+                        None => g.volume(),
+                    };
+                    let items = if let Some((profile, (lo, hi))) = swept {
+                        // The body puts the box's middle on the axis and its bottom at the bottom.
+                        let start = g.world(g.start_ext.0, -(lo.x + hi.x) * 0.5);
+                        let z = g.z_range.0 - lo.y - level_z;
+                        let frame = Frame { origin: start.extend(z), x: g.normal.extend(0.0), z: g.dir.extend(0.0) };
                         let position = self.placement3(frame);
                         let length = g.end_ext.0 - g.start_ext.0;
                         vec![self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, length])]
+                    } else if brep {
+                        // Sloped, or a profile with cut ends: the swept section as a closed shell.
+                        let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
+                        g.add_to(&mut s);
+                        vec![self.faceted_brep(&s.faces, level_z)]
                     } else if g.is_square() {
                         let part = cc_geom::BoxPart {
                             origin: g.origin,
@@ -940,7 +1025,7 @@ impl<'a> Exporter<'a> {
                         };
                         vec![self.oriented_box(&part, level_z)]
                     } else {
-                        // Mitered or skewed ends: the footprint in the beam's frame, extruded up.
+                        // A rectangle with mitered or skewed ends: the footprint in the beam's frame, extruded up.
                         let frame = Frame::horizontal(DVec3::new(g.origin.x, g.origin.y, g.z_range.0 - level_z), g.dir);
                         let position = self.placement3(frame);
                         let (profile, depth) = (g.local_footprint(), g.z_range.1 - g.z_range.0);
@@ -950,8 +1035,7 @@ impl<'a> Exporter<'a> {
                     let axis_start = self.point2(g.origin);
                     let axis_end = self.point2(g.world(g.length, 0.0));
                     axis = Some(self.w.add("IFCPOLYLINE", args![vec![axis_start, axis_end]]));
-                    let q =
-                        vec![("Length", Quantity::Length(g.cut_length())), ("NetVolume", Quantity::Volume(g.volume()))];
+                    let q = vec![("Length", Quantity::Length(g.cut_length())), ("NetVolume", Quantity::Volume(volume))];
                     let product =
                         StructureProduct::new("IFCBEAM", "BEAM", items).quantities("Qto_BeamBaseQuantities", q);
                     if brep { product.brep() } else { product }
@@ -1107,6 +1191,9 @@ impl<'a> Exporter<'a> {
             let id = self.w.add(product.entity, attrs);
             self.products.insert(e.id, id);
             self.register(e, id);
+            if matches!(ty.data, TypeData::Column { .. } | TypeData::Beam { .. }) {
+                self.profile_usage(e.type_id, id);
+            }
             if let Some((set, quantities)) = &product.quantities {
                 self.quantities(e, set, quantities);
             }
@@ -1601,7 +1688,11 @@ impl<'a> Exporter<'a> {
                 usage
             }
         };
-        self.usage_objects.entry(usage).or_default().push(product);
+        self.usage_objects
+            .entry(usage)
+            .or_insert_with(|| (format!("mat-usage-layer-{type_id}"), Vec::new()))
+            .1
+            .push(product);
     }
 
     /// The IFC type object for `type_id`, created with its material on first use.
@@ -1784,6 +1875,11 @@ impl<'a> Exporter<'a> {
                 Some(self.material(def.main_material()))
             }
             TypeData::Component { .. } => None,
+            // A type whose section fails keeps its plain material.
+            TypeData::Column { .. } | TypeData::Beam { .. } => self.profile_set(type_id).or_else(|| {
+                let m = ty.main_material();
+                (!m.is_empty()).then(|| self.material(m))
+            }),
             _ => self.layer_set(type_id),
         };
         if let Some(m) = material {
@@ -2569,8 +2665,8 @@ impl<'a> Exporter<'a> {
             let gid = self.guid(&format!("deftype-member-{type_id}-{name}"));
             self.w.add("IFCRELDEFINESBYTYPE", args![gid, n.clone(), n.clone(), n.clone(), objects, ty]);
         }
-        for (i, (usage, objects)) in std::mem::take(&mut self.usage_objects).into_iter().enumerate() {
-            self.associate_material(&format!("mat-usage-{i}"), objects, usage);
+        for (usage, (tag, objects)) in std::mem::take(&mut self.usage_objects) {
+            self.associate_material(&tag, objects, usage);
         }
         for (level, objects) in std::mem::take(&mut self.contained) {
             let Some(&(storey, _)) = self.storeys.get(&level) else { continue };
@@ -2640,20 +2736,67 @@ fn directrix(bar: &cc_geom::rebar::Bar, diameter: f64) -> Vec<DVec3> {
     std::iter::once(mid).chain(pts[1..].iter().copied()).chain([a, mid + back]).collect()
 }
 
-/// Area of a column section as written: exact circles, profiles as their parts.
-fn section_area(section: cc_core::ColumnSection) -> f64 {
-    use std::f64::consts::PI;
-    match section {
-        cc_core::ColumnSection::Rectangular { width, depth } => width * depth,
-        cc_core::ColumnSection::Round { diameter } => PI * diameter * diameter / 4.0,
-        cc_core::ColumnSection::Pipe { diameter, wall } => {
-            let inner = (diameter / 2.0 - wall).max(0.0);
-            PI * (diameter * diameter / 4.0 - inner * inner)
+/// The area of a type's section as [`Exporter::type_profile`] writes it:
+/// exact when it is a parametric profile (circles, root and corner radii
+/// written as such), else its outline's, whose arcs are chords there too.
+fn section_area(project: &Project, data: &TypeData) -> f64 {
+    let (TypeData::Column { profile_mirror, .. } | TypeData::Beam { profile_mirror, .. }) = data else { return 0.0 };
+    let Some(section) = project.type_section(data) else { return 0.0 };
+    let parametric = section
+        .profile
+        .and_then(|p| project.profile(p))
+        .is_some_and(|d| !*profile_mirror && parametric_profile(&d.shape).is_some());
+    let exact = if parametric { project.exact_section_area(data) } else { None };
+    exact.unwrap_or_else(|| section.outline.properties(0.0).area)
+}
+
+/// Whether a section is a plain rectangle square to its axes (written as a
+/// box rather than as a swept profile).
+fn is_box(outline: &SectionOutline) -> bool {
+    let (lo, hi) = outline.bbox();
+    let size = hi - lo;
+    outline.holes.is_empty()
+        && outline.outer.len() == 4
+        && (polygon::area(&outline.outer).abs() - size.x * size.y).abs() <= 1e-9 * (size.x * size.y).max(1e-12)
+}
+
+/// The IFC4 parametric profile of a shape: its entity and the attributes
+/// after `ProfileType`, `ProfileName` and `Position`. `None` for shapes IFC
+/// has no parametric profile for (asymmetric I, cold-formed channels, Z and
+/// hat sections, concrete T and L, chamfered rectangles and sketches; a
+/// lipped channel IFC's rules refuse), which are written as their outline.
+/// Radii of zero are left unset.
+fn parametric_profile(shape: &ProfileShape) -> Option<(&'static str, Vec<Value>)> {
+    let r = |v: f64| if v > 0.0 { Value::Real(v) } else { Value::Null };
+    let n = || Value::Null;
+    Some(match *shape {
+        ProfileShape::I { d, bf, tw, tf, r: fillet } => {
+            ("IFCISHAPEPROFILEDEF", vec![bf.into(), d.into(), tw.into(), tf.into(), r(fillet), n(), n()])
         }
-        cc_core::ColumnSection::Profile { width, depth, shape } => {
-            cc_geom::section::shape_rects(shape, width, depth).iter().map(|(a, b)| (b.x - a.x) * (b.y - a.y)).sum()
+        ProfileShape::Channel { d, bf, tw, tf, r: fillet } => {
+            ("IFCUSHAPEPROFILEDEF", vec![d.into(), bf.into(), tw.into(), tf.into(), r(fillet), n(), n()])
         }
-    }
+        ProfileShape::T { d, bf, tw, tf, r: fillet } => {
+            ("IFCTSHAPEPROFILEDEF", vec![d.into(), bf.into(), tw.into(), tf.into(), r(fillet), n(), n(), n(), n()])
+        }
+        ProfileShape::Angle { h, b, t, r: fillet } => {
+            ("IFCLSHAPEPROFILEDEF", vec![h.into(), b.into(), t.into(), r(fillet), n(), n()])
+        }
+        // IFC's rules: wall thinner than half the width and a quarter of the
+        // depth, lips shorter than half the depth, the bends inside the walls.
+        ProfileShape::ColdLippedU { d, bf, lip, t, ri }
+            if t < bf / 2.0 && t < d / 4.0 && lip < d / 2.0 && ri <= bf / 2.0 - t && ri <= d / 2.0 - t =>
+        {
+            ("IFCCSHAPEPROFILEDEF", vec![d.into(), bf.into(), t.into(), lip.into(), r(ri)])
+        }
+        ProfileShape::RectTube { h, b, t, ro } => {
+            ("IFCRECTANGLEHOLLOWPROFILEDEF", vec![b.into(), h.into(), t.into(), r((ro - t).max(0.0)), r(ro)])
+        }
+        ProfileShape::RoundTube { d, t } => ("IFCCIRCLEHOLLOWPROFILEDEF", vec![(d / 2.0).into(), t.into()]),
+        ProfileShape::Rect { b, h, chamfer: 0.0 } => ("IFCRECTANGLEPROFILEDEF", vec![b.into(), h.into()]),
+        ProfileShape::Round { d } => ("IFCCIRCLEPROFILEDEF", vec![(d / 2.0).into()]),
+        _ => return None,
+    })
 }
 
 /// Property set with the instance parameter values of components.
@@ -2669,6 +2812,9 @@ pub const PHASING_PSET: &str = "ConstructCAD_Phasing";
 pub const CURTAIN_PSET: &str = "ConstructCAD_Curtain";
 /// Property set of a roof's covering and framing (see `write_roof_framing`).
 pub const ROOFING_PSET: &str = "ConstructCAD_Roofing";
+/// `Category` of the material profile of a cold-formed section (rolled and
+/// cold-formed steel share their materials).
+pub const COLD_FORMED_CATEGORY: &str = "ColdFormed";
 /// A terrain's points, boundary, base depth and type settings, for importers
 /// to rebuild it as terrain (points as `x y z` and the boundary as `x y`,
 /// separated by `;`).
@@ -2870,6 +3016,23 @@ mod tests {
     use super::*;
     use cc_core::Category;
     use std::collections::HashSet;
+
+    /// Round sections export their exact area (they are written as circle
+    /// profiles; their outlines are chorded), the column quantity with it.
+    #[test]
+    fn round_sections_export_their_exact_area() {
+        let p = cc_core::from_ron(include_str!("../tests/fixtures/structure.ccad")).unwrap();
+        let mut round = 0;
+        for ty in p.types.values() {
+            if !p.section_is_round(&ty.data) {
+                continue;
+            }
+            let Some(exact) = p.exact_section_area(&ty.data) else { continue };
+            round += 1;
+            assert!((section_area(&p, &ty.data) - exact).abs() < 1e-12, "{}", ty.name);
+        }
+        assert!(round >= 2, "the fixture has a round column and a round tube");
+    }
 
     fn sample() -> Project {
         cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap()

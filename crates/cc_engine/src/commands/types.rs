@@ -62,6 +62,29 @@ pub(crate) fn validate(def: &ComponentDef) -> Result<()> {
     Ok(())
 }
 
+/// A column or beam type's params patch with its `profile` (a name or id, as
+/// `type_get` shows it) turned into the profile's id; null is refused.
+fn profile_patch(p: &cc_core::Project, data: &TypeData, patch: &Value) -> Result<Value> {
+    let mut patch = patch.clone();
+    if !matches!(data, TypeData::Column { .. } | TypeData::Beam { .. }) {
+        return Ok(patch);
+    }
+    let Some(slot) = patch.as_object_mut().and_then(|o| o.get_mut("profile")) else { return Ok(patch) };
+    let r = match slot {
+        Value::Null => {
+            return Err(EngineError::invalid(
+                "profile: a column or beam type must point to a profile; give another profile instead of null",
+            ));
+        }
+        Value::String(n) => Ref::Name(n.clone()),
+        Value::Number(n) => Ref::Id(n.as_u64().ok_or_else(|| EngineError::invalid("profile: not a profile id"))?),
+        _ => return Err(EngineError::invalid("profile: a profile name or id")),
+    };
+    let id = refs::profile(p, &r).map_err(|e| EngineError::invalid(format!("profile: {}", e.message)))?;
+    *slot = json!(id.0);
+    Ok(patch)
+}
+
 pub(crate) fn type_out(s: &Session, id: ElementTypeId) -> Value {
     super::query::type_json(s, id).unwrap_or_else(|| json!({ "id": id.0 }))
 }
@@ -69,6 +92,11 @@ pub(crate) fn type_out(s: &Session, id: ElementTypeId) -> Value {
 /// Change a type: its name, its parameters (`params`, merged into what
 /// `type_get` shows: layers, sizes, materials, a component's `def`…) and its
 /// identity data (`info`: type mark, description, manufacturer, cost…).
+/// A column or beam type takes `profile` (a structural profile's name or id;
+/// null is refused: these types always point to a profile),
+/// `profile_rotation_deg` and `profile_mirror`. `width`/`height` are the box of
+/// the turned profile; changing them alone re-points the type to a profile of
+/// that section, unturned and unmirrored.
 /// Changing a component's definition updates every type of that component,
 /// each keeping its own parameter values.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -103,7 +131,8 @@ impl Command for TypeSet {
         {
             return Err(EngineError::invalid(format!("the name '{name}' is empty or already used")));
         }
-        let mut data = self.params.as_ref().map(|patch| patch_variant(&ty.data, patch)).transpose()?;
+        let params = self.params.as_ref().map(|patch| profile_patch(p, &ty.data, patch)).transpose()?;
+        let mut data = params.as_ref().map(|patch| patch_variant(&ty.data, patch)).transpose()?;
         // A new roof covering brings the framing it usually lies on, if none was chosen.
         if let (
             Some(TypeData::Roof { covering: Some(kind), framing, .. }),

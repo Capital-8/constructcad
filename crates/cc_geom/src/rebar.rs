@@ -6,7 +6,7 @@
 //! spaced evenly and centered along the host.
 
 use crate::BeamGeom;
-use cc_core::{BarFace, ColumnSection, ElementId, ElementKind, Project, RebarLayout, TypeData};
+use cc_core::{BarFace, ElementId, ElementKind, Project, RebarLayout, TypeData};
 use glam::{DVec2, DVec3};
 use std::collections::BTreeMap;
 
@@ -152,11 +152,13 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
                 beam_bars(g, *height, r.layout, r.cover, d, ds)
             }
             ElementKind::Column(c) => {
-                let Some(TypeData::Column { section, .. }) = project.element_type(host.type_id).map(|t| &t.data) else {
+                let Some(data @ TypeData::Column { section, .. }) = project.element_type(host.type_id).map(|t| &t.data)
+                else {
                     continue;
                 };
                 let (base, top) = project.column_span(host, c);
-                column_bars(*section, c.position, c.rotation_deg, (base, top), r.layout, r.cover, d, ds)
+                let shape = (section.size(), project.section_is_round(data));
+                column_bars(shape, c.position, c.rotation_deg, (base, top), r.layout, r.cover, d, ds)
             }
             _ => continue,
         };
@@ -222,7 +224,7 @@ fn beam_bars(g: &BeamGeom, height: f64, layout: RebarLayout, cover: f64, d: f64,
 /// horizontal ties up the column.
 #[allow(clippy::too_many_arguments)]
 fn column_bars(
-    section: ColumnSection,
+    ((w, depth), round): ((f64, f64), bool),
     position: DVec2,
     rotation_deg: f64,
     (base, top): (f64, f64),
@@ -233,8 +235,6 @@ fn column_bars(
 ) -> Vec<Bar> {
     let rot = DVec2::from_angle(rotation_deg.to_radians());
     let place = |p: DVec2, z: f64| (position + rot.rotate(p)).extend(z);
-    let round = matches!(section, ColumnSection::Round { .. } | ColumnSection::Pipe { .. });
-    let (w, depth) = section.size();
     match layout {
         RebarLayout::Longitudinal { count, .. } => {
             let inset = cover + ds + d / 2.0;

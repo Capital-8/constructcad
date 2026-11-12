@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Structural profiles for columns and beams. Column and beam types can point to a parametric profile (`Project::profiles`: steel, cold-formed, timber and concrete shapes such as I, H, channel, angle, tube and sketched outlines, with built-in catalogs) instead of a fixed section; profile section properties (area, inertia, modulus, radius of gyration, linear mass) are computed from the outline. Columns and beams are built, drawn (cut, with their arcs at fine detail) and swept from the profile, beams frame into column hulls, tags show a steel or cold-formed profile's name, and schedules have *Profile* and *Linear mass* (kg/m, from the material's density) fields. The template's steel material now has a density of 7850 kg/m³ (new projects only). The Profile Manager (*Structure → Profiles*, *Manage → Profiles*) lists, edits, duplicates and sketches profiles and imports the built-in catalogs (W, HEA/HEB/IPE, tubes, NBR 6355 cold-formed, sawn timber, glulam); the same operations are engine commands (`profiles_list`, `profile_get`, `profile_create`, `profile_set`, `profile_duplicate`, `profile_delete`, `profile_catalog`, `profile_import`, `profile_type_create`, and `type_set` `profile`). IFC export writes parametric profile definitions where the standard has one and arbitrary profiles otherwise, with an `IfcMaterialProfileSet` per type, and import makes native types only when it holds the geometry exactly. The analytical model export is now format 2: a member's `section` is `{ profile, area, ix, iy, j, width, height }`. Files are now format 27.
+
 ## [0.11.1] - 2026-11-11
 
 ### Added

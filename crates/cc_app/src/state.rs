@@ -96,6 +96,12 @@ pub struct Dialogs {
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The fill pattern manager.
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
+    /// The Profile Manager.
+    pub profiles: Option<crate::profiles_dialog::ProfilesDialog>,
+    /// The Profile Manager's edits while one of its profiles is in a
+    /// sketch (*Edit sketch*): Finish and Cancel open it again with them, so
+    /// its Cancel still undoes everything.
+    pub profiles_resume: Option<crate::graphics_dialog::Edits>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
     /// The .obj file whose import options are being asked.
@@ -444,6 +450,8 @@ impl AppState {
             }
             _ => self.sketch = None,
         }
+        // A profile's sketch dropped by another tool ends the manager's edits.
+        crate::profiles_dialog::settle_abandoned(self);
         self.detail_draw = None;
         self.tool = tool;
         self.interaction = Interaction::default();

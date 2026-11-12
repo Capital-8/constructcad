@@ -105,7 +105,7 @@ fn mm(v: f64) -> String {
 }
 
 /// A number rounded to the micrometer, as an expression.
-fn um(v: f64) -> String {
+pub(crate) fn um(v: f64) -> String {
     rounded(v, 1e6)
 }
 
@@ -231,7 +231,7 @@ impl Writer<'_> {
 }
 
 /// Whether two segments are the same (an arc of the same radius, the same ellipse).
-fn same(a: Segment, b: Segment) -> bool {
+pub(crate) fn same(a: Segment, b: Segment) -> bool {
     match (a, b) {
         (Segment::Line, Segment::Line) => true,
         (Segment::Arc { radius: r }, Segment::Arc { radius: s }) => (r - s).abs() < 1e-6,

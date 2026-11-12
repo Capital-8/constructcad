@@ -17,6 +17,37 @@ pub fn perimeter(poly: &[DVec2]) -> f64 {
     (0..n).map(|i| poly[i].distance(poly[(i + 1) % n])).sum()
 }
 
+/// Most points [`convex_hull`] takes; the rest are left out.
+pub const MAX_HULL_POINTS: usize = 100_000;
+
+/// The convex hull of `points`, counter-clockwise, without collinear points
+/// (Andrew's monotone chain). Non-finite points are skipped; fewer than three
+/// distinct points give them back as they are.
+pub fn convex_hull(points: &[DVec2]) -> Vec<DVec2> {
+    let mut pts: Vec<DVec2> = points.iter().copied().filter(|p| p.is_finite()).take(MAX_HULL_POINTS).collect();
+    pts.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    pts.dedup();
+    if pts.len() < 3 {
+        return pts;
+    }
+    let cross = |o: DVec2, a: DVec2, b: DVec2| (a - o).perp_dot(b - o);
+    let mut hull: Vec<DVec2> = Vec::with_capacity(pts.len() * 2);
+    for pass in 0..2 {
+        let start = hull.len();
+        let ordered: Box<dyn Iterator<Item = &DVec2>> =
+            if pass == 0 { Box::new(pts.iter()) } else { Box::new(pts.iter().rev()) };
+        for &p in ordered {
+            while hull.len() >= start + 2 && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0 {
+                hull.pop();
+            }
+            hull.push(p);
+        }
+        // The last point of each chain starts the other one.
+        hull.pop();
+    }
+    hull
+}
+
 /// Copy of `poly` wound counter-clockwise.
 pub fn ccw(poly: &[DVec2]) -> Vec<DVec2> {
     let mut p = poly.to_vec();
@@ -363,5 +394,34 @@ mod tests {
             DVec2::new(0.0, 2.0),
         ];
         assert_eq!(triangulate(&l).len(), 4);
+    }
+
+    #[test]
+    fn convex_hulls_box_concave_outlines() {
+        // An I: its hull is its box, counter-clockwise, corners only.
+        let (w, d, t, f) = (0.05, 0.1, 0.003, 0.008);
+        let i = [
+            (-w, -d),
+            (w, -d),
+            (w, -d + f),
+            (t, -d + f),
+            (t, d - f),
+            (w, d - f),
+            (w, d),
+            (-w, d),
+            (-w, d - f),
+            (-t, d - f),
+            (-t, -d + f),
+            (-w, -d + f),
+        ]
+        .map(|(x, y)| DVec2::new(x, y));
+        let hull = convex_hull(&i);
+        assert_eq!(hull.len(), 4, "{hull:?}");
+        assert!((signed_area(&hull) - 4.0 * w * d).abs() < 1e-12);
+        // Bad input: non-finite points are skipped, nothing gives nothing.
+        assert!(convex_hull(&[]).is_empty());
+        let nan = [DVec2::NAN, DVec2::ZERO, DVec2::X, DVec2::Y, DVec2::INFINITY];
+        assert_eq!(convex_hull(&nan).len(), 3);
+        assert_eq!(convex_hull(&[DVec2::ZERO, DVec2::X, DVec2::X * 2.0]).len(), 2, "collinear");
     }
 }

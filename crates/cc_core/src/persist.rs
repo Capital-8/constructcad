@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 26;
+pub const FORMAT_VERSION: u32 = 27;
 
 /// Largest project file read, bytes (pictures and textures are kept in it).
 pub const MAX_FILE_BYTES: u64 = 1 << 30;
@@ -73,7 +73,8 @@ pub fn from_ron_with_repairs_localized(
     // (older files: the standard title block on every sheet); version 23 adds
     // design options (older files have none, everything in the main model);
     // version 24 adds material textures and painted faces (older files have none);
-    // version 25 adds custom fill patterns (older files have none).
+    // version 25 adds custom fill patterns (older files have none); version 27 adds
+    // structural profiles (older files: one per distinct column and beam section).
     let mut project = file.project;
     if file.format_version < 11 {
         project.ensure_phases(&|key| crate::project::template_default(key).to_string());
@@ -87,6 +88,14 @@ pub fn from_ron_with_repairs_localized(
     }
     project.ensure_uids();
     project.ensure_annotation_types();
+    // After repair, so types whose profile was gone get one again, and after
+    // the annotation types, which may add a column or beam type.
+    project.convert_sections_to_profiles(&|k| {
+        translate(k).unwrap_or_else(|| crate::project::template_default(k).to_string())
+    });
+    // The legacy fields of types that already had a profile are only its
+    // box: a file where they disagree gets the box back.
+    repairs += project.resync_profile_boxes();
     Ok((project, repairs))
 }
 
@@ -160,6 +169,36 @@ mod tests {
         let text = to_ron(&project).unwrap();
         let back = from_ron(&text).unwrap();
         assert_eq!(project, back);
+    }
+
+    #[test]
+    fn loading_resyncs_a_profiled_beam_box_that_disagrees() {
+        let mut project = Project::from_template();
+        let (tid, pid) = project
+            .types
+            .values()
+            .find_map(|t| match &t.data {
+                crate::TypeData::Beam { profile: Some(p), .. } => Some((t.id, *p)),
+                _ => None,
+            })
+            .unwrap();
+        // Turn the profile into an I so the legacy fields are its box, then
+        // write a height the profile does not have (a hostile file).
+        project.profiles.get_mut(&pid).unwrap().shape =
+            crate::structural_profile::ProfileShape::I { d: 0.3, bf: 0.15, tw: 0.007, tf: 0.01, r: 0.0 };
+        if let crate::TypeData::Beam { width, height, shape, .. } = &mut project.types.get_mut(&tid).unwrap().data {
+            *width = 0.15;
+            *height = 0.9;
+            *shape = crate::SectionShape::Solid;
+        }
+        let (back, repairs) = from_ron_with_repairs(&to_ron(&project).unwrap()).unwrap();
+        assert!(repairs >= 1);
+        let crate::TypeData::Beam { width, height, shape, profile, .. } = &back.types[&tid].data else { panic!() };
+        assert_eq!(*profile, Some(pid));
+        assert!((height - 0.3).abs() < 1e-9 && (width - 0.15).abs() < 1e-9, "{width} x {height}");
+        assert_eq!(*shape, crate::SectionShape::Solid);
+        // A clean file needs nothing.
+        assert_eq!(from_ron_with_repairs(&to_ron(&back).unwrap()).unwrap().1, 0);
     }
 
     #[test]
@@ -318,6 +357,40 @@ mod tests {
         let (q, repairs) = from_ron_with_repairs(&old).unwrap();
         assert_eq!(q.element(id).unwrap().kind, ElementKind::Foundation(strip(0.0)));
         assert_eq!(repairs, 0);
+    }
+
+    #[test]
+    fn format_26_sections_load_as_profiles() {
+        let mut p = Project::from_template();
+        for t in p.types.values_mut() {
+            if let crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. } = &mut t.data {
+                *profile = None;
+            }
+        }
+        p.profiles.clear();
+        let text = to_ron(&p).unwrap().replacen("format_version: 27", "format_version: 26", 1);
+        let back = from_ron(&text).unwrap();
+        assert!(!back.profiles.is_empty());
+        assert!(back.types.values().all(|t| !matches!(
+            t.data,
+            crate::TypeData::Column { profile: None, .. } | crate::TypeData::Beam { profile: None, .. }
+        )));
+    }
+
+    #[test]
+    fn dangling_profile_reference_is_repaired() {
+        let mut p = Project::from_template();
+        p.profiles.clear();
+        let text = to_ron(&p).unwrap();
+        let (back, repairs) = from_ron_with_repairs(&text).unwrap();
+        assert!(repairs > 0);
+        for t in back.types.values() {
+            if let crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. } = &t.data {
+                let id = profile.expect("re-converted to a profile");
+                assert!(back.profile(id).is_some());
+                assert!(back.type_section(&t.data).is_some());
+            }
+        }
     }
 
     #[test]

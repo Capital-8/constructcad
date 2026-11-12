@@ -12,6 +12,7 @@
 
 use crate::parse::{Entity, Param, StepFile};
 use cc_core::sketch::SketchCurve;
+use cc_core::structural_profile::ProfileShape;
 use cc_geom::polygon;
 use glam::{DAffine3, DMat3, DVec2, DVec3};
 use std::f64::consts::TAU;
@@ -123,6 +124,8 @@ pub struct Extrusion {
     pub xf: DAffine3,
     /// Extrusion vector in world coordinates (direction times depth).
     pub vector: DVec3,
+    /// The profile definition entity extruded.
+    pub source: Option<u32>,
 }
 
 impl Extrusion {
@@ -1006,6 +1009,50 @@ impl<'a> Geometry<'a> {
         }
     }
 
+    /// The structural profile shape of a parametric profile definition,
+    /// when the shape holds it exactly (in meters, before its position);
+    /// `None` for other definitions and for what the shapes lack (edge
+    /// radii, slopes, a hollow rectangle's own inner radius).
+    pub fn parametric_shape(&self, e: &Entity) -> Option<ProfileShape> {
+        let len = |i: usize| self.positive(e.arg(i));
+        let opt = |i: usize| self.len(e.arg(i)).filter(|v| *v > 0.0).unwrap_or(0.0);
+        let unset = |i: usize| e.arg(i).as_f64().is_none_or(|v| v == 0.0);
+        Some(match e.name.as_str() {
+            "IFCISHAPEPROFILEDEF" if unset(8) && unset(9) => {
+                ProfileShape::I { bf: len(3)?, d: len(4)?, tw: len(5)?, tf: len(6)?, r: opt(7) }
+            }
+            "IFCUSHAPEPROFILEDEF" if unset(8) && unset(9) => {
+                ProfileShape::Channel { d: len(3)?, bf: len(4)?, tw: len(5)?, tf: len(6)?, r: opt(7) }
+            }
+            "IFCTSHAPEPROFILEDEF" if (8..=11).all(unset) => {
+                ProfileShape::T { d: len(3)?, bf: len(4)?, tw: len(5)?, tf: len(6)?, r: opt(7) }
+            }
+            "IFCLSHAPEPROFILEDEF" if unset(7) && unset(8) => {
+                let h = len(3)?;
+                ProfileShape::Angle { h, b: len(4).unwrap_or(h), t: len(5)?, r: opt(6) }
+            }
+            // A girth no longer than the wall is no lip a lipped channel holds: drawn as its outline.
+            "IFCCSHAPEPROFILEDEF" => {
+                let (d, bf, t, lip, ri) = (len(3)?, len(4)?, len(5)?, opt(6), opt(7));
+                if lip <= t {
+                    return None;
+                }
+                ProfileShape::ColdLippedU { d, bf, lip, t, ri }
+            }
+            "IFCRECTANGLEHOLLOWPROFILEDEF" => {
+                let (b, h, t, inner, ro) = (len(3)?, len(4)?, len(5)?, opt(6), opt(7));
+                if (inner - (ro - t).max(0.0)).abs() > 1e-7 {
+                    return None;
+                }
+                ProfileShape::RectTube { h, b, t, ro }
+            }
+            "IFCCIRCLEHOLLOWPROFILEDEF" => ProfileShape::RoundTube { d: 2.0 * len(3)?, t: len(4)? },
+            "IFCRECTANGLEPROFILEDEF" => ProfileShape::Rect { b: len(3)?, h: len(4)?, chamfer: 0.0 },
+            "IFCCIRCLEPROFILEDEF" => ProfileShape::Round { d: 2.0 * len(3)? },
+            _ => return None,
+        })
+    }
+
     fn profile(&self, e: &Entity) -> Option<Profile> {
         let len = |i: usize| self.positive(e.arg(i));
         let opt = |i: usize| self.len(e.arg(i)).filter(|v| *v > 0.0).unwrap_or(0.0);
@@ -1276,6 +1323,7 @@ impl<'a> Geometry<'a> {
                     let extrusion = (single && profile.closed).then(|| Extrusion {
                         xf: xf * position,
                         vector: xf.transform_vector3(vector),
+                        source: e.arg(0).as_ref(),
                         profile: profile.clone(),
                     });
                     out.push(Solid::new(id, mesh, extrusion));

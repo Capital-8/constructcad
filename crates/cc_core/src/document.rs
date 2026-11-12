@@ -26,6 +26,7 @@ struct Settings {
     graph_bindings: BTreeMap<ElementId, crate::graph_binding::GraphBinding>,
     line_styles: crate::detail::LineStyles,
     fill_patterns: crate::fill_pattern::FillPatterns,
+    profiles: BTreeMap<crate::ProfileId, crate::structural_profile::ProfileDef>,
     option_sets: Vec<crate::OptionSet>,
     browser: crate::browser::BrowserOrganization,
 }
@@ -49,6 +50,7 @@ impl Settings {
             graph_bindings: p.graph_bindings.clone(),
             line_styles: p.line_styles.clone(),
             fill_patterns: p.fill_patterns.clone(),
+            profiles: p.profiles.clone(),
             option_sets: p.option_sets.clone(),
             browser: p.browser.clone(),
         }
@@ -71,6 +73,7 @@ impl Settings {
         p.graph_bindings = self.graph_bindings;
         p.line_styles = self.line_styles;
         p.fill_patterns = self.fill_patterns;
+        p.profiles = self.profiles;
         p.option_sets = self.option_sets;
         p.browser = self.browser;
     }
@@ -562,6 +565,12 @@ impl<'a> EditCtx<'a> {
         &mut self.project.fill_patterns
     }
 
+    /// The project's structural profiles.
+    pub fn profiles_mut(&mut self) -> &mut BTreeMap<crate::ProfileId, crate::structural_profile::ProfileDef> {
+        self.touch_settings();
+        &mut self.project.profiles
+    }
+
     /// Construction phases, in time order.
     pub fn phases_mut(&mut self) -> &mut Vec<crate::Phase> {
         self.touch_settings();
@@ -794,8 +803,78 @@ impl<'a> EditCtx<'a> {
         &mut self.project.units
     }
 
+    /// Column and beam types with a profile keep their legacy section as the
+    /// profile's bounding box (a legacy section that is exactly the profile
+    /// stays as it is); types whose profile is gone drop the reference and
+    /// keep the box. A type whose legacy section this edit changed while
+    /// leaving its profile reference alone points to a profile made from the
+    /// new section instead (an equal one, else a new one); when both changed,
+    /// the profile wins. Runs when this edit touched settings (profiles live
+    /// there) or a column or beam type, and writes only what changes.
+    fn sync_profiles(&mut self) {
+        let settings = self.tx.settings.is_some();
+        let ids: Vec<ElementTypeId> = self
+            .project
+            .types
+            .values()
+            .filter(|t| {
+                matches!(
+                    t.data,
+                    crate::TypeData::Column { profile: Some(_), .. } | crate::TypeData::Beam { profile: Some(_), .. }
+                ) && (settings || self.tx.types.contains_key(&t.id))
+            })
+            .map(|t| t.id)
+            .collect();
+        for id in ids {
+            let Some(data) = self.project.types.get(&id).map(|t| &t.data) else { continue };
+            // A direct edit of the legacy section (the profile reference left
+            // as it was) is authoritative: the type points to a profile made
+            // from the new section instead of getting the old box back.
+            let before = self.tx.types.get(&id).and_then(|c| c.0.as_ref()).map(|t| &t.data);
+            if let Some(before) = before
+                && crate::profiles_project::type_profile(before) == crate::profiles_project::type_profile(data)
+                && !crate::profiles_project::same_legacy(before, data)
+            {
+                let legacy = self.project.legacy_profile(data);
+                self.touch_settings();
+                let pid = legacy.and_then(|(material, shape)| self.project.section_profile(material, shape));
+                // The new section is already placed: it is the profile as is.
+                if let Some(
+                    crate::TypeData::Column { profile, profile_rotation_deg, profile_mirror, .. }
+                    | crate::TypeData::Beam { profile, profile_rotation_deg, profile_mirror, .. },
+                ) = self.type_mut(id).map(|t| &mut t.data)
+                {
+                    *profile = pid;
+                    *profile_rotation_deg = 0.0;
+                    *profile_mirror = false;
+                }
+                continue;
+            }
+            let gone = match data {
+                crate::TypeData::Column { profile: Some(p), .. } | crate::TypeData::Beam { profile: Some(p), .. } => {
+                    self.project.profile(*p).is_none()
+                }
+                _ => continue,
+            };
+            if gone {
+                if let Some(crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. }) =
+                    self.type_mut(id).map(|t| &mut t.data)
+                {
+                    *profile = None;
+                }
+                continue;
+            }
+            let Some(boxed) = self.project.profile_box(data) else { continue };
+            if let Some(t) = self.type_mut(id) {
+                t.data = boxed;
+            }
+        }
+    }
+
     /// Fill in "after" states and drop no-op entries.
     fn finish(mut self) -> Transaction {
+        // Legacy sections follow their profiles first, so what reads them below sees the new size.
+        self.sync_profiles();
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_shafts();
         self.sync_pads();

@@ -421,6 +421,12 @@ impl Solid {
 
     /// Append a prism like [`Self::add_prism`] with openings: `holes` are
     /// outlines inside `footprint` (either winding).
+    ///
+    /// Faces are pushed caps first (top and bottom triangles), then one side
+    /// per edge, last: the edges of `polygon::ccw(footprint)`, then those of
+    /// each hole of three points or more, in the given order, as
+    /// `polygon::ccw(hole)` reversed (clockwise). Without holes it is
+    /// [`Self::add_prism`]. `section::add_column_body` relies on this order.
     pub fn add_prism_with_holes(
         &mut self,
         footprint: &[DVec2],
@@ -470,6 +476,9 @@ impl Solid {
 
     /// Append a prism between two copies of a polygon: `bottom(p)`/`top(p)` give
     /// the z of each footprint vertex (planar surfaces only).
+    ///
+    /// Faces are pushed top, bottom, then one side per edge, last, in the
+    /// order of the footprint wound counter-clockwise ([`polygon::ccw`]).
     pub fn add_prism(&mut self, footprint: &[DVec2], bottom: impl Fn(DVec2) -> f64, top: impl Fn(DVec2) -> f64) {
         let fp = polygon::ccw(footprint);
         let n = fp.len();

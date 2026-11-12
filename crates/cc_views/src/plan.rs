@@ -136,7 +136,7 @@ pub fn plan_of(
     }
     // Columns over the walls they stand in (issue 276).
     if !ceiling {
-        draw_columns(&mut d, project, level, cut_z, spacing, structural);
+        draw_columns(&mut d, project, level, (cut_z, spacing, detail), structural);
     }
 
     if !ceiling && let Some((lo, hi)) = geom.bounds() {
@@ -337,28 +337,33 @@ fn draw_structure(
 /// walls, so a column standing in or crossing a wall shows whole over the
 /// wall's cut; a wall joined with an architectural column still cuts it, as
 /// [`crate::joins::merge`] paints the cutting element over the one it cuts.
-fn draw_columns(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64, spacing: f64, structural: bool) {
+fn draw_columns(
+    d: &mut Drawing2D,
+    project: &Project,
+    level: LevelId,
+    (cut_z, spacing, detail): (f64, f64, DetailLevel),
+    structural: bool,
+) {
     for e in project.elements.values().filter(|e| e.level == level && (!structural || is_structural(e))) {
         let id = Some(e.id);
-        let (ElementKind::Column(c), Some(TypeData::Column { section, .. })) =
+        let (ElementKind::Column(c), Some(data @ TypeData::Column { .. })) =
             (&e.kind, project.element_type(e.type_id).map(|t| &t.data))
         else {
             continue;
         };
-        let loops = cc_geom::section::column_loops(*section, c.position, c.rotation_deg);
+        let Some(section) = cc_geom::section::detailed(project, data, detail) else { continue };
+        let (outer, holes) = cc_geom::section::column_body(&section, c.position, c.rotation_deg);
         let (base, top) = project.column_span(e, c);
         let style = if base <= cut_z && cut_z <= top {
-            let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
-            for part in cc_geom::section::column_parts(*section, c.position, c.rotation_deg) {
-                crate::cut::cut_fill(d, project, material, part, spacing, id);
-            }
+            let material = data.cut_material();
+            crate::cut::cut_fill_with_holes(d, project, material, &outer, &holes, spacing, id);
             LineStyle::Cut
         } else if base > cut_z {
             LineStyle::Hidden
         } else {
             LineStyle::Projection
         };
-        for outline in &loops {
+        for outline in std::iter::once(&outer).chain(&holes) {
             d.polyline(outline, true, style, id);
         }
     }

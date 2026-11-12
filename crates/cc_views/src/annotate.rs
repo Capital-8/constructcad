@@ -108,9 +108,23 @@ fn cm(meters: f64) -> String {
     if (v - v.round()).abs() < 1e-6 { format!("{v:.0}") } else { format!("{v:.1}") }
 }
 
-/// A section's size in centimeters (inches in imperial units): `15×40`, `Ø30`.
-pub fn section_label(data: &TypeData) -> Option<String> {
+/// A steel or cold-formed profile's name (`IPE 200`), else the section's size in
+/// centimeters (inches in imperial units): `15×40`, `Ø30`.
+pub fn section_label(project: &Project, data: &TypeData) -> Option<String> {
     use cc_core::ColumnSection as C;
+    use cc_core::structural_profile::{ProfileMaterial as M, ProfileShape};
+    if let TypeData::Column { profile: Some(id), .. } | TypeData::Beam { profile: Some(id), .. } = data
+        && let Some(def) = project.profile(*id)
+        && matches!(def.material, M::Steel | M::ColdFormed)
+    {
+        return Some(def.name.clone());
+    }
+    // A round profile (the legacy fields of a profile-made type are its box).
+    if let Some(def) = project.type_profile_def(data)
+        && let ProfileShape::Round { d } | ProfileShape::RoundTube { d, .. } = def.shape
+    {
+        return Some(format!("Ø{}", cm(d)));
+    }
     Some(match data {
         TypeData::Beam { width, height, .. } => format!("{}×{}", cm(*width), cm(*height)),
         TypeData::Column { section: C::Round { diameter } | C::Pipe { diameter, .. }, .. } => {
@@ -140,7 +154,9 @@ pub fn structure_tags(
 ) {
     let mm = mm(scale);
     for e in project.elements.values().filter(|e| e.level == level) {
-        let Some(section) = project.element_type(e.type_id).and_then(|t| section_label(&t.data)) else { continue };
+        let Some(section) = project.element_type(e.type_id).and_then(|t| section_label(project, &t.data)) else {
+            continue;
+        };
         let text = if e.mark.is_empty() { section } else { format!("{} {section}", e.mark) };
         match &e.kind {
             ElementKind::Beam(_) => {
@@ -160,11 +176,12 @@ pub fn structure_tags(
                 d.tag_text(p + offset, &text, 2.5, Anchor::CenterBottom, angle, Some(e.id));
             }
             ElementKind::Column(c) if c.structural => {
-                let Some(TypeData::Column { section, .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
+                let Some(data @ TypeData::Column { .. }) = project.element_type(e.type_id).map(|t| &t.data) else {
                     continue;
                 };
-                let outline = cc_geom::column_outline(*section, c.position, c.rotation_deg);
-                let hi = outline.iter().fold(DVec2::splat(f64::NEG_INFINITY), |a, p| a.max(*p));
+                let outline = cc_geom::column_outline(project, data, c.position, c.rotation_deg);
+                // A section that fails has no outline: tag the column's point.
+                let hi = outline.iter().fold(c.position, |a, p| a.max(*p));
                 let p = hi + DVec2::splat(1.0 * mm);
                 let half = text_half(&text, 2.5, 0.0, mm);
                 let offset = place_tag(d, offsets, e.id, p + half, half, c.position);
@@ -628,5 +645,138 @@ mod tests {
         let [(p0, u0), (p1, u1)] = layout.marks[..] else { panic!("{:?}", layout.marks) };
         assert!(p0.distance(DVec2::X) < 1e-9 && u0.distance(-DVec2::Y) < 1e-9);
         assert!(p1.distance(DVec2::Y) < 1e-9 && u1.distance(-DVec2::X) < 1e-9);
+    }
+
+    #[test]
+    fn a_column_whose_profile_fails_is_tagged_at_its_point() {
+        use cc_core::structural_profile::{ProfileDef, ProfileMaterial, ProfileShape};
+        use cc_core::{Category, Column, Document, Element, ElementId, ProfileId, WallTop};
+        let mut p = Project::from_template();
+        // A root radius that does not fit: the profile has no outline.
+        let shape = ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.0056, tf: 0.0085, r: 0.5 };
+        assert!(shape.outline().is_err());
+        let pid = ProfileId(p.alloc_id());
+        let def = ProfileDef {
+            id: pid,
+            uid: Default::default(),
+            name: "Broken".into(),
+            material: ProfileMaterial::Steel,
+            shape,
+            catalog: None,
+            description: String::new(),
+        };
+        p.profiles.insert(pid, def);
+        let type_id = p.default_type(Category::Column).unwrap();
+        if let Some(TypeData::Column { profile, .. }) = p.types.get_mut(&type_id).map(|t| &mut t.data) {
+            *profile = Some(pid);
+        }
+        let level = p.levels[0].id;
+        let mut doc = Document::new(p);
+        doc.edit("column", |e| {
+            let id = ElementId(e.alloc_id());
+            let column = Column {
+                position: DVec2::new(1.0, 2.0),
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: WallTop::Unconnected,
+                structural: true,
+            };
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: "P1".into(),
+                comments: String::new(),
+                kind: ElementKind::Column(column),
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        });
+        assert!(doc.project.type_section(&doc.project.types[&type_id].data).is_none());
+        let geom = ModelGeometry::build(&doc.project);
+        let mut d = Drawing2D::default();
+        structure_tags(&mut d, &doc.project, &geom, level, 50, &TagOffsets::new());
+        let texts: Vec<DVec2> = d
+            .prims
+            .iter()
+            .filter_map(|p| if let crate::Prim::Text { pos, .. } = p { Some(*pos) } else { None })
+            .collect();
+        assert!(!texts.is_empty(), "the column is tagged");
+        assert!(texts.iter().all(|p| p.is_finite()), "{texts:?}");
+    }
+}
+
+#[cfg(test)]
+mod section_label_tests {
+    use super::*;
+    use cc_core::structural_profile::{ProfileDef, ProfileMaterial, ProfileShape};
+    use cc_core::{ColumnSection, ProfileId, SectionShape, Uid};
+
+    fn with_profile(material: ProfileMaterial) -> (Project, ProfileId) {
+        let mut p = Project::empty();
+        let id = ProfileId(p.alloc_id());
+        let shape = ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.0056, tf: 0.0085, r: 0.012 };
+        p.profiles.insert(
+            id,
+            ProfileDef {
+                id,
+                uid: Uid::generate(),
+                name: "IPE 200".into(),
+                material,
+                shape,
+                catalog: None,
+                description: String::new(),
+            },
+        );
+        (p, id)
+    }
+
+    fn beam(profile: Option<ProfileId>) -> TypeData {
+        TypeData::Beam {
+            width: 0.15,
+            height: 0.4,
+            material: "m".into(),
+            shape: SectionShape::Solid,
+            profile,
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        }
+    }
+
+    #[test]
+    fn steel_profiles_show_their_name_and_others_the_size() {
+        let (p, id) = with_profile(ProfileMaterial::Steel);
+        assert_eq!(section_label(&p, &beam(Some(id))).as_deref(), Some("IPE 200"));
+        let column = TypeData::Column {
+            section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
+            material: "m".into(),
+            profile: Some(id),
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        };
+        assert_eq!(section_label(&p, &column).as_deref(), Some("IPE 200"));
+        let (p, id) = with_profile(ProfileMaterial::Concrete);
+        assert_eq!(section_label(&p, &beam(Some(id))).as_deref(), Some("15×40"));
+        assert_eq!(section_label(&p, &beam(Some(ProfileId(9999)))).as_deref(), Some("15×40"));
+        assert_eq!(section_label(&p, &beam(None)).as_deref(), Some("15×40"));
+    }
+
+    #[test]
+    fn a_round_concrete_profile_column_is_tagged_with_its_diameter() {
+        let (mut p, id) = with_profile(ProfileMaterial::Concrete);
+        p.profiles.get_mut(&id).unwrap().shape = ProfileShape::Round { d: 0.3 };
+        // The legacy fields of a profile-made type are its box.
+        let column = TypeData::Column {
+            section: ColumnSection::Rectangular { width: 0.3, depth: 0.3 },
+            material: "m".into(),
+            profile: Some(id),
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        };
+        assert_eq!(section_label(&p, &column).as_deref(), Some("Ø30"));
     }
 }

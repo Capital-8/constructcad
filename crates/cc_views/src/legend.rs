@@ -125,25 +125,28 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 ];
                 d.polyline(&r, true, LineStyle::Projection, None);
             }
-            TypeData::Column { section, .. } => {
-                let c = o + DVec2::new(0.4, 0.0);
-                for part in cc_geom::section::column_parts(*section, c, 0.0) {
-                    d.fill(part, POCHE, None);
-                }
-                for outline in cc_geom::section::column_loops(*section, c, 0.0) {
-                    d.polyline(&outline, true, LineStyle::Cut, None);
-                }
-            }
-            TypeData::Beam { width, height, shape, .. } => {
-                // Section of the beam.
-                let c = o + DVec2::new(width * 0.5, height * 0.5);
-                for (a, b) in cc_geom::section::shape_rects(*shape, *width, *height) {
-                    let r = vec![c + a, c + DVec2::new(b.x, a.y), c + b, c + DVec2::new(a.x, b.y)];
-                    d.fill(r, POCHE, None);
-                }
-                for outline in cc_geom::section::shape_loops(*shape, *width, *height) {
-                    let pts: Vec<DVec2> = outline.iter().map(|p| c + *p).collect();
-                    d.polyline(&pts, true, LineStyle::Cut, None);
+            TypeData::Column { .. } | TypeData::Beam { .. } => {
+                if let Some(section) = project.type_section(&t.data) {
+                    // A column's section beside the sample's start; a beam's
+                    // standing on the baseline.
+                    let c = if matches!(t.data, TypeData::Beam { .. }) {
+                        let (lo, _) = section.outline.bbox();
+                        o - lo
+                    } else {
+                        o + DVec2::new(0.4, 0.0)
+                    };
+                    let (outer, holes) = cc_geom::section::column_body(&section.outline, c, 0.0);
+                    match cc_geom::polygon::keyhole(&outer, &holes) {
+                        Some(ring) => d.fill(ring, POCHE, None),
+                        None => {
+                            for tri in cc_geom::polygon::triangulate_with_holes(&outer, &holes) {
+                                d.fill(tri.to_vec(), POCHE, None);
+                            }
+                        }
+                    }
+                    for outline in std::iter::once(&outer).chain(&holes) {
+                        d.polyline(outline, true, LineStyle::Cut, None);
+                    }
                 }
             }
             TypeData::Rebar { .. } => {
