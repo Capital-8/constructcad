@@ -232,6 +232,14 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Curvature handle**: a selected arc strip shows a round handle at the middle of its arc, as arc walls do; dragging it bends the strip through the pointer, its ends staying (the radius and length show while dragging). While a strip type is chosen, the options bar names the tool *Strip Footing*.
 - **Views**: plans dash strips below the cut plane and hatch those it cuts, the arcs as short chords; sections cut the curved body; schedules list the length along the arc and the exact volume. IFC export writes an arc strip as an `IfcFooting` (`STRIP_FOOTING`) whose body is its outline of true arcs extruded. IFC import brings strip footings, straight or arc, back as components with their mesh, as before.
 
+## Structure by material
+
+The *Structure* tab starts with a *Material* group: *Concrete*, *Steel* and *Timber* buttons (one is always on; the choice is kept between sessions). The material swaps the groups made for it: concrete shows *Structure* (Column, Beam, Floor) and *Reinforcement*; steel shows *Structure* (Column, Beam, X-Bracing), the *Framing* grid group (Columns at Grids, Beams on Grids, Beams Between Columns, Grid Frame) and Truss; timber shows *Structure* (Column, Beam) and the same grid group. Profiles, Foundation, Analytical, Documentation, Datum and Selection show for every material.
+
+The Column and Beam buttons start their tools on a type of the chosen material, and the options bar's type list shows only those types. When the project has none, one is created from the catalog in one undo step: a W200x26,6 for steel, an MLC 9x32 glulam for timber, a 20x40 concrete rectangle for concrete (`structural_type_for`). The grid commands of the tab use the chosen material's type as well. A type's material comes from its profile (steel and cold-formed profiles are steel).
+
+*Grid Frame* (*Structure → Framing*, available with two or more grids) opens a dialog that places columns on every storey and beams on every level of a range, in one undo step: *Base level* and *Top level*, the *Column type* and *Beam type* (of the chosen material), and *Secondary beams* with the grid they run parallel to and their *Spacing*. It frames the selected grids, or all of them when none is selected. Columns are attached to the level above, and spans and columns already modeled are skipped. Secondary beams fill each bay (four grid intersections) at most one spacing apart and end on the crossing beams; bays that are not such quadrilaterals are skipped. A run of more than 2000 members is refused. The status bar reports what was placed and skipped.
+
 ## Structural profiles
 
 *Structure → Profiles* (also *Manage → Profiles*) opens the Profile Manager: the project's structural profiles, which column and beam types are drawn and built with, grouped by material (steel, cold-formed steel, timber, concrete) under a search box.

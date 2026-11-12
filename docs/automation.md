@@ -266,6 +266,14 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "profiles_list", "args": {"material": "steel"}}
 ```
 
+### Structure by material and grid frames
+
+`structural_type_for` (`category` column or beam, `material` concrete, steel or timber) returns the first type of that material, or creates a default one from the catalog. `grid_frame_create` places columns on every storey of a range of levels and beams on the upper levels over the grids (`grids` default all, `base_level`/`top_level` default the lowest two levels, `column_type`/`beam_type` or a `material`), with optional secondary beams in each bay, in one undo step (at most 2000 members); it returns the ids and the number skipped.
+
+```text
+{"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).
