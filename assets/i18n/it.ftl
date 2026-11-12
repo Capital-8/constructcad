@@ -3199,6 +3199,8 @@ msg-grid-frame-created = { $columns } pilastri, { $beams } travi e { $secondary 
 # Steel building
 category-steel-building = Capannoni in acciaio
 tpl-type-steel-building = Capannone in acciaio
+category-truss = Capriate
+tpl-type-truss = Capriata
 tx-steel-building = Crea capannone in acciaio
 action-steel-building = Capannone in acciaio
 dlg-steel-building = Capannone in acciaio

@@ -387,7 +387,7 @@ impl Tool {
             Category::LevelMark => Tool::LevelMark { type_id },
             Category::DetailComponent => Tool::DetailComponent { type_id },
             // Imported, not drawn.
-            Category::CadImport | Category::TitleBlock | Category::SteelBuilding => return None,
+            Category::CadImport | Category::TitleBlock | Category::SteelBuilding | Category::Truss => return None,
         })
     }
 }

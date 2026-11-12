@@ -3201,6 +3201,8 @@ msg-grid-frame-created = ວາງເສົາ { $columns }, ຄານ { $beams 
 # Steel building
 category-steel-building = ອາຄານໂຄງເຫຼັກ
 tpl-type-steel-building = ອາຄານໂຄງເຫຼັກ
+category-truss = ໂຄງຫຼັງຄາ
+tpl-type-truss = ໂຄງຫຼັງຄາ
 tx-steel-building = ສ້າງອາຄານໂຄງເຫຼັກ
 action-steel-building = ອາຄານໂຄງເຫຼັກ
 dlg-steel-building = ອາຄານໂຄງເຫຼັກ

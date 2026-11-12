@@ -53,6 +53,7 @@ impl ElementKind {
     pub fn member_host(&self) -> Option<&dyn MemberHost> {
         match self {
             ElementKind::SteelBuilding(b) => Some(b.as_ref() as &dyn MemberHost),
+            ElementKind::Truss(t) => Some(t.as_ref() as &dyn MemberHost),
             _ => None,
         }
     }
@@ -60,6 +61,7 @@ impl ElementKind {
     pub fn member_host_mut(&mut self) -> Option<&mut dyn MemberHost> {
         match self {
             ElementKind::SteelBuilding(b) => Some(b.as_mut() as &mut dyn MemberHost),
+            ElementKind::Truss(t) => Some(t.as_mut() as &mut dyn MemberHost),
             _ => None,
         }
     }

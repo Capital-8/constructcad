@@ -3199,6 +3199,8 @@ msg-grid-frame-created = { $columns } pilares, { $beams } vigas y { $secondary }
 # Steel building
 category-steel-building = Naves metálicas
 tpl-type-steel-building = Nave metálica
+category-truss = Cerchas
+tpl-type-truss = Cercha
 tx-steel-building = Crear nave metálica
 action-steel-building = Nave metálica
 dlg-steel-building = Nave metálica

@@ -1708,7 +1708,7 @@ impl<'a> Exporter<'a> {
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             // Rooms, grids, dimensions, texts, detail lines, regions, level marks,
-            // imported drawings, masses, shafts, steel buildings and pads have no IFC type object.
+            // imported drawings, masses, shafts, steel buildings, trusses and pads have no IFC type object.
             TypeData::Room {}
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
@@ -1721,6 +1721,7 @@ impl<'a> Exporter<'a> {
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
+            | TypeData::Truss {}
             | TypeData::Pad { .. } => {
                 return None;
             }

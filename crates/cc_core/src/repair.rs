@@ -107,6 +107,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
         // Out-of-range values are reset by `repair_member_hosts`, which keeps the members.
         ElementKind::SteelBuilding(_) => true,
+        ElementKind::Truss(t) => t.start.is_finite() && t.end.is_finite(),
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
     }
@@ -208,7 +209,8 @@ impl Project {
                 | TypeData::MaskingRegion {}
                 | TypeData::Mass { .. }
                 | TypeData::Shaft {}
-                | TypeData::SteelBuilding {} => {}
+                | TypeData::SteelBuilding {}
+                | TypeData::Truss {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
                     for (r, d) in
                         [(cut_slope, crate::pad::DEFAULT_CUT_SLOPE), (fill_slope, crate::pad::DEFAULT_FILL_SLOPE)]

@@ -1710,6 +1710,7 @@ fn place_label(category: Category) -> String {
         Category::Mass => t!("tool-mass"),
         Category::Shaft => t!("tool-shaft"),
         Category::SteelBuilding => t!("category-steel-building"),
+        Category::Truss => t!("category-truss"),
         Category::Topography => t!("tool-topography"),
         Category::Pad => t!("tool-pad"),
     }
@@ -1751,6 +1752,7 @@ fn place_description(category: Category) -> String {
         Category::Mass => t!("cmd-desc-mass"),
         Category::Shaft => t!("cmd-desc-shaft"),
         Category::SteelBuilding => t!("cmd-desc-steel-building"),
+        Category::Truss => t!("cmd-desc-truss"),
         Category::Topography => t!("cmd-desc-topography"),
         Category::Pad => t!("cmd-desc-pad"),
     }

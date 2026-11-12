@@ -65,6 +65,7 @@ pub mod sweep;
 pub mod title_block;
 pub mod topography;
 pub mod transform;
+pub mod truss;
 mod types;
 pub mod units;
 mod view;
