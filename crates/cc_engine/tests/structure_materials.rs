@@ -177,3 +177,49 @@ fn grid_frame_is_bounded() {
     assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
     assert_eq!(s.doc.undo_depth(), depth, "refused before any edit, the type default included");
 }
+
+#[test]
+fn secondary_beams_divide_each_bay() {
+    let (mut s, grids, levels) = three_storeys();
+    // grids[0] is the vertical grid x = 0; bays are 6 m wide, spacing 2.5 m: ceil(6 / 2.5) - 1 = 2 per bay.
+    let out = run(
+        &mut s,
+        "grid_frame_create",
+        json!({"base_level": levels[0], "top_level": levels[1], "secondary": {"parallel_to": grids[0], "spacing": 2.5}}),
+    );
+    // 4 bays x 2 beams on the one upper level.
+    let sec = out["secondary"].as_array().unwrap();
+    assert_eq!(sec.len(), 8);
+    for id in sec {
+        let e = s.project().element(cc_core::ElementId(id.as_u64().unwrap())).unwrap();
+        let cc_core::ElementKind::Beam(b) = &e.kind else { panic!() };
+        assert!((b.start.x - b.end.x).abs() < 1e-9, "parallel to the x = 0 grid");
+        assert!(((b.start.y - b.end.y).abs() - 6.0).abs() < 1e-9);
+        let frac = b.start.x.rem_euclid(6.0);
+        assert!((frac - 2.0).abs() < 1e-9 || (frac - 4.0).abs() < 1e-9, "evenly spaced: {}", b.start.x);
+    }
+    // An exact multiple: 6 / 3 = 2 gives 1 beam per bay.
+    let again = run(
+        &mut s,
+        "grid_frame_create",
+        json!({"base_level": levels[1], "top_level": levels[2], "secondary": {"parallel_to": grids[0], "spacing": 3.0}}),
+    );
+    assert_eq!(again["secondary"].as_array().unwrap().len(), 4);
+}
+
+#[test]
+fn skewed_bays_are_skipped_and_bad_secondary_refused() {
+    let mut s = Session::default();
+    let a = run(&mut s, "grid_create", json!({"start": [0.0, -1.0], "end": [0.0, 7.0]}))["id"].as_u64().unwrap();
+    run(&mut s, "grid_create", json!({"start": [6.0, -1.0], "end": [6.0, 7.0]}));
+    run(&mut s, "grid_create", json!({"start": [-1.0, 0.0], "end": [7.0, 0.0]}));
+    // The fourth grid leans: the bay's crossing grids are not parallel.
+    run(&mut s, "grid_create", json!({"start": [-1.0, 5.0], "end": [7.0, 7.0]}));
+    let out = run(&mut s, "grid_frame_create", json!({"secondary": {"parallel_to": a, "spacing": 2.0}}));
+    assert_eq!(out["secondary"].as_array().unwrap().len(), 0);
+    assert_eq!(out["skipped_bays"], 1);
+    for sec in [json!({"parallel_to": a, "spacing": 0.1}), json!({"parallel_to": 999_999, "spacing": 2.0})] {
+        let err = run_err(&mut s, "grid_frame_create", json!({"secondary": sec}));
+        assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    }
+}

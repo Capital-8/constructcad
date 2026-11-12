@@ -3,7 +3,7 @@
 //! along the grids on the upper level, plus optional secondary beams, in one
 //! undo step.
 
-use super::structure::{SAME, beam_exists, columns_on, grids_with_ids, intersections};
+use super::structure::{SAME, beam_exists, columns_on, crossing, grids_with_ids, intersections};
 use super::structure_material::{material_arg, structural_type};
 use super::{add_element, edit, ids_json};
 use crate::error::{EngineError, Result};
@@ -228,14 +228,81 @@ fn spans_along(a: DVec2, b: DVec2, on: &[DVec2]) -> Vec<(DVec2, DVec2)> {
     along.windows(2).map(|w| (w[0].1, w[1].1)).filter(|(x, y)| x.distance(*y) >= SAME).collect()
 }
 
-/// Secondary beams of `upper` (Task 4 fills this in).
+/// Grids within this angle are parallel.
+const PARALLEL_DEG: f64 = 1.0;
+
+fn parallel(u: DVec2, v: DVec2) -> bool {
+    u.perp_dot(v).abs() <= PARALLEL_DEG.to_radians().sin()
+}
+
+/// Secondary beams of `upper`: in each bay between two neighboring grids
+/// parallel to `parallel_to` and two neighboring crossing grids, beams
+/// parallel to it, evenly spaced at most `spacing` apart, from one crossing
+/// grid to the other. Bays whose crossing grids are not parallel to each
+/// other, or that lack a corner, are skipped.
 fn secondary_beams(
-    _p: &cc_core::Project,
-    _upper: LevelId,
-    _grids: &[(ElementId, (DVec2, DVec2))],
-    _sec: &SecondaryArg,
-    _out: &mut Layout,
+    p: &cc_core::Project,
+    upper: LevelId,
+    grids: &[(ElementId, (DVec2, DVec2))],
+    sec: &SecondaryArg,
+    out: &mut Layout,
 ) {
+    let Some(&(_, (a0, a1))) = grids.iter().find(|(id, _)| id.0 == sec.parallel_to) else { return };
+    let Some(d) = (a1 - a0).try_normalize() else { return };
+    let n = d.perp();
+    let dir = |(s, e): (DVec2, DVec2)| (e - s).try_normalize();
+    // Parallel grids by their offset across `d`; crossing grids by where they meet the reference line.
+    let mut parallels: Vec<(f64, (DVec2, DVec2))> = Vec::new();
+    let mut crossings: Vec<(f64, (DVec2, DVec2))> = Vec::new();
+    for &(_, line) in grids {
+        let Some(u) = dir(line) else { continue };
+        if parallel(u, d) {
+            parallels.push(((line.0 - a0).dot(n), line));
+        } else {
+            let un = u.dot(n);
+            if un.abs() < 1e-9 {
+                continue;
+            }
+            let along = (line.0 - a0).dot(d) - (line.0 - a0).dot(n) * u.dot(d) / un;
+            if along.is_finite() {
+                crossings.push((along, line));
+            }
+        }
+    }
+    parallels.sort_by(|x, y| x.0.total_cmp(&y.0));
+    crossings.sort_by(|x, y| x.0.total_cmp(&y.0));
+    for pw in parallels.windows(2) {
+        let ((o0, p0), (o1, p1)) = (pw[0], pw[1]);
+        let width = (o1 - o0).abs();
+        if width < SAME {
+            continue;
+        }
+        // Beams per bay, bounded so a tiny spacing cannot run away.
+        let count = (((width / sec.spacing) - 1e-9).ceil().clamp(1.0, MAX_MEMBERS as f64) as usize).saturating_sub(1);
+        for cw in crossings.windows(2) {
+            let (c0, c1) = (cw[0].1, cw[1].1);
+            let corners = (crossing(p0, c0), crossing(p1, c0), crossing(p0, c1), crossing(p1, c1));
+            let (Some(q00), Some(q10), Some(q01), Some(q11)) = corners else {
+                out.skipped_bays += 1;
+                continue;
+            };
+            let (Some(u0), Some(u1)) = (dir(c0), dir(c1)) else { continue };
+            if !parallel(u0, u1) {
+                out.skipped_bays += 1;
+                continue;
+            }
+            for k in 1..=count {
+                let f = k as f64 / (count + 1) as f64;
+                let (x, y) = (q00.lerp(q10, f), q01.lerp(q11, f));
+                let planned = out.secondary.iter().any(|&(l, s, e)| l == upper && same_span((s, e), (x, y)));
+                if planned || beam_exists(p, upper, x, y) {
+                    out.skipped += 1;
+                } else {
+                    out.secondary.push((upper, x, y));
+                }
+            }
+        }
+    }
 }
 
 fn create(s: &mut Session, layout: Layout, column_type: ElementTypeId, beam_type: ElementTypeId) -> Result<Value> {
