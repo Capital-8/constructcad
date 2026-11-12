@@ -325,6 +325,48 @@ impl Solid {
             .collect()
     }
 
+    /// Per face, the smooth facets that read as one surface with it across a
+    /// shared edge, each with that edge's midpoint (none for a flat face).
+    pub fn smooth_neighbors(&self) -> Vec<Vec<(usize, DVec3)>> {
+        // Facets share their edges' ends; look them up on a fine grid.
+        let key = |p: DVec3| {
+            let q = (p * 1e5).round();
+            (q.x as i64, q.y as i64, q.z as i64)
+        };
+        let edge = |a: DVec3, b: DVec3| {
+            let (a, b) = (key(a), key(b));
+            if a <= b { (a, b) } else { (b, a) }
+        };
+        let sides = |face: &Face| -> Vec<(DVec3, DVec3)> {
+            face.verts.iter().copied().zip(face.verts.iter().copied().cycle().skip(1)).collect()
+        };
+        let mut at: std::collections::HashMap<_, Vec<usize>> = std::collections::HashMap::new();
+        for (fi, face) in self.faces.iter().enumerate().filter(|(_, f)| f.smooth) {
+            for (a, b) in sides(face) {
+                at.entry(edge(a, b)).or_default().push(fi);
+            }
+        }
+        self.faces
+            .iter()
+            .enumerate()
+            .map(|(fi, face)| {
+                if !face.smooth {
+                    return Vec::new();
+                }
+                let mut out = Vec::new();
+                for (a, b) in sides(face) {
+                    for &fj in at.get(&edge(a, b)).into_iter().flatten() {
+                        let joins = self.faces.get(fj).is_some_and(|other| other.normal.dot(face.normal) > SMOOTH_COS);
+                        if fj != fi && joins {
+                            out.push((fj, (a + b) * 0.5));
+                        }
+                    }
+                }
+                out
+            })
+            .collect()
+    }
+
     /// Edges between smooth facets (hidden by [`Self::feature_edges`]), per
     /// face, with the neighbor's normal: a view draws one as a silhouette
     /// where the face is seen and its neighbor is not.

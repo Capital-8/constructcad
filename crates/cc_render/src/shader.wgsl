@@ -19,13 +19,16 @@ struct VsIn {
     @location(4) bg: vec4<f32>,
     /// Material texture: xy its coordinates in repeats, z its layer plus one (0 for none).
     @location(5) tex: vec4<f32>,
+    /// Where the vertex is on its face, in meters, running on across the
+    /// facets of a curved surface: what the surface patterns are laid along.
+    @location(6) plane: vec2<f32>,
 };
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) color: vec4<f32>,
-    @location(2) world: vec3<f32>,
+    @location(2) plane: vec2<f32>,
     @location(3) fg: vec4<f32>,
     @location(4) bg: vec4<f32>,
     @location(5) tex: vec4<f32>,
@@ -46,7 +49,7 @@ fn vs_main(v: VsIn) -> VsOut {
     o.clip = u.view_proj * vec4<f32>(v.pos, 1.0);
     o.normal = v.normal;
     o.color = v.color;
-    o.world = v.pos;
+    o.plane = v.plane;
     o.fg = v.fg;
     o.bg = v.bg;
     o.tex = v.tex;
@@ -124,11 +127,9 @@ fn pattern(kind: f32, uv: vec2<f32>, w: f32) -> f32 {
 @fragment
 fn fs_face(i: VsOut) -> @location(0) vec4<f32> {
     let n = normalize(i.normal);
-    // The face's own plane coordinates: the axes it faces least.
-    let a = abs(n);
-    let top = a.z >= a.x && a.z >= a.y;
-    let side_x = !top && a.x >= a.y;
-    let uv = select(select(i.world.xz, i.world.yz, side_x), i.world.xy, top);
+    // The face's own plane coordinates, from its vertices: the shading
+    // normal turns across a curved surface, so it cannot pick them.
+    let uv = i.plane;
     // Derivatives in uniform control flow, before any branch.
     let fw = fwidth(uv);
     let w = max(max(fw.x, fw.y), 1e-5);
