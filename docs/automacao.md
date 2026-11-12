@@ -67,6 +67,8 @@ ccad -p casa.ccad run phases_list
 
 Cada planta, elevação, corte, vista 3D e tabela mostra o modelo na sua fase (`phase`) com um filtro de fases (`phase_filter`, ambos com `view_set`; modelos de vista controlam o filtro, não a fase). Em relação à fase da vista um elemento é *existente* (construído antes, de pé), *demolido* (nesta fase), *novo* (construído nesta fase) ou *temporário* (construído e demolido nela); elementos construídos depois ou demolidos antes não aparecem. Os filtros de fases (`phase_filters_list`, `phase_filter_create`, `phase_filter_set`, `phase_filter_delete`; o modelo traz *Mostrar tudo*, *Mostrar completo*, *Mostrar novo*, *Mostrar anterior + demolição*, *Mostrar anterior + novo*, *Mostrar fase anterior* e *Mostrar demolição + novo*) dizem, para cada situação, `not_displayed`, `by_category` ou `overridden`, que usa os gráficos da situação definidos no projeto (`phase_graphics_get`, `phase_graphics_set`: existente esmaecido, demolido tracejado e sem hachura de corte, temporário esmaecido e tracejado), abaixo das sobreposições de elementos e dos filtros de vista e acima da categoria. Uma vista cuja fase deixa elementos de fora tem geometria própria: portas de fases posteriores não abrem paredes existentes e paredes só se unem com paredes da fase. Um ambiente é delimitado pelas paredes de pé ao fim da fase em que é criado, então paredes demolidas nessa fase ou antes não o delimitam. Tabelas listam o que sua fase e seu filtro mostram e oferecem os campos `PhaseCreated` e `PhaseDemolished` (que também servem em regras de filtros, como `phase_created` e `phase_demolished`).
 
+**Organização do navegador de projeto.** O navegador de projeto agrupa as vistas apenas por tipo, a menos que um esquema esteja em uso. `browser_scheme_create` cria um esquema com nome (`group_by`: os critérios, do grupo mais externo para dentro, entre `view_type`, `level`, `discipline` e `phase`; padrão `["view_type", "level"]`) e o põe em uso, salvo com `use_it` falso; `browser_scheme_set` o renomeia ou muda os critérios, `browser_scheme_delete` o remove e `browser_scheme_use` escolhe o esquema que o navegador segue (sem `scheme`: o padrão). `browser_schemes_list` lista os esquemas, e `browser_tree` devolve a árvore que o navegador mostra — linhas de grupo com `group`, `name`, `value`, `views` e `children`, linhas de vista com `view` e `name` — para o esquema em uso, outro `scheme` ou qualquer `group_by`. Uma vista sem valor para um critério (um corte não tem nível) fica ao lado dos grupos daquele critério.
+
 **Opções de projeto.** Alternativas para uma parte do modelo ficam em conjuntos de opções (`options_list`): `option_set_create` cria um conjunto com as opções nomeadas em `options` (a primeira é a principal), e `option_create`, `option_set` (renomear, `primary: true`, mover com `index`), `option_delete` (não a principal; exclui os elementos da opção), `option_set_rename` e `option_set_delete` (com todos os elementos das suas opções) os gerenciam. Um elemento pertence ao modelo principal ou a uma opção (`design_option` em `element_get`); `elements_option_set` passa elementos para uma opção ou de volta com `null` (portas, janelas e outros hospedados seguem o hospedeiro; anotações não têm opção). Cada planta, elevação, corte, vista 3D e tabela mostra o modelo principal e uma opção por conjunto: `view_options_set` escolhe uma, ou `null` para automática (`design_options` em `view_get` mostra a escolha e o que aparece); modelos de vista podem controlá-la (`design_options` e `include.design_options` em `template_set`). Automática é a opção em edição quando ela está nesse conjunto (`option_active_set`, estado da sessão, não salvo: elementos novos do modelo entram nela), senão a principal. Elementos de opções que a vista não mostra ficam fora do seu desenho, tabela e geometria: paredes se unem e ambientes são delimitados só entre o que aparece junto. `option_accept_primary` passa os elementos da opção principal para o modelo principal e exclui o conjunto com as outras opções e seus elementos. A exportação IFC grava o modelo principal e só as opções principais, cada elemento de opção com `ConstructCAD_DesignOption` (`OptionSet`, `Option`, `Primary`), que a importação lê de volta como conjuntos e opções.
 
 ```sh
@@ -137,7 +139,8 @@ ccad [opções] commands             lista os comandos
 ccad [opções] schema <comando>     o esquema JSON dos parâmetros de um comando
 ccad reference                     a referência de comandos em Markdown
 ccad [opções] run <comando> [args] executa um comando
-ccad [opções] script <arquivo|->   executa um script de comandos
+ccad [opções] script <arquivo|-> [level=<id|nome>]
+                                   executa um script de comandos
 ccad [opções] lua <arquivo|-> [args] executa um script Lua
 ccad [opções] plugins              lista os plugins carregados com --plugins
 ccad plugins install <zip> <pasta>  instala um arquivo de plugin numa pasta de plugins
@@ -279,7 +282,18 @@ Um carimbo é um componente cujas peças 2D desenham a folha inteira, em milíme
 {"command": "sheet_fields", "args": {"sheet": "Plantas gerais"}}
 ```
 
-Scripts não têm variáveis: um passo não usa o id criado por um passo anterior. Os comandos ajudam aceitando posições onde isso importa (`door_create` e `window_create` encontram a parede mais próxima de `point`; pisos, forros e telhados acompanham as paredes com `from_walls`). Para lógica entre passos, escreva um [script Lua](#scripts-lua), chame `ccad run` a partir de um script de shell ou use um agente via MCP.
+**Referências entre passos.** Scripts não têm variáveis, mas um argumento pode tomar um valor do resultado de um passo anterior: `{"$step": n}` é o `id` que o passo `n` (contado a partir de 1) devolveu, e `{"$step": n, "path": "/created/0"}` qualquer valor do seu resultado, indicado por um [ponteiro JSON](https://www.rfc-editor.org/rfc/rfc6901). `{"$level": "active"}` é o nível ativo: no app, o nível da planta ativa; no `ccad script`, o nível dado como `level=<id|nome>`; sem nenhum dos dois, o nível mais baixo. Uma referência a um passo que ainda não rodou, ou a um valor que o seu resultado não tem, para o script com um erro `invalid_arguments`.
+
+```text
+{"command": "wall_create", "args": {"level": {"$level": "active"}, "start": [0, 0], "end": [6, 0]}}
+{"command": "window_create", "args": {"wall": {"$step": 1}, "offset": 2, "sill": 1}}
+```
+
+```sh
+ccad -p casa.ccad --save script paredes.ccmacro level="Pavimento 1"
+```
+
+Os comandos também ajudam aceitando posições onde isso importa (`door_create` e `window_create` encontram a parede mais próxima de `point`; pisos, forros e telhados acompanham as paredes com `from_walls`). Para lógica entre passos, escreva um [script Lua](#scripts-lua), chame `ccad run` a partir de um script de shell ou use um agente via MCP.
 
 ## Scripts Lua
 
@@ -319,7 +333,7 @@ A tabela `ccad`:
 
 Argumentos e resultados são JSON: objetos são tabelas com chaves de texto, listas são sequências (`{ 0, 0 }` é um ponto), e `end`, palavra reservada do Lua, se escreve `["end"]`. Um número inteiro calculado com `/` (que em Lua sempre dá um número real) vai como inteiro, então `10 / 2` funciona onde se espera um id ou uma contagem.
 
-**O sandbox.** Os scripts rodam num Lua restrito: as bibliotecas `table`, `string`, `math`, `utf8` e `coroutine` e as funções básicas, sem `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` nem `loadfile`. Um script só chega ao projeto pelos comandos, e a arquivos só pelos comandos que os leem ou gravam. Cada execução tem um limite de 500 milhões de instruções Lua e 256 MB de memória; passando deles, ela para com um erro `script` (capturar esse erro com `pcall` não faz o script continuar). Cada comando que um script executa é um passo de desfazer.
+**O sandbox.** Os scripts rodam num Lua restrito: as bibliotecas `table`, `string`, `math`, `utf8` e `coroutine` e as funções básicas, sem `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` nem `loadfile`. Um script só chega ao projeto pelos comandos, e a arquivos só pelos comandos que os leem ou gravam. Cada execução tem um limite de 500 milhões de instruções Lua, 60 segundos e 256 MB de memória (as funções de texto contam pelo tamanho do texto, a busca de padrões pelos passos, e `string.rep` e `string.gsub` geram no máximo 16 MB); passando deles, ela para com um erro `script` (capturar esse erro com `pcall` não faz o script continuar). Cada comando que um script executa é um passo de desfazer.
 
 ## Grafos de programação visual
 
@@ -352,8 +366,11 @@ lista todos os nós com suas portas e tipos.
 - **Erros são por nó.** Um nó que falha mostra a mensagem, os nós depois
   dele são pulados, os demais rodam, e os elementos dele ficam como estavam.
 - Um grafo nunca roda `project_new`, `project_open`, `undo`, `redo`,
-  `language_set` nem grafos, e só roda comandos de arquivo quando tem
-  `allow_files` (e nunca quando um plugin o executa).
+  `language_set` nem grafos, e só roda comandos de arquivo quando quem o executa permite: o
+  `allow_files` de `graph_run`, `ccad --allow-files graph`, ou a caixa
+  *Permitir comandos de arquivo* do editor, que vale até outro grafo ser
+  aberto. O arquivo do grafo não pode permitir sozinho (um campo
+  `allow_files` nele é ignorado), e um grafo que um plugin executa nunca pode.
 
 ```sh
 ccad --save-as casa.ccad graph examples/graphs/house.ccgraph width=12 depth=8
@@ -394,7 +411,7 @@ ccad --plugins examples/plugins run quick_rooms__rectangle_room width=4 depth=3 
 claude mcp add constructcad -- ccad mcp --plugins /caminho/para/plugins
 ```
 
-`--plugins` recebe a pasta de um plugin ou uma pasta de pastas de plugins, e pode ser repetido. Um plugin que não carrega é informado na saída de erro e fica de fora; o que os plugins imprimem também vai para a saída de erro.
+`--plugins` recebe a pasta de um plugin ou uma pasta de pastas de plugins, e pode ser repetido. Numa pasta de plugins, a pasta de cada plugin tem o nome do id dele (como as instalações a nomeiam); pastas ocultas (começando com `.`) são ignoradas. Um plugin que não carrega é informado na saída de erro e fica de fora; o que os plugins imprimem também vai para a saída de erro.
 
 ### Escrevendo um plugin
 
@@ -437,7 +454,7 @@ ccad.command {
 
 - `run` recebe os argumentos numa tabela e devolve o resultado do comando (uma tabela, um valor ou nada). Argumentos `required` que faltam são recusados antes de ele rodar; `error("mensagem", 0)` faz o comando falhar com essa mensagem.
 - **Um passo de desfazer:** quantos comandos um comando de plugin executar, ele é desfeito de uma vez, e quando falha (um erro, um `ccad.run` que falhou, um limite atingido) tudo o que ele fez é desfeito.
-- **O que um comando pode executar:** um comando `query` só consulta; um `edit` consulta e edita; comandos que leem ou gravam arquivos (importar, exportar, salvar) precisam da permissão `files`, e só com ela se declara um comando do tipo `file`. Abrir ou criar um projeto, `undo`, `redo` e `language_set` não rodam dentro de um comando de plugin, nem o comando de outro plugin.
+- **O que um comando pode executar:** um comando `query` só consulta; um `edit` consulta e edita; comandos que leem ou gravam arquivos (importar, exportar, salvar) precisam da permissão `files` (sem ela, comandos de edição que leem um arquivo indicado por um parâmetro, como `cad_import` ou `fill_pattern_import` com `path`, recusam o caminho; as formas sem arquivo, como `fill_pattern_import` com `text`, continuam funcionando), e só com ela se declara um comando do tipo `file`. Abrir ou criar um projeto, `undo`, `redo` e `language_set` não rodam dentro de um comando de plugin, nem o comando de outro plugin.
 - **O sandbox** é o dos [scripts Lua](#scripts-lua), com o limite contado por comando; cada plugin tem o seu próprio estado Lua, que guarda as variáveis entre um comando e outro. `require("a.b")` carrega `a/b.lua` da pasta do plugin (uma vez; arquivos fora da pasta são recusados), e `ccad.plugin` tem o `id`, o `name` e a `version` dele. `ccad.run` só funciona enquanto um comando roda, não enquanto o plugin carrega.
 - **As permissões** são concedidas por quem carrega o plugin: `ccad --plugins` concede o que o manifesto pede, já que você indicou a pasta.
 
@@ -486,7 +503,7 @@ As declarações ficam no corpo do script, nunca dentro de `geometry`. Os ids s�
 | `blend` | `bottom, top, offset, depth`, `plane` |
 | `mesh` | `vertices` (`{x, y, z}`), `faces` (listas de números de vértice a partir de 1, no sentido anti-horário vistas de fora) |
 
-Os scripts rodam no [sandbox](#scripts-lua) com limites menores (20 milhões de instruções, 64 MB, 10.000 peças, um milhão de pontos), e `math.random` repete os mesmos números. Quando um script falha, o elemento mantém as últimas peças que funcionaram, e o erro, com a linha, aparece em `element_get` (`derived.script_errors`), na paleta de propriedades e em `component_params_get`; corrigir o script ou o valor o recupera.
+Os scripts rodam no [sandbox](#scripts-lua) com limites menores (20 milhões de instruções, 5 segundos, 64 MB, 10.000 peças, um milhão de pontos), e `math.random` repete os mesmos números. Quando um script falha, o elemento mantém as últimas peças que funcionaram, e o erro, com a linha, aparece em `element_get` (`derived.script_errors`), na paleta de propriedades e em `component_params_get`; corrigir o script ou o valor o recupera.
 
 Comandos:
 
@@ -512,7 +529,8 @@ Um material citado por um parâmetro conta como usado: não pode ser excluído, 
 
 - Só edições são gravadas: abrir, salvar e exportar ficam de fora, então reproduzir nunca sobrescreve arquivos.
 - Um valor arrastado nas propriedades é gravado uma vez, com o valor final; alterações feitas num diálogo cancelado não são gravadas.
-- Os passos gravados se referem a elementos pelo id. No projeto em que foi gravada (ou numa cópia dele como estava no início da gravação), a macro reproduz as mesmas alterações; em outro projeto, passos que indicam elementos pelo id podem falhar ou atingir outros elementos.
+- Elementos, tipos, vistas e níveis criados durante a gravação são escritos como [referências](#scripts) ao passo que os criou (`{"$step": n}`), de modo que a macro usa o que ela mesma cria a cada execução. O nível da planta em que você grava é escrito como `{"$level": "active"}`: a macro roda no nível da planta ativa quando você a executa (os outros níveis ficam como gravados).
+- Os demais passos se referem a elementos pelo id. No projeto em que foi gravada (ou numa cópia dele como estava no início da gravação), a macro reproduz as mesmas alterações; em outro projeto, passos que indicam elementos existentes pelo id podem falhar ou atingir outros elementos.
 
 ## Paleta de comandos no aplicativo
 
@@ -541,6 +559,18 @@ claude mcp add constructcad -- ccad mcp -p /caminho/para/casa.ccad
   }
 }
 ```
+
+No Windows, o `ccad.exe` é instalado ao lado do aplicativo, por padrão em `C:\Program Files\ConstructCraft` (no JSON as barras invertidas são dobradas):
+
+```json
+{
+  "mcpServers": {
+    "constructcad": { "command": "C:\\Program Files\\ConstructCraft\\ccad.exe", "args": ["mcp", "--lang", "pt-BR"] }
+  }
+}
+```
+
+A opção *Add ccad to the PATH* do instalador (marcada por padrão) permite que os clientes achem só `ccad`, mas apenas clientes abertos depois da instalação enxergam o PATH novo; o caminho completo sempre funciona. Apontado para o próprio aplicativo (`constructcraft mcp` ou `constructcraft --mcp`), o cliente recebe o mesmo servidor: o aplicativo executa o `ccad` ao lado dele, na mesma entrada e saída padrão.
 
 Exemplos de pedidos que um agente resolve com essas ferramentas: *"abra casa.ccad, liste as portas sem marca e numere-as"*, *"importe modelo.ifc e diga o volume das paredes de concreto"*, *"crie um pavimento superior 3 m acima do térreo com as mesmas paredes externas"*, *"exporte a folha A101 em PDF"*.
 

@@ -38,10 +38,12 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::phases_dialog::show(ctx, state);
     crate::design_options_ui::show(ctx, state);
     crate::line_styles_dialog::show(ctx, state);
+    crate::browser_org_dialog::show(ctx, state);
     // After the material browser, type properties and graphics, which open it over themselves.
     crate::fill_patterns_dialog::show(ctx, state);
     crate::profiles_dialog::show(ctx, state);
     crate::library::show(ctx, state);
+    crate::obj_ui::show(ctx, state);
     crate::plugins_ui::drain_messages(state);
     crate::plugins_ui::show(ctx, state);
     // After the library window, which opens it over itself.
@@ -199,48 +201,100 @@ fn project_fields(ui: &mut Ui, state: &mut AppState) {
     }
 }
 
+/// The least distance the levels dialog leaves between two levels, meters.
+const LEVEL_GAP: f64 = 0.01;
+
+/// A length field of the levels table. Its value is taken when the field is
+/// left, not at every key: a half-typed number must not move the levels.
+fn level_drag(value: &mut f64) -> egui::DragValue<'_> {
+    crate::properties::length_drag(value).speed(0.01).update_while_editing(false).clamp_existing_to_range(false)
+}
+
 fn levels(ctx: &Context, state: &mut AppState) {
     if !state.dialogs.levels {
         return;
     }
     session::begin(state);
     let mut ok = 0;
-    let response = Dialog::new("levels", t!("dlg-levels")).width(460.0).show(
+    let response = Dialog::new("levels", t!("dlg-levels")).width(560.0).show(
         ctx,
         |ui| {
+            // Lowest first; the table lists them from the top down.
             let levels = state.project().levels.clone();
-            egui::Grid::new("levels").num_columns(3).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
+            let selected = state
+                .dialogs
+                .level_selected
+                .filter(|id| levels.iter().any(|l| l.id == *id))
+                .or(levels.last().map(|l| l.id));
+            state.dialogs.level_selected = selected;
+            egui::Grid::new("levels").num_columns(4).striped(true).spacing([12.0, 6.0]).show(ui, |ui| {
+                ui.label("");
                 form_label(ui, &t!("prop-name"));
                 form_label(ui, &t!("level-elevation"));
-                ui.label("");
+                form_label(ui, &t!("level-height"));
                 ui.end_row();
-                for level in levels.iter().rev() {
+                for (i, level) in levels.iter().enumerate().rev() {
+                    let mut pick = ui.radio(selected == Some(level.id), "").clicked();
                     let mut name = level.name.clone();
                     let r = crate::table::live_text(ui, ("level-name", level.id), &mut name, |ui, t| {
-                        ui.add_sized([220.0, 22.0], egui::TextEdit::singleline(t))
+                        ui.add_sized([200.0, 22.0], egui::TextEdit::singleline(t))
                     });
                     if r.changed() {
                         crate::engine_edit::level(state, level.id, Some(key((level.id, "name"))), |l| l.name = name);
                     }
+                    pick |= r.gained_focus();
                     done(state, &r);
+                    // The elevation stays between the neighbors, so no value
+                    // typed here changes the order of the levels (issue #297).
+                    let below = i.checked_sub(1).and_then(|j| levels.get(j));
+                    let above = levels.get(i + 1);
+                    let lowest = below.map_or(f64::NEG_INFINITY, |l| l.elevation + LEVEL_GAP);
+                    let highest = above.map_or(f64::INFINITY, |l| l.elevation - LEVEL_GAP);
                     let mut elev = level.elevation;
-                    let r = ui.add(crate::properties::length_drag(&mut elev).speed(0.01));
+                    let mut drag = level_drag(&mut elev);
+                    if lowest <= highest {
+                        drag = drag.range(lowest..=highest);
+                    }
+                    let r = ui.add(drag);
                     if r.changed() {
                         crate::engine_edit::level(state, level.id, Some(key((level.id, "elev"))), |l| {
                             l.elevation = elev;
                         });
                     }
+                    pick |= r.gained_focus();
                     done(state, &r);
-                    if ui.add_enabled(levels.len() > 1, egui::Button::new(t!("action-delete"))).clicked() {
-                        state.dialogs.delete_level = Some(level.id);
+                    // The height up to the next level: the levels above move along.
+                    if let Some(above) = above {
+                        let mut height = above.elevation - level.elevation;
+                        let r = ui.add(level_drag(&mut height).range(LEVEL_GAP..=f64::INFINITY));
+                        if r.changed() {
+                            crate::engine_edit::level_height(state, level.id, Some(key((level.id, "height"))), height);
+                        }
+                        pick |= r.gained_focus();
+                        done(state, &r);
+                    } else {
+                        ui.label(RichText::new("—").color(PALETTE.text_muted));
+                    }
+                    if pick {
+                        state.dialogs.level_selected = Some(level.id);
                     }
                     ui.end_row();
                 }
             });
             ui.add_space(4.0);
-            if ui.button(t!("level-add")).clicked() {
-                actions::add_level(state);
-            }
+            let Some(level) = selected else { return };
+            ui.horizontal(|ui| {
+                for (label, above) in [(t!("level-add-above"), true), (t!("level-add-below"), false)] {
+                    if ui.button(label).clicked()
+                        && let Some(new) = actions::add_level_beside(state, level, above)
+                    {
+                        state.dialogs.level_selected = Some(new);
+                    }
+                }
+                if ui.add_enabled(levels.len() > 1, egui::Button::new(t!("action-delete"))).clicked() {
+                    state.dialogs.delete_level = Some(level);
+                }
+            });
         },
         |f| {
             ok = f.primary(t!("action-ok"));
@@ -526,7 +580,7 @@ fn update_install(ctx: &Context, state: &mut AppState) {
             Install::Ready(version, Next::Restart(_)) => {
                 ui.label(t!("update-installed-restart", "version" => version.to_string()));
             }
-            Install::Ready(version, Next::Installer(_)) => {
+            Install::Ready(version, Next::Installer(..)) => {
                 ui.label(t!("update-installer-ready", "version" => version.to_string()));
             }
             Install::Ready(_, Next::Opened) => {
@@ -554,7 +608,7 @@ fn update_install(ctx: &Context, state: &mut AppState) {
                 ids[0] = f.primary(t!("update-restart"));
                 ids[1] = f.secondary(t!("update-later"));
             }
-            Install::Ready(_, Next::Installer(_)) => {
+            Install::Ready(_, Next::Installer(..)) => {
                 ids[0] = f.primary(t!("update-install-close"));
                 ids[1] = f.secondary(t!("update-install-on-exit"));
             }
@@ -578,11 +632,11 @@ fn update_install(ctx: &Context, state: &mut AppState) {
                 updates.install = Some(Install::Running(version, url, running));
             }
         }
-        Some(Install::Ready(_, next @ (Next::Restart(_) | Next::Installer(_)))) => {
+        Some(Install::Ready(_, next @ (Next::Restart(_) | Next::Installer(..)))) => {
             let now = clicked == ids[0];
             // The installer runs when the app closes, now or later; a replaced
             // copy restarts only when asked (its files are already in place).
-            if now || matches!(next, Next::Installer(_)) {
+            if now || matches!(next, Next::Installer(..)) {
                 updates.on_exit = Some(next);
             }
             if now {

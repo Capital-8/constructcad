@@ -15,6 +15,7 @@ use cc_core::component::IfcClass;
 use cc_core::component::convex_hull;
 use cc_core::curtain::{CurtainEdits, CurtainPanel, CurtainSystem};
 use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
+use cc_core::sketch::Sketch;
 use cc_core::structural_profile::{
     MAX_NAME, MAX_OPENINGS as MAX_SKETCH_OPENINGS, MAX_POINTS as MAX_SKETCH_POINTS, MAX_PROFILES, ParamSketch,
     ProfileDef, ProfileMaterial, ProfileShape,
@@ -22,8 +23,8 @@ use cc_core::structural_profile::{
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
-    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, TypeData, Uid, View, ViewId,
-    ViewKind, Wall, WallFunction, WallTop,
+    LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, ShapedRebar, TypeData, Uid,
+    View, ViewId, ViewKind, Wall, WallFunction, WallTop,
 };
 use cc_core::{DoorOperation, ProfileId, ProfilePoint, WindowOperation};
 use cc_core::{Foundation, FoundationKind, FoundationShape};
@@ -33,6 +34,11 @@ use std::collections::{BTreeMap, HashMap};
 
 /// Deepest nesting of complex properties.
 const MAX_PROPERTY_DEPTH: usize = 8;
+/// Largest IFC file imported, bytes: the parsed instances take many times
+/// the file's size in memory.
+pub const MAX_IFC_BYTES: u64 = 512 << 20;
+/// Most properties (nested ones included) read from one property set.
+const MAX_SET_PROPERTIES: usize = 10_000;
 /// Most openings cut from one product.
 const MAX_OPENINGS: usize = 1000;
 /// Window panels read from one type.
@@ -42,6 +48,9 @@ const MAX_PARENT_DEPTH: usize = 16;
 const MAX_PHASES: usize = 100;
 /// Length tolerance when matching types (meters).
 const TYPE_TOL: f64 = 0.001;
+/// How far apart (m) the vertices of two imported pieces may be for the
+/// pieces to be the same (the mesh vertices are welded at 1/100 mm).
+const PIECE_TOL: f64 = 1e-5;
 
 /// What an import brought in.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -87,7 +96,16 @@ impl std::fmt::Display for ImportError {
 impl std::error::Error for ImportError {}
 
 /// Import the IFC file at `path` into `base` (see [`import`]).
+/// Files larger than [`MAX_IFC_BYTES`] are refused before they are read
+/// (an [`ImportError::Io`] of kind `FileTooLarge`).
 pub fn import_file(path: &std::path::Path, base: Project) -> Result<(Project, ImportReport), ImportError> {
+    let len = std::fs::metadata(path).map_err(ImportError::Io)?.len();
+    if len > MAX_IFC_BYTES {
+        return Err(ImportError::Io(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            format!("the IFC file is larger than {} MB", MAX_IFC_BYTES >> 20),
+        )));
+    }
     let bytes = std::fs::read(path).map_err(ImportError::Io)?;
     import(&String::from_utf8_lossy(&bytes), base)
 }
@@ -500,6 +518,7 @@ impl<'a> Importer<'a> {
                 "IFCGEOGRAPHICELEMENT" => self.import_topography(id, e),
                 "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => self.import_column(id, e),
                 "IFCBEAM" | "IFCBEAMSTANDARDCASE" => self.import_beam(id, e),
+                "IFCREINFORCINGBAR" => self.import_bar(id, e),
                 // The framing of a roof whose type now draws it again.
                 "IFCMEMBER" if self.parent.get(&id).is_some_and(|r| self.framed_roofs.contains(r)) => continue,
                 "IFCSPACE" => {
@@ -1771,12 +1790,18 @@ impl<'a> Importer<'a> {
     /// vertical extrusion: the openings are the voids of its profile and the
     /// openings voiding it that pass through it vertically. `None` when the
     /// slab or an opening is anything else, or an opening is not inside the
-    /// outline and apart from the others (natives could not show it).
+    /// outline and apart from the others (natives could not show it). When
+    /// the profile is drawn with arcs or circles, also the sketch of the
+    /// outline and openings, which then come from it (#264).
     #[allow(clippy::type_complexity)]
-    fn slab_sketch(&self, id: u32, body: &Body) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64)> {
+    fn slab_sketch(
+        &self,
+        id: u32,
+        body: &Body,
+    ) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64, Option<Sketch>)> {
         let (ex, cuts) = body.slab_extrusion().filter(|(e, _)| e.is_vertical())?;
         let (z0, z1) = ex.z_range();
-        let outline = clean_polygon(ex.footprint());
+        let mut outline = clean_polygon(ex.footprint());
         if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
             return None;
         }
@@ -1802,6 +1827,25 @@ impl<'a> Importer<'a> {
                 openings.push(footprint);
             }
         }
+        // The profile's curves, with the other openings as lines: the outline
+        // and openings are then the sketch's (arcs split as natives split them).
+        let voids = ex.profile.holes.len();
+        let sketch = ex.footprint_curves().and_then(|mut curves| {
+            for o in openings.iter().skip(voids) {
+                curves.extend(Sketch::from_polygons(o, &[]).curves);
+            }
+            let sketch = Sketch { curves };
+            let p = sketch.profile().ok()?;
+            (p.openings.len() == openings.len()).then_some((sketch, p))
+        });
+        let sketch = sketch.map(|(sketch, p)| {
+            outline = p.outline;
+            openings = p.openings;
+            sketch
+        });
+        if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
+            return None;
+        }
         openings.iter().all(|o| openings_fit(&outline, o)).then_some(())?;
         for (i, a) in openings.iter().enumerate() {
             for b in openings.iter().skip(i + 1) {
@@ -1810,13 +1854,13 @@ impl<'a> Importer<'a> {
                 }
             }
         }
-        Some((outline, openings, z0, z1, ex.vector.z.abs()))
+        Some((outline, openings, z0, z1, ex.vector.z.abs(), sketch))
     }
 
     fn import_slab(&mut self, id: u32, e: &Entity) -> bool {
         let kind = e.arg(8).as_enum().unwrap_or("NOTDEFINED");
         let (_, body) = self.product(e);
-        let Some((boundary, openings, z0, z1, thickness)) = self.slab_sketch(id, &body) else { return false };
+        let Some((boundary, openings, z0, z1, thickness, sketch)) = self.slab_sketch(id, &body) else { return false };
         match kind {
             "ROOF" => return self.add_roof_with_holes(id, e, boundary, openings, z0, thickness, RoofShape::Flat),
             // A foundation slab, if it is shaped like one: piles and pile
@@ -1842,6 +1886,7 @@ impl<'a> Importer<'a> {
         );
         let mut floor = Floor::new(boundary, z1 - elevation);
         floor.openings = openings;
+        floor.sketch = sketch;
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Floor(floor));
         true
     }
@@ -2514,6 +2559,80 @@ impl<'a> Importer<'a> {
 
     /// Any physical object without a native counterpart (or whose geometry
     /// a native element cannot hold): a component that keeps its IFC class.
+    /// A reinforcing bar drawn as disks swept along center lines becomes a
+    /// shaped bar set of the reinforcement category (#263), its type found or
+    /// made by diameter and steel (grade or material), so that bars of one
+    /// size share it. Its property sets stay with the element. `false` for
+    /// bars of other geometry (they come in as components).
+    fn import_bar(&mut self, id: u32, e: &Entity) -> bool {
+        let (_, body) = self.product(e);
+        let mut radius: Option<f64> = None;
+        let mut lines = Vec::new();
+        for s in &body.solids {
+            let Some((path, r)) = s.disk.as_ref().filter(|_| !s.clipped && !s.other_cut) else { return false };
+            // One diameter per set: the type holds it.
+            if radius.is_some_and(|r0| (r0 - r).abs() > 1e-6) {
+                return false;
+            }
+            radius = Some(*r);
+            lines.push(path.clone());
+        }
+        let Some(radius) = radius else { return false };
+        let z0 = lines.iter().flatten().map(|p| p.z).fold(f64::INFINITY, f64::min);
+        if !z0.is_finite() {
+            return false;
+        }
+        let (level, elevation) = self.level_for(id, z0);
+        let bars = lines.into_iter().map(|l| l.into_iter().map(|p| p - DVec3::Z * elevation).collect()).collect();
+        let rebar = ShapedRebar { bars, properties: self.property_sets(id) };
+        if !rebar.is_valid() {
+            return false;
+        }
+        // The nominal diameter, unless it is far from the drawn one.
+        let drawn = 2.0 * radius;
+        let diameter = e
+            .arg(9)
+            .as_f64()
+            .map(|d| d * self.scale)
+            .filter(|d| d.is_finite() && (d - drawn).abs() <= 0.25 * drawn)
+            .unwrap_or(drawn);
+        let grade = e.arg(8).as_str().map(clean_name).filter(|g| !g.is_empty());
+        let steel = grade.clone().or_else(|| self.materials(id).1);
+        let color = self.body_color(e);
+        let material = steel.as_ref().map(|m| self.material(m, color));
+        // Without a grade or material, any bar type of the size will do.
+        let existing = self.p.types_of(Category::Rebar).find_map(|t| match &t.data {
+            TypeData::Rebar { material, .. } => Some(material.clone()),
+            _ => None,
+        });
+        let fallback_material = match (&material, existing) {
+            (Some(m), _) => m.clone(),
+            (None, Some(m)) => m,
+            (None, None) => self.material("IFC", color),
+        };
+        let size = format!("Ø {:.1} mm", diameter * 1000.0);
+        let fallback = grade.map_or_else(|| size.clone(), |g| format!("{size} {g}"));
+        let name = self.type_entity(id).and_then(|t| t.arg(2).as_str()).map(clean_name).filter(|s| !s.is_empty());
+        let uid = self.type_uid(id);
+        let type_id = self.find_or_add_type(
+            Category::Rebar,
+            name,
+            fallback,
+            uid,
+            |t| match t {
+                TypeData::Rebar { diameter: d, material: m } => {
+                    (d - diameter).abs() <= 1e-5 && material.as_ref().is_none_or(|want| m == want)
+                }
+                _ => false,
+            },
+            || TypeData::Rebar { diameter, material: fallback_material },
+        );
+        // The bar mark: the tag, else the name.
+        let mark = Some(Self::tag(e)).filter(|t| !t.is_empty()).or_else(|| e.arg(2).as_str().map(clean_name));
+        self.add_element(id, e, level, type_id, mark.unwrap_or_default(), ElementKind::ShapedRebar(rebar));
+        true
+    }
+
     fn import_generic(&mut self, id: u32, e: &Entity) -> bool {
         let ok = self.import_component(id, e, kind_of_class(&e.name));
         if ok {
@@ -2564,7 +2683,10 @@ impl<'a> Importer<'a> {
             }
             let (quantities, properties) = match set.name.as_str() {
                 "IFCPROPERTYSET" => {
-                    (false, set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, 0)).collect::<Vec<_>>())
+                    let (mut path, mut left) = (Vec::new(), MAX_SET_PROPERTIES);
+                    let properties =
+                        set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, &mut path, &mut left));
+                    (false, properties.collect::<Vec<_>>())
                 }
                 "IFCELEMENTQUANTITY" => (true, set.arg(5).as_list().iter().filter_map(|q| self.quantity(q)).collect()),
                 // Predefined property sets (door linings…) and others.
@@ -2582,8 +2704,14 @@ impl<'a> Importer<'a> {
         out
     }
 
-    fn read_property(&self, param: &Param, depth: usize) -> Option<Property> {
-        let p = self.f.deref(param)?;
+    /// A property of a set. Complex properties nest at most
+    /// [`MAX_PROPERTY_DEPTH`] deep (`path` holds those being read, and one
+    /// already on it is refused) and a set reads at most `left` properties
+    /// in all, so shared nested properties cannot multiply.
+    fn read_property(&self, param: &Param, path: &mut Vec<u32>, left: &mut usize) -> Option<Property> {
+        let id = param.as_ref()?;
+        *left = left.checked_sub(1)?;
+        let p = self.f.get(id)?;
         let name = p.arg(0).as_str()?.to_string();
         let values = |i: usize, unit: &Param| -> Vec<IfcValue> {
             p.arg(i).as_list().iter().filter_map(|v| self.ifc_value(v, unit)).collect()
@@ -2600,10 +2728,12 @@ impl<'a> Importer<'a> {
             "IFCPROPERTYTABLEVALUE" => {
                 PropertyValue::Table { defining: values(2, p.arg(5)), defined: values(3, p.arg(6)) }
             }
-            "IFCCOMPLEXPROPERTY" if depth < MAX_PROPERTY_DEPTH => PropertyValue::Complex {
-                usage: p.arg(2).as_str().unwrap_or_default().to_string(),
-                properties: p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, depth + 1)).collect(),
-            },
+            "IFCCOMPLEXPROPERTY" if path.len() < MAX_PROPERTY_DEPTH && !path.contains(&id) => {
+                path.push(id);
+                let properties = p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, path, left)).collect();
+                path.pop();
+                PropertyValue::Complex { usage: p.arg(2).as_str().unwrap_or_default().to_string(), properties }
+            }
             _ => return None,
         };
         Some(Property { name, value })
@@ -2664,10 +2794,22 @@ impl<'a> Importer<'a> {
         self.cut_openings(id, &mut body);
         let x = world.matrix3.x_axis.truncate().try_normalize().unwrap_or(DVec2::X);
         let rotation = x.y.atan2(x.x);
-        let origin = world.translation;
+        let mut origin = world.translation;
         // Plan frame of the component: origin and rotation in plan, Z up.
-        let frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
-        let inv = frame.inverse();
+        let mut frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+        let mut inv = frame.inverse();
+        // Geometry written in world coordinates (a placement away from the
+        // body) with no type object: the origin goes to the bottom center of
+        // the body, so that identical objects at different places (bars, say)
+        // have the same pieces and share a type.
+        if !self.type_of.contains_key(&id)
+            && let Some((lo, hi)) = local_bounds(&body.solids, &inv)
+            && !((lo - TYPE_TOL).cmple(DVec3::ZERO).all() && (hi + TYPE_TOL).cmpge(DVec3::ZERO).all())
+        {
+            origin = frame.transform_point3(DVec3::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0, lo.z));
+            frame = affine(x.extend(0.0), x.perp().extend(0.0), DVec3::Z, origin);
+            inv = frame.inverse();
+        }
         let main = self.main_material(id, e);
         let n = |v: f64| literal(v);
         let base_name = self.type_name(id, e).unwrap_or_else(|| crate::schema::display_name(&e.name));
@@ -2750,8 +2892,14 @@ impl<'a> Importer<'a> {
         let fallback = format!("{} {}", crate::schema::display_name(&e.name), id);
         let uid = self.type_uid(id);
         let component = name.clone().unwrap_or_else(|| fallback.clone());
-        // Same name and same size: the existing (possibly parametric) type.
+        // Same name and same size: the existing parametric type. A type
+        // imported before as fixed pieces must have the same pieces and class
+        // (equal bounds are not the same shape).
+        let new_def = def.clone();
         let same = move |d: &TypeData| match d {
+            TypeData::Component { def, .. } if def.params.is_empty() && def.ifc.is_some() => {
+                def.ifc == new_def.ifc && same_items(&def.items, &new_def.items)
+            }
             TypeData::Component { def, .. } => def_bounds(def, &check)
                 .is_some_and(|(a, b)| (a - lo).abs().max_element() < 1e-3 && (b - hi).abs().max_element() < 1e-3),
             _ => false,
@@ -3077,7 +3225,59 @@ fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
             faces.push(f);
         }
     }
-    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
+    let faces = cc_geom::coplanar::merge(&vertices, faces);
+    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices: vertices.into(), faces: faces.into() })
+}
+
+/// Bounds of the solids' vertices in the frame `inv` maps to.
+fn local_bounds(solids: &[Solid], inv: &DAffine3) -> Option<(DVec3, DVec3)> {
+    solids
+        .iter()
+        .flat_map(|s| s.mesh.iter().flatten())
+        .map(|p| inv.transform_point3(*p))
+        .filter(|p| p.is_finite())
+        .fold(None, |acc, p| Some(acc.map_or((p, p), |(lo, hi): (DVec3, DVec3)| (lo.min(p), hi.max(p)))))
+}
+
+/// Pieces imported from two objects are the same (within [`PIECE_TOL`]):
+/// same shapes, materials and flags. Only fixed meshes and literal
+/// extrusions are compared by value; other shapes must be equal.
+fn same_items(a: &[ComponentItem], b: &[ComponentItem]) -> bool {
+    let num = |x: &str, y: &str| match (x.parse::<f64>(), y.parse::<f64>()) {
+        (Ok(x), Ok(y)) => (x - y).abs() <= PIECE_TOL,
+        _ => x == y,
+    };
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(a, b)| {
+            a.material == b.material
+                && a.in_plan == b.in_plan
+                && a.void == b.void
+                && a.plan_only == b.plan_only
+                && a.detail == b.detail
+                && match (&a.shape, &b.shape) {
+                    (
+                        ComponentShape::Mesh { vertices: va, faces: fa },
+                        ComponentShape::Mesh { vertices: vb, faces: fb },
+                    ) => {
+                        fa == fb
+                            && va.len() == vb.len()
+                            && va
+                                .iter()
+                                .zip(vb.iter())
+                                .all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
+                    }
+                    (
+                        ComponentShape::Extrusion { points: pa, z: za, height: ha },
+                        ComponentShape::Extrusion { points: pb, z: zb, height: hb },
+                    ) => {
+                        num(za, zb)
+                            && num(ha, hb)
+                            && pa.len() == pb.len()
+                            && pa.iter().zip(pb).all(|(p, q)| num(&p.0, &q.0) && num(&p.1, &q.1))
+                    }
+                    (sa, sb) => sa == sb,
+                }
+        })
 }
 
 /// A number as an expression literal.
@@ -3486,9 +3686,208 @@ DATA;
         assert!(p.profiles.values().all(|f| f.name != "Many"));
     }
 
+    /// Slabs drawn with circles and arcs come in as floors with the curves as
+    /// their sketch, so areas and volumes are those of the true curves (#264):
+    /// a round slab with a square shaft, a slab with a half-round end (a
+    /// composite curve with a trimmed circle) and a square slab with a round
+    /// void.
+    #[test]
+    fn round_slabs_keep_their_curves() {
+        use std::f64::consts::PI;
+        let text = "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Round',$,$,$,$,$,#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#14=IFCDIRECTION((0.,0.,1.));
+#15=IFCAXIS2PLACEMENT3D(#16,$,$);
+#16=IFCCARTESIANPOINT((0.,0.,-200.));
+#100=IFCSLAB('2XvctVUKr0kugbFTf53O9L',$,'Round slab',$,$,#101,#102,'1',.FLOOR.);
+#101=IFCLOCALPLACEMENT(#11,#12);
+#102=IFCPRODUCTDEFINITIONSHAPE($,$,(#103));
+#103=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#104));
+#104=IFCEXTRUDEDAREASOLID(#105,#15,#14,200.);
+#105=IFCCIRCLEPROFILEDEF(.AREA.,$,#106,2000.);
+#106=IFCAXIS2PLACEMENT2D(#107,$);
+#107=IFCCARTESIANPOINT((5000.,5000.));
+#110=IFCOPENINGELEMENT('3XvctVUKr0kugbFTf53O9L',$,'Shaft',$,$,#111,#112,$,.OPENING.);
+#111=IFCLOCALPLACEMENT(#101,#12);
+#112=IFCPRODUCTDEFINITIONSHAPE($,$,(#113));
+#113=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#114));
+#114=IFCEXTRUDEDAREASOLID(#115,#15,#14,200.);
+#115=IFCRECTANGLEPROFILEDEF(.AREA.,$,#106,400.,400.);
+#118=IFCRELVOIDSELEMENT('4XvctVUKr0kugbFTf53O9L',$,$,$,#100,#110);
+#200=IFCSLAB('5XvctVUKr0kugbFTf53O9L',$,'Half-round end',$,$,#201,#202,'2',.FLOOR.);
+#201=IFCLOCALPLACEMENT(#11,#203);
+#203=IFCAXIS2PLACEMENT3D(#204,$,$);
+#204=IFCCARTESIANPOINT((20000.,0.,0.));
+#202=IFCPRODUCTDEFINITIONSHAPE($,$,(#205));
+#205=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#206));
+#206=IFCEXTRUDEDAREASOLID(#207,#15,#14,200.);
+#207=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#208);
+#208=IFCCOMPOSITECURVE((#209,#210,#211),.F.);
+#209=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#212);
+#210=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#213);
+#211=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#214);
+#212=IFCPOLYLINE((#220,#221));
+#213=IFCTRIMMEDCURVE(#215,(#221),(#222),.T.,.CARTESIAN.);
+#214=IFCPOLYLINE((#222,#223,#220));
+#215=IFCCIRCLE(#216,2000.);
+#216=IFCAXIS2PLACEMENT2D(#217,$);
+#217=IFCCARTESIANPOINT((4000.,2000.));
+#220=IFCCARTESIANPOINT((0.,0.));
+#221=IFCCARTESIANPOINT((4000.,0.));
+#222=IFCCARTESIANPOINT((4000.,4000.));
+#223=IFCCARTESIANPOINT((0.,4000.));
+#300=IFCSLAB('6XvctVUKr0kugbFTf53O9L',$,'Round void',$,$,#301,#302,'3',.FLOOR.);
+#301=IFCLOCALPLACEMENT(#11,#303);
+#303=IFCAXIS2PLACEMENT3D(#304,$,$);
+#304=IFCCARTESIANPOINT((40000.,0.,0.));
+#302=IFCPRODUCTDEFINITIONSHAPE($,$,(#305));
+#305=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#306));
+#306=IFCEXTRUDEDAREASOLID(#307,#15,#14,200.);
+#307=IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,#308,(#309));
+#308=IFCPOLYLINE((#220,#310,#311,#312,#220));
+#309=IFCCIRCLE(#313,1000.);
+#310=IFCCARTESIANPOINT((6000.,0.));
+#311=IFCCARTESIANPOINT((6000.,6000.));
+#312=IFCCARTESIANPOINT((0.,6000.));
+#313=IFCAXIS2PLACEMENT2D(#314,$);
+#314=IFCCARTESIANPOINT((3000.,3000.));
+#500=IFCRELCONTAINEDINSPATIALSTRUCTURE('CXvctVUKr0kugbFTf53O9L',$,$,$,(#100,#200,#300),#10);
+ENDSEC;
+END-ISO-10303-21;
+";
+        let (p, report) = import(text, Project::from_template()).unwrap();
+        let geom = cc_geom::ModelGeometry::build(&p);
+        let floors: Vec<(cc_core::ElementId, &cc_core::Floor)> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Floor(f) => Some((e.id, f)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(floors.len(), 3, "{report:?}");
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+        let at = |x: f64| floors.iter().find(|(_, f)| f.boundary.iter().all(|q| q.x >= x - 1e-6 && q.x < x + 15.0));
+        // Round: pi R^2 less the 0.4 x 0.4 shaft, 0.2 m thick.
+        let (id, round) = at(0.0).unwrap();
+        let sketch = round.sketch.as_ref().expect("the circle is kept");
+        assert!(
+            sketch
+                .curves
+                .iter()
+                .any(|c| matches!(c, cc_core::sketch::SketchCurve::Circle { radius, .. } if near(*radius, 2.0)))
+        );
+        assert_eq!(round.openings.len(), 1);
+        let area = PI * 4.0 - 0.16;
+        assert!(near(round.area(), area), "{} != {area}", round.area());
+        assert!(near(geom.volume(*id), area * 0.2), "{}", geom.volume(*id));
+        // The outline follows the circle as closely as natives do (well inside 1 %).
+        let drawn = polygon::area(&round.boundary) - 0.16;
+        assert!((area - drawn) / area < 1e-3, "{drawn}");
+        // Half-round end: 4 x 4 plus half a circle of radius 2.
+        let (id, half) = at(20.0).unwrap();
+        assert!(half.sketch.as_ref().is_some_and(|s| s.is_curved()));
+        let area = 16.0 + 2.0 * PI;
+        assert!(near(half.area(), area), "{} != {area}", half.area());
+        assert!(near(geom.volume(*id), area * 0.2), "{}", geom.volume(*id));
+        // Square with a round void.
+        let (id, voided) = at(40.0).unwrap();
+        assert_eq!(voided.openings.len(), 1);
+        let area = 36.0 - PI;
+        assert!(near(voided.area(), area), "{} != {area}", voided.area());
+        assert!(near(geom.volume(*id), area * 0.2), "{}", geom.volume(*id));
+    }
+
     /// Geometry a hostile file can throw at the importer: cyclic booleans and
     /// mapped items, out-of-range and negative indices, absurd knot
     /// multiplicities and angles, empty paths. Nothing may panic or hang.
+    #[test]
+    fn files_past_the_size_limit_are_refused_unread() {
+        let dir = std::env::temp_dir().join(format!("ccad-ifc-size-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("huge.ifc");
+        std::fs::File::create(&path).unwrap().set_len(MAX_IFC_BYTES + 1).unwrap();
+        let err = import_file(&path, Project::empty()).unwrap_err();
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(matches!(&err, ImportError::Io(e) if e.kind() == std::io::ErrorKind::FileTooLarge), "{err}");
+    }
+
+    /// Complex properties that contain themselves, or that fan out through
+    /// distinct ones, are read once and within a budget, not 10^8 times.
+    #[test]
+    fn complex_properties_that_cycle_or_fan_out_are_bounded() {
+        // #100 holds itself ten times; #101..#108 each hold the next ten times.
+        let mut props = format!("#100=IFCCOMPLEXPROPERTY('Self',$,'u',({}));", ["#100"; 10].join(","));
+        for k in 101..=108 {
+            let inner = if k == 108 { "#109".to_string() } else { vec![format!("#{}", k + 1); 10].join(",") };
+            props += &format!("#{k}=IFCCOMPLEXPROPERTY('Fan',$,'u',({inner}));");
+        }
+        props += "#109=IFCPROPERTYSINGLEVALUE('Leaf',$,IFCLABEL('x'),$);";
+        let text = format!(
+            "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'P',$,$,$,$,$,#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#20=IFCFURNISHINGELEMENT('5XvctVUKr0kugbFTf53O9L',$,'Chair',$,$,#11,#30,$);
+#30=IFCPRODUCTDEFINITIONSHAPE($,$,(#31));
+#31=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#32));
+#32=IFCBLOCK(#12,1.,1.,1.);
+#40=IFCRELCONTAINEDINSPATIALSTRUCTURE('3XvctVUKr0kugbFTf53O9L',$,$,$,(#20),#10);
+#50=IFCPROPERTYSET('6XvctVUKr0kugbFTf53O9L',$,'Pset_Bomb',$,(#100,#101));
+#51=IFCRELDEFINESBYPROPERTIES('7XvctVUKr0kugbFTf53O9L',$,$,$,(#20),#50);
+{props}
+ENDSEC;
+END-ISO-10303-21;
+"
+        );
+        let (p, _) = import(&text, Project::from_template()).unwrap();
+        fn count(props: &[cc_core::properties::Property]) -> usize {
+            props
+                .iter()
+                .map(|p| match &p.value {
+                    cc_core::properties::PropertyValue::Complex { properties, .. } => 1 + count(properties),
+                    _ => 1,
+                })
+                .sum()
+        }
+        let sets: Vec<_> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Component(c) => Some(&c.properties),
+                _ => None,
+            })
+            .flatten()
+            .filter(|s| s.name == "Pset_Bomb")
+            .collect();
+        let [set] = sets.as_slice() else { panic!("{sets:?}") };
+        let total = count(&set.properties);
+        assert!(total <= MAX_SET_PROPERTIES, "{total}");
+        // The self-holding property is read once, with nothing inside.
+        let first = set.properties.first().unwrap();
+        assert!(
+            matches!(&first.value, cc_core::properties::PropertyValue::Complex { properties, .. } if properties.is_empty())
+        );
+    }
+
     #[test]
     fn hostile_geometry_is_survived() {
         let text = "ISO-10303-21;

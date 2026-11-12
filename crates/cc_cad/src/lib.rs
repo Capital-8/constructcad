@@ -52,6 +52,11 @@ pub struct Limits {
     pub max_prims: usize,
     /// Most entity visits while inserting blocks (arrays of nested blocks).
     pub max_work: usize,
+    /// Most points and text characters handled in all: those of every
+    /// entity read (each time a block inserts it) and of every primitive
+    /// produced, so one large entity in an arrayed block cannot ask for
+    /// more memory or time than this.
+    pub max_points: usize,
     /// Deepest block nesting followed.
     pub max_depth: usize,
     /// Most entities kept in block definitions.
@@ -72,6 +77,7 @@ impl Default for Limits {
             max_dwg_bytes: 128 << 20,
             max_prims: cc_core::cad::MAX_PRIMS,
             max_work: 20_000_000,
+            max_points: 40_000_000,
             max_depth: 32,
             max_block_entities: 5_000_000,
             keep_blocks: false,

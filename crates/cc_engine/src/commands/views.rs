@@ -244,7 +244,8 @@ fn capitalized(s: &str) -> String {
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
     pub view: Ref,
-    /// New name.
+    /// New name. A plan's name is its own: its level and the level's other
+    /// plans keep theirs.
     #[serde(default)]
     pub name: Option<String>,
     /// Scale denominator (e.g. 100 for 1:100).

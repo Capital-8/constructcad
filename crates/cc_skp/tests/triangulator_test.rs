@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // Face normals and planar-face triangulation (`triangulator_test.cpp`).
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeMap;
 
@@ -130,4 +130,39 @@ fn overlapping_holes_match_independent_analytical_circle_union_area() {
     // separates "correct, just coarser" from the pre-fix bug.
     let rel_error = (baked_area - expected_area).abs() / expected_area;
     assert!(rel_error < 0.05, "baked area {baked_area} vs analytical {expected_area} (rel err {rel_error})");
+}
+
+/// A thin ring: `m` vertices on a circle from the left, a hole of `m`
+/// vertices each just inside an outer one (in its ear's sliver), so every
+/// outer vertex is blocked by a hole vertex far down the bridged ring.
+fn thin_ring(m: usize) -> (BTreeMap<EntityId, Vertex>, Vec<Vec<EntityId>>) {
+    let step = std::f64::consts::TAU / m as f64;
+    let sagitta = 1.0 - step.cos();
+    let mut v = BTreeMap::new();
+    for (k, radius) in [1.0, 1.0 - sagitta * 0.4].into_iter().enumerate() {
+        for i in 0..m {
+            let a = std::f64::consts::PI + 0.5 * step + step * i as f64;
+            let id = (k * m + i) as EntityId;
+            v.insert(id, Vertex { id, x: radius * a.cos(), y: radius * a.sin(), z: 0.0 });
+        }
+    }
+    let outer = (0..m as EntityId).collect();
+    let hole = (m as EntityId..2 * m as EntityId).collect();
+    (v, vec![outer, hole])
+}
+
+#[test]
+fn hostile_faces_triangulate_in_bounded_time() {
+    for (v, loops) in [thin_ring(2000), thin_ring(20_000)] {
+        let start = std::time::Instant::now();
+        let triangles = triangulate_face_3d(&v, &loops, [0.0, 0.0, 1.0]);
+        assert!(start.elapsed() < std::time::Duration::from_secs(5), "{:?}", start.elapsed());
+        assert!(!triangles.is_empty());
+    }
+    // A small ring is still ear clipped exactly.
+    let (v, loops) = thin_ring(16);
+    let triangles = triangulate_face_3d(&v, &loops, [0.0, 0.0, 1.0]);
+    let polygon = |r: f64| 0.5 * 16.0 * r * r * (std::f64::consts::TAU / 16.0).sin();
+    let inner = 1.0 - (1.0 - (std::f64::consts::TAU / 16.0).cos()) * 0.4;
+    assert_near(tri_area(&triangles, &v), polygon(1.0) - polygon(inner), 1e-9);
 }

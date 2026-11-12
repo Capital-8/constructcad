@@ -98,6 +98,9 @@ pub struct GraphEditor {
     buffers: HashMap<(u64, String), String>,
     clipboard: Option<(Vec<Node>, Vec<Wire>)>,
     confirm: Option<Pending>,
+    /// The user let this graph's commands work with files: a grant of this
+    /// session, never saved with the graph and reset when another opens.
+    pub allow_files: bool,
 }
 
 impl Default for GraphEditor {
@@ -122,6 +125,7 @@ impl Default for GraphEditor {
             buffers: HashMap::new(),
             clipboard: None,
             confirm: None,
+            allow_files: false,
         }
     }
 }
@@ -163,6 +167,7 @@ impl GraphEditor {
     fn replace(&mut self, graph: Graph, path: Option<PathBuf>) {
         self.graph = graph;
         self.path = path;
+        self.allow_files = false;
         self.dirty = false;
         self.report = None;
         self.selected.clear();
@@ -305,7 +310,8 @@ pub fn run(state: &mut AppState) {
             return;
         }
     };
-    let result = state.session.execute("graph_run", json!({ "graph": graph })).map_err(|e| e.message);
+    let args = json!({ "graph": graph, "allow_files": state.graph.allow_files });
+    let result = state.session.execute("graph_run", args).map_err(|e| e.message);
     if let Ok(r) = &result {
         state.message = status_text(r);
     }
@@ -341,7 +347,9 @@ fn open_graph(state: &mut AppState) {
 
 /// Open the graph file at `path` in the editor.
 pub fn open_path(state: &mut AppState, path: PathBuf) {
-    let read = std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| Graph::from_json(&t));
+    let read = cc_core::read_to_string_limited(&path, cc_engine::graph::MAX_FILE as u64)
+        .map_err(|e| e.to_string())
+        .and_then(|t| Graph::from_json(&t));
     match read {
         Ok((graph, repairs)) => {
             state.graph.replace(graph, Some(path));
@@ -859,30 +867,55 @@ fn canvas(ui: &mut Ui, state: &mut AppState) {
             PALETTE.text_faint,
         );
     }
-    // Inline editors of input nodes (drawn over the canvas, so they get the clicks).
+    // Inline editors of input nodes (drawn over the canvas, so they get the clicks), only where the
+    // whole field shows: a widget past the canvas would make the panel grow to hold it.
     if view.zoom >= 0.6 {
         for (id, kind, field) in inline {
-            inline_editor(ui, state, id, &kind, field);
+            if rect.contains_rect(field) {
+                inline_editor(ui, state, id, &kind, field, view.zoom);
+            }
         }
     }
     search(ui, state, &view);
 }
 
-fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: Rect) {
+/// Scales a child ui's style to the canvas zoom, so an inline editor stays inside its field.
+fn fit_style(style: &mut egui::Style, zoom: f32, field: Rect, value_w: f32) {
+    for font in style.text_styles.values_mut() {
+        font.size = (font.size * zoom * 0.9).max(4.0);
+    }
+    let s = &mut style.spacing;
+    s.item_spacing *= zoom;
+    s.button_padding *= zoom;
+    s.icon_width *= zoom;
+    s.icon_width_inner *= zoom;
+    s.icon_spacing *= zoom;
+    s.slider_rail_height *= zoom;
+    s.interact_size = vec2(value_w, field.height());
+    s.slider_width = (field.width() - value_w - s.item_spacing.x).max(8.0);
+}
+
+fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: Rect, zoom: f32) {
     let Some(node) = state.graph.graph.node(id) else { return };
+    // The editor's value box, beside the rail for a slider.
+    let value_w = if kind == "slider" { (field.width() * 0.38).max(8.0) } else { field.width() };
+    let mut child =
+        ui.new_child(egui::UiBuilder::new().max_rect(field).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    fit_style(child.style_mut(), zoom, field, value_w);
+    let ui = &mut child;
     let value = node.values.get("value").cloned().unwrap_or(json!(0));
     let mut changed: Option<Value> = None;
     let mut active = false;
     match kind {
         "boolean" => {
             let mut b = value.as_bool().unwrap_or(false);
-            if ui.put(field, egui::Checkbox::without_text(&mut b)).changed() {
+            if ui.add(egui::Checkbox::without_text(&mut b)).changed() {
                 changed = Some(json!(b));
             }
         }
         "text" => {
             let mut s = value.as_str().map(str::to_string).unwrap_or_default();
-            let r = ui.put(field, egui::TextEdit::singleline(&mut s));
+            let r = ui.add_sized(field.size(), egui::TextEdit::singleline(&mut s).font(egui::TextStyle::Body));
             active = r.has_focus();
             if r.changed() {
                 changed = Some(json!(s));
@@ -894,7 +927,7 @@ fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: 
                 let min = node.values.get("min").and_then(Value::as_f64).unwrap_or(0.0);
                 let max = node.values.get("max").and_then(Value::as_f64).unwrap_or(10.0);
                 let step = node.values.get("step").and_then(Value::as_f64).filter(|s| *s > 0.0).unwrap_or(0.1);
-                let r = ui.put(field, egui::Slider::new(&mut x, min..=max.max(min)).step_by(step));
+                let r = ui.add(egui::Slider::new(&mut x, min..=max.max(min)).step_by(step));
                 active = r.dragged() || r.has_focus();
                 if r.changed() {
                     changed = Some(json!(x));
@@ -903,7 +936,7 @@ fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: 
                 let integer = kind == "integer";
                 let drag = egui::DragValue::new(&mut x).speed(if integer { 0.2 } else { 0.05 });
                 let drag = if integer { drag.fixed_decimals(0) } else { drag };
-                let r = ui.put(field, drag);
+                let r = ui.add_sized(field.size(), drag);
                 active = r.dragged() || r.has_focus();
                 if r.changed() {
                     #[allow(clippy::cast_possible_truncation)]
@@ -1185,10 +1218,10 @@ fn graph_inspector(ui: &mut Ui, state: &mut AppState) {
         state.graph.step();
         state.graph.graph.name = name;
     }
-    let mut files = state.graph.graph.allow_files;
+    // Not a change of the graph: a grant of this session (not saved, not undone).
+    let mut files = state.graph.allow_files;
     if ui.checkbox(&mut files, t!("graph-allow-files")).on_hover_text(t!("graph-allow-files-hint")).changed() {
-        state.graph.step();
-        state.graph.graph.allow_files = files;
+        state.graph.allow_files = files;
     }
     ui.add_space(6.0);
     let uid = state.graph.graph.uid;
@@ -1435,4 +1468,12 @@ fn input_field(ui: &mut Ui, state: &mut AppState, node: &Node, port: &Port) {
 #[cfg(test)]
 pub(crate) fn open_search(state: &mut AppState, at: Pos2, screen: Pos2) {
     state.graph.search = Some(Search { at, screen, query: String::new(), focus: true });
+}
+
+#[cfg(test)]
+impl GraphEditor {
+    pub fn set_view_for_test(&mut self, zoom: f32, pan: Vec2) {
+        self.zoom = zoom;
+        self.pan = pan;
+    }
 }

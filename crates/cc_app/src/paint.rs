@@ -83,12 +83,18 @@ fn has_sharp_corner(pts: &[Pos2]) -> bool {
 }
 
 pub fn fill_polygon(painter: &Painter, pts: Vec<Pos2>, color: Color32) {
+    if let Some(shape) = fill_shape(pts, color) {
+        painter.add(shape);
+    }
+}
+
+/// The shape filling the polygon `pts` (none with fewer than three points).
+fn fill_shape(pts: Vec<Pos2>, color: Color32) -> Option<Shape> {
     if pts.len() < 3 {
-        return;
+        return None;
     }
     if is_convex(&pts) && !has_sharp_corner(&pts) {
-        painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
-        return;
+        return Some(Shape::convex_polygon(pts, color, Stroke::NONE));
     }
     let flat: Vec<DVec2> = pts.iter().map(|p| DVec2::new(p.x as f64, p.y as f64)).collect();
     let mut mesh = egui::Mesh::default();
@@ -98,7 +104,7 @@ pub fn fill_polygon(painter: &Painter, pts: Vec<Pos2>, color: Color32) {
     for [a, b, c] in cc_geom::polygon::triangulate(&flat) {
         mesh.add_triangle(a as u32, b as u32, c as u32);
     }
-    painter.add(Shape::mesh(mesh));
+    Some(Shape::mesh(mesh))
 }
 
 fn tint(c: [u8; 4], highlighted: bool) -> Color32 {
@@ -145,25 +151,50 @@ struct FrameUse {
 }
 
 /// The vertices a drawing still may add, and the pixels its tiny lines took.
-struct Budget {
+pub(crate) struct Budget {
     left: usize,
     background: usize,
-    used: usize,
+    pub(crate) used: usize,
+    /// Whether anything was refused for want of room.
+    pub(crate) refused: bool,
     dots: std::collections::HashSet<(i32, i32)>,
+}
+
+/// The vertices the drawings painted so far in this frame left.
+pub(crate) fn frame_left(ctx: &egui::Context) -> usize {
+    let id = egui::Id::new("paint-frame-vertices");
+    let pass = ctx.cumulative_pass_nr();
+    let used = ctx.data(|d| d.get_temp::<FrameUse>(id)).filter(|u| u.pass == pass).map_or(0, |u| u.vertices);
+    FRAME_VERTICES.saturating_sub(used)
+}
+
+/// Count `n` vertices as used in this frame.
+pub(crate) fn frame_use(ctx: &egui::Context, n: usize) {
+    let id = egui::Id::new("paint-frame-vertices");
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| {
+        let u = d.get_temp_mut_or_default::<FrameUse>(id);
+        if u.pass != pass {
+            *u = FrameUse { pass, vertices: 0 };
+        }
+        u.vertices = u.vertices.saturating_add(n);
+    });
 }
 
 impl Budget {
     fn start(ctx: &egui::Context) -> Self {
-        let id = egui::Id::new("paint-frame-vertices");
-        let pass = ctx.cumulative_pass_nr();
-        let used = ctx.data(|d| d.get_temp::<FrameUse>(id)).filter(|u| u.pass == pass).map_or(0, |u| u.vertices);
-        let left = FRAME_VERTICES.saturating_sub(used);
-        Self { left, background: BACKGROUND_VERTICES.min(left), used: 0, dots: Default::default() }
+        Self::with_left(frame_left(ctx))
+    }
+
+    /// A budget of `left` vertices.
+    pub(crate) fn with_left(left: usize) -> Self {
+        Self { left, background: BACKGROUND_VERTICES.min(left), used: 0, refused: false, dots: Default::default() }
     }
 
     /// Take `n` vertices, or refuse (and take none) when they do not fit.
     fn take(&mut self, n: usize, background: bool) -> bool {
         if n > self.left || (background && n > self.background) {
+            self.refused = true;
             return false;
         }
         self.left -= n;
@@ -181,16 +212,42 @@ impl Budget {
     }
 
     fn finish(self, ctx: &egui::Context) {
-        let id = egui::Id::new("paint-frame-vertices");
-        let pass = ctx.cumulative_pass_nr();
-        ctx.data_mut(|d| {
-            let u = d.get_temp_mut_or_default::<FrameUse>(id);
-            if u.pass != pass {
-                *u = FrameUse { pass, vertices: 0 };
-            }
-            u.vertices = u.vertices.saturating_add(self.used);
-        });
+        frame_use(ctx, self.used);
     }
+}
+
+/// How a primitive is let in: by the budget (painting, or building a
+/// cached drawing), or as an earlier build decided (redrawing part of one).
+pub(crate) enum Gate<'a> {
+    Budget(&'a mut Budget),
+    Decided(bool),
+}
+
+impl Gate<'_> {
+    /// Whether a line this short on screen is drawn (see [`Budget::dot`]).
+    fn dot(&mut self, a: Pos2, b: Pos2) -> bool {
+        match self {
+            Gate::Budget(budget) => budget.dot(a, b),
+            Gate::Decided(drawn) => *drawn,
+        }
+    }
+
+    fn take(&mut self, n: usize, background: bool) -> bool {
+        match self {
+            Gate::Budget(budget) => budget.take(n, background),
+            Gate::Decided(drawn) => *drawn,
+        }
+    }
+}
+
+/// What a primitive draws.
+pub(crate) enum Drawn {
+    /// Nothing: out of view, too small, left out or out of budget.
+    Nothing,
+    /// The shapes added to the output.
+    Shapes,
+    /// Its text, at this screen point and size (laid out by the caller).
+    Text { at: Pos2, px: f32 },
 }
 
 /// The part of segment `a`–`b` inside `rect`, and how far along the segment it starts.
@@ -232,111 +289,155 @@ fn dashed(a: Pos2, b: Pos2, stroke: Stroke, on: &[f32], off: &[f32], clip: egui:
 
 pub fn paint_drawing(painter: &Painter, d: &Drawing2D, xf: &Xf, opts: &PaintOptions) {
     let clip = painter.clip_rect().expand(50.0);
-    let mut budget = Budget::start(painter.ctx());
-    for prim in &d.prims {
-        match prim {
-            Prim::Fill { pts, color, element, .. } => {
-                if opts.only.is_some_and(|only| !element.is_some_and(|e| only.contains(&e))) {
-                    continue;
-                }
-                let hl = element.is_some_and(|e| opts.highlight.contains(&e));
-                let screen: Vec<Pos2> = pts.iter().map(|p| xf.to_screen(*p)).collect();
-                if !screen.iter().any(|p| clip.contains(*p)) && !egui::Rect::from_points(&screen).intersects(clip) {
-                    continue;
-                }
-                // Feathered convex polygons take two vertices a corner.
-                let background = element.is_some_and(|e| d.background.contains(&e));
-                if !budget.take(screen.len().saturating_mul(2), background) {
-                    continue;
-                }
-                let c = match opts.mono {
-                    Some(m) => m.gamma_multiply(0.25),
-                    None => tint(*color, hl),
-                };
-                fill_polygon(painter, screen, c);
-            }
-            Prim::Line { a, b, style, element, pen } => {
-                if opts.only.is_some_and(|only| !element.is_some_and(|e| only.contains(&e))) {
-                    continue;
-                }
-                let hl = element.is_some_and(|e| opts.highlight.contains(&e));
-                let (pa, pb) = (xf.to_screen(*a), xf.to_screen(*b));
-                if !egui::Rect::from_two_pos(pa, pb).intersects(clip) {
-                    continue;
-                }
-                if pa.distance(pb) < DOT_LENGTH && !budget.dot(pa, pb) {
-                    continue;
-                }
-                let background = element.is_some_and(|e| d.background.contains(&e));
-                let mut stroke = stroke_for(*style, hl);
-                // View graphics overrides: paper millimeters at the screen's pen scale.
-                let mut dashes: Option<Vec<f32>> = None;
-                if let Some(p) = pen {
-                    let r = style.resolve(Some(p));
-                    if !hl {
-                        stroke.color = Color32::from_rgb(r.color[0], r.color[1], r.color[2]);
-                    }
-                    if p.weight.is_some() {
-                        stroke.width = (r.width as f32 * PX_PER_PEN_MM).clamp(0.4, 8.0) + if hl { 0.6 } else { 0.0 };
-                    }
-                    if p.pattern.is_some() {
-                        dashes = Some(r.dashes.iter().map(|d| (*d as f32 * PX_PER_PEN_MM).max(1.0)).collect());
-                    }
-                }
-                if let Some(m) = opts.mono {
-                    stroke.color = m;
-                }
-                let (on, off): (Vec<f32>, Vec<f32>) = match dashes {
-                    Some(pattern) => pattern.chunks(2).filter(|c| c.len() == 2).map(|c| (c[0], c[1])).unzip(),
-                    None if *style == LineStyle::Hidden => (vec![6.0], vec![4.0]),
-                    // Dash-dot.
-                    None if *style == LineStyle::Center => (vec![14.0, 2.0], vec![3.0, 3.0]),
-                    None => (Vec::new(), Vec::new()),
-                };
-                if on.is_empty() {
-                    if budget.take(LINE_VERTICES, background) {
-                        painter.line_segment([pa, pb], stroke);
-                    }
-                } else if let Some((shapes, n)) = dashed(pa, pb, stroke, &on, &off, clip)
-                    && budget.take(n, background)
-                {
-                    painter.extend(shapes);
-                }
-            }
-            Prim::Image { origin, u, v, image, element, faded } => {
-                if opts.only.is_some() || opts.mono.is_some() {
-                    continue;
-                }
-                let corners = cc_views::Prim::image_corners(*origin, *u, *v).map(|p| xf.to_screen(p));
-                if !egui::Rect::from_points(&corners).intersects(clip) {
-                    continue;
-                }
-                let background = element.is_some_and(|e| d.background.contains(&e));
-                if !budget.take(4, background) {
-                    continue;
-                }
-                let hl = element.is_some_and(|e| opts.highlight.contains(&e));
-                paint_image(painter, image, *faded, corners, hl);
-            }
-            Prim::Text { pos, text, size, anchor, angle, element, .. } => {
-                if opts.only.is_some() {
-                    continue;
-                }
-                let px = (size * opts.px_per_mm) as f32;
-                let at = xf.to_screen(*pos);
-                // Far outside the view a text cannot reach into it.
-                if px < 3.5 || !clip.expand(px * text.chars().count() as f32).contains(at) {
-                    continue;
-                }
-                // Four vertices a glyph.
-                let background = element.is_some_and(|e| d.background.contains(&e));
-                if budget.take(text.len().saturating_mul(4), background) {
+    let ctx = painter.ctx();
+    let mut budget = Budget::start(ctx);
+    let mut out = Vec::new();
+    let mut paint =
+        |prim: &Prim| match prim_shapes(ctx, d, prim, xf, opts, clip, &mut Gate::Budget(&mut budget), &mut out) {
+            Drawn::Nothing => {}
+            Drawn::Shapes => painter.extend(out.drain(..)),
+            Drawn::Text { at, px } => {
+                if let Prim::Text { text, anchor, angle, .. } = prim {
                     paint_text(painter, at, text, px, *anchor, *angle as f32);
                 }
             }
+        };
+    match opts.only {
+        // Only the primitives of a few elements: found through the drawing's index.
+        Some(only) => d.prims_of(only).into_iter().filter_map(|i| d.prims.get(i)).for_each(&mut paint),
+        None => d.prims.iter().for_each(&mut paint),
+    }
+    budget.finish(ctx);
+}
+
+/// The shapes of one primitive of `d` on screen (into `out`), unless it lies
+/// outside `clip`, is left out by `opts` or `gate` refuses it. Texts are left
+/// to the caller.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prim_shapes(
+    ctx: &egui::Context,
+    d: &Drawing2D,
+    prim: &Prim,
+    xf: &Xf,
+    opts: &PaintOptions,
+    clip: egui::Rect,
+    gate: &mut Gate,
+    out: &mut Vec<Shape>,
+) -> Drawn {
+    match prim {
+        Prim::Fill { pts, color, element, .. } => {
+            if opts.only.is_some_and(|only| !element.is_some_and(|e| only.contains(&e))) {
+                return Drawn::Nothing;
+            }
+            let hl = element.is_some_and(|e| opts.highlight.contains(&e));
+            let screen: Vec<Pos2> = pts.iter().map(|p| xf.to_screen(*p)).collect();
+            if !screen.iter().any(|p| clip.contains(*p)) && !egui::Rect::from_points(&screen).intersects(clip) {
+                return Drawn::Nothing;
+            }
+            // Feathered convex polygons take two vertices a corner.
+            let background = element.is_some_and(|e| d.background.contains(&e));
+            if !gate.take(screen.len().saturating_mul(2), background) {
+                return Drawn::Nothing;
+            }
+            let c = match opts.mono {
+                Some(m) => m.gamma_multiply(0.25),
+                None => tint(*color, hl),
+            };
+            out.extend(fill_shape(screen, c));
+            Drawn::Shapes
+        }
+        Prim::Line { a, b, style, element, pen } => {
+            if opts.only.is_some_and(|only| !element.is_some_and(|e| only.contains(&e))) {
+                return Drawn::Nothing;
+            }
+            let hl = element.is_some_and(|e| opts.highlight.contains(&e));
+            let (pa, pb) = (xf.to_screen(*a), xf.to_screen(*b));
+            if !egui::Rect::from_two_pos(pa, pb).intersects(clip) {
+                return Drawn::Nothing;
+            }
+            if pa.distance(pb) < DOT_LENGTH && !gate.dot(pa, pb) {
+                return Drawn::Nothing;
+            }
+            let background = element.is_some_and(|e| d.background.contains(&e));
+            let mut stroke = stroke_for(*style, hl);
+            // View graphics overrides: paper millimeters at the screen's pen scale.
+            let mut dashes: Option<Vec<f32>> = None;
+            if let Some(p) = pen {
+                let r = style.resolve(Some(p));
+                if !hl {
+                    stroke.color = Color32::from_rgb(r.color[0], r.color[1], r.color[2]);
+                }
+                if p.weight.is_some() {
+                    stroke.width = (r.width as f32 * PX_PER_PEN_MM).clamp(0.4, 8.0) + if hl { 0.6 } else { 0.0 };
+                }
+                if p.pattern.is_some() {
+                    dashes = Some(r.dashes.iter().map(|d| (*d as f32 * PX_PER_PEN_MM).max(1.0)).collect());
+                }
+            }
+            if let Some(m) = opts.mono {
+                stroke.color = m;
+            }
+            let (on, off): (Vec<f32>, Vec<f32>) = match dashes {
+                Some(pattern) => pattern.chunks(2).filter(|c| c.len() == 2).map(|c| (c[0], c[1])).unzip(),
+                None if *style == LineStyle::Hidden => (vec![6.0], vec![4.0]),
+                // Dash-dot.
+                None if *style == LineStyle::Center => (vec![14.0, 2.0], vec![3.0, 3.0]),
+                None => (Vec::new(), Vec::new()),
+            };
+            if on.is_empty() {
+                if !gate.take(LINE_VERTICES, background) {
+                    return Drawn::Nothing;
+                }
+                out.push(Shape::line_segment([pa, pb], stroke));
+            } else {
+                let Some((shapes, n)) = dashed(pa, pb, stroke, &on, &off, clip) else { return Drawn::Nothing };
+                if !gate.take(n, background) {
+                    return Drawn::Nothing;
+                }
+                out.extend(shapes);
+            }
+            Drawn::Shapes
+        }
+        Prim::Image { origin, u, v, image, element, faded } => {
+            if opts.only.is_some() || opts.mono.is_some() {
+                return Drawn::Nothing;
+            }
+            let corners = cc_views::Prim::image_corners(*origin, *u, *v).map(|p| xf.to_screen(p));
+            if !egui::Rect::from_points(&corners).intersects(clip) {
+                return Drawn::Nothing;
+            }
+            let background = element.is_some_and(|e| d.background.contains(&e));
+            if !gate.take(4, background) {
+                return Drawn::Nothing;
+            }
+            let hl = element.is_some_and(|e| opts.highlight.contains(&e));
+            image_shapes(ctx, image, *faded, corners, hl, out);
+            Drawn::Shapes
+        }
+        Prim::Text { pos, text, size, element, .. } => {
+            if opts.only.is_some() {
+                return Drawn::Nothing;
+            }
+            let px = (size * opts.px_per_mm) as f32;
+            let at = xf.to_screen(*pos);
+            // Far outside the view a text cannot reach into it.
+            if text_culled(text, px, at, clip) {
+                return Drawn::Nothing;
+            }
+            // Four vertices a glyph.
+            let background = element.is_some_and(|e| d.background.contains(&e));
+            if !gate.take(text.len().saturating_mul(4), background) {
+                return Drawn::Nothing;
+            }
+            Drawn::Text { at, px }
         }
     }
-    budget.finish(painter.ctx());
+}
+
+/// Whether a text of `px` points at `at` is too small to read or too far
+/// outside `clip` to reach into it.
+pub(crate) fn text_culled(text: &str, px: f32, at: Pos2, clip: egui::Rect) -> bool {
+    px < 3.5 || !clip.expand(px * text.chars().count() as f32).contains(at)
 }
 
 /// Longest side of a picture's texture, pixels (larger pictures are reduced).
@@ -380,8 +481,15 @@ pub(crate) fn image_texture(
 
 /// A picture on the parallelogram `corners` (bottom-left first, on screen),
 /// tinted and outlined when highlighted; a grey box when it cannot be decoded.
-fn paint_image(painter: &Painter, image: &std::sync::Arc<RasterImage>, faded: bool, corners: [Pos2; 4], hl: bool) {
-    match image_texture(painter.ctx(), image, faded) {
+fn image_shapes(
+    ctx: &egui::Context,
+    image: &std::sync::Arc<RasterImage>,
+    faded: bool,
+    corners: [Pos2; 4],
+    hl: bool,
+    out: &mut Vec<Shape>,
+) {
+    match image_texture(ctx, image, faded) {
         Some(texture) => {
             let mut mesh = egui::Mesh::with_texture(texture.id());
             let tint = if hl { Color32::from_rgb(190, 215, 255) } else { Color32::WHITE };
@@ -392,17 +500,17 @@ fn paint_image(painter: &Painter, image: &std::sync::Arc<RasterImage>, faded: bo
             }
             mesh.add_triangle(0, 1, 2);
             mesh.add_triangle(0, 2, 3);
-            painter.add(Shape::mesh(mesh));
+            out.push(Shape::mesh(mesh));
         }
-        None => fill_polygon(painter, corners.to_vec(), Color32::from_gray(225)),
+        None => out.extend(fill_shape(corners.to_vec(), Color32::from_gray(225))),
     }
     if hl {
-        painter.add(Shape::closed_line(corners.to_vec(), Stroke::new(1.5, HIGHLIGHT)));
+        out.push(Shape::closed_line(corners.to_vec(), Stroke::new(1.5, HIGHLIGHT)));
     }
 }
 
 /// Text anchored at `pos` and rotated by `angle` (radians, counter-clockwise on the drawing).
-fn paint_text(painter: &Painter, pos: Pos2, text: &str, px: f32, anchor: cc_views::Anchor, angle: f32) {
+pub(crate) fn paint_text(painter: &Painter, pos: Pos2, text: &str, px: f32, anchor: cc_views::Anchor, angle: f32) {
     let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(px), Color32::from_gray(20));
     let size = galley.size();
     let local = match anchor {

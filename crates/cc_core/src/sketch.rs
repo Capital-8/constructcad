@@ -156,6 +156,40 @@ impl SketchCurve {
         }
     }
 
+    /// The signed area the curve sweeps around the origin, the integral of
+    /// `(x dy - y dx) / 2` along it: summed around a closed loop, the loop's
+    /// exact area (positive counter-clockwise), arcs and ellipses as the true
+    /// curves rather than the points they are split into.
+    pub fn swept_area(&self) -> f64 {
+        // Along an ellipse p(t) = c + u rx cos t + v ry sin t (u, v its unit
+        // axes) from t0 by `sweep`: c x (p(t1) - p(t0)) + rx ry sweep.
+        let elliptic = |c: DVec2, u: DVec2, radii: DVec2, t0: f64, sweep: f64| {
+            let t1 = t0 + sweep;
+            let chord = u * radii.x * (t1.cos() - t0.cos()) + u.perp() * radii.y * (t1.sin() - t0.sin());
+            (c.perp_dot(chord) + radii.x * radii.y * sweep) * 0.5
+        };
+        match *self {
+            SketchCurve::Line { a, b } => a.perp_dot(b) * 0.5,
+            SketchCurve::Arc { a, b, bulge } => match Arc::from_bulge(a, b, bulge) {
+                Some(arc) => elliptic(arc.center, DVec2::X, DVec2::splat(arc.radius), arc.start_angle, arc.sweep),
+                None => a.perp_dot(b) * 0.5,
+            },
+            SketchCurve::Circle { center, radius } => elliptic(center, DVec2::X, DVec2::splat(radius), 0.0, TAU),
+            SketchCurve::Ellipse { center, radii, rotation_deg, start_deg, sweep_deg } => elliptic(
+                center,
+                DVec2::from_angle(rotation_deg.to_radians()),
+                radii,
+                start_deg.to_radians(),
+                sweep_deg.clamp(-360.0, 360.0).to_radians(),
+            ),
+        }
+    }
+
+    /// Whether the curve is curved (an arc, a circle, an ellipse).
+    pub fn is_curved(&self) -> bool {
+        !matches!(self, SketchCurve::Line { .. })
+    }
+
     /// The same curve run the other way.
     pub fn reversed(&self) -> Self {
         match *self {
@@ -318,6 +352,33 @@ impl Sketch {
     /// The closed loops the curves make, each as points without the closing
     /// repeat.
     pub fn loops(&self) -> Result<Vec<Vec<DVec2>>, SketchError> {
+        Ok(self.walk()?.into_iter().map(|(pts, _)| pts).collect())
+    }
+
+    /// The exact area the sketch encloses: its outline less its openings,
+    /// arcs, circles and ellipses as the true curves (the outline's points
+    /// split them into chords, which cut a little off).
+    pub fn area(&self) -> Result<f64, SketchError> {
+        // The loops make an outline holding apart openings.
+        self.profile()?;
+        let loops = self.walk()?;
+        let outer = (0..loops.len()).max_by(|&a, &b| area(&loops[a].0).total_cmp(&area(&loops[b].0)));
+        let Some(outer) = outer else { return Err(SketchError::Empty) };
+        let mut total = 0.0;
+        for (i, (_, swept)) in loops.iter().enumerate() {
+            total += if i == outer { swept.abs() } else { -swept.abs() };
+        }
+        Ok(total.max(0.0))
+    }
+
+    /// Whether any curve is curved: only then does [`Self::area`] differ
+    /// from the area of the points.
+    pub fn is_curved(&self) -> bool {
+        self.curves.iter().any(SketchCurve::is_curved)
+    }
+
+    /// The loops as points, each with its exact signed area.
+    fn walk(&self) -> Result<Vec<(Vec<DVec2>, f64)>, SketchError> {
         if self.curves.is_empty() {
             return Err(SketchError::Empty);
         }
@@ -328,11 +389,13 @@ impl Sketch {
             return Err(SketchError::InvalidCurve(i));
         }
         let mut loops: Vec<Vec<DVec2>> = Vec::new();
+        let mut swept: Vec<f64> = Vec::new();
         // Closed curves are loops of their own.
         for c in self.curves.iter().filter(|c| c.is_closed()) {
             let mut pts = c.points();
             pts.pop();
             loops.push(pts);
+            swept.push(c.swept_area());
         }
         // Open curves meet at nodes: ends within the tolerance.
         let open: Vec<(SketchCurve, DVec2, DVec2)> =
@@ -367,6 +430,7 @@ impl Sketch {
                 continue;
             }
             let mut pts: Vec<DVec2> = Vec::new();
+            let mut loop_area = 0.0;
             let (mut curve, mut from) = (first, ends[first].0);
             // Every curve is used once: the walk is bounded by their count.
             for _ in 0..open.len() {
@@ -374,6 +438,7 @@ impl Sketch {
                 let (c, _, _) = open[curve];
                 let (s, e) = ends[curve];
                 let (c, next) = if s == from { (c, e) } else { (c.reversed(), s) };
+                loop_area += c.swept_area();
                 let mut cp = c.points();
                 // The joint is written once: the next curve starts there.
                 cp.pop();
@@ -386,6 +451,7 @@ impl Sketch {
                 curve = following;
             }
             loops.push(pts);
+            swept.push(loop_area);
         }
         if loops.iter().map(Vec::len).sum::<usize>() > MAX_POINTS {
             return Err(SketchError::TooLarge);
@@ -398,7 +464,7 @@ impl Sketch {
                 return Err(SketchError::NoArea(l.first().copied().unwrap_or_default()));
             }
         }
-        Ok(loops)
+        Ok(loops.into_iter().zip(swept).collect())
     }
 
     /// The outline (the loop around all the others) and the openings in it.
@@ -565,6 +631,67 @@ mod tests {
             line((x + w, y + w), (x, y + w)),
             line((x, y + w), (x, y)),
         ]
+    }
+
+    /// Areas come from the true curves: circles, arcs run either way, ellipse parts.
+    #[test]
+    fn area_is_exact_for_curves() {
+        use std::f64::consts::PI;
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9 * b.max(1.0);
+        let circle = Sketch { curves: vec![SketchCurve::Circle { center: DVec2::new(3.0, -2.0), radius: 2.0 }] };
+        assert!(close(circle.area().unwrap(), 4.0 * PI));
+        // The points cut a little off: the chords of a polygon.
+        assert!(area(&circle.outline().unwrap()) < 4.0 * PI - 1e-3);
+
+        // A 10 x 10 square less a circle of radius 1.
+        let mut curves = square(0.0, 0.0, 10.0);
+        curves.push(SketchCurve::Circle { center: DVec2::new(5.0, 5.0), radius: 1.0 });
+        assert!(close(Sketch { curves }.area().unwrap(), 100.0 - PI));
+
+        // A stadium: two lines and two half circles (bulge 1), some reversed.
+        let half = |a: (f64, f64), b: (f64, f64)| SketchCurve::Arc {
+            a: DVec2::new(a.0, a.1),
+            b: DVec2::new(b.0, b.1),
+            bulge: 1.0,
+        };
+        let stadium = vec![
+            line((0.0, 0.0), (4.0, 0.0)),
+            half((4.0, 0.0), (4.0, 2.0)),
+            line((0.0, 2.0), (4.0, 2.0)).reversed(),
+            half((0.0, 2.0), (0.0, 0.0)).reversed().reversed(),
+        ];
+        assert!(close(Sketch { curves: stadium.clone() }.area().unwrap(), 8.0 + PI));
+        let flipped: Vec<SketchCurve> = stadium.iter().rev().map(SketchCurve::reversed).collect();
+        assert!(close(Sketch { curves: flipped }.area().unwrap(), 8.0 + PI));
+        let sketch = Sketch { curves: stadium };
+        assert!(sketch.is_curved() && !Sketch { curves: square(0.0, 0.0, 1.0) }.is_curved());
+
+        // A square with one edge bowed in by a quarter circle's segment.
+        let r = 2.0_f64.sqrt();
+        let bulge = (PI / 8.0).tan();
+        let bowed = vec![
+            line((0.0, 0.0), (2.0, 0.0)),
+            line((2.0, 0.0), (2.0, 2.0)),
+            SketchCurve::Arc { a: DVec2::new(2.0, 2.0), b: DVec2::new(0.0, 2.0), bulge: -bulge },
+            line((0.0, 2.0), (0.0, 0.0)),
+        ];
+        let segment = r * r / 2.0 * (PI / 2.0 - 1.0);
+        assert!(close(Sketch { curves: bowed }.area().unwrap(), 4.0 - segment));
+
+        // Half an ellipse (semi-axes 3 and 2, turned 30 degrees) closed by its axis.
+        let rot = DVec2::from_angle(30f64.to_radians());
+        let (p0, p1) = (rot * 3.0, rot * -3.0);
+        let half_ellipse = vec![
+            SketchCurve::Ellipse {
+                center: DVec2::ZERO,
+                radii: DVec2::new(3.0, 2.0),
+                rotation_deg: 30.0,
+                start_deg: 0.0,
+                sweep_deg: 180.0,
+            },
+            SketchCurve::Line { a: p1, b: p0 },
+        ];
+        assert!(close(Sketch { curves: half_ellipse }.area().unwrap(), 3.0 * PI));
     }
 
     #[test]

@@ -249,7 +249,14 @@ pub fn level(state: &mut AppState, id: LevelId, key: Option<u64>, f: impl FnOnce
         level: Ref::Id(id.0),
         name: (new.name != old.name).then_some(new.name),
         elevation: (new.elevation != old.elevation).then_some(new.elevation),
+        height: None,
     };
+    run(state, key, command)
+}
+
+/// Set the height from a level up to the next one; the levels above move along (`level_set`).
+pub fn level_height(state: &mut AppState, id: LevelId, key: Option<u64>, height: f64) -> bool {
+    let command = levels::LevelSet { level: Ref::Id(id.0), name: None, elevation: None, height: Some(height) };
     run(state, key, command)
 }
 

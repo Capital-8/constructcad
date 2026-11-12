@@ -13,7 +13,7 @@
 // silently ate into the next sibling's own tag, which surfaced many reads
 // later as an unrelated "back-ref to unwalked slot N" error.
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeSet;
 

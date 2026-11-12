@@ -19,7 +19,7 @@
 // with one definition of four), so these assert parsed structure and
 // cross-check it against the V6 file from the same source.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, BTreeSet};
 

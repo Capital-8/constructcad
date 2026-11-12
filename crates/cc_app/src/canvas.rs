@@ -1,7 +1,7 @@
 //! 2D view canvas: plans, ceilings, elevations, sections, legends and drafting views.
 
 use crate::icons::{self, Icon};
-use crate::paint::{PaintOptions, Xf, paint_drawing};
+use crate::paint::Xf;
 use crate::state::AppState;
 use crate::theme::{self, PALETTE};
 use cc_core::ViewId;
@@ -306,8 +306,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     let xf = st.xf(rect);
     let px_per_mm = st.ppm * view.scale as f64 / 1000.0;
 
-    let opts = PaintOptions { highlight: &state.selection, px_per_mm, mono: None, only: None };
-    paint_drawing(&painter, &drawing, &xf, &opts);
+    // The drawing's meshes are kept between frames on whole pixels: what is
+    // drawn over it uses the transform it was painted with.
+    let xf = state.paint_cache.paint(&painter, view_id, &drawing, &drawing, xf, &state.selection, px_per_mm);
 
     if let Some(p) = resp.hover_pos() {
         state.cursor = Some(xf.to_world(p));

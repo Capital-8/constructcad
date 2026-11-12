@@ -95,20 +95,52 @@ fn tool_icon(tool: &Tool) -> Icon {
 /// Labels wider than this (points) wrap onto two lines at a space.
 const WRAP_WIDTH: f32 = 64.0;
 
-/// Split `label` into one or two lines: long labels break at the space
-/// that best balances the two lines.
+/// The least width of a large ribbon button, so short labels keep the
+/// buttons of a group at an even rhythm.
+const BUTTON_MIN_WIDTH: f32 = 60.0;
+/// Room at each side of a large button's label.
+const BUTTON_PAD: f32 = 8.0;
+
+/// Width of a large button whose label lines are at most `text_w` wide,
+/// with `chevron` more for a menu's arrow.
+fn button_width(text_w: f32, chevron: f32) -> f32 {
+    (text_w + chevron + 2.0 * BUTTON_PAD).max(BUTTON_MIN_WIDTH)
+}
+
+/// Where `label` may break into two lines, as (end of the first line, start
+/// of the second): at a space, which is dropped, or after a slash or a
+/// hyphen between two words, which stays on the first line.
+fn break_points(label: &str) -> Vec<(usize, usize)> {
+    label
+        .char_indices()
+        .filter_map(|(i, c)| match c {
+            ' ' => Some((i, i, i + 1)),
+            '/' | '-' => Some((i, i + 1, i + 1)),
+            _ => None,
+        })
+        // Words on both sides, so neither line is empty or a lone separator.
+        .filter(|(at, _, start)| {
+            let word = |t: Option<&str>| t.is_some_and(|t| !t.trim().is_empty());
+            word(label.get(..*at)) && word(label.get(*start..))
+        })
+        .map(|(_, end, start)| (end, start))
+        .collect()
+}
+
+/// Split `label` into one or two lines: long labels break where the two
+/// lines are best balanced (see [`break_points`]).
 fn label_lines(ui: &Ui, label: &str, font: &egui::FontId) -> Vec<String> {
     let width = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), PALETTE.text).size().x;
-    if width(label) <= WRAP_WIDTH || !label.contains(' ') {
+    if width(label) <= WRAP_WIDTH {
         return vec![label.to_string()];
     }
-    let best = label
-        .match_indices(' ')
-        .map(|(i, _)| (i, width(&label[..i]).max(width(&label[i + 1..]))))
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(i, _)| i);
+    let best = break_points(label)
+        .into_iter()
+        .filter_map(|(end, start)| Some((label.get(..end)?.trim_end(), label.get(start..)?.trim_start())))
+        .map(|(first, second)| (first, second, width(first).max(width(second))))
+        .min_by(|a, b| a.2.total_cmp(&b.2));
     match best {
-        Some(i) => vec![label[..i].to_string(), label[i + 1..].to_string()],
+        Some((first, second, _)) => vec![first.to_string(), second.to_string()],
         None => vec![label.to_string()],
     }
 }
@@ -130,7 +162,7 @@ fn big_button(
         .collect();
     let chevron = if dropdown { 11.0 } else { 0.0 };
     let text_w = galleys.iter().map(|g| g.size().x).fold(0.0, f32::max);
-    let width = (text_w + chevron + 14.0).max(50.0);
+    let width = button_width(text_w, chevron);
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, response) = ui.allocate_exact_size(vec2(width, BUTTON_HEIGHT), sense);
     if ui.is_rect_visible(rect) {
@@ -616,11 +648,11 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
 /// Files brought into the project or written from it, and components to load.
 fn insert_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::{
-        ComponentLibrary, ExportDxf, ExportIfc, ImportCad, ImportIfc, ImportImage, ImportSkp, LoadComponent,
+        ComponentLibrary, ExportDxf, ExportIfc, ImportCad, ImportGltf, ImportIfc, ImportImage, ImportObj, ImportSkp,
+        LoadComponent,
     };
     group(ui, t!("group-import"), |ui| {
-        command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportImage]);
-        ui.checkbox(&mut state.cad_blocks, t!("label-cad-blocks")).on_hover_text(t!("hint-cad-blocks"));
+        command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportObj, ImportGltf, ImportImage]);
     });
     group(ui, t!("group-export"), |ui| command_buttons(ui, state, &[ExportIfc, ExportDxf]));
     group(ui, t!("group-library"), |ui| command_buttons(ui, state, &[LoadComponent, ComponentLibrary]));
@@ -831,7 +863,7 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         });
     });
     group(ui, t!("group-documentation"), |ui| {
-        command_buttons(ui, state, &[UiCommand::Legend, UiCommand::DraftingView]);
+        command_buttons(ui, state, &[UiCommand::Legend, UiCommand::DraftingView, UiCommand::BrowserOrganization]);
         let r = command_menu(ui, state, UiCommand::Schedule);
         egui::Popup::menu(&r).show(|ui| {
             for c in Category::SCHEDULABLE {
@@ -1067,7 +1099,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             });
         ui.separator();
         if let (Some(category), Some(type_id)) = (state.tool.category(), state.tool.type_id()) {
-            let types: Vec<_> = state.project().types_of(category).map(|t| (t.id, t.name.clone())).collect();
+            let types = crate::tools::tool_types(state.project(), category, type_id);
             let mut selected = type_id;
             // Walls: a project without a curtain type gets one from the list.
             let offer_curtain = category == Category::Wall && !crate::curtain_ui::has_curtain_type(state);
@@ -1477,6 +1509,39 @@ mod tests {
         }
         // A single long word cannot wrap.
         assert_eq!(lines[4], vec!["Supercalifragilístico"]);
+    }
+
+    #[test]
+    fn labels_also_wrap_after_a_slash_or_a_hyphen() {
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        let mut lines = Vec::new();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let font = egui::FontId::proportional(12.0);
+            lines = ["Visibilidade/gráficos", "Contra-flecha estrutural", "Importar IFC…"]
+                .map(|l| label_lines(ui, l, &font))
+                .to_vec();
+        });
+        out.textures_delta.clear();
+        // The slash stays at the end of the first line.
+        assert_eq!(lines[0], vec!["Visibilidade/", "gráficos"]);
+        assert_eq!(lines[1].len(), 2);
+        assert_eq!(lines[2], vec!["Importar", "IFC…"]);
+        // Never an empty line: no break before the first or after the last character.
+        assert!(break_points("/a").is_empty());
+        assert!(break_points("a-").is_empty());
+        assert!(break_points(" a ").is_empty());
+        assert_eq!(break_points("a/b c"), vec![(2, 2), (3, 4)]);
+    }
+
+    #[test]
+    fn large_buttons_keep_a_least_width_and_even_padding() {
+        // Short labels share one width, so their icons stand evenly apart.
+        assert_eq!(button_width(20.0, 0.0), BUTTON_MIN_WIDTH);
+        assert_eq!(button_width(40.0, 0.0), BUTTON_MIN_WIDTH);
+        // Longer ones get the same room at each side.
+        assert_eq!(button_width(70.0, 0.0), 70.0 + 2.0 * BUTTON_PAD);
+        assert_eq!(button_width(70.0, 11.0), 81.0 + 2.0 * BUTTON_PAD);
     }
 
     #[test]

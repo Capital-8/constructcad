@@ -67,6 +67,8 @@ ccad -p house.ccad run phases_list
 
 Each plan, elevation, section, 3D view and schedule shows the model in its `phase` with a `phase_filter` (`view_set`; view templates control the filter, not the phase). Relative to the view's phase an element is *existing* (built earlier, standing), *demolished* (in this phase), *new* (built in this phase) or *temporary* (built and demolished in it); elements built later or demolished earlier are not shown. Phase filters (`phase_filters_list`, `phase_filter_create`, `phase_filter_set`, `phase_filter_delete`; the template has *Show All*, *Show Complete*, *Show New*, *Show Previous + Demo*, *Show Previous + New*, *Show Previous Phase* and *Show Demo + New*) map each status to `not_displayed`, `by_category` or `overridden`, which uses the project's graphics of the status (`phase_graphics_get`, `phase_graphics_set`: existing faint, demolished dashed without cut pattern, temporary faint and dashed), below element overrides and view filters and above the category. A view whose phase leaves elements out gets geometry of its own: doors of later phases do not open existing walls and walls join only with walls of the phase. A room is bounded by the walls standing at the end of the phase it is created in, so walls demolished in that phase or earlier do not bound it. Schedules list what their phase and filter show and offer the fields `PhaseCreated` and `PhaseDemolished` (also usable in filter rules as `phase_created`, `phase_demolished`).
 
+**Project browser organization.** The project browser groups the views by type alone unless a scheme is in use. `browser_scheme_create` makes a named scheme (`group_by`: the criteria from the outermost group in, among `view_type`, `level`, `discipline` and `phase`; default `["view_type", "level"]`) and puts it in use unless `use_it` is false; `browser_scheme_set` renames it or changes its criteria, `browser_scheme_delete` removes it, and `browser_scheme_use` picks the scheme the browser follows (no `scheme`: the default). `browser_schemes_list` lists them, and `browser_tree` returns the tree the browser shows — group rows with `group`, `name`, `value`, `views` and `children`, view rows with `view` and `name` — for the scheme in use, another `scheme`, or any `group_by`. A view without a value for a criterion (a section has no level) stays beside that criterion's groups.
+
 **Design options.** Alternatives for part of the model live in option sets (`options_list`): `option_set_create` makes a set with named `options` (the first is primary), `option_create`, `option_set` (rename, `primary: true`, move with `index`), `option_delete` (not the primary; it deletes the option's elements), `option_set_rename` and `option_set_delete` (with every element of its options) manage them. An element belongs to the main model or to one option (`element_get` `design_option`); `elements_option_set` moves elements into an option or back with `null` (doors, windows and other hosted elements follow their host; annotations have no option). Each plan, elevation, section, 3D view and schedule shows the main model plus one option per set: `view_options_set` chooses one, or `null` for automatic (`view_get` `design_options` shows the choice and what is shown); view templates can control it (`template_set` `design_options`, `include.design_options`). Automatic means the option being edited when it is in that set (`option_active_set`, session state, not saved: new model elements go into it), else the primary. Elements of options a view does not show are left out of its drawing, schedule and geometry: walls join and rooms are bounded only among what is shown together. `option_accept_primary` moves the primary option's elements into the main model and deletes the set with its other options and their elements. IFC export writes the main model and the primary options only, each option element with `ConstructCAD_DesignOption` (`OptionSet`, `Option`, `Primary`), which import reads back as sets and options.
 
 ```sh
@@ -137,7 +139,8 @@ ccad [options] commands             list the commands
 ccad [options] schema <command>     the JSON Schema of a command's parameters
 ccad reference                      the command reference in Markdown
 ccad [options] run <command> [args] run one command
-ccad [options] script <file|->      run a script of commands
+ccad [options] script <file|-> [level=<id|name>]
+                                    run a script of commands
 ccad [options] lua <file|-> [args]  run a Lua script
 ccad [options] plugins              list the plugins loaded with --plugins
 ccad plugins install <zip> <folder> install a plugin archive into a plugins folder
@@ -279,7 +282,18 @@ A title block is a component whose 2D pieces draw the whole sheet, in millimeter
 {"command": "sheet_fields", "args": {"sheet": "Plans"}}
 ```
 
-Scripts have no variables: a step cannot use an id created by an earlier one. Commands help by accepting positions where it matters (`door_create` and `window_create` find the wall nearest `point`; floors, ceilings and roofs follow the walls with `from_walls`). For logic between steps, write a [Lua script](#lua-scripts), call `ccad run` from a shell script or use an agent over MCP.
+**References between steps.** Scripts have no variables, but an argument can take a value from the result of an earlier step: `{"$step": n}` is the `id` that step `n` (counted from 1) returned, and `{"$step": n, "path": "/created/0"}` any value of its result, named by a [JSON pointer](https://www.rfc-editor.org/rfc/rfc6901). `{"$level": "active"}` is the active level: in the app, the level of the active plan; with `ccad script`, the level given as `level=<id|name>`; without either, the lowest level. A reference to a step that has not run yet, or to a value its result does not have, stops the script with an `invalid_arguments` error.
+
+```text
+{"command": "wall_create", "args": {"level": {"$level": "active"}, "start": [0, 0], "end": [6, 0]}}
+{"command": "window_create", "args": {"wall": {"$step": 1}, "offset": 2, "sill": 1}}
+```
+
+```sh
+ccad -p house.ccad --save script walls.ccmacro level="Level 1"
+```
+
+Commands also help by accepting positions where it matters (`door_create` and `window_create` find the wall nearest `point`; floors, ceilings and roofs follow the walls with `from_walls`). For logic between steps, write a [Lua script](#lua-scripts), call `ccad run` from a shell script or use an agent over MCP.
 
 ## Lua scripts
 
@@ -319,7 +333,7 @@ The `ccad` table:
 
 Arguments and results are JSON: objects are tables with string keys, arrays are sequences (`{ 0, 0 }` is a point), `end` is a Lua keyword and is written `["end"]`. A whole number computed with `/` (which always gives a float in Lua) is sent as an integer, so `10 / 2` works where an id or count is expected.
 
-**The sandbox.** Scripts run in a restricted Lua: the `table`, `string`, `math`, `utf8` and `coroutine` libraries and the base functions, without `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` or `loadfile`. A script reaches the project only through commands, and files only through the commands that read or write them. A run has a budget of 500 million Lua instructions and 256 MB of memory; past them it stops with a `script` error (catching that error with `pcall` does not keep the script going). Each command a script runs is its own undo step.
+**The sandbox.** Scripts run in a restricted Lua: the `table`, `string`, `math`, `utf8` and `coroutine` libraries and the base functions, without `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` or `loadfile`. A script reaches the project only through commands, and files only through the commands that read or write them. A run has a budget of 500 million Lua instructions, 60 seconds and 256 MB of memory (string functions count by the size of their text, pattern matching by its steps, and `string.rep` and `string.gsub` make at most 16 MB); past them it stops with a `script` error (catching that error with `pcall` does not keep the script going). Each command a script runs is its own undo step.
 
 ## Visual programming graphs
 
@@ -351,8 +365,11 @@ their names. `graph_nodes` lists every node with its ports and types.
 - **Errors are per node.** A failing node shows its message, the nodes after
   it are skipped, the others run, and its elements stay as they were.
 - A graph never runs `project_new`, `project_open`, `undo`, `redo`,
-  `language_set` or graphs, and runs file commands only when its
-  `allow_files` is set (and never when a plugin runs it).
+  `language_set` or graphs, and runs file commands only when whoever runs it allows them: `graph_run`'s
+  `allow_files`, `ccad --allow-files graph`, or the editor's *Allow file
+  commands* checkbox, which lasts until another graph is opened. A graph
+  file cannot allow them itself (an `allow_files` field in it is ignored),
+  and a graph a plugin runs never may.
 
 ```sh
 ccad --save-as house.ccad graph examples/graphs/house.ccgraph width=12 depth=8
@@ -393,7 +410,7 @@ ccad --plugins examples/plugins run quick_rooms__rectangle_room width=4 depth=3 
 claude mcp add constructcad -- ccad mcp --plugins /path/to/plugins
 ```
 
-`--plugins` takes a plugin's folder or a folder of plugin folders, and can be repeated. A plugin that fails to load is reported on standard error and left out; what plugins print also goes to standard error.
+`--plugins` takes a plugin's folder or a folder of plugin folders, and can be repeated. In a folder of plugins, each plugin's folder is named after its id (as installs name them); hidden folders (starting with `.`) are skipped. A plugin that fails to load is reported on standard error and left out; what plugins print also goes to standard error.
 
 ### Writing a plugin
 
@@ -436,7 +453,7 @@ ccad.command {
 
 - `run` gets the arguments as a table and returns the command's result (a table, a value or nothing). Missing `required` arguments are refused before it runs; `error("message", 0)` fails the command with that message.
 - **One undo step:** however many commands a plugin command runs, it is undone at once, and when it fails (an error, a failed `ccad.run`, a limit reached) everything it did is undone.
-- **What a command may run:** a `query` command only queries; an `edit` command queries and edits; commands that read or write files (import, export, save) need the `files` permission, and a command of kind `file` can only be declared with it. Opening or creating a project, `undo`, `redo` and `language_set` cannot run inside a plugin command, nor can another plugin's command.
+- **What a command may run:** a `query` command only queries; an `edit` command queries and edits; commands that read or write files (import, export, save) need the `files` permission (without it, edit commands that read a file a parameter names, such as `cad_import` or `fill_pattern_import` with a `path`, refuse the path; their inline forms, such as `fill_pattern_import` with `text`, still work), and a command of kind `file` can only be declared with it. Opening or creating a project, `undo`, `redo` and `language_set` cannot run inside a plugin command, nor can another plugin's command.
 - **The sandbox** is that of [Lua scripts](#lua-scripts), with the budget counted per command; each plugin has its own Lua state, which keeps its variables between commands. `require("a.b")` loads `a/b.lua` from the plugin's folder (once; files outside the folder are refused), and `ccad.plugin` holds its `id`, `name` and `version`. `ccad.run` works only while a command runs, not while the plugin loads.
 - **Permissions** are granted by whoever loads the plugin: `ccad --plugins` grants what the manifest asks for, since you named the folder.
 
@@ -486,7 +503,7 @@ Declarations go at the script's top level, never inside `geometry`. Ids are name
 | `blend` | `bottom, top, offset, depth`, `plane` |
 | `mesh` | `vertices` (`{x, y, z}`), `faces` (lists of vertex numbers from 1, counter-clockwise seen from outside) |
 
-Scripts run in the [sandbox](#lua-scripts) with smaller limits (20 million instructions, 64 MB, 10,000 pieces, a million points), and `math.random` repeats the same numbers. When a script fails, the element keeps the last pieces that worked and the error, with its line, shows in `element_get` (`derived.script_errors`), in the properties palette and in `component_params_get`; fixing the script or the value brings it back.
+Scripts run in the [sandbox](#lua-scripts) with smaller limits (20 million instructions, 5 seconds, 64 MB, 10,000 pieces, a million points), and `math.random` repeats the same numbers. When a script fails, the element keeps the last pieces that worked and the error, with its line, shows in `element_get` (`derived.script_errors`), in the properties palette and in `component_params_get`; fixing the script or the value brings it back.
 
 Commands:
 
@@ -512,7 +529,8 @@ A material a parameter names counts as used: it cannot be deleted, and renaming 
 
 - Only edits are recorded: opening, saving and exporting are left out, so replaying never overwrites files.
 - A value dragged in the properties is recorded once, with its final value; changes made in a dialog that you cancel are not recorded.
-- Recorded steps refer to elements by id. Played on the project it was recorded on (or on a copy of it as it was when recording started) a macro reproduces the same changes; on another project, steps that name elements by id may fail or reach other elements.
+- Elements, types, views and levels created while recording are written as [references](#scripts) to the step that created them (`{"$step": n}`), so the macro uses what it creates each time it runs. The level of the plan you record in is written as `{"$level": "active"}`: the macro plays on the level of the plan active when you run it (other levels stay as recorded).
+- Other steps refer to elements by id. Played on the project it was recorded on (or on a copy of it as it was when recording started) a macro reproduces the same changes; on another project, steps that name existing elements by id may fail or reach other elements.
 
 ## Command palette in the app
 
@@ -541,6 +559,18 @@ claude mcp add constructcad -- ccad mcp -p /path/to/house.ccad
   }
 }
 ```
+
+On Windows, `ccad.exe` is installed next to the app, by default in `C:\Program Files\ConstructCraft` (JSON doubles the backslashes):
+
+```json
+{
+  "mcpServers": {
+    "constructcad": { "command": "C:\\Program Files\\ConstructCraft\\ccad.exe", "args": ["mcp"] }
+  }
+}
+```
+
+The installer's *Add ccad to the PATH* option (on by default) lets clients find plain `ccad`, but only clients started after the installation see the new PATH; the full path always works. Pointed at the app itself (`constructcraft mcp` or `constructcraft --mcp`), the client gets the same server: the app runs the `ccad` next to it on the same standard input and output.
 
 Requests an agent can handle with these tools, for example: *"open house.ccad, list the doors without a mark and number them"*, *"import model.ifc and tell me the volume of the concrete walls"*, *"add a second floor 3 m above the ground floor with the same exterior walls"*, *"export sheet A101 as PDF"*.
 

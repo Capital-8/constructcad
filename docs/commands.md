@@ -6,12 +6,12 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 
 ## Contents
 
-- **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`site_get`](#site_get), [`site_set`](#site_set), [`site_context_import`](#site_context_import), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set), [`cad_explode`](#cad_explode)
+- **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`site_get`](#site_get), [`site_set`](#site_set), [`site_context_import`](#site_context_import), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`obj_import`](#obj_import), [`gltf_import`](#gltf_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set), [`cad_explode`](#cad_explode)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
 - **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`door_type_create`](#door_type_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`device_type_create`](#device_type_create), [`lps_conductor_create`](#lps_conductor_create), [`lps_conductor_type_create`](#lps_conductor_type_create), [`earth_ring_create`](#earth_ring_create), [`air_terminal_place`](#air_terminal_place), [`earth_electrode_place`](#earth_electrode_place), [`lps_check`](#lps_check), [`rack_place`](#rack_place), [`data_outlet_place`](#data_outlet_place), [`cabling_list`](#cabling_list), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
-- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
+- **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`browser_schemes_list`](#browser_schemes_list), [`browser_scheme_create`](#browser_scheme_create), [`browser_scheme_set`](#browser_scheme_set), [`browser_scheme_delete`](#browser_scheme_delete), [`browser_scheme_use`](#browser_scheme_use), [`browser_tree`](#browser_tree), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`fill_patterns_list`](#fill_patterns_list), [`fill_pattern_get`](#fill_pattern_get), [`fill_pattern_create`](#fill_pattern_create), [`fill_pattern_set`](#fill_pattern_set), [`fill_pattern_duplicate`](#fill_pattern_duplicate), [`fill_pattern_delete`](#fill_pattern_delete), [`fill_pattern_import`](#fill_pattern_import), [`fill_pattern_export`](#fill_pattern_export), [`profiles_list`](#profiles_list), [`profile_get`](#profile_get), [`profile_create`](#profile_create), [`profile_set`](#profile_set), [`profile_duplicate`](#profile_duplicate), [`profile_delete`](#profile_delete), [`profile_catalog`](#profile_catalog), [`profile_import`](#profile_import), [`profile_type_create`](#profile_type_create), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
@@ -143,7 +143,7 @@ No parameters.
 
 ### `skp_import`
 
-*edit* — Import a SketchUp model (.skp) into the project. Each placed component or group becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces (one per material): placements that differ only by a move or a plan rotation share a type, anything else in their transform (tilt, scale, mirror) is built into the type. Faces outside any component make one more element at the file's origin. Missing materials are added by name and color; hidden objects and those on hidden layers are left out.
+*edit* — Import a SketchUp model (.skp) into the project. Each placed component or group becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces (one per material): placements that differ only by a move or a plan rotation share a type, anything else in their transform (tilt, scale, mirror) is built into the type. Faces outside any component make one more element at the file's origin. Missing materials are added by name, color, opacity and texture; hidden objects and those on hidden layers are left out.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -159,6 +159,32 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `path` | string | required | Path of the .skp file. |
+
+### `obj_import`
+
+*edit* — Import a Wavefront OBJ model (.obj) into the project. Each object (or, in a file without objects, each group) becomes a component element on `level`, of a component type holding its faces as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent. Materials come from the `.mtl` libraries next to the file: color (`Kd`), opacity (`d`, `Tr`) and texture (`map_Kd`, the picture next to the file, repeating as the faces' `vt` coordinates say); missing materials are added by name. Faces not flat are split into triangles; lines, points and normals are ignored.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `path` | string | required | Path of the .obj file. |
+| `level` | id or name | optional | Level id or name (default: the lowest level); the file's zero height is at its elevation. |
+| `merge` | boolean | optional | Make the whole file one component element, inserted at the file's origin. |
+| `position` | [x, y] | optional | Where the file's origin goes, in plan (default [0, 0]). |
+| `rotation` | number | optional | Rotation of the whole model in plan, degrees counter-clockwise (default 0). |
+| `units` | string | optional | Units of the file's coordinates: "m" (default), "cm", "mm", "in" or "ft". |
+| `z_up` | boolean | optional | The file's Z axis points up; by default Y does (the usual OBJ convention). |
+
+### `gltf_import`
+
+*edit* — Import a glTF 2.0 model (.glb, or .gltf with its buffers embedded or in files next to it) into the project. Each node of the scene's root, with everything below it, becomes a component element on `level`, of a component type holding its triangles as fixed mesh pieces, one per material, inserted at the center of its footprint and the bottom of its extent. glTF is in meters with Y up. Materials take their base color times its texture's average, the texture itself (repeating as the texture coordinates say) and, when blended, their opacity; missing materials are added by name. Lines and points are ignored, and compressed meshes (Draco, meshopt) are refused.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `path` | string | required | Path of the .glb or .gltf file. |
+| `level` | id or name | optional | Level id or name (default: the lowest level); the file's zero height is at its elevation. |
+| `merge` | boolean | optional | Make the whole scene one component element, inserted at the file's origin. |
+| `position` | [x, y] | optional | Where the file's origin goes, in plan (default [0, 0]). |
+| `rotation` | number | optional | Rotation of the whole model in plan, degrees counter-clockwise (default 0). |
 
 ### `ifc_export`
 
@@ -435,7 +461,7 @@ No parameters.
 | `element` | integer | required | The curtain wall's id. |
 | `add` | [number, …] | optional | Positions of new lines. |
 | `lines` | [number, …] | optional | All the interior lines, replacing the current ones. |
-| `move` | [[JSON, …], …] | optional | Lines to move, as `[index, new position]`. |
+| `move` | [[integer or number, …], …] | optional | Lines to move, as `[index, new position]`. |
 | `remove` | [id, …] | optional | Indices of lines to remove. |
 | `remove_segments` | [[id, …], …] | optional | Segments to remove, as `[line, segment]`. |
 | `reset` | boolean | optional | Go back to the type's lines (and drop removed segments of this axis). |
@@ -1818,6 +1844,57 @@ No parameters.
 | `rotation` | number | optional | Degrees counter-clockwise (default 0). |
 | `scale` | number | optional | Size factor (default 1). |
 
+### `browser_schemes_list`
+
+*query* — The project browser's organization schemes: each with its name and the criteria it groups the views by, outermost first, and whether it is in use. `in_use` is null while the browser lists the views by type alone (the default), and `criteria` are the names `group_by` takes.
+
+No parameters.
+
+### `browser_scheme_create`
+
+*edit* — Create a project browser organization scheme: a named way to group the browser's views. `group_by` lists the criteria from the outermost group in (`view_type`, `level`, `discipline`, `phase`); a view without a value for one (a section has no level) stays beside that criterion's groups. The new scheme is put in use unless `use_it` is false.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name (unique among the schemes). |
+| `group_by` | [string, …] | optional | Criteria, outermost first: `view_type`, `level`, `discipline`, `phase` (default: `["view_type", "level"]`). |
+| `use_it` | boolean | optional | Make the browser follow the new scheme (default true). |
+
+### `browser_scheme_set`
+
+*edit* — Change a project browser organization scheme: its name or the criteria it groups the views by. The browser follows at once when it is in use.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `scheme` | id or name | required | Scheme id or name. |
+| `group_by` | [string, …] | optional | New criteria, outermost first: `view_type`, `level`, `discipline`, `phase`. |
+| `name` | string | optional | New name. |
+
+### `browser_scheme_delete`
+
+*edit* — Delete a project browser organization scheme. When it was in use the browser goes back to listing the views by type.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `scheme` | id or name | required | Scheme id or name. |
+
+### `browser_scheme_use`
+
+*edit* — Choose the scheme the project browser follows. Without `scheme` (or with null) the browser lists the views by type alone, the default.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `scheme` | id or name | optional | Scheme id or name; omitted or null for the default list by view type. |
+
+### `browser_tree`
+
+*query* — The project browser's tree: the views grouped as the scheme in use (or `scheme`, or the criteria in `group_by`) says. A group row has `group` (its criterion), `name`, `value` (the view type, level id, discipline or phase id), how many `views` it holds and its `children`; a view row has `view` (its id) and `name`. Plans come in the order of their levels.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `group_by` | [string, …] | optional | Criteria to group by instead of a scheme's, outermost first: `view_type`, `level`, `discipline`, `phase`. |
+| `scheme` | id or name | optional | Scheme id or name (default: the scheme in use). |
+
 ### `line_styles_list`
 
 *query* — The line styles detail lines and region boundaries can use: the built-in ones (by code) and the project's (by name), each with its weight on paper (mm), color, dash pattern and how many elements use it.
@@ -2532,22 +2609,26 @@ No parameters.
 
 ### `level_create`
 
-*edit* — Add a level (default: 3 m above the highest, named "Level n") with its floor and ceiling plans.
+*edit* — Add a level (default: 3 m above the highest, named "Level n") with its floor and ceiling plans. With `above` or `below` it is a new storey next to that level: the levels beyond it move away by the new storey's height, so the other storeys keep theirs and the order of the levels stays.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `elevation` | number | optional | Elevation in meters. |
+| `above` | id or name | optional | Add the level above this one; the levels above it move up by `height`. |
+| `below` | id or name | optional | Add the level below this one; the levels below it move down by `height`. |
+| `elevation` | number | optional | Elevation in meters (not with `above` or `below`). |
+| `height` | number | optional | With `above` or `below`: the distance to that level, meters (default: the height of the storey next to it on that side, else 3 m). |
 | `name` | string | optional | Level name (default: "Level n"). |
 | `plans` | boolean | optional | Also create its floor and ceiling plans (default true). |
 
 ### `level_set`
 
-*edit* — Rename a level or change its elevation (what is attached to it moves along).
+*edit* — Rename a level, change its elevation or the height up to the next level (what is attached to a moved level moves along). A new `height` moves every level above it by the difference, so the levels keep their order and the other storeys their heights. Renaming it leaves its plans' names as they are: a level and its views are named apart.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `level` | id or name | required | A level, type, view or material: its numeric id or its name. |
-| `elevation` | number | optional | New elevation, meters. |
+| `elevation` | number | optional | New elevation, meters (not with `height`). |
+| `height` | number | optional | New height from this level up to the next one, meters; the levels above move along. Refused for the highest level. |
 | `name` | string | optional | New name. |
 
 ### `level_delete`
@@ -2584,7 +2665,7 @@ No parameters.
 | `view` | id or name | required | A level, type, view or material: its numeric id or its name. |
 | `crop` | [[x, y], [x, y]] | optional | Crop rectangle: two opposite corners in the view's drawing coordinates (plans, sections and elevations draw nothing of the model outside it), or `null` to show everything. For a detail view this is its callout in the parent; for a drafting view a callout points to, it moves that callout. |
 | `detail` | string | optional | Detail level: `coarse` (layered elements cut as one plain region; component pieces set for it), `medium` or `fine`. |
-| `name` | string | optional | New name. |
+| `name` | string | optional | New name. A plan's name is its own: its level and the level's other plans keep theirs. |
 | `params` | JSON | optional | Fields of the view's parameters to change, shaped like `params` in `view_get`. |
 | `phase` | id or name | optional | Phase the view shows (id or name; plans, elevations, sections, 3D views, schedules). |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none (every status by category). |
@@ -3168,6 +3249,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `allow_files` | boolean | optional | Let the graph's commands read and write files (open, save, import, export). Off by default; a graph file cannot turn it on, and it stays off when another command (a plugin's) runs the graph. |
 | `brief` | boolean | optional | Leave each node's outputs out of the result (only errors, outputs and counts). |
 | `graph` | JSON | optional | The graph itself (the contents of a `.ccgraph` file), instead of `path`. |
 | `inputs` | object | optional | Values of the graph's input nodes, by their names. |
@@ -3179,6 +3261,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `allow_files` | boolean | optional | Check it as `graph_run` with `allow_files` would run it (file commands are then no problem). |
 | `graph` | JSON | optional | The graph itself, instead of `path`. |
 | `path` | string | optional | Path of the `.ccgraph` file. |
 

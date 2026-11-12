@@ -10,6 +10,7 @@
 
 pub mod convert;
 pub mod object;
+mod patterns;
 pub mod sandbox;
 
 pub use object::{Declarations, ScriptCache, ScriptError, declare, evaluate, shared};

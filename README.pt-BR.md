@@ -174,7 +174,7 @@ Para usar num cliente MCP (Claude Desktop, Claude Code, IDEs), registre `ccad mc
 { "mcpServers": { "constructcad": { "command": "ccad", "args": ["mcp"] } } }
 ```
 
-ou, no Claude Code, `claude mcp add constructcad -- ccad mcp`. Cada sessão do servidor tem um projeto aberto (`project_open`, `project_new`, `ifc_import`, `project_save`).
+ou, no Claude Code, `claude mcp add constructcad -- ccad mcp`. No Windows, se o `ccad` não estiver no PATH do cliente, use o caminho completo, por padrão `C:\Program Files\ConstructCraft\ccad.exe` (veja [Servidor MCP](docs/automacao.md#servidor-mcp)). Cada sessão do servidor tem um projeto aberto (`project_open`, `project_new`, `ifc_import`, `project_save`).
 
 O aplicativo roda sobre os mesmos comandos: ferramentas de desenho, painel de propriedades e diálogos alteram o modelo pelo motor. *Gerenciar → Macros* grava o que você faz como uma macro (um script de comandos, salvo como `.ccmacro`) e executa macros; `ccad script` roda os mesmos arquivos.
 
@@ -199,10 +199,10 @@ Toda alteração passa por `Document::edit`, que registra uma `Transaction` reve
 ## Desenvolvimento
 
 ```sh
-cargo test --workspace
+cargo nextest run --workspace   # install once: cargo install cargo-nextest --locked
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-CC_UI_SNAPSHOTS=1 cargo test -p cc_app snapshots    # capturas da interface (veja docs/interface.pt-BR.md)
+CC_UI_SNAPSHOTS=1 cargo nextest run -p cc_app snapshots    # capturas da interface (veja docs/interface.pt-BR.md)
 ```
 
 Os arquivos IFC exportados são validados na CI com o [IfcOpenShell](https://ifcopenshell.org/), uma referência independente e de código aberto usada apenas nos testes:

@@ -575,6 +575,14 @@ impl CadImport {
     /// within `r`: endpoints and vertices, midpoints, arc centers, and
     /// segments, all in view coordinates.
     pub fn snap_features(&self, q: DVec2, r: f64) -> CadSnap {
+        self.snap_features_in(&CadSnapIndex::new(&self.drawing), q, r)
+    }
+
+    /// [`CadImport::snap_features`] with the drawing's primitives found
+    /// through `index`, built from this element's drawing (callers keep it
+    /// while the drawing is the same, so a pointer move visits only the
+    /// primitives near it). Long polylines give only their segments near `q`.
+    pub fn snap_features_in(&self, index: &CadSnapIndex, q: DVec2, r: f64) -> CadSnap {
         let mut out = CadSnap::default();
         let f = self.factor();
         if !(f.is_finite() && f > 0.0 && r.is_finite() && r > 0.0) {
@@ -582,14 +590,13 @@ impl CadImport {
         }
         let local = self.to_drawing(q);
         let lr = r / f;
-        let near = |b: Option<(DVec2, DVec2)>| {
-            b.is_some_and(|(lo, hi)| {
-                local.x >= lo.x - lr && local.y >= lo.y - lr && local.x <= hi.x + lr && local.y <= hi.y + lr
-            })
+        let near_box = |lo: DVec2, hi: DVec2| {
+            local.x >= lo.x - lr && local.y >= lo.y - lr && local.x <= hi.x + lr && local.y <= hi.y + lr
         };
         let to = |p: DVec2| self.to_view(p);
-        for prim in &self.drawing.prims {
-            if !self.layer_visible(prim.layer()) || !near(prim.bounds()) {
+        for i in index.near(local, lr) {
+            let Some(prim) = self.drawing.prims.get(i) else { continue };
+            if !self.layer_visible(prim.layer()) {
                 continue;
             }
             match prim {
@@ -599,7 +606,16 @@ impl CadImport {
                     for i in 0..segs {
                         let (Some(a), Some(b)) = (pts.get(i), pts.get((i + 1) % n)) else { continue };
                         let bulge = bulges.get(i).copied().unwrap_or(0.0);
-                        match crate::arc::Arc::from_bulge(*a, *b, bulge) {
+                        let arc = crate::arc::Arc::from_bulge(*a, *b, bulge);
+                        // The segment's box (a bulged one's whole circle, which holds its center).
+                        let (lo, hi) = match &arc {
+                            Some(arc) => (arc.center - DVec2::splat(arc.radius), arc.center + DVec2::splat(arc.radius)),
+                            None => (a.min(*b), a.max(*b)),
+                        };
+                        if !near_box(lo, hi) {
+                            continue;
+                        }
+                        match arc {
                             Some(arc) => {
                                 out.ends.extend([to(*a), to(*b)]);
                                 out.mids.push(to(arc.point(arc.length() * 0.5)));
@@ -653,6 +669,107 @@ impl CadImport {
             start_angle: start + rot,
             sweep,
         }
+    }
+}
+
+/// Where a drawing's primitives lie, to find those near a point without
+/// visiting them all: snapping asks on every pointer move, and imported
+/// drawings hold up to a million primitives. A uniform grid over the
+/// drawing's extents; primitives spanning many cells are kept apart and
+/// checked on every query.
+#[derive(Debug, Clone, Default)]
+pub struct CadSnapIndex {
+    origin: DVec2,
+    cell: f64,
+    cols: usize,
+    rows: usize,
+    /// Indices of the primitives in each cell, row by row.
+    cells: Vec<Vec<usize>>,
+    /// Primitives spanning more than [`MAX_SPAN_CELLS`] cells.
+    wide: Vec<usize>,
+    /// Each primitive's bounds ([`CadPrim::bounds`]).
+    bounds: Vec<Option<(DVec2, DVec2)>>,
+}
+
+/// Cells along the longer side of a [`CadSnapIndex`].
+const INDEX_SIDE: usize = 256;
+/// Cells a primitive may cover before it is checked on every query instead.
+const MAX_SPAN_CELLS: usize = 64;
+
+impl CadSnapIndex {
+    pub fn new(drawing: &CadDrawing) -> Self {
+        let bounds: Vec<Option<(DVec2, DVec2)>> =
+            drawing.prims.iter().map(|p| p.bounds().filter(|(lo, hi)| lo.is_finite() && hi.is_finite())).collect();
+        let Some((lo, hi)) = bounds.iter().flatten().copied().reduce(|a, b| (a.0.min(b.0), a.1.max(b.1))) else {
+            return CadSnapIndex { bounds, ..CadSnapIndex::default() };
+        };
+        let size = hi - lo;
+        let cell = (size.max_element() / INDEX_SIDE as f64).max(1e-9);
+        let count = |v: f64| ((v / cell).floor() as usize).saturating_add(1).min(INDEX_SIDE);
+        let (cols, rows) = (count(size.x), count(size.y));
+        let mut index = CadSnapIndex {
+            origin: lo,
+            cell,
+            cols,
+            rows,
+            cells: vec![Vec::new(); cols * rows],
+            wide: Vec::new(),
+            bounds: Vec::new(),
+        };
+        for (i, b) in bounds.iter().enumerate() {
+            let Some((a, b)) = b else { continue };
+            let (x0, y0, x1, y1) = index.span(*a, *b);
+            if (x1 - x0 + 1) * (y1 - y0 + 1) > MAX_SPAN_CELLS {
+                index.wide.push(i);
+                continue;
+            }
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if let Some(c) = index.cells.get_mut(y * cols + x) {
+                        c.push(i);
+                    }
+                }
+            }
+        }
+        index.bounds = bounds;
+        index
+    }
+
+    /// The cells (first and last column and row) a box covers, clamped to the grid.
+    fn span(&self, lo: DVec2, hi: DVec2) -> (usize, usize, usize, usize) {
+        let at = |v: f64, o: f64, n: usize| (((v - o) / self.cell).floor().max(0.0) as usize).min(n.saturating_sub(1));
+        (
+            at(lo.x, self.origin.x, self.cols),
+            at(lo.y, self.origin.y, self.rows),
+            at(hi.x, self.origin.x, self.cols),
+            at(hi.y, self.origin.y, self.rows),
+        )
+    }
+
+    /// Indices, in ascending order, of the primitives whose bounds come
+    /// within `r` of `p` (drawing units).
+    pub fn near(&self, p: DVec2, r: f64) -> Vec<usize> {
+        let hit = |i: &usize| {
+            self.bounds
+                .get(*i)
+                .copied()
+                .flatten()
+                .is_some_and(|(lo, hi)| p.x >= lo.x - r && p.y >= lo.y - r && p.x <= hi.x + r && p.y <= hi.y + r)
+        };
+        let mut out: Vec<usize> = self.wide.iter().copied().filter(hit).collect();
+        if !self.cells.is_empty() && p.is_finite() && r.is_finite() {
+            let (x0, y0, x1, y1) = self.span(p - DVec2::splat(r), p + DVec2::splat(r));
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if let Some(c) = self.cells.get(y * self.cols + x) {
+                        out.extend(c.iter().copied().filter(hit));
+                    }
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
     }
 }
 
@@ -862,5 +979,57 @@ mod tests {
         assert!(s.centers.iter().any(|p| (*p - DVec2::new(8.0, 0.0)).length() < 1e-12), "{s:?}");
         c.hidden_layers.insert("0".into());
         assert!(c.snap_features(DVec2::new(8.0, 0.0), 0.6).centers.is_empty());
+    }
+
+    /// The index finds the same primitives as checking every one's bounds.
+    #[test]
+    fn the_snap_index_finds_what_a_full_scan_finds() {
+        let mut seed = 7u64;
+        let mut rand = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut prims = Vec::new();
+        for k in 0..2000 {
+            let a = DVec2::new(rand() * 1000.0, rand() * 1000.0);
+            // Mostly short lines, some spanning the drawing, some circles.
+            let b =
+                if k % 50 == 0 { DVec2::new(rand() * 1000.0, rand() * 1000.0) } else { a + DVec2::splat(rand() * 5.0) };
+            prims.push(if k % 7 == 0 {
+                CadPrim::Arc { layer: 0, color: None, center: a, radius: rand() * 20.0, start: 0.0, sweep: 1.0 }
+            } else {
+                CadPrim::Polyline { layer: 0, color: None, closed: false, pts: vec![a, b], bulges: vec![] }
+            });
+        }
+        prims.push(CadPrim::Polyline { layer: 0, color: None, closed: false, pts: vec![], bulges: vec![] });
+        let drawing = CadDrawing { prims, ..CadDrawing::default() };
+        let index = CadSnapIndex::new(&drawing);
+        for _ in 0..300 {
+            let p = DVec2::new(rand() * 1100.0 - 50.0, rand() * 1100.0 - 50.0);
+            let r = rand() * 30.0;
+            let scan: Vec<usize> = (0..drawing.prims.len())
+                .filter(|&i| {
+                    drawing.prims[i].bounds().is_some_and(|(lo, hi)| {
+                        p.x >= lo.x - r && p.y >= lo.y - r && p.x <= hi.x + r && p.y <= hi.y + r
+                    })
+                })
+                .collect();
+            assert_eq!(index.near(p, r), scan, "{p} {r}");
+        }
+        assert!(CadSnapIndex::new(&CadDrawing::default()).near(DVec2::ZERO, 1.0).is_empty());
+    }
+
+    /// A long polyline gives only its segments near the point.
+    #[test]
+    fn long_polylines_give_only_nearby_segments() {
+        let mut c = import(DVec2::ZERO, 0.0, CadUnit::Meters, 1.0);
+        let pts: Vec<DVec2> = (0..100_000).map(|i| DVec2::new(i as f64, (i % 2) as f64)).collect();
+        c.drawing = std::sync::Arc::new(CadDrawing {
+            layers: vec![CadLayer { name: "0".into(), color: [0, 0, 0], visible: true }],
+            prims: vec![CadPrim::Polyline { layer: 0, color: None, closed: false, pts, bulges: vec![] }],
+            ..CadDrawing::default()
+        });
+        let s = c.snap_features(DVec2::new(500.5, 0.5), 0.2);
+        assert!(!s.lines.is_empty() && s.lines.len() <= 2, "{}", s.lines.len());
     }
 }

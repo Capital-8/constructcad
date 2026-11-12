@@ -28,6 +28,7 @@ struct Settings {
     fill_patterns: crate::fill_pattern::FillPatterns,
     profiles: BTreeMap<crate::ProfileId, crate::structural_profile::ProfileDef>,
     option_sets: Vec<crate::OptionSet>,
+    browser: crate::browser::BrowserOrganization,
 }
 
 impl Settings {
@@ -51,6 +52,7 @@ impl Settings {
             fill_patterns: p.fill_patterns.clone(),
             profiles: p.profiles.clone(),
             option_sets: p.option_sets.clone(),
+            browser: p.browser.clone(),
         }
     }
 
@@ -73,6 +75,7 @@ impl Settings {
         p.fill_patterns = self.fill_patterns;
         p.profiles = self.profiles;
         p.option_sets = self.option_sets;
+        p.browser = self.browser;
     }
 }
 
@@ -542,6 +545,12 @@ impl<'a> EditCtx<'a> {
                 *v = view;
             }
         }
+    }
+
+    /// The project browser's schemes and the one in use.
+    pub fn browser_mut(&mut self) -> &mut crate::browser::BrowserOrganization {
+        self.touch_settings();
+        &mut self.project.browser
     }
 
     /// The project's line styles.

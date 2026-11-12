@@ -367,7 +367,14 @@ fn register(lua: &Lua, id: &str, requested: Permissions, spec: &Table) -> mlua::
         Some(t) if !t.trim().is_empty() && description.is_empty() => t,
         _ => description,
     };
-    let info = CommandInfo { name: full, kind, group: format!("Plugin: {id}"), description, input_schema: schema };
+    let info = CommandInfo {
+        name: full,
+        kind,
+        group: format!("Plugin: {id}"),
+        description,
+        input_schema: schema,
+        reads_files: false,
+    };
     Ok(PluginCommand { short, info, required, func })
 }
 
@@ -444,9 +451,12 @@ impl PluginHost {
     }
 
     /// Load the plugins of `folder`: the folder itself when it holds a
-    /// manifest, else each of its subfolders that does (in name order).
-    /// `grant` decides the permissions of each, or `None` to leave it out
-    /// (turned off). Returns the plugins that could not be loaded.
+    /// manifest, else each of its subfolders that does (in name order),
+    /// skipping hidden ones (an install's `.<id>.installing` and `.<id>.old`)
+    /// and refusing one whose name is not its plugin's id (installs are named
+    /// so; permissions are granted by id). `grant` decides the permissions of
+    /// each, or `None` to leave it out (turned off). Returns the plugins that
+    /// could not be loaded.
     pub fn load_folder(
         &mut self,
         folder: &Path,
@@ -454,13 +464,15 @@ impl PluginHost {
         grant: impl Fn(&Manifest) -> Option<Permissions>,
     ) -> Vec<PluginError> {
         let mut errors = Vec::new();
-        let dirs: Vec<PathBuf> = if folder.join(MANIFEST).is_file() {
+        let single = folder.join(MANIFEST).is_file();
+        let dirs: Vec<PathBuf> = if single {
             vec![folder.to_path_buf()]
         } else {
             match std::fs::read_dir(folder) {
                 Ok(entries) => {
                     let mut dirs: Vec<PathBuf> = entries
                         .filter_map(|e| e.ok().map(|e| e.path()))
+                        .filter(|p| !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')))
                         .filter(|p| p.join(MANIFEST).is_file())
                         .take(MAX_PLUGINS)
                         .collect();
@@ -477,6 +489,13 @@ impl PluginHost {
             // Read the manifest first: a plugin left out runs no code.
             let manifest = read_inside(&dir, Path::new(MANIFEST), MAX_MANIFEST).and_then(|t| Manifest::parse(&t));
             let permissions = match &manifest {
+                // A folder named after another id (a copy, a leftover of an
+                // install) would take that id's place and its permissions.
+                Ok(m) if !single && dir.file_name().is_none_or(|n| n.to_string_lossy() != m.id.as_str()) => {
+                    let message = format!("the folder of the plugin \"{}\" must be named {}", m.id, m.id);
+                    errors.push(PluginError { dir: dir.clone(), message });
+                    continue;
+                }
                 Ok(m) => match grant(m) {
                     Some(p) => p,
                     None => continue,

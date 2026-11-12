@@ -14,7 +14,7 @@
 // "succeeds" while silently dropping placements would still be a bug, so the
 // instance counts matter as much as the parse not throwing.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 

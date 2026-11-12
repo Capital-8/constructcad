@@ -207,7 +207,9 @@ fn execute(
     if let Some(reason) = access.refuses(name, session.kind_of(name)) {
         return Ok(Err(EngineError::rejected(reason)));
     }
-    Ok(session.execute(name, args))
+    // Without files, also the edit and query commands that read a file a
+    // parameter names (imports) refuse the path.
+    Ok(session.with_files(access.files, |session| session.execute(name, args)))
 }
 
 /// An error code as its JSON name.

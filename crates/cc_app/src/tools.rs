@@ -163,10 +163,17 @@ pub enum Tool {
 
 impl Tool {
     /// Translation key of the tool's name as the options bar shows it: the
-    /// footing tool drawing a strip type is named for strips.
+    /// footing tool drawing a strip type is named for strips, the component
+    /// tool for the plumbing fixtures or devices it places.
     pub fn name_key(&self, project: &Project) -> &'static str {
         match self {
             Tool::Footing { type_id } if is_strip(project, *type_id) => "tool-strip-footing",
+            Tool::Component { type_id } => match component_group(project, *type_id) {
+                ComponentGroup::Generic => self.key(),
+                ComponentGroup::Fixture => "tool-fixture",
+                ComponentGroup::Device => "tool-device",
+                ComponentGroup::Own(device) => device.key(),
+            },
             tool => tool.key(),
         }
     }
@@ -796,8 +803,8 @@ pub(crate) fn snap_at(
     ortho: bool,
 ) -> Snap {
     let cad = cad_snap(state, raw, SNAP_PX / scale * 1.5);
-    let (project, geom) = (&state.session.doc.project, state.session.geom());
-    let s = snap_with(project, geom, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho, &cad);
+    let model = model_snaps_cached(state, level);
+    let s = snap_with(&model, raw, anchor, extra, &state.interaction.tracked, scale, ortho, &cad);
     if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint | SnapKind::Center) {
         let tracked = &mut state.interaction.tracked;
         tracked.retain(|p| p.distance(s.point) > 1e-9);
@@ -841,8 +848,10 @@ pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad
         if let Some(ElementKind::DetailLine(l)) = state.project().element(id).map(|e| &e.kind) {
             l.snap_features(&mut out);
         }
-        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| &e.kind) {
-            let f = c.snap_features(raw, r);
+        // A copy (its drawing is shared), so that the index cache can change.
+        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| e.kind.clone()) {
+            let index = cad_index(&mut state.cad_snap_index, id, &c.drawing);
+            let f = c.snap_features_in(&index, raw, r);
             out.ends.extend(f.ends);
             out.mids.extend(f.mids);
             out.centers.extend(f.centers);
@@ -851,6 +860,26 @@ pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad
         }
     }
     out
+}
+
+/// An imported drawing and the snap index built from it.
+pub type CadIndexEntry = (std::sync::Arc<cc_core::CadDrawing>, std::sync::Arc<cc_core::cad::CadSnapIndex>);
+
+/// The snap index of element `id`'s `drawing`: the one in `cache` while the
+/// drawing is the same (an edit that changes it gives a new `Arc`), else a new one.
+fn cad_index(
+    cache: &mut std::collections::HashMap<ElementId, CadIndexEntry>,
+    id: ElementId,
+    drawing: &std::sync::Arc<cc_core::CadDrawing>,
+) -> std::sync::Arc<cc_core::cad::CadSnapIndex> {
+    if let Some((d, index)) = cache.get(&id)
+        && std::sync::Arc::ptr_eq(d, drawing)
+    {
+        return index.clone();
+    }
+    let index = std::sync::Arc::new(cc_core::cad::CadSnapIndex::new(drawing));
+    cache.insert(id, (drawing.clone(), index.clone()));
+    index
 }
 
 /// Lines of `drawing`'s underlay passing within `r` of `raw`, with their
@@ -907,33 +936,41 @@ fn snap(
     ortho: bool,
 ) -> Snap {
     let cad = cc_core::cad::CadSnap::default();
-    snap_with(project, geom, level, raw, anchor, extra, tracked, scale, ortho, &cad)
+    snap_with(&model_snaps(project, geom, level), raw, anchor, extra, tracked, scale, ortho, &cad)
 }
 
-/// [`snap`] with the snap features of imported drawings too (their
-/// endpoints, midpoints, arc centers, lines and arcs).
-#[allow(clippy::too_many_arguments)]
-fn snap_with(
-    project: &Project,
-    geom: &ModelGeometry,
-    level: Option<LevelId>,
-    raw: DVec2,
-    anchor: Option<DVec2>,
-    extra: &[DVec2],
-    tracked: &[DVec2],
-    scale: f64,
-    ortho: bool,
-    cad: &cc_core::cad::CadSnap,
-) -> Snap {
-    let r = SNAP_PX / scale;
-    let mut ends: Vec<DVec2> = extra.to_vec();
+/// The model's snap candidates on a level: element ends, midpoints, lines and arcs, outlines,
+/// grid lines and crossings, risers. They depend only on the model, so they are gathered once
+/// per revision and level (see [`model_snaps_cached`]), not on every pointer move.
+#[derive(Debug, Default)]
+pub(crate) struct ModelSnaps {
+    ends: Vec<DVec2>,
+    mids: Vec<DVec2>,
+    lines: Vec<(DVec2, DVec2)>,
+    arcs: Vec<cc_core::arc::Arc>,
+}
+
+/// The cached [`ModelSnaps`] of `level`, gathered again when the document or the level changes.
+fn model_snaps_cached(state: &mut AppState, level: Option<LevelId>) -> std::sync::Arc<ModelSnaps> {
+    let revision = state.session.doc.revision();
+    if let Some((r, l, snaps)) = &state.snap_cache
+        && *r == revision
+        && *l == level
+    {
+        return snaps.clone();
+    }
+    let (project, geom) = state.session.project_and_geometry();
+    let snaps = std::sync::Arc::new(model_snaps(project, geom, level));
+    state.snap_cache = Some((revision, level, snaps.clone()));
+    snaps
+}
+
+/// Gather the model's snap candidates on `level`.
+fn model_snaps(project: &Project, geom: &ModelGeometry, level: Option<LevelId>) -> ModelSnaps {
+    let mut ends: Vec<DVec2> = Vec::new();
     let mut mids = Vec::new();
     let mut lines = Vec::new();
     let mut arcs: Vec<cc_core::arc::Arc> = Vec::new();
-    ends.extend_from_slice(&cad.ends);
-    mids.extend_from_slice(&cad.mids);
-    lines.extend_from_slice(&cad.lines);
-    arcs.extend_from_slice(&cad.arcs);
     for e in project.elements.values().filter(|e| Some(e.level) == level) {
         if let Some(w) = e.as_wall() {
             ends.extend([w.start, w.end]);
@@ -1003,6 +1040,28 @@ fn snap_with(
         let risers = project.segments_at(level).filter(|(e, _)| e.level != level);
         ends.extend(risers.map(|(_, s)| s.start));
     }
+    ModelSnaps { ends, mids, lines, arcs }
+}
+
+/// [`snap`] over the model's candidates `model` with the snap features of imported drawings too
+/// (their endpoints, midpoints, arc centers, lines and arcs).
+#[allow(clippy::too_many_arguments)]
+fn snap_with(
+    model: &ModelSnaps,
+    raw: DVec2,
+    anchor: Option<DVec2>,
+    extra: &[DVec2],
+    tracked: &[DVec2],
+    scale: f64,
+    ortho: bool,
+    cad: &cc_core::cad::CadSnap,
+) -> Snap {
+    let r = SNAP_PX / scale;
+    // In the order they always had: the extra points, the drawings', then the model's.
+    let ends: Vec<DVec2> = extra.iter().chain(&cad.ends).chain(&model.ends).copied().collect();
+    let mids: Vec<DVec2> = cad.mids.iter().chain(&model.mids).copied().collect();
+    let lines: Vec<(DVec2, DVec2)> = cad.lines.iter().chain(&model.lines).copied().collect();
+    let arcs: Vec<cc_core::arc::Arc> = cad.arcs.iter().chain(&model.arcs).cloned().collect();
     let nearest = |pts: &[DVec2]| {
         pts.iter().map(|p| (*p, p.distance(raw))).filter(|(_, d)| *d <= r).min_by(|a, b| a.1.total_cmp(&b.1))
     };
@@ -1628,6 +1687,44 @@ pub fn device_type(project: &Project, type_id: ElementTypeId) -> Option<cc_core:
         Some(cc_core::TypeData::Component { def, .. }) => def.mep.and_then(|m| m.device()),
         _ => None,
     }
+}
+
+/// The ribbon tool that places a component type: the generic component tool,
+/// plumbing fixtures, electrical devices, or a device with a tool of its own
+/// (`commands::DEVICE_TOOLS`). The options bar lists the types of one of these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentGroup {
+    Generic,
+    Fixture,
+    Device,
+    Own(cc_core::DeviceKind),
+}
+
+/// Which tool places `type_id` (`Generic` for any type that is no fixture or device).
+pub fn component_group(project: &Project, type_id: ElementTypeId) -> ComponentGroup {
+    let Some(cc_core::TypeData::Component { def, .. }) = project.element_type(type_id).map(|t| &t.data) else {
+        return ComponentGroup::Generic;
+    };
+    match def.mep {
+        Some(cc_core::MepData::Fixture { .. }) => ComponentGroup::Fixture,
+        Some(cc_core::MepData::Device { device, .. }) if crate::commands::DEVICE_TOOLS.contains(&device) => {
+            ComponentGroup::Own(device)
+        }
+        Some(cc_core::MepData::Device { .. }) => ComponentGroup::Device,
+        None => ComponentGroup::Generic,
+    }
+}
+
+/// The types the options bar offers to a tool of `category` placing `type_id`:
+/// all of the category, but for components only those placed by the same
+/// tool (fixtures, electrical devices, a device with its own tool, the rest).
+pub fn tool_types(project: &Project, category: Category, type_id: ElementTypeId) -> Vec<(ElementTypeId, String)> {
+    let group = (category == Category::Component).then(|| component_group(project, type_id));
+    project
+        .types_of(category)
+        .filter(|t| group.is_none_or(|g| component_group(project, t.id) == g))
+        .map(|t| (t.id, t.name.clone()))
+        .collect()
 }
 
 /// The first component type that is an electrical device (`device`) or a plumbing fixture.
@@ -2647,6 +2744,7 @@ fn dimension_tool(
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
     let scale = view.scale.max(1);
+    let style = cc_views::dimension_type(state.project(), type_id).1;
     let tol = 6.0 / xf.scale;
     let points = state.interaction.points.clone();
     let place = |state: &mut AppState, dim: cc_core::Dimension| {
@@ -2733,7 +2831,7 @@ fn dimension_tool(
                 };
                 match next.and_then(|dims| dims.into_iter().next()) {
                     Some(d) => {
-                        paint_dimension(painter, xf, &d, scale);
+                        paint_dimension(painter, xf, &d, scale, &style);
                         if resp.clicked() && place_chain(state, type_id, &chain, s.point, offset) && !ordinate {
                             state.interaction.dim_chain = Some(DimChain { last: s.point, ..chain });
                         }
@@ -2786,7 +2884,7 @@ fn dimension_tool(
                         }
                         None => d,
                     };
-                    paint_dimension(painter, xf, &d, scale);
+                    paint_dimension(painter, xf, &d, scale, &style);
                     if resp.clicked() {
                         if d.value() > 1e-6 && continuous {
                             // The first dimension of a chain.
@@ -2833,7 +2931,7 @@ fn dimension_tool(
                         (raw - vertex).length(),
                         DimensionKind::Angular { vertex, rays: Default::default() },
                     );
-                    paint_dimension(painter, xf, &d, scale);
+                    paint_dimension(painter, xf, &d, scale, &style);
                     if resp.clicked() && d.value() > 1e-6 {
                         place(state, d);
                     }
@@ -2872,7 +2970,7 @@ fn dimension_tool(
             if points.is_empty() {
                 painter.circle_stroke(xf.to_screen(center), (r * xf.scale) as f32, Stroke::new(2.5, PREVIEW));
             }
-            paint_dimension(painter, xf, &d, scale);
+            paint_dimension(painter, xf, &d, scale, &style);
             if resp.clicked() {
                 if points.is_empty() {
                     // Keep the arc while the leader is placed.
@@ -2952,11 +3050,32 @@ fn draw_line_guide(painter: &Painter, xf: &Xf, reference: DVec2, point: DVec2) {
 }
 
 /// Paint a dimension being placed, as it will be drawn.
-fn paint_dimension(painter: &Painter, xf: &Xf, d: &cc_core::Dimension, scale: u32) {
-    let Some(layout) = cc_views::dimension_layout(d, scale) else { return };
+fn paint_dimension(
+    painter: &Painter,
+    xf: &Xf,
+    d: &cc_core::Dimension,
+    scale: u32,
+    style: &cc_core::dim_style::DimensionStyle,
+) {
+    let Some(layout) = cc_views::dimension_layout(d, scale, style) else { return };
     let stroke = Stroke::new(1.25, PREVIEW);
     for (a, b, _) in &layout.lines {
         painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], stroke);
+    }
+    // The type's marks, in the preview color.
+    let mut marks = Drawing2D::default();
+    cc_views::draw_marks(&mut marks, &layout, style, scale, None);
+    for prim in &marks.prims {
+        match prim {
+            cc_views::Prim::Line { a, b, .. } => {
+                painter.line_segment([xf.to_screen(*a), xf.to_screen(*b)], stroke);
+            }
+            cc_views::Prim::Fill { pts, .. } => {
+                let pts = pts.iter().map(|p| xf.to_screen(*p)).collect();
+                painter.add(egui::Shape::convex_polygon(pts, PREVIEW, Stroke::NONE));
+            }
+            _ => {}
+        }
     }
     let up = DVec2::from_angle(layout.text_angle).perp();
     let at = xf.to_screen(layout.text_pos + up * (2.0 * scale as f64 / 1000.0));
@@ -3921,6 +4040,35 @@ mod tests {
 
     /// 100 px per meter: the snap radius is 0.1 m.
     const SCALE: f64 = 100.0;
+
+    /// The plumbing fixture and electrical device tools offer only their own
+    /// types in the options bar, not furniture or each other's (issue #255);
+    /// the generic component tool offers no fixtures or devices.
+    #[test]
+    fn mep_component_tools_list_only_their_types() {
+        let project = crate::actions::new_project();
+        let group = |id| component_group(&project, id);
+        for (device, wanted) in [(false, ComponentGroup::Fixture), (true, ComponentGroup::Device)] {
+            let first = mep_component_type(&project, device).expect("the template has one");
+            let listed = tool_types(&project, Category::Component, first);
+            assert!(listed.iter().any(|(id, _)| *id == first));
+            assert!(listed.iter().all(|(id, _)| group(*id) == wanted), "{wanted:?}: {listed:?}");
+            let key = Tool::Component { type_id: first }.name_key(&project);
+            assert_eq!(key, if device { "tool-device" } else { "tool-fixture" });
+        }
+        let furniture = project
+            .types_of(Category::Component)
+            .find(|t| group(t.id) == ComponentGroup::Generic)
+            .map(|t| t.id)
+            .expect("the template has furniture");
+        let listed = tool_types(&project, Category::Component, furniture);
+        assert!(!listed.is_empty() && listed.iter().all(|(id, _)| group(*id) == ComponentGroup::Generic));
+        assert!(listed.len() < project.types_of(Category::Component).count());
+        assert_eq!(Tool::Component { type_id: furniture }.name_key(&project), "tool-component");
+        // Other categories keep every type.
+        let wall = project.types_of(Category::Wall).next().map(|t| t.id).unwrap();
+        assert_eq!(tool_types(&project, Category::Wall, wall).len(), project.types_of(Category::Wall).count());
+    }
 
     /// The curvature handle bends arc strip footings as it bends arc walls
     /// (a straight strip has none, like a straight wall), through the engine

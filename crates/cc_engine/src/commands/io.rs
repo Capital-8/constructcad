@@ -1,4 +1,4 @@
-//! Files: IFC import/export, SketchUp import, sheet PDF/SVG, view PNG/SVG/PDF, schedule CSV, component files.
+//! Files: IFC import/export, SketchUp and OBJ import, sheet PDF/SVG, view PNG/SVG/PDF, schedule CSV, component files.
 
 use super::add_element;
 use super::edit;
@@ -261,7 +261,9 @@ pub struct ComponentLoad {
 impl Command for ComponentLoad {
     const NAME: &'static str = "component_load";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let file = guard(|| cc_core::component_file::load(&self.path))??;
         let ids = edit(s, t!("tx-load-component"), |e| {
             let wanted = file.types.len() + file.nested.len();
@@ -308,9 +310,9 @@ fn unique_type_name(p: &cc_core::Project, name: &str, taken: &mut std::collectio
 /// Add the converted materials (those the project lacks) and types; returns the type ids.
 fn add_skp_types(e: &mut cc_core::EditCtx, conv: crate::skp::Converted) -> (Vec<ElementTypeId>, usize) {
     let mut added = 0;
-    for (name, color) in conv.materials {
-        if !e.project().materials.iter().any(|m| m.name == name) {
-            e.materials_mut().push(cc_core::Material::new(name, color));
+    for m in conv.materials {
+        if !e.project().materials.iter().any(|x| x.name == m.name) {
+            e.materials_mut().push(m.to_material());
             added += 1;
         }
     }
@@ -335,8 +337,8 @@ fn too_large(_: crate::skp::SkpError) -> EngineError {
 /// that differ only by a move or a plan rotation share a type, anything
 /// else in their transform (tilt, scale, mirror) is built into the type.
 /// Faces outside any component make one more element at the file's origin.
-/// Missing materials are added by name and color; hidden objects and those
-/// on hidden layers are left out.
+/// Missing materials are added by name, color, opacity and texture; hidden
+/// objects and those on hidden layers are left out.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SkpImport {
@@ -356,7 +358,9 @@ pub struct SkpImport {
 impl Command for SkpImport {
     const NAME: &'static str = "skp_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let level = refs::level_or_first(s.project(), self.level.as_ref())?;
         let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
         let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
@@ -391,6 +395,183 @@ impl Command for SkpImport {
     }
 }
 
+/// Units of the coordinates in an OBJ file (the format does not say).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjUnits {
+    #[default]
+    M,
+    Cm,
+    Mm,
+    In,
+    Ft,
+}
+
+impl ObjUnits {
+    fn meters(self) -> f64 {
+        match self {
+            Self::M => 1.0,
+            Self::Cm => 0.01,
+            Self::Mm => 0.001,
+            Self::In => 0.0254,
+            Self::Ft => 0.3048,
+        }
+    }
+}
+
+/// Import a Wavefront OBJ model (.obj) into the project. Each object (or,
+/// in a file without objects, each group) becomes a component element on
+/// `level`, of a component type holding its faces as fixed mesh pieces, one
+/// per material, inserted at the center of its footprint and the bottom of
+/// its extent. Materials come from the `.mtl` libraries next to the file:
+/// color (`Kd`), opacity (`d`, `Tr`) and texture (`map_Kd`, the picture next
+/// to the file, repeating as the faces' `vt` coordinates say); missing
+/// materials are added by name. Faces not flat are split into triangles;
+/// lines, points and normals are ignored.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObjImport {
+    /// Path of the .obj file.
+    pub path: PathBuf,
+    /// Level id or name (default: the lowest level); the file's zero height is at its elevation.
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Where the file's origin goes, in plan (default [0, 0]).
+    #[serde(default)]
+    pub position: Option<Point>,
+    /// Rotation of the whole model in plan, degrees counter-clockwise (default 0).
+    #[serde(default)]
+    pub rotation: Option<f64>,
+    /// Units of the file's coordinates: "m" (default), "cm", "mm", "in" or "ft".
+    #[serde(default)]
+    pub units: ObjUnits,
+    /// The file's Z axis points up; by default Y does (the usual OBJ convention).
+    #[serde(default)]
+    pub z_up: bool,
+    /// Make the whole file one component element, inserted at the file's origin.
+    #[serde(default)]
+    pub merge: bool,
+}
+
+impl Command for ObjImport {
+    const NAME: &'static str = "obj_import";
+    const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
+        let level = refs::level_or_first(s.project(), self.level.as_ref())?;
+        let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
+        let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
+        if std::fs::metadata(&self.path)?.len() > crate::obj::MAX_BYTES {
+            return Err(EngineError::rejected(t!("err-obj-too-large")));
+        }
+        let bytes = std::fs::read(&self.path)?;
+        let name = file_stem(&self.path);
+        let frame = crate::obj::Frame { scale: self.units.meters(), y_up: !self.z_up };
+        let dir = self.path.parent();
+        let conv = guard(|| crate::obj::convert(&String::from_utf8_lossy(&bytes), dir, frame, &name, self.merge))?
+            .map_err(|_| EngineError::rejected(t!("err-obj-too-large")))?;
+        if conv.placements.is_empty() {
+            return Err(EngineError::rejected(t!("err-obj-empty")));
+        }
+        let faces = conv.faces;
+        let (types, elements, materials) = place_converted(s, conv, level, origin, turn, t!("tx-import-obj"))?;
+        Ok(json!({ "types": types, "elements": elements, "materials": materials, "faces": faces }))
+    }
+}
+
+/// Import a glTF 2.0 model (.glb, or .gltf with its buffers embedded or in
+/// files next to it) into the project. Each node of the scene's root, with
+/// everything below it, becomes a component element on `level`, of a
+/// component type holding its triangles as fixed mesh pieces, one per
+/// material, inserted at the center of its footprint and the bottom of its
+/// extent. glTF is in meters with Y up. Materials take their base color
+/// times its texture's average, the texture itself (repeating as the
+/// texture coordinates say) and, when blended, their opacity; missing
+/// materials are added by name. Lines and points are ignored, and
+/// compressed meshes (Draco, meshopt) are refused.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GltfImport {
+    /// Path of the .glb or .gltf file.
+    pub path: PathBuf,
+    /// Level id or name (default: the lowest level); the file's zero height is at its elevation.
+    #[serde(default)]
+    pub level: Option<Ref>,
+    /// Where the file's origin goes, in plan (default [0, 0]).
+    #[serde(default)]
+    pub position: Option<Point>,
+    /// Rotation of the whole model in plan, degrees counter-clockwise (default 0).
+    #[serde(default)]
+    pub rotation: Option<f64>,
+    /// Make the whole scene one component element, inserted at the file's origin.
+    #[serde(default)]
+    pub merge: bool,
+}
+
+impl Command for GltfImport {
+    const NAME: &'static str = "gltf_import";
+    const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
+        use crate::gltf::GltfError;
+        let level = refs::level_or_first(s.project(), self.level.as_ref())?;
+        let origin = refs::point(self.position.unwrap_or([0.0, 0.0]))?;
+        let turn = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;
+        if std::fs::metadata(&self.path)?.len() > crate::gltf::MAX_BYTES {
+            return Err(EngineError::rejected(t!("err-gltf-too-large")));
+        }
+        let bytes = std::fs::read(&self.path)?;
+        let name = file_stem(&self.path);
+        let dir = self.path.parent();
+        let conv = guard(|| crate::gltf::convert(&bytes, dir, &name, self.merge))?.map_err(|e| {
+            EngineError::rejected(match e {
+                GltfError::Invalid => t!("err-gltf-invalid"),
+                GltfError::Unsupported(ext) => t!("err-gltf-compressed", "ext" => ext),
+                GltfError::MissingBuffer(uri) => t!("err-gltf-buffer", "uri" => uri),
+                GltfError::TooLarge => t!("err-gltf-too-large"),
+            })
+        })?;
+        if conv.placements.is_empty() {
+            return Err(EngineError::rejected(t!("err-gltf-empty")));
+        }
+        let faces = conv.faces;
+        let (types, elements, materials) = place_converted(s, conv, level, origin, turn, t!("tx-import-gltf"))?;
+        Ok(json!({ "types": types, "elements": elements, "materials": materials, "faces": faces }))
+    }
+}
+
+/// Add the types of a converted model and an element per placement on
+/// `level`, the model moved to `origin` and turned by `turn` degrees, in one
+/// undo step named `tx`: the new types, elements and materials.
+fn place_converted(
+    s: &mut Session,
+    conv: crate::skp::Converted,
+    level: cc_core::LevelId,
+    origin: glam::DVec2,
+    turn: f64,
+    tx: String,
+) -> Result<(Vec<u64>, Vec<u64>, Value)> {
+    let placements = conv.placements.clone();
+    let rot = glam::DMat2::from_angle(turn.to_radians());
+    edit(s, tx, |e| {
+        let (types, materials) = add_skp_types(e, conv);
+        let mut elements = Vec::with_capacity(placements.len());
+        for p in &placements {
+            let Some(&type_id) = types.get(p.ty) else { continue };
+            let component = Component {
+                position: origin + rot * p.position,
+                rotation_deg: p.rotation_deg + turn,
+                base_offset: p.z,
+                ..Default::default()
+            };
+            elements.push(add_element(e, level, type_id, ElementKind::Component(component)).0);
+        }
+        Ok((types.iter().map(|t| t.0).collect::<Vec<_>>(), elements, json!(materials)))
+    })
+}
+
 /// Load a SketchUp model (.skp) as one component type, named after the
 /// file, to place like any component: its faces become fixed mesh pieces
 /// (one per material) with the file's origin as the insertion point.
@@ -405,7 +586,9 @@ pub struct SkpComponentLoad {
 impl Command for SkpComponentLoad {
     const NAME: &'static str = "skp_component_load";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let model = read_skp(&self.path)?;
         let name = file_stem(&self.path);
         let conv = guard(|| crate::skp::convert_single(&model, &name))?.map_err(too_large)?;

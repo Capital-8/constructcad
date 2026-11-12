@@ -7,6 +7,9 @@ use std::path::Path;
 /// Current file format version. Bump when the schema changes incompatibly.
 pub const FORMAT_VERSION: u32 = 27;
 
+/// Largest project file read, bytes (pictures and textures are kept in it).
+pub const MAX_FILE_BYTES: u64 = 1 << 30;
+
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
     #[error("I/O error: {0}")]
@@ -17,6 +20,8 @@ pub enum PersistError {
     Serialize(#[from] ron::Error),
     #[error("unsupported format version {0} (maximum {FORMAT_VERSION})")]
     Version(u32),
+    #[error("the file is larger than {} MB", .0 >> 20)]
+    TooLarge(u64),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,12 +108,33 @@ pub fn save(project: &Project, path: &Path) -> Result<(), PersistError> {
     Ok(())
 }
 
+/// The text of the file at `path`, refused past `max` bytes before it is
+/// read (an I/O error of kind `FileTooLarge`): files are hostile input, and
+/// one far larger than any real file would only exhaust memory.
+pub fn read_to_string_limited(path: &Path, max: u64) -> std::io::Result<String> {
+    if std::fs::metadata(path)?.len() > max {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            format!("the file is larger than {} MB", max >> 20),
+        ));
+    }
+    std::fs::read_to_string(path)
+}
+
+/// The text of the file at `path`, refused past `max` bytes before it is read.
+fn read_text(path: &Path, max: u64) -> Result<String, PersistError> {
+    if std::fs::metadata(path)?.len() > max {
+        return Err(PersistError::TooLarge(max));
+    }
+    Ok(std::fs::read_to_string(path)?)
+}
+
 pub fn load(path: &Path) -> Result<Project, PersistError> {
     load_with_repairs(path).map(|(project, _)| project)
 }
 
 pub fn load_with_repairs(path: &Path) -> Result<(Project, usize), PersistError> {
-    from_ron_with_repairs(&std::fs::read_to_string(path)?)
+    from_ron_with_repairs(&read_text(path, MAX_FILE_BYTES)?)
 }
 
 /// Like [`load_with_repairs`], naming what migration adds with `translate`
@@ -117,12 +143,25 @@ pub fn load_with_repairs_localized(
     path: &Path,
     translate: &dyn Fn(&str) -> Option<String>,
 ) -> Result<(Project, usize), PersistError> {
-    from_ron_with_repairs_localized(&std::fs::read_to_string(path)?, translate)
+    from_ron_with_repairs_localized(&read_text(path, MAX_FILE_BYTES)?, translate)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_files_are_refused_before_reading() {
+        let path = std::env::temp_dir().join(format!("ccad-persist-{}-large.ccad", std::process::id()));
+        std::fs::write(&path, "x".repeat(2048)).unwrap();
+        assert!(matches!(read_text(&path, 1024), Err(PersistError::TooLarge(1024))));
+        assert_eq!(read_text(&path, 4096).unwrap().len(), 2048);
+        // The same for the other files read whole (components, graphs, macros).
+        let err = read_to_string_limited(&path, 1024).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::FileTooLarge);
+        assert_eq!(read_to_string_limited(&path, 4096).unwrap().len(), 2048);
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn template_round_trips() {

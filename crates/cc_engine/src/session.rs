@@ -15,6 +15,9 @@ pub struct Session {
     merge_key: Option<u64>,
     /// Commands recorded as a macro, while recording.
     recording: Option<Vec<Recorded>>,
+    /// The level of the view the user works in (the app's active plan):
+    /// recorded steps on it play on the level active when they are played.
+    active_level: Option<cc_core::LevelId>,
     geom: ModelGeometry,
     geom_revision: Option<u64>,
     /// Geometry of the phases and design options whose views leave
@@ -22,6 +25,7 @@ pub struct Session {
     phase_geoms: HashMap<GeomKey, (u64, ModelGeometry)>,
     drawings: HashMap<ViewId, (u64, Rc<Drawing2D>)>,
     sheets: HashMap<ViewId, (u64, Rc<cc_views::Sheet>)>,
+    schedules: HashMap<ViewId, (u64, Rc<cc_views::Table>)>,
     /// Elements temporarily hidden or isolated per view: display state, not
     /// part of the model (not saved, not undone).
     temporary: HashMap<ViewId, cc_core::TemporaryVisibility>,
@@ -31,6 +35,9 @@ pub struct Session {
     extension: Option<Box<dyn crate::Extension>>,
     /// How many commands are running (a plugin command runs others).
     nesting: u32,
+    /// Whether the commands running may work with files (see
+    /// [`Session::with_files`]).
+    files: bool,
 }
 
 /// What a view's own geometry depends on: its phase (an index, when it
@@ -41,6 +48,8 @@ type GeomKey = (Option<usize>, std::collections::BTreeSet<cc_core::OptionId>);
 #[derive(Debug, Clone)]
 struct Recorded {
     step: crate::script::Step,
+    /// The ids it allocated and its result, to refer to from later steps.
+    made: Option<crate::script::Made>,
     merge_key: Option<u64>,
     /// Undo depth before the command ran.
     depth: usize,
@@ -63,15 +72,18 @@ impl Session {
             doc,
             merge_key: None,
             recording: None,
+            active_level: None,
             geom: ModelGeometry::default(),
             geom_revision: None,
             phase_geoms: HashMap::new(),
             drawings: HashMap::new(),
             sheets: HashMap::new(),
+            schedules: HashMap::new(),
             temporary: HashMap::new(),
             temporary_revision: 0,
             extension: None,
             nesting: 0,
+            files: true,
         }
     }
 
@@ -87,9 +99,11 @@ impl Session {
     pub fn replace(&mut self, doc: Document) {
         let extension = self.extension.take();
         let nesting = self.nesting;
+        let files = self.files;
         *self = Self::new(doc);
         self.extension = extension;
         self.nesting = nesting;
+        self.files = files;
     }
 
     pub fn project(&self) -> &Project {
@@ -110,6 +124,11 @@ impl Session {
         self.geom = ModelGeometry::build(&self.doc.project);
         self.geom_revision = Some(rev);
         self.phase_geoms.retain(|_, (r, _)| *r == rev);
+        // Drop what is kept for views that are gone.
+        let views = &self.doc.project.views;
+        self.drawings.retain(|v, _| views.contains_key(v));
+        self.sheets.retain(|v, _| views.contains_key(v));
+        self.schedules.retain(|v, _| views.contains_key(v));
         true
     }
 
@@ -285,6 +304,7 @@ impl Session {
     pub fn invalidate_drawings(&mut self) {
         self.drawings.clear();
         self.sheets.clear();
+        self.schedules.clear();
     }
 
     /// Composition of a sheet in paper millimeters (cached per revision).
@@ -310,8 +330,14 @@ impl Session {
     }
 
     /// A schedule table of a schedule view, with the project's units: the
-    /// elements its phase and phase filter show.
-    pub fn schedule(&mut self, view: ViewId) -> Option<cc_views::Table> {
+    /// elements its phase and phase filter show (cached per revision).
+    pub fn schedule(&mut self, view: ViewId) -> Option<Rc<cc_views::Table>> {
+        let rev = self.doc.revision();
+        if let Some((r, t)) = self.schedules.get(&view)
+            && *r == rev
+        {
+            return Some(t.clone());
+        }
         let (category, def) = match &self.doc.project.view(view)?.kind {
             ViewKind::Schedule { category, def } => (*category, def.clone()),
             _ => return None,
@@ -322,9 +348,11 @@ impl Session {
         let v = p.view(view)?;
         let phase = cc_views::graphics::PhaseView::of(p, v);
         let options = p.shown_options(Some(v));
-        Some(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| {
+        let table = Rc::new(cc_views::schedule_where(p, &self.geom, category, &def, &mut |e| {
             p.option_shows(e, &options) && phase.is_none_or(|ph| ph.shows(p, e))
-        }))
+        }));
+        self.schedules.insert(view, (rev, table.clone()));
+        Some(table)
     }
 
     /// Run a typed command (the way the GUI calls the engine): it goes
@@ -359,9 +387,32 @@ impl Session {
     }
 
     /// Stop recording; returns the recorded steps (a dragged value counts once,
-    /// with its final value).
+    /// with its final value). Ids of objects an earlier step created become
+    /// `{"$step": n}` references and the active level `{"$level": "active"}`
+    /// (see [`crate::script`]), so the macro plays on any level and project.
     pub fn stop_recording(&mut self) -> Vec<crate::script::Step> {
-        self.recording.take().unwrap_or_default().into_iter().map(|r| r.step).collect()
+        let (mut steps, made): (Vec<_>, Vec<_>) =
+            self.recording.take().unwrap_or_default().into_iter().map(|r| (r.step, r.made)).unzip();
+        crate::script::link(&mut steps, &made);
+        steps
+    }
+
+    /// Set the level of the view the user works in (`None` outside plans);
+    /// see [`Session::active_level`].
+    pub fn set_active_level(&mut self, level: Option<cc_core::LevelId>) {
+        self.active_level = level;
+    }
+
+    /// A level by id or name (`ccad script level=…`).
+    pub fn level(&self, r: &crate::Ref) -> Result<cc_core::LevelId> {
+        crate::refs::level(&self.doc.project, r)
+    }
+
+    /// The level of the view the user works in, if it exists: recording
+    /// writes it as the active level placeholder, and scripts play that
+    /// placeholder on it.
+    pub fn active_level(&self) -> Option<cc_core::LevelId> {
+        self.active_level.filter(|l| self.doc.project.level(*l).is_some())
     }
 
     /// Undo back to undo depth `depth` (cancelling a dialog), dropping what
@@ -373,23 +424,37 @@ impl Session {
         }
     }
 
-    fn record(&mut self, name: &str, args: &Value, merge_key: Option<u64>, depth: usize) {
+    /// Record a command that succeeded; `first_id` is the id counter before
+    /// it ran.
+    fn record(&mut self, name: &str, args: Value, result: &Value, first_id: u64, merge_key: Option<u64>, depth: usize) {
         if self.recording.is_none() {
             return;
         }
         let kind = self.kind_of(name);
-        let Some(rec) = &mut self.recording else { return };
         // Edits only: replaying a macro should not open, save or export files.
         if kind != Some(crate::CommandKind::Edit) {
             return;
         }
-        let step = crate::script::Step { command: name.to_string(), args: args.clone() };
+        let mut args = args;
+        if let Some(level) = self.active_level().and_then(|l| self.doc.project.level(l)) {
+            crate::script::mark_level(&mut args, level.id, &level.name, 0);
+        }
+        let next_id = self.doc.project.next_id();
+        let made = (next_id > first_id).then(|| crate::script::Made { ids: first_id..next_id, result: result.clone() });
+        let Some(rec) = &mut self.recording else { return };
+        let step = crate::script::Step { command: name.to_string(), args };
         match rec.last_mut() {
             // A value being dragged: keep its last state only.
             Some(last) if merge_key.is_some() && last.merge_key == merge_key && last.step.command == name => {
                 last.step = step;
+                if let Some(m) = made {
+                    last.made = Some(match last.made.take() {
+                        Some(old) => crate::script::Made { ids: old.ids.start..m.ids.end, result: m.result },
+                        None => m,
+                    });
+                }
             }
-            _ => rec.push(Recorded { step, merge_key, depth }),
+            _ => rec.push(Recorded { step, made, merge_key, depth }),
         }
     }
 
@@ -417,6 +482,36 @@ impl Session {
     /// Whether a command is running (a plugin command running others).
     pub fn is_nested(&self) -> bool {
         self.nesting > 0
+    }
+
+    /// Whether the commands running may read and write files: true unless a
+    /// caller without file access (a plugin without the `files` permission,
+    /// a graph run without `allow_files`) runs them.
+    pub fn files_allowed(&self) -> bool {
+        self.files
+    }
+
+    /// Run `f` with file access narrowed to `allowed` (it is never widened:
+    /// a caller without files cannot give them to what it runs).
+    pub fn with_files<R>(&mut self, allowed: bool, f: impl FnOnce(&mut Session) -> R) -> R {
+        let outer = self.files;
+        self.files = outer && allowed;
+        let result = f(self);
+        self.files = outer;
+        result
+    }
+
+    /// Refuse a file path given to a command (in its parameter `param`) when
+    /// the commands running may not work with files.
+    pub fn require_files(&self, param: &str) -> Result<()> {
+        if self.files {
+            Ok(())
+        } else {
+            Err(EngineError::rejected(format!(
+                "`{param}` names a file, and this run may not work with files (a plugin needs the \"files\" \
+                 permission, a graph `allow_files`)"
+            )))
+        }
     }
 
     /// Every command this session runs: the built-in catalog, then the
@@ -456,6 +551,13 @@ impl Session {
         let merge_key = self.merge_key;
         // Commands run by another command are part of it, not steps of a macro.
         let recorded_args = (self.recording.is_some() && self.nesting == 0).then(|| args.clone());
+        let first_id = self.doc.project.next_id();
+        if !self.files && self.kind_of(name) == Some(crate::CommandKind::File) {
+            return Err(EngineError::rejected(format!(
+                "{name} works with files, and this run may not (a plugin needs the \"files\" permission, a graph \
+                 `allow_files`)"
+            )));
+        }
         let outer = self.nesting;
         self.nesting = outer.saturating_add(1);
         let result = if crate::extension::is_extension_name(name) {
@@ -464,8 +566,8 @@ impl Session {
             guard(|| crate::registry::dispatch(self, name, args)).and_then(|r| r)
         };
         self.nesting = outer;
-        if let (Ok(_), Some(args)) = (&result, recorded_args) {
-            self.record(name, &args, merge_key, depth);
+        if let (Ok(out), Some(args)) = (&result, recorded_args) {
+            self.record(name, args, out, first_id, merge_key, depth);
         }
         if let Err(EngineError { code: ErrorCode::Internal, .. }) = &result {
             // Undo whatever the failed command left behind.

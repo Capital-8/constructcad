@@ -1,3 +1,4 @@
+use crate::drawing_index::DrawingIndex;
 use cc_core::ElementId;
 use glam::DVec2;
 
@@ -216,6 +217,9 @@ pub struct Drawing2D {
     pub sections: Vec<SectionHandle>,
     /// The marks of callouts drawn in the view: picked, moved and resized there.
     pub callouts: Vec<crate::callout::CalloutHandle>,
+    /// Lookups over `prims`, built the first time they are needed (see
+    /// [`DrawingIndex`]); a copy of the drawing starts without them.
+    pub index: DrawingIndex,
 }
 
 /// A section's mark in a plan, as drawn (meters on the plan).
@@ -292,6 +296,13 @@ impl Drawing2D {
     pub fn line(&mut self, a: DVec2, b: DVec2, style: LineStyle, element: Option<ElementId>) {
         if a.distance_squared(b) > 1e-14 {
             self.prims.push(Prim::Line { a, b, style, element, pen: None });
+        }
+    }
+
+    /// A line with its own pen (view graphics still override what they set).
+    pub fn line_pen(&mut self, a: DVec2, b: DVec2, style: LineStyle, pen: Option<Pen>, element: Option<ElementId>) {
+        if a.distance_squared(b) > 1e-14 {
+            self.prims.push(Prim::Line { a, b, style, element, pen });
         }
     }
 
@@ -426,15 +437,45 @@ impl Drawing2D {
     /// Topmost element under `p` within `tol` (view units). Background
     /// elements (imported drawings) are picked only where nothing else is.
     pub fn hit_test(&self, p: DVec2, tol: f64) -> Option<ElementId> {
-        self.hit_test_tier(p, tol, false).or_else(|| self.hit_test_tier(p, tol, true))
+        match self.index.candidates(&self.prims, p, tol) {
+            Some(near) => {
+                let prims = || near.iter().filter_map(|i| self.prims.get(*i as usize));
+                self.hit_test_tier(prims(), p, tol, false).or_else(|| self.hit_test_tier(prims(), p, tol, true))
+            }
+            None => self
+                .hit_test_tier(self.prims.iter(), p, tol, false)
+                .or_else(|| self.hit_test_tier(self.prims.iter(), p, tol, true)),
+        }
+    }
+
+    /// The indices of the primitives of `ids`, in drawing order.
+    pub fn prims_of(&self, ids: &std::collections::BTreeSet<ElementId>) -> Vec<usize> {
+        match self.index.elements(&self.prims) {
+            Some(map) => {
+                let mut out: Vec<usize> =
+                    ids.iter().filter_map(|id| map.get(id)).flatten().map(|i| *i as usize).collect();
+                out.sort_unstable();
+                out
+            }
+            None => (0..self.prims.len())
+                .filter(|i| self.prims.get(*i).and_then(Prim::element).is_some_and(|e| ids.contains(&e)))
+                .collect(),
+        }
     }
 
     /// The element whose line passes within `tol` of `p` (the nearest),
     /// leaving out fills and background elements: what a drag starting at
     /// `p` grabs.
     pub fn hit_test_line(&self, p: DVec2, tol: f64) -> Option<ElementId> {
+        match self.index.candidates(&self.prims, p, tol) {
+            Some(near) => self.nearest_line(near.iter().filter_map(|i| self.prims.get(*i as usize)), p, tol),
+            None => self.nearest_line(self.prims.iter(), p, tol),
+        }
+    }
+
+    fn nearest_line<'a>(&self, prims: impl Iterator<Item = &'a Prim>, p: DVec2, tol: f64) -> Option<ElementId> {
         let mut best: Option<(f64, ElementId)> = None;
-        for prim in &self.prims {
+        for prim in prims {
             if let Prim::Line { a, b, element: Some(id), .. } = prim
                 && !self.background.contains(id)
             {
@@ -447,11 +488,32 @@ impl Drawing2D {
         best.map(|(_, id)| id)
     }
 
-    fn hit_test_tier(&self, p: DVec2, tol: f64, background: bool) -> Option<ElementId> {
+    /// [`Self::hit_test`] searching every primitive (tests of the index).
+    #[cfg(test)]
+    pub(crate) fn hit_test_all(&self, p: DVec2, tol: f64) -> Option<ElementId> {
+        self.hit_test_tier(self.prims.iter(), p, tol, false)
+            .or_else(|| self.hit_test_tier(self.prims.iter(), p, tol, true))
+    }
+
+    /// [`Self::hit_test_line`] searching every primitive (tests of the index).
+    #[cfg(test)]
+    pub(crate) fn nearest_line_all(&self, p: DVec2, tol: f64) -> Option<ElementId> {
+        self.nearest_line(self.prims.iter(), p, tol)
+    }
+
+    /// The pick among `prims` (in drawing order) in one tier: foreground
+    /// elements, or background ones.
+    fn hit_test_tier<'a>(
+        &self,
+        prims: impl DoubleEndedIterator<Item = &'a Prim> + Clone,
+        p: DVec2,
+        tol: f64,
+        background: bool,
+    ) -> Option<ElementId> {
         let tier = |id: &ElementId| self.background.contains(id) == background;
         // Lines first: they are thin and drawn over fills.
         let mut best: Option<(f64, ElementId)> = None;
-        for prim in &self.prims {
+        for prim in prims.clone() {
             if let Prim::Line { a, b, element: Some(id), .. } = prim
                 && tier(id)
             {
@@ -465,7 +527,7 @@ impl Drawing2D {
         if let Some((_, id)) = best {
             return Some(id);
         }
-        self.prims.iter().rev().find_map(|prim| match prim {
+        prims.rev().find_map(|prim| match prim {
             // Fully transparent fills only show selection (room areas); they are not picked.
             Prim::Fill { pts, element: Some(id), color, .. }
                 if color[3] > 0 && tier(id) && cc_geom::polygon::contains(pts, p) =>

@@ -1246,7 +1246,15 @@ impl<'a> Exporter<'a> {
         let geom = self.geom;
         for set in geom.rebar.values() {
             let Some(e) = project.element(set.element) else { continue };
-            let ElementKind::Rebar(r) = &e.kind else { continue };
+            // Shaped bars carry no role (and any imported property sets).
+            let (kind, imported) = match &e.kind {
+                ElementKind::Rebar(r) => match r.layout {
+                    cc_core::RebarLayout::Longitudinal { .. } => ("MAIN", &[][..]),
+                    cc_core::RebarLayout::Stirrups { .. } => ("LIGATURE", &[][..]),
+                },
+                ElementKind::ShapedRebar(r) => ("NOTDEFINED", &r.properties[..]),
+                _ => continue,
+            };
             let Some(ty) = project.element_type(e.type_id) else { continue };
             let Some(storey) = self.storey_placement(e.level) else { continue };
             let level_z = project.level_elevation(e.level);
@@ -1275,10 +1283,6 @@ impl<'a> Exporter<'a> {
             let shape = self.shape_of_type(items, None, "AdvancedSweptSolid");
             let mut attrs = self.element_args(e, placement, shape);
             let area = std::f64::consts::PI * set.diameter * set.diameter / 4.0;
-            let kind = match r.layout {
-                cc_core::RebarLayout::Longitudinal { .. } => "MAIN",
-                cc_core::RebarLayout::Stirrups { .. } => "LIGATURE",
-            };
             attrs.extend(args![
                 Value::Null,
                 set.diameter,
@@ -1290,6 +1294,13 @@ impl<'a> Exporter<'a> {
             let product = self.w.add("IFCREINFORCINGBAR", attrs);
             self.products.insert(e.id, product);
             self.register(e, product);
+            for (i, set) in imported.iter().enumerate() {
+                if let Some(set) = self.imported_set(&format!("imported-{}-{i}", e.id), set) {
+                    let gid = self.guid(&format!("imported-rel-{}-{i}", e.id));
+                    let n = Value::Null;
+                    self.w.add("IFCRELDEFINESBYPROPERTIES", args![gid, n.clone(), n.clone(), n, vec![product], set]);
+                }
+            }
         }
     }
 

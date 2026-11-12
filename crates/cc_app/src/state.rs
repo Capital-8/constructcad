@@ -57,6 +57,8 @@ pub struct Dialogs {
     pub type_layers_open: bool,
     /// Undo depth when the open data dialog started editing (see `dialog::session`).
     pub edit_start: Option<usize>,
+    /// Level picked in the levels dialog: the one a level is added above or below.
+    pub level_selected: Option<LevelId>,
     /// Level waiting for delete confirmation.
     pub delete_level: Option<LevelId>,
     /// Schedule whose definition dialog is open.
@@ -73,8 +75,9 @@ pub struct Dialogs {
     pub lps_check: bool,
     pub lps_class: cc_core::LpsClass,
     pub lps_result: Option<(cc_core::LpsClass, u64, serde_json::Value)>,
-    /// The structured cabling per rack.
+    /// The structured cabling per rack, with its last result (document revision, `cabling_list` output).
     pub cabling: bool,
+    pub cabling_result: Option<(u64, serde_json::Value)>,
     /// Visibility/Graphics of a view or view template.
     pub graphics: Option<crate::graphics_dialog::GraphicsDialog>,
     /// Graphic overrides of the selected elements in a view.
@@ -87,6 +90,8 @@ pub struct Dialogs {
     pub phases: Option<crate::phases_dialog::PhasesDialog>,
     /// Design option sets and their options.
     pub design_options: Option<crate::design_options_ui::OptionsDialog>,
+    /// The project browser's organization schemes.
+    pub browser_org: Option<crate::browser_org_dialog::BrowserOrgDialog>,
     /// The project's line styles.
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The fill pattern manager.
@@ -99,6 +104,10 @@ pub struct Dialogs {
     pub profiles_resume: Option<crate::graphics_dialog::Edits>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
+    /// The .obj file whose import options are being asked.
+    pub obj_import: Option<std::path::PathBuf>,
+    /// The last choices of the OBJ import dialog.
+    pub obj_options: crate::obj_ui::ObjOptions,
     /// The Preferences window.
     pub preferences: Option<crate::preferences::PreferencesDialog>,
 }
@@ -106,6 +115,14 @@ pub struct Dialogs {
 pub struct AppState {
     /// The engine session: document, derived geometry, drawings and sheets.
     pub session: Session,
+    /// The multi-selection rows' copy of the selected elements, per revision and selection.
+    pub multi_summary: Option<std::sync::Arc<crate::properties::MultiSummary>>,
+    /// The 2D views' drawings as painted, kept between frames.
+    pub paint_cache: crate::paint_cache::PaintCache,
+    /// The model's snap candidates (document revision, level, candidates).
+    pub snap_cache: Option<(u64, Option<LevelId>, std::sync::Arc<crate::tools::ModelSnaps>)>,
+    /// Each imported drawing's snap index, kept while its drawing stays the same.
+    pub cad_snap_index: std::collections::HashMap<ElementId, crate::tools::CadIndexEntry>,
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
@@ -218,8 +235,6 @@ pub struct AppState {
     pub detail_component: crate::detail_component_ui::PlaceOptions,
     /// Options of the Callout tool (scale, drafting view pointed to).
     pub callout: crate::callout_ui::CalloutOptions,
-    /// Import CAD brings a drawing's blocks in as detail components.
-    pub cad_blocks: bool,
     /// The visual programming editor (see [`crate::graph_ui`]).
     pub graph: crate::graph_ui::GraphEditor,
     /// Selection seen last frame (see [`AppState::follow_selection`]).
@@ -233,6 +248,10 @@ impl AppState {
         Self {
             session,
             selection: BTreeSet::new(),
+            multi_summary: None,
+            paint_cache: Default::default(),
+            snap_cache: None,
+            cad_snap_index: std::collections::HashMap::new(),
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),
@@ -294,7 +313,6 @@ impl AppState {
             detail_draw: None,
             detail_component: Default::default(),
             callout: Default::default(),
-            cad_blocks: false,
         }
     }
 
@@ -341,6 +359,8 @@ impl AppState {
             let phase = phase.map(|p| cc_engine::Ref::Id(p.0));
             let _ = self.session.run(cc_engine::commands::phases::PhaseCreationSet { phase, view: None });
         }
+        // Macros record and play steps on the active plan's level.
+        self.session.set_active_level(self.active_level());
         if self.session.sync() {
             let project = &self.session.doc.project;
             self.selection.retain(|id| project.elements.contains_key(id));

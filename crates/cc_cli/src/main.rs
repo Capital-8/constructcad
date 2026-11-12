@@ -19,7 +19,8 @@ Usage:
   ccad [options] schema <command>     the JSON Schema of a command's parameters
   ccad reference                      the command reference in Markdown
   ccad [options] run <command> [args] run one command
-  ccad [options] script <file|->      run a script of commands
+  ccad [options] script <file|-> [level=<id|name>]
+                                      run a script of commands
   ccad [options] lua <file|-> [args]  run a Lua script
   ccad [options] graph <file> [inputs] run a visual programming graph (.ccgraph)
   ccad [options] plugins              list the plugins loaded with --plugins
@@ -32,7 +33,9 @@ key=value pairs whose values are JSON or plain text, e.g.
   ccad -p house.ccad --save run wall_create start=[0,0] end=[5,0] height=2.8
 
 A script is a JSON array of {\"command\": ..., \"args\": {...}} objects, or one
-such object per line; it stops at the first error.
+such object per line; it stops at the first error. {\"$step\": n} in its
+arguments is the id step n created (n from 1), {\"$level\": \"active\"} the
+level given as level=<id|name> (default: the lowest level).
 
 A graph (.ccgraph) takes its named input nodes as key=value pairs, e.g.
   ccad --save-as row.ccad graph examples/graphs/house.ccgraph width=12
@@ -51,6 +54,9 @@ Options:
                          subfolders (repeatable); their commands are named
                          <plugin>__<command> and get the permissions their
                          plugin.toml asks for
+  --allow-files          let a graph run commands that read or write files
+                         (open, save, import, export); a graph file cannot
+                         allow them itself
   --lang <code>          language of default names (default: the system's):
                          en, pt-BR, es, fr, de, it, lo, pl, uk-UA, zh-TW, zh-CN or ja
   -V, --version          the version
@@ -64,16 +70,26 @@ struct Options {
     save: bool,
     save_as: Option<PathBuf>,
     plugins: Vec<PathBuf>,
+    /// `graph` may run file commands (`graph_run`'s `allow_files`).
+    allow_files: bool,
     rest: Vec<String>,
 }
 
 fn parse_options(args: Vec<String>) -> Result<Options, String> {
-    let mut o = Options { project: None, save: false, save_as: None, plugins: Vec::new(), rest: Vec::new() };
+    let mut o = Options {
+        project: None,
+        save: false,
+        save_as: None,
+        plugins: Vec::new(),
+        allow_files: false,
+        rest: Vec::new(),
+    };
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "-p" | "--project" => o.project = Some(it.next().ok_or("--project needs a file")?.into()),
             "--save" => o.save = true,
+            "--allow-files" => o.allow_files = true,
             "-V" | "--version" => o.rest.push("--version".into()),
             "--save-as" => o.save_as = Some(it.next().ok_or("--save-as needs a file")?.into()),
             "--plugins" => o.plugins.push(it.next().ok_or("--plugins needs a folder")?.into()),
@@ -288,10 +304,26 @@ fn main() -> ExitCode {
                 Ok(s) => s,
                 Err(e) => return usage_error(&format!("invalid script: {e}")),
             };
+            let level = match rest.get(1..).unwrap_or_default() {
+                [] => None,
+                [arg] => match arg.strip_prefix("level=") {
+                    Some(v) => {
+                        Some(v.parse::<u64>().map_or_else(|_| cc_engine::Ref::Name(v.into()), cc_engine::Ref::Id))
+                    }
+                    None => return usage_error(&format!("unknown script argument {arg} (expected level=<id|name>)")),
+                },
+                _ => return usage_error("script takes a file and at most level=<id|name>"),
+            };
             let mut s = match session(&o) {
                 Ok(s) => s,
                 Err(e) => return fail(&e),
             };
+            if let Some(level) = level {
+                match s.level(&level) {
+                    Ok(id) => s.set_active_level(Some(id)),
+                    Err(e) => return fail(&e),
+                }
+            }
             let results = cc_engine::script::run(&mut s, &steps);
             flush_messages(&mut s);
             let results = match results {
@@ -355,7 +387,10 @@ fn main() -> ExitCode {
                 Ok(s) => s,
                 Err(e) => return fail(&e),
             };
-            let result = s.execute("graph_run", json!({ "path": file, "inputs": inputs, "brief": true }));
+            let result = s.execute(
+                "graph_run",
+                json!({ "path": file, "inputs": inputs, "brief": true, "allow_files": o.allow_files }),
+            );
             flush_messages(&mut s);
             match result.and_then(|out| save(&mut s, &o).map(|()| out)) {
                 Ok(out) => {

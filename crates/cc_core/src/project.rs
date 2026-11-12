@@ -106,6 +106,9 @@ pub struct Project {
     /// Design option sets (see [`crate::design_option`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_sets: Vec<crate::OptionSet>,
+    /// How the project browser groups the views (see [`crate::browser`]).
+    #[serde(default, skip_serializing_if = "crate::browser::BrowserOrganization::is_default")]
+    pub browser: crate::browser::BrowserOrganization,
     /// The design option new elements go into and views without a choice of
     /// their own show for its set: session state, not saved nor undone (set
     /// through [`crate::Document::set_active_option`]).
@@ -147,6 +150,7 @@ impl Project {
             fill_patterns: BTreeMap::new(),
             profiles: BTreeMap::new(),
             option_sets: Vec::new(),
+            browser: Default::default(),
             active_option: None,
             next_id: 1,
         }
@@ -427,7 +431,7 @@ impl Project {
             (&n("tpl-type-conduit-32"), TypeData::Conduit { diameter: 0.032, material: n("tpl-mat-pvc") }),
             (&n("tpl-type-room"), TypeData::Room {}),
             (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
-            (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5 }),
+            (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5, style: Default::default() }),
             (&n("tpl-type-text"), TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
             (&n("tpl-type-text-large"), TypeData::Text { size: 3.5, symbol: crate::LeaderSymbol::Arrow }),
             (
@@ -631,7 +635,11 @@ impl Project {
             ),
             (Category::Room, "tpl-type-room", TypeData::Room {}),
             (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
-            (Category::Dimension, "tpl-type-dimension", TypeData::Dimension { text_size: 2.5 }),
+            (
+                Category::Dimension,
+                "tpl-type-dimension",
+                TypeData::Dimension { text_size: 2.5, style: Default::default() },
+            ),
             (Category::Text, "tpl-type-text", TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
         ];
         for (category, key, data) in defaults {
@@ -980,6 +988,63 @@ impl Project {
         self.next_id
     }
 
+    /// A copy of the project with `types` in place of its own (which are not copied).
+    pub(crate) fn copy_with_types(&self, types: BTreeMap<ElementTypeId, ElementType>) -> Project {
+        // Destructured so that a new field is not forgotten.
+        let Project {
+            info,
+            levels,
+            materials,
+            types: _,
+            elements,
+            views,
+            units,
+            pinned,
+            joins,
+            groups,
+            systems,
+            filters,
+            templates,
+            phases,
+            phase_filters,
+            phase_graphics,
+            graph_bindings,
+            line_styles,
+            fill_patterns,
+            option_sets,
+            browser,
+            profiles,
+            active_option,
+            next_id,
+        } = self;
+        Project {
+            info: info.clone(),
+            levels: levels.clone(),
+            materials: materials.clone(),
+            types,
+            elements: elements.clone(),
+            views: views.clone(),
+            units: units.clone(),
+            pinned: pinned.clone(),
+            joins: joins.clone(),
+            groups: groups.clone(),
+            systems: systems.clone(),
+            filters: filters.clone(),
+            templates: templates.clone(),
+            phases: phases.clone(),
+            phase_filters: phase_filters.clone(),
+            phase_graphics: *phase_graphics,
+            graph_bindings: graph_bindings.clone(),
+            line_styles: line_styles.clone(),
+            fill_patterns: fill_patterns.clone(),
+            option_sets: option_sets.clone(),
+            browser: browser.clone(),
+            profiles: profiles.clone(),
+            active_option: *active_option,
+            next_id: *next_id,
+        }
+    }
+
     pub fn alloc_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
@@ -1003,6 +1068,7 @@ impl Project {
         let profiles = self.profiles.keys().map(|k| k.0);
         let option_sets = self.option_sets.iter().map(|s| s.id.0);
         let options = self.option_sets.iter().flat_map(|s| s.options.iter().map(|o| o.id.0));
+        let schemes = self.browser.schemes.iter().map(|s| s.id.0);
         levels
             .chain(phases)
             .chain(types)
@@ -1018,6 +1084,7 @@ impl Project {
             .chain(profiles)
             .chain(option_sets)
             .chain(options)
+            .chain(schemes)
             .max()
             .unwrap_or(0)
     }

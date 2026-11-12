@@ -24,6 +24,10 @@ pub enum CommandKind {
 pub trait Command: DeserializeOwned + JsonSchema {
     const NAME: &'static str;
     const KIND: CommandKind;
+    /// Whether it may read a file named by one of its parameters (an import
+    /// of an edit or query command); it then refuses the path when the run
+    /// may not work with files ([`Session::require_files`]).
+    const READS_FILES: bool = false;
     fn run(self, session: &mut Session) -> Result<Value>;
 }
 
@@ -35,8 +39,11 @@ pub struct CommandInfo {
     /// Area of the catalog (project, queries, elements…).
     pub group: String,
     pub description: String,
-    /// JSON Schema (draft 7, no references) of the parameters object.
+    /// JSON Schema of the parameters object: no references, valid under draft 7 and 2020-12.
     pub input_schema: Value,
+    /// May read a file named by a parameter (besides `File` commands, which
+    /// all work with files).
+    pub reads_files: bool,
 }
 
 fn info<C: Command>(group: &'static str) -> CommandInfo {
@@ -48,6 +55,7 @@ fn info<C: Command>(group: &'static str) -> CommandInfo {
         .into_generator();
     let schema = generator.into_root_schema_for::<C>();
     let mut input_schema = serde_json::to_value(schema).unwrap_or_else(|_| serde_json::json!({"type": "object"}));
+    portable_tuples(&mut input_schema, 0);
     let description = input_schema
         .get("description")
         .and_then(Value::as_str)
@@ -58,7 +66,53 @@ fn info<C: Command>(group: &'static str) -> CommandInfo {
         o.remove("description");
         o.entry("properties").or_insert_with(|| serde_json::json!({}));
     }
-    CommandInfo { name: C::NAME.to_string(), kind: C::KIND, group: group.to_string(), description, input_schema }
+    CommandInfo {
+        name: C::NAME.to_string(),
+        kind: C::KIND,
+        group: group.to_string(),
+        description,
+        input_schema,
+        reads_files: C::READS_FILES,
+    }
+}
+
+/// Rewrites draft 7 tuples (`items` as an array, which JSON Schema 2020-12 rejects, and with it MCP
+/// clients and model APIs) as `prefixItems` for 2020-12 plus `items` holding any of the positions'
+/// schemas for draft 7, which ignores `prefixItems`; the tuple's `minItems`/`maxItems` stay.
+fn portable_tuples(v: &mut Value, depth: usize) {
+    // Schemas of parameter structs are shallow; the bound only guards the recursion.
+    if depth > 64 {
+        return;
+    }
+    match v {
+        Value::Object(o) => {
+            if let Some(Value::Array(positions)) = o.get("items") {
+                let positions = positions.clone();
+                let mut distinct: Vec<Value> = Vec::new();
+                for p in &positions {
+                    if !distinct.contains(p) {
+                        distinct.push(p.clone());
+                    }
+                }
+                let items = match distinct.len() {
+                    1 => distinct.remove(0),
+                    _ => serde_json::json!({ "anyOf": distinct }),
+                };
+                o.insert("items".into(), items);
+                o.insert("prefixItems".into(), Value::Array(positions));
+                o.remove("additionalItems");
+            }
+            for child in o.values_mut() {
+                portable_tuples(child, depth + 1);
+            }
+        }
+        Value::Array(a) => {
+            for child in a {
+                portable_tuples(child, depth + 1);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn run<C: Command>(session: &mut Session, args: Value) -> Result<Value> {
@@ -118,6 +172,8 @@ registry![
         io::IfcImport,
         io::SkpImport,
         io::SkpComponentLoad,
+        io::ObjImport,
+        io::GltfImport,
         io::IfcExport,
         io::SheetExport,
         io::ViewExport,
@@ -280,6 +336,12 @@ registry![
         detail::DetailLineCreate,
         detail_component::DetailComponentCreate,
         detail_component::DetailComponentPlace,
+        browser::BrowserSchemesList,
+        browser::BrowserSchemeCreate,
+        browser::BrowserSchemeSet,
+        browser::BrowserSchemeDelete,
+        browser::BrowserSchemeUse,
+        browser::BrowserTree,
         line_style::LineStylesList,
         line_style::LineStyleCreate,
         line_style::LineStyleSet,

@@ -563,6 +563,44 @@ fn block_cycles_and_array_bombs_are_bounded() {
     assert!(matches!(&r.drawing.prims[0], CadPrim::Polyline { pts, .. } if close(pts[1], DVec2::X)));
 }
 
+/// The points of all polylines and the characters of all texts.
+fn points_read(r: &CadRead) -> usize {
+    r.drawing
+        .prims
+        .iter()
+        .map(|p| match p {
+            CadPrim::Polyline { pts, .. } | CadPrim::Fill { pts, .. } => pts.len(),
+            CadPrim::Text { text, .. } => text.len(),
+            _ => 1,
+        })
+        .sum()
+}
+
+#[test]
+fn large_entities_in_arrayed_blocks_are_bounded_by_points() {
+    // A block of one 2,000-vertex polyline, inserted 100 × 100 times: few
+    // primitives and little work, but 20 million points.
+    let mut b = pairs(&[(0, "BLOCK"), (2, "P"), (10, "0"), (20, "0"), (30, "0"), (0, "LWPOLYLINE"), (8, "0")]);
+    b += &pairs(&[(90, "2000"), (70, "0")]);
+    for i in 0..2000 {
+        b += &pairs(&[(10, &i.to_string()), (20, &(i % 2).to_string())]);
+    }
+    b += &pairs(&[(0, "ENDBLK")]);
+    // And a block of one long multi-line text.
+    b += &pairs(&[(0, "BLOCK"), (2, "T"), (10, "0"), (20, "0"), (30, "0"), (0, "MTEXT"), (8, "0"), (40, "1")]);
+    b += &pairs(&[(10, "0"), (20, "0"), (30, "0"), (1, &"abcdefghij\\P".repeat(500))]);
+    b += &pairs(&[(0, "ENDBLK")]);
+    let array =
+        |name: &str| pairs(&[(0, "INSERT"), (8, "0"), (2, name), (70, "100"), (71, "100"), (44, "1"), (45, "1")]);
+    let limits = Limits { max_points: 300_000, ..Default::default() };
+    for name in ["P", "T"] {
+        let r = read(file(None, &[], &b, &array(name)).as_bytes(), &limits).unwrap();
+        assert!(r.truncated, "{name}");
+        assert!(points_read(&r) <= 300_000, "{name}: {}", points_read(&r));
+        assert!(!r.drawing.prims.is_empty(), "{name}");
+    }
+}
+
 #[test]
 fn code_page_text_and_binary_dxf() {
     let mut s = pairs(&[(0, "SECTION"), (2, "HEADER"), (9, "$DWGCODEPAGE"), (3, "ANSI_1252"), (0, "ENDSEC")]);

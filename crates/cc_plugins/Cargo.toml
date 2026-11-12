@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "cc_plugins"
 description = "ConstructCraft Lua scripts and plugins: sandboxed Lua 5.4 over the engine's commands"
 version.workspace = true
@@ -19,3 +20,7 @@ toml.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

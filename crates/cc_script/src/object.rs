@@ -24,7 +24,7 @@
 //! pieces that worked for each owner.
 
 use crate::convert::{from_lua, to_lua};
-use crate::sandbox::{BUDGET_SPENT, Limits, Sandbox};
+use crate::sandbox::{BUDGET_SPENT, Limits, Sandbox, TIME_SPENT};
 use cc_core::component::{ComponentItem, ComponentShape, DetailLevels, ProfilePoint, SketchPlane};
 use cc_core::component_script::{
     Hotspot, HotspotShape, MAX_CHOICES, MAX_HOTSPOTS, MAX_TEXT_LEN, ParamChoice, ScriptEval, ScriptInput, ScriptOwner,
@@ -39,7 +39,8 @@ use std::sync::{Arc, Mutex};
 
 /// What one evaluation may use: less than a plugin command, since scripts
 /// come with project files.
-pub const LIMITS: Limits = Limits { instructions: 20_000_000, memory: 64 * 1024 * 1024 };
+pub const LIMITS: Limits =
+    Limits { instructions: 20_000_000, memory: 64 * 1024 * 1024, time: std::time::Duration::from_secs(5) };
 /// Most pieces a script returns.
 pub const MAX_PIECES: usize = 10_000;
 /// Most points (outline points and mesh vertices) of all its pieces.
@@ -70,9 +71,25 @@ impl std::fmt::Display for ScriptError {
     }
 }
 
+/// Longest error message kept (results are cached, and a script chooses its
+/// messages).
+const MAX_MESSAGE: usize = 1000;
+
+/// `message` cut to [`MAX_MESSAGE`] bytes.
+fn bounded(message: &str) -> String {
+    if message.len() <= MAX_MESSAGE {
+        return message.to_string();
+    }
+    let mut cut = MAX_MESSAGE;
+    while !message.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}…", &message[..cut])
+}
+
 impl ScriptError {
-    fn new(message: impl Into<String>) -> ScriptError {
-        ScriptError { message: message.into(), line: None }
+    fn new(message: impl AsRef<str>) -> ScriptError {
+        ScriptError { message: bounded(message.as_ref()), line: None }
     }
 
     /// From a Lua error: `script:12: message` gives line 12.
@@ -81,8 +98,10 @@ impl ScriptError {
             mlua::Error::CallbackError { cause, .. } => cause.to_string(),
             e => e.to_string(),
         };
-        if text.contains(BUDGET_SPENT) {
-            return ScriptError::new(BUDGET_SPENT);
+        for spent in [BUDGET_SPENT, TIME_SPENT] {
+            if text.contains(spent) {
+                return ScriptError::new(spent);
+            }
         }
         if matches!(e, mlua::Error::MemoryError(_)) || text.contains("not enough memory") {
             return ScriptError::new("the script used too much memory");
@@ -95,7 +114,7 @@ impl ScriptError {
             && let Some((line, message)) = rest.split_once(':')
             && let Ok(line) = line.trim().parse()
         {
-            return ScriptError { message: message.trim().to_string(), line: Some(line) };
+            return ScriptError { message: bounded(message.trim()), line: Some(line) };
         }
         ScriptError::new(first)
     }
@@ -211,7 +230,11 @@ fn load(source: &str) -> Result<Loaded, ScriptError> {
     let (get, end): (Function, Function) =
         lua.load(PRELUDE).set_name("=prelude").call(()).map_err(|e| ScriptError::lua(&e))?;
     sandbox.reset_budget();
-    lua.load(source).set_name(format!("={}", CHUNK.trim_end_matches(':'))).exec().map_err(|e| ScriptError::lua(&e))?;
+    lua.load(source)
+        .set_name(format!("={}", CHUNK.trim_end_matches(':')))
+        .set_mode(mlua::ChunkMode::Text)
+        .exec()
+        .map_err(|e| ScriptError::lua(&e))?;
     let decl: LuaValue = get.call(()).map_err(|e| ScriptError::lua(&e))?;
     let decl = from_lua(lua, &decl).map_err(ScriptError::new)?;
     let declarations = declarations(&decl)?;
@@ -568,7 +591,7 @@ fn mesh(m: &Map<String, Value>, index: usize, points: &mut usize) -> Result<Comp
     if corners > MAX_POINTS {
         return Err(ScriptError::new(format!("more than {MAX_POINTS} points")));
     }
-    Ok(ComponentShape::Mesh { vertices, faces })
+    Ok(ComponentShape::Mesh { vertices: vertices.into(), faces: faces.into() })
 }
 
 /// A cached result: the source and values it is for (to rule out hash
@@ -757,6 +780,25 @@ end
     }
 
     #[test]
+    fn scripts_are_text_only() {
+        let e = declare("\x1bLua").unwrap_err();
+        assert!(e.message.contains("mode"), "{e}");
+    }
+
+    #[test]
+    fn hostile_results_stay_small() {
+        // Error messages are cut.
+        let e = declare("error(string.rep('x', 1000000))").unwrap_err();
+        assert!(e.message.len() <= MAX_MESSAGE + 4, "{}", e.message.len());
+        // One large string returned many times is refused, not copied.
+        let src = "function geometry(p) local s = string.rep('x', 8 * 1024 * 1024); local t = {}; \
+                   for i = 1, 100000 do t[i] = s end; return t end";
+        let decl = declare(src).unwrap();
+        let e = evaluate(src, &input(&decl)).unwrap_err();
+        assert!(e.message.contains("bytes"), "{e}");
+    }
+
+    #[test]
     fn declarations_are_read() {
         let d = declare(CABINET).unwrap();
         let names: Vec<&str> = d.params.iter().map(|p| p.name.as_str()).collect();
@@ -853,7 +895,7 @@ end
             err("function geometry() while true do pcall(function() while true do end end) end end"),
             BUDGET_SPENT
         );
-        assert_eq!(err("local s = ('x'):rep(100 * 1024 * 1024)"), "the script used too much memory");
+        assert_eq!(err("local s = ('x'):rep(100 * 1024 * 1024)"), "string.rep: the result would be larger than 16 MB");
         for name in ["io", "os", "require", "load", "dofile", "debug", "package", "ccad"] {
             let src = format!("assert({name} == nil, '{name}') function geometry() return {{}} end");
             assert!(evaluate(&src, &ScriptInput::default()).is_ok(), "{name} is reachable");

@@ -6,8 +6,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Largest image file kept, bytes.
 pub const MAX_IMAGE_BYTES: usize = 64 << 20;
-/// Most pixels an image may have (width × height).
-pub const MAX_IMAGE_PIXELS: u64 = 200_000_000;
+/// Most pixels an image may have (width × height): decoding one takes up to
+/// 8 bytes per pixel, plus 4 for its RGBA copy.
+pub const MAX_IMAGE_PIXELS: u64 = 64_000_000;
 
 /// Encoding of an image's bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -208,6 +209,9 @@ mod tests {
         assert!(!RasterImage { width: 0, ..ok.clone() }.is_valid());
         assert!(!RasterImage { width: u32::MAX, height: u32::MAX, ..ok.clone() }.is_valid());
         assert!(!RasterImage { format: RasterFormat::Jpeg, ..ok.clone() }.is_valid());
+        // 100 million pixels would take over a gigabyte to decode.
+        assert!(!RasterImage { width: 10_000, height: 10_000, ..ok.clone() }.is_valid());
+        assert!(RasterImage { width: 8_000, height: 8_000, ..ok.clone() }.is_valid());
         // A truncated pHYs chunk reads as no resolution.
         let mut short = png;
         short.extend_from_slice(&[0, 0, 0, 9, b'p', b'H', b'Y', b's', 0]);

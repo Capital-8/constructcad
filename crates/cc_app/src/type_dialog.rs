@@ -371,6 +371,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     }
 
     crate::level_mark_ui::type_rows(ui, state, tid, &ty.data);
+    crate::dim_type_ui::type_sections(ui, state, ty);
 
     if let TypeData::Pad { cut_slope, fill_slope } = ty.data {
         section(ui, "type-slopes", t!("section-slopes"), |ui| {

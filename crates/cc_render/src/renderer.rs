@@ -1,6 +1,7 @@
 use crate::textures::{LAYER_SIZE, TextureSet, mip_count};
-use crate::{SceneMesh, Vertex, view_proj};
+use crate::{Highlight, SceneMesh, Shown, Vertex, view_proj};
 use cc_core::CameraState;
+use std::ops::Range;
 use wgpu::util::DeviceExt;
 
 // egui samples native textures as gamma-encoded values, so the shader encodes sRGB itself.
@@ -36,7 +37,26 @@ struct Buffers {
     edge_count: u32,
 }
 
-/// Draws a [`SceneMesh`] into an offscreen, multisampled texture.
+/// A [`Highlight`] on the GPU: its opaque faces and edges, and the parts of
+/// the base mesh to draw.
+struct HighlightBuffers {
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    index_count: u32,
+    edges: wgpu::Buffer,
+    edge_count: u32,
+    shown: Option<Shown>,
+}
+
+/// The ranges to draw of a buffer of `count` items: all of it, or the
+/// ranges `shown` keeps, cut to the buffer.
+fn ranges(shown: Option<&[Range<u32>]>, count: u32) -> Vec<Range<u32>> {
+    let all = std::slice::from_ref(&(0..u32::MAX));
+    shown.unwrap_or(all).iter().map(|r| r.start.min(count)..r.end.min(count)).filter(|r| !r.is_empty()).collect()
+}
+
+/// Draws a [`SceneMesh`] into an offscreen, multisampled texture, with an
+/// optional [`Highlight`] (the selection) over it.
 pub struct Renderer3D {
     faces: wgpu::RenderPipeline,
     /// Blended faces that do not write depth (transparent materials).
@@ -49,6 +69,7 @@ pub struct Renderer3D {
     /// The generation of the textures uploaded (see [`TextureSet::generation`]).
     textures: Option<u64>,
     buffers: Option<Buffers>,
+    highlight: Option<HighlightBuffers>,
     targets: Option<Targets>,
     /// Camera and size of the frame in the targets, while it is current:
     /// rendering it again is skipped.
@@ -174,6 +195,7 @@ impl Renderer3D {
             bind_group,
             textures: None,
             buffers: None,
+            highlight: None,
             targets: None,
             drawn: None,
             unlit: false,
@@ -260,9 +282,12 @@ impl Renderer3D {
         self.bind_group = Self::bind(device, &self.bind_layout, &self.uniforms, &view, &self.sampler);
     }
 
+    /// Upload a new base mesh; the highlight over the old one is dropped
+    /// (its ranges refer to that mesh).
     pub fn upload(&mut self, device: &wgpu::Device, mesh: &SceneMesh) {
         self.drawn = None;
         self.unlit = mesh.unlit;
+        self.highlight = None;
         if mesh.indices.is_empty() && mesh.transparent_indices.is_empty() && mesh.edges.is_empty() {
             self.buffers = None;
             return;
@@ -300,6 +325,41 @@ impl Renderer3D {
             transparent_count: mesh.transparent_indices.len() as u32,
             edges: init("cc_render edges", bytemuck::cast_slice(edges), wgpu::BufferUsages::VERTEX),
             edge_count: mesh.edges.len() as u32,
+        });
+    }
+
+    /// Draw `highlight` (made for the mesh last uploaded) over that mesh, or
+    /// nothing with `None`; the base mesh's buffers stay as they are.
+    pub fn set_highlight(&mut self, device: &wgpu::Device, highlight: Option<&Highlight>) {
+        self.drawn = None;
+        self.highlight = None;
+        let Some(h) = highlight else { return };
+        let mesh = &h.mesh;
+        let largest = [
+            std::mem::size_of_val(mesh.vertices.as_slice()),
+            std::mem::size_of_val(mesh.edges.as_slice()),
+            std::mem::size_of_val(mesh.indices.as_slice()),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0);
+        if !fits(largest, device.limits().max_buffer_size) {
+            return;
+        }
+        let init = |label, contents: &[u8], usage| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents, usage })
+        };
+        let pad = [Vertex::plain([0.0; 3], [0.0; 3], [0.0; 4])];
+        let verts: &[Vertex] = if mesh.vertices.is_empty() { &pad } else { &mesh.vertices };
+        let edges: &[Vertex] = if mesh.edges.is_empty() { &pad } else { &mesh.edges };
+        let indices: &[u32] = if mesh.indices.is_empty() { &[0, 0, 0] } else { &mesh.indices };
+        self.highlight = Some(HighlightBuffers {
+            vertices: init("cc_render highlight vertices", bytemuck::cast_slice(verts), wgpu::BufferUsages::VERTEX),
+            indices: init("cc_render highlight indices", bytemuck::cast_slice(indices), wgpu::BufferUsages::INDEX),
+            index_count: mesh.indices.len() as u32,
+            edges: init("cc_render highlight edges", bytemuck::cast_slice(edges), wgpu::BufferUsages::VERTEX),
+            edge_count: mesh.edges.len() as u32,
+            shown: h.shown.clone(),
         });
     }
 
@@ -391,25 +451,57 @@ impl Renderer3D {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            // The base mesh leaves out what the highlight draws in its place.
+            let h = self.highlight.as_ref();
+            let shown = h.and_then(|h| h.shown.as_ref());
             if let Some(b) = &self.buffers {
-                pass.set_bind_group(0, &self.bind_group, &[]);
-                if b.index_count > 0 {
+                let opaque = ranges(shown.map(|s| s.indices.as_slice()), b.index_count);
+                if !opaque.is_empty() {
                     pass.set_pipeline(&self.faces);
                     pass.set_vertex_buffer(0, b.vertices.slice(..));
                     pass.set_index_buffer(b.indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..b.index_count, 0, 0..1);
+                    for r in opaque {
+                        pass.draw_indexed(r, 0, 0..1);
+                    }
                 }
-                if b.edge_count > 0 {
+            }
+            if let Some(h) = h
+                && h.index_count > 0
+            {
+                pass.set_pipeline(&self.faces);
+                pass.set_vertex_buffer(0, h.vertices.slice(..));
+                pass.set_index_buffer(h.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..h.index_count, 0, 0..1);
+            }
+            if let Some(b) = &self.buffers {
+                let edges = ranges(shown.map(|s| s.edges.as_slice()), b.edge_count);
+                if !edges.is_empty() {
                     pass.set_pipeline(&self.edges);
                     pass.set_vertex_buffer(0, b.edges.slice(..));
-                    pass.draw(0..b.edge_count, 0..1);
+                    for r in edges {
+                        pass.draw(r, 0..1);
+                    }
                 }
-                // Transparent faces last, over everything opaque.
-                if b.transparent_count > 0 {
+            }
+            // After the base edges: lines the highlight shares with the base win the depth test.
+            if let Some(h) = h
+                && h.edge_count > 0
+            {
+                pass.set_pipeline(&self.edges);
+                pass.set_vertex_buffer(0, h.edges.slice(..));
+                pass.draw(0..h.edge_count, 0..1);
+            }
+            // Transparent faces last, over everything opaque.
+            if let Some(b) = &self.buffers {
+                let transparent = ranges(shown.map(|s| s.transparent.as_slice()), b.transparent_count);
+                if !transparent.is_empty() {
                     pass.set_pipeline(&self.blended);
                     pass.set_vertex_buffer(0, b.vertices.slice(..));
                     pass.set_index_buffer(b.transparent.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..b.transparent_count, 0, 0..1);
+                    for r in transparent {
+                        pass.draw_indexed(r, 0, 0..1);
+                    }
                 }
             }
         }
@@ -487,6 +579,15 @@ mod tests {
         let limit = wgpu::Limits::default().max_buffer_size;
         assert!(fits(0, limit) && fits(1 << 20, limit));
         assert!(!fits(usize::try_from(limit).unwrap_or(usize::MAX).saturating_add(1), limit));
+    }
+
+    #[test]
+    fn shown_ranges_are_cut_to_the_buffer() {
+        assert_eq!(ranges(None, 9), vec![0..9]);
+        assert!(ranges(None, 0).is_empty());
+        let shown = [0..3, 5..8, 12..u32::MAX];
+        assert_eq!(ranges(Some(&shown), 10), vec![0..3, 5..8]);
+        assert_eq!(ranges(Some(&shown), 20), vec![0..3, 5..8, 12..20]);
     }
 }
 

@@ -18,6 +18,11 @@ const MAX_DEPTH: usize = 32;
 pub const MAX_FACES: usize = 2_000_000;
 /// Distinct types an import may make.
 const MAX_TYPES: usize = 20_000;
+/// Most work over the whole import: each definition read costs one plus its
+/// faces and instances, every time it is placed. Faces count only when
+/// drawn, so without this a chain of faceless definitions each placing the
+/// next several times would cost its count to the power of the depth.
+const MAX_WORK: usize = 10_000_000;
 
 /// A component type to add: its name and definition.
 #[derive(Debug, Clone)]
@@ -41,8 +46,8 @@ pub struct SkpPlacement {
 pub struct Converted {
     pub types: Vec<SkpType>,
     pub placements: Vec<SkpPlacement>,
-    /// Materials (name, color) the pieces use.
-    pub materials: Vec<(String, [u8; 3])>,
+    /// Materials the pieces use (keyed by index).
+    pub materials: Vec<crate::import_material::ImportedMaterial>,
     /// Hidden instances and faces (or on hidden layers) left out.
     pub hidden: usize,
     pub faces: usize,
@@ -52,6 +57,22 @@ pub struct Converted {
 pub enum SkpError {
     /// More faces than [`MAX_FACES`], or more types than the import makes.
     TooLarge,
+}
+
+/// A SketchUp material: its color (already the texture's average for a
+/// textured one), opacity and texture, whose tile size SketchUp keeps in
+/// inches.
+fn skp_material(name: String, m: &cc_skp::Material) -> crate::import_material::ImportedMaterial {
+    let color = [m.color[0], m.color[1], m.color[2]];
+    let opacity = if m.transparency.is_finite() { m.transparency.clamp(0.0, 1.0) } else { 1.0 };
+    let texture = m.texture.as_ref().and_then(|t| {
+        let image = crate::import_material::texture_image(t.data.clone()?)?;
+        let size = |inches: f64| if inches.is_finite() && inches > 0.0 { inches * INCH } else { 1.0 };
+        let mut texture = cc_core::material::MaterialTexture::new(image, size(t.width), size(t.height));
+        texture.repair();
+        Some(texture)
+    });
+    crate::import_material::ImportedMaterial { name, color, opacity, texture }
 }
 
 /// Same type: the placed definition, what is left of its transform after
@@ -64,6 +85,11 @@ struct Converter<'a> {
     out: Converted,
     keys: HashMap<TypeKey, usize>,
     materials: HashMap<EntityId, Option<usize>>,
+    /// Work done ([`MAX_WORK`]).
+    work: usize,
+    /// The definitions being gathered, outermost first (a definition that
+    /// places itself, directly or not, is not followed again).
+    path: Vec<EntityId>,
 }
 
 /// An instance's 13-value matrix (row-major 3x3, translation, scale term) in inches.
@@ -100,14 +126,14 @@ fn loop_vertices(def: &Definition, lp: &[cc_skp::CoEdge]) -> Vec<EntityId> {
 
 /// Faces of one piece, with vertices shared by position.
 #[derive(Default)]
-struct MeshBuild {
+pub(crate) struct MeshBuild {
     vertices: Vec<[f64; 3]>,
     index: HashMap<[i64; 3], u32>,
     faces: Vec<Vec<u32>>,
 }
 
 impl MeshBuild {
-    fn add(&mut self, face: &[DVec3]) {
+    pub(crate) fn add(&mut self, face: &[DVec3]) {
         let mut f: Vec<u32> = Vec::with_capacity(face.len());
         for p in face {
             // Snap to 1/100 mm so shared corners share a vertex.
@@ -129,7 +155,15 @@ impl MeshBuild {
 impl<'a> Converter<'a> {
     fn new(model: &'a SkpModel) -> Self {
         let hidden_layers = model.layers.iter().filter(|l| l.hidden).map(|l| l.name.as_str()).collect();
-        Self { model, hidden_layers, out: Converted::default(), keys: HashMap::new(), materials: HashMap::new() }
+        Self {
+            model,
+            hidden_layers,
+            out: Converted::default(),
+            keys: HashMap::new(),
+            materials: HashMap::new(),
+            work: 0,
+            path: Vec::new(),
+        }
     }
 
     fn layer_hidden(&self, layer: &str) -> bool {
@@ -145,11 +179,10 @@ impl<'a> Converter<'a> {
         let found = self.model.material_by_id(id).map(|m| {
             let name = m.name.trim();
             let name = if name.is_empty() { format!("SketchUp {id}") } else { name.to_string() };
-            let color = [m.color[0], m.color[1], m.color[2]];
-            match self.out.materials.iter().position(|(n, _)| *n == name) {
+            match self.out.materials.iter().position(|x| x.name == name) {
                 Some(i) => i,
                 None => {
-                    self.out.materials.push((name, color));
+                    self.out.materials.push(skp_material(name, m));
                     self.out.materials.len() - 1
                 }
             }
@@ -169,9 +202,28 @@ impl<'a> Converter<'a> {
         depth: usize,
         pieces: &mut BTreeMap<Option<usize>, MeshBuild>,
     ) -> Result<(), SkpError> {
-        if depth > MAX_DEPTH {
+        if depth > MAX_DEPTH || self.path.contains(&def.id) {
             return Ok(());
         }
+        self.work = self.work.saturating_add(1 + def.faces.len() + def.instances.len());
+        if self.work > MAX_WORK {
+            return Err(SkpError::TooLarge);
+        }
+        self.path.push(def.id);
+        let gathered = self.gather_in(def, to_type, inherited, depth, pieces);
+        self.path.pop();
+        gathered
+    }
+
+    /// The body of [`Self::gather`], with `def` on the path.
+    fn gather_in(
+        &mut self,
+        def: &Definition,
+        to_type: DMat4,
+        inherited: Option<EntityId>,
+        depth: usize,
+        pieces: &mut BTreeMap<Option<usize>, MeshBuild>,
+    ) -> Result<(), SkpError> {
         self.faces(def, to_type, inherited, pieces)?;
         for instance in &def.instances {
             if instance.hidden || self.layer_hidden(&instance.layer) {
@@ -242,23 +294,7 @@ impl<'a> Converter<'a> {
 
     /// A component definition of `pieces` (none when nothing was drawn).
     fn definition(&self, name: &str, pieces: BTreeMap<Option<usize>, MeshBuild>) -> Option<ComponentDef> {
-        let items: Vec<ComponentItem> = pieces
-            .into_iter()
-            .filter(|(_, m)| !m.faces.is_empty())
-            .map(|(material, m)| {
-                let material = material.and_then(|i| self.out.materials.get(i)).map(|(n, _)| n.clone());
-                ComponentItem {
-                    name: material.clone().unwrap_or_else(|| name.to_string()),
-                    shape: ComponentShape::Mesh { vertices: m.vertices, faces: m.faces },
-                    material: material.unwrap_or_default(),
-                    in_plan: true,
-                    void: false,
-                    plan_only: false,
-                    detail: Default::default(),
-                }
-            })
-            .collect();
-        (!items.is_empty()).then(|| ComponentDef { kind: ComponentKind::Generic, items, ..Default::default() })
+        mesh_definition(name, pieces, &self.out.materials)
     }
 
     fn add_type(&mut self, name: String, def: ComponentDef) -> Result<usize, SkpError> {
@@ -339,6 +375,36 @@ impl<'a> Converter<'a> {
         }
         Ok(self.out)
     }
+}
+
+/// A component definition of fixed mesh pieces, one per entry of `pieces`
+/// (keyed by the index in `materials`; `None` takes no material and is
+/// named `name`); none when nothing was drawn.
+pub(crate) fn mesh_definition(
+    name: &str,
+    pieces: BTreeMap<Option<usize>, MeshBuild>,
+    materials: &[crate::import_material::ImportedMaterial],
+) -> Option<ComponentDef> {
+    let items: Vec<ComponentItem> = pieces
+        .into_iter()
+        .filter(|(_, m)| !m.faces.is_empty())
+        .map(|(material, m)| {
+            let material = material.and_then(|i| materials.get(i)).map(|m| m.name.clone());
+            ComponentItem {
+                name: material.clone().unwrap_or_else(|| name.to_string()),
+                shape: ComponentShape::Mesh {
+                    faces: cc_geom::coplanar::merge(&m.vertices, m.faces).into(),
+                    vertices: m.vertices.into(),
+                },
+                material: material.unwrap_or_default(),
+                in_plan: true,
+                void: false,
+                plan_only: false,
+                detail: Default::default(),
+            }
+        })
+        .collect();
+    (!items.is_empty()).then(|| ComponentDef { kind: ComponentKind::Generic, items, ..Default::default() })
 }
 
 /// Every placed component and group of `model` as an element of a

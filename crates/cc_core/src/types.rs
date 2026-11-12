@@ -352,9 +352,11 @@ pub enum TypeData {
     Grid {
         bubble: f64,
     },
-    /// Linear dimension with text of `text_size` paper millimeters.
+    /// Dimensions with text of `text_size` paper millimeters, drawn as `style` says.
     Dimension {
         text_size: f64,
+        #[serde(default)]
+        style: crate::dim_style::DimensionStyle,
     },
     /// Text notes of `size` paper millimeters; new leaders get `symbol`.
     Text {

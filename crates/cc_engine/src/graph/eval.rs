@@ -236,6 +236,12 @@ impl Evaluator {
     /// Run `graph` on `session` as one undo step; `inputs` set the graph's
     /// named input nodes.
     pub fn run(&mut self, session: &mut Session, graph: &Graph, inputs: &BTreeMap<String, Value>) -> RunReport {
+        // Its commands work with files only when the run allows it, also
+        // those that read a file a parameter names.
+        session.with_files(graph.allow_files, |session| self.run_nodes(session, graph, inputs))
+    }
+
+    fn run_nodes(&mut self, session: &mut Session, graph: &Graph, inputs: &BTreeMap<String, Value>) -> RunReport {
         if self.revision != Some(session.doc.revision()) {
             self.cache.clear();
         }
@@ -452,8 +458,12 @@ impl Evaluator {
                 cc_script::convert::to_lua(lua, v.as_ref().unwrap_or(&Value::Null)).map_err(|e| e.to_string())?,
             );
         }
-        let returned: mlua::MultiValue =
-            lua.load(source).set_name(format!("=node {}", node.id)).call(args).map_err(|e| lua_message(&e))?;
+        let returned: mlua::MultiValue = lua
+            .load(source)
+            .set_name(format!("=node {}", node.id))
+            .set_mode(mlua::ChunkMode::Text)
+            .call(args)
+            .map_err(|e| lua_message(&e))?;
         let returned: Vec<mlua::Value> = returned.into_iter().collect();
         let mut out = Vec::with_capacity(node.outputs.len());
         // Several outputs: one value each, or a table with their names.

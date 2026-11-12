@@ -1282,7 +1282,7 @@ fn update_install_dialog_offers_what_is_left_to_do() {
     assert!(harness.state().updates.install.is_none());
 
     let msi = std::path::PathBuf::from("C:/Temp/constructcraft-v9.0.0-x86_64.msi");
-    let next = crate::update_install::Next::Installer(msi);
+    let next = crate::update_install::Next::Installer(msi, "0".repeat(64));
     harness.state_mut().updates.install = Some(Install::Ready(version, next.clone()));
     harness.run();
     harness.get_by_label(&t!("update-install-on-exit")).click();
@@ -3240,4 +3240,150 @@ fn leaving_a_profile_sketch_by_another_tool_ends_the_managers_session() {
     assert!(harness.state().dialogs.edit_start.is_none());
     assert!(harness.state().dialogs.profiles_resume.is_none());
     later_dialog_cancel_keeps(&mut harness, "Unrelated 2");
+}
+
+/// Zooming in until an input node's field passes the canvas edge leaves the editor's panel its size.
+#[test]
+fn zooming_the_graph_keeps_its_panel_size() {
+    // Where the toolbar stands in a panel of the default size: with an empty graph, then zoomed in
+    // until input nodes' fields pass the canvas's bottom edge.
+    fn toolbar_top(graph: Option<serde_json::Value>) -> f32 {
+        let mut state = sample_state();
+        if let Some(graph) = graph {
+            state.graph.graph = cc_engine::graph::Graph::from_value(graph).unwrap().0;
+            state.graph.set_view_for_test(2.0, egui::vec2(0.0, -35.0));
+        }
+        state.graph.open = true;
+        let mut harness = themed_harness(state, egui::vec2(1200.0, 800.0), egui::Theme::Light, |ui, state| {
+            egui::Panel::bottom("graph")
+                .resizable(true)
+                .default_size(300.0)
+                .size_range(160.0..=900.0)
+                .show(ui, |ui| crate::graph_ui::show(ui, state));
+        });
+        for _ in 0..5 {
+            harness.run();
+        }
+        harness.get_by_role_and_label(Role::Button, &t!("graph-run")).rect().top()
+    }
+    let zoomed = toolbar_top(Some(serde_json::json!({
+        "uid": "00000000000000000000000000000abd",
+        "nodes": [
+            {"id": 1, "kind": {"builtin": "number"}, "values": {"value": 8}, "pos": [0, 0]},
+            {"id": 2, "kind": {"builtin": "slider"}, "values": {"value": 0.3}, "pos": [250, 112]},
+            {"id": 3, "kind": {"builtin": "text"}, "values": {"value": "abc"}, "pos": [500, 122]},
+            {"id": 4, "kind": {"builtin": "number"}, "values": {"value": 1}, "pos": [750, 130]}
+        ],
+        "wires": []
+    })));
+    let empty = toolbar_top(None);
+    assert!((zoomed - empty).abs() < 0.5, "the toolbar moved from {empty} to {zoomed}");
+}
+
+/// A schedule lays out only the rows in sight, under its header, and a click on a row selects its element.
+#[test]
+fn schedule_shows_visible_rows_and_selects() {
+    fn first_schedule(state: &AppState) -> Option<cc_core::ViewId> {
+        let project = state.project();
+        project.views.values().find(|v| matches!(v.kind, cc_core::ViewKind::Schedule { .. })).map(|v| v.id)
+    }
+    let mut state = sample_state();
+    let view = first_schedule(&state).unwrap();
+    let table = state.session.schedule(view).unwrap();
+    assert!(table.rows.len() > 1, "the sample's first schedule has rows");
+    let mut harness = themed_harness(state, egui::vec2(900.0, 400.0), egui::Theme::Light, |ui, state| {
+        if let Some(view) = first_schedule(state) {
+            crate::schedule_ui::show(ui, state, view);
+        }
+    });
+    harness.run();
+    let header = crate::i18n::tr(table.headers[0]);
+    assert!(harness.query_by_label(&header).is_some(), "header {header}");
+    let row = &table.rows[0];
+    let first = match &row.cells[0] {
+        cc_views::Cell::Text(s) => s.clone(),
+        cc_views::Cell::Key(k) => crate::i18n::tr(k),
+    };
+    harness.query_all_by_label(&first).next().unwrap().click();
+    harness.run();
+    assert!(harness.state().selection.contains(&row.element));
+}
+
+/// The project browser follows the organization scheme in use (issue #278):
+/// a scheme by view type and level nests the plans under their levels, and
+/// the Browser Organization dialog undoes its changes on Cancel.
+#[test]
+fn the_browser_groups_views_by_the_scheme_in_use() {
+    use crate::commands::UiCommand;
+    use crate::i18n::tr;
+    let mut state = sample_state();
+    let level = state.project().levels.first().map(|l| l.name.clone()).unwrap();
+    let plans = tr(cc_core::ViewCategory::FloorPlan.key());
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::BrowserOrganization);
+    assert!(state.dialogs.browser_org.is_some());
+    let create = cc_engine::commands::browser::BrowserSchemeCreate { name: "By level".into(), ..Default::default() };
+    crate::actions::run_command(&mut state, create);
+    if let Some(d) = state.dialogs.browser_org.take() {
+        d.edits_finish(&mut state, false);
+    }
+    assert!(state.project().browser.is_default(), "Cancel undoes the new scheme");
+
+    let mut harness = themed_harness(state, egui::vec2(400.0, 1200.0), egui::Theme::Light, |ui, state| {
+        egui::ScrollArea::vertical().show(ui, |ui| crate::browser::show(ui, state));
+    });
+    harness.run();
+    // By type alone: the level's name is only its plans'.
+    let flat = harness.query_all_by_label(&level).count();
+    assert!(flat >= 1);
+    assert!(harness.query_by_label(&format!("{level}  ")).is_none(), "no level group");
+
+    let create = cc_engine::commands::browser::BrowserSchemeCreate { name: "By level".into(), ..Default::default() };
+    crate::actions::run_command(harness.state_mut(), create);
+    harness.run();
+    // The level is now a group under each plan type that has plans on it.
+    assert!(harness.query_all_by_label(&format!("{level}  ")).count() >= 1, "a level group");
+    assert!(harness.query_by_label(&format!("{plans}  ")).is_some());
+    // Its plans are still there, one row each.
+    assert_eq!(harness.query_all_by_label(&level).count(), flat);
+
+    // A click on the level group folds its plans away.
+    harness.query_all_by_label(&format!("{level}  ")).next().unwrap().click();
+    harness.run();
+    assert!(harness.query_all_by_label(&level).count() < flat);
+}
+
+/// The levels dialog adds a level above or below the picked one, pushing
+/// the levels beyond it away, so the others keep their order (issue #297).
+#[test]
+fn the_levels_dialog_adds_a_level_above_or_below_the_picked_one() {
+    let mut state = sample_state();
+    state.dialogs.levels = true;
+    let before: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.elevation)).collect();
+    let (lowest, base) = before[0];
+    state.dialogs.level_selected = Some(lowest);
+    let mut harness = app_harness(state);
+    harness.run();
+    harness.get_by_label(&t!("level-add-above")).click();
+    harness.run();
+    let levels = harness.state().project().levels.clone();
+    assert_eq!(levels.len(), before.len() + 1);
+    let added = levels[1].id;
+    assert!(before.iter().all(|(id, _)| *id != added), "the new level stands right above the picked one");
+    assert_eq!(harness.state().dialogs.level_selected, Some(added), "and is picked");
+    let storey = levels[1].elevation - base;
+    assert!(storey > 0.0);
+    // The levels that were above moved up by the new storey, in their order.
+    let after: Vec<_> = levels.iter().filter(|l| l.id != added).map(|l| (l.id, l.elevation)).collect();
+    for ((id, old), (new_id, new)) in before.iter().zip(&after) {
+        assert_eq!(id, new_id);
+        let moved = if *id == lowest { 0.0 } else { storey };
+        assert!((new - old - moved).abs() < 1e-9);
+    }
+    harness.get_by_label(&t!("level-add-below")).click();
+    harness.run();
+    let levels = harness.state().project().levels.clone();
+    assert_eq!(levels.len(), before.len() + 2);
+    assert_eq!(levels[2].id, added, "the level under it went in between");
+    assert_eq!(levels[0].id, lowest);
+    assert!(levels[0].elevation < base, "and pushed the lowest level down");
 }

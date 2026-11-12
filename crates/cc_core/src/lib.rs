@@ -5,6 +5,7 @@
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
 pub mod arc;
+pub mod browser;
 pub mod cad;
 pub mod callout;
 pub mod component;
@@ -17,6 +18,7 @@ pub mod detail;
 pub mod detail_component;
 pub mod dim_line;
 pub mod dim_refs;
+pub mod dim_style;
 mod document;
 mod element;
 pub mod expr;
@@ -81,7 +83,7 @@ pub use document::{Document, EditCtx, Transaction};
 pub use element::{
     BarFace, Beam, BeamLateral, BeamVertical, Ceiling, Column, Component, Dimension, DimensionKind, Element,
     ElementKind, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine, Railing, Ramp,
-    Rebar, RebarLayout, Roof, RoofShape, Room, Stair, TextNote, Wall, WallTop,
+    Rebar, RebarLayout, Roof, RoofShape, Room, ShapedRebar, Stair, TextNote, Wall, WallTop,
 };
 pub use fill_pattern::{FillPattern, FillPatternKind, PatternLine};
 pub use graphics::{
@@ -89,15 +91,15 @@ pub use graphics::{
     LinePattern, TemplateIncludes, TemporaryVisibility, ViewFilter, ViewGraphics, ViewTemplate,
 };
 pub use ids::{
-    ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId, OptionSetId,
-    PhaseFilterId, PhaseId, ProfileId, SystemId, TemplateId, Uid, ViewId,
+    BrowserSchemeId, ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId,
+    OptionSetId, PhaseFilterId, PhaseId, ProfileId, SystemId, TemplateId, Uid, ViewId,
 };
 pub use lightning::{ConductorRole, LightningConductor, LpsClass};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemClass, SystemKind, TrayStyle, Valve, ValveKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, from_ron_with_repairs_localized, load,
-    load_with_repairs, load_with_repairs_localized, save, to_ron,
+    load_with_repairs, load_with_repairs_localized, read_to_string_limited, save, to_ron,
 };
 pub use phase::{Phase, PhaseDisplay, PhaseFilter, PhaseGraphics, PhaseState, PhaseStatus};
 pub use profile::{ProfilePoint, SketchPlane};

@@ -3,7 +3,7 @@
 // SketchUp-written streams are exercised by every fixture parse (each entry is
 // CRC-checked); these cover the codec's own edge cases.
 
-mod common;
+use crate::common;
 
 use cc_skp::deflate::{deflate_raw, zlib_compress};
 use cc_skp::inflate::{InflateError, UncompressError, inflate_raw, uncompress, zlib_decompress};

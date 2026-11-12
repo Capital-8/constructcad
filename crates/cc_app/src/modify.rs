@@ -90,7 +90,7 @@ fn hint_key(tool: &Tool) -> &'static str {
 /// The selection's linework, transformed (for previews).
 fn ghost(drawing: &Drawing2D, ids: &BTreeSet<ElementId>, t: &PlanTransform) -> Drawing2D {
     let mut d = Drawing2D::default();
-    for p in &drawing.prims {
+    for p in drawing.prims_of(ids).into_iter().filter_map(|i| drawing.prims.get(i)) {
         match p {
             Prim::Line { a, b, style, element: Some(e), .. } if ids.contains(e) => {
                 d.line(t.apply(*a), t.apply(*b), *style, Some(*e));
@@ -118,7 +118,7 @@ pub(crate) fn paint_ghost(
 
 /// Center of the selection's linework.
 fn center_of(drawing: &Drawing2D, ids: &BTreeSet<ElementId>) -> Option<DVec2> {
-    let pts = drawing.prims.iter().flat_map(|p| match p {
+    let pts = drawing.prims_of(ids).into_iter().filter_map(|i| drawing.prims.get(i)).flat_map(|p| match p {
         Prim::Line { a, b, element: Some(e), .. } if ids.contains(e) => vec![*a, *b],
         _ => Vec::new(),
     });

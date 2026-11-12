@@ -66,6 +66,21 @@ pub fn level(p: &Project, r: &Ref) -> Result<LevelId> {
     }
 }
 
+/// A project browser organization scheme.
+pub fn browser_scheme(p: &Project, r: &Ref) -> Result<cc_core::BrowserSchemeId> {
+    let schemes = &p.browser.schemes;
+    match r {
+        Ref::Id(id) => schemes
+            .iter()
+            .find(|s| s.id.0 == *id)
+            .map(|s| s.id)
+            .ok_or_else(|| EngineError::not_found(format!("no browser scheme with id {id}"))),
+        Ref::Name(n) => {
+            unique("browser scheme", n, schemes.iter().filter(|s| matches(&s.name, n)).map(|s| s.id).collect())
+        }
+    }
+}
+
 /// The given level, else the lowest one.
 pub fn level_or_first(p: &Project, r: Option<&Ref>) -> Result<LevelId> {
     match r {

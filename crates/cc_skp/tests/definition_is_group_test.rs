@@ -4,7 +4,7 @@
 // often a definition is placed. Each fixture: group "Outer" > component
 // "Shelf" > group "Inner".
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeMap;
 

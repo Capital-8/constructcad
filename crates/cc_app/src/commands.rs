@@ -8,7 +8,7 @@ use crate::icons::{Badge, Icon};
 use crate::ribbon::{category_icon, dimension_icon};
 use crate::state::{AppState, PendingAction};
 use crate::t;
-use crate::tools::{DimensionMode, Tool};
+use crate::tools::{ComponentGroup, DimensionMode, Tool};
 use cc_core::{Category, ViewCategory};
 
 /// The user's two-letter keys by command id (empty: no keys), as
@@ -46,6 +46,10 @@ pub enum UiCommand {
     ImportImage,
     /// Insert a SketchUp model into the open project.
     ImportSkp,
+    /// Insert a Wavefront OBJ model into the open project.
+    ImportObj,
+    /// Insert a glTF model (.glb, .gltf) into the open project.
+    ImportGltf,
     ExportIfc,
     ExportPdf,
     ExportSvg,
@@ -151,6 +155,7 @@ pub enum UiCommand {
     FilledRegion,
     MaskingRegion,
     LineStyles,
+    BrowserOrganization,
     DetailComponent,
     CreateDetailComponent,
     Move,
@@ -288,6 +293,8 @@ impl UiCommand {
             ImportCad,
             ImportImage,
             ImportSkp,
+            ImportObj,
+            ImportGltf,
             ExportIfc,
             ExportPdf,
             ExportSvg,
@@ -355,6 +362,7 @@ impl UiCommand {
             FilledRegion,
             MaskingRegion,
             LineStyles,
+            BrowserOrganization,
             DetailComponent,
             CreateDetailComponent,
             Move,
@@ -451,7 +459,7 @@ impl UiCommand {
         match self {
             Home => Icon::Home,
             New => Icon::New,
-            Open | ImportIfc | ImportSkp => Icon::Open,
+            Open | ImportIfc | ImportSkp | ImportObj | ImportGltf => Icon::Open,
             Save => Icon::Save,
             SaveAs => Icon::SaveAs,
             CloseProject => Icon::CloseProject,
@@ -547,6 +555,7 @@ impl UiCommand {
             FilledRegion => Icon::FilledRegion,
             MaskingRegion => Icon::MaskingRegion,
             LineStyles => Icon::LineStyles,
+            BrowserOrganization => Icon::BrowserOrganization,
             LevelMarkPlan => Icon::LevelMarkPlan,
             LevelMarkSection => Icon::LevelMarkSection,
             AddLeader => Icon::Leader,
@@ -639,7 +648,9 @@ impl UiCommand {
             | PanelDiagram
             | NewTitleBlock
             | CreateDetailComponent => Some(Badge::New),
-            ImportIfc | ImportCad | ImportImage | ImportSkp | LoadComponent => Some(Badge::Import),
+            ImportIfc | ImportCad | ImportImage | ImportSkp | ImportObj | ImportGltf | LoadComponent => {
+                Some(Badge::Import)
+            }
             ExportPdf | ExportSvg | ExportImage | ExportDxf | AnalyticalExport => Some(Badge::Export),
             Delete | DetachTop | RemovePaint => Some(Badge::Remove),
             _ => None,
@@ -660,6 +671,8 @@ impl UiCommand {
             ImportCad => t!("action-import-cad"),
             ImportImage => t!("action-import-image"),
             ImportSkp => t!("action-import-skp"),
+            ImportObj => t!("action-import-obj"),
+            ImportGltf => t!("action-import-gltf"),
             ExportIfc => t!("action-export-ifc"),
             ExportPdf => t!("action-export-pdf"),
             ExportSvg => t!("action-export-svg"),
@@ -751,6 +764,7 @@ impl UiCommand {
             FilledRegion => t!("tool-filled-region"),
             MaskingRegion => t!("tool-masking-region"),
             LineStyles => t!("action-line-styles"),
+            BrowserOrganization => t!("action-browser-organization"),
             LevelMarkPlan => t!("tool-level-mark-plan"),
             LevelMarkSection => t!("tool-level-mark-section"),
             AddLeader => t!("tool-add-leader"),
@@ -862,6 +876,8 @@ impl UiCommand {
             ImportCad => t!("cmd-desc-import-cad"),
             ImportImage => t!("cmd-desc-import-image"),
             ImportSkp => t!("cmd-desc-import-skp"),
+            ImportObj => t!("cmd-desc-import-obj"),
+            ImportGltf => t!("cmd-desc-import-gltf"),
             ExportIfc => t!("cmd-desc-export-ifc"),
             ExportPdf => t!("cmd-desc-export-pdf"),
             ExportSvg => t!("cmd-desc-export-svg"),
@@ -963,6 +979,7 @@ impl UiCommand {
             FilledRegion => t!("cmd-desc-filled-region"),
             MaskingRegion => t!("cmd-desc-masking-region"),
             LineStyles => t!("cmd-desc-line-styles"),
+            BrowserOrganization => t!("cmd-desc-browser-organization"),
             LevelMarkPlan => t!("cmd-desc-level-mark-plan"),
             LevelMarkSection => t!("cmd-desc-level-mark-section"),
             AddLeader => t!("hint-add-leader-button"),
@@ -1168,6 +1185,8 @@ impl UiCommand {
             ImportCad => "cad_import",
             ImportImage => "image_import",
             ImportSkp => "skp_import",
+            ImportObj => "obj_import",
+            ImportGltf => "gltf_import",
             ExportIfc => "ifc_export",
             ExportPdf | ExportSvg => "sheet_export",
             ExportImage | ExportDxf => "view_export",
@@ -1252,6 +1271,7 @@ impl UiCommand {
             FilledRegion => "filled_region_create",
             MaskingRegion => "masking_region_create",
             LineStyles => "line_styles_list",
+            BrowserOrganization => "browser_schemes_list",
             LevelMarkPlan | LevelMarkSection => "level_mark_create",
             AddLeader => "text_add_leader",
             Move => "elements_move",
@@ -1503,18 +1523,11 @@ impl UiCommand {
         use UiCommand::*;
         let tool = &state.tool;
         match self {
-            Place(Category::Component) => {
-                matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id).is_none())
-            }
+            Place(Category::Component) => is_component_group(state, ComponentGroup::Generic),
             Place(category) => tool.category() == Some(category) && !matches!(tool, Tool::Section | Tool::Truss { .. }),
-            PlaceFixture => matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(false)),
-            PlaceDevice => {
-                matches!(tool, Tool::Component { type_id } if mep_kind(state, *type_id) == Some(true)
-                    && !crate::tools::device_type(state.project(), *type_id).is_some_and(|d| DEVICE_TOOLS.contains(&d)))
-            }
-            PlaceDeviceOf(device) => {
-                matches!(tool, Tool::Component { type_id } if crate::tools::device_type(state.project(), *type_id) == Some(device))
-            }
+            PlaceFixture => is_component_group(state, ComponentGroup::Fixture),
+            PlaceDevice => is_component_group(state, ComponentGroup::Device),
+            PlaceDeviceOf(device) => is_component_group(state, ComponentGroup::Own(device)),
             Truss => matches!(tool, Tool::Truss { .. }),
             StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select if state.sketch.is_some() => {
@@ -1627,12 +1640,9 @@ pub fn graphics_view(state: &AppState) -> Option<cc_core::ViewId> {
     state.active_view.filter(|v| state.project().view(*v).is_some_and(|v| v.kind.has_graphics()))
 }
 
-/// Whether a component type is an electrical device (`Some(true)`), a plumbing fixture or neither.
-fn mep_kind(state: &AppState, type_id: cc_core::ElementTypeId) -> Option<bool> {
-    match state.project().element_type(type_id).map(|t| &t.data) {
-        Some(cc_core::TypeData::Component { def, .. }) => def.mep.map(|m| matches!(m, cc_core::MepData::Device { .. })),
-        _ => None,
-    }
+/// Whether the component tool is placing types of `group`.
+fn is_component_group(state: &AppState, group: ComponentGroup) -> bool {
+    matches!(state.tool, Tool::Component { type_id } if crate::tools::component_group(state.project(), type_id) == group)
 }
 
 /// Whether the active view is one `test` accepts.
@@ -1776,6 +1786,8 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         ImportCad => crate::cad_ui::import_cad(state),
         ImportImage => crate::cad_ui::import_image(state),
         ImportSkp => actions::import_skp(state),
+        ImportObj => crate::obj_ui::import_obj(state),
+        ImportGltf => crate::obj_ui::import_gltf(state),
         ExportIfc => actions::export_ifc(state),
         ExportPdf => actions::export_sheet(state, actions::SheetFormat::Pdf),
         ExportSvg => actions::export_sheet(state, actions::SheetFormat::Svg),
@@ -1951,6 +1963,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         FilledRegion => crate::region_ui::start(state, Category::FilledRegion),
         MaskingRegion => crate::region_ui::start(state, Category::MaskingRegion),
         LineStyles => crate::line_styles_dialog::open(state),
+        BrowserOrganization => crate::browser_org_dialog::open(state),
         LevelMarkPlan | LevelMarkSection => {
             // A project gets its level mark type with its first mark.
             if Tool::for_category(state.project(), Category::LevelMark).is_none() {

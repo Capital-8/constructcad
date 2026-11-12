@@ -21,6 +21,14 @@ pub fn sample_project(name: &str) -> Option<Project> {
     cc_core::from_ron(text).ok()
 }
 
+/// The name of a bundled sample, read from its file once (the home screen asks every frame).
+fn sample_name(name: &str) -> Option<&'static str> {
+    static NAMES: std::sync::OnceLock<Vec<Option<String>>> = std::sync::OnceLock::new();
+    let names = NAMES.get_or_init(|| SAMPLES.iter().map(|(id, _)| sample_project(id).map(|p| p.info.name)).collect());
+    let index = SAMPLES.iter().position(|(id, _)| *id == name)?;
+    names.get(index)?.as_deref()
+}
+
 pub fn show(ui: &mut Ui, state: &mut AppState) {
     egui::Panel::left("home-sidebar")
         .frame(egui::Frame::new().fill(PALETTE.surface).inner_margin(egui::Margin::symmetric(24, 24)))
@@ -149,12 +157,12 @@ fn content(ui: &mut Ui, state: &mut AppState) {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(18.0, 18.0);
             for (id, _) in SAMPLES {
-                let Some(project) = sample_project(id) else { continue };
+                let Some(name) = sample_name(id) else { continue };
                 let file = thumbnails::sample_file(id);
                 if file.as_ref().is_some_and(|f| !f.exists()) && state.requested_samples.insert(id) {
                     state.thumbnail_jobs.push(Job::Sample(id));
                 }
-                if card(ui, &project.info.name, file.as_deref(), true).clicked() {
+                if card(ui, name, file.as_deref(), true).clicked() {
                     actions::guarded(state, PendingAction::OpenSample(id));
                 }
             }
@@ -231,6 +239,7 @@ mod tests {
     fn samples_load() {
         for (id, _) in SAMPLES {
             assert!(sample_project(id).is_some(), "{id}");
+            assert_eq!(sample_name(id), sample_project(id).map(|p| p.info.name).as_deref(), "{id}");
         }
     }
 

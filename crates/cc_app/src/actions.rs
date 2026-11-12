@@ -142,9 +142,12 @@ pub fn remove_viewport(state: &mut AppState, sheet: ViewId, index: usize) {
     state.sheet_selection = None;
 }
 
-/// Add a level above the highest one, with its floor and ceiling plans.
-pub fn add_level(state: &mut AppState) {
-    run(state, levels::LevelCreate { name: None, elevation: None, plans: None });
+/// Add a level as a new storey above (or below) `level`, with its plans; the
+/// levels beyond it move away, so the order of the levels stays.
+pub fn add_level_beside(state: &mut AppState, level: LevelId, above: bool) -> Option<LevelId> {
+    let beside = Some(Ref::Id(level.0));
+    let (above, below) = if above { (beside, None) } else { (None, beside) };
+    run(state, levels::LevelCreate { above, below, ..Default::default() })?["id"].as_u64().map(LevelId)
 }
 
 /// Delete a level and its plan views; refused while elements use it.
@@ -584,6 +587,7 @@ fn macro_dialog(state: &AppState) -> rfd::FileDialog {
 /// (the format `ccad script` runs).
 pub fn toggle_macro_recording(state: &mut AppState) {
     if !state.session.is_recording() {
+        state.session.set_active_level(state.active_level());
         state.session.start_recording();
         state.message = t!("msg-macro-recording");
         return;
@@ -609,9 +613,12 @@ pub fn run_macro(state: &mut AppState) {
     run_macro_file(state, &path);
 }
 
+/// Largest macro file read (macros are lists of commands).
+const MAX_MACRO_BYTES: u64 = 32 << 20;
+
 /// Run the macro at `path` (see [`run_macro`]).
 pub fn run_macro_file(state: &mut AppState, path: &std::path::Path) {
-    let text = match std::fs::read_to_string(path) {
+    let text = match cc_core::read_to_string_limited(path, MAX_MACRO_BYTES) {
         Ok(t) => t,
         Err(e) => {
             state.dialogs.error = Some(t!("msg-macro-failed", "step" => 0, "error" => t!("err-io", "detail" => e)));
@@ -625,6 +632,8 @@ pub fn run_macro_file(state: &mut AppState, path: &std::path::Path) {
             return;
         }
     };
+    // Steps recorded on the active level play on the level active now.
+    state.session.set_active_level(state.active_level());
     match cc_engine::script::run(&mut state.session, &steps) {
         Ok(done) => state.message = t!("msg-macro-done", "count" => done.len()),
         Err((_, failed)) => {
@@ -1132,7 +1141,7 @@ mod tests {
         let mut state = AppState::new(Document::new(new_project()));
         let levels = state.project().levels.len();
         state.session.start_recording();
-        add_level(&mut state);
+        run_command(&mut state, levels::LevelCreate::default());
         let wall = run_command(
             &mut state,
             cc_engine::commands::create::WallCreate { start: [0.0, 0.0], end: [5.0, 0.0], ..Default::default() },
@@ -1158,6 +1167,56 @@ mod tests {
         assert_eq!(other.project().levels.len(), levels + 1);
         let (_, w) = other.project().walls().next().unwrap();
         assert!((w.height - 3.4).abs() < 1e-12);
+    }
+
+    /// Issue #275: a macro recorded in one level's plan plays in the plan
+    /// active when it runs, hosting its openings in the walls it draws.
+    #[test]
+    fn a_macro_plays_on_the_active_plans_level() {
+        let mut state = AppState::new(Document::new(new_project()));
+        let plan_of = |state: &AppState, level| {
+            state
+                .project()
+                .views
+                .values()
+                .find(|v| matches!(v.kind, ViewKind::FloorPlan { level: l, mep: None, .. } if l == level))
+                .map(|v| v.id)
+                .unwrap()
+        };
+        let (ground, upper) = (state.project().levels[0].id, state.project().levels[1].id);
+        state.active_view = Some(plan_of(&state, ground));
+        state.sync();
+        state.session.start_recording();
+        let level = Some(cc_engine::Ref::Id(ground.0));
+        let wall = run_command(
+            &mut state,
+            cc_engine::commands::create::WallCreate { level, start: [0.0, 0.0], end: [5.0, 0.0], ..Default::default() },
+        )
+        .and_then(|o| o["id"].as_u64())
+        .unwrap();
+        let args =
+            cc_engine::commands::create::HostedArgs { wall: Some(wall), offset: Some(2.0), ..Default::default() };
+        run_command(&mut state, cc_engine::commands::create::DoorCreate { args }).unwrap();
+        let steps = state.session.stop_recording();
+        let path = std::env::temp_dir().join(format!("ccad-macro-level-{}.ccmacro", std::process::id()));
+        std::fs::write(&path, cc_engine::script::to_text(&steps)).unwrap();
+
+        state.active_view = Some(plan_of(&state, upper));
+        state.sync();
+        run_macro_file(&mut state, &path);
+        assert!(state.dialogs.error.is_none(), "{:?}", state.dialogs.error);
+        let p = state.project();
+        let upper_walls: Vec<_> = p.walls().filter(|(e, _)| e.level == upper).map(|(e, _)| e.id).collect();
+        assert_eq!(upper_walls.len(), 1);
+        let hosts: Vec<_> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                cc_core::ElementKind::Door(h) => Some(h.host),
+                _ => None,
+            })
+            .collect();
+        assert!(hosts.contains(&upper_walls[0]), "{hosts:?}");
     }
 
     #[test]

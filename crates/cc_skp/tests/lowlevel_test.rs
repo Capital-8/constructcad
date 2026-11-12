@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod common;
+use crate::common;
 
 use cc_skp::internal::{
     ErrorKind, extract_version, is_legacy, legacy_instance_has_guid, multiply_matrices, parse_tlv_recursive,
