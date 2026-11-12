@@ -3175,3 +3175,6 @@ browser-org-default-name = Organisation { $n }
 browser-org-group-by = Gruppieren nach
 browser-org-then-by = Dann nach
 browser-org-none = Keine
+
+# Structure by material
+tx-structural-type = Tragwerkstyp erstellen

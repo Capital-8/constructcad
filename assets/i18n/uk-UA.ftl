@@ -3176,3 +3176,6 @@ browser-org-default-name = Організація { $n }
 browser-org-group-by = Групувати за
 browser-org-then-by = Потім за
 browser-org-none = Немає
+
+# Structure by material
+tx-structural-type = Створити конструктивний тип

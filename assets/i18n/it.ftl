@@ -3175,3 +3175,6 @@ browser-org-default-name = Organizzazione { $n }
 browser-org-group-by = Raggruppa per
 browser-org-then-by = Poi per
 browser-org-none = Nessuno
+
+# Structure by material
+tx-structural-type = Crea tipo strutturale

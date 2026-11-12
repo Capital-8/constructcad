@@ -3175,3 +3175,6 @@ browser-org-default-name = 组织 { $n }
 browser-org-group-by = 分组依据
 browser-org-then-by = 然后依据
 browser-org-none = 无
+
+# Structure by material
+tx-structural-type = 创建结构类型

@@ -3175,3 +3175,6 @@ browser-org-default-name = 構成 { $n }
 browser-org-group-by = グループ化
 browser-org-then-by = 次の基準
 browser-org-none = なし
+
+# Structure by material
+tx-structural-type = 構造タイプを作成

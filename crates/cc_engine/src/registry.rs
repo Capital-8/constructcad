@@ -407,6 +407,7 @@ registry![
         profiles::ProfileCatalog,
         profiles::ProfileImport,
         profiles::ProfileTypeCreate,
+        structure_material::StructuralTypeFor,
         paint::Paint,
         paint::PaintRemove,
         paint::PaintsList,

@@ -3177,3 +3177,6 @@ browser-org-default-name = ການຈັດລະບຽບ { $n }
 browser-org-group-by = ຈັດກຸ່ມຕາມ
 browser-org-then-by = ຈາກນັ້ນຕາມ
 browser-org-none = ບໍ່ມີ
+
+# Structure by material
+tx-structural-type = ສ້າງປະເພດໂຄງສ້າງ

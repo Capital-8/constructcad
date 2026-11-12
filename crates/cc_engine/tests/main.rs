@@ -41,6 +41,7 @@ mod regions;
 mod section_marks;
 mod shaft;
 mod skp;
+mod structure_materials;
 mod structure_stress;
 mod textures_paint;
 mod title_block_migration;
