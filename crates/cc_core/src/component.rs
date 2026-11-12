@@ -220,7 +220,7 @@ pub enum ComponentShape {
     Blend { plane: SketchPlane, bottom: Vec<ProfilePoint>, top: Vec<ProfilePoint>, offset: String, depth: String },
     /// Fixed polyhedral surface (not parametric): vertices in the component
     /// frame and faces as counter-clockwise (seen from outside) index loops.
-    Mesh { vertices: Vec<[f64; 3]>, faces: Vec<Vec<u32>> },
+    Mesh { vertices: std::sync::Arc<Vec<[f64; 3]>>, faces: std::sync::Arc<Vec<Vec<u32>>> },
     /// Lua source whose `geometry` function returns the pieces (see
     /// [`crate::component_script`]); they take this piece's material and
     /// flags where they set none.
@@ -2041,9 +2041,10 @@ mod tests {
                     [0.0, 1.0, 0.0],
                     [0.0, 0.0, 2.0],
                     [f64::NAN, 0.0, 0.0],
-                ],
+                ]
+                .into(),
                 // The last face has a bad vertex and an index out of range: it drops to nothing.
-                faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3], vec![4, 9, 4]],
+                faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3], vec![4, 9, 4]].into(),
             },
             material: String::new(),
             in_plan: true,
@@ -2057,7 +2058,7 @@ mod tests {
         assert_eq!(parts[0].faces.len(), 4);
         assert_eq!(parts[0].footprint.len(), 3);
         assert_eq!((parts[0].z0, parts[0].z1), (0.0, 2.0));
-        let empty = ComponentShape::Mesh { vertices: vec![], faces: vec![vec![0, 1, 2]] };
+        let empty = ComponentShape::Mesh { vertices: Default::default(), faces: vec![vec![0, 1, 2]].into() };
         let def = ComponentDef { items: vec![ComponentItem { shape: empty, ..item }], ..Default::default() };
         assert_eq!(def.resolve(&BTreeMap::new()).1.len(), 1);
     }

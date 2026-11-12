@@ -393,8 +393,8 @@ pub(crate) fn mesh_definition(
             ComponentItem {
                 name: material.clone().unwrap_or_else(|| name.to_string()),
                 shape: ComponentShape::Mesh {
-                    faces: cc_geom::coplanar::merge(&m.vertices, m.faces),
-                    vertices: m.vertices,
+                    faces: cc_geom::coplanar::merge(&m.vertices, m.faces).into(),
+                    vertices: m.vertices.into(),
                 },
                 material: material.unwrap_or_default(),
                 in_plan: true,
