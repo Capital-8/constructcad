@@ -111,6 +111,8 @@ pub struct AppState {
     pub session: Session,
     /// The multi-selection rows' copy of the selected elements, per revision and selection.
     pub multi_summary: Option<std::sync::Arc<crate::properties::MultiSummary>>,
+    /// The 2D views' drawings as painted, kept between frames.
+    pub paint_cache: crate::paint_cache::PaintCache,
     /// The model's snap candidates (document revision, level, candidates).
     pub snap_cache: Option<(u64, Option<LevelId>, std::sync::Arc<crate::tools::ModelSnaps>)>,
     /// Each imported drawing's snap index, kept while its drawing stays the same.
@@ -241,6 +243,7 @@ impl AppState {
             session,
             selection: BTreeSet::new(),
             multi_summary: None,
+            paint_cache: Default::default(),
             snap_cache: None,
             cad_snap_index: std::collections::HashMap::new(),
             tool: Tool::Select,
