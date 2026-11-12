@@ -75,6 +75,17 @@ struct Layout {
     skipped_bays: usize,
 }
 
+impl Layout {
+    fn total(&self) -> usize {
+        self.columns.len() + self.beams.len() + self.secondary.len()
+    }
+
+    /// More than one run may create: the layout stops there, the run is refused.
+    fn over(&self) -> bool {
+        self.total() > MAX_MEMBERS
+    }
+}
+
 impl Command for GridFrameCreate {
     const NAME: &'static str = "grid_frame_create";
     const KIND: CommandKind = CommandKind::Edit;
@@ -99,10 +110,9 @@ impl Command for GridFrameCreate {
             check_secondary(&grids, sec)?;
         }
         let layout = layout(p, &storeys, &grids, &points, self.secondary.as_ref());
-        let total = layout.columns.len() + layout.beams.len() + layout.secondary.len();
-        if total > MAX_MEMBERS {
+        if layout.over() {
             return Err(EngineError::invalid(format!(
-                "{total} members are more than {MAX_MEMBERS} in one run; frame fewer levels or grids"
+                "more than {MAX_MEMBERS} members in one run; frame fewer levels or grids, or space the secondary beams wider"
             )));
         }
         let column_given =
@@ -173,9 +183,15 @@ fn layout(
 ) -> Layout {
     let mut out = Layout::default();
     for &(lower, upper) in storeys {
+        if out.over() {
+            break;
+        }
         let existing = columns_on(p, lower);
         let mut on_level: Vec<DVec2> = existing.iter().map(|(_, c)| *c).collect();
         for &q in points {
+            if out.over() {
+                break;
+            }
             if on_level.iter().any(|c| c.distance(q) < SAME) {
                 out.skipped += 1;
                 continue;
@@ -194,6 +210,9 @@ fn layout(
             ));
         }
         for (_, (a, b)) in grids {
+            if out.over() {
+                break;
+            }
             for (x, y) in spans_along(*a, *b, &on_level) {
                 let planned = out.beams.iter().any(|&(l, s, e)| l == upper && same_span((s, e), (x, y)));
                 if planned || beam_exists(p, upper, x, y) {
@@ -280,6 +299,9 @@ fn secondary_beams(
         // Beams per bay, bounded so a tiny spacing cannot run away.
         let count = (((width / sec.spacing) - 1e-9).ceil().clamp(1.0, MAX_MEMBERS as f64) as usize).saturating_sub(1);
         for cw in crossings.windows(2) {
+            if out.over() {
+                return;
+            }
             let (c0, c1) = (cw[0].1, cw[1].1);
             let corners = (crossing(p0, c0), crossing(p1, c0), crossing(p0, c1), crossing(p1, c1));
             let (Some(q00), Some(q10), Some(q01), Some(q11)) = corners else {
@@ -292,6 +314,9 @@ fn secondary_beams(
                 continue;
             }
             for k in 1..=count {
+                if out.over() {
+                    return;
+                }
                 let f = k as f64 / (count + 1) as f64;
                 let (x, y) = (q00.lerp(q10, f), q01.lerp(q11, f));
                 let planned = out.secondary.iter().any(|&(l, s, e)| l == upper && same_span((s, e), (x, y)));

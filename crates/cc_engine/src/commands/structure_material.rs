@@ -61,8 +61,8 @@ pub(crate) fn structural_type(
 
 fn make_default(s: &mut Session, category: Category, material: StructuralMaterial) -> Result<ElementTypeId> {
     let profile = match material {
-        StructuralMaterial::Steel => catalog_profile(s, STEEL_DEFAULT)?,
-        StructuralMaterial::Timber => catalog_profile(s, TIMBER_DEFAULT)?,
+        StructuralMaterial::Steel => catalog_profile(s, STEEL_DEFAULT, material)?,
+        StructuralMaterial::Timber => catalog_profile(s, TIMBER_DEFAULT, material)?,
         StructuralMaterial::Concrete => concrete_profile(s)?,
     };
     let category = if category == Category::Column { "column" } else { "beam" };
@@ -72,14 +72,25 @@ fn make_default(s: &mut Session, category: Category, material: StructuralMateria
 }
 
 /// The project's profile of a catalog row, imported when missing.
-fn catalog_profile(s: &mut Session, (series, designation): (&str, &str)) -> Result<String> {
-    if let Some(p) = s.project().profile_named(designation) {
+fn catalog_profile(
+    s: &mut Session,
+    (series, designation): (&str, &str),
+    material: StructuralMaterial,
+) -> Result<String> {
+    let existing = s.project().profile_named(designation);
+    if let Some(p) = existing.filter(|p| StructuralMaterial::of_profile(p.material) == material) {
         return Ok(p.name.clone());
     }
-    ProfileImport { series: series.into(), designations: vec![designation.into()], on_clash: None }.run(s)?;
-    s.project()
-        .profile_named(designation)
-        .map(|p| p.name.clone())
+    // A same-named profile of another material is left alone: the row comes in under a free name.
+    let out = ProfileImport {
+        series: series.into(),
+        designations: vec![designation.into()],
+        on_clash: Some("rename".into()),
+    }
+    .run(s)?;
+    out["imported"][0]["name"]
+        .as_str()
+        .map(str::to_string)
         .ok_or_else(|| EngineError::not_found(format!("catalog row {designation}")))
 }
 

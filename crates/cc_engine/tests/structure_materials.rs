@@ -223,3 +223,43 @@ fn skewed_bays_are_skipped_and_bad_secondary_refused() {
         assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
     }
 }
+
+#[test]
+fn a_huge_secondary_request_is_refused_quickly_and_before_any_edit() {
+    let mut s = Session::default();
+    let a = run(&mut s, "grid_create", json!({"start": [0.0, -1.0], "end": [0.0, 1001.0]}))["id"].as_u64().unwrap();
+    run(&mut s, "grid_create", json!({"start": [5000.0, -1.0], "end": [5000.0, 1001.0]}));
+    run(&mut s, "grid_create", json!({"start": [-1.0, 0.0], "end": [5001.0, 0.0]}));
+    run(&mut s, "grid_create", json!({"start": [-1.0, 1000.0], "end": [5001.0, 1000.0]}));
+    let depth = s.doc.undo_depth();
+    let started = std::time::Instant::now();
+    // 5000 m between the grids at 0.3 m: some 16,000 beams in the one bay.
+    let err = run_err(&mut s, "grid_frame_create", json!({"secondary": {"parallel_to": a, "spacing": 0.3}}));
+    assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "refused early: {:?}", started.elapsed());
+    assert_eq!(s.doc.undo_depth(), depth);
+}
+
+#[test]
+fn a_catalog_name_of_another_material_is_not_reused() {
+    let mut s = Session::default();
+    // A concrete profile that happens to carry the steel default's name.
+    run(
+        &mut s,
+        "profile_create",
+        json!({"name": "W200x26,6", "material": "concrete", "shape": "rect", "params": {"b": 0.2, "h": 0.4}}),
+    );
+    // No steel type exists: delete them all so the default is made.
+    let steel: Vec<u64> =
+        s.project().types_of_material(cc_core::Category::Column, StructuralMaterial::Steel).map(|t| t.id.0).collect();
+    for id in steel {
+        run(&mut s, "type_delete", json!({"type": id}));
+    }
+    let made = type_for(&mut s, "column", "steel");
+    let id = ElementTypeId(made["id"].as_u64().unwrap());
+    let data = &s.project().element_type(id).unwrap().data;
+    assert_eq!(s.project().structural_material(data), Some(StructuralMaterial::Steel), "made type is steel");
+    let again = type_for(&mut s, "column", "steel");
+    assert_eq!(again["created"], false, "found next time, not another type per call");
+    assert_eq!(again["id"], made["id"]);
+}

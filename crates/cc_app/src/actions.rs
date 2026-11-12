@@ -18,6 +18,24 @@ pub fn material_type_ref(state: &mut AppState, category: Category) -> Option<cc_
     run_command(state, command).and_then(|o| o["id"].as_u64()).map(cc_engine::Ref::Id)
 }
 
+/// Make the material's type, then run the command built from it; when the type cannot be
+/// made the error is shown and nothing runs, and when the command fails the type's undo
+/// step is taken back.
+fn run_with_type<C: cc_engine::Command + serde::Serialize>(
+    state: &mut AppState,
+    category: Category,
+    build: impl FnOnce(&mut AppState, cc_engine::Ref) -> C,
+) -> Option<serde_json::Value> {
+    let depth = state.session.doc.undo_depth();
+    let type_ref = material_type_ref(state, category)?;
+    let command = build(state, type_ref);
+    let out = run(state, command);
+    if out.is_none() {
+        state.session.undo_to(depth);
+    }
+    out
+}
+
 /// Start the column or beam tool of the Structure tab on a type of `material`.
 pub fn structure_place(state: &mut AppState, category: Category, material: cc_core::StructuralMaterial) {
     state.prefs.structure_material = material;
@@ -839,27 +857,24 @@ fn placed(state: &mut AppState, out: Option<serde_json::Value>, what: Placed) {
 
 /// Columns at the intersections of the selected grids (the engine's `columns_at_grids`).
 pub fn columns_at_grids(state: &mut AppState) {
-    let type_ref = material_type_ref(state, Category::Column);
-    let command = cc_engine::commands::structure::ColumnsAtGrids {
-        grids: grids_for(state),
-        level: structure_level(state),
-        type_ref,
-        ..Default::default()
-    };
-    let out = run(state, command);
+    let out =
+        run_with_type(state, Category::Column, |state, type_ref| cc_engine::commands::structure::ColumnsAtGrids {
+            grids: grids_for(state),
+            level: structure_level(state),
+            type_ref: Some(type_ref),
+            ..Default::default()
+        });
     placed(state, out, Placed::Columns);
 }
 
 /// Beams between the columns along the selected grids (the engine's `beams_on_grids`).
 pub fn beams_on_grids(state: &mut AppState) {
-    let type_ref = material_type_ref(state, Category::Beam);
-    let command = cc_engine::commands::structure::BeamsOnGrids {
+    let out = run_with_type(state, Category::Beam, |state, type_ref| cc_engine::commands::structure::BeamsOnGrids {
         grids: grids_for(state),
         level: structure_level(state),
-        type_ref,
+        type_ref: Some(type_ref),
         ..Default::default()
-    };
-    let out = run(state, command);
+    });
     placed(state, out, Placed::Beams);
 }
 
@@ -936,9 +951,12 @@ pub fn export_analytical(state: &mut AppState) {
 /// X bracing between the two selected columns.
 pub fn braces_x(state: &mut AppState) {
     let columns = selected_columns(state);
-    let type_ref = material_type_ref(state, Category::Beam);
-    let command = cc_engine::commands::framing::BracesBetweenColumns { columns, pattern: Some("x".into()), type_ref };
-    if let Some(out) = run(state, command) {
+    let made = run_with_type(state, Category::Beam, |_, type_ref| cc_engine::commands::framing::BracesBetweenColumns {
+        columns,
+        pattern: Some("x".into()),
+        type_ref: Some(type_ref),
+    });
+    if let Some(out) = made {
         let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
         state.selection = ids.map(cc_core::ElementId).collect();
     }
@@ -1085,13 +1103,12 @@ pub fn toggle_structure_tags(state: &mut AppState) {
 
 /// Beams through the selected columns (the engine's `beams_between_columns`).
 pub fn beams_between_columns(state: &mut AppState) {
-    let type_ref = material_type_ref(state, Category::Beam);
-    let command = cc_engine::commands::structure::BeamsBetweenColumns {
-        columns: selected_columns(state),
-        type_ref,
-        ..Default::default()
-    };
-    let out = run(state, command);
+    let out =
+        run_with_type(state, Category::Beam, |state, type_ref| cc_engine::commands::structure::BeamsBetweenColumns {
+            columns: selected_columns(state),
+            type_ref: Some(type_ref),
+            ..Default::default()
+        });
     placed(state, out, Placed::Beams);
 }
 

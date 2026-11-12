@@ -29,11 +29,14 @@ fn levels(state: &AppState) -> Vec<(LevelId, String)> {
     levels.into_iter().map(|(_, id, name)| (id, name)).collect()
 }
 
+/// The grids the command will frame (the selected ones, else all), the same list OK sends.
 fn grids(state: &AppState) -> Vec<(ElementId, String)> {
+    let ids = crate::actions::grids_for(state);
     state
         .project()
         .elements
         .values()
+        .filter(|e| ids.contains(&e.id.0))
         .filter_map(|e| match &e.kind {
             ElementKind::Grid(g) => Some((e.id, g.name.clone())),
             _ => None,

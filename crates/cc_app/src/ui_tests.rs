@@ -3679,3 +3679,35 @@ fn grid_frame_dialog_creates_and_cancels() {
     assert_eq!(columns(&harness), before + 4, "four intersections on the first storey");
     assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
 }
+
+/// With grids selected, the secondary beams' *Parallel to* offers (and
+/// starts on) the selected grids, so OK is never refused for another one.
+#[test]
+fn grid_frame_secondary_beams_use_the_selected_grids() {
+    let mut state = sample_state();
+    let grids =
+        [([0.0, -1.0], [0.0, 7.0]), ([6.0, -1.0], [6.0, 7.0]), ([-1.0, 0.0], [7.0, 0.0]), ([-1.0, 6.0], [7.0, 6.0])];
+    let mut created = Vec::new();
+    for (start, end) in grids {
+        let command = cc_engine::commands::create::GridCreate { start, end, ..Default::default() };
+        let out = crate::actions::run_command(&mut state, command).expect("grid");
+        created.push(cc_core::ElementId(out["id"].as_u64().expect("grid id")));
+    }
+    state.selection = created.iter().copied().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let beams = |h: &Harness<'static, AppState>| h.state().project().elements_of(cc_core::Category::Beam).count();
+    let mut harness = app_harness(state);
+    let before = beams(&harness);
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    let parallel = harness.state().dialogs.grid_frame.as_ref().and_then(|d| d.parallel_to).expect("a default grid");
+    assert!(created.contains(&parallel), "the default is one of the selected grids");
+    harness.get_by_label(&t!("label-secondary-beams")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.grid_frame.is_none(), "OK was accepted: {:?}", state.message);
+    assert!(beams(&harness) > before + 4, "main beams and the secondary ones");
+}
