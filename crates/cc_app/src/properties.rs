@@ -539,7 +539,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     }
 
     match &el.kind {
-        ElementKind::SteelBuilding(_) => {}
+        ElementKind::SteelBuilding(b) => crate::steel_building_ui::props(ui, state, id, b),
         ElementKind::Mass(m) => mass_props(ui, state, &el, m),
         ElementKind::Topography(t) => topography_props(ui, state, &el, t),
         ElementKind::Pad(p) => pad_props(ui, state, &el, p),

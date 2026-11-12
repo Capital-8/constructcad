@@ -3711,3 +3711,66 @@ fn grid_frame_secondary_beams_use_the_selected_grids() {
     assert!(state.dialogs.grid_frame.is_none(), "OK was accepted: {:?}", state.message);
     assert!(beams(&harness) > before + 4, "main beams and the secondary ones");
 }
+
+/// *Structure → Steel Building* (steel) opens its dialog; Cancel changes
+/// nothing, OK creates the building and its members in one undo step.
+#[test]
+fn steel_building_dialog_creates_a_building() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let count = |h: &Harness<'static, AppState>, c| h.state().project().elements_of(c).count();
+    let mut harness = app_harness(state);
+    let columns = count(&harness, cc_core::Category::Column);
+    harness.get_by_role_and_label(Role::Button, &t!("action-steel-building")).click();
+    harness.run();
+    assert!(harness.state().dialogs.steel_building.is_some());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.steel_building.is_none());
+    assert_eq!(harness.state().session.doc.undo_depth(), depth, "Cancel changes nothing");
+    harness.get_by_role_and_label(Role::Button, &t!("action-steel-building")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.steel_building.is_none());
+    assert_eq!(count(&harness, cc_core::Category::SteelBuilding), 1);
+    assert_eq!(count(&harness, cc_core::Category::Column), columns + 12, "two columns on each of six frames");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+}
+
+/// A steel building's rows edit it through `element_set`: a new span moves
+/// its columns (same ids), and *Reset Members* brings back a deleted one.
+#[test]
+fn steel_building_properties_regenerate_it() {
+    let mut state = sample_state();
+    let args = serde_json::json!({"origin": [100, 100], "purlins": null, "girts": null});
+    let out = state.session.execute("steel_building_create", args).unwrap();
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let members = |s: &AppState| match &s.project().element(host).unwrap().kind {
+        cc_core::ElementKind::SteelBuilding(b) => (b.members.clone(), b.detached.len()),
+        _ => panic!("not a steel building"),
+    };
+    let (first, _) = members(&state);
+    // The path the palette's rows take.
+    crate::steel_building_ui::edit(&mut state, host, "span", |b| b.span = 24.0);
+    let (after, _) = members(&state);
+    let ids = |m: &[cc_core::steel_building::FrameMember]| m.iter().map(|m| m.id).collect::<Vec<_>>();
+    assert_eq!(ids(&after), ids(&first), "same members");
+    let right = after[1].id;
+    let cc_core::ElementKind::Column(c) = &state.project().element(right).unwrap().kind else { panic!("a column") };
+    assert!((c.position.x - 124.0).abs() < 1e-9);
+    state.session.execute("elements_delete", serde_json::json!({"ids": [right.0]})).unwrap();
+    assert_eq!(members(&state).1, 1, "the deleted column is detached");
+    state.selection = [host].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.query_by_label(&t!("action-reset-members")).is_some());
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let (members_now, detached) = members(harness.state());
+    assert_eq!((members_now.len(), detached), (first.len(), 0));
+}
