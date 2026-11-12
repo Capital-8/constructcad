@@ -785,6 +785,7 @@ err-io = 読み込み/書き込みエラー ({ $detail })
 err-parse = 有効な ConstructCraft プロジェクトではありません ({ $detail })
 err-serialize = ファイルの書き込みに失敗しました ({ $detail })
 err-version = ファイルのフォーマットバージョンは { $version } ですが、このプログラムのバージョンは最大 { $max } までサポートしています
+err-project-too-large = プロジェクトファイルが { $max } MB を超えています
 
 # New project template (level, material, type and view names)
 tpl-project-name = 新規プロジェクト

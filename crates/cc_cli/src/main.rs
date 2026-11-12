@@ -54,6 +54,9 @@ Options:
                          subfolders (repeatable); their commands are named
                          <plugin>__<command> and get the permissions their
                          plugin.toml asks for
+  --allow-files          let a graph run commands that read or write files
+                         (open, save, import, export); a graph file cannot
+                         allow them itself
   --lang <code>          language of default names (default: the system's):
                          en, pt-BR, es, fr, de, it, lo, pl, uk-UA, zh-TW, zh-CN or ja
   -V, --version          the version
@@ -67,16 +70,26 @@ struct Options {
     save: bool,
     save_as: Option<PathBuf>,
     plugins: Vec<PathBuf>,
+    /// `graph` may run file commands (`graph_run`'s `allow_files`).
+    allow_files: bool,
     rest: Vec<String>,
 }
 
 fn parse_options(args: Vec<String>) -> Result<Options, String> {
-    let mut o = Options { project: None, save: false, save_as: None, plugins: Vec::new(), rest: Vec::new() };
+    let mut o = Options {
+        project: None,
+        save: false,
+        save_as: None,
+        plugins: Vec::new(),
+        allow_files: false,
+        rest: Vec::new(),
+    };
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "-p" | "--project" => o.project = Some(it.next().ok_or("--project needs a file")?.into()),
             "--save" => o.save = true,
+            "--allow-files" => o.allow_files = true,
             "-V" | "--version" => o.rest.push("--version".into()),
             "--save-as" => o.save_as = Some(it.next().ok_or("--save-as needs a file")?.into()),
             "--plugins" => o.plugins.push(it.next().ok_or("--plugins needs a folder")?.into()),
@@ -374,7 +387,10 @@ fn main() -> ExitCode {
                 Ok(s) => s,
                 Err(e) => return fail(&e),
             };
-            let result = s.execute("graph_run", json!({ "path": file, "inputs": inputs, "brief": true }));
+            let result = s.execute(
+                "graph_run",
+                json!({ "path": file, "inputs": inputs, "brief": true, "allow_files": o.allow_files }),
+            );
             flush_messages(&mut s);
             match result.and_then(|out| save(&mut s, &o).map(|()| out)) {
                 Ok(out) => {

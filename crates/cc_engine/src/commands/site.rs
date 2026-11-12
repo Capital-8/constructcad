@@ -252,12 +252,14 @@ fn context_type(e: &mut cc_core::EditCtx) -> ElementTypeId {
 impl Command for SiteContextImport {
     const NAME: &'static str = "site_context_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         let site = s.project().info.site.clone().ok_or_else(|| EngineError::rejected(t!("msg-site-none")))?;
         let text = match (self.data, &self.path) {
             (Some(_), Some(_)) => return Err(EngineError::invalid("give data or path, not both")),
             (Some(d), None) => d,
             (None, Some(path)) => {
+                s.require_files("path")?;
                 let meta =
                     std::fs::metadata(path).map_err(|e| EngineError::invalid(format!("{}: {e}", path.display())))?;
                 if meta.len() > osm::MAX_JSON as u64 {

@@ -136,6 +136,13 @@ fn mcp_session() {
     assert_eq!(tools.len(), cc_count());
     let list = tools.iter().find(|t| t["name"] == "elements_list").unwrap();
     assert_eq!(list["annotations"]["readOnlyHint"], true);
+    assert_eq!(list["annotations"]["openWorldHint"], false);
+    // Commands that read a file a parameter names are neither read-only nor closed-world.
+    for name in ["cad_import", "graph_check", "project_save"] {
+        let tool = tools.iter().find(|t| t["name"] == name).unwrap();
+        assert_eq!(tool["annotations"]["readOnlyHint"], false, "{name}");
+        assert_eq!(tool["annotations"]["openWorldHint"], true, "{name}");
+    }
     assert_eq!(by_id(3)["result"]["isError"], false);
     assert_eq!(by_id(3)["result"]["structuredContent"]["category"], "wall");
     // The wall stays in the session for the next call.

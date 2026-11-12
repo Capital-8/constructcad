@@ -231,6 +231,7 @@ pub struct MaterialTextureSet {
 impl Command for MaterialTextureSet {
     const NAME: &'static str = "material_texture_set";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         use cc_core::material::{MAX_TEXTURE_BYTES, MAX_TEXTURE_SIZE, MIN_TEXTURE_SIZE, MaterialTexture};
         let p = s.project();
@@ -239,6 +240,7 @@ impl Command for MaterialTextureSet {
         let bytes = match (&self.path, &self.data) {
             (Some(_), Some(_)) => return Err(EngineError::invalid("give either path or data, not both")),
             (Some(path), None) => {
+                s.require_files("path")?;
                 if std::fs::metadata(path)?.len() > MAX_TEXTURE_BYTES as u64 {
                     return Err(EngineError::invalid(t!("err-image-too-large")));
                 }

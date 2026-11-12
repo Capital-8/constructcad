@@ -137,10 +137,11 @@ pub fn spline_points(degree: usize, knots: &[f64], control: &[DVec3], weights: &
     }
     let segs = (n * 8).clamp(8, MAX_CURVE_SEGMENTS);
     let mut out = Vec::with_capacity(segs + 1);
+    // The knot span: knots[k] <= u < knots[k + 1], within p..n-1; `u` only
+    // grows, so the search goes on from the last span (linear in all).
+    let mut k = p;
     for s in 0..=segs {
         let u = (u0 + (u1 - u0) * s as f64 / segs as f64).min(u1);
-        // The knot span: knots[k] <= u < knots[k + 1], within p..n-1.
-        let mut k = p;
         while k + 1 < n && knots.get(k + 1).is_some_and(|kn| *kn <= u) {
             k += 1;
         }

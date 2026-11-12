@@ -100,10 +100,31 @@ fn natural(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn compare(a: &Value, b: &Value) -> Ordering {
-    match (a.number(), b.number()) {
-        (Some(x), Some(y)) => x.total_cmp(&y),
-        _ => natural(&text_of(a), &text_of(b)),
+/// What rows are sorted by, worked out once per row: a value's number, and
+/// its text with the number [`natural`] reads from it.
+struct SortKey {
+    number: Option<f64>,
+    text: String,
+    text_number: Option<f64>,
+}
+
+impl SortKey {
+    fn of(v: &Value) -> Self {
+        let text = text_of(v);
+        Self { number: v.number(), text_number: text.trim().parse::<f64>().ok(), text }
+    }
+
+    /// Numbers numerically, else the texts in [`natural`] order.
+    fn compare(&self, other: &Self) -> Ordering {
+        match (self.number, other.number) {
+            (Some(x), Some(y)) => x.total_cmp(&y),
+            _ => match (self.text_number, other.text_number) {
+                (Some(x), Some(y)) => x.total_cmp(&y),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                _ => self.text.cmp(&other.text),
+            },
+        }
     }
 }
 
@@ -130,9 +151,22 @@ fn summable(field: ScheduleField) -> bool {
 }
 
 /// Net side area of a wall: length x height minus its openings.
-fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall) -> f64 {
-    let openings: f64 = project
-        .hosted_by(e.id)
+fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall, cache: &mut Memo) -> f64 {
+    // Every wall's doors and windows, in element order, found in one pass.
+    let hosted = cache.hosted.get_or_insert_with(|| {
+        let mut by_host: std::collections::HashMap<cc_core::ElementId, Vec<cc_core::ElementId>> = Default::default();
+        for h in project.elements.values() {
+            if let Some(x) = h.as_hosted() {
+                by_host.entry(x.host).or_default().push(h.id);
+            }
+        }
+        by_host
+    });
+    let openings: f64 = hosted
+        .get(&e.id)
+        .into_iter()
+        .flatten()
+        .filter_map(|h| project.element(*h))
         .filter_map(|h| project.element_type(h.type_id)?.opening_size())
         .map(|(w, h)| w * h)
         .sum();
@@ -172,6 +206,25 @@ fn valve_pipe<'a>(project: &'a Project, e: &Element) -> Option<&'a Element> {
     }
 }
 
+/// A component type, or one element of it when it has overrides.
+type ExtentKey = (cc_core::ElementTypeId, Option<cc_core::ElementId>);
+
+/// What one schedule works out once and reads for many cells: components'
+/// extents, per type for elements without overrides (they resolve alike),
+/// else per element; and the doors and windows of each wall.
+#[derive(Default)]
+struct Memo {
+    extents: std::collections::HashMap<ExtentKey, Option<(f64, f64, f64)>>,
+    hosted: Option<std::collections::HashMap<cc_core::ElementId, Vec<cc_core::ElementId>>>,
+}
+
+/// [`component_extents`] through `cache`.
+fn cached_extents(project: &Project, e: &Element, cache: &mut Memo) -> Option<(f64, f64, f64)> {
+    let ElementKind::Component(c) = &e.kind else { return None };
+    let key = (e.type_id, (!c.overrides.is_empty()).then_some(e.id));
+    *cache.extents.entry(key).or_insert_with(|| component_extents(project, e))
+}
+
 /// Width (X), depth (Y) and height of a component's pieces in its own frame.
 fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> {
     let ElementKind::Component(c) = &e.kind else { return None };
@@ -190,6 +243,11 @@ fn component_extents(project: &Project, e: &Element) -> Option<(f64, f64, f64)> 
 }
 
 fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField) -> Value {
+    value_cached(project, geom, e, field, &mut Memo::default())
+}
+
+/// [`value`], with the extents of components kept in `cache`.
+fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleField, cache: &mut Memo) -> Value {
     use ScheduleField as F;
     let ty = project.element_type(e.type_id);
     let info = ty.map(|t| &t.info);
@@ -246,7 +304,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             }
             (_, Some(TypeData::Railing { height, .. } | TypeData::CableTray { height, .. })) => Value::Length(*height),
             (ElementKind::Component(_), _) => {
-                component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.2))
+                cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.2))
             }
             _ => Value::Missing,
         },
@@ -257,9 +315,9 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. } | TypeData::CableTray { width, .. }) => {
                 Value::Length(*width)
             }
-            _ => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.0)),
+            _ => cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.0)),
         },
-        F::Depth => component_extents(project, e).map_or(Value::Missing, |s| Value::Length(s.1)),
+        F::Depth => cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.1)),
         F::ComponentName => match ty.map(|t| &t.data) {
             Some(TypeData::Component { component, .. }) => text(component),
             _ => Value::Missing,
@@ -276,7 +334,7 @@ fn value(project: &Project, geom: &ModelGeometry, e: &Element, field: ScheduleFi
             _ => Value::Missing,
         },
         F::Area => match &e.kind {
-            ElementKind::Wall(w) => Value::Area(wall_area(project, e, w)),
+            ElementKind::Wall(w) => Value::Area(wall_area(project, e, w, cache)),
             ElementKind::Room(_) => room_boundary.map_or(Value::Missing, |b| Value::Area(polygon::area(b))),
             ElementKind::Foundation(_) => geom.foundations.get(&e.id).map_or(Value::Missing, |g| Value::Area(g.area())),
             ElementKind::Roof(r) => Value::Area(r.area()),
@@ -510,21 +568,36 @@ pub fn schedule_where(
     let mut elements: Vec<&Element> = project.elements_of(category).filter(|e| keep(e)).collect();
     elements.sort_by(|a, b| default_order(a, b));
 
-    let mut rows: Vec<(&Element, Vec<Value>)> =
-        elements.into_iter().map(|e| (e, fields.iter().map(|&f| value(project, geom, e, f)).collect())).collect();
+    let mut cache = Memo::default();
+    let mut rows: Vec<(&Element, Vec<Value>)> = elements
+        .into_iter()
+        .map(|e| (e, fields.iter().map(|&f| value_cached(project, geom, e, f, &mut cache)).collect()))
+        .collect();
+    // A field's value in a row: the column's when the field is shown.
+    let mut field_of = |e: &Element, values: &[Value], field: ScheduleField| match fields
+        .iter()
+        .position(|f| *f == field)
+        .and_then(|i| values.get(i))
+    {
+        Some(v) => v.clone(),
+        None => value_cached(project, geom, e, field, &mut cache),
+    };
 
     if let Some((field, needle)) = &def.filter {
         let needle = needle.trim().to_lowercase();
         if !needle.is_empty() {
-            rows.retain(|(e, _)| text_of(&value(project, geom, e, *field)).to_lowercase().contains(&needle));
+            rows.retain(|(e, values)| text_of(&field_of(e, values, *field)).to_lowercase().contains(&needle));
         }
     }
     if let Some(field) = def.sort_by {
-        // Stable: ties keep the default order.
-        rows.sort_by(|(a, _), (b, _)| {
-            let order = compare(&value(project, geom, a, field), &value(project, geom, b, field));
+        // Each row's key once; stable: ties keep the default order.
+        let mut keyed: Vec<(SortKey, (&Element, Vec<Value>))> =
+            rows.into_iter().map(|(e, values)| (SortKey::of(&field_of(e, &values, field)), (e, values))).collect();
+        keyed.sort_by(|(a, _), (b, _)| {
+            let order = a.compare(b);
             if def.descending { order.reverse() } else { order }
         });
+        rows = keyed.into_iter().map(|(_, row)| row).collect();
     }
 
     let totals = if def.hide_totals {
@@ -571,7 +644,10 @@ pub fn schedule_where(
 pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cell) -> String) -> String {
     let sep = if format::number(0.5, 1).contains(',') { ';' } else { ',' };
     let quote = |s: &str| {
-        if s.contains(sep) || s.contains('"') || s.contains('\n') {
+        if formula_like(s) {
+            // A spreadsheet would run it as a formula: kept as text.
+            format!("\"'{}\"", s.replace('"', "\"\""))
+        } else if s.contains(sep) || s.contains('"') || s.contains('\n') || s.contains('\r') {
             format!("\"{}\"", s.replace('"', "\"\""))
         } else {
             s.to_string()
@@ -590,6 +666,27 @@ pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cel
         line(table.totals.clone());
     }
     out
+}
+
+/// Whether a spreadsheet would read the cell `s` as a formula: it starts
+/// with `=`, `@`, a tab or a carriage return, or with `+` or `-` and is not
+/// a number (with its unit, such as `-3.50 m`).
+fn formula_like(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some('=' | '@' | '\t' | '\r') => true,
+        Some('+' | '-') => {
+            let rest = chars.as_str();
+            let number = rest.starts_with(|c: char| c.is_ascii_digit())
+                && rest.chars().all(|c| {
+                    c.is_ascii_digit()
+                        || c.is_alphabetic()
+                        || matches!(c, '.' | ',' | ' ' | '\u{a0}' | '\u{202f}' | '²' | '³' | '°' | '%' | '\'' | '"')
+                });
+            !number
+        }
+        _ => false,
+    }
 }
 
 /// A roof's covering (from its type) and its framing figures.
@@ -759,6 +856,36 @@ mod tests {
         assert_eq!(t.totals[0], "1");
     }
 
+    /// Rows sort by keys worked out once per row in the order comparing the
+    /// values themselves gives, by any field, shown or not.
+    #[test]
+    fn sorting_by_keys_matches_comparing_values() {
+        let (project, geom) = sample();
+        let compare = |a: &Value, b: &Value| match (a.number(), b.number()) {
+            (Some(x), Some(y)) => x.total_cmp(&y),
+            _ => natural(&text_of(a), &text_of(b)),
+        };
+        for category in Category::ALL {
+            let mut shown = ScheduleField::available(category);
+            shown.truncate(3);
+            for field in ScheduleField::available(category) {
+                for (fields, descending) in [(vec![ScheduleField::Mark], false), (shown.clone(), true)] {
+                    let def = ScheduleDef { fields, sort_by: Some(field), descending, ..Default::default() };
+                    let t = schedule(&project, &geom, category, &def);
+                    let mut expected: Vec<&Element> = project.elements_of(category).collect();
+                    expected.sort_by(|a, b| default_order(a, b));
+                    expected.sort_by(|a, b| {
+                        let order = compare(&value(&project, &geom, a, field), &value(&project, &geom, b, field));
+                        if descending { order.reverse() } else { order }
+                    });
+                    let got: Vec<_> = t.rows.iter().map(|r| r.element).collect();
+                    let expected: Vec<_> = expected.iter().map(|e| e.id).collect();
+                    assert_eq!(got, expected, "{category:?} by {field:?}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn structural_quantities() {
         let (project, geom) = sample();
@@ -791,6 +918,37 @@ mod tests {
         };
         let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
         assert_eq!(csv, "A;B\r\n\"x;y\";k\r\n1;\r\n");
+    }
+
+    #[test]
+    fn csv_keeps_formulas_as_text() {
+        let text = |s: &str| Cell::Text(s.into());
+        let table = Table {
+            headers: vec!["a", "b", "c", "d", "e", "f"],
+            rows: vec![Row {
+                element: cc_core::ElementId(1),
+                cells: vec![
+                    text("=1+1"),
+                    text("+cmd|' /C calc'!A0"),
+                    text("-2+3"),
+                    text("@SUM(A1)"),
+                    text("-3.50 m"),
+                    text("\t=1"),
+                ],
+            }],
+            totals: vec!["-12".into()],
+        };
+        let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
+        let row = csv.lines().nth(1).unwrap();
+        let cells: Vec<&str> = row.split(';').collect();
+        assert_eq!(cells[0], "\"'=1+1\"");
+        assert!(cells[1].starts_with("\"'+cmd|"), "{row}");
+        assert_eq!(cells[2], "\"'-2+3\"");
+        assert_eq!(cells[3], "\"'@SUM(A1)\"");
+        // Numbers, also negative and with their unit, stay as they are.
+        assert_eq!(cells[4], "-3.50 m");
+        assert_eq!(cells.last().unwrap(), &"\"'\t=1\"");
+        assert!(csv.ends_with("\r\n-12\r\n"), "{csv}");
     }
 
     /// A schedule drawn for a sheet: title, headers, a row per element and

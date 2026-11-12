@@ -320,7 +320,7 @@ The `ccad` table:
 
 Arguments and results are JSON: objects are tables with string keys, arrays are sequences (`{ 0, 0 }` is a point), `end` is a Lua keyword and is written `["end"]`. A whole number computed with `/` (which always gives a float in Lua) is sent as an integer, so `10 / 2` works where an id or count is expected.
 
-**The sandbox.** Scripts run in a restricted Lua: the `table`, `string`, `math`, `utf8` and `coroutine` libraries and the base functions, without `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` or `loadfile`. A script reaches the project only through commands, and files only through the commands that read or write them. A run has a budget of 500 million Lua instructions and 256 MB of memory; past them it stops with a `script` error (catching that error with `pcall` does not keep the script going). Each command a script runs is its own undo step.
+**The sandbox.** Scripts run in a restricted Lua: the `table`, `string`, `math`, `utf8` and `coroutine` libraries and the base functions, without `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` or `loadfile`. A script reaches the project only through commands, and files only through the commands that read or write them. A run has a budget of 500 million Lua instructions, 60 seconds and 256 MB of memory (string functions count by the size of their text, pattern matching by its steps, and `string.rep` and `string.gsub` make at most 16 MB); past them it stops with a `script` error (catching that error with `pcall` does not keep the script going). Each command a script runs is its own undo step.
 
 ## Visual programming graphs
 
@@ -352,8 +352,11 @@ their names. `graph_nodes` lists every node with its ports and types.
 - **Errors are per node.** A failing node shows its message, the nodes after
   it are skipped, the others run, and its elements stay as they were.
 - A graph never runs `project_new`, `project_open`, `undo`, `redo`,
-  `language_set` or graphs, and runs file commands only when its
-  `allow_files` is set (and never when a plugin runs it).
+  `language_set` or graphs, and runs file commands only when whoever runs it allows them: `graph_run`'s
+  `allow_files`, `ccad --allow-files graph`, or the editor's *Allow file
+  commands* checkbox, which lasts until another graph is opened. A graph
+  file cannot allow them itself (an `allow_files` field in it is ignored),
+  and a graph a plugin runs never may.
 
 ```sh
 ccad --save-as house.ccad graph examples/graphs/house.ccgraph width=12 depth=8
@@ -394,7 +397,7 @@ ccad --plugins examples/plugins run quick_rooms__rectangle_room width=4 depth=3 
 claude mcp add constructcad -- ccad mcp --plugins /path/to/plugins
 ```
 
-`--plugins` takes a plugin's folder or a folder of plugin folders, and can be repeated. A plugin that fails to load is reported on standard error and left out; what plugins print also goes to standard error.
+`--plugins` takes a plugin's folder or a folder of plugin folders, and can be repeated. In a folder of plugins, each plugin's folder is named after its id (as installs name them); hidden folders (starting with `.`) are skipped. A plugin that fails to load is reported on standard error and left out; what plugins print also goes to standard error.
 
 ### Writing a plugin
 
@@ -437,7 +440,7 @@ ccad.command {
 
 - `run` gets the arguments as a table and returns the command's result (a table, a value or nothing). Missing `required` arguments are refused before it runs; `error("message", 0)` fails the command with that message.
 - **One undo step:** however many commands a plugin command runs, it is undone at once, and when it fails (an error, a failed `ccad.run`, a limit reached) everything it did is undone.
-- **What a command may run:** a `query` command only queries; an `edit` command queries and edits; commands that read or write files (import, export, save) need the `files` permission, and a command of kind `file` can only be declared with it. Opening or creating a project, `undo`, `redo` and `language_set` cannot run inside a plugin command, nor can another plugin's command.
+- **What a command may run:** a `query` command only queries; an `edit` command queries and edits; commands that read or write files (import, export, save) need the `files` permission (without it, edit commands that read a file a parameter names, such as `cad_import` or `fill_pattern_import` with a `path`, refuse the path; their inline forms, such as `fill_pattern_import` with `text`, still work), and a command of kind `file` can only be declared with it. Opening or creating a project, `undo`, `redo` and `language_set` cannot run inside a plugin command, nor can another plugin's command.
 - **The sandbox** is that of [Lua scripts](#lua-scripts), with the budget counted per command; each plugin has its own Lua state, which keeps its variables between commands. `require("a.b")` loads `a/b.lua` from the plugin's folder (once; files outside the folder are refused), and `ccad.plugin` holds its `id`, `name` and `version`. `ccad.run` works only while a command runs, not while the plugin loads.
 - **Permissions** are granted by whoever loads the plugin: `ccad --plugins` grants what the manifest asks for, since you named the folder.
 
@@ -487,7 +490,7 @@ Declarations go at the script's top level, never inside `geometry`. Ids are name
 | `blend` | `bottom, top, offset, depth`, `plane` |
 | `mesh` | `vertices` (`{x, y, z}`), `faces` (lists of vertex numbers from 1, counter-clockwise seen from outside) |
 
-Scripts run in the [sandbox](#lua-scripts) with smaller limits (20 million instructions, 64 MB, 10,000 pieces, a million points), and `math.random` repeats the same numbers. When a script fails, the element keeps the last pieces that worked and the error, with its line, shows in `element_get` (`derived.script_errors`), in the properties palette and in `component_params_get`; fixing the script or the value brings it back.
+Scripts run in the [sandbox](#lua-scripts) with smaller limits (20 million instructions, 5 seconds, 64 MB, 10,000 pieces, a million points), and `math.random` repeats the same numbers. When a script fails, the element keeps the last pieces that worked and the error, with its line, shows in `element_get` (`derived.script_errors`), in the properties palette and in `component_params_get`; fixing the script or the value brings it back.
 
 Commands:
 

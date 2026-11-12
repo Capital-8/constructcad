@@ -320,7 +320,7 @@ A tabela `ccad`:
 
 Argumentos e resultados são JSON: objetos são tabelas com chaves de texto, listas são sequências (`{ 0, 0 }` é um ponto), e `end`, palavra reservada do Lua, se escreve `["end"]`. Um número inteiro calculado com `/` (que em Lua sempre dá um número real) vai como inteiro, então `10 / 2` funciona onde se espera um id ou uma contagem.
 
-**O sandbox.** Os scripts rodam num Lua restrito: as bibliotecas `table`, `string`, `math`, `utf8` e `coroutine` e as funções básicas, sem `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` nem `loadfile`. Um script só chega ao projeto pelos comandos, e a arquivos só pelos comandos que os leem ou gravam. Cada execução tem um limite de 500 milhões de instruções Lua e 256 MB de memória; passando deles, ela para com um erro `script` (capturar esse erro com `pcall` não faz o script continuar). Cada comando que um script executa é um passo de desfazer.
+**O sandbox.** Os scripts rodam num Lua restrito: as bibliotecas `table`, `string`, `math`, `utf8` e `coroutine` e as funções básicas, sem `io`, `os`, `debug`, `package`, `require`, `load`, `dofile` nem `loadfile`. Um script só chega ao projeto pelos comandos, e a arquivos só pelos comandos que os leem ou gravam. Cada execução tem um limite de 500 milhões de instruções Lua, 60 segundos e 256 MB de memória (as funções de texto contam pelo tamanho do texto, a busca de padrões pelos passos, e `string.rep` e `string.gsub` geram no máximo 16 MB); passando deles, ela para com um erro `script` (capturar esse erro com `pcall` não faz o script continuar). Cada comando que um script executa é um passo de desfazer.
 
 ## Grafos de programação visual
 
@@ -353,8 +353,11 @@ lista todos os nós com suas portas e tipos.
 - **Erros são por nó.** Um nó que falha mostra a mensagem, os nós depois
   dele são pulados, os demais rodam, e os elementos dele ficam como estavam.
 - Um grafo nunca roda `project_new`, `project_open`, `undo`, `redo`,
-  `language_set` nem grafos, e só roda comandos de arquivo quando tem
-  `allow_files` (e nunca quando um plugin o executa).
+  `language_set` nem grafos, e só roda comandos de arquivo quando quem o executa permite: o
+  `allow_files` de `graph_run`, `ccad --allow-files graph`, ou a caixa
+  *Permitir comandos de arquivo* do editor, que vale até outro grafo ser
+  aberto. O arquivo do grafo não pode permitir sozinho (um campo
+  `allow_files` nele é ignorado), e um grafo que um plugin executa nunca pode.
 
 ```sh
 ccad --save-as casa.ccad graph examples/graphs/house.ccgraph width=12 depth=8
@@ -395,7 +398,7 @@ ccad --plugins examples/plugins run quick_rooms__rectangle_room width=4 depth=3 
 claude mcp add constructcad -- ccad mcp --plugins /caminho/para/plugins
 ```
 
-`--plugins` recebe a pasta de um plugin ou uma pasta de pastas de plugins, e pode ser repetido. Um plugin que não carrega é informado na saída de erro e fica de fora; o que os plugins imprimem também vai para a saída de erro.
+`--plugins` recebe a pasta de um plugin ou uma pasta de pastas de plugins, e pode ser repetido. Numa pasta de plugins, a pasta de cada plugin tem o nome do id dele (como as instalações a nomeiam); pastas ocultas (começando com `.`) são ignoradas. Um plugin que não carrega é informado na saída de erro e fica de fora; o que os plugins imprimem também vai para a saída de erro.
 
 ### Escrevendo um plugin
 
@@ -438,7 +441,7 @@ ccad.command {
 
 - `run` recebe os argumentos numa tabela e devolve o resultado do comando (uma tabela, um valor ou nada). Argumentos `required` que faltam são recusados antes de ele rodar; `error("mensagem", 0)` faz o comando falhar com essa mensagem.
 - **Um passo de desfazer:** quantos comandos um comando de plugin executar, ele é desfeito de uma vez, e quando falha (um erro, um `ccad.run` que falhou, um limite atingido) tudo o que ele fez é desfeito.
-- **O que um comando pode executar:** um comando `query` só consulta; um `edit` consulta e edita; comandos que leem ou gravam arquivos (importar, exportar, salvar) precisam da permissão `files`, e só com ela se declara um comando do tipo `file`. Abrir ou criar um projeto, `undo`, `redo` e `language_set` não rodam dentro de um comando de plugin, nem o comando de outro plugin.
+- **O que um comando pode executar:** um comando `query` só consulta; um `edit` consulta e edita; comandos que leem ou gravam arquivos (importar, exportar, salvar) precisam da permissão `files` (sem ela, comandos de edição que leem um arquivo indicado por um parâmetro, como `cad_import` ou `fill_pattern_import` com `path`, recusam o caminho; as formas sem arquivo, como `fill_pattern_import` com `text`, continuam funcionando), e só com ela se declara um comando do tipo `file`. Abrir ou criar um projeto, `undo`, `redo` e `language_set` não rodam dentro de um comando de plugin, nem o comando de outro plugin.
 - **O sandbox** é o dos [scripts Lua](#scripts-lua), com o limite contado por comando; cada plugin tem o seu próprio estado Lua, que guarda as variáveis entre um comando e outro. `require("a.b")` carrega `a/b.lua` da pasta do plugin (uma vez; arquivos fora da pasta são recusados), e `ccad.plugin` tem o `id`, o `name` e a `version` dele. `ccad.run` só funciona enquanto um comando roda, não enquanto o plugin carrega.
 - **As permissões** são concedidas por quem carrega o plugin: `ccad --plugins` concede o que o manifesto pede, já que você indicou a pasta.
 
@@ -487,7 +490,7 @@ As declarações ficam no corpo do script, nunca dentro de `geometry`. Os ids s�
 | `blend` | `bottom, top, offset, depth`, `plane` |
 | `mesh` | `vertices` (`{x, y, z}`), `faces` (listas de números de vértice a partir de 1, no sentido anti-horário vistas de fora) |
 
-Os scripts rodam no [sandbox](#scripts-lua) com limites menores (20 milhões de instruções, 64 MB, 10.000 peças, um milhão de pontos), e `math.random` repete os mesmos números. Quando um script falha, o elemento mantém as últimas peças que funcionaram, e o erro, com a linha, aparece em `element_get` (`derived.script_errors`), na paleta de propriedades e em `component_params_get`; corrigir o script ou o valor o recupera.
+Os scripts rodam no [sandbox](#scripts-lua) com limites menores (20 milhões de instruções, 5 segundos, 64 MB, 10.000 peças, um milhão de pontos), e `math.random` repete os mesmos números. Quando um script falha, o elemento mantém as últimas peças que funcionaram, e o erro, com a linha, aparece em `element_get` (`derived.script_errors`), na paleta de propriedades e em `component_params_get`; corrigir o script ou o valor o recupera.
 
 Comandos:
 

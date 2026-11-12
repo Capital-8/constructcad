@@ -40,34 +40,117 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
         });
         ui.label(RichText::new(t!("schedule-hint")).color(PALETTE.text_faint));
         ui.add_space(6.0);
-        egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
-            egui::Grid::new(("schedule", view_id.0)).striped(true).min_col_width(70.0).spacing([16.0, 6.0]).show(
-                ui,
-                |ui| {
-                    for h in &table.headers {
-                        ui.label(RichText::new(tr(h)).family(theme::semibold()));
+        let widths = column_widths(ui, state.session.doc.revision(), view_id, &table);
+        let row_height = ui.spacing().interact_size.y.max(ui.text_style_height(&egui::TextStyle::Body));
+        // The header stays on top; only the rows in sight are laid out, so long schedules stay cheap.
+        egui::ScrollArea::horizontal().auto_shrink([false, false]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(COLUMN_GAP, ROW_GAP);
+            row_cells(ui, &widths, row_height, None, |ui, i| {
+                let h = table.headers.get(i).map(|h| tr(h)).unwrap_or_default();
+                ui.label(RichText::new(h).family(theme::semibold()));
+            });
+            // The rows, then the totals as one more row.
+            let total = table.rows.len() + 1;
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(ui, row_height, total, |ui, range| {
+                for r in range {
+                    let stripe = (r % 2 == 1).then(|| ui.visuals().faint_bg_color);
+                    let Some(row) = table.rows.get(r) else {
+                        row_cells(ui, &widths, row_height, stripe, |ui, i| {
+                            let Some(cell) = table.totals.get(i) else { return };
+                            let text = if i == 0 { t!("schedule-total", "count" => cell) } else { cell.clone() };
+                            ui.label(RichText::new(text).family(theme::semibold()));
+                        });
+                        continue;
+                    };
+                    let selected = state.selection.contains(&row.element);
+                    let mut clicked = false;
+                    row_cells(ui, &widths, row_height, stripe, |ui, i| {
+                        let Some(cell) = row.cells.get(i) else { return };
+                        let text = cell_text(cell);
+                        let text = if text.is_empty() && i == 0 { "—".to_string() } else { text };
+                        clicked |= ui.selectable_label(selected, text).clicked();
+                    });
+                    if clicked {
+                        state.selection = BTreeSet::from([row.element]);
                     }
-                    ui.end_row();
-                    for row in &table.rows {
-                        let selected = state.selection.contains(&row.element);
-                        for (i, cell) in row.cells.iter().enumerate() {
-                            let text = cell_text(cell);
-                            let text = if text.is_empty() && i == 0 { "—".to_string() } else { text };
-                            if ui.selectable_label(selected, text).clicked() {
-                                state.selection = BTreeSet::from([row.element]);
-                            }
-                        }
-                        ui.end_row();
-                    }
-                    for (i, cell) in table.totals.iter().enumerate() {
-                        let text = if i == 0 { t!("schedule-total", "count" => cell) } else { cell.clone() };
-                        ui.label(RichText::new(text).family(theme::semibold()));
-                    }
-                    ui.end_row();
-                },
-            );
+                }
+            });
         });
     });
+}
+
+/// Space between columns and between rows of the table.
+const COLUMN_GAP: f32 = 16.0;
+const ROW_GAP: f32 = 6.0;
+const MIN_COLUMN: f32 = 70.0;
+
+/// The column widths of the schedule shown: the widest of each column's header, cells and total.
+/// Measuring every cell is the costly part, so the widths are kept until the document, the language
+/// or the text size changes.
+fn column_widths(ui: &Ui, revision: u64, view: ViewId, table: &cc_views::Table) -> Vec<f32> {
+    #[derive(Clone, PartialEq)]
+    struct Key(u64, crate::i18n::Language, u32, usize);
+    let body = ui.text_style_height(&egui::TextStyle::Body);
+    let key = Key(revision, crate::i18n::language(), body.to_bits(), table.headers.len());
+    let id = egui::Id::new(("schedule-widths", view.0));
+    if let Some((k, widths)) = ui.ctx().data(|d| d.get_temp::<(Key, Vec<f32>)>(id))
+        && k == key
+    {
+        return widths;
+    }
+    let painter = ui.painter();
+    let body_font = egui::TextStyle::Body.resolve(ui.style());
+    let bold_font = egui::FontId::new(body_font.size, theme::semibold());
+    let measure = |text: String, font: &egui::FontId| painter.layout_no_wrap(text, font.clone(), PALETTE.text).size().x;
+    // A selectable label pads its text on both sides.
+    let pad = 2.0 * ui.spacing().button_padding.x;
+    let mut widths: Vec<f32> = table.headers.iter().map(|h| measure(tr(h), &bold_font).max(MIN_COLUMN)).collect();
+    for row in &table.rows {
+        for (i, cell) in row.cells.iter().enumerate() {
+            let w = measure(cell_text(cell), &body_font) + pad;
+            if let Some(slot) = widths.get_mut(i) {
+                *slot = slot.max(w);
+            } else {
+                widths.push(w.max(MIN_COLUMN));
+            }
+        }
+    }
+    for (i, cell) in table.totals.iter().enumerate() {
+        let text = if i == 0 { t!("schedule-total", "count" => cell) } else { cell.clone() };
+        let w = measure(text, &bold_font);
+        if let Some(slot) = widths.get_mut(i) {
+            *slot = slot.max(w);
+        } else {
+            widths.push(w.max(MIN_COLUMN));
+        }
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(id, (key, widths.clone())));
+    widths
+}
+
+/// One table row: each column at its width, left aligned, over an optional stripe.
+fn row_cells(
+    ui: &mut Ui,
+    widths: &[f32],
+    height: f32,
+    stripe: Option<egui::Color32>,
+    mut cell: impl FnMut(&mut Ui, usize),
+) {
+    let gap = ui.spacing().item_spacing.x;
+    let width = widths.iter().sum::<f32>() + gap * widths.len().saturating_sub(1) as f32;
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+    if let Some(color) = stripe {
+        ui.painter().rect_filled(rect.expand2(egui::vec2(gap / 2.0, ROW_GAP / 2.0)), 0.0, color);
+    }
+    let mut x = rect.left();
+    for (i, w) in widths.iter().enumerate() {
+        let cell_rect = egui::Rect::from_min_size(egui::pos2(x, rect.top()), egui::vec2(*w, height));
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(cell_rect).layout(egui::Layout::left_to_right(egui::Align::Center)),
+            |ui| cell(ui, i),
+        );
+        x += w + gap;
+    }
 }
 
 fn export_csv(state: &mut AppState, view: ViewId, name: &str) {

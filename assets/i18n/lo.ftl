@@ -777,6 +777,7 @@ err-io = ຂໍ້ຜິດພາດໃນການອ່ານ/ຂຽນໄຟ�
 err-parse = ໄຟລ໌ນີ້ບໍ່ແມ່ນໂຄງການ ConstructCraft ທີ່ຖືກຕ້ອງ ({ $detail })
 err-serialize = ບັນທຶກຂຽນລົງໄຟລ໌ບໍ່ສຳເລັດ ({ $detail })
 err-version = ໄຟລ໌ນີ້ໃຊ້ໂຄງສ້າງເວີຊັນ { $version }; ແຕ່ໂປຣແກຣມລຸ້ນນີ້ຮອງຮັບໄດ້ສູງສຸດຮອດ { $max }
+err-project-too-large = ໄຟລ໌ໂຄງການໃຫຍ່ກວ່າ { $max } MB
 
 # New project template (level, material, type and view names)
 tpl-project-name = ໂຄງການໃໝ່

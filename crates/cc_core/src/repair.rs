@@ -826,6 +826,82 @@ impl Project {
     }
 }
 
+impl Project {
+    /// How many repairs [`Project::repair`] would make, without changing the
+    /// project: it repairs a copy. The copy leaves out the vertices and faces
+    /// of fixed mesh pieces, which repair never reads, so that checking every
+    /// edit of a model with imported meshes does not copy them.
+    pub fn repairs_needed(&self) -> usize {
+        self.copy_with_types(self.types.iter().map(|(id, ty)| (*id, type_for_repair(ty))).collect()).repair()
+    }
+}
+
+/// A copy of a type whose fixed mesh pieces are empty (see [`Project::repairs_needed`]).
+fn type_for_repair(ty: &crate::ElementType) -> crate::ElementType {
+    use crate::{ComponentDef, ComponentItem, ComponentShape};
+    let crate::ElementType { id, name, data, info, uid } = ty;
+    let TypeData::Component { component, def } = data else { return ty.clone() };
+    if !def.items.iter().any(|i| matches!(i.shape, ComponentShape::Mesh { .. })) {
+        return ty.clone();
+    }
+    let ComponentDef {
+        kind,
+        params,
+        items,
+        ifc,
+        mep,
+        opening,
+        connectors,
+        ref_planes,
+        ref_lines,
+        dimensions,
+        equals,
+        hotspots,
+        sheet,
+    } = def;
+    let items = items
+        .iter()
+        .map(|i| {
+            let ComponentItem { name, shape, material, in_plan, void, plan_only, detail } = i;
+            let shape = match shape {
+                ComponentShape::Mesh { .. } => ComponentShape::Mesh { vertices: Vec::new(), faces: Vec::new() },
+                other => other.clone(),
+            };
+            ComponentItem {
+                name: name.clone(),
+                shape,
+                material: material.clone(),
+                in_plan: *in_plan,
+                void: *void,
+                plan_only: *plan_only,
+                detail: *detail,
+            }
+        })
+        .collect();
+    let def = ComponentDef {
+        kind: *kind,
+        params: params.clone(),
+        items,
+        ifc: ifc.clone(),
+        mep: *mep,
+        opening: opening.clone(),
+        connectors: connectors.clone(),
+        ref_planes: ref_planes.clone(),
+        ref_lines: ref_lines.clone(),
+        dimensions: dimensions.clone(),
+        equals: equals.clone(),
+        hotspots: hotspots.clone(),
+        sheet: sheet.clone(),
+    };
+    crate::ElementType {
+        id: *id,
+        name: name.clone(),
+        data: TypeData::Component { component: component.clone(), def },
+        info: info.clone(),
+        uid: *uid,
+    }
+}
+
 /// Script sources, text values, choices and hotspots of a component
 /// definition within their limits; the number of repairs.
 fn repair_scripted(def: &mut crate::ComponentDef) -> usize {
@@ -1339,5 +1415,28 @@ mod tests {
         assert_eq!(def.hotspots.len(), 1);
         assert_eq!(def.hotspots[0].position, [0.0; 3]);
         assert_eq!(p.repair(), 0, "repair is idempotent");
+    }
+
+    #[test]
+    fn repairs_needed_counts_without_copying_meshes() {
+        let mut p = Project::from_template();
+        let ty = p.default_type(Category::Component).unwrap();
+        let Some(crate::TypeData::Component { def, .. }) = p.types.get_mut(&ty).map(|t| &mut t.data) else {
+            panic!("no component type")
+        };
+        let vertices = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let faces = vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![0, 3, 2]];
+        def.items[0].shape = crate::ComponentShape::Mesh { vertices, faces };
+        assert_eq!(p.repairs_needed(), 0);
+        assert_eq!(p.repairs_needed(), p.clone().repair());
+
+        let Some(crate::TypeData::Component { def, .. }) = p.types.get_mut(&ty).map(|t| &mut t.data) else {
+            panic!("no component type")
+        };
+        def.params[0].value = f64::NAN;
+        let before = format!("{p:?}");
+        assert_eq!(p.repairs_needed(), 1);
+        assert_eq!(p.repairs_needed(), p.clone().repair());
+        assert_eq!(format!("{p:?}"), before, "the project is left as it was");
     }
 }

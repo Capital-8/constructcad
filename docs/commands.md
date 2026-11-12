@@ -3158,6 +3158,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `allow_files` | boolean | optional | Let the graph's commands read and write files (open, save, import, export). Off by default; a graph file cannot turn it on, and it stays off when another command (a plugin's) runs the graph. |
 | `brief` | boolean | optional | Leave each node's outputs out of the result (only errors, outputs and counts). |
 | `graph` | JSON | optional | The graph itself (the contents of a `.ccgraph` file), instead of `path`. |
 | `inputs` | object | optional | Values of the graph's input nodes, by their names. |
@@ -3169,6 +3170,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `allow_files` | boolean | optional | Check it as `graph_run` with `allow_files` would run it (file commands are then no problem). |
 | `graph` | JSON | optional | The graph itself, instead of `path`. |
 | `path` | string | optional | Path of the `.ccgraph` file. |
 

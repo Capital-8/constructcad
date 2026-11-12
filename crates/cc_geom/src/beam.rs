@@ -253,11 +253,17 @@ pub(crate) fn resolve_beams(beams: &[BeamInput], columns: &[ColumnInput]) -> Vec
             // The beams this one can meet: those at a common depth.
             let near: Vec<usize> =
                 (0..beams.len()).filter(|&j| j == i || overlap(beams[j].envelope(), b.envelope())).collect();
-            let local: Vec<WallLine> = near.iter().map(|&j| lines[j]).collect();
-            let me = near.iter().position(|&j| j == i).unwrap_or(0);
+            // Usually every beam is at a common depth: then the lines are used as they are.
+            let copied: Vec<WallLine>;
+            let (local, me): (&[WallLine], usize) = if near.len() == lines.len() {
+                (&lines, i)
+            } else {
+                copied = near.iter().map(|&j| lines[j]).collect();
+                (&copied, near.iter().position(|&j| j == i).unwrap_or(0))
+            };
             let resolve = |k: usize, at_start: bool| match framed[i][k] {
                 Some((column, join)) => (BeamEnd::Column(column), Some(join)),
-                None => match resolve_join(&local, me, at_start) {
+                None => match resolve_join(local, me, at_start) {
                     Some(join) => (BeamEnd::Beam, Some(join)),
                     None => (BeamEnd::Free, None),
                 },

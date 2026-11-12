@@ -75,8 +75,9 @@ pub struct Dialogs {
     pub lps_check: bool,
     pub lps_class: cc_core::LpsClass,
     pub lps_result: Option<(cc_core::LpsClass, u64, serde_json::Value)>,
-    /// The structured cabling per rack.
+    /// The structured cabling per rack, with its last result (document revision, `cabling_list` output).
     pub cabling: bool,
+    pub cabling_result: Option<(u64, serde_json::Value)>,
     /// Visibility/Graphics of a view or view template.
     pub graphics: Option<crate::graphics_dialog::GraphicsDialog>,
     /// Graphic overrides of the selected elements in a view.
@@ -108,6 +109,10 @@ pub struct Dialogs {
 pub struct AppState {
     /// The engine session: document, derived geometry, drawings and sheets.
     pub session: Session,
+    /// The multi-selection rows' copy of the selected elements, per revision and selection.
+    pub multi_summary: Option<std::sync::Arc<crate::properties::MultiSummary>>,
+    /// The model's snap candidates (document revision, level, candidates).
+    pub snap_cache: Option<(u64, Option<LevelId>, std::sync::Arc<crate::tools::ModelSnaps>)>,
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
@@ -233,6 +238,8 @@ impl AppState {
         Self {
             session,
             selection: BTreeSet::new(),
+            multi_summary: None,
+            snap_cache: None,
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),

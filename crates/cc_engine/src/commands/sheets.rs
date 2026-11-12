@@ -405,7 +405,7 @@ pub enum SheetPieceArg {
 }
 
 impl SheetPieceArg {
-    pub(crate) fn shape(&self) -> Result<SheetShape> {
+    pub(crate) fn shape(&self, s: &Session) -> Result<SheetShape> {
         let opt = |e: &Option<ExprArg>| e.as_ref().map(ExprArg::text).transpose().map(Option::unwrap_or_default);
         Ok(match self {
             SheetPieceArg::Stroke { points, closed, weight, color, fill, pattern } => {
@@ -471,7 +471,12 @@ impl SheetPieceArg {
                 y: y.text()?,
                 width: width.text()?,
                 height: height.text()?,
-                image: read_picture(image_path.as_deref(), image.as_deref())?,
+                image: {
+                    if image_path.is_some() {
+                        s.require_files("image_path")?;
+                    }
+                    read_picture(image_path.as_deref(), image.as_deref())?
+                },
             },
         })
     }
@@ -615,8 +620,9 @@ pub struct ComponentSheetPieceAdd {
 impl Command for ComponentSheetPieceAdd {
     const NAME: &'static str = "component_sheet_piece_add";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let shapes = self.piece.iter().chain(&self.pieces).map(SheetPieceArg::shape).collect::<Result<Vec<_>>>()?;
+        let shapes = self.piece.iter().chain(&self.pieces).map(|p| p.shape(s)).collect::<Result<Vec<_>>>()?;
         if shapes.is_empty() {
             return Err(EngineError::invalid("give a `piece` or `pieces` to add"));
         }
@@ -682,15 +688,21 @@ pub struct ComponentSheetPieceSet {
 impl Command for ComponentSheetPieceSet {
     const NAME: &'static str = "component_sheet_piece_set";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
         if self.piece.as_ref().and_then(|p| p.get("Image")).and_then(|p| p.get("image")).is_some() {
             return Err(EngineError::invalid("give a new picture as `image_path` or `image`, not in the patch"));
         }
         let picture = match (&self.image_path, &self.image) {
             (None, None) => None,
-            (path, text) => Some(read_picture(path.as_deref(), text.as_deref())?),
+            (path, text) => {
+                if path.is_some() {
+                    s.require_files("image_path")?;
+                }
+                Some(read_picture(path.as_deref(), text.as_deref())?)
+            }
         };
-        let added = self.add.iter().map(SheetPieceArg::shape).collect::<Result<Vec<_>>>()?;
+        let added = self.add.iter().map(|p| p.shape(s)).collect::<Result<Vec<_>>>()?;
         check_nested(s.project(), &self.type_ref, &added)?;
         if let Some(patch) = &self.piece {
             // A patched nested piece must not make a cycle either.
