@@ -274,6 +274,13 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
 ```
 
+`steel_building_create` makes a parametric steel building: portal frames of columns and rafters over `bays` bays, with purlins and girts (`null` turns one off), as ordinary columns and beams in one undo step; types default to the catalog's `W310x38,7`. Its members are regenerated, with their ids kept, when `element_set` changes the building's parameters; a member edited or deleted directly is detached and left alone. `element_get` lists `derived.members` and `detached`.
+
+```text
+{"command": "steel_building_create", "args": {"span": 24, "eave_height": 7, "bays": 8, "roof": "mono", "girts": null}}
+{"command": "element_set", "args": {"id": 42, "params": {"span": 30}}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).

@@ -274,6 +274,13 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
 ```
 
+`steel_building_create` cria um galpão metálico paramétrico: pórticos de pilares e vigas de cobertura em `bays` módulos, com terças e longarinas (`null` desliga uma delas), como pilares e vigas comuns num só passo de desfazer; os tipos padrão são o `W310x38,7` do catálogo. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros do galpão; um elemento editado ou excluído diretamente fica desvinculado e não é mexido. `element_get` lista `derived.members` e `detached`.
+
+```text
+{"command": "steel_building_create", "args": {"span": 24, "eave_height": 7, "bays": 8, "roof": "mono", "girts": null}}
+{"command": "element_set", "args": {"id": 42, "params": {"span": 30}}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).
