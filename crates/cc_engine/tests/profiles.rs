@@ -799,3 +799,25 @@ fn resizing_a_turned_type_keeps_the_typed_box() {
     let (lo, hi) = s.project().type_section(data).unwrap().outline.bbox();
     assert!(((hi - lo) - glam::DVec2::new(0.6, 0.2)).abs().max_element() < 1e-9, "{:?}", hi - lo);
 }
+
+/// A round column's volume is the circle's, not its chorded outline's: IFC
+/// export writes it as a quantity next to an exact `IfcCircleProfileDef`.
+#[test]
+fn round_columns_have_their_exact_volume() {
+    let mut s = Session::default();
+    for (name, shape, params) in
+        [("R30", "round", json!({"d": 0.3})), ("T200", "round_tube", json!({"d": 0.2, "t": 0.008}))]
+    {
+        run(&mut s, "profile_create", json!({"material": "steel", "shape": shape, "name": name, "params": params}));
+        let t = run(&mut s, "profile_type_create", json!({"profile": name, "category": "column"}))["id"].clone();
+        let col = run(&mut s, "column_create", json!({"type": t, "position": [0.0, 0.0]}))["id"].as_u64().unwrap();
+        let id = ElementId(col);
+        let e = s.project().element(id).unwrap();
+        let ElementKind::Column(c) = &e.kind else { panic!() };
+        let (base, top) = s.project().column_span(e, c);
+        let disk = |d: f64| std::f64::consts::PI * d * d / 4.0;
+        let area = if shape == "round" { disk(0.3) } else { disk(0.2) - disk(0.184) };
+        let volume = s.geometry().volume(id);
+        assert!((volume - area * (top - base)).abs() < 1e-9, "{name}: {volume} vs {}", area * (top - base));
+    }
+}

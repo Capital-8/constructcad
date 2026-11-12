@@ -566,6 +566,10 @@ impl ModelGeometry {
                     let (base, top) = project.column_span(e, c);
                     let (outer, holes) = crate::section::column_body(&section.outline, c.position, c.rotation_deg);
                     crate::section::add_column_body(&mut s, &outer, &holes, base, top, section.curved);
+                    // Exact for round sections (the solid meshes the circle with chords).
+                    if let Some(area) = project.round_section_area(&ty.data) {
+                        self.curved_volumes.insert(e.id, area * (top - base).max(0.0));
+                    }
                 }
                 (ElementKind::Beam(_), TypeData::Beam { .. }) => {
                     let Some(g) = self.beams.get(&e.id) else { continue };
