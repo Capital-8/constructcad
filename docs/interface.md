@@ -6,6 +6,8 @@ ConstructCraft's window follows the layout desktop CAD and BIM users expect. The
 
 Opening a project and importing a file (IFC, DWG/DXF, SketchUp, OBJ, glTF, pictures and SVG, component files) read it in the background: a dialog shows the operation, the file's name, folder and size and the time elapsed, with a spinner, and keeps the rest of the window from being used. The open project stays as it was until the file has been read; *Cancel* (or Esc) stops waiting and changes nothing.
 
+Dialogs open in the middle of the window and can be moved by dragging their title; a dialog opens centered again the next time. A dialog is as wide as its buttons and its contents need.
+
 ## Commands and their tooltips
 
 Every button in the ribbon and the quick access toolbar runs an *interface command*. So does every two-letter shortcut and every entry of the command palette. Each command defines, in one place:

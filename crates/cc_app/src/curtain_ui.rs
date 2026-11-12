@@ -645,7 +645,7 @@ fn mullion_rows(
     // Named with its section, so each of the three switches can be told apart.
     let switch = format!("{title}: {label}");
     let r = row(ui, &label, |ui| {
-        let r = ui.checkbox(&mut on, "");
+        let r = crate::table::checkbox(ui, &mut on);
         r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, &switch));
         r
     });

@@ -381,7 +381,7 @@ fn transparency_cell(ui: &mut Ui, label: &str, value: &mut Option<f64>, enabled:
 
 fn halftone_cell(ui: &mut Ui, label: &str, value: &mut Option<bool>, enabled: bool) -> bool {
     let mut on = *value == Some(true);
-    let r = ui.add_enabled(enabled, egui::Checkbox::without_text(&mut on)).on_hover_text(label);
+    let r = ui.add_enabled(enabled, crate::table::boxed(egui::Checkbox::without_text(&mut on))).on_hover_text(label);
     if r.changed() {
         *value = on.then_some(true);
         return true;
@@ -478,7 +478,7 @@ fn graphics_dialog(ctx: &Context, state: &mut AppState) {
     let mut new_tab = tab;
     let (mut ok, mut filters_button) = (0, usize::MAX);
     let title = graphics_title(state, target);
-    let response = Dialog::new("visibility-graphics", title).width(900.0).show(
+    let response = Dialog::new("visibility-graphics", title).width(940.0).show(
         ctx,
         |ui| {
             ui.horizontal(|ui| {
@@ -496,7 +496,9 @@ fn graphics_dialog(ctx: &Context, state: &mut AppState) {
                 ui.label(RichText::new(t!("msg-controlled-by-template", "template" => name)).color(PALETTE.warning));
             }
             let enabled = controlling_template(state, target, filters).is_none();
-            egui::ScrollArea::vertical().max_height(440.0).show(ui, |ui| match new_tab {
+            // Both ways: the columns are as wide as their texts, which in some
+            // languages is more than the dialog.
+            egui::ScrollArea::both().max_height(440.0).show(ui, |ui| match new_tab {
                 Tab::Model => categories_table(ui, state, target, &graphics, &Category::MODEL, enabled),
                 Tab::Annotation => {
                     let annotation: Vec<Category> =
@@ -888,7 +890,13 @@ fn filter_form(ui: &mut Ui, state: &mut AppState, mut f: cc_core::ViewFilter) {
     let mut changed = false;
     section(ui, "filter-categories", t!("vg-filter-categories"), |ui| {
         ui.label(RichText::new(t!("vg-filter-categories-hint")).size(11.0).color(PALETTE.text_faint));
-        egui::Grid::new("filter-cats").num_columns(4).show(ui, |ui| {
+        // Columns of one width that fill the form: a long name wraps in its
+        // cell instead of widening the dialog.
+        const COLUMNS: usize = 3;
+        let gap = ui.spacing().item_spacing.x;
+        let column = ((ui.available_width() - gap * (COLUMNS - 1) as f32) / COLUMNS as f32).max(60.0);
+        let grid = egui::Grid::new("filter-cats").num_columns(COLUMNS).min_col_width(column).max_col_width(column);
+        grid.show(ui, |ui| {
             for (i, c) in Category::ALL.iter().enumerate() {
                 let mut on = f.categories.contains(c);
                 if ui.checkbox(&mut on, crate::actions::t_category(*c)).changed() {
@@ -899,7 +907,7 @@ fn filter_form(ui: &mut Ui, state: &mut AppState, mut f: cc_core::ViewFilter) {
                     }
                     changed = true;
                 }
-                if i % 4 == 3 {
+                if i % COLUMNS == COLUMNS - 1 {
                     ui.end_row();
                 }
             }
@@ -982,10 +990,10 @@ fn templates_dialog(ctx: &Context, state: &mut AppState) {
     let has_selection = selected.is_some();
     let (mut ok, mut new, mut delete) = (0, usize::MAX, usize::MAX);
     let mut edit_graphics = None;
-    let response = Dialog::new("view-templates", t!("dlg-view-templates")).width(800.0).show(
+    let response = Dialog::new("view-templates", t!("dlg-view-templates")).width(840.0).show(
         ctx,
         |ui| {
-            crate::dialog::two_columns(ui, [200.0, 520.0], |ui, column| {
+            crate::dialog::two_columns(ui, [200.0, 615.0], |ui, column| {
                 if column == 0 {
                     let list: Vec<(TemplateId, String)> =
                         state.project().templates.values().map(|t| (t.id, t.name.clone())).collect();
@@ -1087,7 +1095,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         header(ui, t!("vg-value"));
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.scale, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.scale).changed();
         ui.label(t!("prop-scale"));
         let mut scale = t.scale;
         egui::ComboBox::from_id_salt(("tpl-scale", id)).selected_text(format!("1:{scale}")).show_ui(ui, |ui| {
@@ -1100,7 +1108,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         }
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.detail, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.detail).changed();
         ui.label(t!("prop-detail-level"));
         let mut detail = t.detail;
         egui::ComboBox::from_id_salt(("tpl-detail", id)).selected_text(tr(detail.key())).show_ui(ui, |ui| {
@@ -1113,7 +1121,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         }
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.visual_style, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.visual_style).changed();
         ui.label(t!("prop-visual-style"));
         let mut style = t.visual_style;
         let name = |s: Option<cc_core::VisualStyle>| s.map_or_else(|| t!("style-default"), |s| tr(s.key()));
@@ -1128,7 +1136,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         }
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.underlay, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.underlay).changed();
         ui.label(t!("section-underlay"));
         let (old, mut u) = (t.underlay, t.underlay);
         ui.vertical(|ui| {
@@ -1138,24 +1146,24 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         });
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.design_options, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.design_options).changed();
         ui.label(t!("section-design-options"));
         crate::design_options_ui::template_rows(ui, state, id);
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.categories, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.categories).changed();
         ui.label(t!("vg-categories-graphics"));
         if ui.button(t!("vg-edit")).clicked() {
             open_vg = true;
         }
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.filters, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.filters).changed();
         ui.label(t!("vg-filters"));
         ui.label(RichText::new(t!("vg-filter-count", "count" => t.graphics.filters.len())).color(PALETTE.text_muted));
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.cut_height, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.cut_height).changed();
         ui.label(t!("prop-cut-height"));
         let mut h = t.cut_height;
         let r = ui.add(crate::properties::length_drag(&mut h).speed(0.01).range(0.0..=20.0));
@@ -1164,7 +1172,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         }
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.discipline, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.discipline).changed();
         ui.label(t!("vg-discipline"));
         let label = |d: Option<cc_core::MepDiscipline>| d.map_or(t!("vg-discipline-none"), |d| tr(d.key()));
         let mut d = t.discipline;
@@ -1178,7 +1186,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         }
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.structural, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.structural).changed();
         ui.label(t!("section-structural"));
         ui.horizontal(|ui| {
             let (mut s, mut tags) = (t.structural, t.structure_tags);
@@ -1191,7 +1199,7 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         });
         ui.end_row();
 
-        changed |= ui.checkbox(&mut include.phase_filter, "").changed();
+        changed |= crate::table::checkbox(ui, &mut include.phase_filter).changed();
         ui.label(t!("prop-phase-filter"));
         let filters: Vec<(cc_core::PhaseFilterId, String)> =
             state.project().phase_filters.values().map(|f| (f.id, f.name.clone())).collect();
