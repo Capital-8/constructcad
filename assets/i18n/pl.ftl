@@ -3195,3 +3195,6 @@ label-secondary-beams = Belki drugorzędne
 label-parallel-to = Równoległe do
 label-spacing = Rozstaw
 msg-grid-frame-created = Umieszczono słupy: { $columns }, belki: { $beams }, belki drugorzędne: { $secondary }; pominięto: { $skipped }.
+
+# Steel building
+category-steel-building = Hale stalowe

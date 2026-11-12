@@ -51,6 +51,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::MaskingRegion => Icon::MaskingRegion,
         Category::Mass => Icon::Mass,
         Category::Shaft => Icon::Shaft,
+        Category::SteelBuilding => Icon::SteelBuilding,
         Category::Topography => Icon::Topography,
         Category::Pad => Icon::Pad,
         Category::Sweep => Icon::Sweep,

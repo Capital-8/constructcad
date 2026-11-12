@@ -3195,3 +3195,6 @@ label-secondary-beams = Travi secondarie
 label-parallel-to = Parallele a
 label-spacing = Interasse
 msg-grid-frame-created = { $columns } pilastri, { $beams } travi e { $secondary } travi secondarie posizionati; { $skipped } saltati.
+
+# Steel building
+category-steel-building = Capannoni in acciaio

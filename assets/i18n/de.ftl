@@ -3195,3 +3195,6 @@ label-secondary-beams = Nebenträger
 label-parallel-to = Parallel zu
 label-spacing = Abstand
 msg-grid-frame-created = { $columns } Stützen, { $beams } Träger und { $secondary } Nebenträger gesetzt; { $skipped } übersprungen.
+
+# Steel building
+category-steel-building = Stahlhallen

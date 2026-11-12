@@ -3195,3 +3195,6 @@ label-secondary-beams = Vigas secundarias
 label-parallel-to = Paralelas a
 label-spacing = Separación
 msg-grid-frame-created = { $columns } pilares, { $beams } vigas y { $secondary } vigas secundarias colocados; { $skipped } omitidos.
+
+# Steel building
+category-steel-building = Naves metálicas

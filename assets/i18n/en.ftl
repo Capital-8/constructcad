@@ -3195,3 +3195,6 @@ label-secondary-beams = Secondary beams
 label-parallel-to = Parallel to
 label-spacing = Spacing
 msg-grid-frame-created = { $columns } columns, { $beams } beams and { $secondary } secondary beams placed; { $skipped } skipped.
+
+# Steel building
+category-steel-building = Steel buildings

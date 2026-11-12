@@ -3195,3 +3195,6 @@ label-secondary-beams = 次梁
 label-parallel-to = 平行於
 label-spacing = 間距
 msg-grid-frame-created = 已放置 { $columns } 根柱、{ $beams } 根梁及 { $secondary } 根次梁；略過 { $skipped } 個。
+
+# Steel building
+category-steel-building = 鋼構建築

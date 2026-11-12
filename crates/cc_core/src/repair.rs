@@ -105,6 +105,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
+        ElementKind::SteelBuilding(b) => b.origin.is_finite() && b.rotation_deg.is_finite(),
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
     }
@@ -205,7 +206,8 @@ impl Project {
                 | TypeData::FilledRegion { .. }
                 | TypeData::MaskingRegion {}
                 | TypeData::Mass { .. }
-                | TypeData::Shaft {} => {}
+                | TypeData::Shaft {}
+                | TypeData::SteelBuilding {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
                     for (r, d) in
                         [(cut_slope, crate::pad::DEFAULT_CUT_SLOPE), (fill_slope, crate::pad::DEFAULT_FILL_SLOPE)]

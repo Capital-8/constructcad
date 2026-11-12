@@ -3196,3 +3196,6 @@ label-secondary-beams = Другорядні балки
 label-parallel-to = Паралельно до
 label-spacing = Крок
 msg-grid-frame-created = Розміщено колон: { $columns }, балок: { $beams }, другорядних балок: { $secondary }; пропущено: { $skipped }.
+
+# Steel building
+category-steel-building = Сталеві будівлі

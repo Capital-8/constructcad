@@ -71,6 +71,8 @@ pub enum ElementKind {
     Sweep(crate::profile_sweep::Sweep),
     /// A vertical opening through floors, ceilings and roofs.
     Shaft(crate::shaft::Shaft),
+    /// A parametric steel building: it owns the columns and beams of its frames.
+    SteelBuilding(Box<crate::steel_building::SteelBuilding>),
     /// A terrain surface from measured points inside a boundary.
     Topography(crate::topography::Topography),
     /// A building pad graded into its terrain.
@@ -117,6 +119,7 @@ impl Element {
             ElementKind::Mass(_) => Category::Mass,
             ElementKind::Sweep(_) => Category::Sweep,
             ElementKind::Shaft(_) => Category::Shaft,
+            ElementKind::SteelBuilding(_) => Category::SteelBuilding,
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
             ElementKind::DetailLine(_) => Category::DetailLine,
@@ -329,6 +332,7 @@ impl Element {
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Sweep(s) => s.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(|p| *p += delta),
+            ElementKind::SteelBuilding(b) => b.origin += delta,
             ElementKind::Topography(t) => {
                 t.boundary.iter_mut().for_each(|p| *p += delta);
                 t.points.iter_mut().for_each(|p| *p += delta.extend(0.0));

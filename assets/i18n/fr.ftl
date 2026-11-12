@@ -3195,3 +3195,6 @@ label-secondary-beams = Poutres secondaires
 label-parallel-to = Parallèles à
 label-spacing = Espacement
 msg-grid-frame-created = { $columns } poteaux, { $beams } poutres et { $secondary } poutres secondaires placés ; { $skipped } ignorés.
+
+# Steel building
+category-steel-building = Bâtiments métalliques

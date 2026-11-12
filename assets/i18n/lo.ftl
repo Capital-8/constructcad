@@ -3197,3 +3197,6 @@ label-secondary-beams = ຄານຮອງ
 label-parallel-to = ຂະໜານກັບ
 label-spacing = ໄລຍະຫ່າງ
 msg-grid-frame-created = ວາງເສົາ { $columns }, ຄານ { $beams } ແລະ ຄານຮອງ { $secondary }; ຂ້າມ { $skipped }.
+
+# Steel building
+category-steel-building = ອາຄານໂຄງເຫຼັກ

@@ -3195,3 +3195,6 @@ label-secondary-beams = 小梁
 label-parallel-to = 平行
 label-spacing = 間隔
 msg-grid-frame-created = 柱 { $columns } 本、梁 { $beams } 本、小梁 { $secondary } 本を配置しました。{ $skipped } 件をスキップしました。
+
+# Steel building
+category-steel-building = 鉄骨建屋
