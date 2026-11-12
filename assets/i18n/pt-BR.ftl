@@ -3179,3 +3179,6 @@ browser-org-none = Nenhum
 # Structure by material
 tx-structural-type = Criar tipo estrutural
 tx-grid-frame = Criar estrutura em grelha
+
+# Structure tab material and grid frame
+group-structure-material = Material

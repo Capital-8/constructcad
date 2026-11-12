@@ -64,7 +64,6 @@ pub enum UiCommand {
     /// The placement tool of a model category.
     Place(Category),
     /// Start the column or beam tool on a type of the given structural material.
-    #[allow(dead_code)] // the Structure tab (next task) builds it
     StructurePlace(Category, cc_core::StructuralMaterial),
     NewComponent,
     LoadComponent,

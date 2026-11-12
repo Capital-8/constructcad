@@ -286,9 +286,11 @@ fn ribbon_buttons_are_accessible() {
         RibbonTab::Manage,
     ];
     let mut found = std::collections::HashSet::new();
-    for tab in tabs {
+    // The Structure tab shows other groups per material.
+    for (tab, material) in tabs.into_iter().flat_map(|t| cc_core::StructuralMaterial::ALL.map(|m| (t, m))) {
         let mut state = sample_state();
         state.ribbon_tab = tab;
+        state.prefs.structure_material = material;
         let harness = ribbon_harness(state, 1600.0);
         for node in harness.query_all_by_role(Role::Button) {
             let label = node.accesskit_node().label().unwrap_or_default();
@@ -3619,4 +3621,24 @@ fn structure_column_tool_keeps_to_its_material() {
     let crate::tools::Tool::Beam { type_id, .. } = state.tool.clone() else { panic!() };
     assert_eq!(state.project().type_name(type_id), "MLC 9x32");
     assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}
+
+/// The Structure tab's material selector swaps the material's groups:
+/// reinforcement in Concrete, bracing and the grid tools in Steel.
+#[test]
+fn structure_material_selector_swaps_groups() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Concrete;
+    let mut harness = ribbon_harness(state, 1600.0);
+    let rebar = crate::commands::UiCommand::TypicalRebar.label(harness.state());
+    let braces = crate::commands::UiCommand::BracesX.label(harness.state());
+    assert!(harness.query_by_label(&rebar).is_some(), "concrete shows reinforcement");
+    assert!(harness.query_by_label(&braces).is_none());
+    harness.get_by_label(&crate::i18n::tr("profile-material-steel")).click();
+    harness.run();
+    assert_eq!(harness.state().prefs.structure_material, cc_core::StructuralMaterial::Steel);
+    assert!(harness.query_by_label(&rebar).is_none(), "steel hides reinforcement");
+    assert!(harness.query_by_label(&braces).is_some());
+    assert!(harness.query_by_label(&crate::commands::UiCommand::ColumnsAtGrids.label(harness.state())).is_some());
 }

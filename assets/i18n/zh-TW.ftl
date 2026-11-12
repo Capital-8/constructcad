@@ -3179,3 +3179,6 @@ browser-org-none = 無
 # Structure by material
 tx-structural-type = 建立結構類型
 tx-grid-frame = 建立軸網框架
+
+# Structure tab material and grid frame
+group-structure-material = 材料

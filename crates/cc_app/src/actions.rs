@@ -839,9 +839,11 @@ fn placed(state: &mut AppState, out: Option<serde_json::Value>, what: Placed) {
 
 /// Columns at the intersections of the selected grids (the engine's `columns_at_grids`).
 pub fn columns_at_grids(state: &mut AppState) {
+    let type_ref = material_type_ref(state, Category::Column);
     let command = cc_engine::commands::structure::ColumnsAtGrids {
         grids: grids_for(state),
         level: structure_level(state),
+        type_ref,
         ..Default::default()
     };
     let out = run(state, command);
@@ -850,9 +852,11 @@ pub fn columns_at_grids(state: &mut AppState) {
 
 /// Beams between the columns along the selected grids (the engine's `beams_on_grids`).
 pub fn beams_on_grids(state: &mut AppState) {
+    let type_ref = material_type_ref(state, Category::Beam);
     let command = cc_engine::commands::structure::BeamsOnGrids {
         grids: grids_for(state),
         level: structure_level(state),
+        type_ref,
         ..Default::default()
     };
     let out = run(state, command);
@@ -932,8 +936,8 @@ pub fn export_analytical(state: &mut AppState) {
 /// X bracing between the two selected columns.
 pub fn braces_x(state: &mut AppState) {
     let columns = selected_columns(state);
-    let command =
-        cc_engine::commands::framing::BracesBetweenColumns { columns, pattern: Some("x".into()), type_ref: None };
+    let type_ref = material_type_ref(state, Category::Beam);
+    let command = cc_engine::commands::framing::BracesBetweenColumns { columns, pattern: Some("x".into()), type_ref };
     if let Some(out) = run(state, command) {
         let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
         state.selection = ids.map(cc_core::ElementId).collect();
@@ -1081,8 +1085,12 @@ pub fn toggle_structure_tags(state: &mut AppState) {
 
 /// Beams through the selected columns (the engine's `beams_between_columns`).
 pub fn beams_between_columns(state: &mut AppState) {
-    let command =
-        cc_engine::commands::structure::BeamsBetweenColumns { columns: selected_columns(state), ..Default::default() };
+    let type_ref = material_type_ref(state, Category::Beam);
+    let command = cc_engine::commands::structure::BeamsBetweenColumns {
+        columns: selected_columns(state),
+        type_ref,
+        ..Default::default()
+    };
     let out = run(state, command);
     placed(state, out, Placed::Beams);
 }

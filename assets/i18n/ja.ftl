@@ -3179,3 +3179,6 @@ browser-org-none = なし
 # Structure by material
 tx-structural-type = 構造タイプを作成
 tx-grid-frame = 通り芯フレームを作成
+
+# Structure tab material and grid frame
+group-structure-material = 材料

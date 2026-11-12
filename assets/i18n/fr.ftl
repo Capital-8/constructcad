@@ -3179,3 +3179,6 @@ browser-org-none = Aucun
 # Structure by material
 tx-structural-type = Créer un type structurel
 tx-grid-frame = Créer une ossature sur la trame
+
+# Structure tab material and grid frame
+group-structure-material = Matériau
