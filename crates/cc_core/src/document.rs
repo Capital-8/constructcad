@@ -254,7 +254,7 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.railings_of(id).map(|e| e.id));
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.pads_of(id).map(|(e, _)| e.id));
-            pending.extend(self.project.steel_members_of(id));
+            pending.extend(self.project.host_members_of(id));
             pending.extend(self.project.valves_of(id).map(|(e, _)| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);
@@ -893,9 +893,9 @@ impl<'a> EditCtx<'a> {
     fn finish(mut self) -> Transaction {
         // Legacy sections follow their profiles first, so what reads them below sees the new size.
         self.sync_profiles();
-        // Steel buildings next: they read what the edit itself did to
-        // elements, before the syncs below change any.
-        self.sync_steel_buildings();
+        // Member hosts (steel buildings, trusses) next: they read what the
+        // edit itself did to elements, before the syncs below change any.
+        self.sync_member_hosts();
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_shafts();
         self.sync_pads();

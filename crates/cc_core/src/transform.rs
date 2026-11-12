@@ -393,9 +393,9 @@ impl crate::Project {
                 .filter(|e| matches!(&e.kind, ElementKind::Valve(v) if set.contains(&v.host)))
                 .cloned(),
         );
-        // A copied steel building makes its own members: its originals are not copied.
+        // A copied member host makes its own members: its originals are not copied.
         let managed: std::collections::BTreeSet<ElementId> =
-            set.iter().flat_map(|id| self.steel_members_of(*id)).collect();
+            set.iter().flat_map(|id| self.host_members_of(*id)).collect();
         out.retain(|e| !managed.contains(&e.id));
         out
     }

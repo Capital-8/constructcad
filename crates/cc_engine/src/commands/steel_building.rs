@@ -175,7 +175,7 @@ impl Command for SteelBuildingCreate {
                 };
                 Ok(add_element(e, level, type_id, kind))
             })?;
-            let members: Vec<u64> = s.project().steel_members_of(id).iter().map(|m| m.0).collect();
+            let members: Vec<u64> = s.project().host_members_of(id).iter().map(|m| m.0).collect();
             Ok(json!({ "id": id.0, "members": members }))
         })();
         match result {

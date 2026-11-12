@@ -105,7 +105,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
-        // Out-of-range values are reset by `repair_steel_buildings`, which keeps the members.
+        // Out-of-range values are reset by `repair_member_hosts`, which keeps the members.
         ElementKind::SteelBuilding(_) => true,
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
@@ -427,8 +427,8 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
-        // Steel buildings: numbers, types and members (after invalid elements went).
-        repairs += self.repair_steel_buildings();
+        // Member hosts: numbers, types and members (after invalid elements went).
+        repairs += self.repair_member_hosts();
         // Dimension ends referencing missing elements or bad numbers become free.
         let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
         let level_ids: Vec<_> = self.levels.iter().map(|l| l.id).collect();
