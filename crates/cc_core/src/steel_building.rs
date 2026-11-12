@@ -263,6 +263,14 @@ impl SteelBuilding {
         for s in [&mut self.purlins, &mut self.girts].into_iter().flatten() {
             n += reset(&mut s.spacing, &SPACING, DEFAULT_SECONDARY_SPACING);
         }
+        if !self.origin.is_finite() {
+            self.origin = DVec2::ZERO;
+            n += 1;
+        }
+        if !self.rotation_deg.is_finite() {
+            self.rotation_deg = 0.0;
+            n += 1;
+        }
         n
     }
 
@@ -441,9 +449,13 @@ impl crate::EditCtx<'_> {
     /// 2. a building the edit added or changed, or whose member types it
     ///    changed, gets the members of its layout (except detached roles):
     ///    existing ones rewritten in place (same ids), missing ones added,
-    ///    those whose role is gone deleted. A building added with members
-    ///    that are another building's (a copy) or gone (a paste after a
-    ///    cut) gets its own.
+    ///    those whose role is gone deleted. A building the edit added (a
+    ///    copy, a paste) keeps none of the members it lists and gets its
+    ///    own: the listed elements may be another building's or, after a
+    ///    paste, unrelated elements the user owns;
+    /// 3. a building whose phases or design option the edit changed passes
+    ///    them on to the members it manages (a member's own phase or option
+    ///    edit is not a detach, and stays until the host's next change).
     pub(crate) fn sync_steel_buildings(&mut self) {
         let p = self.project();
         if !p.elements.values().any(|e| matches!(e.kind, ElementKind::SteelBuilding(_))) {
@@ -454,6 +466,7 @@ impl crate::EditCtx<'_> {
         let mut changed: BTreeSet<ElementId> = BTreeSet::new();
         let mut removed: BTreeSet<ElementId> = BTreeSet::new();
         let mut reshaped: BTreeSet<ElementId> = BTreeSet::new();
+        let mut moved_phase: BTreeSet<ElementId> = BTreeSet::new();
         for (id, before) in self.element_changes() {
             match (before, p.element(id)) {
                 (None, Some(_)) => {
@@ -467,6 +480,11 @@ impl crate::EditCtx<'_> {
                     changed.insert(id);
                     if b.kind != n.kind || b.type_id != n.type_id || b.level != n.level {
                         reshaped.insert(id);
+                    }
+                    if (b.phase_created, b.phase_demolished, b.design_option)
+                        != (n.phase_created, n.phase_demolished, n.design_option)
+                    {
+                        moved_phase.insert(id);
                     }
                 }
                 (None, None) => {}
@@ -501,36 +519,29 @@ impl crate::EditCtx<'_> {
             }
         }
         for host in regenerate {
-            self.regenerate_steel_building(host, added.contains(&host));
+            self.regenerate_steel_building(host, added.contains(&host), moved_phase.contains(&host));
         }
     }
 
     /// Give building `host` the members of its layout (see
-    /// [`Self::sync_steel_buildings`]); `added` when this edit added it.
-    fn regenerate_steel_building(&mut self, host: ElementId, added: bool) {
+    /// [`Self::sync_steel_buildings`]); `added` when this edit added it,
+    /// `follow` when its phases or design option changed.
+    fn regenerate_steel_building(&mut self, host: ElementId, added: bool, follow: bool) {
         let p = self.project();
         let Some(e) = p.element(host) else { return };
         let ElementKind::SteelBuilding(b) = &e.kind else { return };
-        let b = (**b).clone();
+        let mut b = (**b).clone();
         let (level, phase_created, phase_demolished, design_option) =
             (e.level, e.phase_created, e.phase_demolished, e.design_option);
-        // A copy keeps none of the original's members.
-        let others: BTreeSet<ElementId> = if added {
-            p.elements
-                .values()
-                .filter(|o| o.id != host)
-                .filter_map(|o| match &o.kind {
-                    ElementKind::SteelBuilding(x) => Some(x.members.iter().map(|m| m.id)),
-                    _ => None,
-                })
-                .flatten()
-                .collect()
-        } else {
-            BTreeSet::new()
-        };
+        let phases = (phase_created, phase_demolished, design_option);
+        // A copy or a paste keeps none of the members it lists: they are the
+        // original's or, pasted elsewhere or after a detach, the user's.
+        if added {
+            b.members.clear();
+        }
         let mut wanted: BTreeMap<MemberRole, (ElementTypeId, ElementKind)> =
             b.layout(p).into_iter().filter(|(r, _, _)| !b.detached.contains(r)).map(|(r, t, k)| (r, (t, k))).collect();
-        let (mut kept, mut gone, mut rewrite) = (Vec::new(), Vec::new(), Vec::new());
+        let (mut kept, mut gone, mut rewrite, mut phased) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         // Each element serves one role only (a crafted list may repeat one).
         let mut used = BTreeSet::new();
         for m in &b.members {
@@ -538,17 +549,17 @@ impl crate::EditCtx<'_> {
             if b.detached.contains(&m.role) {
                 continue;
             }
-            let Some(x) = p
-                .element(m.id)
-                .filter(|x| !others.contains(&m.id) && x.id != host && m.role.fits(&x.kind) && used.insert(m.id))
-            else {
-                // Gone, another building's, or no longer a column or beam: dropped from the list.
+            let Some(x) = p.element(m.id).filter(|x| x.id != host && m.role.fits(&x.kind) && used.insert(m.id)) else {
+                // Gone, or no longer a column or beam: dropped from the list.
                 continue;
             };
             match wanted.remove(&m.role) {
                 Some((t, kind)) => {
                     if x.kind != kind || x.type_id != t || x.level != level {
                         rewrite.push((m.id, t, kind));
+                    }
+                    if follow && (x.phase_created, x.phase_demolished, x.design_option) != phases {
+                        phased.push(m.id);
                     }
                     kept.push(*m);
                 }
@@ -558,6 +569,11 @@ impl crate::EditCtx<'_> {
         for (id, t, kind) in rewrite {
             if let Some(x) = self.element_mut(id) {
                 (x.kind, x.type_id, x.level) = (kind, t, level);
+            }
+        }
+        for id in phased {
+            if let Some(x) = self.element_mut(id) {
+                (x.phase_created, x.phase_demolished, x.design_option) = phases;
             }
         }
         for id in gone {
@@ -1056,6 +1072,72 @@ mod tests {
     }
 
     #[test]
+    fn a_paste_never_takes_over_a_detached_member() {
+        let (mut doc, host) = site();
+        // Copy, then move a column by hand: it is the user's now.
+        let clip = doc.project.copy_set(&[host]);
+        let col = member(&building(&doc, host), RoleKind::Column, 0, 0);
+        doc.edit("move", |e| e.transform_elements(&[col], &PlanTransform::translate(DVec2::new(1.0, 0.0))));
+        assert!(building(&doc, host).detached.contains(&role(RoleKind::Column, 0, 0)));
+        let at = column_at(&doc, col);
+        let pasted =
+            doc.edit("paste", |e| e.paste_elements(&clip, &[PlanTransform::translate(DVec2::new(50.0, 0.0))], None));
+        assert_eq!(pasted.len(), 1);
+        assert!(close(column_at(&doc, col), at), "the user's column stays where it was");
+        let b = building(&doc, pasted[0]);
+        assert_eq!(b.members.len(), 134, "the paste gets all its own members");
+        assert!(b.members.iter().all(|m| m.id != col));
+        let original: BTreeSet<ElementId> = building(&doc, host).members.iter().map(|m| m.id).collect();
+        assert!(b.members.iter().all(|m| !original.contains(&m.id)));
+        assert_eq!(doc.project.clone().repair(), 0);
+    }
+
+    #[test]
+    fn members_follow_the_host_phase() {
+        let (mut doc, host) = site();
+        let last = doc.project.phases.last().map(|p| p.id).expect("the template has phases");
+        let ids: Vec<ElementId> = building(&doc, host).members.iter().map(|m| m.id).collect();
+        let start = doc.project.elements.clone();
+        doc.edit("demolish", |e| {
+            if let Some(x) = e.element_mut(host) {
+                x.phase_demolished = Some(last);
+            }
+        });
+        assert!(ids.iter().all(|id| doc.project.element(*id).is_some_and(|e| e.phase_demolished == Some(last))));
+        let b = building(&doc, host);
+        assert!(b.detached.is_empty(), "following the host detaches nothing");
+        assert_eq!(b.members.len(), 134);
+        assert!(doc.undo());
+        assert_eq!(doc.project.elements, start);
+    }
+
+    #[test]
+    fn members_follow_the_host_design_option() {
+        let (mut doc, host) = site();
+        let (a, b) = doc.edit("options", |e| {
+            let set = crate::OptionSetId(e.alloc_id());
+            let (a, b) = (crate::OptionId(e.alloc_id()), crate::OptionId(e.alloc_id()));
+            let options =
+                vec![crate::DesignOption { id: a, name: "A".into() }, crate::DesignOption { id: b, name: "B".into() }];
+            e.option_sets_mut().push(crate::OptionSet { id: set, name: "Set".into(), options, primary: a });
+            (a, b)
+        });
+        let ids: Vec<ElementId> = building(&doc, host).members.iter().map(|m| m.id).collect();
+        let start = doc.project.elements.clone();
+        for option in [Some(b), Some(a), None] {
+            doc.edit("option", |e| {
+                if let Some(x) = e.element_mut(host) {
+                    x.design_option = option;
+                }
+            });
+            assert!(ids.iter().all(|id| doc.project.element(*id).is_some_and(|e| e.design_option == option)));
+            assert!(building(&doc, host).detached.is_empty());
+        }
+        assert!(doc.undo() && doc.undo() && doc.undo());
+        assert_eq!(doc.project.elements, start);
+    }
+
+    #[test]
     fn a_changed_type_regenerates() {
         let (mut doc, host) = site();
         let b = building(&doc, host);
@@ -1087,5 +1169,20 @@ mod tests {
         assert_eq!(x.detached.len(), 1);
         assert_eq!(p.element_type(x.column_type).map(|t| t.category()), Some(Category::Column));
         assert_eq!(p.repair(), 0);
+    }
+
+    #[test]
+    fn repair_resets_a_bad_placement_and_keeps_the_building() {
+        let (doc, host) = site();
+        let b = building(&doc, host);
+        let mut p = doc.project.clone();
+        if let Some(ElementKind::SteelBuilding(x)) = p.elements.get_mut(&host).map(|e| &mut e.kind) {
+            x.origin = DVec2::new(f64::NAN, 0.0);
+            x.rotation_deg = f64::INFINITY;
+        }
+        assert_eq!(p.repair(), 2);
+        let Some(ElementKind::SteelBuilding(x)) = p.element(host).map(|e| &e.kind) else { panic!("kept") };
+        assert_eq!((x.origin, x.rotation_deg), (DVec2::ZERO, 0.0));
+        assert_eq!(x.members, b.members, "the members stay its own");
     }
 }

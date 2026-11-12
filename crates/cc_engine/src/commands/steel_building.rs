@@ -192,8 +192,9 @@ impl Command for SteelBuildingCreate {
 }
 
 /// `element_get`'s derived values of a building: its member ids by role
-/// kind and how many roles are detached.
-pub(crate) fn derived(b: &SteelBuilding, out: &mut serde_json::Map<String, Value>) {
+/// kind, how many roles are detached and whether the layout reached the
+/// member limit (`at_limit`).
+pub(crate) fn derived(p: &cc_core::Project, b: &SteelBuilding, out: &mut serde_json::Map<String, Value>) {
     let ids = |k: RoleKind| -> Vec<u64> { b.members.iter().filter(|m| m.role.kind == k).map(|m| m.id.0).collect() };
     out.insert(
         "members".into(),
@@ -206,4 +207,6 @@ pub(crate) fn derived(b: &SteelBuilding, out: &mut serde_json::Map<String, Value
     );
     out.insert("detached".into(), json!(b.detached.len()));
     out.insert("length".into(), json!(b.length()));
+    // The layout stopped at the member limit: the last girts or purlins are left out.
+    out.insert("at_limit".into(), json!(b.layout(p).len() >= sb::MAX_MEMBERS));
 }

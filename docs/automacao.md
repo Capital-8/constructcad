@@ -274,7 +274,7 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
 ```
 
-`steel_building_create` cria um galpão metálico paramétrico: pórticos de pilares e vigas de cobertura em `bays` módulos, com terças e longarinas (`null` desliga uma delas), como pilares e vigas comuns num só passo de desfazer; os tipos padrão são o `W310x38,7` do catálogo. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros do galpão; um elemento editado ou excluído diretamente fica desvinculado e não é mexido. `element_get` lista `derived.members` e `detached`.
+`steel_building_create` cria um galpão metálico paramétrico: pórticos de pilares e vigas de cobertura em `bays` módulos, com terças e longarinas (`null` desliga uma delas), como pilares e vigas comuns num só passo de desfazer; os tipos padrão são o `W310x38,7` do catálogo. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros do galpão; um elemento editado ou excluído diretamente fica desvinculado e não é mexido. Os elementos acompanham as fases e a opção de projeto do galpão, e uma cópia ou colagem faz os seus próprios. `element_get` lista `derived.members`, `detached` e `at_limit` (o arranjo chegou ao limite de elementos e deixou de fora as últimas terças ou longarinas).
 
 ```text
 {"command": "steel_building_create", "args": {"span": 24, "eave_height": 7, "bays": 8, "roof": "mono", "girts": null}}

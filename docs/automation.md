@@ -274,7 +274,7 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
 ```
 
-`steel_building_create` makes a parametric steel building: portal frames of columns and rafters over `bays` bays, with purlins and girts (`null` turns one off), as ordinary columns and beams in one undo step; types default to the catalog's `W310x38,7`. Its members are regenerated, with their ids kept, when `element_set` changes the building's parameters; a member edited or deleted directly is detached and left alone. `element_get` lists `derived.members` and `detached`.
+`steel_building_create` makes a parametric steel building: portal frames of columns and rafters over `bays` bays, with purlins and girts (`null` turns one off), as ordinary columns and beams in one undo step; types default to the catalog's `W310x38,7`. Its members are regenerated, with their ids kept, when `element_set` changes the building's parameters; a member edited or deleted directly is detached and left alone. Members follow the building's phases and design option, and a copy or paste makes its own. `element_get` lists `derived.members`, `detached` and `at_limit` (the layout reached the member limit and left the last purlins or girts out).
 
 ```text
 {"command": "steel_building_create", "args": {"span": 24, "eave_height": 7, "bays": 8, "roof": "mono", "girts": null}}

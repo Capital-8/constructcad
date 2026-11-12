@@ -60,6 +60,7 @@ fn element_get_lists_the_members_by_role() {
     let len = |k: &str| d["members"][k].as_array().map_or(0, Vec::len);
     assert_eq!([len("columns"), len("rafters"), len("purlins"), len("girts")], [6, 6, 0, 0]);
     assert_eq!(d["detached"], json!(0));
+    assert_eq!(d["at_limit"], json!(false));
     let params = &run(&mut s, "element_get", json!({"id": host}))["params"];
     assert_eq!(params["span"], json!(20.0));
     assert_eq!(params["roof"], json!("Gable"));
@@ -129,4 +130,38 @@ fn ifc_export_writes_the_members_and_not_the_building() {
     assert_eq!(text.matches("IFCBEAM(").count(), count(|k| matches!(k, ElementKind::Beam(_))));
     let uid = cc_ifc::guid::encode(p.element(ElementId(host)).unwrap().uid.0);
     assert!(!text.contains(&uid), "the building itself is not exported");
+}
+
+#[test]
+fn a_crafted_paste_does_not_adopt_foreign_elements() {
+    let mut s = Session::default();
+    let host = id(&run(&mut s, "steel_building_create", json!({"purlins": null, "girts": null})));
+    let user = id(&run(&mut s, "column_create", json!({"position": [7.0, 7.0]})));
+    let mut set = run(&mut s, "elements_export", json!({"ids": [host]}))["elements"].clone();
+    // Point every listed member at the user's column, as a file from
+    // another project whose ids collide might.
+    let members = set[0]["kind"]["SteelBuilding"]["members"].as_array_mut().expect("a building with members");
+    for m in members.iter_mut() {
+        m["id"] = json!(user);
+    }
+    let created = run(&mut s, "elements_paste", json!({"elements": set, "delta": [60.0, 0.0]}))["created"].clone();
+    let pasted = created[0].as_u64().unwrap();
+    assert!((column_x(&s, user) - 7.0).abs() < 1e-9, "the user's column stays put");
+    let d = derived(&mut s, pasted);
+    let columns = d["members"]["columns"].as_array().unwrap();
+    assert_eq!(columns.len(), 12);
+    assert!(columns.iter().all(|c| c.as_u64() != Some(user)));
+    let original = derived(&mut s, host);
+    assert_eq!(original["members"]["columns"].as_array().unwrap().len(), 12);
+}
+
+#[test]
+fn type_delete_names_the_steel_building_using_it() {
+    let mut s = Session::default();
+    let host = id(&run(&mut s, "steel_building_create", json!({"girts": null})));
+    // Every purlin deleted by hand: no element uses the type, the building still does.
+    let purlins = derived(&mut s, host)["members"]["purlins"].clone();
+    run(&mut s, "elements_delete", json!({"ids": purlins}));
+    let err = s.execute("type_delete", json!({"type": "Ue 150x60x20x2,00"})).expect_err("refused");
+    assert!(err.message.contains("steel buildings"), "{}", err.message);
 }

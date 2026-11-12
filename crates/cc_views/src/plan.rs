@@ -130,7 +130,7 @@ pub fn plan_of(
     }
     draw_shafts(&mut d, project, level, cut_z);
     if !ceiling {
-        draw_steel_buildings(&mut d, project, level);
+        draw_steel_buildings(&mut d, project, level, &shown);
     }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
@@ -926,19 +926,24 @@ fn section_mark(
     crate::SectionHandle { view: cc_core::ViewId(0), start, end, segments, pieces, radius: r, head: half_base }
 }
 
-/// Shafts in a plan: those on its level and those its cut plane passes
-/// through, as their outline crossed by its two diagonals (the usual
-/// symbol of an opening through the floors).
 /// Steel buildings of a plan's level: their column lines' rectangle, thin
 /// and dashed, as the building's own lines so it can be picked (its
 /// columns and beams draw themselves).
-fn draw_steel_buildings(d: &mut Drawing2D, project: &Project, level: LevelId) {
-    for e in project.elements.values().filter(|e| e.level == level) {
+fn draw_steel_buildings(
+    d: &mut Drawing2D,
+    project: &Project,
+    level: LevelId,
+    shown: &dyn Fn(&cc_core::Element) -> bool,
+) {
+    for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
         let ElementKind::SteelBuilding(b) = &e.kind else { continue };
         d.polyline(&b.footprint(), true, LineStyle::Hidden, Some(e.id));
     }
 }
 
+/// Shafts in a plan: those on its level and those its cut plane passes
+/// through, as their outline crossed by its two diagonals (the usual
+/// symbol of an opening through the floors).
 fn draw_shafts(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64) {
     for e in project.elements.values() {
         let ElementKind::Shaft(s) = &e.kind else { continue };

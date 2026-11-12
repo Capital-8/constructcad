@@ -247,7 +247,7 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         ElementKind::Sweep(sw) => {
             derived.insert("length".into(), json!(sw.length()));
         }
-        ElementKind::SteelBuilding(b) => super::steel_building::derived(b, &mut derived),
+        ElementKind::SteelBuilding(b) => super::steel_building::derived(p, b, &mut derived),
         ElementKind::Shaft(sh) => {
             let (bottom, top) = p.shaft_span(&e, sh);
             derived.insert("bottom".into(), json!(bottom));

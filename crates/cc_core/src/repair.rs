@@ -105,7 +105,8 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
-        ElementKind::SteelBuilding(b) => b.origin.is_finite() && b.rotation_deg.is_finite(),
+        // Out-of-range values are reset by `repair_steel_buildings`, which keeps the members.
+        ElementKind::SteelBuilding(_) => true,
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
     }

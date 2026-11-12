@@ -1750,7 +1750,7 @@ fn place_description(category: Category) -> String {
         Category::CadImport => t!("cmd-desc-import-cad"),
         Category::Mass => t!("cmd-desc-mass"),
         Category::Shaft => t!("cmd-desc-shaft"),
-        Category::SteelBuilding => t!("category-steel-building"),
+        Category::SteelBuilding => t!("cmd-desc-steel-building"),
         Category::Topography => t!("cmd-desc-topography"),
         Category::Pad => t!("cmd-desc-pad"),
     }
