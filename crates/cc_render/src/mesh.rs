@@ -18,12 +18,16 @@ pub struct Vertex {
     /// The material's texture (textures style): coordinates in repeats in
     /// `xy` and, in `z`, its layer plus one (0 for none).
     pub tex: [f32; 4],
+    /// Where the vertex is on its face, in meters (see [`plane_axes`]),
+    /// running on across the facets of a curved surface: what the surface
+    /// patterns are laid along.
+    pub plane: [f32; 2],
 }
 
 impl Vertex {
     /// A vertex with no surface pattern or texture.
     pub fn plain(pos: [f32; 3], normal: [f32; 3], color: [f32; 4]) -> Self {
-        Self { pos, normal, color, fg: [0.0; 4], bg: [0.0; 4], tex: [0.0; 4] }
+        Self { pos, normal, color, fg: [0.0; 4], bg: [0.0; 4], tex: [0.0; 4], plane: [0.0; 2] }
     }
 }
 
@@ -150,6 +154,51 @@ pub fn plane_axes(n: DVec3) -> (DVec3, DVec3) {
     (u, n.cross(u).normalize_or(DVec3::Z))
 }
 
+/// What to add to the plane coordinates of each face of `solid` so they run
+/// on from one facet of a curved surface to the next: every facet has its own
+/// axes, so without it patterns and textures would start again at each one.
+/// Facets are reached from the first of their surface across shared edges and
+/// agree with the facet they were reached from at the middle of that edge
+/// (exactly along it when it runs up the surface, as on an arc wall); a
+/// surface that closes on itself keeps one seam.
+fn facet_shifts(solid: &cc_geom::Solid) -> Vec<[f64; 2]> {
+    let neighbors = solid.smooth_neighbors();
+    let coords = |fi: usize, p: DVec3| {
+        let (u, v) = plane_axes(solid.faces.get(fi)?.normal);
+        Some([p.dot(u), p.dot(v)])
+    };
+    let mut shifts = vec![[0.0; 2]; solid.faces.len()];
+    let mut seen = vec![false; solid.faces.len()];
+    let mut queue = std::collections::VecDeque::new();
+    for seed in 0..solid.faces.len() {
+        if seen.get(seed) != Some(&false) || neighbors.get(seed).is_none_or(|n| n.is_empty()) {
+            continue;
+        }
+        if let Some(s) = seen.get_mut(seed) {
+            *s = true;
+        }
+        queue.push_back(seed);
+        while let Some(fi) = queue.pop_front() {
+            let base = shifts.get(fi).copied().unwrap_or_default();
+            for &(fj, mid) in neighbors.get(fi).into_iter().flatten() {
+                if seen.get(fj) != Some(&false) {
+                    continue;
+                }
+                let (Some(here), Some(there)) = (coords(fi, mid), coords(fj, mid)) else { continue };
+                let shift = [base[0] + here[0] - there[0], base[1] + here[1] - there[1]];
+                if let (Some(s), Some(slot)) = (seen.get_mut(fj), shifts.get_mut(fj)) {
+                    *s = true;
+                    if shift.iter().all(|c| c.is_finite()) {
+                        *slot = shift;
+                    }
+                    queue.push_back(fj);
+                }
+            }
+        }
+    }
+    shifts
+}
+
 impl Tessellation {
     pub fn new(geom: &ModelGeometry) -> Self {
         let mut solids = Vec::new();
@@ -178,17 +227,20 @@ impl Tessellation {
                     *slot = at;
                 }
             }
-            // Curved surfaces shade smoothly across their facets.
+            // Curved surfaces shade smoothly across their facets, and their
+            // plane coordinates run on from one facet to the next.
+            let shifts = facet_shifts(solid);
             for (fi, (face, normals)) in solid.faces.iter().zip(solid.vertex_normals()).enumerate() {
                 let Some(s) = part_of.get(fi).and_then(|i| parts.get_mut(*i)) else { continue };
                 let (u, v) = plane_axes(face.normal);
+                let [du, dv] = shifts.get(fi).copied().unwrap_or_default();
                 let start = s.vertices.len() as u32;
                 s.faces.push(start);
                 s.vertices.extend(
                     face.verts
                         .iter()
                         .zip(normals)
-                        .map(|(p, n)| (p.as_vec3().to_array(), n.as_vec3().to_array(), [p.dot(u), p.dot(v)])),
+                        .map(|(p, n)| (p.as_vec3().to_array(), n.as_vec3().to_array(), [p.dot(u) + du, p.dot(v) + dv])),
                 );
                 for [a, b, c] in face.triangulate() {
                     s.triangles.extend([start + a as u32, start + b as u32, start + c as u32]);
@@ -239,16 +291,18 @@ impl SceneMesh {
                         shift = [x.floor(), y.floor()];
                     }
                     let tex = [(x - shift[0]) as f32, (y - shift[1]) as f32, index as f32 + 1.0, 0.0];
-                    self.vertices.push(Vertex { pos, normal, color, fg, bg, tex });
+                    let plane = [uv[0] as f32, uv[1] as f32];
+                    self.vertices.push(Vertex { pos, normal, color, fg, bg, tex, plane });
                 }
             }
-            None => self.vertices.extend(solid.vertices.iter().map(|&(pos, normal, _)| Vertex {
+            None => self.vertices.extend(solid.vertices.iter().map(|&(pos, normal, uv)| Vertex {
                 pos,
                 normal,
                 color,
                 fg,
                 bg,
                 tex: [0.0; 4],
+                plane: [uv[0] as f32, uv[1] as f32],
             })),
         }
         let target = if color[3] < 0.999 { &mut self.transparent_indices } else { &mut self.indices };
@@ -794,6 +848,52 @@ mod tests {
         assert_eq!(hidden_runs(&spans, &BTreeSet::from([ElementId(1)])), 2);
         assert_eq!(hidden_runs(&spans, &BTreeSet::from([ElementId(2), ElementId(3)])), 1);
         assert_eq!(complement([2..4, 4..6, 8..9].into_iter()), vec![0..2, 6..8, 9..u32::MAX]);
+    }
+
+    /// Patterns and textures run on across the facets of a curved surface:
+    /// two facets give the points of their shared edge the same coordinates,
+    /// which follow the surface (not a world axis the normal picks).
+    #[test]
+    fn plane_coordinates_run_on_across_smooth_facets() {
+        use glam::DVec2;
+        // Facets of a cylinder of radius 2, 10° apart, across the 45° where the world axes swap.
+        let at = |deg: f64, z: f64| DVec3::new(2.0 * deg.to_radians().cos(), 2.0 * deg.to_radians().sin(), z);
+        let facet = |a: f64, b: f64, smooth: bool| {
+            let mid = ((a + b) / 2.0).to_radians();
+            let verts = vec![at(a, 0.0), at(b, 0.0), at(b, 3.0), at(a, 3.0)];
+            let mut f = cc_geom::Face::new(verts, DVec3::new(mid.cos(), mid.sin(), 0.0));
+            f.smooth = smooth;
+            f
+        };
+        let mut solid = cc_geom::Solid::new(ElementId(1), cc_core::Category::Wall, [200; 3]);
+        solid.faces = (0..6).map(|i| facet(20.0 + 10.0 * i as f64, 30.0 + 10.0 * i as f64, true)).collect();
+        let coords = |solid: &cc_geom::Solid, fi: usize, vi: usize| {
+            let (face, shift) = (&solid.faces[fi], facet_shifts(solid)[fi]);
+            let (u, v) = plane_axes(face.normal);
+            DVec2::new(face.verts[vi].dot(u) + shift[0], face.verts[vi].dot(v) + shift[1])
+        };
+        let chord = at(20.0, 0.0).distance(at(30.0, 0.0));
+        for fi in 0..5 {
+            // The end of one facet is the start of the next, bottom and top.
+            assert!(coords(&solid, fi, 1).distance(coords(&solid, fi + 1, 0)) < 1e-9, "facet {fi}");
+            assert!(coords(&solid, fi, 2).distance(coords(&solid, fi + 1, 3)) < 1e-9, "facet {fi}");
+            // Along the surface at true length, level and up.
+            let step = coords(&solid, fi + 1, 1) - coords(&solid, fi, 1);
+            assert!((step.x - chord).abs() < 1e-9 && step.y.abs() < 1e-9, "{step}");
+        }
+        // The vertices carry them.
+        let mut geom = ModelGeometry::default();
+        geom.solids.push(solid.clone());
+        let tess = Tessellation::new(&geom);
+        let mesh = SceneMesh::build(&tess, &BTreeSet::new(), &mut |_| Some(SolidStyle::default()));
+        let last = mesh.vertices[4 * 5 + 1].plane;
+        assert!((last[0] - mesh.vertices[0].plane[0] - 6.0 * chord as f32).abs() < 1e-4, "{last:?}");
+        // Flat faces and facets across a sharp corner keep their own coordinates.
+        solid.faces[1].smooth = false;
+        solid.faces[4] = facet(60.0, 140.0, true);
+        let shifts = facet_shifts(&solid);
+        assert_eq!((shifts[0], shifts[1], shifts[4], shifts[5]), ([0.0; 2], [0.0; 2], [0.0; 2], [0.0; 2]));
+        assert!(shifts[3][0].abs() > 1e-3);
     }
 
     #[test]
