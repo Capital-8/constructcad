@@ -85,7 +85,9 @@ fn main() -> eframe::Result<()> {
     if let Some(args) = mcp_bridge::mcp_args(&raw) {
         std::process::exit(mcp_bridge::run(args));
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    // OpenGL drivers report performance hints as warnings on every frame; keep only its errors
+    // (`RUST_LOG` still overrides this).
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,wgpu_hal::gles=error")).init();
     // Panics are logged to the crash log (release builds on Windows have no console).
     recovery::install_panic_hook();
     let args = parse_args(raw.into_iter());
