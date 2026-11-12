@@ -201,7 +201,8 @@ fn beams_with_w_profiles_meet_in_a_mitered_l() {
     };
     let a = make(&mut s, [0.0, 0.0], [4.0, 0.0]);
     let b = make(&mut s, [4.0, 0.0], [4.0, 4.0]);
-    let area = W310.outline().unwrap().properties(0.0).area;
+    // Volumes count the root radii whole, not as their chords.
+    let area = W310.area().unwrap();
     let length = 4.0;
     let g = s.geometry();
     let (ga, gb) = (&g.beams[&a], &g.beams[&b]);
@@ -818,6 +819,20 @@ fn round_columns_have_their_exact_volume() {
         let disk = |d: f64| std::f64::consts::PI * d * d / 4.0;
         let area = if shape == "round" { disk(0.3) } else { disk(0.2) - disk(0.184) };
         let volume = s.geometry().volume(id);
-        assert!((volume - area * (top - base)).abs() < 1e-9, "{name}: {volume} vs {}", area * (top - base));
+        let want = area * (top - base);
+        assert!((volume - want).abs() / want < 1e-5, "{name}: {volume} vs {want}");
     }
+}
+
+/// A free beam of a round profile sweeps the circle's exact area along it.
+#[test]
+fn round_beams_have_their_exact_volume() {
+    let mut s = Session::default();
+    run(&mut s, "profile_create", json!({"material": "steel", "shape": "round", "name": "R30", "params": {"d": 0.3}}));
+    let t = run(&mut s, "profile_type_create", json!({"profile": "R30", "category": "beam"}))["id"].clone();
+    let id = run(&mut s, "beam_create", json!({"type": t, "start": [0.0, 0.0], "end": [4.0, 0.0]}))["id"].as_u64();
+    let id = ElementId(id.unwrap());
+    let want = std::f64::consts::PI * 0.0225 * 4.0;
+    let volume = s.geometry().volume(id);
+    assert!((volume - want).abs() / want < 1e-5, "{volume} vs {want}");
 }

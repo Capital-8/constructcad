@@ -265,19 +265,13 @@ impl Project {
         matches!(shape, ProfileShape::Round { .. } | ProfileShape::RoundTube { .. })
     }
 
-    /// The exact area of a round section (a solid or hollow circle), whose
-    /// outline only approximates it with chords; `None` for other shapes or
-    /// a shape that makes no outline.
-    pub fn round_section_area(&self, data: &TypeData) -> Option<f64> {
+    /// The exact area of a column or beam type's section (its profile's,
+    /// else its legacy section's): arcs count whole, where the outline only
+    /// follows them with chords. `None` when the shape makes no outline.
+    pub fn exact_section_area(&self, data: &TypeData) -> Option<f64> {
         let s = section_data(data)?;
         let shape = s.profile.and_then(|id| self.profile(id)).map_or(&s.legacy, |d| &d.shape);
-        shape.outline().ok()?;
-        let disk = |d: f64| std::f64::consts::PI * d * d / 4.0;
-        match *shape {
-            ProfileShape::Round { d } => Some(disk(d)),
-            ProfileShape::RoundTube { d, t } => Some(disk(d) - disk(d - 2.0 * t)),
-            _ => None,
-        }
+        shape.area().ok()
     }
 
     /// The column and beam types that use a profile.

@@ -435,7 +435,7 @@ fn v2(x: f64, y: f64) -> DVec2 {
 /// Points of the arc tangent to the two edges that leave `corner` along the
 /// unit directions `a` and `b`, with radius `r`. With `r = 0` (or straight
 /// edges) the corner itself.
-fn fillet(corner: DVec2, a: DVec2, b: DVec2, r: f64) -> Vec<DVec2> {
+fn fillet(corner: DVec2, a: DVec2, b: DVec2, r: f64, segs: usize) -> Vec<DVec2> {
     let theta = a.dot(b).clamp(-1.0, 1.0).acos();
     if r <= 0.0 || theta < 1e-6 || theta > PI - 1e-6 {
         return vec![corner];
@@ -451,16 +451,16 @@ fn fillet(corner: DVec2, a: DVec2, b: DVec2, r: f64) -> Vec<DVec2> {
     } else if d < -PI {
         d += TAU;
     }
-    (0..=ARC_SEGMENTS)
+    (0..=segs)
         .map(|i| {
-            let ang = a0 + d * i as f64 / ARC_SEGMENTS as f64;
+            let ang = a0 + d * i as f64 / segs as f64;
             center + v2(ang.cos(), ang.sin()) * r
         })
         .collect()
 }
 
 /// A polygon whose corners carry a radius: each is replaced by its fillet.
-fn rounded(pts: &[(DVec2, f64)]) -> Result<Vec<DVec2>, ProfileError> {
+fn rounded(pts: &[(DVec2, f64)], segs: usize) -> Result<Vec<DVec2>, ProfileError> {
     let n = pts.len();
     let bad = || ProfileError::DoesNotFit("the corner radii do not fit the edges of the section".into());
     // Directions to the neighbors and how far each fillet eats into its edges.
@@ -487,7 +487,7 @@ fn rounded(pts: &[(DVec2, f64)]) -> Result<Vec<DVec2>, ProfileError> {
     }
     let mut out = Vec::new();
     for (i, (a, b)) in dirs.into_iter().enumerate() {
-        out.extend(fillet(pts[i].0, a, b, pts[i].1));
+        out.extend(fillet(pts[i].0, a, b, pts[i].1, segs));
     }
     Ok(out)
 }
@@ -498,7 +498,7 @@ fn signed_area(p: &[DVec2]) -> f64 {
 
 /// A closed strip along an open centerline, `t` thick. Bends turn on the
 /// inner radius `ri` and the outer `ri + t` (square corners when `ri` is 0).
-fn strip(center: &[DVec2], t: f64, ri: f64) -> Result<Vec<DVec2>, ProfileError> {
+fn strip(center: &[DVec2], t: f64, ri: f64, segs: usize) -> Result<Vec<DVec2>, ProfileError> {
     let n = center.len();
     if n < 2 {
         return Err(ProfileError::DoesNotFit("the strip needs at least two points".into()));
@@ -544,16 +544,16 @@ fn strip(center: &[DVec2], t: f64, ri: f64) -> Result<Vec<DVec2>, ProfileError> 
     }
     let mut poly: Vec<(DVec2, f64)> = left.into_iter().zip(rl).collect();
     poly.extend(right.into_iter().zip(rr).rev());
-    rounded(&poly)
+    rounded(&poly, segs)
 }
 
-fn rect_loop(w: f64, h: f64, r: f64) -> Result<Vec<DVec2>, ProfileError> {
+fn rect_loop(w: f64, h: f64, r: f64, segs: usize) -> Result<Vec<DVec2>, ProfileError> {
     let (x, y) = (w / 2.0, h / 2.0);
-    rounded(&[(v2(-x, -y), r), (v2(x, -y), r), (v2(x, y), r), (v2(-x, y), r)])
+    rounded(&[(v2(-x, -y), r), (v2(x, -y), r), (v2(x, y), r), (v2(-x, y), r)], segs)
 }
 
-fn circle(d: f64) -> Vec<DVec2> {
-    let n = 4 * ARC_SEGMENTS;
+fn circle(d: f64, segs: usize) -> Vec<DVec2> {
+    let n = 4 * segs;
     (0..n)
         .map(|i| {
             let a = TAU * i as f64 / n as f64;
@@ -713,6 +713,24 @@ impl ProfileShape {
 
     /// The outline, centered on its bounding box.
     pub fn outline(&self) -> Result<SectionOutline, ProfileError> {
+        self.outline_at(ARC_SEGMENTS)
+    }
+
+    /// The section's area, exact for its arcs: the areas of outlines with
+    /// arcs of [`ARC_SEGMENTS`] and twice as many chords, extrapolated (the
+    /// chords' error falls with the square of their number), so a circle or a
+    /// root radius is not counted short. Sketches give their outline's area.
+    pub fn area(&self) -> Result<f64, ProfileError> {
+        let area = |segs| -> Result<f64, ProfileError> {
+            let o = self.outline_at(segs)?;
+            Ok(signed_area(&o.outer).abs() - o.holes.iter().map(|h| signed_area(h).abs()).sum::<f64>())
+        };
+        let (coarse, fine) = (area(ARC_SEGMENTS)?, area(2 * ARC_SEGMENTS)?);
+        Ok((4.0 * fine - coarse) / 3.0)
+    }
+
+    /// [`Self::outline`] with arcs of `segs` chords per quarter turn.
+    fn outline_at(&self, segs: usize) -> Result<SectionOutline, ProfileError> {
         match *self {
             Self::I { d, bf, tw, tf, r } => {
                 size("d", d)?;
@@ -723,7 +741,7 @@ impl ProfileShape {
                 fit(2.0 * tf < d, "the flanges (tf) must be thinner than half the depth (d)")?;
                 fit(tw < bf, "the web (tw) must be thinner than the flange width (bf)")?;
                 fit(r <= (bf - tw) / 2.0 && r <= (d - 2.0 * tf) / 2.0, "the root radius (r) does not fit")?;
-                Self::i_loop(d, bf, tf, bf, tf, tw, r)
+                Self::i_loop(d, (bf, tf), (bf, tf), tw, r, segs)
             }
             Self::IAsym { d, bf_top, tf_top, bf_bot, tf_bot, tw } => {
                 size("d", d)?;
@@ -734,7 +752,7 @@ impl ProfileShape {
                 size("tw", tw)?;
                 fit(tf_top + tf_bot < d, "the flanges (tf_top, tf_bot) must leave room for the web")?;
                 fit(tw < bf_top.min(bf_bot), "the web (tw) must be thinner than the flanges are wide")?;
-                Self::i_loop(d, bf_top, tf_top, bf_bot, tf_bot, tw, 0.0)
+                Self::i_loop(d, (bf_top, tf_top), (bf_bot, tf_bot), tw, 0.0, segs)
             }
             Self::Channel { d, bf, tw, tf, r } => {
                 size("d", d)?;
@@ -756,7 +774,7 @@ impl ProfileShape {
                     (v2(bf, hd), 0.0),
                     (v2(0.0, hd), 0.0),
                 ];
-                finish(rounded(&pts)?, vec![])
+                finish(rounded(&pts, segs)?, vec![])
             }
             Self::T { d, bf, tw, tf, r } => {
                 size("d", d)?;
@@ -778,7 +796,7 @@ impl ProfileShape {
                     (v2(-hw, hd - tf), 0.0),
                     (v2(-hb, hd - tf), r),
                 ];
-                finish(rounded(&pts)?, vec![])
+                finish(rounded(&pts, segs)?, vec![])
             }
             Self::Angle { h, b, t, r } => {
                 size("h", h)?;
@@ -795,13 +813,13 @@ impl ProfileShape {
                     (v2(t, h), 0.0),
                     (v2(0.0, h), 0.0),
                 ];
-                finish(rounded(&pts)?, vec![])
+                finish(rounded(&pts, segs)?, vec![])
             }
             Self::ColdU { d, bf, t, ri } => {
                 Self::cold_check(d, bf, t, ri)?;
                 let yt = d / 2.0 - t / 2.0;
                 let c = [v2(bf, yt), v2(t / 2.0, yt), v2(t / 2.0, -yt), v2(bf, -yt)];
-                finish(strip(&c, t, ri)?, vec![])
+                finish(strip(&c, t, ri, segs)?, vec![])
             }
             Self::ColdLippedU { d, bf, lip, t, ri } => {
                 Self::cold_check(d, bf, t, ri)?;
@@ -817,7 +835,7 @@ impl ProfileShape {
                     v2(xf, -yt),
                     v2(xf, lip - d / 2.0),
                 ];
-                finish(strip(&c, t, ri)?, vec![])
+                finish(strip(&c, t, ri, segs)?, vec![])
             }
             Self::ColdZ { d, bf, lip, t, ri, angle } => {
                 Self::cold_check(d, bf, t, ri)?;
@@ -832,7 +850,7 @@ impl ProfileShape {
                 let dir = v2(angle.to_radians().cos(), -angle.to_radians().sin());
                 let c =
                     [v2(-xf, -yt) - dir * l, v2(-xf, -yt), v2(0.0, -yt), v2(0.0, yt), v2(xf, yt), v2(xf, yt) + dir * l];
-                finish(strip(&c, t, ri)?, vec![])
+                finish(strip(&c, t, ri, segs)?, vec![])
             }
             Self::ColdHat { d, bf, lip, t, ri } => {
                 Self::cold_check(d, bf, t, ri)?;
@@ -840,7 +858,7 @@ impl ProfileShape {
                 fit(lip > t, "the brim (lip) must be longer than the thickness (t)")?;
                 let (yt, xc, xb) = (d / 2.0 - t / 2.0, bf / 2.0 - t / 2.0, bf / 2.0 + lip);
                 let c = [v2(-xb, -yt), v2(-xc, -yt), v2(-xc, yt), v2(xc, yt), v2(xc, -yt), v2(xb, -yt)];
-                finish(strip(&c, t, ri)?, vec![])
+                finish(strip(&c, t, ri, segs)?, vec![])
             }
             Self::RectTube { h, b, t, ro } => {
                 size("h", h)?;
@@ -848,15 +866,15 @@ impl ProfileShape {
                 size("t", t)?;
                 radius("ro", ro)?;
                 fit(2.0 * t < h.min(b), "the wall (t) must be thinner than half the sides (h, b)")?;
-                let outer = rect_loop(b, h, ro)?;
-                let hole = rect_loop(b - 2.0 * t, h - 2.0 * t, (ro - t).max(0.0))?;
+                let outer = rect_loop(b, h, ro, segs)?;
+                let hole = rect_loop(b - 2.0 * t, h - 2.0 * t, (ro - t).max(0.0), segs)?;
                 finish(outer, vec![hole])
             }
             Self::RoundTube { d, t } => {
                 size("d", d)?;
                 size("t", t)?;
                 fit(2.0 * t < d, "the wall (t) must be thinner than the radius")?;
-                finish(circle(d), vec![circle(d - 2.0 * t)])
+                finish(circle(d, segs), vec![circle(d - 2.0 * t, segs)])
             }
             Self::Rect { b, h, chamfer } => {
                 size("b", b)?;
@@ -864,7 +882,7 @@ impl ProfileShape {
                 radius("chamfer", chamfer)?;
                 fit(2.0 * chamfer < b.min(h), "the chamfer must be smaller than half the sides")?;
                 if chamfer == 0.0 {
-                    return finish(rect_loop(b, h, 0.0)?, vec![]);
+                    return finish(rect_loop(b, h, 0.0, segs)?, vec![]);
                 }
                 let (x, y, c) = (b / 2.0, h / 2.0, chamfer);
                 finish(
@@ -883,7 +901,7 @@ impl ProfileShape {
             }
             Self::Round { d } => {
                 size("d", d)?;
-                finish(circle(d), vec![])
+                finish(circle(d, segs), vec![])
             }
             Self::ConcreteT { h, bf, hf, bw } => {
                 Self::concrete_check(h, bf, hf, bw)?;
@@ -911,7 +929,14 @@ impl ProfileShape {
     }
 
     /// An I (or H) with the given flanges and web fillets of radius `r`.
-    fn i_loop(d: f64, bt: f64, tt: f64, bb: f64, tb: f64, tw: f64, r: f64) -> Result<SectionOutline, ProfileError> {
+    fn i_loop(
+        d: f64,
+        (bt, tt): (f64, f64),
+        (bb, tb): (f64, f64),
+        tw: f64,
+        r: f64,
+        segs: usize,
+    ) -> Result<SectionOutline, ProfileError> {
         let (hd, hb, wt, wb) = (d / 2.0, tw / 2.0, bt / 2.0, bb / 2.0);
         let pts = [
             (v2(-wb, -hd), 0.0),
@@ -927,7 +952,7 @@ impl ProfileShape {
             (v2(-hb, -hd + tb), r),
             (v2(-wb, -hd + tb), 0.0),
         ];
-        finish(rounded(&pts)?, vec![])
+        finish(rounded(&pts, segs)?, vec![])
     }
 
     fn cold_check(d: f64, bf: f64, t: f64, ri: f64) -> Result<(), ProfileError> {
@@ -975,6 +1000,23 @@ mod tests {
         assert!((area(&o) - exact).abs() < 1e-12);
         let (lo, hi) = o.bbox();
         assert!((hi - lo - DVec2::new(0.1, 0.2)).length() < 1e-12);
+    }
+
+    #[test]
+    fn area_counts_arcs_whole() {
+        let (d, bf, tw, tf, r) = (0.2, 0.1, 0.0056, 0.0085, 0.012);
+        let i = ProfileShape::I { d, bf, tw, tf, r }.area().unwrap();
+        let exact = 2.0 * bf * tf + (d - 2.0 * tf) * tw + 4.0 * r * r * (1.0 - PI / 4.0);
+        assert!((i - exact).abs() / exact < 1e-6, "{i} vs {exact}");
+        // The chorded outline cuts the fillets' arcs short.
+        assert!(area(&ProfileShape::I { d, bf, tw, tf, r }.outline().unwrap()) > exact + 1e-7);
+        let round = ProfileShape::Round { d: 0.3 }.area().unwrap();
+        assert!((round - PI * 0.0225).abs() / round < 1e-5, "{round}");
+        let tube = ProfileShape::RoundTube { d: 0.2, t: 0.008 }.area().unwrap();
+        let exact = PI / 4.0 * (0.04 - 0.184 * 0.184);
+        assert!((tube - exact).abs() / exact < 1e-5, "{tube} vs {exact}");
+        let rect = ProfileShape::Rect { b: 0.2, h: 0.4, chamfer: 0.0 }.area().unwrap();
+        assert!((rect - 0.08).abs() < 1e-15);
     }
 
     #[test]
@@ -1118,8 +1160,8 @@ mod tests {
 
     #[test]
     fn strip_with_too_few_points_is_an_error() {
-        assert!(strip(&[], 0.001, 0.0).is_err());
-        assert!(strip(&[DVec2::ZERO], 0.001, 0.0).is_err());
+        assert!(strip(&[], 0.001, 0.0, ARC_SEGMENTS).is_err());
+        assert!(strip(&[DVec2::ZERO], 0.001, 0.0, ARC_SEGMENTS).is_err());
     }
 
     #[test]

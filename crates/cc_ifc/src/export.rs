@@ -996,6 +996,11 @@ impl<'a> Exporter<'a> {
                         _ => None,
                     };
                     let brep = swept.is_none() && (!level || !rect);
+                    // A swept profile is written exact; other bodies as their chords run.
+                    let volume = match swept {
+                        Some(_) => section_area(project, &ty.data) * (g.end_ext.0 - g.start_ext.0),
+                        None => g.volume(),
+                    };
                     let items = if let Some((profile, (lo, hi))) = swept {
                         // The body puts the box's middle on the axis and its bottom at the bottom.
                         let start = g.world(g.start_ext.0, -(lo.x + hi.x) * 0.5);
@@ -1030,8 +1035,7 @@ impl<'a> Exporter<'a> {
                     let axis_start = self.point2(g.origin);
                     let axis_end = self.point2(g.world(g.length, 0.0));
                     axis = Some(self.w.add("IFCPOLYLINE", args![vec![axis_start, axis_end]]));
-                    let q =
-                        vec![("Length", Quantity::Length(g.cut_length())), ("NetVolume", Quantity::Volume(g.volume()))];
+                    let q = vec![("Length", Quantity::Length(g.cut_length())), ("NetVolume", Quantity::Volume(volume))];
                     let product =
                         StructureProduct::new("IFCBEAM", "BEAM", items).quantities("Qto_BeamBaseQuantities", q);
                     if brep { product.brep() } else { product }
@@ -2732,13 +2736,18 @@ fn directrix(bar: &cc_geom::rebar::Bar, diameter: f64) -> Vec<DVec3> {
     std::iter::once(mid).chain(pts[1..].iter().copied()).chain([a, mid + back]).collect()
 }
 
-/// The area of a type's section: exact for round sections, which export
-/// writes as circle profiles; otherwise its outline's.
+/// The area of a type's section as [`Exporter::type_profile`] writes it:
+/// exact when it is a parametric profile (circles, root and corner radii
+/// written as such), else its outline's, whose arcs are chords there too.
 fn section_area(project: &Project, data: &TypeData) -> f64 {
-    project
-        .round_section_area(data)
-        .or_else(|| project.type_section(data).map(|s| s.outline.properties(0.0).area))
-        .unwrap_or(0.0)
+    let (TypeData::Column { profile_mirror, .. } | TypeData::Beam { profile_mirror, .. }) = data else { return 0.0 };
+    let Some(section) = project.type_section(data) else { return 0.0 };
+    let parametric = section
+        .profile
+        .and_then(|p| project.profile(p))
+        .is_some_and(|d| !*profile_mirror && parametric_profile(&d.shape).is_some());
+    let exact = if parametric { project.exact_section_area(data) } else { None };
+    exact.unwrap_or_else(|| section.outline.properties(0.0).area)
 }
 
 /// Whether a section is a plain rectangle square to its axes (written as a
@@ -3015,7 +3024,10 @@ mod tests {
         let p = cc_core::from_ron(include_str!("../tests/fixtures/structure.ccad")).unwrap();
         let mut round = 0;
         for ty in p.types.values() {
-            let Some(exact) = p.round_section_area(&ty.data) else { continue };
+            if !p.section_is_round(&ty.data) {
+                continue;
+            }
+            let Some(exact) = p.exact_section_area(&ty.data) else { continue };
             round += 1;
             assert!((section_area(&p, &ty.data) - exact).abs() < 1e-12, "{}", ty.name);
         }

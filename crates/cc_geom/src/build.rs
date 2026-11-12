@@ -566,8 +566,10 @@ impl ModelGeometry {
                     let (base, top) = project.column_span(e, c);
                     let (outer, holes) = crate::section::column_body(&section.outline, c.position, c.rotation_deg);
                     crate::section::add_column_body(&mut s, &outer, &holes, base, top, section.curved);
-                    // Exact for round sections (the solid meshes the circle with chords).
-                    if let Some(area) = project.round_section_area(&ty.data) {
+                    // Exact for sections with arcs (the solid meshes them with chords).
+                    if section.curved
+                        && let Some(area) = project.exact_section_area(&ty.data)
+                    {
                         self.curved_volumes.insert(e.id, area * (top - base).max(0.0));
                     }
                 }
@@ -637,6 +639,18 @@ impl ModelGeometry {
             }
         }
         self.beams = resolve_beams(&beams, &columns).into_iter().map(|g| (g.element, g)).collect();
+        // Exact for sections with arcs: the swept volume scaled from the
+        // chorded outline's area to the section's.
+        for g in self.beams.values().filter(|g| g.curved) {
+            let Some(e) = project.element(g.element) else { continue };
+            let Some(exact) = project.element_type(e.type_id).and_then(|t| project.exact_section_area(&t.data)) else {
+                continue;
+            };
+            let chorded = g.section.properties(0.0).area;
+            if chorded > 0.0 {
+                self.curved_volumes.insert(g.element, g.volume() * exact / chorded);
+            }
+        }
     }
 
     /// Pads, strips (meeting at corners and tees like beams) and slabs.
