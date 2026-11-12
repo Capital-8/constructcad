@@ -100,6 +100,9 @@ pub struct Project {
     /// by materials, filled regions and view overrides next to the built-in ones.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fill_patterns: crate::fill_pattern::FillPatterns,
+    /// Named structural profiles (tracked as settings).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profiles: BTreeMap<crate::ProfileId, crate::structural_profile::ProfileDef>,
     /// Design option sets (see [`crate::design_option`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_sets: Vec<crate::OptionSet>,
@@ -145,6 +148,7 @@ impl Project {
             graph_bindings: BTreeMap::new(),
             line_styles: BTreeMap::new(),
             fill_patterns: BTreeMap::new(),
+            profiles: BTreeMap::new(),
             option_sets: Vec::new(),
             browser: Default::default(),
             active_option: None,
@@ -301,11 +305,20 @@ impl Project {
                 TypeData::Column {
                     section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
                     material: n("tpl-mat-concrete"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
                 &n("tpl-type-column-round"),
-                TypeData::Column { section: ColumnSection::Round { diameter: 0.3 }, material: n("tpl-mat-concrete") },
+                TypeData::Column {
+                    section: ColumnSection::Round { diameter: 0.3 },
+                    material: n("tpl-mat-concrete"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
+                },
             ),
             (
                 &n("tpl-type-beam"),
@@ -314,6 +327,9 @@ impl Project {
                     height: 0.4,
                     material: n("tpl-mat-concrete"),
                     shape: SectionShape::Solid,
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -325,6 +341,9 @@ impl Project {
                         shape: SectionShape::I { web: 0.009, flange: 0.015 },
                     },
                     material: n("tpl-mat-steel"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -336,6 +355,9 @@ impl Project {
                         shape: SectionShape::Tube { wall: 0.006 },
                     },
                     material: n("tpl-mat-steel"),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -345,6 +367,9 @@ impl Project {
                     height: 0.3,
                     material: n("tpl-mat-steel"),
                     shape: SectionShape::I { web: 0.0071, flange: 0.0107 },
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (&n("tpl-type-rebar-5"), TypeData::Rebar { diameter: 0.005, material: n("tpl-mat-steel") }),
@@ -488,6 +513,8 @@ impl Project {
         p.ensure_phases(&n);
         p.add_french_doors(&names, &n);
         p.ensure_uids();
+        // Last, so the ids of everything above stay as they were.
+        p.convert_sections_to_profiles(&n);
         p
     }
 
@@ -567,6 +594,9 @@ impl Project {
                 TypeData::Column {
                     section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
                     material: template_default("tpl-mat-concrete").to_string(),
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -577,6 +607,9 @@ impl Project {
                     height: 0.4,
                     material: template_default("tpl-mat-concrete").to_string(),
                     shape: SectionShape::Solid,
+                    profile: None,
+                    profile_rotation_deg: 0.0,
+                    profile_mirror: false,
                 },
             ),
             (
@@ -955,6 +988,63 @@ impl Project {
         self.next_id
     }
 
+    /// A copy of the project with `types` in place of its own (which are not copied).
+    pub(crate) fn copy_with_types(&self, types: BTreeMap<ElementTypeId, ElementType>) -> Project {
+        // Destructured so that a new field is not forgotten.
+        let Project {
+            info,
+            levels,
+            materials,
+            types: _,
+            elements,
+            views,
+            units,
+            pinned,
+            joins,
+            groups,
+            systems,
+            filters,
+            templates,
+            phases,
+            phase_filters,
+            phase_graphics,
+            graph_bindings,
+            line_styles,
+            fill_patterns,
+            option_sets,
+            browser,
+            profiles,
+            active_option,
+            next_id,
+        } = self;
+        Project {
+            info: info.clone(),
+            levels: levels.clone(),
+            materials: materials.clone(),
+            types,
+            elements: elements.clone(),
+            views: views.clone(),
+            units: units.clone(),
+            pinned: pinned.clone(),
+            joins: joins.clone(),
+            groups: groups.clone(),
+            systems: systems.clone(),
+            filters: filters.clone(),
+            templates: templates.clone(),
+            phases: phases.clone(),
+            phase_filters: phase_filters.clone(),
+            phase_graphics: *phase_graphics,
+            graph_bindings: graph_bindings.clone(),
+            line_styles: line_styles.clone(),
+            fill_patterns: fill_patterns.clone(),
+            option_sets: option_sets.clone(),
+            browser: browser.clone(),
+            profiles: profiles.clone(),
+            active_option: *active_option,
+            next_id: *next_id,
+        }
+    }
+
     pub fn alloc_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
@@ -975,6 +1065,7 @@ impl Project {
         let phase_filters = self.phase_filters.keys().map(|k| k.0);
         let line_styles = self.line_styles.keys().map(|k| k.0);
         let fill_patterns = self.fill_patterns.keys().map(|k| k.0);
+        let profiles = self.profiles.keys().map(|k| k.0);
         let option_sets = self.option_sets.iter().map(|s| s.id.0);
         let options = self.option_sets.iter().flat_map(|s| s.options.iter().map(|o| o.id.0));
         let schemes = self.browser.schemes.iter().map(|s| s.id.0);
@@ -990,6 +1081,7 @@ impl Project {
             .chain(phase_filters)
             .chain(line_styles)
             .chain(fill_patterns)
+            .chain(profiles)
             .chain(option_sets)
             .chain(options)
             .chain(schemes)

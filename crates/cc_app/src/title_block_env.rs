@@ -752,7 +752,8 @@ fn piece_props(ui: &mut Ui, state: &mut AppState, def: &ComponentDef, index: usi
             let mut on = fill.is_some();
             let mut rgb = fill.unwrap_or([220, 220, 220]);
             let (toggled, r) = crate::table::row(ui, &t!("tb-fill"), |ui| {
-                ui.horizontal(|ui| (ui.checkbox(&mut on, "").changed(), ui.color_edit_button_srgb(&mut rgb))).inner
+                ui.horizontal(|ui| (crate::table::checkbox(ui, &mut on).changed(), ui.color_edit_button_srgb(&mut rgb)))
+                    .inner
             });
             if toggled {
                 let value = if on { serde_json::json!(rgb) } else { serde_json::Value::Null };
@@ -800,12 +801,26 @@ const SVG_PX: f32 = 2048.0;
 /// The picture in a file's bytes; an SVG is drawn into a PNG. `None` for
 /// anything else, a file over the picture size limit, or a reader that
 /// fails (a panic in a decoder is caught: files are hostile input).
+///
+/// usvg parses and renders nested elements recursively, and a deeply nested
+/// file could overflow the caller's stack, which aborts the process; so the
+/// file is read on a thread of its own with a large stack.
 pub fn picture(bytes: Vec<u8>) -> Option<Picture> {
     if bytes.len() > cc_core::raster::MAX_IMAGE_BYTES {
         return None;
     }
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| read_picture(bytes))).ok().flatten()
+    std::thread::scope(|scope| {
+        let worker = std::thread::Builder::new()
+            .name("picture-reader".into())
+            .stack_size(PICTURE_STACK_BYTES)
+            .spawn_scoped(scope, || std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| read_picture(bytes))))
+            .ok()?;
+        worker.join().ok()?.ok().flatten()
+    })
 }
+
+/// Stack of the thread that reads a picture.
+const PICTURE_STACK_BYTES: usize = 64 << 20;
 
 fn read_picture(bytes: Vec<u8>) -> Option<Picture> {
     if cc_core::raster::RasterFormat::sniff(&bytes).is_some() {
@@ -1664,6 +1679,24 @@ fn params(ui: &mut Ui, state: &mut AppState, def: &ComponentDef) {
 mod tests {
     use super::*;
     use cc_core::Document;
+
+    /// A deeply nested SVG picked as a title block picture is read without
+    /// overflowing a small stack (the UI thread's, say).
+    #[test]
+    fn deeply_nested_svg_pictures_do_not_overflow_the_stack() {
+        let depth = 1000;
+        let text = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">{}<line x1="0" y1="0" x2="9" y2="9" stroke="black"/>{}</svg>"#,
+            r#"<g transform="translate(0.01 0)" opacity="0.99">"#.repeat(depth),
+            "</g>".repeat(depth)
+        );
+        let worker = std::thread::Builder::new()
+            .stack_size(2 << 20)
+            .spawn(move || picture(text.into_bytes()).is_some())
+            .unwrap();
+        // Read (or refused as too deep), without bringing the process down.
+        let _ = worker.join().unwrap();
+    }
 
     /// The sample house with its first sheet active and its title block open.
     pub(crate) fn editor_state() -> (AppState, ViewId, ElementTypeId) {

@@ -5,8 +5,7 @@ use crate::paint::{HIGHLIGHT, PREVIEW, PaintOptions, Xf, paint_drawing};
 use crate::state::AppState;
 use crate::t;
 use cc_core::{
-    Category, ColumnSection, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId,
-    ViewKind,
+    Category, DimensionKind, ElementId, ElementKind, ElementTypeId, LevelId, Project, View, ViewId, ViewKind,
 };
 use cc_engine::Ref;
 use cc_engine::commands::{create, modify as modify_cmd, views};
@@ -804,8 +803,8 @@ pub(crate) fn snap_at(
     ortho: bool,
 ) -> Snap {
     let cad = cad_snap(state, raw, SNAP_PX / scale * 1.5);
-    let (project, geom) = (&state.session.doc.project, state.session.geom());
-    let s = snap_with(project, geom, level, raw, anchor, extra, &state.interaction.tracked, scale, ortho, &cad);
+    let model = model_snaps_cached(state, level);
+    let s = snap_with(&model, raw, anchor, extra, &state.interaction.tracked, scale, ortho, &cad);
     if matches!(s.kind, SnapKind::Endpoint | SnapKind::Midpoint | SnapKind::Center) {
         let tracked = &mut state.interaction.tracked;
         tracked.retain(|p| p.distance(s.point) > 1e-9);
@@ -849,8 +848,10 @@ pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad
         if let Some(ElementKind::DetailLine(l)) = state.project().element(id).map(|e| &e.kind) {
             l.snap_features(&mut out);
         }
-        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| &e.kind) {
-            let f = c.snap_features(raw, r);
+        // A copy (its drawing is shared), so that the index cache can change.
+        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| e.kind.clone()) {
+            let index = cad_index(&mut state.cad_snap_index, id, &c.drawing);
+            let f = c.snap_features_in(&index, raw, r);
             out.ends.extend(f.ends);
             out.mids.extend(f.mids);
             out.centers.extend(f.centers);
@@ -859,6 +860,26 @@ pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad
         }
     }
     out
+}
+
+/// An imported drawing and the snap index built from it.
+pub type CadIndexEntry = (std::sync::Arc<cc_core::CadDrawing>, std::sync::Arc<cc_core::cad::CadSnapIndex>);
+
+/// The snap index of element `id`'s `drawing`: the one in `cache` while the
+/// drawing is the same (an edit that changes it gives a new `Arc`), else a new one.
+fn cad_index(
+    cache: &mut std::collections::HashMap<ElementId, CadIndexEntry>,
+    id: ElementId,
+    drawing: &std::sync::Arc<cc_core::CadDrawing>,
+) -> std::sync::Arc<cc_core::cad::CadSnapIndex> {
+    if let Some((d, index)) = cache.get(&id)
+        && std::sync::Arc::ptr_eq(d, drawing)
+    {
+        return index.clone();
+    }
+    let index = std::sync::Arc::new(cc_core::cad::CadSnapIndex::new(drawing));
+    cache.insert(id, (drawing.clone(), index.clone()));
+    index
 }
 
 /// Lines of `drawing`'s underlay passing within `r` of `raw`, with their
@@ -915,33 +936,41 @@ fn snap(
     ortho: bool,
 ) -> Snap {
     let cad = cc_core::cad::CadSnap::default();
-    snap_with(project, geom, level, raw, anchor, extra, tracked, scale, ortho, &cad)
+    snap_with(&model_snaps(project, geom, level), raw, anchor, extra, tracked, scale, ortho, &cad)
 }
 
-/// [`snap`] with the snap features of imported drawings too (their
-/// endpoints, midpoints, arc centers, lines and arcs).
-#[allow(clippy::too_many_arguments)]
-fn snap_with(
-    project: &Project,
-    geom: &ModelGeometry,
-    level: Option<LevelId>,
-    raw: DVec2,
-    anchor: Option<DVec2>,
-    extra: &[DVec2],
-    tracked: &[DVec2],
-    scale: f64,
-    ortho: bool,
-    cad: &cc_core::cad::CadSnap,
-) -> Snap {
-    let r = SNAP_PX / scale;
-    let mut ends: Vec<DVec2> = extra.to_vec();
+/// The model's snap candidates on a level: element ends, midpoints, lines and arcs, outlines,
+/// grid lines and crossings, risers. They depend only on the model, so they are gathered once
+/// per revision and level (see [`model_snaps_cached`]), not on every pointer move.
+#[derive(Debug, Default)]
+pub(crate) struct ModelSnaps {
+    ends: Vec<DVec2>,
+    mids: Vec<DVec2>,
+    lines: Vec<(DVec2, DVec2)>,
+    arcs: Vec<cc_core::arc::Arc>,
+}
+
+/// The cached [`ModelSnaps`] of `level`, gathered again when the document or the level changes.
+fn model_snaps_cached(state: &mut AppState, level: Option<LevelId>) -> std::sync::Arc<ModelSnaps> {
+    let revision = state.session.doc.revision();
+    if let Some((r, l, snaps)) = &state.snap_cache
+        && *r == revision
+        && *l == level
+    {
+        return snaps.clone();
+    }
+    let (project, geom) = state.session.project_and_geometry();
+    let snaps = std::sync::Arc::new(model_snaps(project, geom, level));
+    state.snap_cache = Some((revision, level, snaps.clone()));
+    snaps
+}
+
+/// Gather the model's snap candidates on `level`.
+fn model_snaps(project: &Project, geom: &ModelGeometry, level: Option<LevelId>) -> ModelSnaps {
+    let mut ends: Vec<DVec2> = Vec::new();
     let mut mids = Vec::new();
     let mut lines = Vec::new();
     let mut arcs: Vec<cc_core::arc::Arc> = Vec::new();
-    ends.extend_from_slice(&cad.ends);
-    mids.extend_from_slice(&cad.mids);
-    lines.extend_from_slice(&cad.lines);
-    arcs.extend_from_slice(&cad.arcs);
     for e in project.elements.values().filter(|e| Some(e.level) == level) {
         if let Some(w) = e.as_wall() {
             ends.extend([w.start, w.end]);
@@ -980,13 +1009,13 @@ fn snap_with(
         // Outlines as the plan draws them: corners are endpoints, edges lines.
         let outlines: Vec<Vec<DVec2>> = match (&e.kind, project.element_type(e.type_id).map(|t| &t.data)) {
             (ElementKind::Wall(_), _) => geom.walls.get(&e.id).filter(|w| w.arc.is_none()).map(|w| vec![w.footprint()]),
-            (
-                ElementKind::Column(c),
-                Some(cc_core::TypeData::Column {
-                    section: section @ (ColumnSection::Rectangular { .. } | ColumnSection::Profile { .. }),
-                    ..
-                }),
-            ) => Some(cc_geom::section::column_loops(*section, c.position, c.rotation_deg)),
+            // Corners of the section without its radii (round sections have none).
+            (ElementKind::Column(c), Some(data @ cc_core::TypeData::Column { .. })) => {
+                project.type_section_without_radii(data).filter(|s| !s.curved).map(|s| {
+                    let (outer, holes) = cc_geom::section::column_body(&s.outline, c.position, c.rotation_deg);
+                    std::iter::once(outer).chain(holes).collect()
+                })
+            }
             (ElementKind::Stair(st), _) => cc_geom::stair_geom(project, e, st).map(|g| g.parts),
             (ElementKind::Ramp(r), _) => {
                 cc_geom::ramp_geom(project, e, r).map(|g| g.pieces.into_iter().map(|p| p.outline).collect())
@@ -1011,6 +1040,28 @@ fn snap_with(
         let risers = project.segments_at(level).filter(|(e, _)| e.level != level);
         ends.extend(risers.map(|(_, s)| s.start));
     }
+    ModelSnaps { ends, mids, lines, arcs }
+}
+
+/// [`snap`] over the model's candidates `model` with the snap features of imported drawings too
+/// (their endpoints, midpoints, arc centers, lines and arcs).
+#[allow(clippy::too_many_arguments)]
+fn snap_with(
+    model: &ModelSnaps,
+    raw: DVec2,
+    anchor: Option<DVec2>,
+    extra: &[DVec2],
+    tracked: &[DVec2],
+    scale: f64,
+    ortho: bool,
+    cad: &cc_core::cad::CadSnap,
+) -> Snap {
+    let r = SNAP_PX / scale;
+    // In the order they always had: the extra points, the drawings', then the model's.
+    let ends: Vec<DVec2> = extra.iter().chain(&cad.ends).chain(&model.ends).copied().collect();
+    let mids: Vec<DVec2> = cad.mids.iter().chain(&model.mids).copied().collect();
+    let lines: Vec<(DVec2, DVec2)> = cad.lines.iter().chain(&model.lines).copied().collect();
+    let arcs: Vec<cc_core::arc::Arc> = cad.arcs.iter().chain(&model.arcs).cloned().collect();
     let nearest = |pts: &[DVec2]| {
         pts.iter().map(|p| (*p, p.distance(raw))).filter(|(_, d)| *d <= r).min_by(|a, b| a.1.total_cmp(&b.1))
     };
@@ -1589,8 +1640,8 @@ fn column_tool(
     let shift = ui.input(|i| i.modifiers.shift);
     let s = snap_at(state, Some(level), raw, None, &grid_crossings(state.project()), xf.scale, shift);
     draw_snap(painter, xf, s);
-    if let Some(cc_core::TypeData::Column { section, .. }) = state.project().element_type(type_id).map(|t| &t.data) {
-        let outline: Vec<Pos2> = cc_geom::column_outline(*section, s.point, state.interaction.rotation)
+    if let Some(data @ cc_core::TypeData::Column { .. }) = state.project().element_type(type_id).map(|t| &t.data) {
+        let outline: Vec<Pos2> = cc_geom::column_outline(state.project(), data, s.point, state.interaction.rotation)
             .iter()
             .map(|p| xf.to_screen(*p))
             .collect();
@@ -1937,8 +1988,7 @@ fn footing_tool(
     if let Some(cc_core::TypeData::Foundation { width, length, .. }) =
         state.project().element_type(type_id).map(|t| &t.data)
     {
-        let section = cc_core::ColumnSection::Rectangular { width: *width, depth: *length };
-        let outline: Vec<Pos2> = cc_geom::column_outline(section, s.point, state.interaction.rotation)
+        let outline: Vec<Pos2> = cc_geom::rect_outline(*width, *length, s.point, state.interaction.rotation)
             .iter()
             .map(|p| xf.to_screen(*p))
             .collect();
@@ -2232,10 +2282,11 @@ fn beam_tool(
     let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
     draw_snap(painter, xf, s);
     if let Some(a) = state.interaction.anchor {
-        let width = match state.project().element_type(type_id).map(|t| &t.data) {
-            Some(cc_core::TypeData::Beam { width, .. }) => *width,
-            _ => 0.15,
-        };
+        // As wide as the type's section (its profile turned in the type).
+        let project = state.project();
+        let section = project.element_type(type_id).and_then(|t| project.type_section(&t.data));
+        let width = section.map(|s| s.outline.bbox()).map_or(0.15, |(lo, hi)| hi.x - lo.x);
+        let width = if width.is_finite() && width > 0.0 { width } else { 0.15 };
         let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
         let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
         painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));

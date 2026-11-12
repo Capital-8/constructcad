@@ -215,6 +215,15 @@ pub enum ProfileError {
     Degenerate,
 }
 
+impl std::fmt::Display for ProfileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProfileError::Expr { field, error } => write!(f, "{field}: {error}"),
+            ProfileError::Degenerate => write!(f, "the outline is degenerate (too few points, no area or a zero size)"),
+        }
+    }
+}
+
 /// The outline of `points` in plane coordinates, arcs divided into segments,
 /// counter-clockwise.
 pub fn outline(points: &[ProfilePoint], lookup: &dyn Fn(&str) -> Option<f64>) -> Result<Vec<DVec2>, ProfileError> {

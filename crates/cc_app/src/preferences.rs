@@ -664,7 +664,7 @@ fn check(ui: &mut Ui, label: &str, value: &mut bool) {
     ui.add_space(4.0);
     // Unlike the flat cells around it, the box shows when unchecked too.
     ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, PALETTE.border_strong);
-    let r = ui.checkbox(value, "");
+    let r = crate::table::checkbox(ui, value);
     r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *value, label));
 }
 

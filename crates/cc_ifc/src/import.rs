@@ -8,7 +8,7 @@
 //! elements with matching or new types. Products that cannot be interpreted
 //! are counted in the report instead of failing the import.
 
-use crate::geometry::{Extrusion, Geometry, ProfileKind, Solid, affine, clean_loop};
+use crate::geometry::{Extrusion, Geometry, Solid, affine, clean_loop};
 use crate::guid;
 use crate::parse::{Entity, Param, ParseError, StepFile, parse};
 use cc_core::component::IfcClass;
@@ -16,13 +16,17 @@ use cc_core::component::convex_hull;
 use cc_core::curtain::{CurtainEdits, CurtainPanel, CurtainSystem};
 use cc_core::properties::{Atom, IfcValue, Property, PropertySet, PropertyValue};
 use cc_core::sketch::Sketch;
+use cc_core::structural_profile::{
+    MAX_NAME, MAX_OPENINGS as MAX_SKETCH_OPENINGS, MAX_POINTS as MAX_SKETCH_POINTS, MAX_PROFILES, ParamSketch,
+    ProfileDef, ProfileMaterial, ProfileShape,
+};
 use cc_core::{
     Beam, Category, Ceiling, Column, ColumnSection, Component, ComponentDef, ComponentItem, ComponentKind,
     ComponentShape, Element, ElementId, ElementKind, ElementType, ElementTypeId, Floor, Grid, Hosted, Layer,
     LayerFunction, Level, LevelId, Material, Project, Roof, RoofShape, Room, SectionShape, ShapedRebar, TypeData, Uid,
     View, ViewId, ViewKind, Wall, WallFunction, WallTop,
 };
-use cc_core::{DoorOperation, WindowOperation};
+use cc_core::{DoorOperation, ProfileId, ProfilePoint, WindowOperation};
 use cc_core::{Foundation, FoundationKind, FoundationShape};
 use cc_geom::polygon;
 use glam::{DAffine3, DVec2, DVec3};
@@ -30,6 +34,11 @@ use std::collections::{BTreeMap, HashMap};
 
 /// Deepest nesting of complex properties.
 const MAX_PROPERTY_DEPTH: usize = 8;
+/// Largest IFC file imported, bytes: the parsed instances take many times
+/// the file's size in memory.
+pub const MAX_IFC_BYTES: u64 = 512 << 20;
+/// Most properties (nested ones included) read from one property set.
+const MAX_SET_PROPERTIES: usize = 10_000;
 /// Most openings cut from one product.
 const MAX_OPENINGS: usize = 1000;
 /// Window panels read from one type.
@@ -87,7 +96,16 @@ impl std::fmt::Display for ImportError {
 impl std::error::Error for ImportError {}
 
 /// Import the IFC file at `path` into `base` (see [`import`]).
+/// Files larger than [`MAX_IFC_BYTES`] are refused before they are read
+/// (an [`ImportError::Io`] of kind `FileTooLarge`).
 pub fn import_file(path: &std::path::Path, base: Project) -> Result<(Project, ImportReport), ImportError> {
+    let len = std::fs::metadata(path).map_err(ImportError::Io)?.len();
+    if len > MAX_IFC_BYTES {
+        return Err(ImportError::Io(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            format!("the IFC file is larger than {} MB", MAX_IFC_BYTES >> 20),
+        )));
+    }
     let bytes = std::fs::read(path).map_err(ImportError::Io)?;
     import(&String::from_utf8_lossy(&bytes), base)
 }
@@ -2321,51 +2339,74 @@ impl<'a> Importer<'a> {
             return false;
         }
         let (_, body) = self.product(e);
-        let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical() && e.profile.is_simple()).cloned() else {
+        let Some(ex) = body.sole_extrusion_with_voids().filter(|e| e.is_vertical()).cloned() else {
             return false;
         };
         let Some((z0, z1)) = body.z_range() else { return false };
-        let (section, center, rotation) = match ex.profile.kind {
-            ProfileKind::Circle { center, r } => {
-                (ColumnSection::Round { diameter: 2.0 * r }, ex.plane_point(center).truncate(), 0.0)
-            }
-            _ => {
-                let (center, x, w, h) = ex.profile.rect();
-                let xw = ex.plane_vector(x).truncate();
-                (
-                    ColumnSection::Rectangular { width: w, depth: h },
-                    ex.plane_point(center).truncate(),
-                    xw.y.atan2(xw.x).to_degrees(),
-                )
-            }
+        // The profile plane seen from above, unscaled: the section turns
+        // with the column; otherwise its footprint is the section.
+        let (xw, yw) = (ex.plane_vector(DVec2::X).truncate(), ex.plane_vector(DVec2::Y).truncate());
+        let rigid = (xw.length() - 1.0).abs() < 1e-6 && (yw.length() - 1.0).abs() < 1e-6 && xw.dot(yw).abs() < 1e-6;
+        let (read, position, rotation) = if rigid && xw.perp_dot(yw) > 0.0 {
+            let Some(read) = self.read_section(id, &ex) else { return false };
+            let position = ex.plane_point(read.center).truncate();
+            (read, position, xw.y.atan2(xw.x).to_degrees())
+        } else {
+            let Some(read) = loose_section(&ex.footprint(), &ex.void_footprints()) else { return false };
+            let position = read.center;
+            (read, position, 0.0)
         };
+        if !(position.is_finite() && rotation.is_finite()) {
+            return false;
+        }
         let (level, elevation) = self.level_for(id, z0);
         let name = self.type_name(id, e);
         let material = self.main_material(id, e);
-        let fallback = match section {
-            ColumnSection::Rectangular { width, depth } => format!("{:.0} x {:.0}", width * 100.0, depth * 100.0),
-            ColumnSection::Round { diameter } => format!("Ø {:.0}", diameter * 100.0),
-            ColumnSection::Profile { width, depth, .. } => format!("{:.0} x {:.0}", width * 100.0, depth * 100.0),
-            ColumnSection::Pipe { diameter, .. } => format!("Ø {:.0}", diameter * 100.0),
+        let profile = self.profile_for(id, &read, &material);
+        // Without a profile (the project has no room for more) only a box or a round is held exactly.
+        let held = matches!(
+            read.shape,
+            ProfileShape::Rect { chamfer: 0.0, .. } | ProfileShape::Round { .. } | ProfileShape::RoundTube { .. }
+        );
+        if profile.is_none() && (!held || read.rotation_deg != 0.0) {
+            return false;
+        }
+        let turn = read.rotation_deg;
+        let mut data = TypeData::Column {
+            section: ColumnSection::Rectangular { width: 1.0, depth: 1.0 },
+            material,
+            profile,
+            profile_rotation_deg: turn,
+            profile_mirror: false,
         };
-        let same = move |s: &ColumnSection| match (s, section) {
-            (ColumnSection::Rectangular { width: a, depth: b }, ColumnSection::Rectangular { width: c, depth: d }) => {
-                (a - c).abs() < TYPE_TOL && (b - d).abs() < TYPE_TOL
-            }
-            (ColumnSection::Round { diameter: a }, ColumnSection::Round { diameter: b }) => (a - b).abs() < TYPE_TOL,
-            _ => false,
+        // The legacy section is the profile's box (or its round), as edits keep it.
+        let size = match profile {
+            Some(_) => self.p.type_section(&data).map(|s| s.outline.bbox()).map(|(lo, hi)| hi - lo),
+            None => read.shape.outline().ok().map(|o| o.bbox()).map(|(lo, hi)| hi - lo),
         };
+        let Some(size) = size.filter(|s| s.is_finite() && s.x > 1e-6 && s.y > 1e-6) else { return false };
+        let legacy = match read.shape {
+            ProfileShape::Round { d } if turn == 0.0 => ColumnSection::Round { diameter: d },
+            ProfileShape::RoundTube { d, t } if turn == 0.0 => ColumnSection::Pipe { diameter: d, wall: t },
+            _ => ColumnSection::Rectangular { width: size.x, depth: size.y },
+        };
+        if let TypeData::Column { section, .. } = &mut data {
+            *section = legacy;
+        }
+        let fallback = profile
+            .and_then(|p| self.p.profile(p))
+            .map_or_else(|| format!("{:.0} x {:.0}", size.x * 100.0, size.y * 100.0), |p| p.name.clone());
         let uid = self.type_uid(id);
         let type_id = self.find_or_add_type(
             Category::Column,
             name,
             fallback,
             uid,
-            |d| matches!(d, TypeData::Column { section, .. } if same(section)),
-            || TypeData::Column { section, material },
+            |d| same_section(d, profile, turn, &data),
+            || data.clone(),
         );
         let column = Column {
-            position: center,
+            position,
             rotation_deg: rotation,
             base_offset: z0 - elevation,
             height: z1 - z0,
@@ -2374,6 +2415,146 @@ impl<'a> Importer<'a> {
         };
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Column(column));
         true
+    }
+
+    /// The section of a column or beam extrusion: the parametric shape of
+    /// its profile definition when one holds it (and makes a valid outline),
+    /// else the profile's outline as a sketch (`None` when neither holds it). Its
+    /// name is the definition's `ProfileName`, else the name of the material
+    /// profile that holds the definition in the material profile set of the
+    /// product or its type.
+    fn read_section(&self, id: u32, ex: &Extrusion) -> Option<ReadSection> {
+        let source = ex.source.and_then(|s| self.f.get(s).map(|e| (s, e)));
+        let name = source.and_then(|(s, e)| profile_name(e).or_else(|| self.material_profile_name(id, s)));
+        let parametric = source.and_then(|(_, e)| {
+            let shape = self.g.parametric_shape(e).filter(|s| s.outline().is_ok())?;
+            let x = self.g.axis_placement(e.arg(2)).transform_vector3(DVec3::X).truncate();
+            let turn = if x.length() > 1e-9 { x.y.atan2(x.x) } else { 0.0 };
+            // The middle of the drawn outline's box, in the shape's frame, is
+            // where the shape's outline is centered.
+            let back = DVec2::from_angle(-turn);
+            let (lo, hi) = polygon_bounds(ex.profile.pts.iter().map(|p| back.rotate(*p)))?;
+            let center = DVec2::from_angle(turn).rotate((lo + hi) * 0.5);
+            let rotation_deg = if turn.abs() < 1e-12 { 0.0 } else { turn.to_degrees() };
+            Some(ReadSection { shape, name: name.clone(), rotation_deg, center })
+        });
+        parametric.or_else(|| loose_section(&ex.profile.pts, &ex.profile.holes).map(|r| ReadSection { name, ..r }))
+    }
+
+    /// The material profile set the product `id` or its type uses (IFC4).
+    fn material_profile_set(&self, id: u32) -> Option<&'a Entity> {
+        let f = self.f;
+        let mut owners = vec![id];
+        owners.extend(self.type_of.get(&id));
+        owners.into_iter().find_map(|owner| {
+            let m = self.material_of.get(&owner).and_then(|m| f.get(*m))?;
+            let set = if m.name == "IFCMATERIALPROFILESETUSAGE" { f.deref(m.arg(0))? } else { m };
+            (set.name == "IFCMATERIALPROFILESET").then_some(set)
+        })
+    }
+
+    /// The name of the material profile that holds profile definition
+    /// `profile` in the material profile set of product `id` or its type.
+    fn material_profile_name(&self, id: u32, profile: u32) -> Option<String> {
+        let f = self.f;
+        let set = self.material_profile_set(id)?;
+        let item = set
+            .arg(2)
+            .as_list()
+            .iter()
+            .filter_map(|x| f.deref(x))
+            .find(|i| i.name == "IFCMATERIALPROFILE" && i.arg(3).as_ref() == Some(profile))?;
+        item.arg(0).as_str().map(clean_profile_name).filter(|n| !n.is_empty())
+    }
+
+    /// Whether the material profile of product `id` (or its type) is marked
+    /// cold-formed ([`crate::export::COLD_FORMED_CATEGORY`]).
+    fn cold_formed(&self, id: u32) -> bool {
+        let f = self.f;
+        self.material_profile_set(id).is_some_and(|set| {
+            set.arg(2).as_list().iter().filter_map(|x| f.deref(x)).any(|i| {
+                i.name == "IFCMATERIALPROFILE"
+                    && i.arg(5).as_str().is_some_and(|c| c.eq_ignore_ascii_case(crate::export::COLD_FORMED_CATEGORY))
+            })
+        })
+    }
+
+    /// The section of a beam written as a `width` x `height` box: the
+    /// material profile of product `id` (or its type), with its name, when
+    /// it is an unturned solid rectangle of that size; else that rectangle.
+    fn rect_section(&self, id: u32, width: f64, height: f64) -> ReadSection {
+        let f = self.f;
+        let from_set = || {
+            let set = self.material_profile_set(id)?;
+            let item =
+                set.arg(2).as_list().first().and_then(|x| f.deref(x)).filter(|i| i.name == "IFCMATERIALPROFILE")?;
+            let def = f.deref(item.arg(3))?;
+            let turned = self.g.axis_placement(def.arg(2)).transform_vector3(DVec3::X);
+            match self.g.parametric_shape(def)? {
+                shape @ ProfileShape::Rect { b, h, .. }
+                    if (turned.x - 1.0).abs() < 1e-9
+                        && (b - width).abs() < TYPE_TOL
+                        && (h - height).abs() < TYPE_TOL =>
+                {
+                    let name = profile_name(def)
+                        .or_else(|| item.arg(0).as_str().map(clean_profile_name))
+                        .filter(|n| !n.is_empty());
+                    Some(ReadSection { shape, name, rotation_deg: 0.0, center: DVec2::ZERO })
+                }
+                _ => None,
+            }
+        };
+        from_set().unwrap_or(ReadSection {
+            shape: ProfileShape::Rect { b: width, h: height, chamfer: 0.0 },
+            name: None,
+            rotation_deg: 0.0,
+            center: DVec2::ZERO,
+        })
+    }
+
+    /// The project profile for a read section: the one of its name when it
+    /// has the same shape, else a new one (named after the section, under a
+    /// free name when another profile has it); without a name, one of the
+    /// same material and shape. `None` when the project has no room for more.
+    fn profile_for(&mut self, id: u32, read: &ReadSection, material: &str) -> Option<ProfileId> {
+        // Float noise in a file reuses a profile rather than making "name 2".
+        const TOL: f64 = 1e-6;
+        let class = match self.p.profile_material_for(material) {
+            ProfileMaterial::Steel if read.shape.is_cold_formed() || self.cold_formed(id) => {
+                ProfileMaterial::ColdFormed
+            }
+            class => class,
+        };
+        let name = match &read.name {
+            Some(name) => match self.p.profile_named(name) {
+                Some(p) if p.shape.close_to(&read.shape, TOL) => return Some(p.id),
+                Some(_) => self.p.free_profile_name(name),
+                None => name.clone(),
+            },
+            None => {
+                if let Some(p) =
+                    self.p.profiles.values().find(|p| p.material == class && p.shape.close_to(&read.shape, TOL))
+                {
+                    return Some(p.id);
+                }
+                self.p.free_profile_name(&cc_core::profiles_project::section_name(&read.shape, class))
+            }
+        };
+        if self.p.profiles.len() >= MAX_PROFILES {
+            return None;
+        }
+        let id = ProfileId(self.p.alloc_id());
+        let def = ProfileDef {
+            id,
+            uid: Uid::generate(),
+            name,
+            material: class,
+            shape: read.shape.clone(),
+            catalog: None,
+            description: String::new(),
+        };
+        self.p.profiles.insert(id, def);
+        Some(id)
     }
 
     /// Any physical object without a native counterpart (or whose geometry
@@ -2502,7 +2683,10 @@ impl<'a> Importer<'a> {
             }
             let (quantities, properties) = match set.name.as_str() {
                 "IFCPROPERTYSET" => {
-                    (false, set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, 0)).collect::<Vec<_>>())
+                    let (mut path, mut left) = (Vec::new(), MAX_SET_PROPERTIES);
+                    let properties =
+                        set.arg(4).as_list().iter().filter_map(|p| self.read_property(p, &mut path, &mut left));
+                    (false, properties.collect::<Vec<_>>())
                 }
                 "IFCELEMENTQUANTITY" => (true, set.arg(5).as_list().iter().filter_map(|q| self.quantity(q)).collect()),
                 // Predefined property sets (door linings…) and others.
@@ -2520,8 +2704,14 @@ impl<'a> Importer<'a> {
         out
     }
 
-    fn read_property(&self, param: &Param, depth: usize) -> Option<Property> {
-        let p = self.f.deref(param)?;
+    /// A property of a set. Complex properties nest at most
+    /// [`MAX_PROPERTY_DEPTH`] deep (`path` holds those being read, and one
+    /// already on it is refused) and a set reads at most `left` properties
+    /// in all, so shared nested properties cannot multiply.
+    fn read_property(&self, param: &Param, path: &mut Vec<u32>, left: &mut usize) -> Option<Property> {
+        let id = param.as_ref()?;
+        *left = left.checked_sub(1)?;
+        let p = self.f.get(id)?;
         let name = p.arg(0).as_str()?.to_string();
         let values = |i: usize, unit: &Param| -> Vec<IfcValue> {
             p.arg(i).as_list().iter().filter_map(|v| self.ifc_value(v, unit)).collect()
@@ -2538,10 +2728,12 @@ impl<'a> Importer<'a> {
             "IFCPROPERTYTABLEVALUE" => {
                 PropertyValue::Table { defining: values(2, p.arg(5)), defined: values(3, p.arg(6)) }
             }
-            "IFCCOMPLEXPROPERTY" if depth < MAX_PROPERTY_DEPTH => PropertyValue::Complex {
-                usage: p.arg(2).as_str().unwrap_or_default().to_string(),
-                properties: p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, depth + 1)).collect(),
-            },
+            "IFCCOMPLEXPROPERTY" if path.len() < MAX_PROPERTY_DEPTH && !path.contains(&id) => {
+                path.push(id);
+                let properties = p.arg(3).as_list().iter().filter_map(|x| self.read_property(x, path, left)).collect();
+                path.pop();
+                PropertyValue::Complex { usage: p.arg(2).as_str().unwrap_or_default().to_string(), properties }
+            }
             _ => return None,
         };
         Some(Property { name, value })
@@ -2817,56 +3009,190 @@ impl<'a> Importer<'a> {
                 return false;
             }
             let n = dir.perp() * ((v0 + v1) / 2.0);
-            return self.add_beam(id, e, (a + n, b + n), (v1 - v0, ex.vector.z.abs()), z1);
+            let (width, height) = (v1 - v0, ex.vector.z.abs());
+            let read = self.rect_section(id, width, height);
+            return self.add_beam(id, e, (a + n, b + n), read, z1);
         }
-        let Some(ex) = body.sole_extrusion().filter(|e| e.profile.is_simple()).cloned() else { return false };
-        let (center, x, w, h) = ex.profile.rect();
-        let (start, end, width, height) = if ex.is_vertical() {
+        let Some(ex) = body.sole_extrusion_with_voids().cloned() else { return false };
+        if ex.is_vertical() {
             // Plan rectangle extruded upwards: the long side is the beam.
+            if !ex.profile.is_simple() {
+                return false;
+            }
+            let (center, x, w, h) = ex.profile.rect();
             let c = ex.plane_point(center).truncate();
             let xw = ex.plane_vector(x).truncate().try_normalize().unwrap_or(DVec2::X);
             let (along, len, across) = if w >= h { (xw, w, h) } else { (xw.perp(), h, w) };
-            (c - along * len / 2.0, c + along * len / 2.0, across, ex.vector.z.abs())
-        } else if ex.vector.normalize().z.abs() < 0.1 {
-            // Section extruded along the beam.
-            let start = ex.plane_point(center);
-            let end = start + ex.vector;
-            let rx = ex.plane_vector(x);
-            let (width, height) = if rx.z.abs() > rx.truncate().length() { (h, w) } else { (w, h) };
-            (start.truncate(), end.truncate(), width, height)
-        } else {
+            let height = ex.vector.z.abs();
+            let read = self.rect_section(id, across, height);
+            return self.add_beam(id, e, (c - along * len / 2.0, c + along * len / 2.0), read, z1);
+        }
+        // A section extruded along the beam, level.
+        let Some(dir) = ex.vector.truncate().try_normalize().filter(|_| ex.vector.normalize().z.abs() < 0.1) else {
             return false;
         };
-        self.add_beam(id, e, (start, end), (width, height), z1)
+        let n = dir.perp();
+        let across = n.extend(0.0);
+        // The profile plane's axes across the beam (to its left) and up.
+        let (xw, yw) = (ex.plane_vector(DVec2::X), ex.plane_vector(DVec2::Y));
+        let (xv, xz, yv, yz) = (xw.dot(across), xw.z, yw.dot(across), yw.z);
+        let rigid = (xw.length() - 1.0).abs() < 1e-6 && (yw.length() - 1.0).abs() < 1e-6 && xw.dot(yw).abs() < 1e-6;
+        let world: Vec<DVec3> = ex.profile.pts.iter().map(|p| ex.plane_point(*p)).collect();
+        let origin = ex.plane_point(DVec2::ZERO);
+        let read = if rigid && xv * yz - xz * yv > 0.0 {
+            let Some(read) = self.read_section(id, &ex) else { return false };
+            let turn = xz.atan2(xv).to_degrees();
+            ReadSection { rotation_deg: read.rotation_deg + if turn.abs() < 1e-9 { 0.0 } else { turn }, ..read }
+        } else {
+            // The section as seen along the beam.
+            let in_section = |w: DVec3| DVec2::new((w - origin).dot(across), w.z);
+            let holes: Vec<Vec<DVec2>> =
+                ex.profile.holes.iter().map(|h| h.iter().map(|p| in_section(ex.plane_point(*p))).collect()).collect();
+            let outer: Vec<DVec2> = world.iter().map(|w| in_section(*w)).collect();
+            let Some(read) = loose_section(&outer, &holes) else { return false };
+            read
+        };
+        // The body's middle across the beam, on the axis when it has one along the beam.
+        let (a, b) = match body.axis {
+            Some((a, b)) if (b - a).try_normalize().is_some_and(|d| d.dot(dir) > 1.0 - 1e-6) => (a, b),
+            _ => (origin.truncate(), origin.truncate() + ex.vector.truncate()),
+        };
+        let Some((v0, v1)) = range(world.iter().map(|w| (w.truncate() - a).dot(n))) else { return false };
+        let shift = n * ((v0 + v1) / 2.0);
+        self.add_beam(id, e, (a + shift, b + shift), read, z1)
     }
 
-    /// A native beam along `start`-`end` with its top at `z1`.
-    fn add_beam(
-        &mut self,
-        id: u32,
-        e: &Entity,
-        (start, end): (DVec2, DVec2),
-        (width, height): (f64, f64),
-        z1: f64,
-    ) -> bool {
-        if start.distance(end) < 0.01 || !(start.is_finite() && end.is_finite() && width > 1e-6 && height > 1e-6) {
+    /// A native beam along `start`-`end` with its top at `z1`, its type of the section `read`.
+    fn add_beam(&mut self, id: u32, e: &Entity, (start, end): (DVec2, DVec2), read: ReadSection, z1: f64) -> bool {
+        if start.distance(end) < 0.01 || !(start.is_finite() && end.is_finite() && z1.is_finite()) {
             return false;
         }
-        let (level, elevation) = self.level_for(id, z1 - height);
-        let name = self.type_name(id, e);
         let material = self.main_material(id, e);
+        let profile = self.profile_for(id, &read, &material);
+        // Without a profile (the project has no room for more) only a box is held exactly.
+        if profile.is_none()
+            && (!matches!(read.shape, ProfileShape::Rect { chamfer: 0.0, .. }) || read.rotation_deg != 0.0)
+        {
+            return false;
+        }
+        let turn = read.rotation_deg;
+        let mut data = TypeData::Beam {
+            width: 1.0,
+            height: 1.0,
+            material,
+            shape: SectionShape::Solid,
+            profile,
+            profile_rotation_deg: turn,
+            profile_mirror: false,
+        };
+        // The legacy size is the profile's box, as edits keep it.
+        let size = match profile {
+            Some(_) => self.p.type_section(&data).map(|s| s.outline.bbox()).map(|(lo, hi)| hi - lo),
+            None => read.shape.outline().ok().map(|o| o.bbox()).map(|(lo, hi)| hi - lo),
+        };
+        let Some(size) = size.filter(|s| s.is_finite() && s.x > 1e-6 && s.y > 1e-6) else { return false };
+        if let TypeData::Beam { width, height, .. } = &mut data {
+            *width = size.x;
+            *height = size.y;
+        }
+        let (level, elevation) = self.level_for(id, z1 - size.y);
+        let name = self.type_name(id, e);
         let uid = self.type_uid(id);
+        let fallback = profile
+            .and_then(|p| self.p.profile(p))
+            .map_or_else(|| format!("{:.0} x {:.0}", size.x * 100.0, size.y * 100.0), |p| p.name.clone());
         let type_id = self.find_or_add_type(
             Category::Beam,
             name,
-            format!("{:.0} x {:.0}", width * 100.0, height * 100.0),
+            fallback,
             uid,
-            |d| matches!(d, TypeData::Beam { width: a, height: b, shape: SectionShape::Solid, .. } if (a - width).abs() < TYPE_TOL && (b - height).abs() < TYPE_TOL),
-            || TypeData::Beam { width, height, material, shape: SectionShape::Solid },
+            |d| same_section(d, profile, turn, &data),
+            || data.clone(),
         );
         let beam = Beam::new(start, end, z1 - elevation);
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
         true
+    }
+}
+
+/// A column or beam section read from an IFC profile.
+struct ReadSection {
+    shape: ProfileShape,
+    /// The profile's name in the file.
+    name: Option<String>,
+    /// Turn of the shape in the profile plane, degrees counter-clockwise.
+    rotation_deg: f64,
+    /// The profile-plane point the shape's outline is centered on (its box's middle).
+    center: DVec2,
+}
+
+/// A section drawn as `outer` with `holes`: a sketch of those points
+/// (centered on their box). `None` when it does not make a valid outline,
+/// has more points or openings than a sketch holds, or a point is not
+/// finite: the product then keeps its exact mesh as a component.
+fn loose_section(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Option<ReadSection> {
+    let (lo, hi) = polygon_bounds(outer.iter().copied())?;
+    let center = (lo + hi) * 0.5;
+    let points = outer.len() + holes.iter().map(Vec::len).sum::<usize>();
+    let sketch = (holes.len() <= MAX_SKETCH_OPENINGS && points <= MAX_SKETCH_POINTS).then(|| {
+        let ring = |r: &[DVec2]| -> Vec<ProfilePoint> {
+            r.iter().map(|p| ProfilePoint::new(literal(p.x - center.x), literal(p.y - center.y))).collect()
+        };
+        ProfileShape::Sketch(ParamSketch {
+            params: Vec::new(),
+            outline: ring(outer),
+            openings: holes.iter().map(|h| ring(h)).collect(),
+        })
+    });
+    let shape = sketch.filter(|s| s.outline().is_ok())?;
+    Some(ReadSection { shape, name: None, rotation_deg: 0.0, center })
+}
+
+/// The corners of the box around `pts`; `None` when there are none or one is not finite.
+fn polygon_bounds(pts: impl Iterator<Item = DVec2>) -> Option<(DVec2, DVec2)> {
+    let mut found = None;
+    for p in pts {
+        if !p.is_finite() {
+            return None;
+        }
+        found = Some(found.map_or((p, p), |(lo, hi): (DVec2, DVec2)| (lo.min(p), hi.max(p))));
+    }
+    found
+}
+
+/// The least and greatest of `values`; `None` when there are none or one is not finite.
+fn range(values: impl Iterator<Item = f64>) -> Option<(f64, f64)> {
+    polygon_bounds(values.map(DVec2::splat)).map(|(lo, hi)| (lo.x, hi.x))
+}
+
+/// A profile definition's `ProfileName`, cleaned.
+fn profile_name(e: &Entity) -> Option<String> {
+    e.arg(1).as_str().map(clean_profile_name).filter(|n| !n.is_empty())
+}
+
+/// A name trimmed and cut to a profile name's length.
+fn clean_profile_name(name: &str) -> String {
+    name.trim().chars().take(MAX_NAME).collect::<String>().trim().to_string()
+}
+
+/// Whether a column or beam type draws the section of `made`: the same
+/// profile and turn, unmirrored, and without a profile the same legacy section.
+fn same_section(d: &TypeData, profile: Option<ProfileId>, turn: f64, made: &TypeData) -> bool {
+    match (d, made) {
+        (
+            TypeData::Column { profile: p, profile_rotation_deg: r, profile_mirror: m, section: a, .. },
+            TypeData::Column { section: b, .. },
+        ) => *p == profile && !*m && (r - turn).abs() < 1e-6 && (profile.is_some() || a == b),
+        (
+            TypeData::Beam { profile: p, profile_rotation_deg: r, profile_mirror: m, width: w0, height: h0, .. },
+            TypeData::Beam { width: w1, height: h1, .. },
+        ) => {
+            *p == profile
+                && !*m
+                && (r - turn).abs() < 1e-6
+                && (profile.is_some() || ((w0 - w1).abs() < TYPE_TOL && (h0 - h1).abs() < TYPE_TOL))
+        }
+        _ => false,
     }
 }
 
@@ -2900,7 +3226,7 @@ fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
         }
     }
     let faces = cc_geom::coplanar::merge(&vertices, faces);
-    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
+    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices: vertices.into(), faces: faces.into() })
 }
 
 /// Bounds of the solids' vertices in the frame `inv` maps to.
@@ -2935,7 +3261,10 @@ fn same_items(a: &[ComponentItem], b: &[ComponentItem]) -> bool {
                     ) => {
                         fa == fb
                             && va.len() == vb.len()
-                            && va.iter().zip(vb).all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
+                            && va
+                                .iter()
+                                .zip(vb.iter())
+                                .all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
                     }
                     (
                         ComponentShape::Extrusion { points: pa, z: za, height: ha },
@@ -3211,6 +3540,152 @@ END-ISO-10303-21;
         assert!(slab_components >= 1);
     }
 
+    /// Profiles as other tools write them (IFC2X3, millimeters, no material
+    /// profile sets): a named I column, an I whose root radius does not fit
+    /// (its drawn outline comes in as a sketch), an angle thicker than its
+    /// legs (an outline that crosses itself: a component), and a channel beam
+    /// extruded along its axis.
+    #[test]
+    fn foreign_and_hostile_profiles() {
+        let text = "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC2X3'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Foreign',$,$,$,$,(#2),#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#24=IFCDIRECTION((0.,0.,1.));
+#30=IFCAXIS2PLACEMENT2D(#13,$);
+#40=IFCRELCONTAINEDINSPATIALSTRUCTURE('3XvctVUKr0kugbFTf53O9L',$,$,$,(#50,#60,#70,#80),#10);
+#50=IFCCOLUMN('4XvctVUKr0kugbFTf53O9L',$,'A',$,$,#11,#51,$);
+#51=IFCPRODUCTDEFINITIONSHAPE($,$,(#52));
+#52=IFCSHAPEREPRESENTATION(#2,'Body','SweptSolid',(#53));
+#53=IFCEXTRUDEDAREASOLID(#54,$,#24,3000.);
+#54=IFCISHAPEPROFILEDEF(.AREA.,'IPE200',#30,100.,200.,5.6,8.5,12.,$,$);
+#60=IFCCOLUMN('5XvctVUKr0kugbFTf53O9L',$,'B',$,$,#61,#64,$);
+#61=IFCLOCALPLACEMENT(#11,#62);
+#62=IFCAXIS2PLACEMENT3D(#63,$,$);
+#63=IFCCARTESIANPOINT((2000.,0.,0.));
+#64=IFCPRODUCTDEFINITIONSHAPE($,$,(#65));
+#65=IFCSHAPEREPRESENTATION(#2,'Body','SweptSolid',(#66));
+#66=IFCEXTRUDEDAREASOLID(#67,$,#24,3000.);
+#67=IFCISHAPEPROFILEDEF(.AREA.,'Bad',#30,100.,200.,5.6,8.5,500.,$,$);
+#70=IFCCOLUMN('6XvctVUKr0kugbFTf53O9L',$,'C',$,$,#71,#74,$);
+#71=IFCLOCALPLACEMENT(#11,#72);
+#72=IFCAXIS2PLACEMENT3D(#73,$,$);
+#73=IFCCARTESIANPOINT((4000.,0.,0.));
+#74=IFCPRODUCTDEFINITIONSHAPE($,$,(#75));
+#75=IFCSHAPEREPRESENTATION(#2,'Body','SweptSolid',(#76));
+#76=IFCEXTRUDEDAREASOLID(#77,$,#24,3000.);
+#77=IFCLSHAPEPROFILEDEF(.AREA.,$,#30,100.,100.,150.,$,$,$);
+#80=IFCBEAM('7XvctVUKr0kugbFTf53O9L',$,'D',$,$,#81,#84,$);
+#81=IFCLOCALPLACEMENT(#11,#82);
+#82=IFCAXIS2PLACEMENT3D(#83,$,$);
+#83=IFCCARTESIANPOINT((0.,5000.,3000.));
+#84=IFCPRODUCTDEFINITIONSHAPE($,$,(#85));
+#85=IFCSHAPEREPRESENTATION(#2,'Body','SweptSolid',(#86));
+#86=IFCEXTRUDEDAREASOLID(#87,#88,#24,4000.);
+#87=IFCUSHAPEPROFILEDEF(.AREA.,'U100',#30,100.,50.,6.,8.5,$,$,$);
+#88=IFCAXIS2PLACEMENT3D(#13,#89,#90);
+#89=IFCDIRECTION((1.,0.,0.));
+#90=IFCDIRECTION((0.,1.,0.));
+ENDSEC;
+END-ISO-10303-21;
+";
+        let (p, report) = import(text, Project::from_template()).unwrap();
+        let shape_of = |name: &str| {
+            let e = p.elements.values().find(|e| p.type_name(e.type_id) == name).unwrap();
+            let ty = p.element_type(e.type_id).unwrap();
+            let (TypeData::Column { profile: Some(id), .. } | TypeData::Beam { profile: Some(id), .. }) = &ty.data
+            else {
+                panic!("{name} has no profile: {:?}", ty.data);
+            };
+            p.profile(*id).unwrap().clone()
+        };
+        assert_eq!(report.imported.get(&Category::Column), Some(&2), "{report:?}");
+        assert_eq!(report.imported.get(&Category::Beam), Some(&1), "{report:?}");
+        let a = shape_of("A");
+        assert_eq!(a.name, "IPE200");
+        let ProfileShape::I { d, bf, tw, tf, r } = a.shape else { panic!("{:?}", a.shape) };
+        for (got, want) in [(d, 0.2), (bf, 0.1), (tw, 0.0056), (tf, 0.0085), (r, 0.012)] {
+            assert!((got - want).abs() < 1e-9, "{got} vs {want}");
+        }
+        let b = shape_of("B");
+        assert_eq!(b.name, "Bad");
+        assert!(matches!(b.shape, ProfileShape::Sketch(_)), "{:?}", b.shape);
+        // Its drawn outline crosses itself: no profile, a component of its class.
+        let c = p.elements.values().find(|e| p.type_name(e.type_id) == "C").unwrap();
+        assert_eq!(c.category(), Category::Component);
+        assert_eq!(report.generic.get("IfcColumn"), Some(&1), "{report:?}");
+        let d = shape_of("D");
+        assert_eq!(d.name, "U100");
+        assert!(matches!(d.shape, ProfileShape::Channel { .. }), "{:?}", d.shape);
+        let (_, beam) = p
+            .elements
+            .values()
+            .find_map(|e| match &e.kind {
+                ElementKind::Beam(b) => Some((e, b.clone())),
+                _ => None,
+            })
+            .unwrap();
+        assert!(beam.start.distance(DVec2::new(0.0, 5.0)) < 1e-9, "{}", beam.start);
+        assert!(beam.end.distance(DVec2::new(4.0, 5.0)) < 1e-9, "{}", beam.end);
+        let mut again = p.clone();
+        assert_eq!(again.repair(), 0);
+    }
+
+    /// An outline of more points than a sketch holds (or with a point that is
+    /// not a number) gives no section: the column stays a component.
+    #[test]
+    fn oversized_outlines_become_components() {
+        let n = MAX_SKETCH_POINTS + 1;
+        let circle: Vec<DVec2> =
+            (0..n).map(|i| DVec2::from_angle(std::f64::consts::TAU * i as f64 / n as f64) * 0.1).collect();
+        assert!(loose_section(&circle, &[]).is_none());
+        let mut bad = circle[..8].to_vec();
+        bad[3] = DVec2::new(f64::NAN, 0.0);
+        assert!(loose_section(&bad, &[]).is_none());
+
+        // A column extruded from that outline keeps its exact mesh.
+        let mut text = String::from(
+            "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'Foreign',$,$,$,$,(#2),#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#24=IFCDIRECTION((0.,0.,1.));
+#40=IFCRELCONTAINEDINSPATIALSTRUCTURE('3XvctVUKr0kugbFTf53O9L',$,$,$,(#50),#10);
+#50=IFCCOLUMN('4XvctVUKr0kugbFTf53O9L',$,'Round',$,$,#11,#51,$);
+#51=IFCPRODUCTDEFINITIONSHAPE($,$,(#52));
+#52=IFCSHAPEREPRESENTATION(#2,'Body','SweptSolid',(#53));
+#53=IFCEXTRUDEDAREASOLID(#54,$,#24,3.);
+#54=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,'Many',#55);
+",
+        );
+        let ids: Vec<String> = (0..n).map(|i| format!("#{}", 100 + i)).collect();
+        text.push_str(&format!("#55=IFCPOLYLINE(({},#100));\n", ids.join(",")));
+        for (i, p) in circle.iter().enumerate() {
+            text.push_str(&format!("#{}=IFCCARTESIANPOINT(({:.9},{:.9}));\n", 100 + i, p.x, p.y));
+        }
+        text.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
+        let (p, report) = import(&text, Project::from_template()).unwrap();
+        assert_eq!(report.imported.get(&Category::Column), None, "{report:?}");
+        assert_eq!(report.imported.get(&Category::Component), Some(&1), "{report:?}");
+        assert!(p.profiles.values().all(|f| f.name != "Many"));
+    }
+
     /// Slabs drawn with circles and arcs come in as floors with the curves as
     /// their sketch, so areas and volumes are those of the true curves (#264):
     /// a round slab with a square shaft, a slab with a half-round end (a
@@ -3336,6 +3811,83 @@ END-ISO-10303-21;
     /// Geometry a hostile file can throw at the importer: cyclic booleans and
     /// mapped items, out-of-range and negative indices, absurd knot
     /// multiplicities and angles, empty paths. Nothing may panic or hang.
+    #[test]
+    fn files_past_the_size_limit_are_refused_unread() {
+        let dir = std::env::temp_dir().join(format!("ccad-ifc-size-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("huge.ifc");
+        std::fs::File::create(&path).unwrap().set_len(MAX_IFC_BYTES + 1).unwrap();
+        let err = import_file(&path, Project::empty()).unwrap_err();
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(matches!(&err, ImportError::Io(e) if e.kind() == std::io::ErrorKind::FileTooLarge), "{err}");
+    }
+
+    /// Complex properties that contain themselves, or that fan out through
+    /// distinct ones, are read once and within a budget, not 10^8 times.
+    #[test]
+    fn complex_properties_that_cycle_or_fan_out_are_bounded() {
+        // #100 holds itself ten times; #101..#108 each hold the next ten times.
+        let mut props = format!("#100=IFCCOMPLEXPROPERTY('Self',$,'u',({}));", ["#100"; 10].join(","));
+        for k in 101..=108 {
+            let inner = if k == 108 { "#109".to_string() } else { vec![format!("#{}", k + 1); 10].join(",") };
+            props += &format!("#{k}=IFCCOMPLEXPROPERTY('Fan',$,'u',({inner}));");
+        }
+        props += "#109=IFCPROPERTYSINGLEVALUE('Leaf',$,IFCLABEL('x'),$);";
+        let text = format!(
+            "ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0YvctVUKr0kugbFTf53O9L',$,'P',$,$,$,$,$,#3);
+#3=IFCUNITASSIGNMENT((#4));
+#4=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#10=IFCBUILDINGSTOREY('1XvctVUKr0kugbFTf53O9L',$,'Level 1',$,$,#11,$,$,.ELEMENT.,0.);
+#11=IFCLOCALPLACEMENT($,#12);
+#12=IFCAXIS2PLACEMENT3D(#13,$,$);
+#13=IFCCARTESIANPOINT((0.,0.,0.));
+#20=IFCFURNISHINGELEMENT('5XvctVUKr0kugbFTf53O9L',$,'Chair',$,$,#11,#30,$);
+#30=IFCPRODUCTDEFINITIONSHAPE($,$,(#31));
+#31=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#32));
+#32=IFCBLOCK(#12,1.,1.,1.);
+#40=IFCRELCONTAINEDINSPATIALSTRUCTURE('3XvctVUKr0kugbFTf53O9L',$,$,$,(#20),#10);
+#50=IFCPROPERTYSET('6XvctVUKr0kugbFTf53O9L',$,'Pset_Bomb',$,(#100,#101));
+#51=IFCRELDEFINESBYPROPERTIES('7XvctVUKr0kugbFTf53O9L',$,$,$,(#20),#50);
+{props}
+ENDSEC;
+END-ISO-10303-21;
+"
+        );
+        let (p, _) = import(&text, Project::from_template()).unwrap();
+        fn count(props: &[cc_core::properties::Property]) -> usize {
+            props
+                .iter()
+                .map(|p| match &p.value {
+                    cc_core::properties::PropertyValue::Complex { properties, .. } => 1 + count(properties),
+                    _ => 1,
+                })
+                .sum()
+        }
+        let sets: Vec<_> = p
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Component(c) => Some(&c.properties),
+                _ => None,
+            })
+            .flatten()
+            .filter(|s| s.name == "Pset_Bomb")
+            .collect();
+        let [set] = sets.as_slice() else { panic!("{sets:?}") };
+        let total = count(&set.properties);
+        assert!(total <= MAX_SET_PROPERTIES, "{total}");
+        // The self-holding property is read once, with nothing inside.
+        let first = set.properties.first().unwrap();
+        assert!(
+            matches!(&first.value, cc_core::properties::PropertyValue::Complex { properties, .. } if properties.is_empty())
+        );
+    }
+
     #[test]
     fn hostile_geometry_is_survived() {
         let text = "ISO-10303-21;

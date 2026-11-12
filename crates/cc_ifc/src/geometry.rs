@@ -12,6 +12,7 @@
 
 use crate::parse::{Entity, Param, StepFile};
 use cc_core::sketch::SketchCurve;
+use cc_core::structural_profile::ProfileShape;
 use cc_geom::polygon;
 use glam::{DAffine3, DMat3, DVec2, DVec3};
 use std::f64::consts::TAU;
@@ -123,6 +124,8 @@ pub struct Extrusion {
     pub xf: DAffine3,
     /// Extrusion vector in world coordinates (direction times depth).
     pub vector: DVec3,
+    /// The profile definition entity extruded.
+    pub source: Option<u32>,
 }
 
 impl Extrusion {
@@ -456,11 +459,69 @@ pub struct Geometry<'a> {
     /// Chords of a full circle while curves are sampled (finer for measured
     /// center lines, see [`Geometry::measured_curve`]).
     circle_segments: std::cell::Cell<usize>,
+    /// The instances being read, outermost first ([`Geometry::enter`]).
+    path: std::cell::Cell<Vec<u32>>,
+    /// Instances the current walk (from an empty path) may still read.
+    walk_left: std::cell::Cell<usize>,
+    /// What `walk_left` starts at ([`MAX_WALK_VISITS`]; smaller in tests).
+    max_walk_visits: usize,
+    /// Instances the whole file may still read.
+    file_left: std::cell::Cell<usize>,
+}
+
+/// Most instances one walk over items, curves and profiles reads: their
+/// references may fan out (twenty mapped items of one representation,
+/// each mapping it again) faster than the depth bound helps.
+const MAX_WALK_VISITS: usize = 1_000_000;
+/// Most instances the walks of one file read in all.
+const MAX_FILE_VISITS: usize = 50_000_000;
+
+/// An instance on the current path, taken off when dropped.
+struct Visit<'g, 'a> {
+    g: &'g Geometry<'a>,
+}
+
+impl Drop for Visit<'_, '_> {
+    fn drop(&mut self) {
+        let mut path = self.g.path.take();
+        path.pop();
+        self.g.path.set(path);
+    }
 }
 
 impl<'a> Geometry<'a> {
     pub fn new(f: &'a StepFile, scale: f64, angle: f64) -> Self {
-        Self { f, scale, angle, circle_segments: std::cell::Cell::new(CIRCLE_SEGMENTS) }
+        Self {
+            f,
+            scale,
+            angle,
+            circle_segments: std::cell::Cell::new(CIRCLE_SEGMENTS),
+            path: std::cell::Cell::new(Vec::new()),
+            walk_left: std::cell::Cell::new(MAX_WALK_VISITS),
+            max_walk_visits: MAX_WALK_VISITS,
+            file_left: std::cell::Cell::new(MAX_FILE_VISITS),
+        }
+    }
+
+    /// Start reading instance `param` within a walk: `None` when it is
+    /// being read already (a cycle) or the walk or the file has read too
+    /// many instances; else a guard that keeps it on the path.
+    fn enter(&self, param: &Param) -> Option<Visit<'_, 'a>> {
+        let id = param.as_ref()?;
+        let mut path = self.path.take();
+        if path.is_empty() {
+            self.walk_left.set(self.max_walk_visits);
+        }
+        let (walk, file) = (self.walk_left.get(), self.file_left.get());
+        if walk == 0 || file == 0 || path.contains(&id) {
+            self.path.set(path);
+            return None;
+        }
+        self.walk_left.set(walk - 1);
+        self.file_left.set(file - 1);
+        path.push(id);
+        self.path.set(path);
+        Some(Visit { g: self })
     }
 
     /// Chords for an arc of `angle` radians at the current sampling.
@@ -615,6 +676,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH {
             return Vec::new();
         }
+        let Some(_visit) = self.enter(param) else { return Vec::new() };
         let mut pts = match e.name.as_str() {
             "IFCPOLYLINE" => e.arg(0).as_list().iter().filter_map(|p| self.point(p)).collect(),
             "IFCINDEXEDPOLYCURVE" => self.indexed_curve(e),
@@ -691,6 +753,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH {
             return None;
         }
+        let _visit = self.enter(param)?;
         let lines = |pts: &[DVec3]| -> Vec<SketchCurve> {
             pts.windows(2)
                 .filter(|w| w[0].truncate().distance(w[1].truncate()) > cc_core::sketch::JOIN_TOL)
@@ -819,16 +882,18 @@ impl<'a> Geometry<'a> {
                     let from_value = v.map(|v| v * self.angle);
                     if prefer_points { from_point.or(from_value) } else { from_value.or(from_point) }
                 };
-                let (Some(a), Some(mut b)) = (param(t1), param(t2)) else { return Vec::new() };
-                if sense {
-                    while b <= a + 1e-12 {
-                        b += TAU;
-                    }
-                } else {
-                    while b >= a - 1e-12 {
-                        b -= TAU;
-                    }
+                let (Some(a), Some(b)) = (param(t1), param(t2)) else { return Vec::new() };
+                // The turn from `a` to `b` along the sense, within one full
+                // turn (an equal end is a full turn).
+                let turn = |d: f64| match d.rem_euclid(TAU) {
+                    d if d <= 1e-12 => TAU,
+                    d => d,
+                };
+                let sweep = if sense { turn(b - a) } else { -turn(a - b) };
+                if !(a.is_finite() && b.is_finite() && sweep.is_finite()) {
+                    return Vec::new();
                 }
+                let b = a + sweep;
                 let n = self.arc_chords(b - a);
                 (0..=n).filter_map(|i| self.conic_point(basis, a + (b - a) * i as f64 / n as f64)).collect()
             }
@@ -929,6 +994,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH {
             return Vec::new();
         }
+        let Some(_visit) = self.enter(param) else { return Vec::new() };
         match e.name.as_str() {
             "IFCCOMPOSITEPROFILEDEF" => e.arg(2).as_list().iter().flat_map(|p| self.profiles(p, depth + 1)).collect(),
             "IFCDERIVEDPROFILEDEF" => {
@@ -941,6 +1007,50 @@ impl<'a> Geometry<'a> {
             }
             _ => self.profile(e).into_iter().collect(),
         }
+    }
+
+    /// The structural profile shape of a parametric profile definition,
+    /// when the shape holds it exactly (in meters, before its position);
+    /// `None` for other definitions and for what the shapes lack (edge
+    /// radii, slopes, a hollow rectangle's own inner radius).
+    pub fn parametric_shape(&self, e: &Entity) -> Option<ProfileShape> {
+        let len = |i: usize| self.positive(e.arg(i));
+        let opt = |i: usize| self.len(e.arg(i)).filter(|v| *v > 0.0).unwrap_or(0.0);
+        let unset = |i: usize| e.arg(i).as_f64().is_none_or(|v| v == 0.0);
+        Some(match e.name.as_str() {
+            "IFCISHAPEPROFILEDEF" if unset(8) && unset(9) => {
+                ProfileShape::I { bf: len(3)?, d: len(4)?, tw: len(5)?, tf: len(6)?, r: opt(7) }
+            }
+            "IFCUSHAPEPROFILEDEF" if unset(8) && unset(9) => {
+                ProfileShape::Channel { d: len(3)?, bf: len(4)?, tw: len(5)?, tf: len(6)?, r: opt(7) }
+            }
+            "IFCTSHAPEPROFILEDEF" if (8..=11).all(unset) => {
+                ProfileShape::T { d: len(3)?, bf: len(4)?, tw: len(5)?, tf: len(6)?, r: opt(7) }
+            }
+            "IFCLSHAPEPROFILEDEF" if unset(7) && unset(8) => {
+                let h = len(3)?;
+                ProfileShape::Angle { h, b: len(4).unwrap_or(h), t: len(5)?, r: opt(6) }
+            }
+            // A girth no longer than the wall is no lip a lipped channel holds: drawn as its outline.
+            "IFCCSHAPEPROFILEDEF" => {
+                let (d, bf, t, lip, ri) = (len(3)?, len(4)?, len(5)?, opt(6), opt(7));
+                if lip <= t {
+                    return None;
+                }
+                ProfileShape::ColdLippedU { d, bf, lip, t, ri }
+            }
+            "IFCRECTANGLEHOLLOWPROFILEDEF" => {
+                let (b, h, t, inner, ro) = (len(3)?, len(4)?, len(5)?, opt(6), opt(7));
+                if (inner - (ro - t).max(0.0)).abs() > 1e-7 {
+                    return None;
+                }
+                ProfileShape::RectTube { h, b, t, ro }
+            }
+            "IFCCIRCLEHOLLOWPROFILEDEF" => ProfileShape::RoundTube { d: 2.0 * len(3)?, t: len(4)? },
+            "IFCRECTANGLEPROFILEDEF" => ProfileShape::Rect { b: len(3)?, h: len(4)?, chamfer: 0.0 },
+            "IFCCIRCLEPROFILEDEF" => ProfileShape::Round { d: 2.0 * len(3)? },
+            _ => return None,
+        })
     }
 
     fn profile(&self, e: &Entity) -> Option<Profile> {
@@ -1178,6 +1288,7 @@ impl<'a> Geometry<'a> {
         if depth > MAX_DEPTH || out.len() > MAX_SOLIDS {
             return;
         }
+        let Some(_visit) = self.enter(param) else { return };
         let world = |mesh: Vec<Polygon>| -> Vec<Polygon> {
             let flip = xf.matrix3.determinant() < 0.0;
             mesh.into_iter()
@@ -1212,6 +1323,7 @@ impl<'a> Geometry<'a> {
                     let extrusion = (single && profile.closed).then(|| Extrusion {
                         xf: xf * position,
                         vector: xf.transform_vector3(vector),
+                        source: e.arg(0).as_ref(),
                         profile: profile.clone(),
                     });
                     out.push(Solid::new(id, mesh, extrusion));
@@ -1921,6 +2033,65 @@ mod tests {
         assert!((v - exact).abs() / exact < 0.02, "{v} vs {exact}");
     }
 
+    /// `levels` representations of `fan` mapped items each, every item of
+    /// one mapping the next representation; the last holds `last` (STEP).
+    fn mapped_fan(levels: u32, fan: usize, last: &str) -> String {
+        let mut s = String::from("#1=IFCCARTESIANPOINT((0.,0.,0.));#2=IFCAXIS2PLACEMENT3D(#1,$,$);");
+        s += "#3=IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,#1,$,$);";
+        // Level k: representation #(10k), map #(10k+1), mapped item #(10k+2) mapping it.
+        for k in 1..=levels {
+            let items =
+                if k == levels { last.to_string() } else { vec![format!("#{}", 10 * (k + 1) + 2); fan].join(",") };
+            s += &format!("#{}=IFCSHAPEREPRESENTATION($,'Body','MappedRepresentation',({items}));", 10 * k);
+            s += &format!("#{}=IFCREPRESENTATIONMAP(#2,#{});", 10 * k + 1, 10 * k);
+            s += &format!("#{}=IFCMAPPEDITEM(#{},#3);", 10 * k + 2, 10 * k + 1);
+        }
+        s
+    }
+
+    #[test]
+    fn mapped_items_that_fan_out_or_cycle_are_bounded() {
+        // 20 items at each of 17 levels: 20^16 visits unbounded, none with geometry.
+        let f = step(&mapped_fan(17, 20, "#1"));
+        let mut g = Geometry::new(&f, 1.0, 1.0);
+        g.max_walk_visits = 20_000;
+        let mut out = Vec::new();
+        g.items(&Param::Ref(12), DAffine3::IDENTITY, &mut out);
+        assert!(MAX_FILE_VISITS - g.file_left.get() <= 20_000);
+        assert!(g.path.take().is_empty());
+        // A representation that maps itself twenty times is read once.
+        let items = format!("{},#5", vec!["#12"; 20].join(","));
+        let f = step(&format!("{}#5=IFCBLOCK(#2,1.,1.,1.);", mapped_fan(1, 1, &items)));
+        let g = Geometry::new(&f, 1.0, 1.0);
+        let mut out = Vec::new();
+        g.items(&Param::Ref(12), DAffine3::IDENTITY, &mut out);
+        assert_eq!(out.len(), 1);
+        assert!(MAX_FILE_VISITS - g.file_left.get() <= 25);
+    }
+
+    #[test]
+    fn composite_curves_and_profiles_that_fan_out_are_bounded() {
+        // Composite curves of 20 segments, each the next composite, 17 deep;
+        // composite profiles likewise.
+        let mut s = String::new();
+        for k in 1..=17 {
+            let next = if k == 17 { "#999".to_string() } else { format!("#{}", 10 * (k + 1)) };
+            s += &format!("#{}=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,{next});", 10 * k + 1);
+            let segments = vec![format!("#{}", 10 * k + 1); 20].join(",");
+            s += &format!("#{}=IFCCOMPOSITECURVE(({segments}),.F.);", 10 * k);
+            let profiles =
+                if k == 17 { "#999".to_string() } else { vec![format!("#{}", 10 * (k + 1) + 5); 20].join(",") };
+            s += &format!("#{}=IFCCOMPOSITEPROFILEDEF(.AREA.,$,({profiles}),$);", 10 * k + 5);
+        }
+        let f = step(&s);
+        let mut g = Geometry::new(&f, 1.0, 1.0);
+        g.max_walk_visits = 20_000;
+        assert!(g.curve(&Param::Ref(10), 0).is_empty());
+        assert!(g.plan_curves(&Param::Ref(10), 0).is_none_or(|c| c.is_empty()));
+        assert!(g.profiles(&Param::Ref(15), 0).is_empty());
+        assert!(MAX_FILE_VISITS - g.file_left.get() <= 3 * 20_000);
+    }
+
     #[test]
     fn swept_disk_follows_its_path() {
         let path = [DVec3::ZERO, DVec3::new(4.0, 0.0, 0.0), DVec3::new(4.0, 3.0, 0.0)];
@@ -1928,6 +2099,37 @@ mod tests {
         let v = volume(&mesh);
         let exact = std::f64::consts::PI * 0.01 * 7.0;
         assert!((v - exact).abs() / exact < 0.05, "{v} vs {exact}");
+    }
+
+    fn step(data: &str) -> crate::parse::StepFile {
+        crate::parse::parse(&format!(
+            "ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{data}\nENDSEC;\nEND-ISO-10303-21;\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn trimmed_circles_with_huge_or_infinite_parameters_end() {
+        let base = "#1=IFCCARTESIANPOINT((0.,0.));#2=IFCAXIS2PLACEMENT2D(#1,$);#3=IFCCIRCLE(#2,1.);";
+        for (t1, t2, sense) in
+            [("0.", "1.E30", ".F."), ("1.E30", "0.", ".T."), ("0.", "1.E999", ".T."), ("-1.E999", "0.", ".F.")]
+        {
+            let f = step(&format!(
+                "{base}#4=IFCTRIMMEDCURVE(#3,(IFCPARAMETERVALUE({t1})),(IFCPARAMETERVALUE({t2})),{sense},.PARAMETER.);"
+            ));
+            let g = Geometry::new(&f, 1.0, 1.0);
+            let pts = g.curve(&Param::Ref(4), 0);
+            assert!(pts.len() <= 4 * CIRCLE_SEGMENTS + 1 && pts.iter().all(|p| p.is_finite()), "{t1} {t2}");
+        }
+        // A quarter turn either way, as before.
+        let f = step(&format!(
+            "{base}#4=IFCTRIMMEDCURVE(#3,(IFCPARAMETERVALUE(0.)),(IFCPARAMETERVALUE(1.5707963267948966)),.F.,.PARAMETER.);"
+        ));
+        let pts = Geometry::new(&f, 1.0, 1.0).curve(&Param::Ref(4), 0);
+        // Clockwise from (1, 0) the long way round to (0, 1), through (0, -1).
+        assert!(pts.first().is_some_and(|p| p.distance(DVec3::X) < 1e-9));
+        assert!(pts.last().is_some_and(|p| p.distance(DVec3::Y) < 1e-9));
+        assert!(pts.iter().any(|p| p.distance(-DVec3::Y) < 1e-9));
     }
 
     #[test]

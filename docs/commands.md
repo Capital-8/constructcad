@@ -12,7 +12,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`device_type_create`](#device_type_create), [`lps_conductor_create`](#lps_conductor_create), [`lps_conductor_type_create`](#lps_conductor_type_create), [`earth_ring_create`](#earth_ring_create), [`air_terminal_place`](#air_terminal_place), [`earth_electrode_place`](#earth_electrode_place), [`lps_check`](#lps_check), [`rack_place`](#rack_place), [`data_outlet_place`](#data_outlet_place), [`cabling_list`](#cabling_list), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`browser_schemes_list`](#browser_schemes_list), [`browser_scheme_create`](#browser_scheme_create), [`browser_scheme_set`](#browser_scheme_set), [`browser_scheme_delete`](#browser_scheme_delete), [`browser_scheme_use`](#browser_scheme_use), [`browser_tree`](#browser_tree), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
-- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`fill_patterns_list`](#fill_patterns_list), [`fill_pattern_get`](#fill_pattern_get), [`fill_pattern_create`](#fill_pattern_create), [`fill_pattern_set`](#fill_pattern_set), [`fill_pattern_duplicate`](#fill_pattern_duplicate), [`fill_pattern_delete`](#fill_pattern_delete), [`fill_pattern_import`](#fill_pattern_import), [`fill_pattern_export`](#fill_pattern_export), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
+- **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`fill_patterns_list`](#fill_patterns_list), [`fill_pattern_get`](#fill_pattern_get), [`fill_pattern_create`](#fill_pattern_create), [`fill_pattern_set`](#fill_pattern_set), [`fill_pattern_duplicate`](#fill_pattern_duplicate), [`fill_pattern_delete`](#fill_pattern_delete), [`fill_pattern_import`](#fill_pattern_import), [`fill_pattern_export`](#fill_pattern_export), [`profiles_list`](#profiles_list), [`profile_get`](#profile_get), [`profile_create`](#profile_create), [`profile_set`](#profile_set), [`profile_duplicate`](#profile_duplicate), [`profile_delete`](#profile_delete), [`profile_catalog`](#profile_catalog), [`profile_import`](#profile_import), [`profile_type_create`](#profile_type_create), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
 - **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
@@ -351,7 +351,7 @@ No parameters.
 
 ### `element_get`
 
-*query* — An element with all its parameters (`params`, editable with `element_set`) and derived values (length, height, thickness, volume, room area and perimeter; for beams the length after joins and what each end is framed into).
+*query* — An element with all its parameters (`params`, editable with `element_set`) and derived values (length, height, thickness, volume, room area and perimeter; for beams the length after joins and what each end is framed into; for columns and beams the `section`: profile name, area, mass per length with the material's density (null without one), `ix`, `iy`, `wx`, `wy`).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -741,7 +741,7 @@ No parameters.
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `panels` | integer | optional | Number of panels (default: about one per 1.5 m). |
 | `pattern` | string | optional | `pratt`, `howe` or `warren`. |
-| `post_type` | id or name | optional | Column type of the posts (default: the first profile column type). |
+| `post_type` | id or name | optional | Column type of the posts (default: the first column type of a steel or cold-formed profile, else of a steel section). |
 | `web_type` | id or name | optional | Beam type of the diagonals (default: the chord type). |
 
 ### `rebar_create`
@@ -768,7 +768,7 @@ No parameters.
 
 ### `analytical_model`
 
-*query* — The analytical model of the structure: structural columns and beams as members along their center lines between shared nodes. Beams framed into columns end on the column axis, beams ending on beams end on their line, and members are split where others connect.
+*query* — The analytical model of the structure: structural columns and beams as members along their center lines between shared nodes. Beams framed into columns end on the column axis, beams ending on beams end on their line, and members are split where others connect. Each member carries its `section`: the profile's name, `width` and `height` (m), `area` (m²), `ix`, `iy` and `j` (m⁴).
 
 No parameters.
 
@@ -2016,7 +2016,7 @@ No parameters.
 
 ### `type_set`
 
-*edit* — Change a type: its name, its parameters (`params`, merged into what `type_get` shows: layers, sizes, materials, a component's `def`…) and its identity data (`info`: type mark, description, manufacturer, cost…). Changing a component's definition updates every type of that component, each keeping its own parameter values.
+*edit* — Change a type: its name, its parameters (`params`, merged into what `type_get` shows: layers, sizes, materials, a component's `def`…) and its identity data (`info`: type mark, description, manufacturer, cost…). A column or beam type takes `profile` (a structural profile's name or id; null is refused: these types always point to a profile), `profile_rotation_deg` and `profile_mirror`. `width`/`height` are the box of the turned profile; changing them alone re-points the type to a profile of that section, unturned and unmirrored. Changing a component's definition updates every type of that component, each keeping its own parameter values.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2484,6 +2484,97 @@ No parameters.
 |---|---|---|---|
 | `path` | string | optional | Path of the .pat file to write. |
 | `patterns` | [id or name, …] | optional | Fill pattern ids or names (default: all the project's). |
+
+### `profiles_list`
+
+*query* — The project's structural profiles, optionally of one material or shape: id, name, material, shape, area (m²), mass per meter in steel (kg/m) and the number of column and beam types using each.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `material` | string | optional | Only profiles of this material: `steel`, `cold_formed`, `timber` or `concrete`. |
+| `shape` | string | optional | Only profiles of this shape code (`i`, `channel`, `rect`, `sketch`…). |
+
+### `profile_get`
+
+*query* — One structural profile: its material, shape and parameters (and the sketch of a sketched one), the outline (outer loop counter-clockwise, holes clockwise, meters, centered on its bounding box), its section properties (SI units; mass per length with the usual density of its material), its catalog entry and the names of the types using it.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `profile` | id or name | required | Profile id or name. |
+
+### `profile_create`
+
+*edit* — Create a structural profile: a standard shape of a material (its default dimensions, changed by `params`), or a sketch drawn with `curves` (and `openings`), whose points keep the drawn coordinates and which declares `sketch_params`. Without a name it gets one from its shape and size.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `material` | string | required | Material: `steel`, `cold_formed`, `timber` or `concrete`. |
+| `curves` | [JSON, …] | optional | The closed outline of a sketched profile, in meters. |
+| `name` | string | optional | Name (unique, ignoring case; default: from the shape and its size). |
+| `openings` | [[JSON, …], …] | optional | The openings of a sketched profile: each a closed loop of curves inside the outline. |
+| `params` | object | optional | Parameter values by name, meters (degrees for `angle`), over the shape's defaults; see `profile_get` `params` for the names. |
+| `shape` | string | optional | Shape code: `i`, `i_asym`, `channel`, `t`, `angle`, `cold_u`, `cold_lipped_u`, `cold_z`, `cold_hat`, `rect_tube`, `round_tube`, `rect`, `round`, `concrete_t`, `concrete_l` or `sketch` (the default with `curves`; required without them). |
+| `sketch_params` | [object, …] | optional | Numeric parameters a sketched profile declares (lengths). |
+
+### `profile_set`
+
+*edit* — Change a structural profile: its name, material, parameter values or, for a sketched one, its sketch (a merge patch over the `sketch` that `profile_get` shows: `params`, `outline` and `openings`). A change that leaves no valid outline is refused. The column and beam types using it follow; a profile whose size or material changes is no longer its catalog entry.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `profile` | id or name | required | Profile id or name. |
+| `material` | string | optional | New material: `steel`, `cold_formed`, `timber` or `concrete`. |
+| `name` | string | optional | New name (unique, ignoring case). |
+| `params` | object | optional | Parameter values by name, meters (degrees for `angle`). |
+| `sketch` | JSON | optional | Merge patch over a sketched profile's sketch. |
+
+### `profile_duplicate`
+
+*edit* — Copy a structural profile under a new name (default: the name with a number).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `profile` | id or name | required | Profile id or name. |
+| `name` | string | optional | Name of the copy (unique, ignoring case). |
+
+### `profile_delete`
+
+*edit* — Delete a structural profile. Refused while column or beam types use it, unless `replace_with` names the profile they take instead, in the same undo step.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `profile` | id or name | required | Profile id or name. |
+| `replace_with` | id or name | optional | The profile (id or name) the types using it take instead. |
+
+### `profile_catalog`
+
+*query* — The built-in profile catalogs (standard steel, cold-formed, timber and hollow sections). Without `series`: each series' `code`, `name`, `material`, `shape` and row `count`. With it: the series' `code`, `name` and `rows`, each a `designation`, the `name` an imported profile gets and its `params` (meters; degrees for `angle`). Catalogs are not part of the project; `profile_import` copies rows in.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `search` | string | optional | Only rows whose designation contains this text (ignoring case). |
+| `series` | string | optional | Series code (`W`, `HP`, `IPE`, `HEA`, `HEB`, `NBR6355-Ue`, `SHS`…; ignoring case). |
+
+### `profile_import`
+
+*edit* — Copy rows of a built-in catalog series into the project as profiles that remember their catalog entry, in one undo step (none when nothing is imported). A row whose profile name is taken keeps the existing profile (`on_clash: "keep"`, the default) or comes in under a free name (`"rename"`). Returns the `imported` profiles (`id`, `name`), the names `kept` and the designations the series does not have (`unknown`).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `designations` | [string, …] | required | Designations to import, as `profile_catalog` lists them (ignoring case). |
+| `series` | string | required | Series code (see `profile_catalog`). |
+| `on_clash` | string | optional | `keep` (default) or `rename`. |
+
+### `profile_type_create`
+
+*edit* — Make a column or beam type of a structural profile: a copy of the category's first type given the profile, its width and height becoming the profile's bounding box. Returns its `id` and `name`.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `category` | string | required | `column` or `beam`. |
+| `profile` | id or name | required | Profile id or name. |
+| `material` | string | optional | Material name (default: the first project material of the profile's class, metal, wood or concrete; else the template's concrete). |
+| `name` | string | optional | Type name (unique in its category; default: the profile's name, made unique). |
 
 ### `paint`
 
@@ -3158,6 +3249,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `allow_files` | boolean | optional | Let the graph's commands read and write files (open, save, import, export). Off by default; a graph file cannot turn it on, and it stays off when another command (a plugin's) runs the graph. |
 | `brief` | boolean | optional | Leave each node's outputs out of the result (only errors, outputs and counts). |
 | `graph` | JSON | optional | The graph itself (the contents of a `.ccgraph` file), instead of `path`. |
 | `inputs` | object | optional | Values of the graph's input nodes, by their names. |
@@ -3169,6 +3261,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `allow_files` | boolean | optional | Check it as `graph_run` with `allow_files` would run it (file commands are then no problem). |
 | `graph` | JSON | optional | The graph itself, instead of `path`. |
 | `path` | string | optional | Path of the `.ccgraph` file. |
 

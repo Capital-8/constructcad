@@ -41,7 +41,7 @@ fn optional_row<T: Copy>(
     let r = row(ui, label, |ui| {
         ui.horizontal(|ui| {
             let mut on = value.is_some();
-            let mut r = ui.checkbox(&mut on, "");
+            let mut r = crate::table::checkbox(ui, &mut on);
             if on != value.is_some() {
                 *value = on.then_some(default);
                 // A click is one whole edit.
@@ -103,7 +103,7 @@ pub fn type_sections(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         mm_row(ui, &mut edits, &t!("prop-dim-text-offset"), &mut s.text_offset, 0.0);
         text_row(ui, &mut edits, &t!("prop-dim-prefix"), &mut s.prefix);
         text_row(ui, &mut edits, &t!("prop-dim-suffix"), &mut s.suffix);
-        let r = row(ui, &t!("prop-dim-opaque-text"), |ui| ui.checkbox(&mut s.opaque_text, ""));
+        let r = row(ui, &t!("prop-dim-opaque-text"), |ui| crate::table::checkbox(ui, &mut s.opaque_text));
         edits.done |= r.changed();
         edits.add(&r);
     });

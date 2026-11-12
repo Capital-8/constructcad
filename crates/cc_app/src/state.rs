@@ -75,8 +75,9 @@ pub struct Dialogs {
     pub lps_check: bool,
     pub lps_class: cc_core::LpsClass,
     pub lps_result: Option<(cc_core::LpsClass, u64, serde_json::Value)>,
-    /// The structured cabling per rack.
+    /// The structured cabling per rack, with its last result (document revision, `cabling_list` output).
     pub cabling: bool,
+    pub cabling_result: Option<(u64, serde_json::Value)>,
     /// Visibility/Graphics of a view or view template.
     pub graphics: Option<crate::graphics_dialog::GraphicsDialog>,
     /// Graphic overrides of the selected elements in a view.
@@ -95,6 +96,12 @@ pub struct Dialogs {
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
     /// The fill pattern manager.
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
+    /// The Profile Manager.
+    pub profiles: Option<crate::profiles_dialog::ProfilesDialog>,
+    /// The Profile Manager's edits while one of its profiles is in a
+    /// sketch (*Edit sketch*): Finish and Cancel open it again with them, so
+    /// its Cancel still undoes everything.
+    pub profiles_resume: Option<crate::graphics_dialog::Edits>,
     /// The component library window.
     pub library: Option<crate::library::Library>,
     /// The .obj file whose import options are being asked.
@@ -108,6 +115,14 @@ pub struct Dialogs {
 pub struct AppState {
     /// The engine session: document, derived geometry, drawings and sheets.
     pub session: Session,
+    /// The multi-selection rows' copy of the selected elements, per revision and selection.
+    pub multi_summary: Option<std::sync::Arc<crate::properties::MultiSummary>>,
+    /// The 2D views' drawings as painted, kept between frames.
+    pub paint_cache: crate::paint_cache::PaintCache,
+    /// The model's snap candidates (document revision, level, candidates).
+    pub snap_cache: Option<(u64, Option<LevelId>, std::sync::Arc<crate::tools::ModelSnaps>)>,
+    /// Each imported drawing's snap index, kept while its drawing stays the same.
+    pub cad_snap_index: std::collections::HashMap<ElementId, crate::tools::CadIndexEntry>,
     pub selection: BTreeSet<ElementId>,
     pub tool: Tool,
     pub interaction: Interaction,
@@ -233,6 +248,10 @@ impl AppState {
         Self {
             session,
             selection: BTreeSet::new(),
+            multi_summary: None,
+            paint_cache: Default::default(),
+            snap_cache: None,
+            cad_snap_index: std::collections::HashMap::new(),
             tool: Tool::Select,
             interaction: Interaction::default(),
             modify: Default::default(),
@@ -431,6 +450,8 @@ impl AppState {
             }
             _ => self.sketch = None,
         }
+        // A profile's sketch dropped by another tool ends the manager's edits.
+        crate::profiles_dialog::settle_abandoned(self);
         self.detail_draw = None;
         self.tool = tool;
         self.interaction = Interaction::default();

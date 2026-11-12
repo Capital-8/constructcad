@@ -158,6 +158,13 @@ fn check(original: &Project) {
                     (ColumnSection::Round { diameter: d0 }, ColumnSection::Round { diameter: d1 }) => {
                         close(d0, d1, TOL, "diameter")
                     }
+                    (
+                        ColumnSection::Pipe { diameter: d0, wall: w0 },
+                        ColumnSection::Pipe { diameter: d1, wall: w1 },
+                    ) => {
+                        close(d0, d1, TOL, "diameter");
+                        close(w0, w1, TOL, "wall");
+                    }
                     (x, y) => panic!("section {x:?} came back as {y:?}"),
                 }
             }
@@ -295,6 +302,11 @@ fn roof_fixture_round_trips() {
 #[test]
 fn curtain_fixture_round_trips() {
     check(&load(include_str!("fixtures/curtains.ccad")));
+}
+
+#[test]
+fn profile_fixture_round_trips() {
+    check(&load(include_str!("fixtures/profiles.ccad")));
 }
 
 #[test]
@@ -1121,4 +1133,432 @@ fn clashing_type_names_import_as_one_type() {
     uids.sort();
     uids.dedup();
     assert_eq!(uids.len(), n, "type uids are unique");
+}
+
+/// One profile per shape code (the sketch with an opening), each with a
+/// column type and a beam type and an element of each; plus a turned and a
+/// mirrored type. Types are built through the document, so their legacy
+/// fields follow their profiles.
+fn profiles_project() -> Project {
+    use cc_core::structural_profile::{ParamSketch, ProfileDef, ProfileMaterial, ProfileShape};
+    use cc_core::{
+        Beam, Column, Document, ElementType, ElementTypeId, MaterialClass, ProfileId, ProfilePoint, WallTop,
+    };
+    let mut doc = Document::new(Project::from_template());
+    doc.edit("profiles", |e| {
+        let p = e.project();
+        let level = p.levels[0].id;
+        let material =
+            |class: MaterialClass| p.materials.iter().find(|m| m.identity.class == class).unwrap().name.clone();
+        let (steel, concrete) = (material(MaterialClass::Metal), material(MaterialClass::Concrete));
+        let mut shapes: Vec<(String, ProfileShape, f64, bool)> = ProfileShape::CODES
+            .iter()
+            .map(|code| {
+                let mut shape = ProfileShape::default_for(code).unwrap();
+                if let ProfileShape::Sketch(s) = &mut shape {
+                    let hole = [("-0.02", "-0.03"), ("-0.02", "0.01"), ("0.02", "0.01"), ("0.02", "-0.03")];
+                    *s = ParamSketch {
+                        openings: vec![hole.iter().map(|(u, v)| ProfilePoint::new(*u, *v)).collect()],
+                        ..ParamSketch::square(0.1, 0.12)
+                    };
+                }
+                (format!("P {code}"), shape, 0.0, false)
+            })
+            .collect();
+        shapes.push(("P i turned".into(), ProfileShape::default_for("i").unwrap(), 30.0, false));
+        shapes.push(("P channel mirrored".into(), ProfileShape::default_for("channel").unwrap(), 0.0, true));
+        let mut add = Vec::new();
+        for (i, (name, shape, rotation, mirror)) in shapes.into_iter().enumerate() {
+            let concrete_shape = matches!(
+                shape,
+                ProfileShape::Rect { .. }
+                    | ProfileShape::Round { .. }
+                    | ProfileShape::ConcreteT { .. }
+                    | ProfileShape::ConcreteL { .. }
+                    | ProfileShape::Sketch(_)
+            );
+            let (pm, mat) = if concrete_shape {
+                (ProfileMaterial::Concrete, concrete.clone())
+            } else if shape.is_cold_formed() {
+                (ProfileMaterial::ColdFormed, steel.clone())
+            } else {
+                (ProfileMaterial::Steel, steel.clone())
+            };
+            let section = match shape {
+                ProfileShape::Round { d } if rotation == 0.0 && !mirror => ColumnSection::Round { diameter: d },
+                ProfileShape::RoundTube { d, t } if rotation == 0.0 && !mirror => {
+                    ColumnSection::Pipe { diameter: d, wall: t }
+                }
+                _ => ColumnSection::Rectangular { width: 0.1, depth: 0.1 },
+            };
+            add.push((i, name, pm, mat, shape, section, rotation, mirror));
+        }
+        for (i, name, pm, mat, shape, section, rotation, mirror) in add {
+            let pid = ProfileId(e.alloc_id());
+            let def = ProfileDef {
+                id: pid,
+                uid: Uid::generate(),
+                name: name.clone(),
+                material: pm,
+                shape,
+                catalog: None,
+                description: String::new(),
+            };
+            e.profiles_mut().insert(pid, def);
+            let column_type = TypeData::Column {
+                section,
+                material: mat.clone(),
+                profile: Some(pid),
+                profile_rotation_deg: rotation,
+                profile_mirror: mirror,
+            };
+            let beam_type = TypeData::Beam {
+                width: 0.1,
+                height: 0.1,
+                material: mat,
+                shape: cc_core::SectionShape::Solid,
+                profile: Some(pid),
+                profile_rotation_deg: rotation,
+                profile_mirror: mirror,
+            };
+            let x = 6.0 * i as f64;
+            let column = Column {
+                position: DVec2::new(x, 0.0),
+                rotation_deg: 15.0 * (i % 3) as f64,
+                base_offset: 0.0,
+                height: 3.0,
+                top: WallTop::Unconnected,
+                structural: true,
+            };
+            let beam = Beam::new(DVec2::new(x, 10.0), DVec2::new(x + 4.0, 10.0 + 0.5 * (i % 2) as f64), 3.0);
+            for (type_name, data, kind) in [
+                (format!("C {name}"), column_type, ElementKind::Column(column)),
+                (format!("V {name}"), beam_type, ElementKind::Beam(beam)),
+            ] {
+                let type_id = ElementTypeId(e.alloc_id());
+                e.add_type(ElementType {
+                    id: type_id,
+                    name: type_name,
+                    data,
+                    info: Default::default(),
+                    uid: Uid::generate(),
+                });
+                let id = cc_core::ElementId(e.alloc_id());
+                e.add_element(Element {
+                    id,
+                    level,
+                    type_id,
+                    mark: String::new(),
+                    comments: String::new(),
+                    kind,
+                    uid: Uid::default(),
+                    phase_created: Default::default(),
+                    phase_demolished: None,
+                    design_option: None,
+                    paints: Vec::new(),
+                });
+            }
+        }
+    });
+    doc.project
+}
+
+/// Writes `fixtures/profiles.ccad` from [`profiles_project`]
+/// (`cargo test -p cc_ifc --test round_trip write_profiles_fixture -- --ignored`).
+#[test]
+#[ignore]
+fn write_profiles_fixture() {
+    let text = cc_core::to_ron(&profiles_project()).unwrap();
+    std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/profiles.ccad"), text).unwrap();
+}
+
+/// Bounds and volume of an element's body.
+fn body_figures(g: &cc_geom::ModelGeometry, id: cc_core::ElementId) -> (glam::DVec3, glam::DVec3, f64) {
+    let (lo, hi) = g
+        .body_of(id)
+        .flat_map(|s| s.faces.iter().flat_map(|f| f.verts.iter().copied()))
+        .fold((glam::DVec3::splat(f64::INFINITY), glam::DVec3::splat(f64::NEG_INFINITY)), |(lo, hi), p| {
+            (lo.min(p), hi.max(p))
+        });
+    (lo, hi, g.volume(id))
+}
+
+#[test]
+fn profiles_round_trip() {
+    use cc_core::structural_profile::ProfileShape;
+    let original = profiles_project();
+    let text =
+        export(&original, &ExportOptions { time_stamp: Some("2026-01-01T00:00:00".into()), file_name: "t.ifc".into() });
+    for entity in [
+        "IFCISHAPEPROFILEDEF",
+        "IFCUSHAPEPROFILEDEF",
+        "IFCTSHAPEPROFILEDEF",
+        "IFCLSHAPEPROFILEDEF",
+        "IFCCSHAPEPROFILEDEF",
+        "IFCRECTANGLEHOLLOWPROFILEDEF",
+        "IFCCIRCLEHOLLOWPROFILEDEF",
+        "IFCRECTANGLEPROFILEDEF",
+        "IFCCIRCLEPROFILEDEF",
+        "IFCARBITRARYCLOSEDPROFILEDEF",
+        "IFCARBITRARYPROFILEDEFWITHVOIDS",
+        "IFCMATERIALPROFILE",
+        "IFCMATERIALPROFILESET",
+        "IFCMATERIALPROFILESETUSAGE",
+    ] {
+        assert!(text.contains(&format!("={entity}(")), "{entity}");
+    }
+    assert!(text.contains("'P i'"), "profile names are written");
+    check(&original);
+    let (imported, _) = round_trip(&original);
+
+    // Every type comes back with its profile: the same shape (parametric
+    // kinds) or the same area (arbitrary ones), under the same name.
+    let parametric = ["i", "channel", "t", "angle", "cold_lipped_u", "rect_tube", "round_tube", "rect", "round"];
+    let mut types = 0;
+    for t in original.types.values() {
+        let (TypeData::Column { profile: Some(pid), .. } | TypeData::Beam { profile: Some(pid), .. }) = &t.data else {
+            continue;
+        };
+        let def = original.profile(*pid).unwrap();
+        if !def.name.starts_with("P ") {
+            continue;
+        }
+        types += 1;
+        let back = imported
+            .types_of(t.category())
+            .find(|x| x.name == t.name)
+            .unwrap_or_else(|| panic!("type {} not imported", t.name));
+        let (TypeData::Column { profile: Some(bid), .. } | TypeData::Beam { profile: Some(bid), .. }) = &back.data
+        else {
+            panic!("{} came back without a profile: {:?}", t.name, back.data);
+        };
+        let bdef = imported.profile(*bid).unwrap();
+        assert_eq!(bdef.name, def.name, "profile name of {}", t.name);
+        assert_eq!(bdef.material, def.material, "profile material of {}", t.name);
+        let mirrored = def.name.ends_with("mirrored");
+        if parametric.contains(&def.shape.code()) && !mirrored {
+            assert_eq!(bdef.shape, def.shape, "shape of {}", t.name);
+        } else {
+            assert!(matches!(bdef.shape, ProfileShape::Sketch(_)), "{} is a sketch: {:?}", t.name, bdef.shape);
+        }
+        // The placed sections coincide: area, box and centroid.
+        let a = original.type_section(&t.data).unwrap().outline;
+        let b = imported.type_section(&back.data).unwrap().outline;
+        let (pa, pb) = (a.properties(0.0), b.properties(0.0));
+        assert!((pa.area - pb.area).abs() <= 0.005 * pa.area, "area of {}: {} vs {}", t.name, pa.area, pb.area);
+        let ((la, ha), (lb, hb)) = (a.bbox(), b.bbox());
+        close2(ha - la, hb - lb, 1e-5, &format!("box of {}", t.name));
+        let centroid = |c: [f64; 2], lo: DVec2| DVec2::new(c[0], c[1]) - lo;
+        close2(centroid(pa.centroid, la), centroid(pb.centroid, lb), 1e-5, &format!("centroid of {}", t.name));
+    }
+    assert_eq!(types, 2 * (ProfileShape::CODES.len() + 2));
+
+    // The bodies stand where they stood: bounds and volume.
+    let (g0, g1) = (cc_geom::ModelGeometry::build(&original), cc_geom::ModelGeometry::build(&imported));
+    let lookup = by_uid(&imported);
+    let mut bodies = 0;
+    for e in original.elements.values().filter(|e| matches!(e.category(), Category::Column | Category::Beam)) {
+        let i = lookup[&e.uid];
+        let (lo0, hi0, v0) = body_figures(&g0, e.id);
+        let (lo1, hi1, v1) = body_figures(&g1, i.id);
+        let name = original.type_name(e.type_id);
+        assert!(v0 > 0.0, "{name}");
+        assert!((v0 - v1).abs() <= 0.005 * v0, "volume of {name}: {v0} vs {v1}");
+        assert!(
+            (lo0 - lo1).abs().max_element() < 1e-5 && (hi0 - hi1).abs().max_element() < 1e-5,
+            "bounds of {name}: {lo0} {hi0} vs {lo1} {hi1}"
+        );
+        bodies += 1;
+    }
+    assert_eq!(bodies, 2 * (ProfileShape::CODES.len() + 2));
+}
+
+/// A project with a profile of `shape` named `name` and one column or beam
+/// type of it, inserted as they are (no edit, so no repair or sync).
+fn with_profile_type(
+    p: &mut Project,
+    name: &str,
+    shape: cc_core::structural_profile::ProfileShape,
+    data: impl FnOnce(cc_core::ProfileId, String) -> TypeData,
+) -> cc_core::ElementTypeId {
+    use cc_core::structural_profile::{ProfileDef, ProfileMaterial};
+    let pid = cc_core::ProfileId(p.alloc_id());
+    let def = ProfileDef {
+        id: pid,
+        uid: Uid::generate(),
+        name: name.into(),
+        material: ProfileMaterial::Steel,
+        shape,
+        catalog: None,
+        description: String::new(),
+    };
+    p.profiles.insert(pid, def);
+    let material = p.materials.iter().find(|m| m.identity.class == cc_core::MaterialClass::Metal).unwrap().name.clone();
+    let tid = cc_core::ElementTypeId(p.alloc_id());
+    let ty = cc_core::ElementType {
+        id: tid,
+        name: format!("T {name}"),
+        data: data(pid, material),
+        info: Default::default(),
+        uid: Uid::generate(),
+    };
+    p.types.insert(tid, ty);
+    tid
+}
+
+fn add_plain(p: &mut Project, type_id: cc_core::ElementTypeId, kind: ElementKind) -> cc_core::ElementId {
+    let id = cc_core::ElementId(p.alloc_id());
+    let e = Element {
+        id,
+        level: p.levels[0].id,
+        type_id,
+        mark: String::new(),
+        comments: String::new(),
+        kind,
+        uid: Uid::generate(),
+        phase_created: Default::default(),
+        phase_demolished: None,
+        design_option: None,
+        paints: Vec::new(),
+    };
+    p.elements.insert(id, e);
+    id
+}
+
+/// A column whose profile makes no outline (a hostile file, before repair)
+/// is still written: as its type's box, with its type's material.
+#[test]
+fn a_column_without_a_section_keeps_its_box_and_material() {
+    use cc_core::structural_profile::ProfileShape;
+    let mut p = Project::from_template();
+    // Flanges thicker than half the depth: no outline.
+    let bad = ProfileShape::I { d: 0.2, bf: 0.1, tw: 0.005, tf: 0.15, r: 0.0 };
+    let mut material = String::new();
+    let tid = with_profile_type(&mut p, "Bad", bad, |pid, m| {
+        material = m.clone();
+        TypeData::Column {
+            section: ColumnSection::Rectangular { width: 0.2, depth: 0.3 },
+            material: m,
+            profile: Some(pid),
+            profile_rotation_deg: 0.0,
+            profile_mirror: false,
+        }
+    });
+    assert!(p.type_section(&p.types[&tid].data).is_none());
+    let column = cc_core::Column {
+        position: DVec2::new(1.0, 2.0),
+        rotation_deg: 0.0,
+        base_offset: 0.0,
+        height: 3.0,
+        top: cc_core::WallTop::Unconnected,
+        structural: true,
+    };
+    add_plain(&mut p, tid, ElementKind::Column(column));
+    let text = export(&p, &ExportOptions::default());
+    assert_eq!(text.lines().filter(|l| l.contains("=IFCCOLUMN(")).count(), 1);
+    // Its body is the type's box.
+    assert!(
+        text.lines().any(|l| l.contains("=IFCRECTANGLEPROFILEDEF(.AREA.,$,") && l.ends_with(",0.2,0.3);")),
+        "box profile"
+    );
+    let (imported, _) = round_trip(&p);
+    let back = imported.elements.values().find(|e| e.category() == Category::Column).unwrap();
+    let g = cc_geom::ModelGeometry::build(&imported);
+    assert!((g.volume(back.id) - 0.2 * 0.3 * 3.0).abs() < 1e-9);
+    // The type carries the plain material.
+    let type_id = text.lines().find(|l| l.contains("=IFCCOLUMNTYPE(") && l.contains("'T Bad'")).unwrap();
+    let type_id = type_id.split('=').next().unwrap();
+    let association =
+        text.lines().find(|l| l.contains("=IFCRELASSOCIATESMATERIAL(") && l.contains(&format!("({type_id})"))).unwrap();
+    let material_id = association.rsplit(',').next().unwrap().trim_end_matches(");");
+    assert!(text.lines().any(|l| l.starts_with(&format!("{material_id}=IFCMATERIAL("))), "{association}");
+    let back_type = imported.element_type(back.type_id).unwrap();
+    assert_eq!(back_type.main_material(), material);
+}
+
+/// A sloped profile beam goes out as a B-rep and comes back as a component
+/// of the same body.
+#[test]
+fn sloped_profile_beams_come_back_as_their_body() {
+    use cc_core::structural_profile::ProfileShape;
+    let mut p = Project::from_template();
+    let shape = ProfileShape::default_for("i").unwrap();
+    let tid = with_profile_type(&mut p, "Sloped", shape, |pid, m| TypeData::Beam {
+        width: 0.1,
+        height: 0.2,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    let mut beam = cc_core::Beam::new(DVec2::ZERO, DVec2::new(4.0, 1.0), 3.0);
+    beam.end_offset = Some(3.6);
+    let id = add_plain(&mut p, tid, ElementKind::Beam(beam));
+    assert_eq!(p.repair(), 0);
+    let text = export(&p, &ExportOptions::default());
+    assert!(text.contains("=IFCFACETEDBREP("));
+    let (imported, _) = round_trip(&p);
+    let uid = p.elements[&id].uid;
+    let back = imported.elements.values().find(|e| e.uid == uid).unwrap();
+    assert_eq!(back.category(), Category::Component);
+    let (g0, g1) = (cc_geom::ModelGeometry::build(&p), cc_geom::ModelGeometry::build(&imported));
+    let (lo0, hi0, v0) = body_figures(&g0, id);
+    let (lo1, hi1, v1) = body_figures(&g1, back.id);
+    assert!(v0 > 0.0);
+    assert!((v0 - v1).abs() <= 1e-6 * v0.max(1.0) + 0.005 * v0, "volume {v0} vs {v1}");
+    assert!(
+        (lo0 - lo1).abs().max_element() < 1e-5 && (hi0 - hi1).abs().max_element() < 1e-5,
+        "{lo0} {hi0} vs {lo1} {hi1}"
+    );
+}
+
+/// A file whose section differs from a project profile of the same name only
+/// by float noise reuses that profile instead of making "name 2".
+#[test]
+fn float_noise_reuses_the_profile_of_the_same_name() {
+    use cc_core::structural_profile::ProfileShape;
+    let shape = ProfileShape::I { d: 0.3, bf: 0.15, tw: 0.0071, tf: 0.0107, r: 0.0 };
+    let mut p = Project::from_template();
+    let tid = with_profile_type(&mut p, "Noisy", shape.clone(), |pid, m| TypeData::Beam {
+        width: 0.15,
+        height: 0.3,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    add_plain(&mut p, tid, ElementKind::Beam(cc_core::Beam::new(DVec2::ZERO, DVec2::new(4.0, 0.0), 3.0)));
+    let text = export(&p, &ExportOptions::default());
+    // The project imported into has "Noisy" a few nanometers off.
+    let mut base = Project::from_template();
+    let noisy = ProfileShape::I { d: 0.3 + 3e-9, bf: 0.15 - 2e-9, tw: 0.0071, tf: 0.0107 + 1e-9, r: 0.0 };
+    with_profile_type(&mut base, "Noisy", noisy, |pid, m| TypeData::Beam {
+        width: 0.15,
+        height: 0.3,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    let before = base.profiles.len();
+    let (imported, _) = import(&text, base).unwrap();
+    assert!(imported.profile_named("Noisy 2").is_none(), "{:?}", imported.profiles.values().map(|d| &d.name));
+    assert_eq!(imported.profiles.len(), before);
+    // A real difference still makes a new profile.
+    let mut base = Project::from_template();
+    let other = ProfileShape::I { d: 0.31, bf: 0.15, tw: 0.0071, tf: 0.0107, r: 0.0 };
+    with_profile_type(&mut base, "Noisy", other, |pid, m| TypeData::Beam {
+        width: 0.15,
+        height: 0.31,
+        material: m,
+        shape: cc_core::SectionShape::Solid,
+        profile: Some(pid),
+        profile_rotation_deg: 0.0,
+        profile_mirror: false,
+    });
+    let (imported, _) = import(&text, base).unwrap();
+    assert!(imported.profile_named("Noisy 2").is_some());
 }

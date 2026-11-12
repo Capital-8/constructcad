@@ -39,7 +39,9 @@ pub mod pat;
 mod persist;
 pub mod phase;
 pub mod profile;
+pub mod profile_catalog;
 pub mod profile_sweep;
+pub mod profiles_project;
 mod project;
 pub mod properties;
 pub mod ramp;
@@ -49,11 +51,13 @@ pub mod region;
 mod repair;
 pub mod roofing;
 mod schedule;
+pub mod section_props;
 pub mod shaft;
 pub mod site;
 pub mod sketch;
 pub mod sketch_edit;
 pub mod stair;
+pub mod structural_profile;
 pub mod sweep;
 pub mod title_block;
 pub mod topography;
@@ -88,14 +92,14 @@ pub use graphics::{
 };
 pub use ids::{
     BrowserSchemeId, ElementId, ElementTypeId, FillPatternId, FilterId, GroupId, LevelId, LineStyleId, OptionId,
-    OptionSetId, PhaseFilterId, PhaseId, SystemId, TemplateId, Uid, ViewId,
+    OptionSetId, PhaseFilterId, PhaseId, ProfileId, SystemId, TemplateId, Uid, ViewId,
 };
 pub use lightning::{ConductorRole, LightningConductor, LpsClass};
 pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemClass, SystemKind, TrayStyle, Valve, ValveKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, from_ron_with_repairs_localized, load,
-    load_with_repairs, load_with_repairs_localized, save, to_ron,
+    load_with_repairs, load_with_repairs_localized, read_to_string_limited, save, to_ron,
 };
 pub use phase::{Phase, PhaseDisplay, PhaseFilter, PhaseGraphics, PhaseState, PhaseStatus};
 pub use profile::{ProfilePoint, SketchPlane};
@@ -105,10 +109,12 @@ pub use project::{
 pub use ramp::{RampCheck, RampIssue, RampLayout, RampRules, RampShape, ramp_flights};
 pub use region::Region;
 pub use schedule::{ScheduleDef, ScheduleField};
+pub use section_props::SectionProperties;
 pub use stair::{
     LandingBeams, LandingPosts, PostAt, StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout,
     StairRailing, StairRules, StairShape, StairSide, Stringers, TreadRule, Turn, stair_steps,
 };
+pub use structural_profile::{ProfileDef, ProfileMaterial, ProfileShape, SectionOutline};
 pub use transform::PlanTransform;
 pub use types::{
     Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, TypeData, TypeInfo,

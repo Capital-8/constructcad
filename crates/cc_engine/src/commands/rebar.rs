@@ -6,9 +6,7 @@ use crate::refs::{self, Ref, finite};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
-use cc_core::{
-    BarFace, Category, ColumnSection, ElementId, ElementKind, ElementTypeId, Project, Rebar, RebarLayout, TypeData,
-};
+use cc_core::{BarFace, Category, ElementId, ElementKind, ElementTypeId, Project, Rebar, RebarLayout, TypeData};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -163,10 +161,7 @@ impl Command for RebarTypical {
                     rebar_kind(id, RebarLayout::Longitudinal { face: BarFace::Top, count: 2 }, COVER),
                 ));
             } else {
-                let round = matches!(
-                    p.element_type(e.type_id).map(|t| &t.data),
-                    Some(TypeData::Column { section: ColumnSection::Round { .. } | ColumnSection::Pipe { .. }, .. })
-                );
+                let round = p.element_type(e.type_id).is_some_and(|t| p.section_is_round(&t.data));
                 let bars = RebarLayout::Longitudinal { face: BarFace::Perimeter, count: if round { 6 } else { 4 } };
                 todo.push((e.level, main, rebar_kind(id, bars, COVER)));
             }

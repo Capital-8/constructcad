@@ -291,22 +291,29 @@ fn save_section(ui: &mut Ui, state: &mut AppState, lib: &mut Library) {
         return;
     }
     ui.separator();
-    ui.horizontal(|ui| {
+    // Wrapped: the labels and a long folder name must not widen the dialog.
+    ui.horizontal_wrapped(|ui| {
         ui.label(theme::muted(t!("lib-save")));
         let selected = lib.save_component.clone().unwrap_or_default();
-        egui::ComboBox::from_id_salt("lib-save-component").selected_text(selected).width(170.0).show_ui(ui, |ui| {
-            for c in &components {
-                ui.selectable_value(&mut lib.save_component, Some(c.clone()), c);
-            }
-        });
+        egui::ComboBox::from_id_salt("lib-save-component").selected_text(selected).width(170.0).truncate().show_ui(
+            ui,
+            |ui| {
+                for c in &components {
+                    ui.selectable_value(&mut lib.save_component, Some(c.clone()), c);
+                }
+            },
+        );
         ui.label(theme::muted(t!("lib-save-into")));
         let folder = lib.save_folder.clone().or_else(|| state.prefs.library_folders.first().cloned());
         let folder_name = folder.as_ref().map(|f| f.display().to_string()).unwrap_or_default();
-        egui::ComboBox::from_id_salt("lib-save-folder").selected_text(folder_name).width(180.0).show_ui(ui, |ui| {
-            for f in &state.prefs.library_folders {
-                ui.selectable_value(&mut lib.save_folder, Some(f.clone()), f.display().to_string());
-            }
-        });
+        egui::ComboBox::from_id_salt("lib-save-folder").selected_text(folder_name).width(180.0).truncate().show_ui(
+            ui,
+            |ui| {
+                for f in &state.prefs.library_folders {
+                    ui.selectable_value(&mut lib.save_folder, Some(f.clone()), f.display().to_string());
+                }
+            },
+        );
         let ready = lib.save_component.is_some() && folder.is_some();
         if ui.add_enabled(ready, egui::Button::new(t!("lib-save-button"))).clicked()
             && let (Some(component), Some(folder)) = (lib.save_component.clone(), folder)

@@ -48,6 +48,11 @@ pub fn section(ui: &mut Ui, id: &str, title: String, add: impl FnOnce(&mut Ui)) 
 
 /// One table row: a label cell and a value cell filled by `add`.
 pub fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
+    row_tip(ui, label, None, add)
+}
+
+/// [`row`] whose label shows `tip` when hovered (else the label itself).
+pub fn row_tip<R>(ui: &mut Ui, label: &str, tip: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
     let width = ui.available_width();
     let row_h = row_height();
     let (rect, _) = ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
@@ -66,28 +71,75 @@ pub fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
         PALETTE.text_muted,
     );
     let label_hover = ui.interact(label_rect, ui.id().with(("prop-label", label)), Sense::hover());
-    label_hover.on_hover_text(label);
+    label_hover.on_hover_text(tip.unwrap_or(label));
 
     let value_rect = Rect::from_min_max(egui::pos2(split + 2.0, rect.top() + 1.0), rect.max - vec2(2.0, 2.0));
     let builder = UiBuilder::new().max_rect(value_rect).layout(Layout::left_to_right(Align::Center));
-    ui.scope_builder(builder, |ui| {
-        let w = value_rect.width();
-        let s = ui.spacing_mut();
-        s.interact_size = vec2(w, row_h - 4.0);
-        s.combo_width = w - 8.0;
-        s.text_edit_width = w - 4.0;
-        s.button_padding = vec2(6.0, 1.0);
-        s.item_spacing = vec2(4.0, 0.0);
-        // Flat cells: borders appear only on hover and focus.
-        let v = ui.visuals_mut();
-        v.widgets.inactive.bg_stroke = Stroke::NONE;
-        v.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-        v.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-        v.extreme_bg_color = egui::Color32::TRANSPARENT;
-        ui.style_mut().override_font_id = Some(egui::FontId::proportional(font_size()));
-        add(ui)
-    })
-    .inner
+    // A value too wide for its cell is cut off there: it must not widen the
+    // table, and with it the panel or dialog around it.
+    let mut cell = ui.new_child(builder);
+    cell.set_clip_rect(rect.intersect(ui.clip_rect()));
+    let w = value_rect.width();
+    let s = cell.spacing_mut();
+    s.interact_size = vec2(w, row_h - 4.0);
+    s.combo_width = w - 8.0;
+    s.text_edit_width = w - 4.0;
+    s.button_padding = vec2(6.0, 1.0);
+    s.item_spacing = vec2(4.0, 0.0);
+    // Flat cells: borders appear only on hover and focus.
+    let v = cell.visuals_mut();
+    v.widgets.inactive.bg_stroke = Stroke::NONE;
+    v.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+    v.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
+    v.extreme_bg_color = egui::Color32::TRANSPARENT;
+    cell.style_mut().override_font_id = Some(egui::FontId::proportional(font_size()));
+    let inner = add(&mut cell);
+    ui.advance_cursor_after_rect(cell.min_rect().intersect(value_rect));
+    inner
+}
+
+/// A checkbox that shows its box wherever it stands. Table cells are flat
+/// (no border or fill until hovered), which would leave an unticked box the
+/// color of the background.
+pub fn boxed<'a>(checkbox: egui::Checkbox<'a>) -> impl egui::Widget + 'a {
+    move |ui: &mut Ui| {
+        let theme = ui.ctx().style_of(ui.ctx().theme()).visuals.widgets.inactive;
+        let saved = ui.visuals().widgets.inactive;
+        let inactive = &mut ui.visuals_mut().widgets.inactive;
+        inactive.bg_fill = theme.bg_fill;
+        inactive.bg_stroke = Stroke::new(1.0, PALETTE.border_strong);
+        let response = ui.add(checkbox);
+        ui.visuals_mut().widgets.inactive = saved;
+        response
+    }
+}
+
+/// A checkbox without text, as [`boxed`].
+pub fn checkbox(ui: &mut Ui, checked: &mut bool) -> egui::Response {
+    ui.add(boxed(egui::Checkbox::without_text(checked)))
+}
+
+/// A checkbox with a text beside it, as [`boxed`].
+pub fn labeled_checkbox(ui: &mut Ui, checked: &mut bool, text: impl Into<egui::WidgetText>) -> egui::Response {
+    ui.add(boxed(egui::Checkbox::new(checked, text.into())))
+}
+
+/// A row of buttons across the whole table, wrapping when they do not fit;
+/// `add` draws them.
+pub fn button_row<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let out = egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 3)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().button_padding = vec2(6.0, 1.0);
+            ui.spacing_mut().item_spacing = vec2(4.0, 3.0);
+            ui.style_mut().override_font_id = Some(egui::FontId::proportional(font_size()));
+            add(ui)
+        })
+        .inner
+    });
+    let rect = out.response.rect;
+    ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, Stroke::new(1.0, PALETTE.border));
+    out.inner
 }
 
 /// A row whose value cannot be edited (shown dimmed).

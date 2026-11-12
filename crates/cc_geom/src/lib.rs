@@ -39,14 +39,14 @@ mod wall;
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{
     BoxPart, FRAME_COLOR, FoundationGeom, HostedPart, ModelGeometry, OpeningSymbol, WorldConnector, column_outline,
-    component_connectors, component_parts, hosted_parts, opening_parts,
+    component_connectors, component_parts, hosted_parts, opening_parts, rect_outline,
 };
 pub use component::{instance_errors, resolve_component, resolve_component_in, resolve_instance, resolve_pieces};
 pub use cut::{clip_polygon, face_plane_segments};
 pub use mep::{SegmentGeom, TraySection, ValveGeom, segment_geom, valve_geom};
 pub use mesh::{MeshPlan, mesh_plan, plan_edges};
 pub use ramp::{RampGeom, RampPiece, ramp_geom};
-pub use rooms::{outer_boundary, room_boundary};
+pub use rooms::{RoomArrangement, outer_boundary, room_boundary};
 pub use solid::{Face, Look, Ray, Solid};
 pub use stair::{
     Flight, LandingRect, Pieces, StairGeom, StairLanding, StairStep, StepKind, add_railing, railing_length,

@@ -881,7 +881,7 @@ pub(crate) fn params(ui: &mut Ui, state: &mut AppState, def: &cc_core::Component
             } else {
                 Some(ui.add(crate::properties::param_value(&mut value, p.kind)))
             };
-            ui.checkbox(&mut instance, "").on_hover_text(t!("comp-param-instance"));
+            crate::table::checkbox(ui, &mut instance).on_hover_text(t!("comp-param-instance"));
             delete = ui.small_button("×").on_hover_text(t!("action-delete")).clicked();
             r
         });
@@ -1237,7 +1237,7 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         return;
     }
     let mut void = item.void;
-    crate::table::row(ui, &t!("comp-sketch-void"), |ui| ui.checkbox(&mut void, ""));
+    crate::table::row(ui, &t!("comp-sketch-void"), |ui| crate::table::checkbox(ui, &mut void));
     if void != item.void {
         set.void = Some(void);
     }
@@ -1247,7 +1247,7 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         ui.horizontal(|ui| {
             for level in cc_core::DetailLevel::ALL {
                 let mut on = detail.shows(level);
-                if ui.checkbox(&mut on, crate::i18n::tr(level.key())).changed() {
+                if crate::table::labeled_checkbox(ui, &mut on, crate::i18n::tr(level.key())).changed() {
                     detail.set(level, on);
                 }
             }
@@ -1258,7 +1258,7 @@ pub fn piece_props(ui: &mut Ui, state: &mut AppState, def: &cc_core::ComponentDe
         set.detail = Some(names.collect());
     }
     let mut in_plan = item.in_plan;
-    crate::table::row(ui, &t!("comp-env-in-plan"), |ui| ui.checkbox(&mut in_plan, ""));
+    crate::table::row(ui, &t!("comp-env-in-plan"), |ui| crate::table::checkbox(ui, &mut in_plan));
     if in_plan != item.in_plan {
         set.in_plan = Some(in_plan);
     }

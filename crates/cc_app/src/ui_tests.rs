@@ -1282,7 +1282,7 @@ fn update_install_dialog_offers_what_is_left_to_do() {
     assert!(harness.state().updates.install.is_none());
 
     let msi = std::path::PathBuf::from("C:/Temp/constructcraft-v9.0.0-x86_64.msi");
-    let next = crate::update_install::Next::Installer(msi);
+    let next = crate::update_install::Next::Installer(msi, "0".repeat(64));
     harness.state_mut().updates.install = Some(Install::Ready(version, next.clone()));
     harness.run();
     harness.get_by_label(&t!("update-install-on-exit")).click();
@@ -2804,6 +2804,210 @@ fn enter_in_a_dialog_text_field_does_not_press_ok() {
     assert_eq!(harness.state().ok, 1);
 }
 
+/// What the dialog layout tests show: one dialog, while `open`.
+struct DialogProbe {
+    themed: bool,
+    open: bool,
+}
+
+/// A harness that shows the dialog `show` builds, every frame.
+fn dialog_probe(mut show: impl FnMut(&egui::Context) + 'static) -> Harness<'static, DialogProbe> {
+    let mut harness = Harness::builder().with_size(egui::vec2(900.0, 600.0)).build_ui_state(
+        move |ui, p: &mut DialogProbe| {
+            let ctx = &ui.ctx().clone();
+            if !p.themed {
+                crate::theme::apply(ctx);
+                p.themed = true;
+                return;
+            }
+            crate::theme::sync(ctx);
+            if p.open {
+                show(ctx);
+            }
+        },
+        DialogProbe { themed: false, open: true },
+    );
+    harness.run();
+    harness
+}
+
+/// A dialog is moved by dragging its header, stays where it was put, and
+/// opens centered again the next time.
+#[test]
+fn a_dialog_moves_by_its_header() {
+    let mut harness = dialog_probe(|ctx| {
+        crate::dialog::Dialog::new("move-probe", "Probe").show(
+            ctx,
+            |ui| {
+                ui.label("Body");
+            },
+            |f| {
+                f.primary("OK");
+            },
+        );
+    });
+    let start = harness.get_by_label("Probe").rect();
+    let by = egui::vec2(60.0, 40.0);
+    // Pressed on the title itself.
+    harness.drag_at(start.center());
+    harness.step();
+    for k in 1..=4 {
+        harness.hover_at(start.center() + by * (k as f32 / 4.0));
+        harness.step();
+    }
+    harness.drop_at(start.center() + by);
+    harness.run();
+    let moved = harness.get_by_label("Probe").rect();
+    assert!((moved.min - start.min - by).length() < 1.5, "moved by {:?}", moved.min - start.min);
+    // The body and the footer went along.
+    harness.run();
+    assert!((harness.get_by_label("Probe").rect().min - moved.min).length() < 0.5);
+
+    harness.state_mut().open = false;
+    harness.run();
+    harness.state_mut().open = true;
+    harness.run();
+    let again = harness.get_by_label("Probe").rect();
+    assert!((again.min - start.min).length() < 1.5, "reopened at {:?}, not {:?}", again.min, start.min);
+}
+
+/// Footer buttons that do not fit the dialog's width widen it: they never
+/// lie over each other, and the header follows.
+#[test]
+fn dialog_footer_buttons_never_overlap() {
+    let labels = ["Ignore this version", "Update now", "Download", "Later"];
+    let mut harness = dialog_probe(move |ctx| {
+        crate::dialog::Dialog::new("footer-probe", "Probe").width(200.0).show(
+            ctx,
+            |ui| {
+                ui.label("Body");
+            },
+            |f| {
+                f.extra(labels[0]);
+                f.primary(labels[1]);
+                f.secondary(labels[2]);
+                f.secondary(labels[3]);
+            },
+        );
+    });
+    harness.run();
+    let rects: Vec<egui::Rect> = labels.iter().map(|l| harness.get_by_label(l).rect()).collect();
+    for pair in rects.windows(2) {
+        assert!(pair[0].right() + 7.0 < pair[1].left(), "{:?} lies over {:?}", pair[0], pair[1]);
+    }
+    let close = harness.get_by_label(&crate::t!("action-close")).rect();
+    assert!(
+        close.right() > rects[3].right() - 12.0,
+        "the header ends at {}, the footer at {}",
+        close.right(),
+        rects[3].right()
+    );
+}
+
+/// A body wider than the dialog takes the header and the footer with it.
+#[test]
+fn dialog_header_and_footer_follow_a_wide_body() {
+    crate::dialog::overflow::allow();
+    let mut harness = dialog_probe(|ctx| {
+        crate::dialog::Dialog::new("wide-probe", "Probe").width(300.0).show(
+            ctx,
+            |ui| {
+                ui.add(egui::Button::new("Wide").min_size(egui::vec2(500.0, 20.0)));
+            },
+            |f| {
+                f.primary("OK");
+            },
+        );
+    });
+    harness.run();
+    let wide = harness.get_by_label("Wide").rect();
+    let ok = harness.get_by_label("OK").rect();
+    let close = harness.get_by_label(&crate::t!("action-close")).rect();
+    assert!((ok.right() - wide.right()).abs() < 1.5, "OK ends at {}, the body at {}", ok.right(), wide.right());
+    assert!(close.right() > wide.right(), "the close button stayed at {}", close.right());
+}
+
+/// A value too wide for its table cell is cut off there and does not widen
+/// the dialog (the dialog itself fails the test when its body overflows).
+#[test]
+fn a_table_row_never_widens_its_dialog() {
+    let mut harness = dialog_probe(|ctx| {
+        crate::dialog::Dialog::new("row-probe", "Probe").width(300.0).show(
+            ctx,
+            |ui| {
+                crate::table::row(ui, "Definition", |ui| {
+                    let _ = ui.button("Edit the component in its own environment");
+                    let _ = ui.button("Save the component to a file of the library");
+                });
+                crate::table::row(ui, "Next", |ui| {
+                    ui.label("value");
+                });
+            },
+            |f| {
+                f.primary("OK");
+            },
+        );
+    });
+    harness.run();
+    let ok = harness.get_by_label("OK").rect();
+    let title = harness.get_by_label("Probe").rect();
+    assert!((ok.right() - title.left() - 300.0).abs() < 1.5, "the dialog is {} wide", ok.right() - title.left());
+}
+
+/// Every dialog keeps its body inside its width (a dialog fails the test
+/// when its body overflows): the plain ones, Type Properties of every type
+/// of the sample project, and each section of the Preferences.
+#[test]
+fn every_dialog_keeps_its_body_inside() {
+    use crate::preferences::Section;
+    type Open = Box<dyn Fn(&mut AppState)>;
+    let mut opens: Vec<(String, Open)> = vec![
+        ("project info".into(), Box::new(|s| s.dialogs.project_info = true)),
+        ("units".into(), Box::new(|s| s.dialogs.units = true)),
+        ("levels".into(), Box::new(|s| s.dialogs.levels = true)),
+        ("materials".into(), Box::new(|s| s.dialogs.materials = true)),
+        ("about".into(), Box::new(|s| s.dialogs.about = true)),
+        ("systems".into(), Box::new(|s| s.dialogs.systems = true)),
+        ("sizing".into(), Box::new(|s| s.dialogs.sizing = true)),
+        ("lightning check".into(), Box::new(|s| s.dialogs.lps_check = true)),
+        ("cabling".into(), Box::new(|s| s.dialogs.cabling = true)),
+        ("error".into(), Box::new(|s| s.dialogs.error = Some("The file could not be read. ".repeat(12)))),
+        ("design options".into(), Box::new(crate::design_options_ui::open)),
+        ("browser organization".into(), Box::new(crate::browser_org_dialog::open)),
+        ("line styles".into(), Box::new(crate::line_styles_dialog::open)),
+        ("fill patterns".into(), Box::new(crate::fill_patterns_dialog::open)),
+        ("phases".into(), Box::new(crate::phases_dialog::open)),
+        ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
+        ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+    ];
+    for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
+        opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
+    }
+    let types: Vec<(cc_core::ElementTypeId, String)> =
+        sample_state().project().types.values().map(|t| (t.id, t.name.clone())).collect();
+    for (id, name) in types {
+        opens.push((
+            format!("type {name}"),
+            Box::new(move |s| {
+                s.dialogs.type_editor = Some(id);
+                s.dialogs.type_layers_open = true;
+            }),
+        ));
+    }
+    for (name, open) in opens {
+        let mut state = sample_state();
+        open(&mut state);
+        let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| crate::dialogs::show(ui.ctx(), state);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut harness = themed_harness(state, egui::vec2(1500.0, 1000.0), egui::Theme::Light, draw);
+            for _ in 0..6 {
+                harness.step();
+            }
+        }));
+        assert!(result.is_ok(), "the dialog \"{name}\" overflows");
+    }
+}
+
 /// Issue #159: the Detail Line tool takes typed values after the first
 /// point, like the sketches: a circle's radius, a line's length; Enter
 /// places them and Esc drops the value first.
@@ -2958,6 +3162,290 @@ fn graphics_dialog_hides_imported_cad() {
     assert!(!drawn(harness.state_mut()));
 }
 
+/// The Profile Manager (*Structure → Profiles*): *Import from catalog*
+/// brings IPE profiles in, which OK keeps as one undo step; deleting one a
+/// beam type uses, with another taking its place, is undone by Cancel.
+#[test]
+fn profile_manager_imports_and_cancels() {
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::ProfileTypeCreate;
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    let depth = state.session.doc.undo_depth();
+    let mut harness = app_harness(state);
+    harness.get_by_role_and_label(Role::Button, &t!("cmd-profiles")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_some());
+    harness.get_by_label(&t!("profiles-import")).click();
+    harness.run();
+    // The series combo box, as if IPE were picked in it.
+    let catalog = harness.state_mut().dialogs.profiles.as_mut().and_then(|d| d.catalog.as_mut());
+    catalog.expect("the catalog opens").series = "IPE".into();
+    harness.run();
+    let add = t!("profiles-catalog-add");
+    let disabled = harness.get_by_role_and_label(Role::Button, &add).accesskit_node().is_disabled();
+    assert!(disabled, "Add waits for a ticked designation");
+    harness.get_by_role_and_label(Role::CheckBox, "IPE 200").click();
+    harness.get_by_role_and_label(Role::CheckBox, "IPE 220").click();
+    harness.run();
+    harness.get_by_label(&t!("profiles-catalog-add")).click();
+    harness.run();
+    assert!(harness.state().project().profile_named("IPE 200").is_some());
+    assert!(harness.state().project().profile_named("IPE 220").is_some());
+    assert!(harness.state().dialogs.profiles.as_ref().is_some_and(|d| d.catalog.is_none()), "Add closes the catalog");
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none());
+    let ipe = harness.state().project().profile_named("IPE 200").map(|p| p.id).expect("OK keeps the import");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+
+    // A beam type of IPE 200; deleting the profile moves it to another one.
+    let command =
+        ProfileTypeCreate { profile: Ref::Name("IPE 200".into()), category: "beam".into(), ..Default::default() };
+    let beam = crate::actions::run_command(harness.state_mut(), command).and_then(|o| o["id"].as_u64());
+    let beam = cc_core::ElementTypeId(beam.expect("a beam type of IPE 200"));
+    let users = |h: &Harness<'static, AppState>| h.state().project().profile_users(ipe);
+    assert_eq!(users(&harness), vec![beam]);
+    harness.get_by_role_and_label(Role::Button, &t!("cmd-profiles")).click();
+    harness.run();
+    harness.get_by_label("IPE 200").click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected), Some(ipe));
+    harness.get_by_role_and_label(Role::Button, &t!("profiles-delete")).click();
+    harness.run();
+    assert!(harness.state().project().profile(ipe).is_none(), "{}", harness.state().message);
+    assert!(harness.state().project().profile_users(ipe).is_empty());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none());
+    assert!(harness.state().project().profile(ipe).is_some(), "Cancel undoes the deletion");
+    assert_eq!(users(&harness), vec![beam]);
+}
+
+/// Type Properties of the template beam: the profile picked in the combo
+/// box (IPE 200, imported first) is the type's after OK, as `type_get` shows.
+#[test]
+fn type_properties_pick_a_profile() {
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::ProfileImport;
+    let mut state = sample_state();
+    let import = ProfileImport { series: "IPE".into(), designations: vec!["IPE 200".into()], on_clash: None };
+    state.session.run(import).unwrap();
+    let beam = state.project().default_type(cc_core::Category::Beam).unwrap();
+    let shown = match &state.project().element_type(beam).unwrap().data {
+        cc_core::TypeData::Beam { profile, .. } => {
+            profile.and_then(|p| state.project().profile(p)).map_or("—".to_string(), |p| p.name.clone())
+        }
+        _ => panic!("not a beam type"),
+    };
+    state.dialogs.type_editor = Some(beam);
+    let mut harness = app_harness(state);
+    harness.run();
+    let combo = harness.query_all_by_role(Role::ComboBox).find(|n| n.value().as_deref() == Some(shown.as_str()));
+    combo.expect("the profile combo shows the type's profile").click();
+    harness.run();
+    harness.get_by_label("IPE 200").click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.type_editor.is_none());
+    let out = harness.state_mut().session.run(cc_engine::commands::query::TypeGet { type_ref: Ref::Id(beam.0) });
+    assert_eq!(out.unwrap()["params"]["profile"], "IPE 200");
+}
+
+fn sketch_harness(state: AppState) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(1400.0, 900.0), egui::Theme::Light, |ui, state| {
+        egui::Panel::top("ribbon").show(ui, |ui| {
+            if state.sketch.is_some() {
+                crate::sketch_mode::ribbon(ui, state)
+            } else {
+                crate::ribbon::ribbon(ui, state)
+            }
+        });
+        egui::CentralPanel::default().show(ui, |ui| {
+            if crate::profile_sketch::is_open(state) {
+                crate::profile_sketch::central(ui, state);
+            }
+        });
+        crate::dialogs::show(ui.ctx(), state);
+    })
+}
+
+/// *Edit sketch* in the Profile Manager opens a sketched profile; Finish
+/// without changes leaves it as it was (its expressions kept) and goes back
+/// to the manager, as Cancel does.
+#[test]
+fn a_sketched_profile_is_edited_and_kept() {
+    use cc_engine::commands::profiles::ProfileCreate;
+    let mut state = sample_state();
+    let command = ProfileCreate { material: "steel".into(), shape: Some("sketch".into()), ..Default::default() };
+    let id = cc_core::ProfileId(state.session.run(command).unwrap()["id"].as_u64().unwrap());
+    let before = state.project().profile(id).unwrap().shape.clone();
+    assert!(matches!(before, cc_core::ProfileShape::Sketch(_)));
+    crate::profiles_dialog::open(&mut state);
+    state.dialogs.profiles.as_mut().unwrap().selected = Some(id);
+    let depth = state.session.doc.undo_depth();
+    let mut harness = sketch_harness(state);
+    harness.run();
+    harness.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none(), "the manager makes way for the sketch");
+    assert!(crate::profile_sketch::is_open(harness.state()));
+    assert_eq!(harness.state().sketch.as_ref().unwrap().curves.len(), 4, "the square's sides");
+    harness.get_by_role_and_label(Role::Button, &t!("sketch-finish-mode")).click();
+    harness.run();
+    assert!(harness.state().sketch.is_none(), "{}", harness.state().message);
+    assert_eq!(harness.state().project().profile(id).unwrap().shape, before, "unchanged");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth);
+    let back = harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected);
+    assert_eq!(back, Some(id), "back in the manager, on the profile");
+
+    // Cancel goes back to the manager too.
+    harness.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+    harness.run();
+    assert!(crate::profile_sketch::is_open(harness.state()));
+    harness.get_by_role_and_label(Role::Button, &t!("sketch-cancel-mode")).click();
+    harness.run();
+    assert!(harness.state().sketch.is_none());
+    assert_eq!(harness.state().dialogs.profiles.as_ref().and_then(|d| d.selected), Some(id));
+}
+
+/// The Profile Manager's session spans *Edit sketch*: a parameter changed
+/// before it and a point moved in it are both undone by the manager's
+/// Cancel and both kept by its OK.
+#[test]
+fn the_profile_managers_cancel_undoes_its_sketch() {
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::{ProfileCreate, ProfileSet};
+    let mut state = sample_state();
+    let command = ProfileCreate { material: "steel".into(), shape: Some("sketch".into()), ..Default::default() };
+    let id = cc_core::ProfileId(state.session.run(command).unwrap()["id"].as_u64().unwrap());
+    let original = state.project().profile(id).unwrap().shape.clone();
+    let mut harness = sketch_harness(state);
+    let edit = |h: &mut Harness<'static, AppState>| {
+        crate::profiles_dialog::open(h.state_mut());
+        h.state_mut().dialogs.profiles.as_mut().unwrap().selected = Some(id);
+        h.run();
+        // A dimension changed in the manager (as its field would).
+        let set = ProfileSet {
+            profile: Ref::Id(id.0),
+            params: Some([("b".to_string(), 0.12)].into_iter().collect()),
+            ..Default::default()
+        };
+        h.state_mut().session.run(set).unwrap();
+        h.run();
+        h.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+        h.run();
+        assert!(h.state().dialogs.edit_start.is_some(), "the manager's session stays open");
+        // The top right corner (b/2, h/2) moves 2 cm right.
+        let corner = glam::DVec2::new(0.06, 0.05);
+        for c in &mut h.state_mut().sketch.as_mut().unwrap().curves {
+            if let cc_core::sketch::SketchCurve::Line { a, b } = c {
+                for p in [a, b] {
+                    if p.distance(corner) < 1e-9 {
+                        *p = glam::DVec2::new(0.08, 0.05);
+                    }
+                }
+            }
+        }
+        h.get_by_role_and_label(Role::Button, &t!("sketch-finish-mode")).click();
+        h.run();
+        assert!(h.state().sketch.is_none(), "{}", h.state().message);
+        let label = t!("profiles-edit-sketch");
+        let button = h.get_by_role_and_label(Role::Button, &label);
+        assert!(!button.accesskit_node().is_disabled(), "the manager is not nested");
+    };
+    let outline = |h: &Harness<'static, AppState>| match &h.state().project().profile(id).unwrap().shape {
+        cc_core::ProfileShape::Sketch(s) => s.outline.clone(),
+        _ => panic!("not a sketch"),
+    };
+    edit(&mut harness);
+    assert!(outline(&harness).contains(&cc_core::profile::ProfilePoint::new("0.08", "0.05")));
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.profiles.is_none());
+    assert!(harness.state().dialogs.edit_start.is_none());
+    assert_eq!(harness.state().project().profile(id).unwrap().shape, original, "Cancel undoes both");
+
+    edit(&mut harness);
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.edit_start.is_none());
+    assert!(outline(&harness).contains(&cc_core::profile::ProfilePoint::new("0.08", "0.05")), "OK keeps the sketch");
+    let b = harness.state().project().profile(id).unwrap().shape.params();
+    assert!(b.iter().any(|(n, v)| n == "b" && (*v - 0.12).abs() < 1e-12), "OK keeps the dimension: {b:?}");
+}
+
+/// A profile's sketch left by another tool (or dropped any other way) ends
+/// the Profile Manager's session, keeping its edits, so a later dialog's
+/// Cancel undoes only its own; the manager cannot open over the sketch.
+#[test]
+fn leaving_a_profile_sketch_by_another_tool_ends_the_managers_session() {
+    use crate::commands::UiCommand;
+    use cc_engine::Ref;
+    use cc_engine::commands::profiles::{ProfileCreate, ProfileSet};
+    use cc_engine::commands::project::ProjectInfoSet;
+    let mut state = sample_state();
+    let command = ProfileCreate { material: "steel".into(), shape: Some("sketch".into()), ..Default::default() };
+    let id = cc_core::ProfileId(state.session.run(command).unwrap()["id"].as_u64().unwrap());
+    let mut harness = sketch_harness(state);
+    let to_sketch = |h: &mut Harness<'static, AppState>, v: f64| {
+        crate::profiles_dialog::open(h.state_mut());
+        h.state_mut().dialogs.profiles.as_mut().unwrap().selected = Some(id);
+        h.run();
+        let set = ProfileSet {
+            profile: Ref::Id(id.0),
+            params: Some([("b".to_string(), v)].into_iter().collect()),
+            ..Default::default()
+        };
+        h.state_mut().session.run(set).unwrap();
+        h.run();
+        h.get_by_role_and_label(Role::Button, &t!("profiles-edit-sketch")).click();
+        h.run();
+        assert!(crate::profile_sketch::is_open(h.state()));
+        assert!(h.state().dialogs.edit_start.is_some());
+        assert!(UiCommand::Profiles.unavailable(h.state()).is_some(), "no manager over its own sketch");
+        crate::profiles_dialog::open(h.state_mut());
+        assert!(h.state().dialogs.profiles.is_none());
+    };
+    let b = |h: &Harness<'static, AppState>| {
+        let params = h.state().project().profile(id).unwrap().shape.params();
+        params.iter().find(|(n, _)| n == "b").map(|(_, v)| *v)
+    };
+    let later_dialog_cancel_keeps = |h: &mut Harness<'static, AppState>, name: &str| {
+        let info = ProjectInfoSet {
+            name: Some(name.into()),
+            number: None,
+            client: None,
+            address: None,
+            author: None,
+            fields: None,
+        };
+        h.state_mut().session.run(info).unwrap();
+        crate::dialog::session::begin(h.state_mut());
+        crate::dialog::session::cancel(h.state_mut());
+        assert_eq!(h.state().project().info.name, name, "a later Cancel keeps unrelated edits");
+    };
+
+    // Another tool.
+    to_sketch(&mut harness, 0.12);
+    harness.state_mut().set_tool(crate::tools::Tool::Measure);
+    assert!(harness.state().sketch.is_none());
+    assert!(harness.state().dialogs.edit_start.is_none(), "the manager's session ended");
+    assert!(harness.state().dialogs.profiles_resume.is_none());
+    assert_eq!(b(&harness), Some(0.12), "the manager's edits are kept");
+    later_dialog_cancel_keeps(&mut harness, "Unrelated");
+
+    // Dropped directly: settled on the next frame.
+    harness.state_mut().set_tool(crate::tools::Tool::Select);
+    to_sketch(&mut harness, 0.14);
+    harness.state_mut().sketch = None;
+    harness.run();
+    assert!(harness.state().dialogs.edit_start.is_none());
+    assert!(harness.state().dialogs.profiles_resume.is_none());
+    later_dialog_cancel_keeps(&mut harness, "Unrelated 2");
+}
+
 /// Zooming in until an input node's field passes the canvas edge leaves the editor's panel its size.
 #[test]
 fn zooming_the_graph_keeps_its_panel_size() {
@@ -2994,6 +3482,35 @@ fn zooming_the_graph_keeps_its_panel_size() {
     })));
     let empty = toolbar_top(None);
     assert!((zoomed - empty).abs() < 0.5, "the toolbar moved from {empty} to {zoomed}");
+}
+
+/// A schedule lays out only the rows in sight, under its header, and a click on a row selects its element.
+#[test]
+fn schedule_shows_visible_rows_and_selects() {
+    fn first_schedule(state: &AppState) -> Option<cc_core::ViewId> {
+        let project = state.project();
+        project.views.values().find(|v| matches!(v.kind, cc_core::ViewKind::Schedule { .. })).map(|v| v.id)
+    }
+    let mut state = sample_state();
+    let view = first_schedule(&state).unwrap();
+    let table = state.session.schedule(view).unwrap();
+    assert!(table.rows.len() > 1, "the sample's first schedule has rows");
+    let mut harness = themed_harness(state, egui::vec2(900.0, 400.0), egui::Theme::Light, |ui, state| {
+        if let Some(view) = first_schedule(state) {
+            crate::schedule_ui::show(ui, state, view);
+        }
+    });
+    harness.run();
+    let header = crate::i18n::tr(table.headers[0]);
+    assert!(harness.query_by_label(&header).is_some(), "header {header}");
+    let row = &table.rows[0];
+    let first = match &row.cells[0] {
+        cc_views::Cell::Text(s) => s.clone(),
+        cc_views::Cell::Key(k) => crate::i18n::tr(k),
+    };
+    harness.query_all_by_label(&first).next().unwrap().click();
+    harness.run();
+    assert!(harness.state().selection.contains(&row.element));
 }
 
 /// The project browser follows the organization scheme in use (issue #278):

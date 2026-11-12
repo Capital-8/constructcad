@@ -67,6 +67,21 @@ mod tests {
             .chain(cc_core::Pattern::ALL.map(|p| p.key()))
             .chain(cc_core::material::Finish::ALL.map(|f| f.key()))
             .chain(cc_core::material::Behavior::ALL.map(|b| b.key()));
+        // Structural profiles: materials, shapes and catalog series.
+        let profiles: Vec<String> = cc_core::ProfileMaterial::ALL
+            .map(|m| m.key().to_string())
+            .into_iter()
+            .chain(cc_core::ProfileShape::CODES.iter().map(|c| crate::profiles_dialog::shape_key(c)))
+            .chain(cc_core::profile_catalog::catalog().iter().map(|s| s.name_key.to_string()))
+            .chain(
+                cc_core::ProfileShape::CODES
+                    .iter()
+                    .filter_map(|c| cc_core::ProfileShape::default_for(c))
+                    .flat_map(|s| s.params())
+                    .map(|(n, _)| crate::profiles_dialog::param_key(&n)),
+            )
+            .collect();
+        missing.extend(profiles.into_iter().filter(|k| !messages.contains_key(k.as_str())));
         for k in ["value-yes", "value-no"].into_iter().chain(cube).chain(materials) {
             if !messages.contains_key(k) {
                 missing.push(k.to_string());

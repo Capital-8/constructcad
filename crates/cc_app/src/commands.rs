@@ -230,6 +230,7 @@ pub enum UiCommand {
     Levels,
     Materials,
     FillPatterns,
+    Profiles,
     MacroRecord,
     MacroRun,
     /// Open or close the visual programming editor.
@@ -431,6 +432,7 @@ impl UiCommand {
             Levels,
             Materials,
             FillPatterns,
+            Profiles,
             MacroRecord,
             MacroRun,
             VisualProgramming,
@@ -615,6 +617,7 @@ impl UiCommand {
             Levels => Icon::Levels,
             Materials => Icon::Materials,
             FillPatterns => Icon::FillPatterns,
+            Profiles => Icon::Profiles,
             MacroRecord => Icon::MacroRecord,
             MacroRun => Icon::MacroRun,
             VisualProgramming => Icon::Graph,
@@ -832,6 +835,7 @@ impl UiCommand {
             Levels => t!("dlg-levels"),
             Materials => t!("dlg-materials"),
             FillPatterns => t!("dlg-fill-patterns"),
+            Profiles => t!("cmd-profiles"),
             MacroRecord if state.session.is_recording() => t!("action-macro-stop"),
             MacroRecord => t!("action-macro-record"),
             MacroRun => t!("action-macro-run"),
@@ -1046,6 +1050,7 @@ impl UiCommand {
             Levels => t!("cmd-desc-levels"),
             Materials => t!("cmd-desc-materials"),
             FillPatterns => t!("cmd-desc-fill-patterns"),
+            Profiles => t!("cmd-profiles-desc"),
             MacroRecord => t!("hint-macro-record"),
             MacroRun => t!("hint-macro-run"),
             VisualProgramming => t!("cmd-desc-visual-programming"),
@@ -1317,6 +1322,7 @@ impl UiCommand {
             Levels => "level_set",
             Materials => "material_set",
             FillPatterns => "fill_patterns_list",
+            Profiles => "profiles_list",
             _ => return None,
         })
     }
@@ -1378,6 +1384,7 @@ impl UiCommand {
             }
             EditBoundary if crate::sketch_mode::boundary_target(state).is_none() => Some(t!("why-select-outline")),
             EditProfile if crate::profile_sketch::target(state).is_none() => Some(t!("why-select-sweep")),
+            Profiles if crate::profiles_dialog::section_sketch_open(state) => Some(t!("why-profile-sketch-open")),
             TbLines | TbText | TbImage if !crate::title_block_env::is_open(state) => Some(t!("why-title-block-editor")),
             EditTitleBlock if crate::title_block_env::sheet_title_block(state).is_none() => {
                 Some(t!("why-sheet-title-block"))
@@ -2084,6 +2091,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Levels => state.dialogs.levels = true,
         Materials => state.dialogs.materials = true,
         FillPatterns => crate::fill_patterns_dialog::open(state),
+        Profiles => crate::profiles_dialog::open(state),
         MacroRecord => actions::toggle_macro_recording(state),
         MacroRun => actions::run_macro(state),
         VisualProgramming => crate::graph_ui::toggle(state),

@@ -15,6 +15,9 @@ use serde_json::{Map, Number, Value};
 pub const MAX_DEPTH: usize = 64;
 /// Most values converted at once.
 pub const MAX_VALUES: usize = 1_000_000;
+/// Most bytes of text (strings and keys) converted from Lua at once: a
+/// table can hold one large string many times.
+pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// Floats up to this magnitude are exact integers.
 const EXACT_INT: f64 = 9_007_199_254_740_992.0;
@@ -56,18 +59,37 @@ fn to_lua_at(lua: &Lua, value: &Value, depth: usize, count: &mut usize) -> mlua:
     })
 }
 
-/// A Lua value as JSON; `Err` says what cannot be converted.
-pub fn from_lua(lua: &Lua, value: &LuaValue) -> Result<Value, String> {
-    let mut count = 0;
-    from_lua_at(lua, value, 0, &mut count)
+/// What a conversion from Lua has used: values and bytes of text.
+#[derive(Default)]
+struct Used {
+    values: usize,
+    bytes: usize,
 }
 
-fn from_lua_at(lua: &Lua, value: &LuaValue, depth: usize, count: &mut usize) -> Result<Value, String> {
-    *count += 1;
+impl Used {
+    /// The text of a Lua string, counted (checked before it is copied).
+    fn text(&mut self, s: &mlua::String, what: &str) -> Result<String, String> {
+        let bytes = s.as_bytes();
+        self.bytes = self.bytes.saturating_add(bytes.len());
+        if self.bytes > MAX_BYTES {
+            return Err(format!("more than {} MB of text (bytes of strings)", MAX_BYTES >> 20));
+        }
+        std::str::from_utf8(&bytes).map(str::to_string).map_err(|_| format!("a {what} that is not UTF-8"))
+    }
+}
+
+/// A Lua value as JSON; `Err` says what cannot be converted.
+pub fn from_lua(lua: &Lua, value: &LuaValue) -> Result<Value, String> {
+    let mut used = Used::default();
+    from_lua_at(lua, value, 0, &mut used)
+}
+
+fn from_lua_at(lua: &Lua, value: &LuaValue, depth: usize, used: &mut Used) -> Result<Value, String> {
+    used.values += 1;
     if depth > MAX_DEPTH {
         return Err(format!("tables nested more than {MAX_DEPTH} deep (or a table that contains itself)"));
     }
-    if *count > MAX_VALUES {
+    if used.values > MAX_VALUES {
         return Err(format!("more than {MAX_VALUES} values"));
     }
     Ok(match value {
@@ -76,8 +98,8 @@ fn from_lua_at(lua: &Lua, value: &LuaValue, depth: usize, count: &mut usize) -> 
         LuaValue::Boolean(b) => Value::Bool(*b),
         LuaValue::Integer(i) => Value::from(*i),
         LuaValue::Number(n) => number(*n)?,
-        LuaValue::String(s) => Value::String(s.to_str().map_err(|_| "a string that is not UTF-8")?.to_string()),
-        LuaValue::Table(t) => table(lua, t, depth, count)?,
+        LuaValue::String(s) => Value::String(used.text(s, "string")?),
+        LuaValue::Table(t) => table(lua, t, depth, used)?,
         other => return Err(format!("a {} cannot be passed as a value", other.type_name())),
     })
 }
@@ -94,7 +116,7 @@ fn number(n: f64) -> Result<Value, String> {
     Number::from_f64(n).map(Value::Number).ok_or_else(|| format!("{n} is not a finite number"))
 }
 
-fn table(lua: &Lua, t: &Table, depth: usize, count: &mut usize) -> Result<Value, String> {
+fn table(lua: &Lua, t: &Table, depth: usize, used: &mut Used) -> Result<Value, String> {
     let marked = t.metatable().is_some_and(|m| m == lua.array_metatable());
     let len = t.raw_len();
     let mut keys = 0usize;
@@ -117,7 +139,7 @@ fn table(lua: &Lua, t: &Table, depth: usize, count: &mut usize) -> Result<Value,
         let mut items = Vec::with_capacity(len.min(4096));
         for i in 1..=len {
             let v: LuaValue = t.raw_get(i).map_err(|e| e.to_string())?;
-            items.push(from_lua_at(lua, &v, depth + 1, count)?);
+            items.push(from_lua_at(lua, &v, depth + 1, used)?);
         }
         return Ok(Value::Array(items));
     }
@@ -125,13 +147,13 @@ fn table(lua: &Lua, t: &Table, depth: usize, count: &mut usize) -> Result<Value,
     for pair in t.pairs::<LuaValue, LuaValue>() {
         let (k, v) = pair.map_err(|e| e.to_string())?;
         let key = match &k {
-            LuaValue::String(s) => s.to_str().map_err(|_| "a key that is not UTF-8")?.to_string(),
+            LuaValue::String(s) => used.text(s, "key")?,
             LuaValue::Integer(_) | LuaValue::Number(_) => {
                 return Err("a table with both list items and named fields (or a list with gaps)".into());
             }
             other => return Err(format!("a {} key (keys must be strings)", other.type_name())),
         };
-        map.insert(key, from_lua_at(lua, &v, depth + 1, count)?);
+        map.insert(key, from_lua_at(lua, &v, depth + 1, used)?);
     }
     Ok(Value::Object(map))
 }
@@ -180,5 +202,16 @@ mod tests {
             v = json!([v]);
         }
         assert!(to_lua(&lua, &v).is_err());
+    }
+
+    #[test]
+    fn one_string_many_times_is_refused_before_copying() {
+        let lua = Lua::new();
+        let src = "local s = string.rep('x', 1024 * 1024); local t = {}; for i = 1, 100000 do t[i] = s end; return t";
+        let shared: LuaValue = lua.load(src).eval().unwrap();
+        let e = from_lua(&lua, &shared).unwrap_err();
+        assert!(e.contains("MB of text"), "{e}");
+        let keys: LuaValue = lua.load("local t = {}; t[string.rep('k', 1000)] = 1; return t").eval().unwrap();
+        assert!(from_lua(&lua, &keys).is_ok());
     }
 }

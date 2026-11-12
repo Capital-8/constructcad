@@ -89,7 +89,10 @@ fn body(ui: &mut Ui, state: &mut AppState) {
     // inherit the row's horizontal layout and line every field up side by
     // side, making the dialog far wider than the screen.)
     let list_w = 270.0;
-    let details_w = (ui.available_width() - list_w - 16.0).max(300.0);
+    // What the list, the divider and the gaps around it leave.
+    const DIVIDER_W: f32 = 9.0;
+    let gaps = 2.0 * ui.spacing().item_spacing.x;
+    let details_w = (ui.available_width() - list_w - DIVIDER_W - gaps).max(300.0);
     let column = egui::Layout::top_down(egui::Align::Min);
     ui.horizontal_top(|ui| {
         ui.allocate_ui_with_layout(vec2(list_w, height), column, |ui| {
@@ -99,7 +102,7 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         });
         // A fixed-height divider: `ui.separator()` in a row stretches to the
         // available height, which is unbounded in a modal.
-        let (divider, _) = ui.allocate_exact_size(vec2(9.0, height), Sense::hover());
+        let (divider, _) = ui.allocate_exact_size(vec2(DIVIDER_W, height), Sense::hover());
         ui.painter().vline(divider.center().x, divider.y_range(), Stroke::new(1.0, PALETTE.border));
         ui.allocate_ui_with_layout(vec2(details_w, height), column, |ui| {
             ui.set_width(details_w);
@@ -399,7 +402,7 @@ fn optional_value(
 ) {
     ui.horizontal(|ui| {
         let mut on = value.is_some();
-        if ui.checkbox(&mut on, "").changed() {
+        if crate::table::checkbox(ui, &mut on).changed() {
             update(state, &m.name, field, |x| set(x, if on { Some(value.unwrap_or(0.0)) } else { None }));
         }
         if let Some(mut v) = value {

@@ -226,8 +226,12 @@ impl MepNetwork {
             }
         }
         // Valves: a node on their pipe's run where they sit (a node already there within TOL).
+        let mut run_of: std::collections::HashMap<ElementId, usize> = std::collections::HashMap::new();
+        for (i, r) in runs.iter().enumerate() {
+            run_of.entry(r.0.element).or_insert(i);
+        }
         for v in valves.values() {
-            let Some((g, category, system, level)) = runs.iter().find(|r| r.0.element == v.host) else { continue };
+            let Some((g, category, system, level)) = run_of.get(&v.host).and_then(|i| runs.get(*i)) else { continue };
             let d = g.b - g.a;
             let len2 = d.length_squared();
             if len2 < 1e-12 {

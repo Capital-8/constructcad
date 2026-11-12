@@ -6,6 +6,8 @@ ConstructCraft's window follows the layout desktop CAD and BIM users expect. The
 
 Opening a project and importing a file (IFC, DWG/DXF, SketchUp, OBJ, glTF, pictures and SVG, component files) read it in the background: a dialog shows the operation, the file's name, folder and size and the time elapsed, with a spinner, and keeps the rest of the window from being used. The open project stays as it was until the file has been read; *Cancel* (or Esc) stops waiting and changes nothing.
 
+Dialogs open in the middle of the window and can be moved by dragging their title; a dialog opens centered again the next time. A dialog is as wide as its buttons and its contents need.
+
 ## Commands and their tooltips
 
 Every button in the ribbon and the quick access toolbar runs an *interface command*. So does every two-letter shortcut and every entry of the command palette. Each command defines, in one place:
@@ -229,6 +231,19 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Properties**: *Arc angle* bends a strip (0 makes it straight); its length along the arc, radius, area and volume are shown. A mirror turns an arc the other way; moving and rotating keep it.
 - **Curvature handle**: a selected arc strip shows a round handle at the middle of its arc, as arc walls do; dragging it bends the strip through the pointer, its ends staying (the radius and length show while dragging). While a strip type is chosen, the options bar names the tool *Strip Footing*.
 - **Views**: plans dash strips below the cut plane and hatch those it cuts, the arcs as short chords; sections cut the curved body; schedules list the length along the arc and the exact volume. IFC export writes an arc strip as an `IfcFooting` (`STRIP_FOOTING`) whose body is its outline of true arcs extruded. IFC import brings strip footings, straight or arc, back as components with their mesh, as before.
+
+## Structural profiles
+
+*Structure → Profiles* (also *Manage → Profiles*) opens the Profile Manager: the project's structural profiles, which column and beam types are drawn and built with, grouped by material (steel, cold-formed steel, timber, concrete) under a search box.
+
+- **New** makes a profile of a standard shape (I-section, channel, angle, cold-formed sections, tubes, rectangle, circle, concrete T and L, or a sketch) with its default dimensions and a name from its size; **Duplicate** copies the selected one; **Delete** removes it, and when column or beam types use it, the profile picked under the buttons takes its place in them in the same step.
+- **Import from catalog** lists the built-in series (W and HP per ABNT NBR 15980:2024 and ASTM A6/A6M, IPE, HEA, HEB, the NBR 6355 cold-formed sections, sawn timber and glulam, square, rectangular and circular hollow sections); tick designations (the full names, e.g. `W150x13`, `W150x22,5 (H)` for the wide-flange column sizes), filter by text, and *Add* copies them in as profiles that remember their catalog entry.
+- The selected profile's outline is drawn to fit, with its centroid, axes and overall depth (d) and width (bf). Its name, material and dimensions are edited in the table (millimeters; a dragged value is one undo step); a value the profile cannot take is shown in red and the previous one comes back. The section properties follow: area (cm²), mass per meter (kg/m), Ix, Iy and J (cm⁴), Wx and Wy (cm³), rx and ry (cm), and the types using it.
+- Hovering a dimension's symbol (d, bf, tw, tf…) tells what it measures. In the catalog, a refused import is shown in red in the catalog itself, and a note asks to tick designations while none is ticked.
+- **Edit sketch** (sketched profiles) opens the profile in a sketch in place of the views, around the axes x = 0 and y = 0: the outline and the openings inside it are drawn and changed with the usual sketch tools. *Finish* writes them to the profile (points that did not move keep their expressions, so they still follow the sketch's parameters) and every type using it follows; a sketch that does not close shows why and stays open. *Finish* and *Cancel* both go back to the manager. The sketch is part of the manager's session: the manager's Cancel also undoes what *Finish* wrote. It opens from the manager on its own, not over Type Properties.
+- Every change is a `profile_*` command; OK keeps them and Cancel undoes them all.
+
+In **Type Properties**, column and beam types have a *Profile* row in place of the old section fields: a list of the project's profiles grouped by material with a search box, and *Manage…*, which opens the Profile Manager on the type's profile. Below it, the profile's rotation (degrees) and *Mirrored* turn and flip it in the type, and a read-only row gives the profile's d × bf. A type with no profile shows "—" and keeps its own section until one is picked. Changes go through `type_set`, and OK/Cancel keep or undo them with the dialog's other changes.
 
 ## Cable trays and valves
 

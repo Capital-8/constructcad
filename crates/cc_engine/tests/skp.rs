@@ -78,13 +78,13 @@ fn mesh_of(s: &Session, type_id: u64) -> ([f64; 3], [f64; 3], f64, usize) {
     let (mut lo, mut hi, mut volume) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3], 0.0);
     for item in &def.items {
         let ComponentShape::Mesh { vertices, faces } = &item.shape else { panic!("not a mesh") };
-        for v in vertices {
+        for v in vertices.iter() {
             for k in 0..3 {
                 lo[k] = lo[k].min(v[k]);
                 hi[k] = hi[k].max(v[k]);
             }
         }
-        for f in faces {
+        for f in faces.iter() {
             let p = |i: u32| glam::DVec3::from_array(vertices[i as usize]);
             for k in 1..f.len() - 1 {
                 volume += p(f[0]).dot(p(f[k]).cross(p(f[k + 1]))) / 6.0;
@@ -204,4 +204,42 @@ fn bad_skp_files_are_errors() {
     b.save(&empty).unwrap();
     let err = s.execute("skp_import", json!({ "path": empty })).unwrap_err();
     assert_eq!(err.code, ErrorCode::Rejected, "{err:?}");
+}
+
+/// A model whose root places definition 1 once; definition `k` places the
+/// definitions `children(k)`, and none has faces.
+fn nested_model(defs: i64, children: impl Fn(i64) -> Vec<i64>) -> cc_skp::SkpModel {
+    let place = |id: i64| cc_skp::Instance {
+        ref_idx: Some(id),
+        matrix: vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        ..Default::default()
+    };
+    let mut model = cc_skp::SkpModel::default();
+    for id in 1..=defs {
+        let instances = children(id).into_iter().map(place).collect();
+        model
+            .definitions
+            .insert(id, cc_skp::Definition { id, name: format!("D{id}"), instances, ..Default::default() });
+    }
+    model.root_mut().instances.push(place(1));
+    model
+}
+
+#[test]
+fn skp_definitions_that_place_themselves_are_followed_once() {
+    // Ten placements of itself: 10^32 visits without the path check.
+    let model = nested_model(1, |_| vec![1; 10]);
+    let start = std::time::Instant::now();
+    assert!(cc_engine::skp::convert(&model, "Loose").is_ok());
+    assert!(cc_engine::skp::convert_single(&model, "All").is_ok());
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn skp_definitions_that_fan_out_are_bounded() {
+    // Each of 33 faceless definitions places the next ten times: 10^32 visits.
+    let model = nested_model(33, |k| if k < 33 { vec![k + 1; 10] } else { Vec::new() });
+    let start = std::time::Instant::now();
+    assert!(matches!(cc_engine::skp::convert(&model, "Loose"), Err(cc_engine::skp::SkpError::TooLarge)));
+    assert!(start.elapsed() < std::time::Duration::from_secs(10), "{:?}", start.elapsed());
 }

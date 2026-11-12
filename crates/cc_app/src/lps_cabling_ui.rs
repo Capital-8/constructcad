@@ -134,19 +134,27 @@ fn cabling_dialog(ctx: &Context, state: &mut AppState) {
     if !state.dialogs.cabling {
         return;
     }
-    let Ok(out) = state.session.run(cabling::CablingList { rack: None }) else {
-        state.dialogs.cabling = false;
-        return;
-    };
+    // Listed again only when the model changes.
+    let revision = state.session.doc.revision();
+    if !state.dialogs.cabling_result.as_ref().is_some_and(|(r, _)| *r == revision) {
+        let Ok(out) = state.session.run(cabling::CablingList { rack: None }) else {
+            state.dialogs.cabling = false;
+            state.dialogs.cabling_result = None;
+            return;
+        };
+        state.dialogs.cabling_result = Some((revision, out));
+    }
+    let Some((_, out)) = &state.dialogs.cabling_result else { return };
     let response = Dialog::new("cabling", t!("dlg-cabling")).width(560.0).show(
         ctx,
-        |ui| cabling_body(ui, &out),
+        |ui| cabling_body(ui, out),
         |f| {
             f.primary(t!("action-close"));
         },
     );
     if response.clicked.is_some() || response.dismissed {
         state.dialogs.cabling = false;
+        state.dialogs.cabling_result = None;
     }
 }
 

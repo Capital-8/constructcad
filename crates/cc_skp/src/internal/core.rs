@@ -28,20 +28,32 @@ struct Zip<'a> {
     /// Entry names (C strings, as miniz reports them), directories excluded.
     names: Vec<Vec<u8>>,
     archive_len: u64,
+    /// Uncompressed bytes extracted so far (declared sizes), all entries.
+    extracted: std::cell::Cell<u64>,
 }
 
 // A ZIP entry's declared uncompressed size is untrusted central-directory
 // metadata - it can be set independently of what the compressed stream
 // actually decompresses to, and even when genuine, DEFLATE can expand highly
 // compressible data by three orders of magnitude. Real production model.dat
-// entries are observed at ~10x compression, so both limits below leave
+// entries are observed at ~10x compression, so the limits below leave
 // generous headroom for legitimate files while rejecting the kind of
-// declared-size lie or extreme ratio a genuine file would never need.
-const MAX_UNCOMPRESSED_ENTRY_BYTES: u64 = 16 * 1024 * 1024 * 1024; // 16 GB
+// declared-size lie or extreme ratio a genuine file would never need. An
+// entry is extracted up to its declared size, and the bytes stay in memory
+// (textures are kept with their materials), so the sizes are capped per
+// entry and in all for one file.
+/// Largest `model.dat`.
+pub const MAX_MODEL_ENTRY_BYTES: u64 = 1 << 30; // 1 GiB
+/// Largest other entry (a texture, a style, the metadata).
+pub const MAX_OTHER_ENTRY_BYTES: u64 = 128 << 20; // 128 MiB
+/// Most bytes extracted from one file's entries in all.
+pub const MAX_TOTAL_EXTRACTED_BYTES: u64 = 2 << 30; // 2 GiB
 const MAX_COMPRESSION_RATIO: u64 = 1000;
 const RATIO_CHECK_THRESHOLD_BYTES: u64 = 1024 * 1024; // 1 MB
 
-fn validate_entry_size(s: &ZipFileStat, archive_len: u64) -> Result<(), SkpParseError> {
+/// Check an entry's declared size before extracting it, given the bytes
+/// already extracted from the file (`extracted`).
+fn validate_entry_size(s: &ZipFileStat, archive_len: u64, extracted: u64) -> Result<(), SkpParseError> {
     let declared = s.uncomp_size;
     if declared == 0 {
         return Ok(());
@@ -53,11 +65,22 @@ fn validate_entry_size(s: &ZipFileStat, archive_len: u64) -> Result<(), SkpParse
             ParseStage::ZipExtract,
         ));
     }
-    if declared > MAX_UNCOMPRESSED_ENTRY_BYTES {
+    let ceiling =
+        if s.filename.eq_ignore_ascii_case(b"model.dat") { MAX_MODEL_ENTRY_BYTES } else { MAX_OTHER_ENTRY_BYTES };
+    if declared > ceiling {
         return Err(SkpParseError::at_stage(
             format!(
                 "ZIP entry '{name}' declares {declared} bytes uncompressed, exceeding the \
-                 {MAX_UNCOMPRESSED_ENTRY_BYTES}-byte safety ceiling"
+                 {ceiling}-byte safety ceiling"
+            ),
+            ParseStage::ZipExtract,
+        ));
+    }
+    if extracted.saturating_add(declared) > MAX_TOTAL_EXTRACTED_BYTES {
+        return Err(SkpParseError::at_stage(
+            format!(
+                "ZIP entry '{name}' would bring the bytes extracted past the \
+                 {MAX_TOTAL_EXTRACTED_BYTES}-byte safety ceiling for one file"
             ),
             ParseStage::ZipExtract,
         ));
@@ -90,7 +113,7 @@ impl<'a> Zip<'a> {
                 names.push(s.filename);
             }
         }
-        Ok(Zip { z, names, archive_len: d.len() as u64 })
+        Ok(Zip { z, names, archive_len: d.len() as u64, extracted: std::cell::Cell::new(0) })
     }
 
     /// The entry's bytes, `None` when it is missing or fails to extract; an
@@ -98,8 +121,51 @@ impl<'a> Zip<'a> {
     fn get(&self, name: &[u8]) -> Result<Option<Vec<u8>>, SkpParseError> {
         let Some(i) = self.z.locate(name) else { return Ok(None) };
         let Ok(s) = self.z.stat(i) else { return Ok(None) };
-        validate_entry_size(&s, self.archive_len)?;
+        validate_entry_size(&s, self.archive_len, self.extracted.get())?;
+        self.extracted.set(self.extracted.get().saturating_add(s.uncomp_size));
         Ok(self.z.extract(i).ok())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stat(name: &str, uncomp_size: u64) -> ZipFileStat {
+        ZipFileStat {
+            index: 0,
+            filename: name.as_bytes().to_vec(),
+            comp_size: uncomp_size / 10,
+            uncomp_size,
+            crc32: 0,
+            method: 8,
+            bit_flag: 0,
+            local_header_ofs: 0,
+            external_attr: 0,
+            is_directory: false,
+        }
+    }
+
+    #[test]
+    fn entries_are_capped_by_kind_and_in_all() {
+        let archive = u64::MAX;
+        // A model of 1.5 GiB and a texture of 512 MiB (ratio 10) are refused.
+        assert!(validate_entry_size(&stat("model.dat", 3 << 29), archive, 0).is_err());
+        assert!(validate_entry_size(&stat("materials/1/t.png", 512 << 20), archive, 0).is_err());
+        assert!(validate_entry_size(&stat("model.dat", 512 << 20), archive, 0).is_ok());
+        assert!(validate_entry_size(&stat("materials/1/t.png", 100 << 20), archive, 0).is_ok());
+        // Many textures within their own cap still meet the total.
+        let mut extracted = 0;
+        let mut refused = false;
+        for _ in 0..100 {
+            let s = stat("materials/1/t.png", 100 << 20);
+            if validate_entry_size(&s, archive, extracted).is_err() {
+                refused = true;
+                break;
+            }
+            extracted += s.uncomp_size;
+        }
+        assert!(refused && extracted <= MAX_TOTAL_EXTRACTED_BYTES);
     }
 }
 

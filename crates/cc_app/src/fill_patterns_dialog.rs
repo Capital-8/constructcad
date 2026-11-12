@@ -657,7 +657,7 @@ fn import_dialog(ctx: &Context, state: &mut AppState) {
             egui::ScrollArea::vertical().id_salt("fp-import-list").max_height(320.0).show(ui, |ui| {
                 for e in &mut import.entries {
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut e.pick, "");
+                        crate::table::checkbox(ui, &mut e.pick);
                         let (rect, _) = ui.allocate_exact_size(vec2(64.0, 32.0), Sense::hover());
                         let painter = ui.painter().with_clip_rect(rect);
                         painter.rect_filled(rect, 1.0, Color32::WHITE);

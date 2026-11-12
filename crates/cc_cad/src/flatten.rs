@@ -40,6 +40,8 @@ pub struct Flattener {
     /// Primitives emitted in all (the drawing's and the kept blocks').
     emitted: usize,
     work: usize,
+    /// Points and text characters handled ([`Limits::max_points`]).
+    points: usize,
     stopped: bool,
     /// Where block references go when blocks are kept ([`Limits::keep_blocks`]):
     /// the drawing's, then each kept block's in turn.
@@ -59,6 +61,7 @@ impl Flattener {
             out: Vec::new(),
             emitted: 0,
             work: 0,
+            points: 0,
             stopped: false,
             refs: Vec::new(),
             wanted: Vec::new(),
@@ -139,9 +142,27 @@ impl Flattener {
         self.entity(e, blocks, &ctx);
     }
 
+    /// Count `n` points or characters against [`Limits::max_points`];
+    /// false (and the reader stopped) once the budget is spent.
+    fn charge(&mut self, n: usize) -> bool {
+        self.points = self.points.saturating_add(n);
+        if self.points > self.limits.max_points {
+            self.stopped = true;
+        }
+        !self.stopped
+    }
+
     fn emit(&mut self, prim: CadPrim) {
         if self.emitted >= self.limits.max_prims {
             self.stopped = true;
+            return;
+        }
+        let size = match &prim {
+            CadPrim::Polyline { pts, .. } | CadPrim::Fill { pts, .. } => pts.len(),
+            CadPrim::Text { text, .. } => text.len(),
+            _ => 1,
+        };
+        if !self.charge(size) {
             return;
         }
         if prim.is_valid() {
@@ -177,6 +198,10 @@ impl Flattener {
         self.work += 1;
         if self.work > self.limits.max_work {
             self.stopped = true;
+            return;
+        }
+        // Reading an entity costs its size, each time a block inserts it.
+        if !self.charge(e.groups.len().saturating_add(e.children.len())) {
             return;
         }
         // Invisible entities.
@@ -335,6 +360,9 @@ impl Flattener {
                 }
                 None => out.push(p),
             }
+            if out.len() >= MAX_POLY_POINTS {
+                break;
+            }
         }
         if !closed {
             out.push(pts[n - 1]);
@@ -450,6 +478,9 @@ impl Flattener {
         if e.name == "ATTRIB" && e.int(70, 0) & 1 == 1 {
             return;
         }
+        if !self.charge(e.str(1).len()) {
+            return;
+        }
         let s = text::plain(e.str(1));
         let height = e.real(40, 0.0);
         if s.trim().is_empty() || !(height.is_finite() && height > 0.0) {
@@ -522,6 +553,9 @@ impl Flattener {
             }
         }
         raw.push_str(e.str(1));
+        if !self.charge(raw.len()) {
+            return;
+        }
         let lines: Vec<String> = text::mtext_lines(&raw).into_iter().take(1000).collect();
         let n = e.normal();
         let (ax, ay, _) = geom::ocs_axes(n);
@@ -825,6 +859,9 @@ fn hatch_loop(cur: &mut Cursor) -> Option<Vec<DVec2>> {
                     pts.extend(arc.iter().take(arc.len().saturating_sub(1)));
                 }
                 None => pts.push(p),
+            }
+            if pts.len() >= MAX_POLY_POINTS {
+                break;
             }
         }
         return Some(pts);

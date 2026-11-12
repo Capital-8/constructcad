@@ -143,6 +143,8 @@ pub fn now() -> u64 {
 /// The one request: the latest release as JSON.
 fn fetch() -> Result<String, ureq::Error> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
+        // No request, and no redirect, leaves https.
+        .https_only(true)
         .timeout_global(Some(TIMEOUT))
         .user_agent(format!("ConstructCraft/{}", env!("CARGO_PKG_VERSION")))
         .build()

@@ -98,6 +98,9 @@ pub struct GraphEditor {
     buffers: HashMap<(u64, String), String>,
     clipboard: Option<(Vec<Node>, Vec<Wire>)>,
     confirm: Option<Pending>,
+    /// The user let this graph's commands work with files: a grant of this
+    /// session, never saved with the graph and reset when another opens.
+    pub allow_files: bool,
 }
 
 impl Default for GraphEditor {
@@ -122,6 +125,7 @@ impl Default for GraphEditor {
             buffers: HashMap::new(),
             clipboard: None,
             confirm: None,
+            allow_files: false,
         }
     }
 }
@@ -163,6 +167,7 @@ impl GraphEditor {
     fn replace(&mut self, graph: Graph, path: Option<PathBuf>) {
         self.graph = graph;
         self.path = path;
+        self.allow_files = false;
         self.dirty = false;
         self.report = None;
         self.selected.clear();
@@ -305,7 +310,8 @@ pub fn run(state: &mut AppState) {
             return;
         }
     };
-    let result = state.session.execute("graph_run", json!({ "graph": graph })).map_err(|e| e.message);
+    let args = json!({ "graph": graph, "allow_files": state.graph.allow_files });
+    let result = state.session.execute("graph_run", args).map_err(|e| e.message);
     if let Ok(r) = &result {
         state.message = status_text(r);
     }
@@ -341,7 +347,9 @@ fn open_graph(state: &mut AppState) {
 
 /// Open the graph file at `path` in the editor.
 pub fn open_path(state: &mut AppState, path: PathBuf) {
-    let read = std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| Graph::from_json(&t));
+    let read = cc_core::read_to_string_limited(&path, cc_engine::graph::MAX_FILE as u64)
+        .map_err(|e| e.to_string())
+        .and_then(|t| Graph::from_json(&t));
     match read {
         Ok((graph, repairs)) => {
             state.graph.replace(graph, Some(path));
@@ -901,7 +909,7 @@ fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: 
     match kind {
         "boolean" => {
             let mut b = value.as_bool().unwrap_or(false);
-            if ui.add(egui::Checkbox::without_text(&mut b)).changed() {
+            if ui.add(crate::table::boxed(egui::Checkbox::without_text(&mut b))).changed() {
                 changed = Some(json!(b));
             }
         }
@@ -1210,10 +1218,10 @@ fn graph_inspector(ui: &mut Ui, state: &mut AppState) {
         state.graph.step();
         state.graph.graph.name = name;
     }
-    let mut files = state.graph.graph.allow_files;
+    // Not a change of the graph: a grant of this session (not saved, not undone).
+    let mut files = state.graph.allow_files;
     if ui.checkbox(&mut files, t!("graph-allow-files")).on_hover_text(t!("graph-allow-files-hint")).changed() {
-        state.graph.step();
-        state.graph.graph.allow_files = files;
+        state.graph.allow_files = files;
     }
     ui.add_space(6.0);
     let uid = state.graph.graph.uid;

@@ -30,6 +30,7 @@ id_type!(LineStyleId, "LS");
 id_type!(OptionSetId, "OS");
 id_type!(OptionId, "OP");
 id_type!(FillPatternId, "FP");
+id_type!(ProfileId, "PR");
 id_type!(BrowserSchemeId, "BO");
 
 impl Default for PhaseId {

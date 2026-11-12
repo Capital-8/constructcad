@@ -174,7 +174,9 @@ pub struct CadImportFile {
 impl Command for CadImportFile {
     const NAME: &'static str = "cad_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let (view_id, level) = import_view(s, &self.view)?;
         let (center, auto) = align_arg(self.align.as_deref(), (false, false))?;
         let units = self.units.as_deref().map(units_arg).transpose()?;
@@ -472,7 +474,9 @@ pub const IMAGE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "bmp", "we
 impl Command for ImageImport {
     const NAME: &'static str = "image_import";
     const KIND: CommandKind = CommandKind::Edit;
+    const READS_FILES: bool = true;
     fn run(self, s: &mut Session) -> Result<Value> {
+        s.require_files("path")?;
         let (view_id, level) = import_view(s, &self.view)?;
         let (center, _) = align_arg(self.align.as_deref(), (true, false))?;
         let rotation_deg = refs::finite(self.rotation.unwrap_or(0.0), "rotation")?;

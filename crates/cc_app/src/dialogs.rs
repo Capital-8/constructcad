@@ -21,6 +21,8 @@ fn done(state: &mut AppState, r: &egui::Response) {
 }
 
 pub fn show(ctx: &Context, state: &mut AppState) {
+    // Before any dialog begins its edits over a session a dropped profile sketch left open.
+    crate::profiles_dialog::settle_abandoned(state);
     project_info(ctx, state);
     crate::site_ui::show(ctx, state);
     crate::units_dialog::show(ctx, state);
@@ -39,6 +41,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::browser_org_dialog::show(ctx, state);
     // After the material browser, type properties and graphics, which open it over themselves.
     crate::fill_patterns_dialog::show(ctx, state);
+    crate::profiles_dialog::show(ctx, state);
     crate::library::show(ctx, state);
     crate::obj_ui::show(ctx, state);
     crate::plugins_ui::drain_messages(state);
@@ -577,7 +580,7 @@ fn update_install(ctx: &Context, state: &mut AppState) {
             Install::Ready(version, Next::Restart(_)) => {
                 ui.label(t!("update-installed-restart", "version" => version.to_string()));
             }
-            Install::Ready(version, Next::Installer(_)) => {
+            Install::Ready(version, Next::Installer(..)) => {
                 ui.label(t!("update-installer-ready", "version" => version.to_string()));
             }
             Install::Ready(_, Next::Opened) => {
@@ -605,7 +608,7 @@ fn update_install(ctx: &Context, state: &mut AppState) {
                 ids[0] = f.primary(t!("update-restart"));
                 ids[1] = f.secondary(t!("update-later"));
             }
-            Install::Ready(_, Next::Installer(_)) => {
+            Install::Ready(_, Next::Installer(..)) => {
                 ids[0] = f.primary(t!("update-install-close"));
                 ids[1] = f.secondary(t!("update-install-on-exit"));
             }
@@ -629,11 +632,11 @@ fn update_install(ctx: &Context, state: &mut AppState) {
                 updates.install = Some(Install::Running(version, url, running));
             }
         }
-        Some(Install::Ready(_, next @ (Next::Restart(_) | Next::Installer(_)))) => {
+        Some(Install::Ready(_, next @ (Next::Restart(_) | Next::Installer(..)))) => {
             let now = clicked == ids[0];
             // The installer runs when the app closes, now or later; a replaced
             // copy restarts only when asked (its files are already in place).
-            if now || matches!(next, Next::Installer(_)) {
+            if now || matches!(next, Next::Installer(..)) {
                 updates.on_exit = Some(next);
             }
             if now {

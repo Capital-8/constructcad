@@ -271,7 +271,7 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, c: &CadImport) {
             set(state, id, "colors", |x| x.color_mode = mode);
         }
         let mut halftone = c.halftone;
-        if row(ui, &t!("vg-halftone"), |ui| ui.checkbox(&mut halftone, "")).changed() {
+        if row(ui, &t!("vg-halftone"), |ui| crate::table::checkbox(ui, &mut halftone)).changed() {
             set(state, id, "halftone", |x| x.halftone = halftone);
         }
         readonly_row(ui, &t!("prop-cad-primitives"), c.drawing.prims.len().to_string());
@@ -286,7 +286,7 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, c: &CadImport) {
         if c.drawing.layers.len() > 1 {
             let all_shown = c.hidden_layers.is_empty();
             let mut all = all_shown;
-            if row(ui, &t!("prop-cad-all-layers"), |ui| ui.checkbox(&mut all, "")).changed() {
+            if row(ui, &t!("prop-cad-all-layers"), |ui| crate::table::checkbox(ui, &mut all)).changed() {
                 layers_set(state, id, Vec::new(), all);
             }
         }
@@ -296,7 +296,7 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, c: &CadImport) {
                 let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 let [red, g, b] = layer.color;
                 ui.painter().rect_filled(r, 2.0, egui::Color32::from_rgb(red, g, b));
-                ui.checkbox(&mut visible, "").changed()
+                crate::table::checkbox(ui, &mut visible).changed()
             });
             if changed {
                 layers_set(state, id, vec![layer.name.clone()], visible);

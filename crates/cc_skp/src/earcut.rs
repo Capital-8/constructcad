@@ -37,26 +37,55 @@ fn inside(p: &EarPoint, a: &EarPoint, b: &EarPoint, c: &EarPoint) -> bool {
     x >= -1e-12 && y >= -1e-12 && z >= -1e-12
 }
 
+/// Most vertices (all loops of a face) ear clipped; a larger face is fanned
+/// from the first vertex of its outer loop instead, its holes left out
+/// (exact for convex outlines, and bounded for any): checking holes for
+/// overlaps and clipping cost the square of the vertices or more.
+pub const MAX_EAR_VERTICES: usize = 4096;
+
+/// Most steps (vertices looked at, ear tests, vertices shifted) one ring is
+/// clipped with; what is left past them is fanned.
+pub const MAX_CLIP_WORK: usize = 30_000_000;
+
+/// Triangles fanning out from the first point of a ring (degenerate ones
+/// left out).
+fn fan(p: &[EarPoint]) -> Vec<[EntityId; 3]> {
+    let Some(first) = p.first() else { return Vec::new() };
+    p.windows(2)
+        .skip(1)
+        .filter(|w| cross(first, &w[0], &w[1]).abs() > 1e-12)
+        .map(|w| [first.id, w[0].id, w[1].id])
+        .collect()
+}
+
 fn clip(mut p: Vec<EarPoint>) -> Vec<[EntityId; 3]> {
     let mut out = Vec::new();
     if area(&p) < 0.0 {
         p.reverse();
     }
     let mut guard = 0usize;
+    let mut work = 0usize;
     while p.len() > 3 && {
         let g = guard;
         guard += 1;
         g < p.len() * p.len() * 4
     } {
         let n = p.len();
+        // Removing a vertex shifts the rest.
+        work += n;
         let mut cut = false;
         for i in 0..n {
+            work += 1;
+            if work > MAX_CLIP_WORK {
+                break;
+            }
             let a = (i + n - 1) % n;
             let c = (i + 1) % n;
             if cross(&p[a], &p[i], &p[c]) <= 1e-12 {
                 continue;
             }
             let hit = (0..n).any(|j| {
+                work += 1;
                 j != a
                     && j != i
                     && j != c
@@ -72,6 +101,10 @@ fn clip(mut p: Vec<EarPoint>) -> Vec<[EntityId; 3]> {
             p.remove(i);
             cut = true;
             break;
+        }
+        if work > MAX_CLIP_WORK {
+            out.extend(fan(&p));
+            return out;
         }
         if !cut {
             for i in 0..n {
@@ -160,6 +193,13 @@ fn triangulate_by_filtering_holes(loops: &[Vec<EarPoint>]) -> Vec<[EntityId; 3]>
 pub fn earcut_2d(mut loops: Vec<Vec<EarPoint>>) -> Vec<[EntityId; 3]> {
     if loops.is_empty() {
         return Vec::new();
+    }
+    if loops.iter().map(Vec::len).sum::<usize>() > MAX_EAR_VERTICES {
+        let mut outer = std::mem::take(&mut loops[0]);
+        if area(&outer) < 0.0 {
+            outer.reverse();
+        }
+        return fan(&outer);
     }
     if loops.len() > 2 && holes_overlap(&loops) {
         return triangulate_by_filtering_holes(&loops);

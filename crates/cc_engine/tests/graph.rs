@@ -209,6 +209,59 @@ fn nodes_that_cannot_run_say_why() {
 }
 
 #[test]
+fn a_graph_file_cannot_grant_itself_files() {
+    let dir = std::env::temp_dir().join(format!("ccad-graph-files-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("saved.ccad");
+    let _ = std::fs::remove_file(&out);
+    let g = json!({
+        "allow_files": true,
+        "nodes": [{"id": 1, "kind": {"command": "project_save"}, "values": {"path": out}}]
+    });
+    let mut s = Session::default();
+    let r = run(&mut s, "graph_run", json!({"graph": g}));
+    assert!(r["nodes"]["1"]["error"].as_str().unwrap().contains("files"), "{r}");
+    assert!(!out.exists());
+    let check = run(&mut s, "graph_check", json!({"graph": g}));
+    assert_eq!(check["problems"].as_array().unwrap().len(), 1, "{check}");
+    // The caller grants it.
+    let r = run(&mut s, "graph_run", json!({"graph": g, "allow_files": true}));
+    assert_eq!(r["errors"], 0, "{r}");
+    assert!(out.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn imports_by_path_need_the_runs_file_access() {
+    let pat = "*Diag, diagonal\n45, 0,0, 0,3\n";
+    let g = json!({
+        "nodes": [
+            {"id": 1, "kind": {"command": "cad_import"}, "values": {"path": "no/such/drawing.dxf", "view": "Plan"}},
+            {"id": 2, "kind": {"command": "fill_pattern_import"}, "values": {"path": "no/such/file.pat"}},
+            {"id": 3, "kind": {"command": "fill_pattern_import"}, "values": {"text": pat}}
+        ]
+    });
+    let mut s = Session::default();
+    let r = run(&mut s, "graph_run", json!({"graph": g}));
+    for node in ["1", "2"] {
+        assert!(r["nodes"][node]["error"].as_str().unwrap().contains("may not work with files"), "{r}");
+    }
+    // The inline variant runs.
+    assert!(r["nodes"]["3"]["error"].is_null(), "{r}");
+    // Allowed, the path is read (and is missing).
+    let r = run(&mut s, "graph_run", json!({"graph": g, "allow_files": true}));
+    let e = r["nodes"]["2"]["error"].as_str().unwrap();
+    assert!(!e.contains("may not work with files"), "{r}");
+    // A graph file named by path is refused the same way inside a run without files.
+    s.with_files(false, |s| {
+        let e = s.execute("graph_check", json!({"path": "examples/graphs/house.ccgraph"})).unwrap_err();
+        assert!(e.message.contains("may not work with files"), "{e:?}");
+        let e = s.execute("project_save", json!({"path": "x.ccad"})).unwrap_err();
+        assert!(e.message.contains("works with files"), "{e:?}");
+    });
+}
+
+#[test]
 fn every_command_is_a_node() {
     let mut s = Session::default();
     let nodes = run(&mut s, "graph_nodes", json!({}));

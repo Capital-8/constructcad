@@ -38,6 +38,7 @@ pub mod modify;
 pub mod pad;
 pub mod paint;
 pub mod phases;
+pub mod profiles;
 pub mod project;
 pub mod query;
 pub mod ramp;
@@ -70,7 +71,7 @@ pub(crate) fn edit<R>(s: &mut Session, tx: String, f: impl FnOnce(&mut EditCtx) 
 
 /// The project is consistent: repairing a copy would change nothing.
 pub(crate) fn check(p: &Project) -> Result<()> {
-    match p.clone().repair() {
+    match p.repairs_needed() {
         0 => Ok(()),
         n => Err(EngineError::rejected(format!("the edit would leave the model invalid ({n} problems)"))),
     }

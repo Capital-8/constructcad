@@ -6,6 +6,8 @@ A janela do ConstructCraft segue a disposição que usuários de CAD e BIM de de
 
 Abrir um projeto e importar um arquivo (IFC, DWG/DXF, SketchUp, OBJ, glTF, imagens e SVG, arquivos de componente) faz a leitura em segundo plano: um diálogo mostra a operação, o nome, a pasta e o tamanho do arquivo e o tempo decorrido, com um indicador animado, e impede o uso do resto da janela. O projeto aberto continua como estava até o arquivo ser lido; *Cancelar* (ou Esc) deixa de esperar e não altera nada.
 
+Os diálogos abrem no meio da janela e podem ser movidos arrastando o título; na próxima vez, o diálogo abre centralizado de novo. Um diálogo tem a largura que seus botões e seu conteúdo precisam.
+
 ## Comandos e suas dicas
 
 Todo botão do ribbon e da barra de acesso rápido executa um *comando da interface*. O mesmo vale para cada atalho de duas letras e cada item da paleta de comandos. Cada comando define, num só lugar:
@@ -229,6 +231,19 @@ Cortinas de vidro são paredes de um tipo cortina (um projeto sem tipo cortina g
 - **Propriedades**: *Ângulo do arco* curva a sapata (0 a deixa reta); são mostrados o comprimento ao longo do arco, o raio, a área e o volume. Espelhar inverte o sentido do arco; mover e girar o mantêm.
 - **Alça de curvatura**: uma sapata em arco selecionada mostra uma alça redonda no meio do arco, como as paredes em arco; arrastá-la curva a sapata pelo ponteiro, mantendo as pontas (o raio e o comprimento aparecem durante o arrasto). Com um tipo de sapata corrida escolhido, a barra de opções chama a ferramenta de *Sapata corrida*.
 - **Vistas**: as plantas tracejam as sapatas abaixo do plano de corte e hachuram as que ele corta, com os arcos em cordas curtas; os cortes cortam o corpo curvo; as tabelas listam o comprimento ao longo do arco e o volume exato. A exportação IFC grava uma sapata em arco como `IfcFooting` (`STRIP_FOOTING`) cujo corpo é o seu contorno de arcos verdadeiros extrudado. A importação IFC traz as sapatas corridas, retas ou em arco, como componentes com a sua malha, como antes.
+
+## Perfis estruturais
+
+*Estrutura → Perfis* (também *Gerenciar → Perfis*) abre o Gerenciador de perfis: os perfis estruturais do projeto, com que os tipos de pilar e viga são desenhados e construídos, agrupados por material (aço, aço formado a frio, madeira, concreto) sob uma caixa de busca.
+
+- **Novo** cria um perfil de forma padrão (perfil I, U laminado, cantoneira, perfis formados a frio, tubos, retangular, circular, seções T e L de concreto ou esboço) com as dimensões padrão e um nome tirado do tamanho; **Duplicar** copia o selecionado; **Excluir** o remove e, quando tipos de pilar ou viga o usam, o perfil escolhido abaixo dos botões toma o seu lugar neles no mesmo passo.
+- **Importar do catálogo** lista as séries embutidas (W e HP conforme a ABNT NBR 15980:2024 e a ASTM A6/A6M, IPE, HEA, HEB, os perfis formados a frio da NBR 6355, madeira serrada e MLC, tubos quadrados, retangulares e circulares); marque designações (os nomes completos, como `W150x13` e `W150x22,5 (H)` para as bitolas de pilar de abas largas), filtre por texto, e *Adicionar* as copia como perfis que lembram sua entrada do catálogo.
+- O contorno do perfil selecionado é desenhado ajustado, com o centroide, os eixos e a altura (d) e a largura (bf) totais. Nome, material e dimensões são editados na tabela (milímetros; um valor arrastado é um passo de desfazer); um valor que o perfil não aceita aparece em vermelho e o anterior volta. Seguem as propriedades da seção: área (cm²), massa por metro (kg/m), Ix, Iy e J (cm⁴), Wx e Wy (cm³), rx e ry (cm), e os tipos que o usam.
+- Passar o mouse sobre o símbolo de uma dimensão (d, bf, tw, tf…) mostra o que ela mede. No catálogo, uma importação recusada aparece em vermelho no próprio catálogo, e uma nota pede para marcar designações enquanto nenhuma está marcada.
+- **Editar esboço** (perfis de esboço) abre o perfil num esboço no lugar das vistas, em torno dos eixos x = 0 e y = 0: o contorno e as aberturas dentro dele são desenhados e alterados com as ferramentas de esboço de sempre. *Concluir* grava-os no perfil (os pontos que não se moveram mantêm as suas expressões e continuam seguindo os parâmetros do esboço) e todos os tipos que o usam acompanham; um esboço que não fecha mostra o motivo e continua aberto. *Concluir* e *Cancelar* voltam ao gerenciador. O esboço faz parte da sessão do gerenciador: o Cancelar do gerenciador também desfaz o que *Concluir* gravou. Ele abre do gerenciador sozinho, não sobre as Propriedades do tipo.
+- Cada mudança é um comando `profile_*`; OK as mantém e Cancelar desfaz todas.
+
+Nas **Propriedades do tipo**, os tipos de pilar e viga têm uma linha *Perfil* no lugar dos antigos campos de seção: uma lista dos perfis do projeto agrupados por material com caixa de busca, e *Gerenciar…*, que abre o Gerenciador de perfis no perfil do tipo. Abaixo, a rotação do perfil (graus) e *Espelhado* giram e espelham o perfil no tipo, e uma linha só de leitura dá d × bf do perfil. Um tipo sem perfil mostra "—" e mantém a sua própria seção até que um seja escolhido. As mudanças passam por `type_set`, e OK/Cancelar as mantêm ou desfazem com as demais mudanças do diálogo.
 
 ## Eletrocalhas e registros
 

@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 26;
+pub const FORMAT_VERSION: u32 = 27;
+
+/// Largest project file read, bytes (pictures and textures are kept in it).
+pub const MAX_FILE_BYTES: u64 = 1 << 30;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
@@ -17,6 +20,8 @@ pub enum PersistError {
     Serialize(#[from] ron::Error),
     #[error("unsupported format version {0} (maximum {FORMAT_VERSION})")]
     Version(u32),
+    #[error("the file is larger than {} MB", .0 >> 20)]
+    TooLarge(u64),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -68,7 +73,8 @@ pub fn from_ron_with_repairs_localized(
     // (older files: the standard title block on every sheet); version 23 adds
     // design options (older files have none, everything in the main model);
     // version 24 adds material textures and painted faces (older files have none);
-    // version 25 adds custom fill patterns (older files have none).
+    // version 25 adds custom fill patterns (older files have none); version 27 adds
+    // structural profiles (older files: one per distinct column and beam section).
     let mut project = file.project;
     if file.format_version < 11 {
         project.ensure_phases(&|key| crate::project::template_default(key).to_string());
@@ -82,6 +88,14 @@ pub fn from_ron_with_repairs_localized(
     }
     project.ensure_uids();
     project.ensure_annotation_types();
+    // After repair, so types whose profile was gone get one again, and after
+    // the annotation types, which may add a column or beam type.
+    project.convert_sections_to_profiles(&|k| {
+        translate(k).unwrap_or_else(|| crate::project::template_default(k).to_string())
+    });
+    // The legacy fields of types that already had a profile are only its
+    // box: a file where they disagree gets the box back.
+    repairs += project.resync_profile_boxes();
     Ok((project, repairs))
 }
 
@@ -94,12 +108,33 @@ pub fn save(project: &Project, path: &Path) -> Result<(), PersistError> {
     Ok(())
 }
 
+/// The text of the file at `path`, refused past `max` bytes before it is
+/// read (an I/O error of kind `FileTooLarge`): files are hostile input, and
+/// one far larger than any real file would only exhaust memory.
+pub fn read_to_string_limited(path: &Path, max: u64) -> std::io::Result<String> {
+    if std::fs::metadata(path)?.len() > max {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            format!("the file is larger than {} MB", max >> 20),
+        ));
+    }
+    std::fs::read_to_string(path)
+}
+
+/// The text of the file at `path`, refused past `max` bytes before it is read.
+fn read_text(path: &Path, max: u64) -> Result<String, PersistError> {
+    if std::fs::metadata(path)?.len() > max {
+        return Err(PersistError::TooLarge(max));
+    }
+    Ok(std::fs::read_to_string(path)?)
+}
+
 pub fn load(path: &Path) -> Result<Project, PersistError> {
     load_with_repairs(path).map(|(project, _)| project)
 }
 
 pub fn load_with_repairs(path: &Path) -> Result<(Project, usize), PersistError> {
-    from_ron_with_repairs(&std::fs::read_to_string(path)?)
+    from_ron_with_repairs(&read_text(path, MAX_FILE_BYTES)?)
 }
 
 /// Like [`load_with_repairs`], naming what migration adds with `translate`
@@ -108,7 +143,7 @@ pub fn load_with_repairs_localized(
     path: &Path,
     translate: &dyn Fn(&str) -> Option<String>,
 ) -> Result<(Project, usize), PersistError> {
-    from_ron_with_repairs_localized(&std::fs::read_to_string(path)?, translate)
+    from_ron_with_repairs_localized(&read_text(path, MAX_FILE_BYTES)?, translate)
 }
 
 #[cfg(test)]
@@ -116,11 +151,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn oversized_files_are_refused_before_reading() {
+        let path = std::env::temp_dir().join(format!("ccad-persist-{}-large.ccad", std::process::id()));
+        std::fs::write(&path, "x".repeat(2048)).unwrap();
+        assert!(matches!(read_text(&path, 1024), Err(PersistError::TooLarge(1024))));
+        assert_eq!(read_text(&path, 4096).unwrap().len(), 2048);
+        // The same for the other files read whole (components, graphs, macros).
+        let err = read_to_string_limited(&path, 1024).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::FileTooLarge);
+        assert_eq!(read_to_string_limited(&path, 4096).unwrap().len(), 2048);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn template_round_trips() {
         let project = Project::from_template();
         let text = to_ron(&project).unwrap();
         let back = from_ron(&text).unwrap();
         assert_eq!(project, back);
+    }
+
+    #[test]
+    fn loading_resyncs_a_profiled_beam_box_that_disagrees() {
+        let mut project = Project::from_template();
+        let (tid, pid) = project
+            .types
+            .values()
+            .find_map(|t| match &t.data {
+                crate::TypeData::Beam { profile: Some(p), .. } => Some((t.id, *p)),
+                _ => None,
+            })
+            .unwrap();
+        // Turn the profile into an I so the legacy fields are its box, then
+        // write a height the profile does not have (a hostile file).
+        project.profiles.get_mut(&pid).unwrap().shape =
+            crate::structural_profile::ProfileShape::I { d: 0.3, bf: 0.15, tw: 0.007, tf: 0.01, r: 0.0 };
+        if let crate::TypeData::Beam { width, height, shape, .. } = &mut project.types.get_mut(&tid).unwrap().data {
+            *width = 0.15;
+            *height = 0.9;
+            *shape = crate::SectionShape::Solid;
+        }
+        let (back, repairs) = from_ron_with_repairs(&to_ron(&project).unwrap()).unwrap();
+        assert!(repairs >= 1);
+        let crate::TypeData::Beam { width, height, shape, profile, .. } = &back.types[&tid].data else { panic!() };
+        assert_eq!(*profile, Some(pid));
+        assert!((height - 0.3).abs() < 1e-9 && (width - 0.15).abs() < 1e-9, "{width} x {height}");
+        assert_eq!(*shape, crate::SectionShape::Solid);
+        // A clean file needs nothing.
+        assert_eq!(from_ron_with_repairs(&to_ron(&back).unwrap()).unwrap().1, 0);
     }
 
     #[test]
@@ -279,6 +357,40 @@ mod tests {
         let (q, repairs) = from_ron_with_repairs(&old).unwrap();
         assert_eq!(q.element(id).unwrap().kind, ElementKind::Foundation(strip(0.0)));
         assert_eq!(repairs, 0);
+    }
+
+    #[test]
+    fn format_26_sections_load_as_profiles() {
+        let mut p = Project::from_template();
+        for t in p.types.values_mut() {
+            if let crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. } = &mut t.data {
+                *profile = None;
+            }
+        }
+        p.profiles.clear();
+        let text = to_ron(&p).unwrap().replacen("format_version: 27", "format_version: 26", 1);
+        let back = from_ron(&text).unwrap();
+        assert!(!back.profiles.is_empty());
+        assert!(back.types.values().all(|t| !matches!(
+            t.data,
+            crate::TypeData::Column { profile: None, .. } | crate::TypeData::Beam { profile: None, .. }
+        )));
+    }
+
+    #[test]
+    fn dangling_profile_reference_is_repaired() {
+        let mut p = Project::from_template();
+        p.profiles.clear();
+        let text = to_ron(&p).unwrap();
+        let (back, repairs) = from_ron_with_repairs(&text).unwrap();
+        assert!(repairs > 0);
+        for t in back.types.values() {
+            if let crate::TypeData::Column { profile, .. } | crate::TypeData::Beam { profile, .. } = &t.data {
+                let id = profile.expect("re-converted to a profile");
+                assert!(back.profile(id).is_some());
+                assert!(back.type_section(&t.data).is_some());
+            }
+        }
     }
 
     #[test]
