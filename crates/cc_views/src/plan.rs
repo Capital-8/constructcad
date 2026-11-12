@@ -1308,7 +1308,7 @@ mod tests {
             vec![3, 2, 6, 7],
             vec![2, 0, 4, 6],
         ];
-        let shape = ComponentShape::Mesh { vertices: (0..8).map(v).collect(), faces };
+        let shape = ComponentShape::Mesh { vertices: (0..8).map(v).collect::<Vec<_>>().into(), faces: faces.into() };
         let item = ComponentItem {
             name: "m".into(),
             shape,

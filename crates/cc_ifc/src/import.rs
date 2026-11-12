@@ -2925,7 +2925,7 @@ fn local_mesh(mesh: &[Vec<DVec3>], inv: &DAffine3) -> Option<ComponentShape> {
         }
     }
     let faces = cc_geom::coplanar::merge(&vertices, faces);
-    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices, faces })
+    (!faces.is_empty()).then_some(ComponentShape::Mesh { vertices: vertices.into(), faces: faces.into() })
 }
 
 /// Bounds of the solids' vertices in the frame `inv` maps to.
@@ -2960,7 +2960,10 @@ fn same_items(a: &[ComponentItem], b: &[ComponentItem]) -> bool {
                     ) => {
                         fa == fb
                             && va.len() == vb.len()
-                            && va.iter().zip(vb).all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
+                            && va
+                                .iter()
+                                .zip(vb.iter())
+                                .all(|(p, q)| p.iter().zip(q).all(|(x, y)| (x - y).abs() <= PIECE_TOL))
                     }
                     (
                         ComponentShape::Extrusion { points: pa, z: za, height: ha },

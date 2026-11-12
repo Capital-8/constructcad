@@ -591,7 +591,7 @@ fn mesh(m: &Map<String, Value>, index: usize, points: &mut usize) -> Result<Comp
     if corners > MAX_POINTS {
         return Err(ScriptError::new(format!("more than {MAX_POINTS} points")));
     }
-    Ok(ComponentShape::Mesh { vertices, faces })
+    Ok(ComponentShape::Mesh { vertices: vertices.into(), faces: faces.into() })
 }
 
 /// A cached result: the source and values it is for (to rule out hash

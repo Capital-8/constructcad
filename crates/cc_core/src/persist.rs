@@ -99,6 +99,19 @@ pub fn save(project: &Project, path: &Path) -> Result<(), PersistError> {
     Ok(())
 }
 
+/// The text of the file at `path`, refused past `max` bytes before it is
+/// read (an I/O error of kind `FileTooLarge`): files are hostile input, and
+/// one far larger than any real file would only exhaust memory.
+pub fn read_to_string_limited(path: &Path, max: u64) -> std::io::Result<String> {
+    if std::fs::metadata(path)?.len() > max {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            format!("the file is larger than {} MB", max >> 20),
+        ));
+    }
+    std::fs::read_to_string(path)
+}
+
 /// The text of the file at `path`, refused past `max` bytes before it is read.
 fn read_text(path: &Path, max: u64) -> Result<String, PersistError> {
     if std::fs::metadata(path)?.len() > max {
@@ -134,6 +147,10 @@ mod tests {
         std::fs::write(&path, "x".repeat(2048)).unwrap();
         assert!(matches!(read_text(&path, 1024), Err(PersistError::TooLarge(1024))));
         assert_eq!(read_text(&path, 4096).unwrap().len(), 2048);
+        // The same for the other files read whole (components, graphs, macros).
+        let err = read_to_string_limited(&path, 1024).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::FileTooLarge);
+        assert_eq!(read_to_string_limited(&path, 4096).unwrap().len(), 2048);
         let _ = std::fs::remove_file(&path);
     }
 

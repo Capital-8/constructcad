@@ -226,8 +226,11 @@ pub fn save(file: &ComponentFile, path: &Path) -> Result<(), ComponentFileError>
     Ok(())
 }
 
+/// Largest `.ccomp` file read: imported meshes make the largest ones.
+pub const MAX_COMPONENT_BYTES: u64 = 512 << 20;
+
 pub fn load(path: &Path) -> Result<ComponentFile, ComponentFileError> {
-    from_ron(&std::fs::read_to_string(path)?)
+    from_ron(&crate::read_to_string_limited(path, MAX_COMPONENT_BYTES)?)
 }
 
 /// Most component files a library scan reads.

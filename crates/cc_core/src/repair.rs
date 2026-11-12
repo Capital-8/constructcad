@@ -864,7 +864,9 @@ fn type_for_repair(ty: &crate::ElementType) -> crate::ElementType {
         .map(|i| {
             let ComponentItem { name, shape, material, in_plan, void, plan_only, detail } = i;
             let shape = match shape {
-                ComponentShape::Mesh { .. } => ComponentShape::Mesh { vertices: Vec::new(), faces: Vec::new() },
+                ComponentShape::Mesh { .. } => {
+                    ComponentShape::Mesh { vertices: Default::default(), faces: Default::default() }
+                }
                 other => other.clone(),
             };
             ComponentItem {
@@ -1426,7 +1428,7 @@ mod tests {
         };
         let vertices = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         let faces = vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![0, 3, 2]];
-        def.items[0].shape = crate::ComponentShape::Mesh { vertices, faces };
+        def.items[0].shape = crate::ComponentShape::Mesh { vertices: vertices.into(), faces: faces.into() };
         assert_eq!(p.repairs_needed(), 0);
         assert_eq!(p.repairs_needed(), p.clone().repair());
 

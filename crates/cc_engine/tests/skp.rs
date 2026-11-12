@@ -78,13 +78,13 @@ fn mesh_of(s: &Session, type_id: u64) -> ([f64; 3], [f64; 3], f64, usize) {
     let (mut lo, mut hi, mut volume) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3], 0.0);
     for item in &def.items {
         let ComponentShape::Mesh { vertices, faces } = &item.shape else { panic!("not a mesh") };
-        for v in vertices {
+        for v in vertices.iter() {
             for k in 0..3 {
                 lo[k] = lo[k].min(v[k]);
                 hi[k] = hi[k].max(v[k]);
             }
         }
-        for f in faces {
+        for f in faces.iter() {
             let p = |i: u32| glam::DVec3::from_array(vertices[i as usize]);
             for k in 1..f.len() - 1 {
                 volume += p(f[0]).dot(p(f[k]).cross(p(f[k + 1]))) / 6.0;

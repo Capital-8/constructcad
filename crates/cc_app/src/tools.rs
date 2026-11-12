@@ -849,8 +849,10 @@ pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad
         if let Some(ElementKind::DetailLine(l)) = state.project().element(id).map(|e| &e.kind) {
             l.snap_features(&mut out);
         }
-        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| &e.kind) {
-            let f = c.snap_features(raw, r);
+        // A copy (its drawing is shared), so that the index cache can change.
+        if let Some(ElementKind::CadImport(c)) = state.project().element(id).map(|e| e.kind.clone()) {
+            let index = cad_index(&mut state.cad_snap_index, id, &c.drawing);
+            let f = c.snap_features_in(&index, raw, r);
             out.ends.extend(f.ends);
             out.mids.extend(f.mids);
             out.centers.extend(f.centers);
@@ -859,6 +861,26 @@ pub(crate) fn cad_snap(state: &mut AppState, raw: DVec2, r: f64) -> cc_core::cad
         }
     }
     out
+}
+
+/// An imported drawing and the snap index built from it.
+pub type CadIndexEntry = (std::sync::Arc<cc_core::CadDrawing>, std::sync::Arc<cc_core::cad::CadSnapIndex>);
+
+/// The snap index of element `id`'s `drawing`: the one in `cache` while the
+/// drawing is the same (an edit that changes it gives a new `Arc`), else a new one.
+fn cad_index(
+    cache: &mut std::collections::HashMap<ElementId, CadIndexEntry>,
+    id: ElementId,
+    drawing: &std::sync::Arc<cc_core::CadDrawing>,
+) -> std::sync::Arc<cc_core::cad::CadSnapIndex> {
+    if let Some((d, index)) = cache.get(&id)
+        && std::sync::Arc::ptr_eq(d, drawing)
+    {
+        return index.clone();
+    }
+    let index = std::sync::Arc::new(cc_core::cad::CadSnapIndex::new(drawing));
+    cache.insert(id, (drawing.clone(), index.clone()));
+    index
 }
 
 /// Lines of `drawing`'s underlay passing within `r` of `raw`, with their

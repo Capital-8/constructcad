@@ -13,11 +13,8 @@ pub struct View3DState {
     pub camera: CameraState,
     renderer: Option<Renderer3D>,
     pub texture: Option<egui::TextureId>,
-    mesh_key: Option<(u64, u64, u64)>,
-    /// Triangles and edges of the geometry shown, with the revision they were made at.
-    tessellation: Option<(u64, cc_render::Tessellation)>,
-    /// The materials' textures, decoded, with the revision they follow.
-    textures: (Option<u64>, cc_render::TextureSet),
+    /// The meshes uploaded to the renderer.
+    scene: Scene,
     /// Camera changed since it was last written back to the model.
     camera_dirty: bool,
     fit_requested: bool,
@@ -64,9 +61,7 @@ impl View3DState {
             camera,
             renderer: None,
             texture: None,
-            mesh_key: None,
-            tessellation: None,
-            textures: (None, cc_render::TextureSet::default()),
+            scene: Scene::default(),
             camera_dirty: false,
             fit_requested: false,
             auto_fit: None,
@@ -226,6 +221,167 @@ fn selection_hash(sel: &BTreeSet<cc_core::ElementId>) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     sel.hash(&mut h);
     h.finish()
+}
+
+/// What a 3D view shows of the model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// The solids in the view's graphics and visual style.
+    Model,
+    /// The analytical model over faint solids.
+    Analytical,
+    /// The reinforcing bars over faint solids.
+    Rebar,
+}
+
+/// What a base mesh was built for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BaseKey {
+    revision: u64,
+    temporary: u64,
+    mode: Mode,
+    /// The hash of the selection built into the mesh: only a selection too
+    /// scattered for a highlight (see [`cc_render::MAX_HIDDEN_RUNS`]).
+    baked: Option<u64>,
+}
+
+/// The renderer as [`Scene::update`] drives it.
+trait SceneSink {
+    fn set_textures(&mut self, set: &cc_render::TextureSet);
+    fn upload(&mut self, mesh: &SceneMesh);
+    fn set_highlight(&mut self, highlight: Option<&cc_render::Highlight>);
+}
+
+struct Gpu<'a> {
+    renderer: &'a mut Renderer3D,
+    device: &'a wgpu::Device,
+    queue: &'a wgpu::Queue,
+}
+
+impl SceneSink for Gpu<'_> {
+    fn set_textures(&mut self, set: &cc_render::TextureSet) {
+        self.renderer.set_textures(self.device, self.queue, set);
+    }
+    fn upload(&mut self, mesh: &SceneMesh) {
+        self.renderer.upload(self.device, mesh);
+    }
+    fn set_highlight(&mut self, highlight: Option<&cc_render::Highlight>) {
+        self.renderer.set_highlight(self.device, highlight);
+    }
+}
+
+/// The meshes of a 3D view: a base mesh that follows the model and the
+/// temporary visibility, and the selection drawn over it as a small
+/// highlight, so selecting does not rebuild or upload the whole scene.
+#[derive(Default)]
+struct Scene {
+    base: Option<BaseKey>,
+    /// Where each solid part sits in the base mesh.
+    spans: Vec<cc_render::Span>,
+    /// The base mesh and the selection hash the highlight was made for.
+    highlight: Option<(BaseKey, u64)>,
+    /// Triangles and edges of the geometry shown, with the revision they were made at.
+    tessellation: Option<(u64, cc_render::Tessellation)>,
+    /// The materials' textures, decoded, with the revision they follow.
+    textures: (Option<u64>, cc_render::TextureSet),
+    /// The analytical model, with the revision it was made at.
+    analytical: Option<(u64, cc_geom::analytical::AnalyticalModel)>,
+    /// How many base meshes were built.
+    builds: usize,
+}
+
+impl Scene {
+    /// Bring the meshes in `sink` up to date with the session and `selection`.
+    fn update(
+        &mut self,
+        session: &mut cc_engine::Session,
+        view_id: ViewId,
+        mode: Mode,
+        selection: &BTreeSet<cc_core::ElementId>,
+        sink: &mut dyn SceneSink,
+    ) {
+        session.view_geometry(view_id);
+        let (revision, temporary) = (session.doc.revision(), session.temporary_revision());
+        let key = |baked| BaseKey { revision, temporary, mode, baked };
+        let sel = selection_hash(selection);
+        if self.base.is_none_or(|b| b != key(b.baked)) {
+            self.build_base(session, view_id, mode, &BTreeSet::new(), sink);
+            self.base = Some(key(None));
+        }
+        let Some(base) = self.base else { return };
+        if self.highlight == Some((base, sel)) {
+            return;
+        }
+        // A selection scattered over too many runs of the base mesh is built into it instead.
+        let scattered =
+            mode == Mode::Model && cc_render::hidden_runs(&self.spans, selection) > cc_render::MAX_HIDDEN_RUNS;
+        let baked = scattered.then_some(sel);
+        if base.baked != baked {
+            let built_with = if scattered { selection.clone() } else { BTreeSet::new() };
+            self.build_base(session, view_id, mode, &built_with, sink);
+            self.base = Some(key(baked));
+        }
+        let Some(base) = self.base else { return };
+        let highlight = match mode {
+            _ if scattered || selection.is_empty() => None,
+            Mode::Model => {
+                self.tessellation.as_ref().map(|(_, tess)| SceneMesh::highlight(tess, &self.spans, selection))
+            }
+            Mode::Analytical => {
+                self.analytical.as_ref().map(|(_, model)| SceneMesh::analytical_highlight(model, selection))
+            }
+            Mode::Rebar => Some(SceneMesh::rebar_highlight(session.geom_for(view_id), selection)),
+        };
+        sink.set_highlight(highlight.as_ref());
+        self.highlight = Some((base, sel));
+    }
+
+    /// Build and upload the base mesh with `selected` built in (none but a scattered selection).
+    fn build_base(
+        &mut self,
+        session: &cc_engine::Session,
+        view_id: ViewId,
+        mode: Mode,
+        selected: &BTreeSet<cc_core::ElementId>,
+        sink: &mut dyn SceneSink,
+    ) {
+        self.builds += 1;
+        self.highlight = None;
+        let revision = session.doc.revision();
+        let project = &session.doc.project;
+        let geom = session.geom_for(view_id);
+        if self.tessellation.as_ref().is_none_or(|(r, _)| *r != revision) {
+            self.tessellation = Some((revision, cc_render::Tessellation::new(geom)));
+        }
+        let Some((_, tess)) = &self.tessellation else { return };
+        let mut mesh = match mode {
+            Mode::Analytical => {
+                if self.analytical.as_ref().is_none_or(|(r, _)| *r != revision) {
+                    self.analytical = Some((revision, cc_geom::analytical::analytical_model(project, geom)));
+                }
+                let Some((_, model)) = &self.analytical else { return };
+                SceneMesh::build_analytical(tess, model, selected)
+            }
+            Mode::Rebar => SceneMesh::build_rebar(geom, tess, selected),
+            Mode::Model => match project.view(view_id) {
+                Some(view) => {
+                    let temporary = session.temporary(view_id);
+                    let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
+                    let style = &mut |e| resolver.style(e).map(|g| solid_style(&g));
+                    if self.textures.0 != Some(revision) {
+                        self.textures.1.update(project);
+                        self.textures.0 = Some(revision);
+                    }
+                    sink.set_textures(&self.textures.1);
+                    let textures = &self.textures.1;
+                    SceneMesh::build_textured(tess, selected, style, view.detail, view.style(), textures)
+                }
+                None => SceneMesh::build_plain(tess, selected),
+            },
+        };
+        sink.upload(&mesh);
+        self.spans = std::mem::take(&mut mesh.spans);
+    }
 }
 
 /// Zoom the camera to frame the whole model.
@@ -401,43 +557,16 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         }
     }
 
-    // Upload geometry when the model or selection changed; a new selection
-    // or temporary visibility only repaints the triangles and edges kept.
-    let revision = state.session.doc.revision();
-    let key = (revision, selection_hash(&state.selection), state.session.temporary_revision());
+    // Rebuild the base mesh when the model or the temporary visibility
+    // changed; a new selection only replaces the highlight drawn over it.
     let renderer = v3.renderer.get_or_insert_with(|| Renderer3D::new(&rs.device));
-    if v3.mesh_key != Some(key) {
-        let geom = state.session.geom_for(view_id);
-        if v3.tessellation.as_ref().is_none_or(|(r, _)| *r != revision) {
-            v3.tessellation = Some((revision, cc_render::Tessellation::new(geom)));
-        }
-        let Some((_, tess)) = &v3.tessellation else { return };
-        let mesh = if analytical {
-            let model = cc_geom::analytical::analytical_model(&state.session.doc.project, geom);
-            SceneMesh::build_analytical(tess, &model, &state.selection)
-        } else if rebar {
-            SceneMesh::build_rebar(geom, tess, &state.selection)
-        } else {
-            let project = &state.session.doc.project;
-            match project.view(view_id) {
-                Some(view) => {
-                    let temporary = state.session.temporary(view_id);
-                    let mut resolver = cc_views::graphics::Resolver::new(project, geom, view, temporary);
-                    let style = &mut |e| resolver.style(e).map(|g| solid_style(&g));
-                    if v3.textures.0 != Some(revision) {
-                        v3.textures.1.update(project);
-                        v3.textures.0 = Some(revision);
-                    }
-                    renderer.set_textures(&rs.device, &rs.queue, &v3.textures.1);
-                    let textures = &v3.textures.1;
-                    SceneMesh::build_textured(tess, &state.selection, style, view.detail, view.style(), textures)
-                }
-                None => SceneMesh::build_plain(tess, &state.selection),
-            }
-        };
-        renderer.upload(&rs.device, &mesh);
-        v3.mesh_key = Some(key);
-    }
+    let mode = match (analytical, rebar) {
+        (true, _) => Mode::Analytical,
+        (false, true) => Mode::Rebar,
+        (false, false) => Mode::Model,
+    };
+    let mut gpu = Gpu { renderer: &mut *renderer, device: &rs.device, queue: &rs.queue };
+    v3.scene.update(&mut state.session, view_id, mode, &state.selection, &mut gpu);
     let ppp = ui.ctx().pixels_per_point();
     let size = [(rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32];
     let Some((texture_view, recreated)) = renderer.render(&rs.device, &rs.queue, size, &v3.camera) else { return };
@@ -557,6 +686,58 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Counts what the scene sends to the renderer.
+    #[derive(Default)]
+    struct Recorder {
+        uploads: usize,
+        /// Vertices and edge vertices of each highlight set (`None`: cleared).
+        highlights: Vec<Option<(usize, usize)>>,
+    }
+
+    impl SceneSink for Recorder {
+        fn set_textures(&mut self, _: &cc_render::TextureSet) {}
+        fn upload(&mut self, _: &SceneMesh) {
+            self.uploads += 1;
+        }
+        fn set_highlight(&mut self, h: Option<&cc_render::Highlight>) {
+            self.highlights.push(h.map(|h| (h.mesh.vertices.len(), h.mesh.edges.len())));
+        }
+    }
+
+    #[test]
+    fn a_new_selection_does_not_rebuild_the_scene() {
+        let project = cc_core::from_ron(include_str!("../../../examples/casa_simples.ccad")).unwrap();
+        let mut session = cc_engine::Session::new(cc_core::Document::new(project));
+        let view = session.doc.project.views_of(cc_core::ViewCategory::ThreeD).next().unwrap().id;
+        let walls: Vec<cc_core::ElementId> =
+            session.doc.project.elements.values().filter(|e| e.as_wall().is_some()).map(|e| e.id).collect();
+        let (mut scene, mut gpu) = (Scene::default(), Recorder::default());
+        let mut update = |scene: &mut Scene, session: &mut cc_engine::Session, sel: &[cc_core::ElementId]| {
+            scene.update(session, view, Mode::Model, &sel.iter().copied().collect(), &mut gpu);
+        };
+        update(&mut scene, &mut session, &[]);
+        assert_eq!(scene.builds, 1);
+        // Selecting, adding to the selection and clearing it only change the highlight.
+        update(&mut scene, &mut session, &walls[..1]);
+        update(&mut scene, &mut session, &walls[..1]);
+        update(&mut scene, &mut session, &walls[..2]);
+        update(&mut scene, &mut session, &[]);
+        assert_eq!(scene.builds, 1);
+        // An edit rebuilds it, and the highlight over it.
+        session.execute("elements_delete", serde_json::json!({"ids": [walls[3].0]})).unwrap();
+        update(&mut scene, &mut session, &walls[..1]);
+        assert_eq!(scene.builds, 2);
+        drop(update);
+        assert_eq!(gpu.uploads, 2);
+        let h = &gpu.highlights;
+        assert_eq!(h.len(), 5, "{h:?}");
+        // None at first, one wall, two walls, cleared, the wall again over the new base.
+        let one = h[1].unwrap();
+        assert!(h[0].is_none() && one.0 > 0 && one.1 > 0);
+        assert!(h[2].is_some_and(|(v, _)| v > one.0));
+        assert!(h[3].is_none() && h[4].is_some());
+    }
 
     #[test]
     fn zoom_commands_move_the_camera_and_walk_back() {

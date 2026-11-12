@@ -613,9 +613,12 @@ pub fn run_macro(state: &mut AppState) {
     run_macro_file(state, &path);
 }
 
+/// Largest macro file read (macros are lists of commands).
+const MAX_MACRO_BYTES: u64 = 32 << 20;
+
 /// Run the macro at `path` (see [`run_macro`]).
 pub fn run_macro_file(state: &mut AppState, path: &std::path::Path) {
-    let text = match std::fs::read_to_string(path) {
+    let text = match cc_core::read_to_string_limited(path, MAX_MACRO_BYTES) {
         Ok(t) => t,
         Err(e) => {
             state.dialogs.error = Some(t!("msg-macro-failed", "step" => 0, "error" => t!("err-io", "detail" => e)));
