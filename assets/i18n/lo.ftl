@@ -1403,7 +1403,6 @@ default-rebar-view-name = ເຫຼັກເສີມ { $n }
 msg-member-vertical = ສົ້ນທັງສອງຂອງທ່ອນຄໍ້າຢັນບໍ່ສາມາດຢູ່ກົງກັນຕາມລວງຕັ້ງໄດ້.
 tx-create-brace = ສ້າງຄໍ້າຢັນ
 msg-columns-two-exactly = ກະລຸນາເລືອກເສົາໃຫ້ຄົບ 2 ຕົ້ນພໍດີ.
-truss-default-name = ໂຄງຖັກ { $n }
 tx-create-truss = ສ້າງໂຄງຖັກ
 tool-truss = ໂຄງຖັກ
 hint-truss = ຄລິກເລືອກສອງສົ້ນຂອງໂຄງຖັກ · ກົດ Esc ເພື່ອສິ້ນສຸດ

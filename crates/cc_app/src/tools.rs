@@ -1962,7 +1962,7 @@ fn truss_tool(
                     ..Default::default()
                 };
                 if let Some(out) = crate::actions::run_command(state, command) {
-                    let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
+                    let ids = out["members"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
                     state.selection = ids.map(ElementId).collect();
                 }
                 state.interaction.anchor = None;

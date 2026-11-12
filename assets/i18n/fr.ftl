@@ -1432,7 +1432,6 @@ default-rebar-view-name = Armatures { $n }
 msg-member-vertical = Les extrémités d'un contreventement ne peuvent pas être l'une au-dessus de l'autre.
 tx-create-brace = Créer un contreventement
 msg-columns-two-exactly = Sélectionnez exactement deux poteaux.
-truss-default-name = Ferme { $n }
 tx-create-truss = Créer une ferme
 tool-truss = Ferme
 hint-truss = Cliquez les deux extrémités de la ferme · Échap termine

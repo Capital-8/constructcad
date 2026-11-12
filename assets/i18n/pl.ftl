@@ -1432,7 +1432,6 @@ default-rebar-view-name = Zbrojenie { $n }
 msg-member-vertical = Końce stężenia nie mogą leżeć jeden nad drugim.
 tx-create-brace = Utwórz stężenie
 msg-columns-two-exactly = Zaznacz dokładnie dwa słupy.
-truss-default-name = Kratownica { $n }
 tx-create-truss = Utwórz kratownicę
 tool-truss = Kratownica
 hint-truss = Kliknij oba końce kratownicy · Esc kończy

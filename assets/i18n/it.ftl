@@ -1432,7 +1432,6 @@ default-rebar-view-name = Armatura { $n }
 msg-member-vertical = Le estremità di un controvento non possono essere una sopra l'altra.
 tx-create-brace = Crea controvento
 msg-columns-two-exactly = Seleziona esattamente due pilastri.
-truss-default-name = Travatura reticolare { $n }
 tx-create-truss = Crea travatura reticolare
 tool-truss = Travatura reticolare
 hint-truss = Fai clic sulle due estremità della travatura reticolare · Esc termina

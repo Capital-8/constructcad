@@ -1451,7 +1451,6 @@ default-rebar-view-name = 配筋 { $n }
 msg-member-vertical = ブレースの両端を同じ上下位置にすることはできません。
 tx-create-brace = ブレースを作成
 msg-columns-two-exactly = 2 本の柱を正確に選択してください。
-truss-default-name = トラス { $n }
 tx-create-truss = トラスを作成
 tool-truss = トラス
 hint-truss = トラスの両端をクリック · Esc で終了

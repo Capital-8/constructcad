@@ -1432,7 +1432,6 @@ default-rebar-view-name = Bewehrung { $n }
 msg-member-vertical = Die Enden einer Strebe können nicht übereinander liegen.
 tx-create-brace = Strebe erstellen
 msg-columns-two-exactly = Wählen Sie genau zwei Stützen aus.
-truss-default-name = Fachwerk { $n }
 tx-create-truss = Fachwerk erstellen
 tool-truss = Fachwerk
 hint-truss = Die beiden Enden des Fachwerks klicken · Esc beendet

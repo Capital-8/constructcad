@@ -1451,7 +1451,6 @@ default-rebar-view-name = 钢筋 { $n }
 msg-member-vertical = 支撑的两端不能上下重叠。
 tx-create-brace = 创建支撑
 msg-columns-two-exactly = 请恰好选择两根柱。
-truss-default-name = 桁架 { $n }
 tx-create-truss = 创建桁架
 tool-truss = 桁架
 hint-truss = 单击桁架的两个端点 · Esc 结束

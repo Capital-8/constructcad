@@ -1433,7 +1433,6 @@ default-rebar-view-name = Армування { $n }
 msg-member-vertical = Кінці розкоса не можуть розташовуватися один над одним.
 tx-create-brace = Створити розкіс
 msg-columns-two-exactly = Виберіть рівно дві колони.
-truss-default-name = Ферма { $n }
 tx-create-truss = Створити ферму
 tool-truss = Ферма
 hint-truss = Клацніть на двох кінцях ферми · Esc — завершити

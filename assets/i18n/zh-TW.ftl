@@ -1432,7 +1432,6 @@ default-rebar-view-name = 鋼筋 { $n }
 msg-member-vertical = 支撐構件的兩端不能位於同一位置。
 tx-create-brace = 建立支撐
 msg-columns-two-exactly = 請選取剛好兩根柱子。
-truss-default-name = 桁架 { $n }
 tx-create-truss = 建立桁架
 tool-truss = 桁架
 hint-truss = 點選桁架的兩個端點 · 按 Esc 結束

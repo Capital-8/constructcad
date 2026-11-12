@@ -1451,7 +1451,6 @@ default-rebar-view-name = Armaduras { $n }
 msg-member-vertical = As pontas de um contraventamento não podem ficar uma sobre a outra.
 tx-create-brace = Criar contraventamento
 msg-columns-two-exactly = Selecione exatamente dois pilares.
-truss-default-name = Treliça { $n }
 tx-create-truss = Criar treliça
 tool-truss = Treliça
 hint-truss = Clique as duas pontas da treliça · Esc encerra

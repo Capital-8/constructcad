@@ -1,7 +1,7 @@
 //! Parametric steel buildings (see `cc_core::steel_building`): the host
 //! element and the catalog types its members get by default.
 
-use super::structure_material::catalog_type;
+use super::structure_material::type_or_row;
 use super::{add_element, edit};
 use crate::error::{EngineError, Result};
 use crate::refs::{self, Point, Ref, point};
@@ -101,19 +101,6 @@ fn spacing(arg: &Option<Option<SecondaryMembers>>) -> Option<f64> {
 
 fn type_arg(arg: &Option<Option<SecondaryMembers>>) -> Option<&Ref> {
     arg.as_ref().and_then(|o| o.as_ref()).and_then(|m| m.type_ref.as_ref())
-}
-
-/// The given type, else the catalog row's (made when missing).
-fn type_or_row(
-    s: &mut Session,
-    given: Option<ElementTypeId>,
-    category: Category,
-    (series, row): (&str, &str),
-) -> Result<ElementTypeId> {
-    match given {
-        Some(t) => Ok(t),
-        None => catalog_type(s, category, series, row),
-    }
 }
 
 impl Command for SteelBuildingCreate {

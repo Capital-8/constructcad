@@ -1432,7 +1432,6 @@ default-rebar-view-name = Armadura { $n }
 msg-member-vertical = Los extremos de una riostra no pueden estar uno encima del otro.
 tx-create-brace = Crear riostra
 msg-columns-two-exactly = Seleccione exactamente dos pilares.
-truss-default-name = Cercha { $n }
 tx-create-truss = Crear cercha
 tool-truss = Cercha
 hint-truss = Haga clic en los dos extremos de la cercha · Esc termina

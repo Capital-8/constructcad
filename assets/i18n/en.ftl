@@ -1451,7 +1451,6 @@ default-rebar-view-name = Reinforcement { $n }
 msg-member-vertical = The ends of a brace cannot be one above the other.
 tx-create-brace = Create Brace
 msg-columns-two-exactly = Select exactly two columns.
-truss-default-name = Truss { $n }
 tx-create-truss = Create Truss
 tool-truss = Truss
 hint-truss = Click the two ends of the truss · Esc ends
