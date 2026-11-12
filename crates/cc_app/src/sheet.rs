@@ -1,6 +1,6 @@
 //! Sheet composer: paper, title block and placed viewports.
 
-use crate::paint::{HIGHLIGHT, PaintOptions, paint_drawing};
+use crate::paint::HIGHLIGHT;
 use crate::state::AppState;
 
 use cc_core::{ViewId, ViewKind};
@@ -28,8 +28,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, sheet_id: ViewId) {
     let paper_rect = Rect::from_two_pos(to(DVec2::ZERO), to(paper));
     painter.rect_filled(paper_rect.translate(egui::vec2(4.0, 4.0)), 0.0, Color32::from_black_alpha(60));
     painter.rect_filled(paper_rect, 0.0, Color32::WHITE);
-    let opts = PaintOptions { highlight: &BTreeSet::new(), px_per_mm: xf.scale, mono: None, only: None };
-    paint_drawing(&painter.with_clip_rect(paper_rect.intersect(rect)), &sheet.drawing, &xf, &opts);
+    // Kept between frames on whole pixels: what is drawn over it follows.
+    let paper_painter = painter.with_clip_rect(paper_rect.intersect(rect));
+    let xf = state.paint_cache.paint(&paper_painter, sheet_id, &sheet, &sheet.drawing, xf, &BTreeSet::new(), xf.scale);
+    let to = |p: DVec2| xf.to_screen(p);
 
     let placed = &sheet.viewports;
     for p in placed {

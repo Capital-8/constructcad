@@ -44,6 +44,7 @@ mod modify3d;
 mod obj_ui;
 mod opening_place;
 mod paint;
+mod paint_cache;
 mod paint_ui;
 mod palette;
 mod phases_dialog;
