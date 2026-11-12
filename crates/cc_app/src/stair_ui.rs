@@ -132,7 +132,7 @@ pub fn layout_controls(ui: &mut Ui, salt: u64, layout: &mut StairLayout, table: 
         let r = field(ui, table, &t!("prop-stair-inner-radius"), |ui| length(ui, &mut layout.inner_radius, 10.0));
         e.add(&r);
     }
-    let r = field(ui, table, &t!("prop-stair-numbers"), |ui| ui.checkbox(&mut layout.numbers, ""));
+    let r = field(ui, table, &t!("prop-stair-numbers"), |ui| crate::table::checkbox(ui, &mut layout.numbers));
     e.choice(r.changed());
     if layout.numbers {
         let r = field(ui, table, &t!("prop-stair-number-start"), |ui| {
@@ -178,7 +178,7 @@ pub fn build_rows(ui: &mut Ui, salt: u64, build: &mut StairBuild) -> Edited {
                 let r = row(ui, &label, |ui| length(ui, value, 1.0));
                 e.add(&r);
             }
-            let r = row(ui, &t!("prop-stair-closed-risers"), |ui| ui.checkbox(&mut build.closed_risers, ""));
+            let r = row(ui, &t!("prop-stair-closed-risers"), |ui| crate::table::checkbox(ui, &mut build.closed_risers));
             e.choice(r.changed());
         }
     }
@@ -195,7 +195,7 @@ pub fn posts_rows(ui: &mut Ui, layout: &mut StairLayout, g: &cc_geom::StairGeom,
             ui.vertical(|ui| {
                 for (at, _) in landing.post_spots(build.stringers, build.landing_beams) {
                     let mut on = posts.get(at);
-                    if ui.checkbox(&mut on, tr(at.key())).changed() {
+                    if crate::table::labeled_checkbox(ui, &mut on, tr(at.key())).changed() {
                         posts.set(at, on);
                         e.choice(true);
                     }

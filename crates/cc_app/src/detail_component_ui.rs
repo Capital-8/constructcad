@@ -189,7 +189,7 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, c: &DetailCompone
             ui.add(DragValue::new(&mut new.scale).speed(0.01).range(MIN_SCALE..=MAX_SCALE))
         });
         done |= r.drag_stopped() || r.lost_focus();
-        done |= row(ui, &t!("prop-mirrored"), |ui| ui.checkbox(&mut new.mirrored, "")).changed();
+        done |= row(ui, &t!("prop-mirrored"), |ui| crate::table::checkbox(ui, &mut new.mirrored)).changed();
     });
     new.rotation_deg = new.rotation_deg.rem_euclid(360.0);
     if new != *c {

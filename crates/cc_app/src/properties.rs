@@ -363,7 +363,7 @@ fn shared_rows(
                 let mut on = values.first().and_then(|v| v.as_bool()).unwrap_or(false);
                 // Differing values show as an indeterminate box.
                 let r = row(ui, &crate::i18n::tr(label), |ui| {
-                    ui.add(egui::Checkbox::without_text(&mut on).indeterminate(!same))
+                    ui.add(crate::table::boxed(egui::Checkbox::without_text(&mut on).indeterminate(!same)))
                 });
                 if r.changed() {
                     crate::engine_edit::elements(state, ids, None, None, Some(patch_at(path, on.into())));
@@ -547,7 +547,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             section(ui, "constraints", t!("section-constraints"), |ui| wall_constraints(ui, state, &el, w));
             section(ui, "structural", t!("section-structural"), |ui| {
                 let mut on = w.structural;
-                if row(ui, &t!("prop-structural"), |ui| ui.checkbox(&mut on, "")).changed() {
+                if row(ui, &t!("prop-structural"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
                     modify(state, id, "structural", |e| {
                         if let ElementKind::Wall(w) = &mut e.kind {
                             w.structural = on;
@@ -630,7 +630,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     [(t!("prop-flip-facing"), "ff", h.flip_facing), (t!("prop-flip-hand"), "fh", h.flip_hand)]
                 {
                     let mut v = value;
-                    if row(ui, &label, |ui| ui.checkbox(&mut v, "")).changed() {
+                    if row(ui, &label, |ui| crate::table::checkbox(ui, &mut v)).changed() {
                         crate::engine_edit::element(state, id, None, |x| {
                             if let Some(h) = x.as_hosted_mut() {
                                 if field == "ff" {
@@ -673,7 +673,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "structural", t!("section-structural"), |ui| {
                 let mut on = c.structural;
-                if row(ui, &t!("prop-structural"), |ui| ui.checkbox(&mut on, "")).changed() {
+                if row(ui, &t!("prop-structural"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
                     modify(state, id, "structural", |e| {
                         if let ElementKind::Column(c) = &mut e.kind {
                             c.structural = on;
@@ -725,7 +725,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     [(t!("prop-join-start"), true, b.join_start), (t!("prop-join-end"), false, b.join_end)]
                 {
                     let mut on = value;
-                    if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+                    if row(ui, &label, |ui| crate::table::checkbox(ui, &mut on)).changed() {
                         crate::engine_edit::element(state, id, None, |x| {
                             if let ElementKind::Beam(b) = &mut x.kind {
                                 *(if at_start { &mut b.join_start } else { &mut b.join_end }) = on;
@@ -912,14 +912,14 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     }
                 });
                 let (mut closed, mut flip) = (sw.closed, sw.flip);
-                if row(ui, &t!("opt-sweep-closed"), |ui| ui.checkbox(&mut closed, "")).changed() {
+                if row(ui, &t!("opt-sweep-closed"), |ui| crate::table::checkbox(ui, &mut closed)).changed() {
                     modify(state, id, "sweep-closed", |e| {
                         if let ElementKind::Sweep(s) = &mut e.kind {
                             s.closed = closed;
                         }
                     });
                 }
-                if row(ui, &t!("opt-sweep-flip"), |ui| ui.checkbox(&mut flip, "")).changed() {
+                if row(ui, &t!("opt-sweep-flip"), |ui| crate::table::checkbox(ui, &mut flip)).changed() {
                     modify(state, id, "sweep-flip", |e| {
                         if let ElementKind::Sweep(s) = &mut e.kind {
                             s.flip = flip;
@@ -1104,7 +1104,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             finish(state, &r);
         }
         let mut pinned = state.project().is_pinned(id);
-        if row(ui, &t!("prop-pinned"), |ui| ui.checkbox(&mut pinned, "")).changed() {
+        if row(ui, &t!("prop-pinned"), |ui| crate::table::checkbox(ui, &mut pinned)).changed() {
             crate::actions::run_command(state, cc_engine::commands::modify::ElementsPin { ids: vec![id.0], pinned });
         }
     });
@@ -1274,7 +1274,9 @@ pub fn underlay_rows(
         }
     }
     let mut printed = u.printed;
-    row(ui, &t!("prop-underlay-printed"), |ui| ui.add_enabled(enabled, egui::Checkbox::without_text(&mut printed)));
+    row(ui, &t!("prop-underlay-printed"), |ui| {
+        ui.add_enabled(enabled, crate::table::boxed(egui::Checkbox::without_text(&mut printed)))
+    });
     u.printed = printed;
     *u != before
 }
@@ -1322,7 +1324,7 @@ pub fn param_editor(
     match p.kind {
         ParamKind::Boolean => {
             let mut on = number != 0.0;
-            let r = ui.checkbox(&mut on, "");
+            let r = crate::table::checkbox(ui, &mut on);
             let changed = r.changed().then(|| ParamEdit::Number(f64::from(u8::from(on))));
             (r, changed)
         }
@@ -1430,7 +1432,7 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
                 .collect();
             for (cid, label) in circuits {
                 let mut on = s.systems.contains(&cid);
-                if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+                if row(ui, &label, |ui| crate::table::checkbox(ui, &mut on)).changed() {
                     crate::engine_edit::element(state, id, None, |e| {
                         if let Some(s) = e.as_segment_mut() {
                             s.systems.retain(|x| *x != cid);
@@ -1690,7 +1692,7 @@ fn slope_row(
     let mut v = own.unwrap_or(of_type);
     let (toggled, r) = row(ui, label, |ui| {
         ui.horizontal(|ui| {
-            let toggled = ui.checkbox(&mut by_type, t!("prop-by-type")).changed();
+            let toggled = crate::table::labeled_checkbox(ui, &mut by_type, t!("prop-by-type")).changed();
             let drag = egui::DragValue::new(&mut v).speed(0.05).range(MIN_SLOPE..=MAX_SLOPE).prefix("1:");
             (toggled, ui.add_enabled(!by_type, drag))
         })
@@ -1747,7 +1749,7 @@ fn mass_props(ui: &mut Ui, state: &mut AppState, el: &Element, m: &cc_core::mass
             let mut on = m.floors.contains(&level);
             let area = geom.as_ref().and_then(|g| g.floors.iter().find(|f| f.level == level)).map(|f| f.area);
             let changed = row(ui, &name, |ui| {
-                let r = ui.checkbox(&mut on, area.map(format::area).unwrap_or_default());
+                let r = crate::table::labeled_checkbox(ui, &mut on, area.map(format::area).unwrap_or_default());
                 r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, &name));
                 r.changed()
             });
@@ -1932,7 +1934,7 @@ fn text_props(ui: &mut Ui, state: &mut AppState, id: ElementId, note: &cc_core::
         }
         finish(state, &r);
         let mut multiline = note.width.is_some();
-        if row(ui, &t!("text-multiline"), |ui| ui.checkbox(&mut multiline, "")).changed() {
+        if row(ui, &t!("text-multiline"), |ui| crate::table::checkbox(ui, &mut multiline)).changed() {
             let width = multiline.then_some(state.text_options.width);
             set(state, "multiline", &|n| n.width = width);
         }
@@ -2294,7 +2296,7 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
         [(t!("prop-join-start"), true, w.join_start), (t!("prop-join-end"), false, w.join_end)]
     {
         let mut on = value;
-        if row(ui, &label, |ui| ui.checkbox(&mut on, "")).changed() {
+        if row(ui, &label, |ui| crate::table::checkbox(ui, &mut on)).changed() {
             crate::engine_edit::element(state, id, None, |x| {
                 if let ElementKind::Wall(w) = &mut x.kind {
                     if at_start {
@@ -2384,7 +2386,7 @@ fn wall_constraints(ui: &mut Ui, state: &mut AppState, el: &Element, w: &cc_core
     }
 
     let mut bounding = w.room_bounding;
-    if row(ui, &t!("prop-room-bounding"), |ui| ui.checkbox(&mut bounding, "")).changed() {
+    if row(ui, &t!("prop-room-bounding"), |ui| crate::table::checkbox(ui, &mut bounding)).changed() {
         set(state, "bounding", &|w| w.room_bounding = bounding);
     }
 }
@@ -2676,7 +2678,7 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             }
             if let ViewKind::ThreeD { analytical, .. } = view.kind {
                 let mut on = analytical;
-                if row(ui, &t!("prop-analytical"), |ui| ui.checkbox(&mut on, "")).changed() {
+                if row(ui, &t!("prop-analytical"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
                     crate::engine_edit::view(state, id, None, |v| {
                         if let ViewKind::ThreeD { analytical, .. } = &mut v.kind {
                             *analytical = on;
@@ -2698,11 +2700,11 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 section(ui, "structure-display", t!("section-structural"), |ui| {
                     let (mut s, mut tags) = (structural, structure_tags);
                     let a = row(ui, &t!("prop-structural-plan"), |ui| {
-                        ui.add_enabled(!locked, egui::Checkbox::without_text(&mut s))
+                        ui.add_enabled(!locked, crate::table::boxed(egui::Checkbox::without_text(&mut s)))
                     })
                     .changed();
                     let b = row(ui, &t!("prop-structure-tags"), |ui| {
-                        ui.add_enabled(!locked, egui::Checkbox::without_text(&mut tags))
+                        ui.add_enabled(!locked, crate::table::boxed(egui::Checkbox::without_text(&mut tags)))
                     })
                     .changed();
                     if a || b {
@@ -2765,7 +2767,7 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 }
                 finish(state, &r);
                 let mut split = segments.is_some();
-                if row(ui, &t!("prop-split-line"), |ui| ui.checkbox(&mut split, "")).changed() {
+                if row(ui, &t!("prop-split-line"), |ui| crate::table::checkbox(ui, &mut split)).changed() {
                     crate::section_mark::set_split(state, id, split);
                 }
                 if let Some(pieces) = segments {
@@ -2832,7 +2834,7 @@ fn legend_types(ui: &mut Ui, state: &mut AppState, id: ViewId, current: &[cc_cor
     let all: Vec<_> = state.project().types.values().map(|t| (t.id, t.name.clone())).collect();
     for (tid, name) in all {
         let mut on = current.contains(&tid);
-        if row(ui, &name, |ui| ui.checkbox(&mut on, "")).changed() {
+        if row(ui, &name, |ui| crate::table::checkbox(ui, &mut on)).changed() {
             crate::engine_edit::view(state, id, None, |x| {
                 if let ViewKind::Legend { types } = &mut x.kind {
                     if on {

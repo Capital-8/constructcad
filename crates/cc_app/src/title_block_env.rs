@@ -752,7 +752,8 @@ fn piece_props(ui: &mut Ui, state: &mut AppState, def: &ComponentDef, index: usi
             let mut on = fill.is_some();
             let mut rgb = fill.unwrap_or([220, 220, 220]);
             let (toggled, r) = crate::table::row(ui, &t!("tb-fill"), |ui| {
-                ui.horizontal(|ui| (ui.checkbox(&mut on, "").changed(), ui.color_edit_button_srgb(&mut rgb))).inner
+                ui.horizontal(|ui| (crate::table::checkbox(ui, &mut on).changed(), ui.color_edit_button_srgb(&mut rgb)))
+                    .inner
             });
             if toggled {
                 let value = if on { serde_json::json!(rgb) } else { serde_json::Value::Null };

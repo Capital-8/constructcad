@@ -477,7 +477,7 @@ fn params_table(ui: &mut Ui, ed: &mut Editor, materials: &[String]) {
                 },
             );
             ui.add(crate::properties::param_value(&mut p.value, p.kind));
-            ui.checkbox(&mut p.instance, "");
+            crate::table::checkbox(ui, &mut p.instance);
             if ui.add(egui::Button::new("×").small()).on_hover_text(t!("comp-param-remove")).clicked() {
                 remove = Some(i);
             }

@@ -106,14 +106,15 @@ fn header(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
             None => {
                 let mut selected = tid;
                 let types: Vec<_> = state.project().types_of(category).map(|t| (t.id, t.name.clone())).collect();
-                egui::ComboBox::from_id_salt("type-switch").width(field_w).selected_text(ty.name.clone()).show_ui(
-                    ui,
-                    |ui| {
+                egui::ComboBox::from_id_salt("type-switch")
+                    .width(field_w)
+                    .truncate()
+                    .selected_text(ty.name.clone())
+                    .show_ui(ui, |ui| {
                         for (id, name) in types {
                             ui.selectable_value(&mut selected, id, name);
                         }
-                    },
-                );
+                    });
                 if selected != tid {
                     state.dialogs.type_editor = Some(selected);
                 }
@@ -179,15 +180,13 @@ fn component_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     section(ui, "type-component", t!("section-component"), |ui| {
         readonly_row(ui, &t!("col-component"), component.clone());
         readonly_row(ui, &t!("col-component-kind"), tr(def.kind.key()));
-        let (edit, quick, save) = row(ui, &t!("comp-definition"), |ui| {
-            ui.horizontal(|ui| {
-                (
-                    ui.button(t!("action-edit-component")).clicked(),
-                    ui.button(t!("action-quick-edit-component")).clicked(),
-                    ui.button(t!("action-save-component")).clicked(),
-                )
-            })
-            .inner
+        // Three buttons do not fit a value cell in every language.
+        let (edit, quick, save) = crate::table::button_row(ui, |ui| {
+            (
+                ui.button(t!("action-edit-component")).clicked(),
+                ui.button(t!("action-quick-edit-component")).clicked(),
+                ui.button(t!("action-save-component")).clicked(),
+            )
         });
         if edit {
             crate::component_env::open(state, tid);

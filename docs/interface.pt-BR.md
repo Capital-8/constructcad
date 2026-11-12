@@ -6,6 +6,8 @@ A janela do ConstructCraft segue a disposição que usuários de CAD e BIM de de
 
 Abrir um projeto e importar um arquivo (IFC, DWG/DXF, SketchUp, OBJ, glTF, imagens e SVG, arquivos de componente) faz a leitura em segundo plano: um diálogo mostra a operação, o nome, a pasta e o tamanho do arquivo e o tempo decorrido, com um indicador animado, e impede o uso do resto da janela. O projeto aberto continua como estava até o arquivo ser lido; *Cancelar* (ou Esc) deixa de esperar e não altera nada.
 
+Os diálogos abrem no meio da janela e podem ser movidos arrastando o título; na próxima vez, o diálogo abre centralizado de novo. Um diálogo tem a largura que seus botões e seu conteúdo precisam.
+
 ## Comandos e suas dicas
 
 Todo botão do ribbon e da barra de acesso rápido executa um *comando da interface*. O mesmo vale para cada atalho de duas letras e cada item da paleta de comandos. Cada comando define, num só lugar:

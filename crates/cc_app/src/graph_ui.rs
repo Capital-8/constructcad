@@ -909,7 +909,7 @@ fn inline_editor(ui: &mut Ui, state: &mut AppState, id: u64, kind: &str, field: 
     match kind {
         "boolean" => {
             let mut b = value.as_bool().unwrap_or(false);
-            if ui.add(egui::Checkbox::without_text(&mut b)).changed() {
+            if ui.add(crate::table::boxed(egui::Checkbox::without_text(&mut b))).changed() {
                 changed = Some(json!(b));
             }
         }

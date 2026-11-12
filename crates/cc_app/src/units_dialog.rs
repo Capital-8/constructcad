@@ -60,7 +60,7 @@ fn precision(ui: &mut Ui, state: &mut AppState, value: u8) {
 
 fn symbol(ui: &mut Ui, state: &mut AppState, field: &str, value: bool, apply: fn(&mut Units, bool)) {
     let mut v = value;
-    if ui.checkbox(&mut v, "").changed() {
+    if crate::table::checkbox(ui, &mut v).changed() {
         set(state, field, |u| apply(u, v));
     }
 }

@@ -2804,6 +2804,210 @@ fn enter_in_a_dialog_text_field_does_not_press_ok() {
     assert_eq!(harness.state().ok, 1);
 }
 
+/// What the dialog layout tests show: one dialog, while `open`.
+struct DialogProbe {
+    themed: bool,
+    open: bool,
+}
+
+/// A harness that shows the dialog `show` builds, every frame.
+fn dialog_probe(mut show: impl FnMut(&egui::Context) + 'static) -> Harness<'static, DialogProbe> {
+    let mut harness = Harness::builder().with_size(egui::vec2(900.0, 600.0)).build_ui_state(
+        move |ui, p: &mut DialogProbe| {
+            let ctx = &ui.ctx().clone();
+            if !p.themed {
+                crate::theme::apply(ctx);
+                p.themed = true;
+                return;
+            }
+            crate::theme::sync(ctx);
+            if p.open {
+                show(ctx);
+            }
+        },
+        DialogProbe { themed: false, open: true },
+    );
+    harness.run();
+    harness
+}
+
+/// A dialog is moved by dragging its header, stays where it was put, and
+/// opens centered again the next time.
+#[test]
+fn a_dialog_moves_by_its_header() {
+    let mut harness = dialog_probe(|ctx| {
+        crate::dialog::Dialog::new("move-probe", "Probe").show(
+            ctx,
+            |ui| {
+                ui.label("Body");
+            },
+            |f| {
+                f.primary("OK");
+            },
+        );
+    });
+    let start = harness.get_by_label("Probe").rect();
+    let by = egui::vec2(60.0, 40.0);
+    // Pressed on the title itself.
+    harness.drag_at(start.center());
+    harness.step();
+    for k in 1..=4 {
+        harness.hover_at(start.center() + by * (k as f32 / 4.0));
+        harness.step();
+    }
+    harness.drop_at(start.center() + by);
+    harness.run();
+    let moved = harness.get_by_label("Probe").rect();
+    assert!((moved.min - start.min - by).length() < 1.5, "moved by {:?}", moved.min - start.min);
+    // The body and the footer went along.
+    harness.run();
+    assert!((harness.get_by_label("Probe").rect().min - moved.min).length() < 0.5);
+
+    harness.state_mut().open = false;
+    harness.run();
+    harness.state_mut().open = true;
+    harness.run();
+    let again = harness.get_by_label("Probe").rect();
+    assert!((again.min - start.min).length() < 1.5, "reopened at {:?}, not {:?}", again.min, start.min);
+}
+
+/// Footer buttons that do not fit the dialog's width widen it: they never
+/// lie over each other, and the header follows.
+#[test]
+fn dialog_footer_buttons_never_overlap() {
+    let labels = ["Ignore this version", "Update now", "Download", "Later"];
+    let mut harness = dialog_probe(move |ctx| {
+        crate::dialog::Dialog::new("footer-probe", "Probe").width(200.0).show(
+            ctx,
+            |ui| {
+                ui.label("Body");
+            },
+            |f| {
+                f.extra(labels[0]);
+                f.primary(labels[1]);
+                f.secondary(labels[2]);
+                f.secondary(labels[3]);
+            },
+        );
+    });
+    harness.run();
+    let rects: Vec<egui::Rect> = labels.iter().map(|l| harness.get_by_label(l).rect()).collect();
+    for pair in rects.windows(2) {
+        assert!(pair[0].right() + 7.0 < pair[1].left(), "{:?} lies over {:?}", pair[0], pair[1]);
+    }
+    let close = harness.get_by_label(&crate::t!("action-close")).rect();
+    assert!(
+        close.right() > rects[3].right() - 12.0,
+        "the header ends at {}, the footer at {}",
+        close.right(),
+        rects[3].right()
+    );
+}
+
+/// A body wider than the dialog takes the header and the footer with it.
+#[test]
+fn dialog_header_and_footer_follow_a_wide_body() {
+    crate::dialog::overflow::allow();
+    let mut harness = dialog_probe(|ctx| {
+        crate::dialog::Dialog::new("wide-probe", "Probe").width(300.0).show(
+            ctx,
+            |ui| {
+                ui.add(egui::Button::new("Wide").min_size(egui::vec2(500.0, 20.0)));
+            },
+            |f| {
+                f.primary("OK");
+            },
+        );
+    });
+    harness.run();
+    let wide = harness.get_by_label("Wide").rect();
+    let ok = harness.get_by_label("OK").rect();
+    let close = harness.get_by_label(&crate::t!("action-close")).rect();
+    assert!((ok.right() - wide.right()).abs() < 1.5, "OK ends at {}, the body at {}", ok.right(), wide.right());
+    assert!(close.right() > wide.right(), "the close button stayed at {}", close.right());
+}
+
+/// A value too wide for its table cell is cut off there and does not widen
+/// the dialog (the dialog itself fails the test when its body overflows).
+#[test]
+fn a_table_row_never_widens_its_dialog() {
+    let mut harness = dialog_probe(|ctx| {
+        crate::dialog::Dialog::new("row-probe", "Probe").width(300.0).show(
+            ctx,
+            |ui| {
+                crate::table::row(ui, "Definition", |ui| {
+                    let _ = ui.button("Edit the component in its own environment");
+                    let _ = ui.button("Save the component to a file of the library");
+                });
+                crate::table::row(ui, "Next", |ui| {
+                    ui.label("value");
+                });
+            },
+            |f| {
+                f.primary("OK");
+            },
+        );
+    });
+    harness.run();
+    let ok = harness.get_by_label("OK").rect();
+    let title = harness.get_by_label("Probe").rect();
+    assert!((ok.right() - title.left() - 300.0).abs() < 1.5, "the dialog is {} wide", ok.right() - title.left());
+}
+
+/// Every dialog keeps its body inside its width (a dialog fails the test
+/// when its body overflows): the plain ones, Type Properties of every type
+/// of the sample project, and each section of the Preferences.
+#[test]
+fn every_dialog_keeps_its_body_inside() {
+    use crate::preferences::Section;
+    type Open = Box<dyn Fn(&mut AppState)>;
+    let mut opens: Vec<(String, Open)> = vec![
+        ("project info".into(), Box::new(|s| s.dialogs.project_info = true)),
+        ("units".into(), Box::new(|s| s.dialogs.units = true)),
+        ("levels".into(), Box::new(|s| s.dialogs.levels = true)),
+        ("materials".into(), Box::new(|s| s.dialogs.materials = true)),
+        ("about".into(), Box::new(|s| s.dialogs.about = true)),
+        ("systems".into(), Box::new(|s| s.dialogs.systems = true)),
+        ("sizing".into(), Box::new(|s| s.dialogs.sizing = true)),
+        ("lightning check".into(), Box::new(|s| s.dialogs.lps_check = true)),
+        ("cabling".into(), Box::new(|s| s.dialogs.cabling = true)),
+        ("error".into(), Box::new(|s| s.dialogs.error = Some("The file could not be read. ".repeat(12)))),
+        ("design options".into(), Box::new(crate::design_options_ui::open)),
+        ("browser organization".into(), Box::new(crate::browser_org_dialog::open)),
+        ("line styles".into(), Box::new(crate::line_styles_dialog::open)),
+        ("fill patterns".into(), Box::new(crate::fill_patterns_dialog::open)),
+        ("phases".into(), Box::new(crate::phases_dialog::open)),
+        ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
+        ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+    ];
+    for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
+        opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
+    }
+    let types: Vec<(cc_core::ElementTypeId, String)> =
+        sample_state().project().types.values().map(|t| (t.id, t.name.clone())).collect();
+    for (id, name) in types {
+        opens.push((
+            format!("type {name}"),
+            Box::new(move |s| {
+                s.dialogs.type_editor = Some(id);
+                s.dialogs.type_layers_open = true;
+            }),
+        ));
+    }
+    for (name, open) in opens {
+        let mut state = sample_state();
+        open(&mut state);
+        let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| crate::dialogs::show(ui.ctx(), state);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut harness = themed_harness(state, egui::vec2(1500.0, 1000.0), egui::Theme::Light, draw);
+            for _ in 0..6 {
+                harness.step();
+            }
+        }));
+        assert!(result.is_ok(), "the dialog \"{name}\" overflows");
+    }
+}
+
 /// Issue #159: the Detail Line tool takes typed values after the first
 /// point, like the sketches: a circle's radius, a line's length; Enter
 /// places them and Esc drops the value first.

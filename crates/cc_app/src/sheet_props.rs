@@ -95,7 +95,7 @@ pub fn rows(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                 }
                 ui.selectable_value(&mut choice, None, custom_label.clone());
             });
-            ui.checkbox(&mut turned, t!("prop-portrait"));
+            crate::table::labeled_checkbox(ui, &mut turned, t!("prop-portrait"));
         });
     });
     match choice {
