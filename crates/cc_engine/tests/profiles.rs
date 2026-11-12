@@ -477,12 +477,12 @@ fn import_from_catalog_and_make_types() {
     let series = run(&mut s, "profile_catalog", json!({}));
     assert!(series.as_array().unwrap().iter().any(|x| x["code"] == "IPE"));
     let rows = run(&mut s, "profile_catalog", json!({"series": "IPE", "search": "20"}));
-    assert!(rows["rows"].as_array().unwrap().iter().any(|r| r["designation"] == "200"));
+    assert!(rows["rows"].as_array().unwrap().iter().any(|r| r["designation"] == "IPE 200"));
 
-    let out = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200", "270", "999"]}));
+    let out = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200", "IPE 270", "999"]}));
     assert_eq!(out["imported"].as_array().unwrap().len(), 2);
     assert_eq!(out["unknown"][0], "999");
-    let again = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    let again = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     assert_eq!(again["kept"][0], "IPE 200");
 
     let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}));
@@ -495,7 +495,7 @@ fn import_from_catalog_and_make_types() {
     let e = run(&mut s, "element_get", json!({"id": beam}));
     assert!((e["derived"]["section"]["area"].as_f64().unwrap() - 0.00285).abs() / 0.00285 < 0.02);
 
-    run(&mut s, "profile_import", json!({"series": "HEB", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "HEB", "designations": ["HEB 200"]}));
     run(&mut s, "type_set", json!({"type": t["id"], "params": {"profile": "HEB 200"}}));
     let ty = run(&mut s, "type_get", json!({"type": t["id"]}));
     assert!((ty["params"]["width"].as_f64().unwrap() - 0.2).abs() < 1e-9);
@@ -519,7 +519,7 @@ fn catalog_import_options_and_undo() {
     assert_eq!(err.code, cc_engine::ErrorCode::NotFound);
     let ipe = run(&mut s, "profile_catalog", json!({"series": "ipe"}));
     assert_eq!(ipe["code"], "IPE");
-    let row = ipe["rows"].as_array().unwrap().iter().find(|r| r["designation"] == "200").unwrap().clone();
+    let row = ipe["rows"].as_array().unwrap().iter().find(|r| r["designation"] == "IPE 200").unwrap().clone();
     assert_eq!(row["name"], "IPE 200");
     assert!((row["params"]["d"].as_f64().unwrap() - 0.2).abs() < 1e-9, "{row}");
     let all = run(&mut s, "profile_catalog", json!({}));
@@ -529,20 +529,21 @@ fn catalog_import_options_and_undo() {
     assert_eq!(entry["count"].as_u64().unwrap() as usize, ipe["rows"].as_array().unwrap().len());
 
     let steps = s.doc.undo_depth();
-    let out = run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200", "220", "200"]}));
+    let out =
+        run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200", "IPE 220", "IPE 200"]}));
     assert_eq!(out["imported"].as_array().unwrap().len(), 2, "{out}");
     assert_eq!(out["kept"][0], "IPE 200", "a repeated designation is kept");
     assert_eq!(s.doc.undo_depth(), steps + 1, "one undo step");
     let got = run(&mut s, "profile_get", json!({"profile": "IPE 200"}));
     assert_eq!(got["catalog"]["series"], "IPE");
-    assert_eq!(got["catalog"]["designation"], "200");
+    assert_eq!(got["catalog"]["designation"], "IPE 200");
     // Nothing new: no undo step.
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200", "nope"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200", "nope"]}));
     assert_eq!(s.doc.undo_depth(), steps + 1);
     let renamed =
-        run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"], "on_clash": "rename"}));
+        run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"], "on_clash": "rename"}));
     assert_eq!(renamed["imported"][0]["name"], "IPE 200 2");
-    let err = run_err(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"], "on_clash": "x"}));
+    let err = run_err(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"], "on_clash": "x"}));
     assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
     run(&mut s, "undo", json!({}));
     run(&mut s, "undo", json!({}));
@@ -589,7 +590,7 @@ fn profile_types_take_a_material_of_their_class_and_a_free_name() {
 #[test]
 fn type_set_takes_a_profile_but_never_none() {
     let mut s = Session::default();
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}))["id"].clone();
     let steps = s.doc.undo_depth();
     let err = run_err(&mut s, "type_set", json!({"type": t, "params": {"profile": "nope"}}));
@@ -617,7 +618,7 @@ fn type_set_takes_a_profile_but_never_none() {
 #[test]
 fn element_section_mass_needs_a_density() {
     let mut s = Session::default();
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "column"}))["id"].clone();
     let col = run(&mut s, "column_create", json!({"type": t, "position": [0.0, 0.0]}))["id"].clone();
     let e = run(&mut s, "element_get", json!({"id": col}));
@@ -684,7 +685,7 @@ fn truss_posts_prefer_a_steel_profile_column_type() {
 #[test]
 fn analytical_members_carry_the_type_box() {
     let mut s = Session::default();
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     let t = run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}));
     let beam =
         run(&mut s, "beam_create", json!({"type": t["id"], "start": [0.0, 0.0], "end": [6.0, 0.0]}))["id"].clone();
@@ -703,7 +704,7 @@ fn profile_command_inputs_are_bounded() {
     assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
     let err = run_err(&mut s, "profile_import", json!({"series": "IPE", "designations": [long]}));
     assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     let err = run_err(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam", "name": long}));
     assert_eq!(err.code, cc_engine::ErrorCode::InvalidArguments);
 }
@@ -714,7 +715,7 @@ fn profile_command_inputs_are_bounded() {
 #[test]
 fn a_template_beam_type_switched_to_ipe_200_builds_its_body() {
     let mut s = Session::default();
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     let pid = run(&mut s, "profile_get", json!({"profile": "IPE 200"}))["id"].clone();
     let t = s.project().default_type(cc_core::Category::Beam).unwrap();
     run(&mut s, "type_set", json!({"type": t.0, "params": {"profile": pid}}));
@@ -768,7 +769,7 @@ fn schedules_tags_and_legends_read_profile_made_sections() {
     assert!(section.starts_with('Ø'), "{section}");
 
     // A beam on an I profile is drawn in legends as an I, not its box.
-    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["200"]}));
+    run(&mut s, "profile_import", json!({"series": "IPE", "designations": ["IPE 200"]}));
     let t =
         run(&mut s, "profile_type_create", json!({"profile": "IPE 200", "category": "beam"}))["id"].as_u64().unwrap();
     let d = cc_views::legend(s.project(), &[ElementTypeId(t)], 20);

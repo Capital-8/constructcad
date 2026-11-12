@@ -2981,8 +2981,8 @@ fn profile_manager_imports_and_cancels() {
     let add = t!("profiles-catalog-add");
     let disabled = harness.get_by_role_and_label(Role::Button, &add).accesskit_node().is_disabled();
     assert!(disabled, "Add waits for a ticked designation");
-    harness.get_by_role_and_label(Role::CheckBox, "200").click();
-    harness.get_by_role_and_label(Role::CheckBox, "220").click();
+    harness.get_by_role_and_label(Role::CheckBox, "IPE 200").click();
+    harness.get_by_role_and_label(Role::CheckBox, "IPE 220").click();
     harness.run();
     harness.get_by_label(&t!("profiles-catalog-add")).click();
     harness.run();
@@ -3025,7 +3025,7 @@ fn type_properties_pick_a_profile() {
     use cc_engine::Ref;
     use cc_engine::commands::profiles::ProfileImport;
     let mut state = sample_state();
-    let import = ProfileImport { series: "IPE".into(), designations: vec!["200".into()], on_clash: None };
+    let import = ProfileImport { series: "IPE".into(), designations: vec!["IPE 200".into()], on_clash: None };
     state.session.run(import).unwrap();
     let beam = state.project().default_type(cc_core::Category::Beam).unwrap();
     let shown = match &state.project().element_type(beam).unwrap().data {
