@@ -7,6 +7,31 @@ use cc_core::{Category, Document, ElementId, LevelId, Project, ViewCategory, Vie
 use cc_engine::Ref;
 use cc_engine::commands::{io, levels, project, views};
 
+/// The type of `category` in the Structure tab's material (made when the
+/// project has none, as an undo step).
+pub fn material_type_ref(state: &mut AppState, category: Category) -> Option<cc_engine::Ref> {
+    let material = state.prefs.structure_material;
+    let command = cc_engine::commands::structure_material::StructuralTypeFor {
+        category: if category == Category::Column { "column" } else { "beam" }.into(),
+        material: material.code().into(),
+    };
+    run_command(state, command).and_then(|o| o["id"].as_u64()).map(cc_engine::Ref::Id)
+}
+
+/// Start the column or beam tool of the Structure tab on a type of `material`.
+pub fn structure_place(state: &mut AppState, category: Category, material: cc_core::StructuralMaterial) {
+    state.prefs.structure_material = material;
+    let Some(cc_engine::Ref::Id(id)) = material_type_ref(state, category) else { return };
+    let type_id = cc_core::ElementTypeId(id);
+    let material = Some(material);
+    let tool = if category == Category::Column {
+        Tool::Column { type_id, material }
+    } else {
+        Tool::Beam { type_id, material }
+    };
+    state.set_tool(tool);
+}
+
 /// Run an engine command; failures go to the status bar.
 pub fn run_command<C: cc_engine::Command + serde::Serialize>(
     state: &mut AppState,

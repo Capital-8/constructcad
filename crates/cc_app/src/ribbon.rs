@@ -1099,7 +1099,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             });
         ui.separator();
         if let (Some(category), Some(type_id)) = (state.tool.category(), state.tool.type_id()) {
-            let types = crate::tools::tool_types(state.project(), category, type_id);
+            let types = crate::tools::tool_types(state.project(), category, type_id, state.tool.material());
             let mut selected = type_id;
             // Walls: a project without a curtain type gets one from the list.
             let offer_curtain = category == Category::Wall && !crate::curtain_ui::has_curtain_type(state);

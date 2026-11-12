@@ -3591,3 +3591,32 @@ fn the_levels_dialog_adds_a_level_above_or_below_the_picked_one() {
     assert_eq!(levels[0].id, lowest);
     assert!(levels[0].elevation < base, "and pushed the lowest level down");
 }
+
+/// Column in Steel starts on a steel type, and the options bar lists only
+/// steel column types; Timber makes its default type, undone in one step.
+#[test]
+fn structure_column_tool_keeps_to_its_material() {
+    use crate::commands::UiCommand;
+    use cc_core::{Category, StructuralMaterial as M};
+    let mut state = sample_state();
+    let ctx = egui::Context::default();
+    crate::commands::run(&mut state, &ctx, UiCommand::StructurePlace(Category::Column, M::Steel));
+    let crate::tools::Tool::Column { type_id, material } = state.tool.clone() else { panic!("{:?}", state.tool) };
+    assert_eq!(material, Some(M::Steel));
+    let project = state.project();
+    assert_eq!(project.structural_material(&project.element_type(type_id).unwrap().data), Some(M::Steel));
+    let listed = crate::tools::tool_types(project, Category::Column, type_id, Some(M::Steel));
+    assert!(!listed.is_empty());
+    assert!(
+        listed
+            .iter()
+            .all(|(id, _)| project.structural_material(&project.element_type(*id).unwrap().data) == Some(M::Steel))
+    );
+    assert!(listed.len() < project.types_of(Category::Column).count(), "concrete types are left out");
+    // Timber: the project has none, so one is made.
+    let depth = state.session.doc.undo_depth();
+    crate::commands::run(&mut state, &ctx, UiCommand::StructurePlace(Category::Beam, M::Timber));
+    let crate::tools::Tool::Beam { type_id, .. } = state.tool.clone() else { panic!() };
+    assert_eq!(state.project().type_name(type_id), "MLC 9x32");
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}

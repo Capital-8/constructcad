@@ -63,6 +63,9 @@ pub enum UiCommand {
     Default3D,
     /// The placement tool of a model category.
     Place(Category),
+    /// Start the column or beam tool on a type of the given structural material.
+    #[allow(dead_code)] // the Structure tab (next task) builds it
+    StructurePlace(Category, cc_core::StructuralMaterial),
     NewComponent,
     LoadComponent,
     ComponentLibrary,
@@ -475,7 +478,7 @@ impl UiCommand {
             Undo => Icon::Undo,
             Redo => Icon::Redo,
             Default3D | New3D => Icon::View3D,
-            Place(category) => category_icon(category),
+            Place(category) | StructurePlace(category, _) => category_icon(category),
             NewComponent | LoadComponent | EditComponent => Icon::Component,
             CompExtrusion => Icon::Extrusion,
             CompRevolution => Icon::Revolution,
@@ -684,7 +687,7 @@ impl UiCommand {
             Undo => t!("action-undo"),
             Redo => t!("action-redo"),
             Default3D => t!("action-default-3d"),
-            Place(category) => place_label(category),
+            Place(category) | StructurePlace(category, _) => place_label(category),
             NewComponent => t!("action-new-component"),
             EditComponent => t!("action-edit-component"),
             CompExtrusion => t!("comp-env-extrusion"),
@@ -889,7 +892,7 @@ impl UiCommand {
             Undo => t!("cmd-desc-undo"),
             Redo => t!("cmd-desc-redo"),
             Default3D => t!("cmd-desc-default-3d"),
-            Place(category) => place_description(category),
+            Place(category) | StructurePlace(category, _) => place_description(category),
             NewComponent => t!("cmd-desc-new-component"),
             EditComponent => t!("cmd-desc-edit-component"),
             CompExtrusion => t!("cmd-desc-comp-extrusion"),
@@ -1330,6 +1333,9 @@ impl UiCommand {
     /// Why the command cannot run now, or `None` when it can.
     pub fn unavailable(self, state: &AppState) -> Option<String> {
         use UiCommand::*;
+        if let StructurePlace(category, _) = self {
+            return Place(category).unavailable(state);
+        }
         let project_open = state.project_open && !state.show_home;
         match self {
             Home | New | Open | ImportIfc | About | CheckUpdates | Preferences | ToggleRibbon | CommandPalette => {
@@ -1816,6 +1822,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         },
         Default3D => actions::open_default_3d(state),
         Place(category) => actions::activate_category_tool(state, category),
+        StructurePlace(category, material) => actions::structure_place(state, category, material),
         NewComponent => {
             state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
         }
