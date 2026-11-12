@@ -1477,7 +1477,9 @@ impl UiCommand {
             FoundationSlab if crate::tools::foundation_type(project, cc_core::FoundationKind::Slab).is_none() => {
                 Some(t!("msg-no-type"))
             }
-            Truss if project.default_type(Category::Beam).is_none() => Some(t!("msg-no-type")),
+            Truss if state.prefs.structure_material == cc_core::StructuralMaterial::Concrete => {
+                Some(t!("msg-truss-material"))
+            }
             BracesX if crate::actions::selected_columns(state).len() != 2 => Some(t!("msg-columns-two-exactly")),
             TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
             StructuralPlan | PlumbingPlan | ElectricalPlan | CommunicationsPlan | LightningPlan | EarthRing
@@ -1925,8 +1927,9 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         AnalyticalView => crate::actions::open_analytical_view(state),
         AnalyticalExport => crate::actions::export_analytical(state),
         Truss => {
-            if let Some(type_id) = state.project().default_type(Category::Beam) {
-                state.set_tool(Tool::Truss { type_id });
+            let material = state.prefs.structure_material;
+            if material != cc_core::StructuralMaterial::Concrete {
+                state.set_tool(Tool::Truss { material });
                 state.message = t!("hint-truss");
             }
         }

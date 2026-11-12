@@ -1468,7 +1468,7 @@ action-structural-plan = 構造平面図
 action-number-structure = 構造部材の番号付け
 action-structure-tags = 構造タグ
 action-remove-rebar = 削除
-cmd-desc-truss = 平面トラスをレイアウトします: 両端をクリック; オプションバーで高さ、パネル、パターン (プラット、ハウ、ワーレン) を設定します。弦材と斜材は梁、垂直材は柱となり、1 つのグループになります。
+cmd-desc-truss = 鉄骨または木造のパラメトリックなトラスを配置します。両端をクリックし、オプションバーで形状（平行、片流れ、切妻）、ラチス形式（Pratt、Howe、Warren、キングポスト、クイーンポスト、フィンク）、高さ、パネル数、コピー数、間隔を設定します。弦材と斜材は梁、束材は柱で、トラスに合わせて更新されます。
 cmd-desc-braces-x = 選択した 2 本の柱の間のスパンに、それぞれのベースからもう一方のトップへと交差する 2 つの部材でブレースを架けます。
 cmd-desc-rebar-typical = 配筋のない選択した梁や柱 (またはアクティブレベルのすべて) に標準配筋 (主筋と帯筋) を適用します。
 cmd-desc-rebar-view = 薄く描画されたモデルの上に補強鉄筋を表示する 3D ビューを開きます。
@@ -3218,3 +3218,15 @@ action-reset-members = 部材をリセット
 opt-catalog-default = カタログ既定
 cmd-desc-steel-building = パラメトリックな鉄骨建屋を作成します。柱とラフターからなる門型フレームに母屋と胴縁を加え、スパン、高さ、勾配、ベイに合わせて更新します。
 msg-steel-building-created = 部材 { $count } 本の鉄骨建屋を作成しました。
+
+# Parametric trusses
+truss-king-post = キングポスト
+truss-queen-post = クイーンポスト
+truss-fink = フィンク (W)
+prop-truss-pattern = ラチス形式
+prop-truss-copies = コピー数
+label-top-chord-type = 上弦材タイプ
+label-bottom-chord-type = 下弦材タイプ
+label-web-type = 斜材タイプ
+label-post-type = 束材タイプ
+msg-truss-material = トラスは鉄骨または木造です。「材料」でいずれかを選んでください。

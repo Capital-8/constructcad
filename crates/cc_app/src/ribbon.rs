@@ -735,7 +735,7 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
         M::Timber => {
             group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam]));
             group(ui, t!("group-framing"), |ui| {
-                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame]]);
+                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
             });
         }
     }
@@ -1282,28 +1282,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             Tool::Footing { .. } => {
                 ui.label(theme::muted(t!("hint-footing")));
             }
-            Tool::Truss { .. } => {
-                let o = &mut state.truss;
-                ui.label(t!("prop-truss-height"));
-                ui.add(crate::properties::length_drag(&mut o.height).speed(0.01).range(0.1..=20.0));
-                ui.label(t!("prop-truss-panels"));
-                ui.add(
-                    DragValue::new(&mut o.panels)
-                        .range(0..=100)
-                        .custom_formatter(|n, _| if n < 0.5 { t!("truss-panels-auto") } else { format!("{n:.0}") }),
-                );
-                let current = crate::tools::TRUSS_PATTERNS
-                    .iter()
-                    .find(|(p, _)| *p == o.pattern)
-                    .map_or(String::new(), |(_, key)| crate::i18n::tr(key));
-                egui::ComboBox::from_id_salt("truss-pattern").selected_text(current).show_ui(ui, |ui| {
-                    for (pattern, key) in crate::tools::TRUSS_PATTERNS {
-                        ui.selectable_value(&mut o.pattern, pattern, crate::i18n::tr(key));
-                    }
-                });
-                ui.separator();
-                ui.label(theme::muted(t!("hint-truss")));
-            }
+            Tool::Truss { .. } => crate::truss_ui::tool_options(ui, state),
             Tool::Stair { .. } => crate::stair_ui::tool_options(ui, state),
             Tool::Ramp { .. } => crate::stair_ui::ramp_tool_options(ui, state),
             Tool::Pipe { type_id } => segment_options(ui, state, type_id, Run::Pipe),

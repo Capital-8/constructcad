@@ -1449,7 +1449,7 @@ action-structural-plan = Planta estructural
 action-number-structure = Numerar estructura
 action-structure-tags = Etiquetas estructurales
 action-remove-rebar = Quitar
-cmd-desc-truss = Traza una cercha plana: haga clic en sus dos extremos; la barra de opciones define su altura, paneles y patrón (Pratt, Howe, Warren). Los cordones y diagonales son vigas, los montantes son pilares, todos en un grupo.
+cmd-desc-truss = Traza una cercha paramétrica de acero o madera: haga clic en sus dos extremos; la barra de opciones define la forma (plana, a un agua, a dos aguas), el patrón (Pratt, Howe, Warren, pendolón, doble pendolón, Fink), la altura, los paneles, las copias y la separación. Cordones y diagonales son vigas y montantes son pilares, que siguen a la cercha.
 cmd-desc-braces-x = Arriostra el vano entre los dos pilares seleccionados con dos barras que se cruzan desde la base de cada uno hasta la parte superior del otro.
 cmd-desc-rebar-typical = Da a las vigas y pilares seleccionados (o a todos los del nivel activo) sin armadura una armadura típica: barras longitudinales y estribos.
 cmd-desc-rebar-view = Abre una vista 3D de las barras de armadura sobre el modelo dibujado atenuado.
@@ -3218,3 +3218,15 @@ action-reset-members = Restablecer barras
 opt-catalog-default = Predeterminado del catálogo
 cmd-desc-steel-building = Crea una nave metálica paramétrica: pórticos de pilares y dinteles, con correas de cubierta y de fachada, que siguen su luz, altura, pendiente y vanos.
 msg-steel-building-created = Nave metálica creada con { $count } barras.
+
+# Parametric trusses
+truss-king-post = Pendolón
+truss-queen-post = Doble pendolón
+truss-fink = Fink (W)
+prop-truss-pattern = Patrón
+prop-truss-copies = Copias
+label-top-chord-type = Tipo de cordón superior
+label-bottom-chord-type = Tipo de cordón inferior
+label-web-type = Tipo de diagonales
+label-post-type = Tipo de montantes
+msg-truss-material = Las cerchas son de acero o madera: elija uno en Material.

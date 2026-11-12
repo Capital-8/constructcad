@@ -1449,7 +1449,7 @@ action-structural-plan = Rzut konstrukcyjny
 action-number-structure = Numeruj konstrukcję
 action-structure-tags = Etykiety konstrukcyjne
 action-remove-rebar = Usuń
-cmd-desc-truss = Rozmieść kratownicę płaską: kliknij jej oba końce; pasek opcji ustala jej wysokość, przedziały i układ (Pratt, Howe, Warren). Pasy i krzyżulce są belkami, słupki są słupami, wszystkie w jednej grupie.
+cmd-desc-truss = Tworzy parametryczną kratownicę stalową lub drewnianą: kliknij jej dwa końce; pasek opcji ustala kształt (płaska, jednospadowa, dwuspadowa), układ (Pratt, Howe, Warren, jednowieszakowa, dwuwieszakowa, Fink), wysokość, przęsła, kopie i rozstaw. Pasy i krzyżulce to belki, słupki to słupy, aktualizowane razem z kratownicą.
 cmd-desc-braces-x = Stęż pole między dwoma zaznaczonymi słupami dwoma prętami krzyżującymi się od podstawy każdego do wierzchu drugiego.
 cmd-desc-rebar-typical = Nadaj zaznaczonym belkom i słupom (lub wszystkim na aktywnym poziomie) bez zbrojenia zbrojenie typowe: pręty podłużne i strzemiona.
 cmd-desc-rebar-view = Otwórz widok 3D prętów zbrojeniowych na tle słabo narysowanego modelu.
@@ -3218,3 +3218,15 @@ action-reset-members = Przywróć pręty
 opt-catalog-default = Domyślny z katalogu
 cmd-desc-steel-building = Tworzy parametryczną halę stalową: ramy ze słupów i rygli, z płatwiami i ryglami ściennymi, dopasowane do rozpiętości, wysokości, spadku i przęseł.
 msg-steel-building-created = Utworzono halę stalową, prętów: { $count }.
+
+# Parametric trusses
+truss-king-post = Jednowieszakowa
+truss-queen-post = Dwuwieszakowa
+truss-fink = Fink (W)
+prop-truss-pattern = Układ krzyżulców
+prop-truss-copies = Kopie
+label-top-chord-type = Typ pasa górnego
+label-bottom-chord-type = Typ pasa dolnego
+label-web-type = Typ krzyżulców
+label-post-type = Typ słupków
+msg-truss-material = Kratownice są stalowe lub drewniane: wybierz jedno w Materiale.

@@ -1468,7 +1468,7 @@ action-structural-plan = Structural Plan
 action-number-structure = Number Structure
 action-structure-tags = Structural Tags
 action-remove-rebar = Remove
-cmd-desc-truss = Lay out a plane truss: click its two ends; the options bar sets its height, panels and pattern (Pratt, Howe, Warren). Chords and diagonals are beams, posts are columns, all in one group.
+cmd-desc-truss = Lay out a parametric steel or timber truss: click its two ends; the options bar sets its shape (flat, mono, gable), pattern (Pratt, Howe, Warren, king post, queen post, Fink), height, panels, copies and spacing. Chords and diagonals are beams and posts are columns, kept in step with the truss.
 cmd-desc-braces-x = Brace the bay between the two selected columns with two members crossing from the base of each to the top of the other.
 cmd-desc-rebar-typical = Give the selected beams and columns (or all of the active level) without reinforcement a typical one: longitudinal bars and stirrups.
 cmd-desc-rebar-view = Open a 3D view of the reinforcing bars over the model drawn faint.
@@ -3218,3 +3218,15 @@ action-reset-members = Reset Members
 opt-catalog-default = Catalog default
 cmd-desc-steel-building = Create a parametric steel building: portal frames of columns and rafters, with purlins and girts, kept in step with its span, height, slope and bays.
 msg-steel-building-created = Steel building created with { $count } members.
+
+# Parametric trusses
+truss-king-post = King post
+truss-queen-post = Queen post
+truss-fink = Fink (W)
+prop-truss-pattern = Pattern
+prop-truss-copies = Copies
+label-top-chord-type = Top chord type
+label-bottom-chord-type = Bottom chord type
+label-web-type = Diagonal type
+label-post-type = Post type
+msg-truss-material = Trusses are steel or timber: pick one under Material.
