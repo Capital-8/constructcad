@@ -117,3 +117,16 @@ fn out_of_range_values_are_refused() {
     }
     assert_eq!(s.doc.undo_depth(), depth);
 }
+
+#[test]
+fn ifc_export_writes_the_members_and_not_the_building() {
+    let mut s = Session::default();
+    let host = id(&run(&mut s, "steel_building_create", json!({"bays": 2})));
+    let text = cc_ifc::export(s.project(), &cc_ifc::ExportOptions::default());
+    let p = s.project();
+    let count = |f: fn(&ElementKind) -> bool| p.elements.values().filter(|e| f(&e.kind)).count();
+    assert_eq!(text.matches("IFCCOLUMN(").count(), count(|k| matches!(k, ElementKind::Column(_))));
+    assert_eq!(text.matches("IFCBEAM(").count(), count(|k| matches!(k, ElementKind::Beam(_))));
+    let uid = cc_ifc::guid::encode(p.element(ElementId(host)).unwrap().uid.0);
+    assert!(!text.contains(&uid), "the building itself is not exported");
+}

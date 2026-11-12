@@ -50,7 +50,11 @@ pub fn is_structural(e: &cc_core::Element) -> bool {
     match &e.kind {
         ElementKind::Wall(w) => w.structural,
         ElementKind::Column(c) => c.structural,
-        ElementKind::Floor(_) | ElementKind::Beam(_) | ElementKind::Foundation(_) | ElementKind::Grid(_) => true,
+        ElementKind::Floor(_)
+        | ElementKind::Beam(_)
+        | ElementKind::Foundation(_)
+        | ElementKind::Grid(_)
+        | ElementKind::SteelBuilding(_) => true,
         _ => false,
     }
 }
@@ -125,6 +129,9 @@ pub fn plan_of(
         draw_masses(&mut d, project, geom, level, cut_z);
     }
     draw_shafts(&mut d, project, level, cut_z);
+    if !ceiling {
+        draw_steel_buildings(&mut d, project, level);
+    }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
         if let Some(g) = geom.walls.get(&e.id) {
@@ -922,6 +929,16 @@ fn section_mark(
 /// Shafts in a plan: those on its level and those its cut plane passes
 /// through, as their outline crossed by its two diagonals (the usual
 /// symbol of an opening through the floors).
+/// Steel buildings of a plan's level: their column lines' rectangle, thin
+/// and dashed, as the building's own lines so it can be picked (its
+/// columns and beams draw themselves).
+fn draw_steel_buildings(d: &mut Drawing2D, project: &Project, level: LevelId) {
+    for e in project.elements.values().filter(|e| e.level == level) {
+        let ElementKind::SteelBuilding(b) = &e.kind else { continue };
+        d.polyline(&b.footprint(), true, LineStyle::Hidden, Some(e.id));
+    }
+}
+
 fn draw_shafts(d: &mut Drawing2D, project: &Project, level: LevelId, cut_z: f64) {
     for e in project.elements.values() {
         let ElementKind::Shaft(s) = &e.kind else { continue };
@@ -1000,6 +1017,44 @@ mod tests {
     use crate::Prim;
     use cc_core::{Category, Document, Element, ElementId, Hosted, Wall};
 
+    /// A steel building draws its footprint dashed as its own lines, so it
+    /// can be picked; its members draw themselves.
+    #[test]
+    fn steel_buildings_draw_their_footprint() {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let host = doc.edit("t", |e| {
+            let column = e.project().default_type(Category::Column).unwrap();
+            let beam = e.project().default_type(Category::Beam).unwrap();
+            let ty = cc_core::ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::steel_building::host_type(ty, "Steel building".into()));
+            let b = cc_core::steel_building::SteelBuilding::new(column, beam, None);
+            let id = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id: ty,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind: ElementKind::SteelBuilding(Box::new(b)),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 100);
+        let lines = d
+            .prims
+            .iter()
+            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Hidden, element: Some(e), .. } if *e == host))
+            .count();
+        assert_eq!(lines, 4);
+        // Mid-bay on a long side: nothing else is there.
+        assert_eq!(d.hit_test(DVec2::new(0.0, 3.0), 0.01), Some(host));
+    }
     /// A wall with a column standing in it, cut by the plan; the column is
     /// joined with the wall when `joined` (the wall cutting an architectural one).
     fn wall_and_column(structural: bool, joined: bool) -> (Drawing2D, ElementId, ElementId) {
