@@ -95,7 +95,7 @@ pub use material::{Material, MaterialClass, Pattern, PatternFill};
 pub use mep::{DeviceKind, MepData, MepSegment, MepSystem, SystemClass, SystemKind, TrayStyle, Valve, ValveKind};
 pub use persist::{
     FORMAT_VERSION, PersistError, from_ron, from_ron_with_repairs, from_ron_with_repairs_localized, load,
-    load_with_repairs, load_with_repairs_localized, save, to_ron,
+    load_with_repairs, load_with_repairs_localized, read_to_string_limited, save, to_ron,
 };
 pub use phase::{Phase, PhaseDisplay, PhaseFilter, PhaseGraphics, PhaseState, PhaseStatus};
 pub use profile::{ProfilePoint, SketchPlane};

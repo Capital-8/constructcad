@@ -347,7 +347,9 @@ fn open_graph(state: &mut AppState) {
 
 /// Open the graph file at `path` in the editor.
 pub fn open_path(state: &mut AppState, path: PathBuf) {
-    let read = std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| Graph::from_json(&t));
+    let read = cc_core::read_to_string_limited(&path, cc_engine::graph::MAX_FILE as u64)
+        .map_err(|e| e.to_string())
+        .and_then(|t| Graph::from_json(&t));
     match read {
         Ok((graph, repairs)) => {
             state.graph.replace(graph, Some(path));
