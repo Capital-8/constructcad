@@ -3178,3 +3178,4 @@ browser-org-none = Brak
 
 # Structure by material
 tx-structural-type = Utwórz typ konstrukcyjny
+tx-grid-frame = Utwórz szkielet na siatce osi

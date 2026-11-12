@@ -3180,3 +3180,4 @@ browser-org-none = ບໍ່ມີ
 
 # Structure by material
 tx-structural-type = ສ້າງປະເພດໂຄງສ້າງ
+tx-grid-frame = ສ້າງໂຄງສ້າງຕາມກຣິດ

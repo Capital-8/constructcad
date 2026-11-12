@@ -3179,3 +3179,4 @@ browser-org-none = Немає
 
 # Structure by material
 tx-structural-type = Створити конструктивний тип
+tx-grid-frame = Створити каркас за сіткою осей

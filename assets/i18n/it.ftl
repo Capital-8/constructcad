@@ -3178,3 +3178,4 @@ browser-org-none = Nessuno
 
 # Structure by material
 tx-structural-type = Crea tipo strutturale
+tx-grid-frame = Crea telaio sulla griglia

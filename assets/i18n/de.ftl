@@ -3178,3 +3178,4 @@ browser-org-none = Keine
 
 # Structure by material
 tx-structural-type = Tragwerkstyp erstellen
+tx-grid-frame = Rasterskelett erstellen

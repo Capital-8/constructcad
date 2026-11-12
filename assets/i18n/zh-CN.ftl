@@ -3178,3 +3178,4 @@ browser-org-none = 无
 
 # Structure by material
 tx-structural-type = 创建结构类型
+tx-grid-frame = 创建轴网框架

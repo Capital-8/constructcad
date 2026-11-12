@@ -3178,3 +3178,4 @@ browser-org-none = Ninguno
 
 # Structure by material
 tx-structural-type = Crear tipo estructural
+tx-grid-frame = Crear estructura en retícula

@@ -225,6 +225,7 @@ registry![
         structure::ColumnsAtGrids,
         structure::BeamsOnGrids,
         structure::BeamsBetweenColumns,
+        grid_frame::GridFrameCreate,
         structure::SlabJoinSupports,
         structure::StructureNumber,
         framing::BraceCreate,
