@@ -315,6 +315,17 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.12}}
 ```
 
+A column that continues a cylindrical wall has an `annular_sector` profile; `rebar_create` then takes its bars face by face (the faces are listed, in order, in the column's `derived.faces`), ties that follow the outline, cross-ties and lifts:
+
+```text
+{"command": "profile_create", "args": {"name": "P1", "material": "concrete", "shape": "annular_sector", "params": {"r_in": 2.0, "r_out": 2.2, "sweep": 30}}}
+{"command": "profile_type_create", "args": {"profile": "P1", "category": "column"}}
+{"command": "column_create", "args": {"type": "P1", "position": [0, 2.1]}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "perimeter", "faces": [7, 3, 7, 3], "same_type": true}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "ties", "spacing": 0.30}}
+```
+
 `bracing_create` braces one bay of a frame: a host element whose braces are ordinary beams, made in one undo step and returned as `{id, members}`. The bay is `start` to `end` (the two column axes) or the two `columns`, whose base and height it then takes; `pattern` is `x`, `diagonal` (with `flip` and `alternate`), `v`, `chevron` or `k`; `stories` storeys of `height` stand one above the other from `base_offset`; `material` (`steel` or `timber`) picks the catalog row of the default brace type. `element_set` changes its parameters and regenerates the braces with their ids kept.
 
 ```text

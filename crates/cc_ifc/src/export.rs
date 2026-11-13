@@ -1276,7 +1276,7 @@ impl<'a> Exporter<'a> {
                 ElementKind::Rebar(r) => match r.layout {
                     cc_core::RebarLayout::Longitudinal { .. } => ("MAIN", &[][..]),
                     cc_core::RebarLayout::Sides { .. } => ("EDGE", &[][..]),
-                    cc_core::RebarLayout::Stirrups { .. } => ("LIGATURE", &[][..]),
+                    cc_core::RebarLayout::Stirrups { .. } | cc_core::RebarLayout::Ties { .. } => ("LIGATURE", &[][..]),
                 },
                 ElementKind::ShapedRebar(r) => ("NOTDEFINED", &r.properties[..]),
                 _ => continue,

@@ -11,7 +11,7 @@ use crate::profile::{self, ProfilePoint};
 use crate::{ProfileId, Uid};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
-use std::f64::consts::{PI, TAU};
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 /// Segments of an arc that turns a quarter circle (fillets use this many).
 pub const ARC_SEGMENTS: usize = 8;
@@ -185,7 +185,34 @@ pub enum ProfileShape {
         hf: f64,
         bw: f64,
     },
+    /// An annular sector: the part of a ring between the radii `r_in` (0
+    /// for a circular sector) and `r_out` turning by `sweep` degrees,
+    /// symmetric about the Y axis with its outer face up, as the piece of a
+    /// cylindrical wall a column continues.
+    AnnularSector {
+        r_in: f64,
+        r_out: f64,
+        sweep: f64,
+    },
     Sketch(ParamSketch),
+}
+
+impl ProfileShape {
+    /// Largest turn of an annular sector, degrees.
+    pub const MAX_SECTOR_SWEEP: f64 = 180.0;
+
+    /// The center of an annular sector's ring in the section's own frame
+    /// (the outline is centered on its bounding box): below the origin on
+    /// the Y axis. `None` for other shapes and invalid values.
+    pub fn sector_center(&self) -> Option<DVec2> {
+        let Self::AnnularSector { r_in, r_out, sweep } = *self else { return None };
+        self.outline().ok()?;
+        // The lowest points are the inner arc's ends (or the center of a
+        // circular sector); the highest the middle of the outer arc.
+        let half = sweep.to_radians() / 2.0;
+        let low = if r_in > 0.0 { r_in * half.cos() } else { 0.0 };
+        Some(DVec2::new(0.0, -(low + r_out) / 2.0))
+    }
 }
 
 /// Most parameters of a sketch.
@@ -603,6 +630,7 @@ impl ProfileShape {
         "round",
         "concrete_t",
         "concrete_l",
+        "annular_sector",
         "sketch",
     ];
 
@@ -623,6 +651,7 @@ impl ProfileShape {
             Self::Round { .. } => "round",
             Self::ConcreteT { .. } => "concrete_t",
             Self::ConcreteL { .. } => "concrete_l",
+            Self::AnnularSector { .. } => "annular_sector",
             Self::Sketch(_) => "sketch",
         }
     }
@@ -645,6 +674,7 @@ impl ProfileShape {
             "round" => Self::Round { d: 0.3 },
             "concrete_t" => Self::ConcreteT { h: 0.5, bf: 0.6, hf: 0.12, bw: 0.2 },
             "concrete_l" => Self::ConcreteL { h: 0.5, bf: 0.4, hf: 0.12, bw: 0.2 },
+            "annular_sector" => Self::AnnularSector { r_in: 2.0, r_out: 2.2, sweep: 15.0 },
             "sketch" => Self::Sketch(ParamSketch::square(0.1, 0.1)),
             _ => return None,
         })
@@ -678,6 +708,7 @@ impl ProfileShape {
             Self::ConcreteT { h, bf, hf, bw } | Self::ConcreteL { h, bf, hf, bw } => {
                 vec![("h", h), ("bf", bf), ("hf", hf), ("bw", bw)]
             }
+            Self::AnnularSector { r_in, r_out, sweep } => vec![("r_in", r_in), ("r_out", r_out), ("sweep", sweep)],
             Self::Sketch(_) => Vec::new(),
         }
     }
@@ -721,6 +752,11 @@ impl ProfileShape {
     /// chords' error falls with the square of their number), so a circle or a
     /// root radius is not counted short. Sketches give their outline's area.
     pub fn area(&self) -> Result<f64, ProfileError> {
+        // A piece of a ring has its own formula.
+        if let Self::AnnularSector { r_in, r_out, sweep } = *self {
+            self.outline()?;
+            return Ok(sweep.to_radians() / 2.0 * (r_out * r_out - r_in * r_in));
+        }
         let area = |segs| -> Result<f64, ProfileError> {
             let o = self.outline_at(segs)?;
             Ok(signed_area(&o.outer).abs() - o.holes.iter().map(|h| signed_area(h).abs()).sum::<f64>())
@@ -924,6 +960,33 @@ impl ProfileShape {
                 let pts = [v2(0.0, -y), v2(bw, -y), v2(bw, y - hf), v2(bf, y - hf), v2(bf, y), v2(0.0, y)];
                 finish(pts.to_vec(), vec![])
             }
+            Self::AnnularSector { r_in, r_out, sweep } => {
+                radius("r_in", r_in)?;
+                size("r_out", r_out)?;
+                fit(
+                    r_out - r_in >= MIN_THICKNESS,
+                    "the outer radius (r_out) must be larger than the inner one (r_in)",
+                )?;
+                if !(sweep.is_finite() && sweep > 0.0 && sweep <= Self::MAX_SECTOR_SWEEP) {
+                    return Err(ProfileError::Range("sweep"));
+                }
+                let half = sweep.to_radians() / 2.0;
+                fit(2.0 * r_out * half.sin() >= MIN_THICKNESS, "the sweep is too small for the radius")?;
+                // Chords as fine as a circle's, `segs` to the quarter turn; an
+                // even number, so the middle of the outer arc is a point.
+                let n = 2 * ((sweep / 180.0) * segs as f64).ceil().max(1.0) as usize;
+                let at = |r: f64, i: usize| {
+                    let a = FRAC_PI_2 - half + 2.0 * half * i as f64 / n as f64;
+                    v2(a.cos(), a.sin()) * r
+                };
+                let mut pts: Vec<DVec2> = (0..=n).map(|i| at(r_out, i)).collect();
+                if r_in > 0.0 {
+                    pts.extend((0..=n).rev().map(|i| at(r_in, i)));
+                } else {
+                    pts.push(DVec2::ZERO);
+                }
+                finish(pts, vec![])
+            }
             Self::Sketch(ref s) => s.resolve(),
         }
     }
@@ -1117,6 +1180,48 @@ mod tests {
         close(&o, 0.4 * 0.12 + 0.2 * 0.38);
         let o = ProfileShape::Rect { b: 0.2, h: 0.4, chamfer: 0.03 }.outline().unwrap();
         close(&o, 0.08 - 2.0 * 0.03 * 0.03);
+    }
+
+    #[test]
+    fn annular_sector_is_a_piece_of_a_ring() {
+        let shape = ProfileShape::AnnularSector { r_in: 2.0, r_out: 2.2, sweep: 30.0 };
+        let o = shape.outline().unwrap();
+        // Counter-clockwise, centered on its box, symmetric about the Y axis.
+        assert!(signed_area(&o.outer) > 0.0);
+        let (lo, hi) = o.bbox();
+        assert!((lo + hi).length() < 1e-12);
+        assert!((hi.x - 2.2 * 15f64.to_radians().sin()).abs() < 1e-12);
+        assert!((hi.y - lo.y - (2.2 - 2.0 * 15f64.to_radians().cos())).abs() < 1e-12);
+        // Every point lies on one of the two circles around the ring's center.
+        let c = shape.sector_center().unwrap();
+        assert!(c.x == 0.0 && (c.y + (2.0 * 15f64.to_radians().cos() + 2.2) / 2.0).abs() < 1e-12);
+        assert!(o.outer.iter().all(|p| {
+            let r = p.distance(c);
+            (r - 2.0).abs() < 1e-9 || (r - 2.2).abs() < 1e-9
+        }));
+        // The exact area: half the sweep times the difference of the squared radii.
+        let exact = 30f64.to_radians() / 2.0 * (2.2f64.powi(2) - 2.0f64.powi(2));
+        assert!((shape.area().unwrap() - exact).abs() < 1e-9, "{}", shape.area().unwrap());
+        // Without an inner radius it is a circular sector, to its center.
+        let pie = ProfileShape::AnnularSector { r_in: 0.0, r_out: 0.5, sweep: 90.0 };
+        let o = pie.outline().unwrap();
+        assert!(o.outer.iter().any(|p| p.distance(pie.sector_center().unwrap()) < 1e-12));
+        assert!((pie.area().unwrap() - FRAC_PI_2 / 2.0 * 0.25).abs() < 1e-9);
+        // Out of range values are errors, not shapes.
+        for bad in [
+            ProfileShape::AnnularSector { r_in: 2.2, r_out: 2.2, sweep: 30.0 },
+            ProfileShape::AnnularSector { r_in: 2.0, r_out: 2.2, sweep: 0.0 },
+            ProfileShape::AnnularSector { r_in: 2.0, r_out: 2.2, sweep: 200.0 },
+            ProfileShape::AnnularSector { r_in: -1.0, r_out: 2.2, sweep: 30.0 },
+            ProfileShape::AnnularSector { r_in: 2.0, r_out: f64::NAN, sweep: 30.0 },
+        ] {
+            assert!(bad.outline().is_err() && bad.sector_center().is_none(), "{bad:?}");
+        }
+        // Parameters by name, the sweep in degrees.
+        let mut s = ProfileShape::default_for("annular_sector").unwrap();
+        assert_eq!(s.code(), "annular_sector");
+        assert!(s.set_param("sweep", 45.0) && s.set_param("r_in", 1.0) && !s.set_param("angle", 1.0));
+        assert_eq!(s, ProfileShape::AnnularSector { r_in: 1.0, r_out: 2.2, sweep: 45.0 });
     }
 
     #[test]

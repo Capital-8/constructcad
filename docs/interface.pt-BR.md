@@ -254,6 +254,18 @@ A ferramenta *Viga* tem dois modos na barra de opções, como a de parede: *Linh
 - **Barras de pele**: *Adicionar barras de pele* põe uma barra em cada face lateral, à meia altura; `rebar_create` com o layout `sides` aceita um `count` por face, ou um `spacing` que põe quantas barras forem necessárias para mantê-las a essa distância ao longo da altura.
 - **Emendas por traspasse**: uma barra ao longo de uma viga mais comprida que a barra comercial (12 m, ou 40' em projetos imperiais) é feita do menor número de peças iguais, com traspasse de 40 diâmetros, e as emendas de barras vizinhas ficam defasadas de meia peça. `rebar_create` aceita `max_length` (0 mantém barras inteiras) e `lap`. As tabelas contam e medem as peças.
 
+## Seções de pilares e sua armadura
+
+A seção de um tipo de pilar é um perfil estrutural. Além das formas padrão, o Gerenciador de Perfis (*Estrutura → Perfis*) tem o *Setor anular*: o trecho de um anel entre um raio interno e um raio externo que gira um ângulo, como os pilares que continuam uma parede cilíndrica (raio interno 0 dá um setor circular). A seção é desenhada simétrica em relação ao eixo vertical, com a face externa para cima, e posicionada pelo meio da sua caixa envolvente; gire cada pilar do círculo pela sua rotação. A área e o volume do pilar são os do anel, não os das cordas com que ele é desenhado. Pilares em L, T, U e outros polígonos são perfis desenhados (um perfil novo da forma *Esboço*).
+
+`rebar_create` (paleta de comandos) arma um pilar de qualquer seção:
+
+- **Barras por face**: `perimeter` com `faces` recebe a quantidade de barras em cada face da seção (incluídas as duas barras de canto; as barras de canto são compartilhadas entre faces), na ordem do `derived.faces` que `element_get` lista para o pilar: sentido anti-horário, começando pelo arco externo no setor anular. Em uma face curva as barras ficam em ângulos iguais. `face_spacing` põe em cada face quantas barras forem necessárias para mantê-las a essa distância. Um `count` simples é distribuído em volta da seção, os cantos primeiro.
+- **Estribos**: `stirrups` seguem o contorno da seção, afastados do cobrimento, com a face curva como curva, e o comprimento é o verdadeiro.
+- **Grampos**: `ties` acrescenta, a cada `spacing` ao longo do pilar, uma barra reta com gancho de 135° em uma ponta e de 180° na outra, de cada barra entre cantos até a barra oposta: reta através da seção, ou, entre as faces radiais de um setor, perpendicular ao seu eixo. Um grampo cuja linha sairia da armadura (entre as faces radiais de um anel fino) não é criado.
+- **Lances**: com `max_length` as barras verticais são cortadas em lances iguais de no máximo esse comprimento, cada um traspassando o seguinte por `lap` (padrão 40 diâmetros), todos nas mesmas alturas.
+- **Todos os pilares do tipo**: `same_type` dá o conjunto aos outros pilares do tipo do hospedeiro no mesmo passo.
+
 ## Estrutura por material
 
 A aba *Estrutura* começa com o grupo *Material*: botões *Concreto*, *Aço* e *Madeira* (um fica sempre ligado; a escolha é guardada entre sessões). O material troca os grupos feitos para ele: concreto mostra *Estrutura* (Pilar, Viga, Laje) e *Armadura*; aço mostra *Estrutura* (Pilar, Viga, Contraventamento), o grupo de grade *Estruturação* (Pilares nas grades, Vigas nas grades, Vigas entre pilares, Pórtico por grade, Treliça, Galpão metálico, Light Steel Frame) e *Ligações* (Placa de base, Placa de topo, Chapa de alma); madeira mostra *Estrutura* (Pilar, Viga, Contraventamento), o mesmo grupo de grade com Wood Frame no lugar de Galpão metálico e Estrutura de aço leve, e *Ligações* (Ligação parafusada, Suporte de viga). Perfis, Fundação, Analítico, Documentação, Referência e Seleção aparecem para todos os materiais.

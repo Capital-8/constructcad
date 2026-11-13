@@ -2206,10 +2206,10 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
             }
             finish(state, &r);
         }
-        L::Stirrups { spacing } => {
+        L::Stirrups { spacing } | L::Ties { spacing } => {
             length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
                 if let ElementKind::Rebar(x) = &mut e.kind
-                    && let L::Stirrups { spacing } = &mut x.layout
+                    && let L::Stirrups { spacing } | L::Ties { spacing } = &mut x.layout
                 {
                     *spacing = v.max(0.02);
                 }
@@ -2249,6 +2249,7 @@ fn rebar_role(layout: cc_core::RebarLayout) -> String {
         cc_core::RebarLayout::Longitudinal { face, .. } => tr(face.key()),
         cc_core::RebarLayout::Stirrups { .. } => t!("bars-stirrups"),
         cc_core::RebarLayout::Sides { .. } => t!("bars-sides"),
+        cc_core::RebarLayout::Ties { .. } => t!("bars-ties"),
     }
 }
 

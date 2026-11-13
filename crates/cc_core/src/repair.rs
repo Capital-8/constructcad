@@ -63,7 +63,9 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Rebar(r) => {
             let layout = match r.layout {
                 crate::RebarLayout::Longitudinal { count, .. } => (1..=200).contains(&count),
-                crate::RebarLayout::Stirrups { spacing } => spacing.is_finite() && spacing >= 0.02,
+                crate::RebarLayout::Stirrups { spacing } | crate::RebarLayout::Ties { spacing } => {
+                    spacing.is_finite() && spacing >= 0.02
+                }
                 crate::RebarLayout::Sides { count, spacing } => {
                     count <= 200 && spacing.is_finite() && (count > 0 || spacing >= 0.02)
                 }
@@ -600,6 +602,15 @@ impl Project {
             };
             if fixed.to_bits() != bulge.to_bits() {
                 *bulge = fixed;
+                repairs += 1;
+            }
+        }
+        // Bars by face out of range: spread around the section again.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Rebar(r) = &mut e.kind
+                && (r.faces.len() > crate::FaceBars::MAX_FACES || r.faces.iter().any(|f| !f.is_valid()))
+            {
+                r.faces.clear();
                 repairs += 1;
             }
         }
@@ -1292,7 +1303,7 @@ mod tests {
             Splice { max_length: 2.0, lap: 1.5 },
         ] {
             let layout = RebarLayout::Sides { count: 1, spacing: 0.0 };
-            let rebar = Rebar { host: ids[0], layout, cover: 0.025, splice: Some(splice) };
+            let rebar = Rebar { host: ids[0], layout, cover: 0.025, splice: Some(splice), faces: Vec::new() };
             bars.push(add(&mut p, bar_t, ElementKind::Rebar(rebar)));
         }
         assert!(p.repair() >= 5);

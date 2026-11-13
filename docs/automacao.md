@@ -315,6 +315,17 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.12}}
 ```
 
+Um pilar que continua uma parede cilíndrica tem um perfil `annular_sector`; `rebar_create` recebe então as barras face a face (as faces são listadas, em ordem, no `derived.faces` do pilar), estribos que seguem o contorno, grampos e lances:
+
+```text
+{"command": "profile_create", "args": {"name": "P1", "material": "concrete", "shape": "annular_sector", "params": {"r_in": 2.0, "r_out": 2.2, "sweep": 30}}}
+{"command": "profile_type_create", "args": {"profile": "P1", "category": "column"}}
+{"command": "column_create", "args": {"type": "P1", "position": [0, 2.1]}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "perimeter", "faces": [7, 3, 7, 3], "same_type": true}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "ties", "spacing": 0.30}}
+```
+
 `bracing_create` contraventa um vão de pórtico: um elemento hospedeiro cujas barras são vigas comuns, criado em um passo de desfazer e devolvido como `{id, members}`. O vão vai de `start` a `end` (os eixos dos dois pilares) ou fica entre os dois `columns`, de quem toma a base e a altura; `pattern` é `x`, `diagonal` (com `flip` e `alternate`), `v`, `chevron` ou `k`; `stories` pavimentos de altura `height` ficam um sobre o outro a partir de `base_offset`; `material` (`steel` ou `timber`) escolhe a linha de catálogo do tipo padrão das barras. `element_set` muda seus parâmetros e regenera as barras mantendo seus ids.
 
 ```text

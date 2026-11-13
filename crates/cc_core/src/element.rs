@@ -1139,12 +1139,49 @@ pub enum RebarLayout {
     /// top and bottom bars: `count` on each face, or with a count of 0 as
     /// many as keep them at most `spacing` apart over the height.
     Sides { count: u32, spacing: f64 },
+    /// Cross-ties of a column every `spacing` up it: a straight bar with a
+    /// hook at each end from every bar of its longitudinal set that is not
+    /// at a corner, across the section to the bar opposite.
+    Ties { spacing: f64 },
+}
+
+/// The longitudinal bars on one face of a column's section: `count` of them
+/// evenly spread, the two at the face's ends (the corners, shared with the
+/// faces beside it) included, so at least 2; or with a count of 0 as many
+/// as keep them at most `spacing` apart.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FaceBars {
+    pub count: u32,
+    #[serde(default)]
+    pub spacing: f64,
+}
+
+impl FaceBars {
+    /// Most bars on one face.
+    pub const MAX_COUNT: u32 = 200;
+    /// Most faces a set lists.
+    pub const MAX_FACES: usize = 64;
+
+    pub fn is_valid(&self) -> bool {
+        self.count <= Self::MAX_COUNT && self.spacing.is_finite() && (self.count > 0 || self.spacing >= 0.02)
+    }
+
+    /// Bars strictly between the corners of a face `length` long.
+    pub fn between(&self, length: f64) -> usize {
+        if self.count > 0 {
+            return self.count.min(Self::MAX_COUNT).saturating_sub(2) as usize;
+        }
+        if !(length.is_finite() && length > 0.0 && self.spacing.is_finite() && self.spacing > 0.0) {
+            return 0;
+        }
+        (((length / self.spacing) - 1e-9).ceil().max(1.0) as usize - 1).min(Self::MAX_COUNT as usize)
+    }
 }
 
 impl RebarLayout {
     /// Whether the bars run along the host (and so may be spliced).
     pub fn runs_along(self) -> bool {
-        !matches!(self, RebarLayout::Stirrups { .. })
+        !matches!(self, RebarLayout::Stirrups { .. } | RebarLayout::Ties { .. })
     }
 }
 
@@ -1199,9 +1236,14 @@ pub struct Rebar {
     pub host: ElementId,
     pub layout: RebarLayout,
     pub cover: f64,
-    /// Lap splices of the bars running along a beam (none: whole bars).
+    /// Lap splices of the bars running along a beam, or the lifts of a
+    /// column's vertical bars (none: whole bars).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub splice: Option<Splice>,
+    /// A column's longitudinal bars face by face, in the order of the faces
+    /// of its section (empty: `count` bars spread around it).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub faces: Vec<FaceBars>,
 }
 
 /// Reinforcing bars of any shape (bars bent to a schedule's shape codes,
