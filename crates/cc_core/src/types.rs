@@ -34,6 +34,8 @@ pub enum Category {
     Sweep,
     /// Shaft openings through floors, ceilings and roofs.
     Shaft,
+    /// Parametric steel buildings: hosts of portal frames, purlins and girts.
+    SteelBuilding,
     /// Terrain surfaces.
     Topography,
     /// Building pads graded into terrain.
@@ -59,7 +61,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 34] = [
+    pub const ALL: [Category; 35] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -92,6 +94,7 @@ impl Category {
         Category::CadImport,
         Category::Mass,
         Category::Shaft,
+        Category::SteelBuilding,
         Category::Topography,
         Category::Pad,
     ];
@@ -187,6 +190,7 @@ impl Category {
             Category::Railing => "category-railing",
             Category::Sweep => "category-sweep",
             Category::Shaft => "category-shaft",
+            Category::SteelBuilding => "category-steel-building",
             Category::Topography => "category-topography",
             Category::Pad => "category-pad",
             Category::Component => "category-component",
@@ -510,6 +514,8 @@ pub enum TypeData {
     },
     /// Shaft openings (no properties of their own).
     Shaft {},
+    /// Steel buildings (no properties of their own; types name them).
+    SteelBuilding {},
     /// Terrain surfaces: the earth `material` they are cut in, and the
     /// spacing of their contour lines, every `major_every`-th one a major.
     Topography {
@@ -596,6 +602,7 @@ impl TypeData {
             | TypeData::FilledRegion { .. }
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
+            | TypeData::SteelBuilding {}
             | TypeData::Pad { .. } => Vec::new(),
         }
     }
@@ -669,6 +676,7 @@ impl TypeData {
             | TypeData::FilledRegion { .. }
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
+            | TypeData::SteelBuilding {}
             | TypeData::Pad { .. } => {}
         }
     }
@@ -824,6 +832,7 @@ impl ElementType {
             TypeData::Mass { .. } => Category::Mass,
             TypeData::Sweep { .. } => Category::Sweep,
             TypeData::Shaft {} => Category::Shaft,
+            TypeData::SteelBuilding {} => Category::SteelBuilding,
             TypeData::Topography { .. } => Category::Topography,
             TypeData::Pad { .. } => Category::Pad,
         }
@@ -982,6 +991,7 @@ impl ElementType {
             | TypeData::FilledRegion { .. }
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
+            | TypeData::SteelBuilding {}
             | TypeData::Pad { .. } => "",
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }

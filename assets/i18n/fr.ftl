@@ -3229,6 +3229,28 @@ label-parallel-to = Parallèles à
 label-spacing = Espacement
 msg-grid-frame-created = { $columns } poteaux, { $beams } poutres et { $secondary } poutres secondaires placés ; { $skipped } ignorés.
 
+# Steel building
+category-steel-building = Bâtiments métalliques
+tpl-type-steel-building = Bâtiment métallique
+tx-steel-building = Créer un bâtiment métallique
+action-steel-building = Bâtiment métallique
+dlg-steel-building = Bâtiment métallique
+section-steel-building = Bâtiment métallique
+section-secondary-members = Pannes et lisses
+prop-span = Portée
+prop-eave-height = Hauteur à l'égout
+prop-bays = Travées
+prop-bay-spacing = Entraxe des portiques
+label-rafter-type = Type de traverse
+prop-purlins = Pannes
+prop-girts = Lisses
+prop-members = Barres
+prop-detached-members = Barres détachées
+action-reset-members = Rétablir les barres
+opt-catalog-default = Par défaut du catalogue
+cmd-desc-steel-building = Crée un bâtiment métallique paramétrique : portiques de poteaux et de traverses, avec pannes et lisses, qui suivent sa portée, sa hauteur, sa pente et ses travées.
+msg-steel-building-created = Bâtiment métallique créé avec { $count } barres.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Maçonnerie 6"
 tpl-imp-type-masonry-10 = Maçonnerie 10"

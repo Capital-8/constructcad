@@ -43,6 +43,7 @@ mod regions;
 mod section_marks;
 mod shaft;
 mod skp;
+mod steel_building;
 mod structure_materials;
 mod structure_stress;
 mod textures_paint;

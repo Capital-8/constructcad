@@ -51,6 +51,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::MaskingRegion => Icon::MaskingRegion,
         Category::Mass => Icon::Mass,
         Category::Shaft => Icon::Shaft,
+        Category::SteelBuilding => Icon::SteelBuilding,
         Category::Topography => Icon::Topography,
         Category::Pad => Icon::Pad,
         Category::Sweep => Icon::Sweep,
@@ -723,7 +724,11 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
         M::Steel => {
             group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam, BracesX]));
             group(ui, t!("group-framing"), |ui| {
-                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
+                stacks(
+                    ui,
+                    state,
+                    &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss, SteelBuilding]],
+                );
             });
         }
         M::Timber => {

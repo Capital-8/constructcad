@@ -3229,6 +3229,28 @@ label-parallel-to = 平行
 label-spacing = 間隔
 msg-grid-frame-created = 柱 { $columns } 本、梁 { $beams } 本、小梁 { $secondary } 本を配置しました。{ $skipped } 件をスキップしました。
 
+# Steel building
+category-steel-building = 鉄骨建屋
+tpl-type-steel-building = 鉄骨建屋
+tx-steel-building = 鉄骨建屋を作成
+action-steel-building = 鉄骨建屋
+dlg-steel-building = 鉄骨建屋
+section-steel-building = 鉄骨建屋
+section-secondary-members = 母屋と胴縁
+prop-span = スパン
+prop-eave-height = 軒高
+prop-bays = ベイ数
+prop-bay-spacing = ベイ間隔
+label-rafter-type = ラフタータイプ
+prop-purlins = 母屋
+prop-girts = 胴縁
+prop-members = 部材
+prop-detached-members = 切り離した部材
+action-reset-members = 部材をリセット
+opt-catalog-default = カタログ既定
+cmd-desc-steel-building = パラメトリックな鉄骨建屋を作成します。柱とラフターからなる門型フレームに母屋と胴縁を加え、スパン、高さ、勾配、ベイに合わせて更新します。
+msg-steel-building-created = 部材 { $count } 本の鉄骨建屋を作成しました。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 煉瓦造 6"
 tpl-imp-type-masonry-10 = 煉瓦造 10"

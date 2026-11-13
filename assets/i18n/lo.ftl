@@ -3231,6 +3231,28 @@ label-parallel-to = ຂະໜານກັບ
 label-spacing = ໄລຍະຫ່າງ
 msg-grid-frame-created = ວາງເສົາ { $columns }, ຄານ { $beams } ແລະ ຄານຮອງ { $secondary }; ຂ້າມ { $skipped }.
 
+# Steel building
+category-steel-building = ອາຄານໂຄງເຫຼັກ
+tpl-type-steel-building = ອາຄານໂຄງເຫຼັກ
+tx-steel-building = ສ້າງອາຄານໂຄງເຫຼັກ
+action-steel-building = ອາຄານໂຄງເຫຼັກ
+dlg-steel-building = ອາຄານໂຄງເຫຼັກ
+section-steel-building = ອາຄານໂຄງເຫຼັກ
+section-secondary-members = ແປຫຼັງຄາ ແລະ ແປຝາ
+prop-span = ຊ່ວງກວ້າງ
+prop-eave-height = ຄວາມສູງຊາຍຄາ
+prop-bays = ຈຳນວນຊ່ອງ
+prop-bay-spacing = ໄລຍະຫ່າງລະຫວ່າງໂຄງ
+label-rafter-type = ປະເພດຄານຫຼັງຄາ
+prop-purlins = ແປຫຼັງຄາ
+prop-girts = ແປຝາ
+prop-members = ອົງປະກອບ
+prop-detached-members = ອົງປະກອບທີ່ແຍກອອກ
+action-reset-members = ຄືນຄ່າອົງປະກອບ
+opt-catalog-default = ຄ່າເລີ່ມຕົ້ນຈາກລາຍການ
+cmd-desc-steel-building = ສ້າງອາຄານໂຄງເຫຼັກແບບພາຣາມິເຕີ: ໂຄງປະກອບດ້ວຍເສົາ ແລະ ຄານຫຼັງຄາ, ພ້ອມແປຫຼັງຄາ ແລະ ແປຝາ, ທີ່ປ່ຽນຕາມຊ່ວງກວ້າງ, ຄວາມສູງ, ຄວາມຊັນ ແລະ ຈຳນວນຊ່ອງ.
+msg-steel-building-created = ສ້າງອາຄານໂຄງເຫຼັກແລ້ວ ມີ { $count } ອົງປະກອບ.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = ຝາກໍ່ 6"
 tpl-imp-type-masonry-10 = ຝາກໍ່ 10"

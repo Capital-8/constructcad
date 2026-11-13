@@ -3229,6 +3229,28 @@ label-parallel-to = Parallel to
 label-spacing = Spacing
 msg-grid-frame-created = { $columns } columns, { $beams } beams and { $secondary } secondary beams placed; { $skipped } skipped.
 
+# Steel building
+category-steel-building = Steel buildings
+tpl-type-steel-building = Steel building
+tx-steel-building = Create steel building
+action-steel-building = Steel Building
+dlg-steel-building = Steel Building
+section-steel-building = Steel Building
+section-secondary-members = Purlins and Girts
+prop-span = Span
+prop-eave-height = Eave height
+prop-bays = Bays
+prop-bay-spacing = Bay spacing
+label-rafter-type = Rafter type
+prop-purlins = Purlins
+prop-girts = Girts
+prop-members = Members
+prop-detached-members = Detached members
+action-reset-members = Reset Members
+opt-catalog-default = Catalog default
+cmd-desc-steel-building = Create a parametric steel building: portal frames of columns and rafters, with purlins and girts, kept in step with its span, height, slope and bays.
+msg-steel-building-created = Steel building created with { $count } members.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Masonry 6"
 tpl-imp-type-masonry-10 = Masonry 10"

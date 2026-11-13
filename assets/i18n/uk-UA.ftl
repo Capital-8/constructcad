@@ -3230,6 +3230,28 @@ label-parallel-to = Паралельно до
 label-spacing = Крок
 msg-grid-frame-created = Розміщено колон: { $columns }, балок: { $beams }, другорядних балок: { $secondary }; пропущено: { $skipped }.
 
+# Steel building
+category-steel-building = Сталеві будівлі
+tpl-type-steel-building = Сталева будівля
+tx-steel-building = Створити сталеву будівлю
+action-steel-building = Сталева будівля
+dlg-steel-building = Сталева будівля
+section-steel-building = Сталева будівля
+section-secondary-members = Прогони та ригелі фахверку
+prop-span = Проліт
+prop-eave-height = Висота карниза
+prop-bays = Кількість кроків
+prop-bay-spacing = Крок рам
+label-rafter-type = Тип ригеля
+prop-purlins = Прогони
+prop-girts = Ригелі фахверку
+prop-members = Елементи
+prop-detached-members = Від'єднані елементи
+action-reset-members = Відновити елементи
+opt-catalog-default = Типовий з каталогу
+cmd-desc-steel-building = Створює параметричну сталеву будівлю: рами з колон і ригелів, з прогонами та ригелями фахверку, що відповідають прольоту, висоті, ухилу та кроку рам.
+msg-steel-building-created = Створено сталеву будівлю, елементів: { $count }.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Кладка завтовшки 6"
 tpl-imp-type-masonry-10 = Кладка завтовшки 10"

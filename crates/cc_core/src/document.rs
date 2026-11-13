@@ -183,6 +183,23 @@ impl<'a> EditCtx<'a> {
         self.project.alloc_id()
     }
 
+    /// The elements this edit has changed so far, each with its state before
+    /// the edit (`None`: it was added). Elements touched but left as they
+    /// were are skipped.
+    pub(crate) fn element_changes(&self) -> Vec<(ElementId, Option<&Element>)> {
+        self.tx
+            .elements
+            .iter()
+            .filter(|(id, c)| c.0.as_ref() != self.project.elements.get(id))
+            .map(|(id, c)| (*id, c.0.as_ref()))
+            .collect()
+    }
+
+    /// The types this edit has added, removed or changed so far.
+    pub(crate) fn changed_types(&self) -> std::collections::BTreeSet<ElementTypeId> {
+        self.tx.types.iter().filter(|(id, c)| c.0.as_ref() != self.project.types.get(id)).map(|(id, _)| *id).collect()
+    }
+
     fn touch_element(&mut self, id: ElementId) {
         if !self.tx.elements.contains_key(&id) {
             let before = self.project.elements.get(&id).cloned();
@@ -237,6 +254,7 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.railings_of(id).map(|e| e.id));
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.pads_of(id).map(|(e, _)| e.id));
+            pending.extend(self.project.steel_members_of(id));
             pending.extend(self.project.valves_of(id).map(|(e, _)| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);
@@ -875,6 +893,9 @@ impl<'a> EditCtx<'a> {
     fn finish(mut self) -> Transaction {
         // Legacy sections follow their profiles first, so what reads them below sees the new size.
         self.sync_profiles();
+        // Steel buildings next: they read what the edit itself did to
+        // elements, before the syncs below change any.
+        self.sync_steel_buildings();
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_shafts();
         self.sync_pads();

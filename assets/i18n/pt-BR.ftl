@@ -3229,6 +3229,28 @@ label-parallel-to = Paralelas a
 label-spacing = Espaçamento
 msg-grid-frame-created = { $columns } pilares, { $beams } vigas e { $secondary } vigas secundárias colocados; { $skipped } ignorados.
 
+# Steel building
+category-steel-building = Galpões metálicos
+tpl-type-steel-building = Galpão metálico
+tx-steel-building = Criar galpão metálico
+action-steel-building = Galpão metálico
+dlg-steel-building = Galpão metálico
+section-steel-building = Galpão metálico
+section-secondary-members = Terças e longarinas
+prop-span = Vão
+prop-eave-height = Altura do beiral
+prop-bays = Módulos
+prop-bay-spacing = Distância entre pórticos
+label-rafter-type = Tipo de viga de cobertura
+prop-purlins = Terças
+prop-girts = Longarinas
+prop-members = Elementos
+prop-detached-members = Elementos desvinculados
+action-reset-members = Restaurar elementos
+opt-catalog-default = Padrão do catálogo
+cmd-desc-steel-building = Cria um galpão metálico paramétrico: pórticos de pilares e vigas de cobertura, com terças e longarinas, que acompanham seu vão, altura, inclinação e módulos.
+msg-steel-building-created = Galpão metálico criado com { $count } elementos.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Alvenaria 6"
 tpl-imp-type-masonry-10 = Alvenaria 10"

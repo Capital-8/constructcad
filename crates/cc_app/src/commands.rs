@@ -116,6 +116,7 @@ pub enum UiCommand {
     ColumnsAtGrids,
     /// Opens the Grid Frame dialog.
     GridFrame,
+    SteelBuilding,
     AlignGridEnds,
     BeamsOnGrids,
     BeamsBetweenColumns,
@@ -348,7 +349,15 @@ impl UiCommand {
             TbText,
             TbImage,
         ]);
-        all.extend([AlignGridEnds, ColumnsAtGrids, GridFrame, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
+        all.extend([
+            AlignGridEnds,
+            ColumnsAtGrids,
+            GridFrame,
+            SteelBuilding,
+            BeamsOnGrids,
+            BeamsBetweenColumns,
+            StructuralSchedules,
+        ]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
@@ -516,6 +525,7 @@ impl UiCommand {
             SelectInstances => Icon::SelectInstances,
             ColumnsAtGrids => Icon::ColumnsAtGrids,
             GridFrame => Icon::GridFrame,
+            SteelBuilding => Icon::SteelBuilding,
             AlignGridEnds => Icon::AlignGridEnds,
             BeamsOnGrids => Icon::BeamsOnGrids,
             BeamsBetweenColumns => Icon::BeamsBetweenColumns,
@@ -729,6 +739,7 @@ impl UiCommand {
             SelectInstances => t!("action-select-instances"),
             ColumnsAtGrids => t!("action-columns-at-grids"),
             GridFrame => t!("action-grid-frame"),
+            SteelBuilding => t!("action-steel-building"),
             AlignGridEnds => t!("action-align-grid-ends"),
             BeamsOnGrids => t!("action-beams-on-grids"),
             BeamsBetweenColumns => t!("action-beams-between-columns"),
@@ -935,6 +946,7 @@ impl UiCommand {
             SelectInstances => t!("cmd-desc-select-instances"),
             ColumnsAtGrids => t!("cmd-desc-columns-at-grids"),
             GridFrame => t!("cmd-desc-grid-frame"),
+            SteelBuilding => t!("cmd-desc-steel-building"),
             AlignGridEnds => t!("cmd-desc-align-grid-ends"),
             BeamsOnGrids => t!("cmd-desc-beams-on-grids"),
             BeamsBetweenColumns => t!("cmd-desc-beams-between-columns"),
@@ -1201,6 +1213,7 @@ impl UiCommand {
             SelectInstances => "elements_list",
             ColumnsAtGrids => "columns_at_grids",
             GridFrame => "grid_frame_create",
+            SteelBuilding => "steel_building_create",
             AlignGridEnds => "grids_align_ends",
             BeamsOnGrids => "beams_on_grids",
             BeamsBetweenColumns => "beams_between_columns",
@@ -1696,6 +1709,7 @@ fn place_label(category: Category) -> String {
         Category::CadImport => t!("action-import-cad"),
         Category::Mass => t!("tool-mass"),
         Category::Shaft => t!("tool-shaft"),
+        Category::SteelBuilding => t!("category-steel-building"),
         Category::Topography => t!("tool-topography"),
         Category::Pad => t!("tool-pad"),
     }
@@ -1736,6 +1750,7 @@ fn place_description(category: Category) -> String {
         Category::CadImport => t!("cmd-desc-import-cad"),
         Category::Mass => t!("cmd-desc-mass"),
         Category::Shaft => t!("cmd-desc-shaft"),
+        Category::SteelBuilding => t!("cmd-desc-steel-building"),
         Category::Topography => t!("cmd-desc-topography"),
         Category::Pad => t!("cmd-desc-pad"),
     }
@@ -1892,6 +1907,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Group => crate::actions::group_selection(state),
         ColumnsAtGrids => crate::actions::columns_at_grids(state),
         GridFrame => crate::grid_frame_ui::open(state),
+        SteelBuilding => crate::steel_building_ui::open(state),
         AlignGridEnds => crate::actions::align_grid_ends(state),
         BeamsOnGrids => crate::actions::beams_on_grids(state),
         BeamsBetweenColumns => crate::actions::beams_between_columns(state),

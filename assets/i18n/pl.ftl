@@ -3229,6 +3229,28 @@ label-parallel-to = Równoległe do
 label-spacing = Rozstaw
 msg-grid-frame-created = Umieszczono słupy: { $columns }, belki: { $beams }, belki drugorzędne: { $secondary }; pominięto: { $skipped }.
 
+# Steel building
+category-steel-building = Hale stalowe
+tpl-type-steel-building = Hala stalowa
+tx-steel-building = Utwórz halę stalową
+action-steel-building = Hala stalowa
+dlg-steel-building = Hala stalowa
+section-steel-building = Hala stalowa
+section-secondary-members = Płatwie i rygle ścienne
+prop-span = Rozpiętość
+prop-eave-height = Wysokość okapu
+prop-bays = Przęsła
+prop-bay-spacing = Rozstaw ram
+label-rafter-type = Typ rygla
+prop-purlins = Płatwie
+prop-girts = Rygle ścienne
+prop-members = Pręty
+prop-detached-members = Odłączone pręty
+action-reset-members = Przywróć pręty
+opt-catalog-default = Domyślny z katalogu
+cmd-desc-steel-building = Tworzy parametryczną halę stalową: ramy ze słupów i rygli, z płatwiami i ryglami ściennymi, dopasowane do rozpiętości, wysokości, spadku i przęseł.
+msg-steel-building-created = Utworzono halę stalową, prętów: { $count }.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mur 6"
 tpl-imp-type-masonry-10 = Mur 10"

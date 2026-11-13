@@ -68,7 +68,7 @@ pub fn open(state: &mut AppState) {
     });
 }
 
-fn combo<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, value: &mut T, items: &[(T, String)]) {
+pub(crate) fn combo<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, value: &mut T, items: &[(T, String)]) {
     let shown = items.iter().find(|(v, _)| v == value).map(|(_, n)| n.clone()).unwrap_or_default();
     egui::ComboBox::from_id_salt(id).selected_text(shown).width(200.0).show_ui(ui, |ui| {
         for (v, name) in items {

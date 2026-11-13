@@ -135,6 +135,16 @@ fn patched(
                 super::detail_component::check(old, c)?;
             }
         }
+        cc_core::ElementKind::SteelBuilding(b) => {
+            if let cc_core::ElementKind::SteelBuilding(old) = &element.kind
+                && b.members != old.members
+            {
+                return Err(EngineError::invalid(
+                    "a steel building keeps its own members: change its parameters, or edit a member to detach it",
+                ));
+            }
+            b.check().and_then(|()| b.check_types(p)).map_err(EngineError::invalid)?;
+        }
         _ => {}
     }
     Ok(kind)

@@ -3229,6 +3229,28 @@ label-parallel-to = Parallel zu
 label-spacing = Abstand
 msg-grid-frame-created = { $columns } Stützen, { $beams } Träger und { $secondary } Nebenträger gesetzt; { $skipped } übersprungen.
 
+# Steel building
+category-steel-building = Stahlhallen
+tpl-type-steel-building = Stahlhalle
+tx-steel-building = Stahlhalle erstellen
+action-steel-building = Stahlhalle
+dlg-steel-building = Stahlhalle
+section-steel-building = Stahlhalle
+section-secondary-members = Pfetten und Wandriegel
+prop-span = Spannweite
+prop-eave-height = Traufhöhe
+prop-bays = Felder
+prop-bay-spacing = Binderabstand
+label-rafter-type = Riegeltyp
+prop-purlins = Pfetten
+prop-girts = Wandriegel
+prop-members = Stäbe
+prop-detached-members = Gelöste Stäbe
+action-reset-members = Stäbe zurücksetzen
+opt-catalog-default = Katalogstandard
+cmd-desc-steel-building = Erstellt eine parametrische Stahlhalle: Rahmen aus Stützen und Riegeln mit Pfetten und Wandriegeln, die Spannweite, Höhe, Neigung und Feldern folgen.
+msg-steel-building-created = Stahlhalle mit { $count } Stäben erstellt.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mauerwerk 6"
 tpl-imp-type-masonry-10 = Mauerwerk 10"

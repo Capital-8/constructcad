@@ -3229,6 +3229,28 @@ label-parallel-to = 平行于
 label-spacing = 间距
 msg-grid-frame-created = 已放置 { $columns } 根柱、{ $beams } 根梁和 { $secondary } 根次梁；跳过 { $skipped } 个。
 
+# Steel building
+category-steel-building = 钢结构建筑
+tpl-type-steel-building = 钢结构建筑
+tx-steel-building = 创建钢结构建筑
+action-steel-building = 钢结构建筑
+dlg-steel-building = 钢结构建筑
+section-steel-building = 钢结构建筑
+section-secondary-members = 檩条与墙檩
+prop-span = 跨度
+prop-eave-height = 檐口高度
+prop-bays = 开间数
+prop-bay-spacing = 开间间距
+label-rafter-type = 屋面梁类型
+prop-purlins = 檩条
+prop-girts = 墙檩
+prop-members = 构件
+prop-detached-members = 已分离构件
+action-reset-members = 重置构件
+opt-catalog-default = 目录默认
+cmd-desc-steel-building = 创建参数化钢结构建筑：由柱和屋面梁组成的刚架，附檩条和墙檩，随跨度、高度、坡度和开间更新。
+msg-steel-building-created = 已创建钢结构建筑，共 { $count } 个构件。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌体墙 6"
 tpl-imp-type-masonry-10 = 砌体墙 10"

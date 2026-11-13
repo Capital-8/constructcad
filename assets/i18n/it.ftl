@@ -3229,6 +3229,28 @@ label-parallel-to = Parallele a
 label-spacing = Interasse
 msg-grid-frame-created = { $columns } pilastri, { $beams } travi e { $secondary } travi secondarie posizionati; { $skipped } saltati.
 
+# Steel building
+category-steel-building = Capannoni in acciaio
+tpl-type-steel-building = Capannone in acciaio
+tx-steel-building = Crea capannone in acciaio
+action-steel-building = Capannone in acciaio
+dlg-steel-building = Capannone in acciaio
+section-steel-building = Capannone in acciaio
+section-secondary-members = Arcarecci e correnti di parete
+prop-span = Luce
+prop-eave-height = Altezza di gronda
+prop-bays = Campate
+prop-bay-spacing = Interasse dei portali
+label-rafter-type = Tipo di traverso
+prop-purlins = Arcarecci
+prop-girts = Correnti di parete
+prop-members = Aste
+prop-detached-members = Aste scollegate
+action-reset-members = Ripristina aste
+opt-catalog-default = Predefinito del catalogo
+cmd-desc-steel-building = Crea un capannone in acciaio parametrico: portali di pilastri e traversi, con arcarecci e correnti di parete, che seguono luce, altezza, pendenza e campate.
+msg-steel-building-created = Capannone in acciaio creato con { $count } aste.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Muratura 6"
 tpl-imp-type-masonry-10 = Muratura 10"

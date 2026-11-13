@@ -59,16 +59,45 @@ pub(crate) fn structural_type(
     }
 }
 
-fn make_default(s: &mut Session, category: Category, material: StructuralMaterial) -> Result<ElementTypeId> {
-    let profile = match material {
-        StructuralMaterial::Steel => catalog_profile(s, STEEL_DEFAULT, material)?,
-        StructuralMaterial::Timber => catalog_profile(s, TIMBER_DEFAULT, material)?,
-        StructuralMaterial::Concrete => concrete_profile(s)?,
+/// The first `category` type whose profile is catalog row `designation` of
+/// `series`, else one made from the row (the profile imported when the
+/// project lacks it). What it makes takes undo steps of its own: callers
+/// squash them into theirs.
+pub(crate) fn catalog_type(
+    s: &mut Session,
+    category: Category,
+    series: &str,
+    designation: &str,
+) -> Result<ElementTypeId> {
+    let p = s.project();
+    let is_row = |d: &cc_core::ProfileDef| {
+        d.catalog.as_ref().is_some_and(|c| c.series == series && c.designation == designation) || d.name == designation
     };
-    let category = if category == Category::Column { "column" } else { "beam" };
-    let out =
-        ProfileTypeCreate { profile: Ref::Name(profile), category: category.into(), ..Default::default() }.run(s)?;
+    let found = p.types_of(category).find(|t| p.type_profile_def(&t.data).is_some_and(is_row)).map(|t| t.id);
+    if let Some(id) = found {
+        return Ok(id);
+    }
+    let material = cc_core::profile_catalog::series(series)
+        .map_or(StructuralMaterial::Steel, |x| StructuralMaterial::of_profile(x.material));
+    let profile = catalog_profile(s, (series, designation), material)?;
+    let code = if category == Category::Column { "column" } else { "beam" };
+    let out = ProfileTypeCreate { profile: Ref::Name(profile), category: code.into(), ..Default::default() }.run(s)?;
     out["id"].as_u64().map(ElementTypeId).ok_or_else(|| EngineError::not_found("the new type"))
+}
+
+fn make_default(s: &mut Session, category: Category, material: StructuralMaterial) -> Result<ElementTypeId> {
+    match material {
+        StructuralMaterial::Steel => catalog_type(s, category, STEEL_DEFAULT.0, STEEL_DEFAULT.1),
+        StructuralMaterial::Timber => catalog_type(s, category, TIMBER_DEFAULT.0, TIMBER_DEFAULT.1),
+        StructuralMaterial::Concrete => {
+            let profile = concrete_profile(s)?;
+            let category = if category == Category::Column { "column" } else { "beam" };
+            let out =
+                ProfileTypeCreate { profile: Ref::Name(profile), category: category.into(), ..Default::default() }
+                    .run(s)?;
+            out["id"].as_u64().map(ElementTypeId).ok_or_else(|| EngineError::not_found("the new type"))
+        }
+    }
 }
 
 /// The project's profile of a catalog row, imported when missing.
