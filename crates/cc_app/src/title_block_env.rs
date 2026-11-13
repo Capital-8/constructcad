@@ -1904,7 +1904,7 @@ mod tests {
 
     #[test]
     fn quick_edit_does_not_offer_title_blocks() {
-        assert!(!crate::component_editor::kinds().contains(&cc_core::ComponentKind::TitleBlock));
+        assert!(!crate::new_component_dialog::kinds().contains(&cc_core::ComponentKind::TitleBlock));
     }
 
     #[test]
