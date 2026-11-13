@@ -236,6 +236,24 @@ Curtain walls are walls of a curtain type (a project without one gets one from t
 - **Curvature handle**: a selected arc strip shows a round handle at the middle of its arc, as arc walls do; dragging it bends the strip through the pointer, its ends staying (the radius and length show while dragging). While a strip type is chosen, the options bar names the tool *Strip Footing*.
 - **Views**: plans dash strips below the cut plane and hatch those it cuts, the arcs as short chords; sections cut the curved body; schedules list the length along the arc and the exact volume. IFC export writes an arc strip as an `IfcFooting` (`STRIP_FOOTING`) whose body is its outline of true arcs extruded. IFC import brings strip footings, straight or arc, back as components with their mesh, as before.
 
+## Arc beams
+
+The *Beam* tool has two modes in the options bar, as the wall tool has: *Line* draws straight beams, *Arc* takes the start, the end and then a point on the arc, or a typed radius + Enter. An arc beam is level (it has no end elevation offset).
+
+- **Joins**: an arc beam frames into the structural columns at its ends, each of its sides stopping where it leaves the column, and meets other beams at corners and tees like a straight one. An arc too tight for the beam's width is refused.
+- **Properties**: *Arc angle* bends a beam (0 makes it straight); its length along the arc, radius, cut length and volume are shown. The volume is exact, not that of the chords the body is drawn with.
+- **Editing**: a selected arc beam shows the round curvature handle at the middle of its arc; the Modify tools trim, extend, split and offset it on its circle, and a mirror turns it the other way. Tools snap to its ends, its middle and the arc.
+- **Reinforcement**: top, bottom and side bars follow the arc, each as long as the arc at its own radius (so the schedule's lengths and weights match a hand calculation), and stirrups are radial, spaced along the beam's axis.
+- **Views and IFC**: plans draw both faces of the arc; sections, elevations and 3D views show the curved body. IFC export writes a rectangular arc beam as its outline of true arcs extruded, with its axis on the arc, and import brings it back as an arc beam; an arc beam of another profile is written as a faceted body.
+
+## Beam reinforcement
+
+*Typical Reinforcement* in a beam's or column's properties gives it bottom and top bars and stirrups. Further sets are made with `rebar_create` (command palette), and each set's count or spacing is edited in the *Reinforcement* section.
+
+- **Layers**: top and bottom bars that do not fit side by side, keeping a clear distance of the bar diameter and at least 2 cm, go in a second layer above the bottom bars or below the top ones (up to four layers).
+- **Side bars**: *Add side bars* puts one bar on each side face at mid height; `rebar_create` with the `sides` layout takes a `count` per face, or a `spacing` that puts as many as keep them that far apart over the height.
+- **Lap splices**: a bar along a beam longer than the stock length (12 m, or 40' in imperial projects) is made of the fewest equal pieces, lapping by 40 bar diameters, and the splices of neighbouring bars are staggered by half a piece. `rebar_create` takes `max_length` (0 keeps whole bars) and `lap`. Schedules count and measure the pieces.
+
 ## Structure by material
 
 The *Structure* tab starts with a *Material* group: *Concrete*, *Steel* and *Timber* buttons (one is always on; the choice is kept between sessions). The material swaps the groups made for it: concrete shows *Structure* (Column, Beam, Floor) and *Reinforcement*; steel shows *Structure* (Column, Beam, Bracing), the *Framing* grid group (Columns at Grids, Beams on Grids, Beams Between Columns, Grid Frame, Truss, Steel Building, Light Steel Frame) and *Connections* (Base Plate, End Plate, Fin Plate); timber shows *Structure* (Column, Beam, Bracing), the same grid group with Wood Frame in place of Steel Building and Light Steel Frame, and *Connections* (Bolted Joint, Hanger). Profiles, Foundation, Analytical, Documentation, Datum and Selection show for every material.

@@ -122,6 +122,10 @@ fn patched(
             super::create::check_bulge(w.bulge)?;
             super::create::check_arc(p, type_id.unwrap_or(element.type_id), w)?;
         }
+        cc_core::ElementKind::Beam(b) => {
+            super::create::check_bulge(b.bulge)?;
+            super::create::check_beam_arc(p, type_id.unwrap_or(element.type_id), b)?;
+        }
         cc_core::ElementKind::Foundation(f) => {
             if let cc_core::FoundationShape::Strip { bulge, .. } = f.shape {
                 super::create::check_bulge(bulge)?;

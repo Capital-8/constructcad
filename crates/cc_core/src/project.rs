@@ -903,14 +903,21 @@ impl Project {
             Some(crate::TypeData::Beam { width, .. }) => *width,
             _ => 0.0,
         };
-        let normal = (beam.end - beam.start).normalize_or_zero().perp();
-        let shift = match beam.lateral {
-            crate::BeamLateral::Center => DVec2::ZERO,
-            // The location line runs along the left face: the body lies to its right.
-            crate::BeamLateral::Left => -normal * (width * 0.5),
-            crate::BeamLateral::Right => normal * (width * 0.5),
+        // The location line runs along the left face: the body lies to its right.
+        let side = match beam.lateral {
+            crate::BeamLateral::Center => 0.0,
+            crate::BeamLateral::Left => -width * 0.5,
+            crate::BeamLateral::Right => width * 0.5,
         };
-        (beam.start + shift, beam.end + shift)
+        match beam.arc() {
+            // A concentric arc: the same sweep, so the same bulge.
+            Some(arc) if arc.radius_at(side) > 1e-6 => (arc.at(0.0, side), arc.at(arc.length(), side)),
+            Some(_) => (beam.start, beam.end),
+            None => {
+                let shift = (beam.end - beam.start).normalize_or_zero().perp() * side;
+                (beam.start + shift, beam.end + shift)
+            }
+        }
     }
 
     /// Bottom and top elevations of a beam at its start, from its location
@@ -922,7 +929,7 @@ impl Project {
             _ => 0.0,
         };
         let length = beam.length();
-        let slope = if length > 1e-9 { beam.rise() / length } else { 0.0 };
+        let slope = if length > 1e-9 && beam.arc().is_none() { beam.rise() / length } else { 0.0 };
         let height = height * slope.hypot(1.0);
         let z = self.level_elevation(element.level) + beam.top_offset;
         match beam.vertical {

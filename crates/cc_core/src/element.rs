@@ -995,6 +995,15 @@ pub struct Beam {
     pub join_start: bool,
     #[serde(default = "yes")]
     pub join_end: bool,
+    /// Bulge of an arc beam (`tan(sweep / 4)`, positive when it turns
+    /// counter-clockwise from `start` to `end`; see [`crate::arc`]); 0 for a
+    /// straight beam. An arc beam is level: it has no `end_offset`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub bulge: f64,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl Beam {
@@ -1003,9 +1012,17 @@ impl Beam {
         self.end_offset.map_or(0.0, |end| end - self.top_offset)
     }
 
-    /// Length along the slope.
+    /// Length along the slope, or along the arc of an arc beam.
     pub fn true_length(&self) -> f64 {
-        self.length().hypot(self.rise())
+        match self.arc() {
+            Some(arc) => arc.length(),
+            None => self.length().hypot(self.rise()),
+        }
+    }
+
+    /// The arc of the location line (`None` for a straight beam).
+    pub fn arc(&self) -> Option<crate::arc::Arc> {
+        crate::arc::Arc::from_bulge(self.start, self.end, self.bulge)
     }
 
     /// A beam whose ends may join.
@@ -1019,9 +1036,11 @@ impl Beam {
             vertical: BeamVertical::Top,
             join_start: true,
             join_end: true,
+            bulge: 0.0,
         }
     }
 
+    /// Distance between the ends (the chord of an arc beam).
     pub fn length(&self) -> f64 {
         self.start.distance(self.end)
     }
@@ -1116,6 +1135,61 @@ pub enum RebarLayout {
     Longitudinal { face: BarFace, count: u32 },
     /// Closed stirrups (ties) around the section every `spacing` along the host.
     Stirrups { spacing: f64 },
+    /// Side (skin) bars running along a beam on both side faces, between its
+    /// top and bottom bars: `count` on each face, or with a count of 0 as
+    /// many as keep them at most `spacing` apart over the height.
+    Sides { count: u32, spacing: f64 },
+}
+
+impl RebarLayout {
+    /// Whether the bars run along the host (and so may be spliced).
+    pub fn runs_along(self) -> bool {
+        !matches!(self, RebarLayout::Stirrups { .. })
+    }
+}
+
+/// Lap splices: a bar longer than `max_length` (the stock length) is made of
+/// pieces overlapping by `lap`, the splices of neighbouring bars staggered.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Splice {
+    pub max_length: f64,
+    pub lap: f64,
+}
+
+impl Splice {
+    /// Shortest stock length and lap accepted, meters.
+    pub const MIN_LENGTH: f64 = 1.0;
+    pub const MIN_LAP: f64 = 0.05;
+
+    /// Usable: finite, a stock of at least [`Self::MIN_LENGTH`] and a lap
+    /// from [`Self::MIN_LAP`] to half the stock.
+    pub fn is_valid(&self) -> bool {
+        self.max_length.is_finite()
+            && self.lap.is_finite()
+            && self.max_length >= Self::MIN_LENGTH
+            && self.lap >= Self::MIN_LAP
+            && self.lap <= self.max_length * 0.5
+    }
+
+    /// The pieces of bar number `index` of a set, `length` long: `(from,
+    /// to)` along it. A bar within the stock length is one piece; a longer
+    /// one is cut in the fewest equal pieces, and odd bars are cut half a
+    /// piece off the even ones so that neighbours never splice together.
+    pub fn pieces(&self, length: f64, index: usize) -> Vec<(f64, f64)> {
+        if !self.is_valid() || !length.is_finite() || length <= self.max_length + 1e-9 {
+            return vec![(0.0, length)];
+        }
+        // `n` pieces overlapping by `lap` cover `n * pitch + lap`.
+        let n = (((length - self.lap) / (self.max_length - self.lap)) - 1e-9).ceil().clamp(2.0, 10_000.0);
+        let pitch = (length - self.lap) / n;
+        let n = n as usize;
+        let shift = if index % 2 == 1 { pitch * 0.5 } else { 0.0 };
+        let mut cuts: Vec<f64> = (0..n).map(|i| shift + pitch * i as f64).collect();
+        if shift > 0.0 {
+            cuts.insert(0, 0.0);
+        }
+        (0..cuts.len()).map(|i| (cuts[i], cuts.get(i + 1).map_or(length, |next| next + self.lap))).collect()
+    }
 }
 
 /// A set of reinforcing bars in a beam or column (`host`), `cover` from its
@@ -1125,6 +1199,9 @@ pub struct Rebar {
     pub host: ElementId,
     pub layout: RebarLayout,
     pub cover: f64,
+    /// Lap splices of the bars running along a beam (none: whole bars).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub splice: Option<Splice>,
 }
 
 /// Reinforcing bars of any shape (bars bent to a schedule's shape codes,

@@ -995,9 +995,10 @@ impl<'a> Exporter<'a> {
                     let section = project.type_section(&ty.data).map(|s| s.outline);
                     let rect = section.as_ref().is_none_or(is_box);
                     let level = g.slope.abs() < 1e-12;
-                    // A level profile square at both ends: the section swept along the axis.
+                    let arc = g.arc.is_some();
+                    // A straight level profile square at both ends: the section swept along the axis.
                     let swept = match &section {
-                        Some(outline) if level && !rect && g.is_square() => {
+                        Some(outline) if level && !rect && !arc && g.is_square() => {
                             self.type_profile(e.type_id).map(|profile| (profile, outline.bbox()))
                         }
                         _ => None,
@@ -1021,6 +1022,20 @@ impl<'a> Exporter<'a> {
                         let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
                         g.add_to(&mut s);
                         vec![self.faceted_brep(&s.faces, level_z)]
+                    } else if let Some(a) = &g.arc {
+                        // A rectangle along an arc: its outline of arcs and lines extruded up.
+                        let (h, l, r) = (g.half, (g.start_ext.0, g.end_ext.0), (g.start_ext.1, g.end_ext.1));
+                        let profile = self.arc_band_profile([
+                            a.at(r.0, -h),
+                            a.at((r.0 + r.1) * 0.5, -h),
+                            a.at(r.1, -h),
+                            a.at(l.1, h),
+                            a.at((l.0 + l.1) * 0.5, h),
+                            a.at(l.0, h),
+                        ]);
+                        let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, g.z_range.0 - level_z)));
+                        let depth = g.z_range.1 - g.z_range.0;
+                        vec![self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth])]
                     } else if g.is_square() {
                         let part = cc_geom::BoxPart {
                             origin: g.origin,
@@ -1039,9 +1054,8 @@ impl<'a> Exporter<'a> {
                         vec![self.extrude_polygon(&profile, position, self.dir_z, depth)]
                     };
                     // The location line, which keeps the beam's own length.
-                    let axis_start = self.point2(g.origin);
-                    let axis_end = self.point2(g.world(g.length, 0.0));
-                    axis = Some(self.w.add("IFCPOLYLINE", args![vec![axis_start, axis_end]]));
+                    let points: Vec<Id> = g.axis().into_iter().map(|p| self.point2(p)).collect();
+                    axis = Some(self.w.add("IFCPOLYLINE", args![points]));
                     let q = vec![("Length", Quantity::Length(g.cut_length())), ("NetVolume", Quantity::Volume(volume))];
                     let product =
                         StructureProduct::new("IFCBEAM", "BEAM", items).quantities("Qto_BeamBaseQuantities", q);
@@ -1261,6 +1275,7 @@ impl<'a> Exporter<'a> {
             let (kind, imported) = match &e.kind {
                 ElementKind::Rebar(r) => match r.layout {
                     cc_core::RebarLayout::Longitudinal { .. } => ("MAIN", &[][..]),
+                    cc_core::RebarLayout::Sides { .. } => ("EDGE", &[][..]),
                     cc_core::RebarLayout::Stirrups { .. } => ("LIGATURE", &[][..]),
                 },
                 ElementKind::ShapedRebar(r) => ("NOTDEFINED", &r.properties[..]),

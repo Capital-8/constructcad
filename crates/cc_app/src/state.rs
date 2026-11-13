@@ -199,6 +199,8 @@ pub struct AppState {
     pub wall_arc: bool,
     /// The footing tool, with a strip type, draws arc strips as the wall tool draws arcs.
     pub strip_arc: bool,
+    /// The beam tool draws arc beams the same way.
+    pub beam_arc: bool,
     /// Level new walls rise to (`None`: unconnected, `wall_height` tall).
     pub wall_top_level: Option<LevelId>,
     /// Allow the window to close after the user confirmed.
@@ -302,6 +304,7 @@ impl AppState {
             ramp_layout: Default::default(),
             wall_arc: false,
             strip_arc: false,
+            beam_arc: false,
             wall_top_level: None,
             quit_confirmed: false,
             textures_to_free: Vec::new(),

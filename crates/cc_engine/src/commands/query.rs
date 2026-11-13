@@ -228,8 +228,14 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         }
         ElementKind::Beam(b) => {
             derived.insert("length".into(), json!(b.length()));
-            if b.end_offset.is_some() {
+            if b.end_offset.is_some() || b.arc().is_some() {
                 derived.insert("true_length".into(), json!(b.true_length()));
+            }
+            if let Some(arc) = b.arc() {
+                // The location line's circle and the turn from start to end.
+                derived.insert("center".into(), json!(arc.center.to_array()));
+                derived.insert("radius".into(), json!(arc.radius));
+                derived.insert("sweep".into(), json!(arc.sweep.to_degrees()));
             }
         }
         ElementKind::Foundation(f) if matches!(f.shape, cc_core::FoundationShape::Strip { .. }) => {

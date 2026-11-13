@@ -263,17 +263,20 @@ impl EndFrame {
 }
 
 fn end_frame(g: &BeamGeom, end: MemberEnd) -> Option<EndFrame> {
-    let (u, out) = match end {
-        MemberEnd::Start => ((g.start_ext.0 + g.start_ext.1) * 0.5, -g.dir),
-        MemberEnd::End => ((g.end_ext.0 + g.end_ext.1) * 0.5, g.dir),
+    // Along an arc beam the frame is the tangent's at the end.
+    let (u, sign) = match end {
+        MemberEnd::Start => ((g.start_ext.0 + g.start_ext.1) * 0.5, -1.0),
+        MemberEnd::End => ((g.end_ext.0 + g.end_ext.1) * 0.5, 1.0),
         MemberEnd::Base => return None,
     };
+    let dir = g.dir_at(u);
+    let out = dir * sign;
     let (bottom, top) = g.z_at(u);
     let joined = beam_end_join(g, end)?;
     let (lo, hi) = g.section.bbox();
     let web = width_at(&g.section, (lo.y + hi.y) * 0.5 + 1e-7);
     let web = if web.is_finite() && web > 0.0 { web } else { 2.0 * g.half };
-    Some(EndFrame { face: g.world(u, 0.0), out, side: g.normal, bottom, top, half: g.half, web, joined })
+    Some(EndFrame { face: g.world(u, 0.0), out, side: dir.perp(), bottom, top, half: g.half, web, joined })
 }
 
 type Parts = (Vec<Plate>, Vec<Bolt>);

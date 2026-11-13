@@ -306,6 +306,15 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
 ```
 
+`beam_create` desenha uma viga em arco com `mid` (um ponto do arco), `bulge` ou `radius` (positivo no sentido anti-horário; `major_arc` escolhe o arco maior), como `wall_create` desenha paredes em arco; `element_get` devolve então `center`, `radius`, `sweep` e o `true_length` ao longo do arco. `rebar_create` arma uma viga ou pilar: `top`, `bottom` (vigas) ou `perimeter` (pilares) com um `count`, `sides` (barras de pele nas duas faces laterais de uma viga: um `count` por face, ou um `spacing` ao longo da altura) e `stirrups` a cada `spacing`. Em uma viga em arco as barras seguem o arco, cada uma com o comprimento do arco no seu raio, e os estribos são radiais. As barras que não cabem lado a lado vão para uma segunda camada, e as barras ao longo de uma viga mais compridas que `max_length` (padrão 12 m; 0 para barras inteiras) são emendadas com traspasse `lap` (padrão 40 diâmetros), com as emendas vizinhas defasadas.
+
+```text
+{"command": "beam_create", "args": {"start": [2.5, 0], "end": [0, 2.5], "radius": 2.5}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "bottom", "count": 6}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "sides", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.12}}
+```
+
 `bracing_create` contraventa um vão de pórtico: um elemento hospedeiro cujas barras são vigas comuns, criado em um passo de desfazer e devolvido como `{id, members}`. O vão vai de `start` a `end` (os eixos dos dois pilares) ou fica entre os dois `columns`, de quem toma a base e a altura; `pattern` é `x`, `diagonal` (com `flip` e `alternate`), `v`, `chevron` ou `k`; `stories` pavimentos de altura `height` ficam um sobre o outro a partir de `base_offset`; `material` (`steel` ou `timber`) escolhe a linha de catálogo do tipo padrão das barras. `element_set` muda seus parâmetros e regenera as barras mantendo seus ids.
 
 ```text

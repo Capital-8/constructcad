@@ -191,6 +191,7 @@ impl Element {
                 // The line keeps its direction, so a face justification changes sides.
                 if t.mirror {
                     b.lateral = b.lateral.mirrored();
+                    b.bulge = -b.bulge;
                 }
             }
             ElementKind::Stair(s) => {

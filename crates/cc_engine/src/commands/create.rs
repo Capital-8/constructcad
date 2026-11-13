@@ -168,6 +168,23 @@ pub(crate) fn check_arc(p: &Project, type_id: cc_core::ElementTypeId, wall: &Wal
     Ok(())
 }
 
+/// An arc beam is level and must leave room inside its curve for its width.
+pub(crate) fn check_beam_arc(p: &Project, type_id: cc_core::ElementTypeId, beam: &Beam) -> Result<()> {
+    let Some(arc) = beam.arc() else { return Ok(()) };
+    if beam.rise().abs() > 1e-9 {
+        return Err(EngineError::invalid("an arc beam is level: it takes no end_offset"));
+    }
+    let width = match p.element_type(type_id).map(|t| &t.data) {
+        Some(cc_core::TypeData::Beam { width, .. }) => *width,
+        _ => 0.0,
+    };
+    // The tightest face may be the location line moved by up to the whole width.
+    if arc.radius <= width + 1e-3 {
+        return Err(EngineError::rejected("the arc is too tight for the width of the beam"));
+    }
+    Ok(())
+}
+
 /// Parameters shared by doors and windows.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 pub struct HostedArgs {
@@ -767,8 +784,10 @@ impl Command for ColumnCreate {
     }
 }
 
-/// Create a beam from `start` to `end`; its location line is `top_offset` above the level
-/// (default: the level's height), at the top of the section unless `vertical` says otherwise.
+/// Create a beam from `start` to `end`, straight or, for an arc beam, through `mid` (or with a
+/// `bulge` or a `radius`); its location line is `top_offset` above the level (default: the
+/// level's height), at the top of the section unless `vertical` says otherwise. An arc beam is
+/// level and joins columns and other beams at its ends like a straight one.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct BeamCreate {
@@ -794,6 +813,20 @@ pub struct BeamCreate {
     /// Height of the section at the location elevation: `top` (default), `center` or `bottom`.
     #[serde(default)]
     pub vertical: Option<String>,
+    /// Arc beams: a point the location line passes through between `start` and `end`.
+    #[serde(default)]
+    pub mid: Option<Point>,
+    /// Arc beams: `tan(sweep / 4)`, positive when the arc turns counter-clockwise from `start`
+    /// to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given.
+    #[serde(default)]
+    pub bulge: Option<f64>,
+    /// Arc beams: the radius in meters, positive when the arc turns counter-clockwise from
+    /// `start` to `end`, negative when clockwise. Ignored when `mid` or `bulge` is given.
+    #[serde(default)]
+    pub radius: Option<f64>,
+    /// With `radius`: take the longer of the two arcs (default: the shorter).
+    #[serde(default)]
+    pub major_arc: Option<bool>,
 }
 
 /// A beam justification by name.
@@ -819,6 +852,8 @@ impl Command for BeamCreate {
             finite(self.top_offset.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "top_offset")?;
         let mut beam = Beam::new(start, end, top_offset);
         beam.end_offset = self.end_offset.map(|z| finite(z, "end_offset")).transpose()?;
+        beam.bulge = arc_bulge(start, end, self.mid, self.bulge, self.radius, self.major_arc)?;
+        check_beam_arc(p, refs::type_of(p, Category::Beam, self.type_ref.as_ref())?, &beam)?;
         let lateral = [("center", BeamLateral::Center), ("left", BeamLateral::Left), ("right", BeamLateral::Right)];
         let vertical = [("top", BeamVertical::Top), ("center", BeamVertical::Center), ("bottom", BeamVertical::Bottom)];
         if let Some(j) = justification(self.lateral.as_deref(), &lateral, "lateral")? {

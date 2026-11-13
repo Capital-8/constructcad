@@ -15,7 +15,7 @@ use crate::sketch_edit;
 use crate::{EditCtx, Element, ElementId, ElementKind, Project};
 use glam::DVec2;
 
-/// Where a linear element runs: a straight line, or an arc (arc walls).
+/// Where a linear element runs: a straight line, or an arc (arc walls and arc beams).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Path {
     Line(DVec2, DVec2),
@@ -32,9 +32,27 @@ pub fn path_of(e: &Element) -> Option<Path> {
         };
     }
     let (a, b) = line_of(e)?;
-    match e.as_wall().and_then(|w| w.arc()) {
+    match arc_of(e) {
         Some(arc) => Some(Path::Arc(arc)),
         None => Some(Path::Line(a, b)),
+    }
+}
+
+/// The arc of an arc wall's or arc beam's location line.
+fn arc_of(e: &Element) -> Option<Arc> {
+    match &e.kind {
+        ElementKind::Wall(w) => w.arc(),
+        ElementKind::Beam(b) => b.arc(),
+        _ => None,
+    }
+}
+
+/// The bulge of a wall's or beam's location line.
+fn bulge_mut(e: &mut Element) -> Option<&mut f64> {
+    match &mut e.kind {
+        ElementKind::Wall(w) => Some(&mut w.bulge),
+        ElementKind::Beam(b) => Some(&mut b.bulge),
+        _ => None,
     }
 }
 
@@ -151,11 +169,12 @@ fn circle_circle(c0: DVec2, r0: f64, c1: DVec2, r1: f64) -> Vec<DVec2> {
 }
 
 /// The curve of an element as a sketch curve: a detail line's own, or the
-/// location line of a wall (an arc for arc walls), beam or grid.
+/// location line of a wall or beam (an arc for arc walls and arc beams) or grid.
 pub fn curve_of(e: &Element) -> Option<SketchCurve> {
     match &e.kind {
         ElementKind::DetailLine(l) => Some(l.curve),
         ElementKind::Wall(w) if w.bulge != 0.0 => Some(SketchCurve::Arc { a: w.start, b: w.end, bulge: w.bulge }),
+        ElementKind::Beam(b) if b.bulge != 0.0 => Some(SketchCurve::Arc { a: b.start, b: b.end, bulge: b.bulge }),
         _ => line_of(e).map(|(a, b)| SketchCurve::Line { a, b }),
     }
 }
@@ -265,8 +284,8 @@ impl EditCtx<'_> {
     fn apply_trimmed(&mut self, id: ElementId, t: Trimmed) {
         if let Some(el) = self.element_mut(id) {
             set_line(el, t.start, t.end);
-            if let ElementKind::Wall(w) = &mut el.kind {
-                w.bulge = t.bulge;
+            if let Some(bulge) = bulge_mut(el) {
+                *bulge = t.bulge;
             }
         }
         let length =
@@ -371,9 +390,9 @@ impl EditCtx<'_> {
         }
         let (a, b) = line(self.project(), id)?;
         let dir = (b - a).normalize_or_zero();
-        let arc = self.project().element(id).and_then(|e| e.as_wall()).and_then(|w| w.arc());
+        let arc = self.project().element(id).and_then(arc_of);
         let len = arc.map_or(a.distance(b), |c| c.length());
-        // Arc walls split on the arc, each part keeping its share of the sweep.
+        // Arc walls and arc beams split on the arc, each part keeping its share of the sweep.
         let t = arc.map_or((at - a).dot(dir), |c| c.locate(at).0);
         if t < 1e-3 || t > len - 1e-3 {
             return Err(EditError::Degenerate);
@@ -387,8 +406,8 @@ impl EditCtx<'_> {
             g.name = format!("{}'", g.name);
         }
         set_line(&mut second, p, b);
-        if let (Some(c), ElementKind::Wall(w)) = (arc, &mut second.kind) {
-            w.bulge = c.bulge_between(t, len);
+        if let (Some(c), Some(bulge)) = (arc, bulge_mut(&mut second)) {
+            *bulge = c.bulge_between(t, len);
         }
         // A sloped beam keeps its slope: the split point's elevation joins the parts.
         let split_z = match &original.kind {
@@ -400,8 +419,8 @@ impl EditCtx<'_> {
         }
         if let Some(el) = self.element_mut(id) {
             set_line(el, a, p);
-            if let (Some(c), ElementKind::Wall(w)) = (arc, &mut el.kind) {
-                w.bulge = c.bulge_between(0.0, t);
+            if let (Some(c), Some(bulge)) = (arc, bulge_mut(el)) {
+                *bulge = c.bulge_between(0.0, t);
             }
             if let (Some(z), ElementKind::Beam(x)) = (split_z, &mut el.kind) {
                 x.end_offset = Some(z);
@@ -469,6 +488,14 @@ impl EditCtx<'_> {
                     return Err(EditError::Degenerate);
                 }
                 (w.start, w.end) = w.offset_line(distance);
+            }
+            // An arc beam's too: the same bulge on a concentric circle.
+            ElementKind::Beam(b) if b.arc().is_some() => {
+                let arc = b.arc().ok_or(EditError::NotLinear)?;
+                if arc.radius_at(distance) < 1e-3 {
+                    return Err(EditError::Degenerate);
+                }
+                (b.start, b.end) = (arc.at(0.0, distance), arc.at(arc.length(), distance));
             }
             _ => copy.translate(n * distance),
         }

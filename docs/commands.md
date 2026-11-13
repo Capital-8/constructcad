@@ -641,15 +641,19 @@ No parameters.
 
 ### `beam_create`
 
-*edit* — Create a beam from `start` to `end`; its location line is `top_offset` above the level (default: the level's height), at the top of the section unless `vertical` says otherwise.
+*edit* — Create a beam from `start` to `end`, straight or, for an arc beam, through `mid` (or with a `bulge` or a `radius`); its location line is `top_offset` above the level (default: the level's height), at the top of the section unless `vertical` says otherwise. An arc beam is level and joins columns and other beams at its ends like a straight one.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `end` | [x, y] | required | End of the beam axis. |
 | `start` | [x, y] | required | Start of the beam axis. |
+| `bulge` | number | optional | Arc beams: `tan(sweep / 4)`, positive when the arc turns counter-clockwise from `start` to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given. |
 | `end_offset` | number | optional | Elevation of the location line at the end, when it differs from the start (a sloped beam). |
 | `lateral` | string | optional | Line across the section the axis follows: `center` (default), `left` or `right` face. |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `major_arc` | boolean | optional | With `radius`: take the longer of the two arcs (default: the shorter). |
+| `mid` | [x, y] | optional | Arc beams: a point the location line passes through between `start` and `end`. |
+| `radius` | number | optional | Arc beams: the radius in meters, positive when the arc turns counter-clockwise from `start` to `end`, negative when clockwise. Ignored when `mid` or `bulge` is given. |
 | `top_offset` | number | optional | Elevation of the location line above the level, meters (default: the level height). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
 | `vertical` | string | optional | Height of the section at the location elevation: `top` (default), `center` or `bottom`. |
@@ -787,20 +791,22 @@ No parameters.
 
 ### `rebar_create`
 
-*edit* — Add a set of bars to a beam or column: `layout` is `top` or `bottom` (beams), `perimeter` (columns) with `count` bars, or `stirrups` every `spacing`. The bars are `cover` inside the faces (default 2.5 cm) and follow the host.
+*edit* — Add a set of bars to a beam or column: `layout` is `top` or `bottom` (beams), `perimeter` (columns) with `count` bars, `sides` (beams: `count` side bars on each side face, or as many as keep them `spacing` apart over the height), or `stirrups` every `spacing`. The bars are `cover` inside the faces (default 2.5 cm) and follow the host: along an arc beam they follow the arc, each at its own radius, and the stirrups are radial. Top and bottom bars that do not fit side by side (a clear distance of the bar diameter, at least 2 cm) go in a second layer. Bars along a beam longer than `max_length` are made of pieces overlapping by `lap`, the splices of neighbouring bars staggered.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `host` | integer | required | Beam or column id. |
-| `layout` | string | required | `top`, `bottom`, `perimeter` or `stirrups`. |
-| `count` | integer | optional | Number of longitudinal bars (default: 2 in beams, 4 in columns). |
+| `layout` | string | required | `top`, `bottom`, `perimeter`, `sides` or `stirrups`. |
+| `count` | integer | optional | Number of longitudinal bars (default: 2 in beams, 4 in columns), or of side bars on each side face (default 1, unless `spacing` is given). |
 | `cover` | number | optional | Concrete cover, meters (default 0.025; 1 1/2" in imperial projects). |
-| `spacing` | number | optional | Stirrup spacing, meters (default 0.15; 6" in imperial projects). |
+| `lap` | number | optional | Lap length of the splices, meters (default: 40 bar diameters). |
+| `max_length` | number | optional | Longest bar along a beam, meters (default: the stock length, 12 m, or 40' in imperial projects): longer bars are lap spliced. 0 keeps whole bars. |
+| `spacing` | number | optional | Stirrup spacing, meters (default 0.15; 6" in imperial projects), or the largest distance between side bars over the height when no `count` is given. |
 | `type` | id or name | optional | Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups; 1/2" and 3/8" in imperial projects). |
 
 ### `rebar_typical`
 
-*edit* — Give beams and columns without reinforcement a typical one: beams two (three when 20 cm wide or more) 10 mm bars at the bottom, two 8 mm at the top and 5 mm stirrups every 15 cm; columns four 10 mm bars (six in round ones) and 5 mm ties every 15 cm. Default: every beam and column of `level` (or of the project).
+*edit* — Give beams and columns without reinforcement a typical one: beams two (three when 20 cm wide or more) 10 mm bars at the bottom, two 8 mm at the top (both lap spliced past the stock length) and 5 mm stirrups every 15 cm; columns four 10 mm bars (six in round ones) and 5 mm ties every 15 cm. Default: every beam and column of `level` (or of the project).
 
 | Parameter | Type | | Description |
 |---|---|---|---|

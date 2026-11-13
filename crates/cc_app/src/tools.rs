@@ -1016,6 +1016,13 @@ fn model_snaps(project: &Project, geom: &ModelGeometry, level: Option<LevelId>) 
                 Some(a) => arcs.push(a),
                 None => lines.push((w.start, w.end)),
             }
+        } else if let ElementKind::Beam(b) = &e.kind
+            && let Some(a) = b.arc()
+        {
+            // An arc beam's location line: its ends, its middle and the arc itself.
+            ends.extend([b.start, b.end]);
+            mids.push(a.point(a.length() * 0.5));
+            arcs.push(a);
         } else if let Some(s) = e.as_segment() {
             // Pipe and conduit ends, and runs to branch from.
             ends.extend([s.start, s.end]);
@@ -2165,11 +2172,12 @@ fn footing_tool(
 }
 
 /// Whether `type_id` is a strip footing type.
-/// The ends and the arc of an arc wall or arc strip footing: what the
-/// curvature handle of a selected element bends.
+/// The ends and the arc of an arc wall, arc beam or arc strip footing: what
+/// the curvature handle of a selected element bends.
 fn bendable(e: &cc_core::Element) -> Option<(DVec2, DVec2, cc_core::arc::Arc)> {
     match &e.kind {
         ElementKind::Wall(w) => Some((w.start, w.end, w.arc()?)),
+        ElementKind::Beam(b) => Some((b.start, b.end, b.arc()?)),
         ElementKind::Foundation(f) => match &f.shape {
             cc_core::FoundationShape::Strip { start, end, .. } => Some((*start, *end, f.shape.arc()?)),
             _ => None,
@@ -2178,10 +2186,11 @@ fn bendable(e: &cc_core::Element) -> Option<(DVec2, DVec2, cc_core::arc::Arc)> {
     }
 }
 
-/// Give a wall or strip footing a new bulge (the curvature handle's edit).
+/// Give a wall, beam or strip footing a new bulge (the curvature handle's edit).
 fn set_bulge(e: &mut cc_core::Element, to: f64) {
     match &mut e.kind {
         ElementKind::Wall(w) => w.bulge = to,
+        ElementKind::Beam(b) => b.bulge = to,
         ElementKind::Foundation(f) => {
             if let cc_core::FoundationShape::Strip { bulge, .. } = &mut f.shape {
                 *bulge = to;
@@ -2424,6 +2433,18 @@ fn align_grid_end(
 }
 
 /// Two clicks: start and end of a beam. Its top is at the level above by default.
+/// The command the beam tool runs for a beam from `a` to `b` (an arc with a `bulge`).
+pub fn beam_command(level: LevelId, type_id: ElementTypeId, a: DVec2, b: DVec2, bulge: f64) -> create::BeamCreate {
+    create::BeamCreate {
+        start: a.to_array(),
+        end: b.to_array(),
+        level: Some(Ref::Id(level.0)),
+        type_ref: Some(Ref::Id(type_id.0)),
+        bulge: (bulge != 0.0).then_some(bulge),
+        ..Default::default()
+    }
+}
+
 fn beam_tool(
     ui: &Ui,
     resp: &Response,
@@ -2439,28 +2460,71 @@ fn beam_tool(
     let anchor = state.interaction.anchor;
     let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
     draw_snap(painter, xf, s);
+    // As wide as the type's section (its profile turned in the type).
+    let project = state.project();
+    let section = project.element_type(type_id).and_then(|t| project.type_section(&t.data));
+    let width = section.map(|s| s.outline.bbox()).map_or(0.15, |(lo, hi)| hi.x - lo.x);
+    let width = if width.is_finite() && width > 0.0 { width } else { 0.15 };
+    // Arc mode: the start, the end, then a point on the arc (or a typed radius).
+    let arc_end = state.interaction.points.first().copied().filter(|_| state.beam_arc);
+    if let (Some(a), Some(b)) = (anchor, arc_end) {
+        let p = s.point;
+        let radius = state.typed.length_value();
+        let bulge = match radius {
+            Some(r) => bulge_with_radius(a, b, p, r),
+            None => cc_core::arc::Arc::bulge_through(a, p, b),
+        };
+        match bulge {
+            Some(bulge) => arc_preview(painter, xf, a, b, bulge, 0.0, width / 2.0),
+            None => paint_wall_preview(painter, xf, a, b, 0.0, width / 2.0),
+        }
+        if let Some(arc) = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge)) {
+            label(
+                painter,
+                xf.to_screen(p),
+                format!("R {}  {}", format::length(arc.radius), format::length(arc.length())),
+            );
+        }
+        let enter = ui.input(|i| i.key_pressed(Key::Enter)) && radius.is_some();
+        if resp.clicked() || enter {
+            match bulge {
+                Some(bulge) => {
+                    let command = beam_command(level, type_id, a, b, bulge);
+                    let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
+                    run_create(state, command);
+                    state.interaction.anchor = Some(b);
+                    state.interaction.points.clear();
+                    state.typed.clear();
+                    chain_placed(state, before, depth);
+                }
+                None if radius.is_some() => state.message = t!("msg-arc-radius-short"),
+                None => state.message = t!("msg-arc-collinear"),
+            }
+        }
+        return;
+    }
     if let Some(a) = state.interaction.anchor {
-        // As wide as the type's section (its profile turned in the type).
-        let project = state.project();
-        let section = project.element_type(type_id).and_then(|t| project.type_section(&t.data));
-        let width = section.map(|s| s.outline.bbox()).map_or(0.15, |(lo, hi)| hi.x - lo.x);
-        let width = if width.is_finite() && width > 0.0 { width } else { 0.15 };
-        let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
-        let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
-        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+        if state.beam_arc {
+            painter.line_segment([xf.to_screen(a), xf.to_screen(s.point)], Stroke::new(1.0, PREVIEW));
+        } else {
+            let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
+            let pts =
+                vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
+            painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+        }
         temp_dimension(painter, xf, a, s.point, None, None, width / 2.0);
     }
     if resp.clicked() {
         match state.interaction.anchor {
             None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.05 && state.beam_arc => {
+                // The end of the arc; the next click places a point on it.
+                state.interaction.points = vec![s.point];
+                state.message = t!("hint-wall-arc-point");
+                state.typed.clear();
+            }
             Some(a) if a.distance(s.point) > 0.05 => {
-                let command = create::BeamCreate {
-                    start: a.to_array(),
-                    end: s.point.to_array(),
-                    level: Some(Ref::Id(level.0)),
-                    type_ref: Some(Ref::Id(type_id.0)),
-                    ..Default::default()
-                };
+                let command = beam_command(level, type_id, a, s.point, 0.0);
                 let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
                 run_create(state, command);
                 state.interaction.anchor = Some(s.point);
@@ -4267,6 +4331,39 @@ mod tests {
         assert!(!crate::engine_edit::element(&mut state, arc, None, |e| set_bulge(e, 1e3)));
         assert_eq!(element(&state, arc), kept);
         assert!(!state.message.is_empty());
+    }
+
+    /// The beam tool's command makes a straight beam or, with a bulge, an
+    /// arc beam, which then has the curvature handle and snaps by its arc.
+    #[test]
+    fn the_beam_tool_draws_arc_beams() {
+        let mut state = AppState::new(cc_core::Document::new(crate::actions::new_project()));
+        let level = state.project().levels.first().map(|l| l.id).unwrap();
+        let type_id = state.project().default_type(Category::Beam).unwrap();
+        let (a, b) = (DVec2::new(2.5, 0.0), DVec2::new(0.0, 2.5));
+        let made = |state: &mut AppState, command: create::BeamCreate| {
+            ElementId(state.session.run(command).unwrap()["id"].as_u64().unwrap())
+        };
+        let straight = made(&mut state, beam_command(level, type_id, a + DVec2::X * 10.0, b + DVec2::X * 10.0, 0.0));
+        let bulge = cc_core::arc::Arc::bulge_through(a, DVec2::from_angle(0.7) * 2.5, b).unwrap();
+        let arc = made(&mut state, beam_command(level, type_id, a, b, bulge));
+        let element = |state: &AppState, id| state.project().element(id).cloned().unwrap();
+        assert!(bendable(&element(&state, straight)).is_none());
+        let (a2, b2, curve) = bendable(&element(&state, arc)).expect("an arc beam has a handle");
+        assert_eq!((a2, b2), (a, b));
+        assert!((curve.radius - 2.5).abs() < 1e-9 && curve.center.length() < 1e-9);
+        // The handle bends it through the engine, in one undo step.
+        let tighter = cc_core::arc::Arc::bulge_through(a, DVec2::new(2.5, 2.5), b).unwrap();
+        let depth = state.session.doc.undo_depth();
+        assert!(crate::engine_edit::element(&mut state, arc, None, |e| set_bulge(e, tighter)));
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
+        let (.., bent) = bendable(&element(&state, arc)).unwrap();
+        assert!(bent.point(bent.length() * 0.5).distance(DVec2::new(2.5, 2.5)) < 1e-9);
+        // Its ends, middle and arc are snap targets.
+        state.sync();
+        let snaps = model_snaps_cached(&mut state, Some(level));
+        assert!(snaps.arcs.iter().any(|c| (c.radius - bent.radius).abs() < 1e-9));
+        assert!(snaps.ends.contains(&a) && snaps.ends.contains(&b));
     }
 
     #[test]

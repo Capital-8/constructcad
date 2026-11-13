@@ -334,7 +334,7 @@ fn draw_structure(
                 } else {
                     LineStyle::Projection
                 };
-                d.polyline(&g.footprint(), true, style, id);
+                d.polyline(&g.outline(), true, style, id);
             }
             (ElementKind::Stair(st), Some(TypeData::Stair { .. })) => {
                 if let Some(g) = cc_geom::stair_geom(project, e, st) {

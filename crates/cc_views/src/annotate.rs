@@ -159,7 +159,7 @@ pub fn structure_tags(
                 let Some(g) = geom.beams.get(&e.id) else { continue };
                 let u = (g.start_ext.0.max(g.start_ext.1) + g.end_ext.0.min(g.end_ext.1)) / 2.0;
                 // Readable: text runs left to right or bottom to top.
-                let mut dir = g.dir;
+                let mut dir = g.dir_at(u);
                 if dir.x < -1e-9 || (dir.x.abs() <= 1e-9 && dir.y < 0.0) {
                     dir = -dir;
                 }
