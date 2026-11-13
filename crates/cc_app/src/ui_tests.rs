@@ -4358,6 +4358,8 @@ fn new_component_picks_a_kind_and_opens_the_environment() {
     let ty = state.project().element_type(made).unwrap();
     assert_eq!(ty.category(), cc_core::Category::Door);
     assert_eq!(ty.name, t!("comp-new-name"));
+}
+
 /// A length as a number field shows it, without the unit.
 fn length_text(meters: f64) -> String {
     let (units, comma) = cc_views::format::current();
