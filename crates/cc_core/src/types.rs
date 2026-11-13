@@ -434,6 +434,15 @@ pub enum TypeData {
     Rebar {
         diameter: f64,
         material: String,
+        /// Steel grade (e.g. "CA-50"); empty for none. Bars of different
+        /// grades never share a mark, and bending schedules total by it.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        grade: String,
+        /// Mass per meter, kg/m, when it is not that of a round bar of
+        /// `diameter` in steel of 7850 kg/m³ (ribbed bars are listed by
+        /// their nominal mass).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mass_per_meter: Option<f64>,
     },
     /// Pipes of outside `diameter`.
     Pipe {
@@ -581,6 +590,12 @@ pub(crate) fn default_major_every() -> u32 {
 }
 
 impl TypeData {
+    /// A type of reinforcing bars of `diameter` in `material`, with no grade
+    /// and the mass per meter of a round bar.
+    pub fn rebar(diameter: f64, material: String) -> TypeData {
+        TypeData::Rebar { diameter, material, grade: String::new(), mass_per_meter: None }
+    }
+
     /// Material names referenced by this type.
     pub fn materials(&self) -> Vec<&str> {
         match self {

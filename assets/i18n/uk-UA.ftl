@@ -3417,3 +3417,23 @@ tpl-imp-type-bed = Двоспальне ліжко 5'-0" × 6'-8"
 tpl-imp-type-wardrobe = Шафа завширшки 5'-0"
 tpl-imp-type-kitchen-sink = Мийка з нержавійки 4'-0"
 tpl-imp-type-floor-drain = Трап 6"
+
+# Позиції стрижнів, відомості гнуття і позначки арматури
+category-bar-tag = Позначки арматури
+tpl-type-bar-tag = Позначка арматури 2,5 мм
+col-grade = Клас сталі
+col-shape = Форма
+col-unit-length-cm = Довжина одного (см)
+col-note = Примітка
+col-waste-percent = Відходи (%)
+col-weight-with-waste = Маса з відходами
+bending-over-stock = Довший за стандартний стрижень: потрібен стик
+bending-no-partition = (без розділу)
+bending-summary = Підсумок за діаметрами
+default-bending-schedule-name = Відомість гнуття арматури
+tx-bar-marks-update = Закріпити позиції стрижнів
+tx-bar-marks-renumber = Перенумерувати позиції стрижнів
+tx-bar-marking-set = Змінити нумерацію стрижнів
+tx-create-bar-tag = Створити позначку арматури
+msg-bar-tag-view = Позначки арматури розміщують на планах, фасадах і розрізах.
+msg-bar-tag-set = Позначка арматури належить до набору арматури.

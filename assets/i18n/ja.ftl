@@ -3416,3 +3416,23 @@ tpl-imp-type-bed = ダブルベッド 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = ワードローブ 5'-0"
 tpl-imp-type-kitchen-sink = ステンレスシンク 4'-0"
 tpl-imp-type-floor-drain = 床排水トラップ 6"
+
+# 鉄筋符号、加工帳、鉄筋タグ
+category-bar-tag = 鉄筋タグ
+tpl-type-bar-tag = 鉄筋タグ 2.5 mm
+col-grade = 鋼種
+col-shape = 形状
+col-unit-length-cm = 1本の長さ (cm)
+col-note = 備考
+col-waste-percent = ロス (%)
+col-weight-with-waste = ロス込み重量
+bending-over-stock = 定尺より長い: 継手が必要
+bending-no-partition = (区分なし)
+bending-summary = 径別集計
+default-bending-schedule-name = 鉄筋加工帳
+tx-bar-marks-update = 鉄筋符号を固定
+tx-bar-marks-renumber = 鉄筋符号を振り直す
+tx-bar-marking-set = 鉄筋符号の設定を変更
+tx-create-bar-tag = 鉄筋タグを作成
+msg-bar-tag-view = 鉄筋タグは平面図、立面図、断面図に配置します。
+msg-bar-tag-set = 鉄筋タグは配筋セットに付けます。

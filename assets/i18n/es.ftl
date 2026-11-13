@@ -3416,3 +3416,23 @@ tpl-imp-type-bed = Cama doble 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Armario 5'-0"
 tpl-imp-type-kitchen-sink = Fregadero de acero inoxidable 4'-0"
 tpl-imp-type-floor-drain = Sumidero sifónico 6"
+
+# Marcas de barras, planillas de doblado y etiquetas de armadura
+category-bar-tag = Etiquetas de armadura
+tpl-type-bar-tag = Etiqueta de armadura 2,5 mm
+col-grade = Acero
+col-shape = Forma
+col-unit-length-cm = Long. unitaria (cm)
+col-note = Nota
+col-waste-percent = Desperdicio (%)
+col-weight-with-waste = Peso con desperdicio
+bending-over-stock = Más larga que la barra comercial: empalmar
+bending-no-partition = (sin partición)
+bending-summary = Resumen por diámetro
+default-bending-schedule-name = Planilla de doblado
+tx-bar-marks-update = Fijar marcas de barras
+tx-bar-marks-renumber = Renumerar marcas de barras
+tx-bar-marking-set = Cambiar numeración de barras
+tx-create-bar-tag = Crear etiqueta de armadura
+msg-bar-tag-view = Las etiquetas de armadura van en plantas, alzados y cortes.
+msg-bar-tag-set = Una etiqueta de armadura identifica un conjunto de armadura.

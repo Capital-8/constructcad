@@ -29,6 +29,7 @@ struct Settings {
     profiles: BTreeMap<crate::ProfileId, crate::structural_profile::ProfileDef>,
     option_sets: Vec<crate::OptionSet>,
     browser: crate::browser::BrowserOrganization,
+    bar_marking: crate::bar_marks::BarMarking,
 }
 
 impl Settings {
@@ -53,6 +54,7 @@ impl Settings {
             profiles: p.profiles.clone(),
             option_sets: p.option_sets.clone(),
             browser: p.browser.clone(),
+            bar_marking: p.bar_marking.clone(),
         }
     }
 
@@ -76,6 +78,7 @@ impl Settings {
         p.profiles = self.profiles;
         p.option_sets = self.option_sets;
         p.browser = self.browser;
+        p.bar_marking = self.bar_marking;
     }
 }
 
@@ -572,6 +575,12 @@ impl<'a> EditCtx<'a> {
     pub fn browser_mut(&mut self) -> &mut crate::browser::BrowserOrganization {
         self.touch_settings();
         &mut self.project.browser
+    }
+
+    /// How the project's reinforcing bars are marked.
+    pub fn bar_marking_mut(&mut self) -> &mut crate::bar_marks::BarMarking {
+        self.touch_settings();
+        &mut self.project.bar_marking
     }
 
     /// The project's line styles.

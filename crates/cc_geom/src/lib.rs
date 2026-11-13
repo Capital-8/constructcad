@@ -5,6 +5,8 @@
 //! elevations and sections, plus [`WallGeom`] and [`BeamGeom`] data used by plan views.
 
 pub mod analytical;
+pub mod bar_marks;
+pub mod bar_shape;
 mod beam;
 mod build;
 pub mod component;

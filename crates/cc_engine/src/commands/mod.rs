@@ -3,6 +3,7 @@
 
 pub mod analytical;
 pub mod annotate;
+pub mod bar_marks;
 pub mod bracing;
 pub mod browser;
 pub mod cable_tray;

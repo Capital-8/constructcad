@@ -5,6 +5,7 @@
 //! computes tables.
 
 mod annotate;
+pub mod bending;
 pub mod cad;
 pub mod callout;
 pub mod component_view;

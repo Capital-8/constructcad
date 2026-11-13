@@ -3416,3 +3416,23 @@ tpl-imp-type-bed = Łóżko podwójne 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Szafa 5'-0"
 tpl-imp-type-kitchen-sink = Zlewozmywak stalowy 4'-0"
 tpl-imp-type-floor-drain = Wpust podłogowy 6"
+
+# Numery prętów, wykazy zbrojenia i etykiety zbrojenia
+category-bar-tag = Etykiety zbrojenia
+tpl-type-bar-tag = Etykieta zbrojenia 2,5 mm
+col-grade = Gatunek stali
+col-shape = Kształt
+col-unit-length-cm = Dł. jednostkowa (cm)
+col-note = Uwagi
+col-waste-percent = Odpad (%)
+col-weight-with-waste = Masa z odpadem
+bending-over-stock = Dłuższy niż pręt handlowy: zakład
+bending-no-partition = (bez partycji)
+bending-summary = Zestawienie według średnic
+default-bending-schedule-name = Wykaz zbrojenia
+tx-bar-marks-update = Zablokuj numery prętów
+tx-bar-marks-renumber = Ponumeruj pręty od nowa
+tx-bar-marking-set = Zmień numerację prętów
+tx-create-bar-tag = Utwórz etykietę zbrojenia
+msg-bar-tag-view = Etykiety zbrojenia umieszcza się w rzutach, elewacjach i przekrojach.
+msg-bar-tag-set = Etykieta zbrojenia opisuje zestaw zbrojenia.

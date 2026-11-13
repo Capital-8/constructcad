@@ -3418,3 +3418,23 @@ tpl-imp-type-bed = ຕຽງຄູ່ 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = ຕູ້ເສື້ອຜ້າ 5'-0"
 tpl-imp-type-kitchen-sink = ອ່າງສະແຕນເລດ 4'-0"
 tpl-imp-type-floor-drain = ຈຸດລະບາຍນ້ຳພື້ນ 6"
+
+# ເຄື່ອງໝາຍເຫຼັກ, ຕາຕະລາງການດັດເຫຼັກ ແລະ ປ້າຍເຫຼັກເສີມ
+category-bar-tag = ປ້າຍເຫຼັກເສີມ
+tpl-type-bar-tag = ປ້າຍເຫຼັກເສີມ 2,5 mm
+col-grade = ຊັ້ນເຫຼັກ
+col-shape = ຮູບຮ່າງ
+col-unit-length-cm = ຄວາມຍາວຕໍ່ເສັ້ນ (ຊມ)
+col-note = ໝາຍເຫດ
+col-waste-percent = ເສດເຫຼືອ (%)
+col-weight-with-waste = ນໍ້າໜັກລວມເສດເຫຼືອ
+bending-over-stock = ຍາວກວ່າເຫຼັກມາດຕະຖານ: ຕ້ອງຕໍ່
+bending-no-partition = (ບໍ່ມີພາກສ່ວນ)
+bending-summary = ສະຫຼຸບຕາມເສັ້ນຜ່າສູນກາງ
+default-bending-schedule-name = ຕາຕະລາງການດັດເຫຼັກ
+tx-bar-marks-update = ກຳນົດເຄື່ອງໝາຍເຫຼັກຄົງທີ່
+tx-bar-marks-renumber = ລຽງເລກເຄື່ອງໝາຍເຫຼັກໃໝ່
+tx-bar-marking-set = ປ່ຽນການລຽງເລກເຫຼັກ
+tx-create-bar-tag = ສ້າງປ້າຍເຫຼັກເສີມ
+msg-bar-tag-view = ປ້າຍເຫຼັກເສີມໃຊ້ໃນແຜນຜັງ, ໜ້າດ້ານ ແລະ ໜ້າຕັດ.
+msg-bar-tag-set = ປ້າຍເຫຼັກເສີມໃຊ້ກັບຊຸດເຫຼັກເສີມ.

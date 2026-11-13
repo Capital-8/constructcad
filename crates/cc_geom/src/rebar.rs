@@ -77,10 +77,22 @@ pub struct RebarGeom {
     /// The beam or column the set is laid out in (none for shaped bars).
     pub host: Option<ElementId>,
     pub diameter: f64,
+    /// The steel grade of the set's type (empty: none).
+    pub grade: String,
+    /// The type's mass per meter, kg/m, when it gives one.
+    pub mass_per_meter: Option<f64>,
     pub bars: Vec<Bar>,
 }
 
 impl RebarGeom {
+    /// Mass of a meter of bar, kilograms: the type's, else a round bar of
+    /// the diameter in steel of [`STEEL_DENSITY`].
+    pub fn mass_per_meter(&self) -> f64 {
+        self.mass_per_meter
+            .filter(|m| m.is_finite() && *m > 0.0)
+            .unwrap_or(std::f64::consts::PI * self.diameter * self.diameter / 4.0 * STEEL_DENSITY)
+    }
+
     pub fn count(&self) -> usize {
         self.bars.len()
     }
@@ -96,7 +108,7 @@ impl RebarGeom {
 
     /// Steel weight in kilograms.
     pub fn weight(&self) -> f64 {
-        std::f64::consts::PI * self.diameter * self.diameter / 4.0 * self.total_length() * STEEL_DENSITY
+        self.total_length() * self.mass_per_meter()
     }
 }
 
@@ -154,6 +166,14 @@ fn diameter(project: &Project, e: &cc_core::Element) -> Option<f64> {
     match project.element_type(e.type_id).map(|t| &t.data) {
         Some(TypeData::Rebar { diameter, .. }) if diameter.is_finite() && *diameter > 0.0 => Some(*diameter),
         _ => None,
+    }
+}
+
+/// The steel grade and the mass per meter of a rebar element's type.
+fn steel(project: &Project, e: &cc_core::Element) -> (String, Option<f64>) {
+    match project.element_type(e.type_id).map(|t| &t.data) {
+        Some(TypeData::Rebar { grade, mass_per_meter, .. }) => (grade.clone(), *mass_per_meter),
+        _ => (String::new(), None),
     }
 }
 
@@ -312,7 +332,8 @@ pub fn build_rebar(
             }
             _ => continue,
         };
-        out.insert(e.id, RebarGeom { element: e.id, host: Some(r.host), diameter: d, bars });
+        let (grade, mass_per_meter) = steel(project, e);
+        out.insert(e.id, RebarGeom { element: e.id, host: Some(r.host), diameter: d, grade, mass_per_meter, bars });
     }
     // Shaped bars stand where they are drawn.
     for e in project.elements.values() {
@@ -320,7 +341,8 @@ pub fn build_rebar(
         let Some(d) = diameter(project, e) else { continue };
         let z = project.level_elevation(e.level);
         let bars = r.bars.iter().filter_map(|b| shaped_bar(b, z)).collect();
-        out.insert(e.id, RebarGeom { element: e.id, host: None, diameter: d, bars });
+        let (grade, mass_per_meter) = steel(project, e);
+        out.insert(e.id, RebarGeom { element: e.id, host: None, diameter: d, grade, mass_per_meter, bars });
     }
     out
 }

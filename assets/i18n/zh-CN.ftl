@@ -3416,3 +3416,23 @@ tpl-imp-type-bed = 双人床 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = 衣柜 5'-0"
 tpl-imp-type-kitchen-sink = 不锈钢洗涤盆 4'-0"
 tpl-imp-type-floor-drain = 地漏 6"
+
+# 钢筋编号、钢筋下料表与钢筋标签
+category-bar-tag = 钢筋标签
+tpl-type-bar-tag = 钢筋标签 2.5 mm
+col-grade = 钢筋牌号
+col-shape = 形状
+col-unit-length-cm = 单根长度 (cm)
+col-note = 备注
+col-waste-percent = 损耗 (%)
+col-weight-with-waste = 含损耗重量
+bending-over-stock = 长于定尺钢筋：需搭接
+bending-no-partition = (无分区)
+bending-summary = 按直径汇总
+default-bending-schedule-name = 钢筋下料表
+tx-bar-marks-update = 固定钢筋编号
+tx-bar-marks-renumber = 重新编排钢筋编号
+tx-bar-marking-set = 更改钢筋编号设置
+tx-create-bar-tag = 创建钢筋标签
+msg-bar-tag-view = 钢筋标签可放在平面、立面和剖面中。
+msg-bar-tag-set = 钢筋标签用于标注钢筋组。

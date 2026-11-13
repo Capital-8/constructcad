@@ -583,6 +583,24 @@ pub fn imperial() -> bool {
     current().0.length.unit.is_imperial()
 }
 
+/// A bar's length (or a leg's, a radius, a spacing) as bending schedules
+/// and bar tags write it: whole centimeters without the unit in metric
+/// projects, the project's length format in imperial ones.
+pub fn bar_length(meters: f64) -> String {
+    if imperial() { self::meters(meters) } else { number(meters * 100.0, 0) }
+}
+
+/// A number with up to `decimals` places, trailing zeros dropped (12.5, 10).
+pub fn trimmed(value: f64, decimals: usize) -> String {
+    let (u, c) = current();
+    trimmed_with(&u, c, value, decimals)
+}
+
+/// A bar diameter as bar tags write it: `Ø12.5` (millimeters), `Ø1/2"` in imperial projects.
+pub fn bar_diameter(meters: f64) -> String {
+    if imperial() { format!("Ø{}", inch_size(meters)) } else { format!("Ø{}", trimmed(meters * 1000.0, 1)) }
+}
+
 /// The scale 1:`n` in the current units (see [`scale_with`]).
 pub fn scale(n: u32) -> String {
     scale_with(&current().0, n)

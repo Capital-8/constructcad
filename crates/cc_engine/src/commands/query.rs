@@ -212,6 +212,14 @@ impl Command for ElementsList {
 pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     let e = s.project().element(id)?.clone();
     let params = super::cad::params(&e.kind);
+    // The marks of a reinforcement set's bars, each once.
+    let bar_marks: Vec<String> = {
+        let (p, g) = s.project_and_geometry();
+        match g.rebar.contains_key(&id) {
+            true => cc_geom::bar_marks::resolve(p, &g.rebar).of_set(id).into_iter().map(|m| m.mark.clone()).collect(),
+            false => Vec::new(),
+        }
+    };
     let p = s.project();
     let mut derived = serde_json::Map::new();
     match &e.kind {
@@ -442,6 +450,9 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         let bars: Vec<Value> =
             lengths.iter().rev().map(|(mm, count)| json!({"length": *mm as f64 / 1000.0, "count": count})).collect();
         derived.insert("bars".into(), json!(bars));
+        // The marks of its bars, in the order they first have them, and what a meter of bar weighs.
+        derived.insert("marks".into(), json!(bar_marks));
+        derived.insert("mass_per_meter".into(), json!(set.mass_per_meter()));
     }
     if let Some(lines) = geom.roof_ridges.get(&id) {
         // Ridges, hips and valleys in plan.

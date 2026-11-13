@@ -256,7 +256,18 @@ impl Project {
                     repairs += usize::from(fix_positive(width, 0.15)) + usize::from(fix_positive(height, 0.4));
                     repairs += fit_shape(shape, *width, *height);
                 }
-                TypeData::Rebar { diameter, .. } => repairs += usize::from(fix_positive(diameter, 0.01)),
+                TypeData::Rebar { diameter, grade, mass_per_meter, .. } => {
+                    repairs += usize::from(fix_positive(diameter, 0.01));
+                    // A mass per meter that is no mass is left to the diameter; a long grade is cut.
+                    if mass_per_meter.is_some_and(|m| !(m.is_finite() && m > 0.0 && m <= 1000.0)) {
+                        *mass_per_meter = None;
+                        repairs += 1;
+                    }
+                    if let Some((end, _)) = grade.char_indices().nth(crate::bar_marks::MAX_MARK_TEXT) {
+                        grade.truncate(end);
+                        repairs += 1;
+                    }
+                }
                 TypeData::CableTray { width, height, .. } => {
                     repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(height, 0.1));
                     for (v, max) in [(width, crate::mep::MAX_TRAY_WIDTH), (height, crate::mep::MAX_TRAY_HEIGHT)] {
@@ -367,6 +378,9 @@ impl Project {
 
         // Browser schemes: distinct ids, names, bounded criteria, a scheme in use that exists.
         repairs += self.browser.repair();
+
+        // Bar marking: numbers in range, usable frozen marks.
+        repairs += self.bar_marking.repair();
 
         // Fill patterns: valid patterns, and references to patterns that are gone dropped.
         repairs += self.repair_fill_patterns();

@@ -2595,7 +2595,7 @@ impl<'a> Importer<'a> {
         }
         let (level, elevation) = self.level_for(id, z0);
         let bars = lines.into_iter().map(|l| l.into_iter().map(|p| p - DVec3::Z * elevation).collect()).collect();
-        let rebar = ShapedRebar { bars, properties: self.property_sets(id) };
+        let rebar = ShapedRebar { bars, properties: self.property_sets(id), partition: String::new(), bar_mark: None };
         if !rebar.is_valid() {
             return false;
         }
@@ -2631,12 +2631,12 @@ impl<'a> Importer<'a> {
             fallback,
             uid,
             |t| match t {
-                TypeData::Rebar { diameter: d, material: m } => {
+                TypeData::Rebar { diameter: d, material: m, .. } => {
                     (d - diameter).abs() <= 1e-5 && material.as_ref().is_none_or(|want| m == want)
                 }
                 _ => false,
             },
-            || TypeData::Rebar { diameter, material: fallback_material },
+            || TypeData::rebar(diameter, fallback_material),
         );
         // The bar mark: the tag, else the name.
         let mark = Some(Self::tag(e)).filter(|t| !t.is_empty()).or_else(|| e.arg(2).as_str().map(clean_name));

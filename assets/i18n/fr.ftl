@@ -3416,3 +3416,23 @@ tpl-imp-type-bed = Lit double 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Armoire 5'-0"
 tpl-imp-type-kitchen-sink = Évier inox 4'-0"
 tpl-imp-type-floor-drain = Siphon de sol 6"
+
+# Repères de barres, nomenclatures de façonnage et étiquettes d'armature
+category-bar-tag = Étiquettes d'armature
+tpl-type-bar-tag = Étiquette d'armature 2,5 mm
+col-grade = Nuance
+col-shape = Forme
+col-unit-length-cm = Long. unitaire (cm)
+col-note = Remarque
+col-waste-percent = Chutes (%)
+col-weight-with-waste = Poids avec chutes
+bending-over-stock = Plus longue que la barre du commerce : recouvrement
+bending-no-partition = (sans partition)
+bending-summary = Récapitulatif par diamètre
+default-bending-schedule-name = Nomenclature de façonnage
+tx-bar-marks-update = Figer les repères de barres
+tx-bar-marks-renumber = Renuméroter les repères de barres
+tx-bar-marking-set = Modifier la numérotation des barres
+tx-create-bar-tag = Créer une étiquette d'armature
+msg-bar-tag-view = Les étiquettes d'armature vont dans les plans, élévations et coupes.
+msg-bar-tag-set = Une étiquette d'armature désigne un ensemble d'armatures.

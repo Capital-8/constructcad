@@ -5,6 +5,7 @@
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
 pub mod arc;
+pub mod bar_marks;
 pub mod bracing;
 pub mod browser;
 pub mod cad;
