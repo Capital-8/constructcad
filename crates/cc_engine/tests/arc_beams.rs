@@ -373,3 +373,28 @@ fn arc_beams_mirror_split_and_offset() {
     let c = c.arc().unwrap();
     assert!(c.center.length() < 1e-9 && close((c.radius - 2.5).abs(), 0.5) && close(c.sweep, arcs[0].sweep));
 }
+
+/// Bars along beams that carry on from one another lap at the joint when asked.
+#[test]
+fn bars_lap_where_a_beam_carries_on_from_another() {
+    let mut s = Session::default();
+    let a = id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [4, 0]})));
+    let b = id(&run(&mut s, "beam_create", json!({"start": [4, 0], "end": [9, 0]})));
+    let args = |host: ElementId, laps: bool| json!({"host": host.0, "layout": "bottom", "count": 2, "cover": 0.025, "max_length": 0, "lap": 0.4, "lap_at_joins": laps});
+    let plain = id(&run(&mut s, "rebar_create", args(a, false)));
+    let lapped = [id(&run(&mut s, "rebar_create", args(a, true))), id(&run(&mut s, "rebar_create", args(b, true)))];
+    let geom = s.geom().clone();
+    assert!(geom.rebar[&plain].bars.iter().all(|bar| close(bar.length(), 4.0 - 0.05)));
+    // The free end keeps its cover; the joined one runs half a lap past the joint.
+    for bar in &geom.rebar[&lapped[0]].bars {
+        let (x0, x1) = (bar.points[0].x.min(bar.points[1].x), bar.points[0].x.max(bar.points[1].x));
+        assert!(close(x0, 0.025) && close(x1, 4.2), "{x0} {x1}");
+    }
+    for bar in &geom.rebar[&lapped[1]].bars {
+        let (x0, x1) = (bar.points[0].x.min(bar.points[1].x), bar.points[0].x.max(bar.points[1].x));
+        assert!(close(x0, 3.8) && close(x1, 9.0 - 0.025), "{x0} {x1}");
+    }
+    // Stirrups are not bars along the beam.
+    let st = id(&run(&mut s, "rebar_create", json!({"host": a.0, "layout": "stirrups", "lap_at_joins": true})));
+    assert!(run(&mut s, "element_get", json!({"id": st.0}))["params"].get("lap_at_joins").is_none());
+}

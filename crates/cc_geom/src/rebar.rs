@@ -14,8 +14,8 @@
 //! the corners to the bars opposite, and the vertical bars may be cut in
 //! lifts that lap.
 
-use crate::BeamGeom;
 use crate::faces::{self, FaceBar, SectionFace};
+use crate::{BeamEnd, BeamGeom};
 use cc_core::profiles_project::SectorPlacement;
 use cc_core::{BarFace, ElementId, ElementKind, Project, Rebar, RebarLayout, Splice, TypeData};
 use glam::{DVec2, DVec3};
@@ -205,6 +205,20 @@ pub fn build_rebar(
             slab_sets.entry(r.host).or_default().push((r, d));
         }
     }
+    // The ends of the hosts' axes, when a set laps its bars past them.
+    let laps = project.elements.values().any(|e| matches!(&e.kind, ElementKind::Rebar(r) if r.lap_at_joins));
+    let ends_of = |g: &BeamGeom| [(g.world(0.0, 0.0), -g.dir_at(0.0)), (g.world(g.length, 0.0), g.dir_at(g.length))];
+    let mut wall_ends: AxisEnds = BTreeMap::new();
+    let mut beam_ends: AxisEnds = BTreeMap::new();
+    let mut strip_ends: AxisEnds = BTreeMap::new();
+    if laps {
+        wall_ends = walls
+            .iter()
+            .map(|(id, g)| (*id, [(g.world(0.0, 0.0), -g.tangent(0.0)), (g.world(g.length, 0.0), g.tangent(g.length))]))
+            .collect();
+        beam_ends = beams.iter().map(|(id, g)| (*id, ends_of(g))).collect();
+        strip_ends = foundations.iter().filter_map(|(id, f)| Some((*id, ends_of(f.strip.as_ref()?)))).collect();
+    }
     let mut out = BTreeMap::new();
     for e in project.elements.values() {
         let ElementKind::Rebar(r) = &e.kind else { continue };
@@ -217,7 +231,7 @@ pub fn build_rebar(
                 let Some(TypeData::Beam { height, .. }) = project.element_type(host.type_id).map(|t| &t.data) else {
                     continue;
                 };
-                beam_bars(g, *height, &r.layout, r.cover, d, ds, r.splice)
+                beam_bars(g, *height, r, d, ds, beam_past(r, d, g, &beam_ends))
             }
             // A strip footing: its own bars, or those of a beam in its beam part.
             ElementKind::Foundation(f) if matches!(f.shape, cc_core::FoundationShape::Strip { .. }) => {
@@ -246,11 +260,11 @@ pub fn build_rebar(
                         .filter(|(_, s)| across(s))
                         .filter_map(|(e, _)| diameter(project, e))
                         .fold(0.0, f64::max);
-                    crate::strip_rebar::strip_bars(g, &section, r, d, other)
+                    crate::strip_rebar::strip_bars(g, &section, r, d, other, beam_past(r, d, g, &strip_ends))
                 } else {
                     // As a beam as wide as the beam part and as deep as the whole section.
                     let part = BeamGeom { half: section.beam_half(), ..g.clone() };
-                    beam_bars(&part, data.foundation_depth(), &r.layout, r.cover, d, ds, r.splice)
+                    beam_bars(&part, data.foundation_depth(), r, d, ds, beam_past(r, d, g, &strip_ends))
                 }
             }
             ElementKind::Floor(_) | ElementKind::Foundation(_) => {
@@ -269,7 +283,15 @@ pub fn build_rebar(
             ElementKind::Wall(_) => {
                 let Some(g) = walls.get(&r.host) else { continue };
                 let all = wall_sets.get(&r.host).map_or(&[][..], |v| v.as_slice());
-                crate::wall_rebar::wall_bars(g, r, d, &wall_context(r, all))
+                let mut context = wall_context(r, all);
+                if r.lap_at_joins {
+                    let half = half_lap(r, d);
+                    let on = |joined: bool, end: usize| {
+                        if joined && carries_on(r.host, end, &wall_ends) { half } else { 0.0 }
+                    };
+                    context.past = (on(g.start_joined, 0), on(g.end_joined, 1));
+                }
+                crate::wall_rebar::wall_bars(g, r, d, &context)
             }
             ElementKind::Column(c) => {
                 let Some(data @ TypeData::Column { section, .. }) = project.element_type(host.type_id).map(|t| &t.data)
@@ -301,6 +323,53 @@ pub fn build_rebar(
         out.insert(e.id, RebarGeom { element: e.id, host: None, diameter: d, bars });
     }
     out
+}
+
+/// The two ends of each host's axis: the point, and the direction the axis leaves it by.
+type AxisEnds = BTreeMap<ElementId, [(DVec2, DVec2); 2]>;
+
+/// Ends of two axes this near are one joint.
+const JOINT_REACH: f64 = 0.05;
+
+/// Whether another host of `ends` carries on from the `end` (0: start, 1:
+/// end) of `host`: one of its ends lies there and its axis leaves the
+/// joint the opposite way, within some ten degrees.
+fn carries_on(host: ElementId, end: usize, ends: &AxisEnds) -> bool {
+    let Some((at, out)) = ends.get(&host).and_then(|e| e.get(end)).copied() else { return false };
+    let others = ends.iter().filter(|(id, _)| **id != host).flat_map(|(_, e)| e.iter());
+    others.into_iter().any(|(p, dir)| p.distance(at) <= JOINT_REACH && dir.dot(out) < -0.985)
+}
+
+/// Half the lap of the set `r` of bars `d` thick: its splices', else 40 diameters.
+fn half_lap(r: &Rebar, d: f64) -> f64 {
+    lap_of(r, d) * 0.5
+}
+
+/// The lap of the set `r` of bars `d` thick: its splices', else 40 diameters.
+fn lap_of(r: &Rebar, d: f64) -> f64 {
+    r.splice.filter(Splice::is_valid).map_or(40.0 * d, |s| s.lap)
+}
+
+/// How far the bars of `r` along the beam or strip `g` run past its start
+/// and end: half a lap where it is joined to another that carries on.
+fn beam_past(r: &Rebar, d: f64, g: &BeamGeom, ends: &AxisEnds) -> (f64, f64) {
+    if !r.lap_at_joins {
+        return (0.0, 0.0);
+    }
+    let half = half_lap(r, d);
+    let on = |joined: bool, end: usize| if joined && carries_on(g.element, end, ends) { half } else { 0.0 };
+    (on(g.start == BeamEnd::Beam, 0), on(g.end == BeamEnd::Beam, 1))
+}
+
+/// The stretch of the axis a bar along its host covers: `inside` is the
+/// stretch the `cover` clear of both end faces, and where the bar runs
+/// `past` an end (a length on its own line, `scale` times the axis's) it
+/// starts that far beyond the face instead.
+pub(crate) fn run_past(inside: (f64, f64), cover: f64, past: (f64, f64), scale: f64) -> (f64, f64) {
+    let scale = scale.max(1e-9);
+    let from = if past.0 > 0.0 { inside.0 - cover - past.0 / scale } else { inside.0 };
+    let to = if past.1 > 0.0 { inside.1 + cover + past.1 / scale } else { inside.1 };
+    (from, to)
 }
 
 /// Whether a slab's set lies inside the other bars of its layer.
@@ -344,6 +413,7 @@ fn wall_context<'a>(r: &Rebar, all: &[(&'a Rebar, f64)]) -> crate::wall_rebar::W
         horizontal: first(cc_core::WallSide::Exterior, true),
         vertical: first(cc_core::WallSide::Exterior, false),
         interior,
+        past: (0.0, 0.0),
     }
 }
 
@@ -399,15 +469,8 @@ fn side_heights(count: u32, spacing: f64, lo: f64, hi: f64) -> Vec<f64> {
 /// Bars along a beam: longitudinal and side bars from end to end inside the
 /// cover (following the arc of an arc beam), stirrups in vertical planes
 /// across it (radial on an arc).
-fn beam_bars(
-    g: &BeamGeom,
-    height: f64,
-    layout: &RebarLayout,
-    cover: f64,
-    d: f64,
-    ds: f64,
-    splice: Option<Splice>,
-) -> Vec<Bar> {
+fn beam_bars(g: &BeamGeom, height: f64, r: &Rebar, d: f64, ds: f64, past: (f64, f64)) -> Vec<Bar> {
+    let (layout, cover, splice) = (&r.layout, r.cover, r.splice);
     let k = g.stretch();
     let u0 = g.start_ext.0.max(g.start_ext.1) + cover;
     let u1 = g.end_ext.0.min(g.end_ext.1) - cover;
@@ -421,6 +484,7 @@ fn beam_bars(
         for (index, (v, z)) in lines.into_iter().enumerate() {
             // Length of the bar per meter of the axis: its own radius on an arc, the slope.
             let scale = g.arc.as_ref().map_or(k, |a| (a.radius_at(v) / a.radius.max(1e-9)).max(1e-9));
+            let (u0, u1) = run_past((u0, u1), cover, past, scale);
             let length = (u1 - u0) * scale;
             let pieces = splice.map_or_else(|| vec![(0.0, length)], |s| s.pieces(length, index));
             for (from, to) in pieces {
@@ -568,7 +632,7 @@ struct ColumnFrame {
 /// Length of a tie's hook bent by `turn` radians: the bend around a pin
 /// three bar diameters across, then a straight end of five diameters (at
 /// least 5 cm).
-fn hook(turn: f64, d: f64) -> f64 {
+pub(crate) fn hook(turn: f64, d: f64) -> f64 {
     turn * 2.0 * d + (5.0 * d).max(0.05)
 }
 
@@ -589,8 +653,12 @@ fn column_bars(
     let (w, depth) = shape.size;
     match r.layout {
         RebarLayout::Longitudinal { .. } => {
-            // Every bar is cut at the same heights: the lifts the column is cast in.
-            let lifts = r.splice.map_or_else(|| vec![(0.0, top - base)], |s| s.pieces(top - base, 0));
+            // Every bar is cut at the same heights: the lifts the column is cast
+            // in, at the heights given or equal ones under the stock length.
+            let lifts = match r.lifts.is_empty() {
+                false => Rebar::lift_pieces(&r.lifts, top - base, lap_of(r, d)),
+                true => r.splice.map_or_else(|| vec![(0.0, top - base)], |s| s.pieces(top - base, 0)),
+            };
             let mut bars = Vec::new();
             for bar in shape.bars(r, d, ds) {
                 for (from, to) in &lifts {
@@ -615,6 +683,26 @@ fn column_bars(
         | RebarLayout::StripLongitudinal { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = r.cover + d / 2.0;
+            // Overlapping stirrups: one around each rectangle the section is made of.
+            let rects = if r.overlapping && !shape.round { faces::rectangles(&shape.outline) } else { Vec::new() };
+            if rects.len() > 1 {
+                let loops: Vec<[DVec2; 4]> = rects
+                    .iter()
+                    .map(|(lo, hi)| (*lo + DVec2::splat(inset), *hi - DVec2::splat(inset)))
+                    .filter(|(lo, hi)| hi.x - lo.x > 1e-6 && hi.y - lo.y > 1e-6)
+                    .map(|(lo, hi)| [lo, DVec2::new(hi.x, lo.y), hi, DVec2::new(lo.x, hi.y)])
+                    .collect();
+                let mut out = Vec::new();
+                for z in stations(base + r.cover, top - r.cover, spacing) {
+                    for l in &loops {
+                        if out.len() >= MAX_BARS {
+                            return out;
+                        }
+                        out.push(Bar::new(l.iter().map(|p| place(*p, z)).collect(), true));
+                    }
+                }
+                return out;
+            }
             let (outline, length) = if shape.round {
                 (circle(ROUND, (w / 2.0 - inset).max(0.0)), None)
             } else if shape.boxed {

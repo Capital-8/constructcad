@@ -105,7 +105,7 @@ pub(crate) fn section(p: &Project, data: &TypeData) -> Option<TypeSectionInfo> {
     let density = p.material(material).and_then(|m| m.physical.density).filter(|d| d.is_finite() && *d > 0.0);
     Some(TypeSectionInfo {
         profile: sec.profile.and_then(|id| p.profile(id)).map(|f| f.name.clone()),
-        properties: sec.outline.properties(density.unwrap_or(0.0)),
+        properties: p.type_section_properties(data, density.unwrap_or(0.0))?,
         has_density: density.is_some(),
     })
 }

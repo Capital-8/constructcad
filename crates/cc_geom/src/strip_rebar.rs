@@ -45,8 +45,16 @@ impl StripSection {
 
 /// The bars of the strip's own set `r` (bars `d` thick): `other` is the
 /// largest bar of the sets of the same layer that run the other way, which
-/// the bars along the strip lie inside.
-pub(crate) fn strip_bars(g: &BeamGeom, section: &StripSection, r: &Rebar, d: f64, other: f64) -> Vec<Bar> {
+/// the bars along the strip lie inside. The bars along the strip run `past`
+/// its start and end by those lengths instead of stopping the cover short.
+pub(crate) fn strip_bars(
+    g: &BeamGeom,
+    section: &StripSection,
+    r: &Rebar,
+    d: f64,
+    other: f64,
+    past: (f64, f64),
+) -> Vec<Bar> {
     let cover = r.cover;
     let (u0, u1) = (g.start_ext.0.max(g.start_ext.1) + cover, g.end_ext.0.min(g.end_ext.1) - cover);
     // The outermost bar line across the strip, and the heights of the layers.
@@ -89,6 +97,7 @@ pub(crate) fn strip_bars(g: &BeamGeom, section: &StripSection, r: &Rebar, d: f64
                 let y = if top { (under(v) - other).max(low) } else { low + other };
                 // Length of the bar per meter of the axis: its own radius on an arc.
                 let scale = g.arc.as_ref().map_or(1.0, |a| (a.radius_at(v) / a.radius.max(1e-9)).max(1e-9));
+                let (u0, u1) = crate::rebar::run_past((u0, u1), cover, past, scale);
                 let length = (u1 - u0) * scale;
                 let pieces = r.splice.map_or_else(|| vec![(0.0, length)], |s| s.pieces(length, index));
                 for (from, to) in pieces {

@@ -222,6 +222,64 @@ pub fn face_bars(faces: &[SectionFace], spec: &[FaceBars], count: usize) -> Vec<
 
 /// The closed loop around `faces` (a stirrup's center line) and its true
 /// length, arcs as arcs.
+/// The largest rectangles `(min, max)` inside an outline whose sides all
+/// run along its own X or Y axis: two in an L or a T, three in a U, one in a
+/// rectangle. Together they cover it, overlapping where its parts meet.
+/// Empty for any other outline, or one with too many corners.
+pub fn rectangles(outline: &[DVec2]) -> Vec<(DVec2, DVec2)> {
+    const TOL: f64 = 1e-6;
+    const MAX_LINES: usize = 16;
+    let n = outline.len();
+    let square = (0..n).all(|i| {
+        let e = outline[(i + 1) % n] - outline[i];
+        e.x.abs() < TOL || e.y.abs() < TOL
+    });
+    if n < 4 || !square || outline.iter().any(|p| !p.is_finite()) {
+        return Vec::new();
+    }
+    let lines = |pick: fn(&DVec2) -> f64| {
+        let mut v: Vec<f64> = outline.iter().map(pick).collect();
+        v.sort_by(f64::total_cmp);
+        v.dedup_by(|a, b| (*a - *b).abs() < TOL);
+        v
+    };
+    let (xs, ys) = (lines(|p| p.x), lines(|p| p.y));
+    if xs.len() < 2 || ys.len() < 2 || xs.len() > MAX_LINES || ys.len() > MAX_LINES {
+        return Vec::new();
+    }
+    // The cells of the grid of those lines that lie inside the outline.
+    let (nx, ny) = (xs.len() - 1, ys.len() - 1);
+    let inside: Vec<Vec<bool>> = (0..nx)
+        .map(|i| {
+            (0..ny)
+                .map(|j| polygon::contains(outline, DVec2::new((xs[i] + xs[i + 1]) * 0.5, (ys[j] + ys[j + 1]) * 0.5)))
+                .collect()
+        })
+        .collect();
+    let full = |i0: usize, i1: usize, j0: usize, j1: usize| (i0..i1).all(|i| (j0..j1).all(|j| inside[i][j]));
+    let mut out = Vec::new();
+    for i0 in 0..nx {
+        for i1 in i0 + 1..=nx {
+            for j0 in 0..ny {
+                for j1 in j0 + 1..=ny {
+                    if !full(i0, i1, j0, j1) {
+                        continue;
+                    }
+                    // The largest: it cannot grow a row or a column of cells any way.
+                    let grows = (i0 > 0 && full(i0 - 1, i0, j0, j1))
+                        || (i1 < nx && full(i1, i1 + 1, j0, j1))
+                        || (j0 > 0 && full(i0, i1, j0 - 1, j0))
+                        || (j1 < ny && full(i0, i1, j1, j1 + 1));
+                    if !grows {
+                        out.push((DVec2::new(xs[i0], ys[j0]), DVec2::new(xs[i1], ys[j1])));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 pub fn face_loop(faces: &[SectionFace]) -> (Vec<DVec2>, f64) {
     let mut points: Vec<DVec2> = Vec::new();
     for face in faces {
@@ -275,6 +333,27 @@ pub fn across(faces: &[SectionFace], from: DVec2, inward: DVec2, clear: f64) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_section_of_square_corners_is_made_of_overlapping_rectangles() {
+        let p = |x: f64, y: f64| DVec2::new(x, y);
+        // A T: the flange, and the web through it.
+        let t = [p(0.0, 0.4), p(0.6, 0.4), p(0.6, 0.6), p(0.0, 0.6)];
+        let web = [p(0.4, 0.4), p(0.4, 0.0), p(0.2, 0.0), p(0.2, 0.4)];
+        let outline = [t[0], web[3], web[2], web[1], web[0], t[1], t[2], t[3]];
+        let mut r = rectangles(&outline);
+        r.sort_by(|a, b| a.0.x.total_cmp(&b.0.x));
+        assert_eq!(r, vec![(p(0.0, 0.4), p(0.6, 0.6)), (p(0.2, 0.0), p(0.4, 0.6))]);
+        // A rectangle is itself, wound either way.
+        let mut square = vec![p(0.0, 0.0), p(1.0, 0.0), p(1.0, 2.0), p(0.0, 2.0)];
+        assert_eq!(rectangles(&square), vec![(p(0.0, 0.0), p(1.0, 2.0))]);
+        square.reverse();
+        assert_eq!(rectangles(&square).len(), 1);
+        // A slanted side, too few points or a bad number: none.
+        assert!(rectangles(&[p(0.0, 0.0), p(1.0, 0.0), p(1.2, 1.0), p(0.0, 1.0)]).is_empty());
+        assert!(rectangles(&[p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0)]).is_empty());
+        assert!(rectangles(&[p(0.0, 0.0), p(f64::NAN, 0.0), p(1.0, 1.0), p(0.0, 1.0)]).is_empty());
+    }
     use std::f64::consts::FRAC_PI_2;
 
     fn sector(r_in: f64, r_out: f64, sweep_deg: f64) -> SectorPlacement {

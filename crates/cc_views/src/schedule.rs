@@ -147,8 +147,8 @@ fn text_of(v: &Value) -> String {
 fn linear_mass(project: &Project, data: &TypeData) -> Value {
     let (TypeData::Column { material, .. } | TypeData::Beam { material, .. }) = data else { return Value::Missing };
     let density = project.material(material).and_then(|m| m.physical.density).filter(|d| d.is_finite() && *d > 0.0);
-    let (Some(density), Some(section)) = (density, project.type_section(data)) else { return Value::Missing };
-    let mass = section.outline.properties(density).linear_mass;
+    let Some(props) = density.and_then(|d| project.type_section_properties(data, d)) else { return Value::Missing };
+    let mass = props.linear_mass;
     if mass.is_finite() && mass > 0.0 { Value::LinearMass(mass) } else { Value::Missing }
 }
 

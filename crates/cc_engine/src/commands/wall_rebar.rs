@@ -100,6 +100,11 @@ pub struct TieBars {
     /// A tie at every this many vertical bars (default 2: every other one).
     #[serde(default)]
     pub every_vertical: Option<u32>,
+    /// The angles the tie's two ends are hooked by, degrees, 90 to 180: at the exterior
+    /// face, then the interior (default `[135, 135]`; `[135, 90]` or `[135, 180]` are
+    /// common). The hooks count in the tie's length.
+    #[serde(default)]
+    pub hooks: Option<[f64; 2]>,
 }
 
 /// Reinforce walls, straight or arc: `horizontal` bars up the wall (ring
@@ -155,6 +160,12 @@ pub struct WallRebarCreate {
     /// Lap length of the splices, meters (default: 40 bar diameters).
     #[serde(default)]
     pub lap: Option<f64>,
+    /// Run the horizontal bars half a lap past each end joined to another wall that carries
+    /// on in the same line (the walls of a cylinder), so the bars of the two lap there
+    /// (default false: they meet end to end at the joint). The lap is `lap`,
+    /// or 40 bar diameters where bars are kept whole (`max_length` 0).
+    #[serde(default)]
+    pub lap_at_joins: Option<bool>,
 }
 
 fn spacing(value: f64, what: &str) -> Result<f64> {
@@ -292,10 +303,11 @@ impl Command for WallRebarCreate {
             let layout = RebarLayout::WallTies {
                 every_horizontal: ties.every_horizontal.unwrap_or(1),
                 every_vertical: ties.every_vertical.unwrap_or(2),
+                hooks: ties.hooks.unwrap_or_else(wall_bars::default_hooks),
             };
             if !layout.is_valid() {
                 return Err(EngineError::invalid(format!(
-                    "every_horizontal and every_vertical must be between 1 and {}",
+                    "every_horizontal and every_vertical must be between 1 and {}, and hooks 90 to 180 degrees",
                     wall_bars::MAX_EVERY
                 )));
             }
@@ -305,16 +317,15 @@ impl Command for WallRebarCreate {
             return Ok(json!({"created": [], "walls": 0, "skipped": skipped}));
         }
         let count = walls.len();
+        let lap_at_joins = self.lap_at_joins.unwrap_or(false);
         let created = edit(s, t!("tx-create-rebar"), |e| {
             let mut ids = Vec::new();
             for (host, level) in &walls {
                 for (type_id, layout, cover, splice) in &sets {
                     let rebar = Rebar {
-                        host: *host,
-                        layout: layout.clone(),
-                        cover: *cover,
                         splice: *splice,
-                        faces: Vec::new(),
+                        lap_at_joins: lap_at_joins && matches!(layout, RebarLayout::WallHorizontal { .. }),
+                        ..Rebar::new(*host, layout.clone(), *cover)
                     };
                     ids.push(add_element(e, *level, *type_id, ElementKind::Rebar(rebar)));
                 }

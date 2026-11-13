@@ -60,7 +60,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Beam(b) => {
             b.top_offset.is_finite() && b.end_offset.is_none_or(f64::is_finite) && finite_points(&[b.start, b.end])
         }
-        ElementKind::Rebar(r) => r.layout.is_valid() && r.cover.is_finite() && r.cover >= 0.0,
+        ElementKind::Rebar(r) => r.is_valid(),
         ElementKind::ShapedRebar(r) => r.is_valid(),
         ElementKind::Foundation(f) => {
             let shape = match &f.shape {
@@ -1309,7 +1309,7 @@ mod tests {
             Splice { max_length: 2.0, lap: 1.5 },
         ] {
             let layout = RebarLayout::Sides { count: 1, spacing: 0.0 };
-            let rebar = Rebar { host: ids[0], layout, cover: 0.025, splice: Some(splice), faces: Vec::new() };
+            let rebar = Rebar { splice: Some(splice), ..Rebar::new(ids[0], layout, 0.025) };
             bars.push(add(&mut p, bar_t, ElementKind::Rebar(rebar)));
         }
         assert!(p.repair() >= 5);

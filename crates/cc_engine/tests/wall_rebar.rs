@@ -280,6 +280,24 @@ fn ties_link_the_faces_and_long_bars_are_spliced() {
         let hooks = 2.0 * (0.75 * PI * 2.0 * t.diameter + (5.0 * t.diameter).max(0.05));
         assert!(close(bar.length(), span + hooks));
     }
+    // Other hooks: 135 degrees at the exterior face and 90 at the interior one are shorter.
+    let args = json!({"walls": [wall.0], "ties": {"every_horizontal": 2, "every_vertical": 3, "hooks": [135, 90]}});
+    let other = created(&run(&mut s, "wall_rebar_create", args));
+    let o = s.geometry().rebar[&other[0]].clone();
+    let straight_end = (5.0 * o.diameter).max(0.05);
+    let hooks = (0.75 * PI + 0.5 * PI) * 2.0 * o.diameter + 2.0 * straight_end;
+    assert!(o.count() == t.count() && o.bars.iter().all(|bar| close(bar.length(), span + hooks)));
+    let kept = run(&mut s, "element_get", json!({"id": other[0].0}));
+    assert_eq!(kept["params"]["layout"]["WallTies"]["hooks"], json!([135.0, 90.0]), "{kept}");
+    // Hooks that are no hooks are refused, here and in an edit.
+    let bad = json!({"walls": [wall.0], "ties": {"hooks": [135, 45]}});
+    assert_eq!(fails(&mut s, "wall_rebar_create", bad), ErrorCode::InvalidArguments);
+    let bad = json!({"id": other[0].0, "params": {"layout": {"WallTies": {"hooks": [200.0, 135.0]}}}});
+    assert!(s.execute("element_set", bad).is_err());
+    // A file written before hooks had angles reads as 135 degrees at both ends.
+    let old: RebarLayout =
+        serde_json::from_value(json!({"WallTies": {"every_horizontal": 1, "every_vertical": 2}})).unwrap();
+    assert!(matches!(old, RebarLayout::WallTies { hooks, .. } if hooks == [135.0, 135.0]));
     // Ties alone, with no bars to hang them on, make none.
     let bare = id(&run(&mut s, "wall_create", json!({"start": [0, 10], "end": [6, 10], "height": 3.0})));
     let alone = created(&run(&mut s, "wall_rebar_create", json!({"walls": [bare.0], "ties": {}})));
@@ -308,4 +326,53 @@ fn only_walls_with_a_body_are_reinforced() {
     assert_eq!(rows.as_array().unwrap().len(), 4);
     let d = run(&mut s, "element_get", json!({"id": created(&all)[0].0}));
     assert!(d["params"]["layout"]["WallHorizontal"]["zones"].as_array().is_some(), "{d}");
+}
+
+/// The ring bars of a cylinder made of two walls lap at the joints when
+/// asked: each runs half a lap past the joint, along its own circle.
+#[test]
+fn ring_bars_lap_at_the_joints_of_a_cylinder() {
+    let mut s = Session::default();
+    let walls = cylinder(&mut s);
+    let ids = [walls[0].0, walls[1].0];
+    let butt = created(&run(&mut s, "wall_rebar_create", json!({"walls": ids, "horizontal": {}, "max_length": 0})));
+    let args = json!({"walls": ids, "horizontal": {}, "lap": 0.6, "lap_at_joins": true});
+    let lapped = created(&run(&mut s, "wall_rebar_create", args));
+    let geom = s.geometry().clone();
+    let on = |sets: &[ElementId], side| {
+        let own: Vec<ElementId> = sets.iter().copied().filter(|x| geom.rebar[x].host == Some(walls[0])).collect();
+        geom.rebar[&family(&s, &own, true, side)].clone()
+    };
+    for side in [WallSide::Exterior, WallSide::Interior] {
+        let (plain, laps) = (on(&butt, side), on(&lapped, side));
+        assert_eq!(plain.count(), laps.count());
+        for (a, b) in plain.bars.iter().zip(&laps.bars) {
+            // Half a circle, and 0.3 m past each joint on the same circle.
+            let radius = a.points[0].truncate().length();
+            assert!(close(a.length(), PI * radius) && close(b.length(), PI * radius + 0.6), "{}", b.length());
+            assert!(b.points.iter().all(|p| close(p.truncate().length(), radius)));
+        }
+    }
+    // Whole bars (no stock length) have no lap of their own: 40 diameters.
+    let args = json!({"walls": [ids[0]], "horizontal": {}, "faces": "exterior", "max_length": 0, "lap_at_joins": true});
+    let default = created(&run(&mut s, "wall_rebar_create", args));
+    let set = &s.geometry().rebar[&default[0]];
+    let radius = set.bars[0].points[0].truncate().length();
+    assert!(close(set.bars[0].length(), PI * radius + 40.0 * set.diameter));
+
+    // At a corner the other wall does not carry on: the bars stop at the joint, as without the option.
+    let a = id(&run(&mut s, "wall_create", json!({"start": [10, 0], "end": [14, 0]})));
+    run(&mut s, "wall_create", json!({"start": [14, 0], "end": [14, 3]}));
+    let plain =
+        created(&run(&mut s, "wall_rebar_create", json!({"walls": [a.0], "horizontal": {}, "faces": "exterior"})));
+    let args = json!({"walls": [a.0], "horizontal": {}, "faces": "exterior", "lap_at_joins": true});
+    let asked = created(&run(&mut s, "wall_rebar_create", args));
+    let geom = s.geometry();
+    assert!(close(geom.rebar[&plain[0]].total_length(), geom.rebar[&asked[0]].total_length()));
+    // Vertical bars and ties are not bars along the wall: they do not keep the option.
+    let d = run(&mut s, "element_get", json!({"id": asked[0].0}));
+    assert_eq!(d["params"]["lap_at_joins"], json!(true), "{d}");
+    let v = created(&run(&mut s, "wall_rebar_create", json!({"walls": [a.0], "vertical": {}, "lap_at_joins": true})));
+    let d = run(&mut s, "element_get", json!({"id": v[0].0}));
+    assert!(d["params"].get("lap_at_joins").is_none(), "{d}");
 }
