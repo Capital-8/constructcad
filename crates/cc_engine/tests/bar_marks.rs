@@ -1,12 +1,13 @@
 //! Bar marks, bending schedules and the bar length check (#286): identical
 //! bars share a mark across hosts, overrides win, frozen marks stay when the
 //! model changes, renumbering restarts and undoes; the bending schedule's
-//! totals add the bars exactly, and it goes on a sheet and to CSV.
+//! totals add the bars exactly, and it goes on a sheet and to CSV; tags
+//! write their set's bars; crafted settings are repaired.
 
 // Test helpers outside #[test] functions may fail loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use cc_core::{BendingOptions, ElementId, RebarLayout};
+use cc_core::{BendingOptions, ElementId, ElementKind, RebarLayout};
 use cc_engine::{ErrorCode, Session};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -385,4 +386,197 @@ fn rings_and_arcs_have_their_codes() {
     let codes: Vec<String> = list(&mut s).iter().map(|m| m["code"].as_str().unwrap().to_string()).collect();
     assert!(codes.iter().any(|c| c.starts_with("ring R=")), "{codes:?}");
     assert!(codes.iter().any(|c| c.starts_with("arc R=")), "{codes:?}");
+}
+
+/// A tag writes its set: count, mark, diameter, spacing and length; with a
+/// multiplier; the view draws the set's bars; tags go with their set.
+#[test]
+fn bar_tags_write_their_set_and_go_with_it() {
+    let mut s = Session::default();
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0, 0], "end": [4, 0], "height": 3.0})));
+    let created = ids(&run(&mut s, "wall_rebar_create", json!({"walls": [wall], "faces": "exterior"})));
+    let vertical = *created
+        .iter()
+        .find(|c| matches!(&s.project().element(ElementId(**c)).unwrap().kind, ElementKind::Rebar(r) if matches!(r.layout, RebarLayout::WallVertical { .. })))
+        .unwrap();
+    let horizontal = *created.iter().find(|c| **c != vertical).unwrap();
+    let view = id(&run(&mut s, "view_create", json!({"kind": "elevation", "direction": "south"})));
+    let tag = run(&mut s, "bar_tag_create", json!({"view": view, "set": vertical, "position": [1.0, 1.5]}));
+    let set = run(&mut s, "element_get", json!({"id": vertical}));
+    let geom = s.geometry().clone();
+    let bars = &geom.rebar[&ElementId(vertical)].bars;
+    assert!(bars.windows(2).all(|w| (w[0].length() - w[1].length()).abs() < 1e-9));
+    let expected = format!(
+        "{} {} Ø10 c/15 C={}",
+        set["derived"]["count"],
+        set["derived"]["marks"][0].as_str().unwrap(),
+        cc_views::format::number(bars[0].length() * 100.0, 0)
+    );
+    assert_eq!(tag["derived"]["text"], json!(expected), "{tag}");
+    let twice = run(
+        &mut s,
+        "bar_tag_create",
+        json!({"view": view, "set": vertical, "position": [1.0, 2.0], "multiplier": 2, "leader": [1.2, 1.0]}),
+    );
+    assert_eq!(twice["derived"]["text"], json!(format!("2x {expected}")));
+    let short = run(
+        &mut s,
+        "bar_tag_create",
+        json!({"view": view, "set": vertical, "position": [1.0, 2.5], "parts": {"count": false, "length": false}}),
+    );
+    assert!(short["derived"]["text"].as_str().unwrap().starts_with(set["derived"]["marks"][0].as_str().unwrap()));
+    // The elevation draws the tagged set's bars (thin lines of the set) and the texts.
+    let d = s.drawing(cc_core::ViewId(view)).unwrap();
+    let lines = d
+        .prims
+        .iter()
+        .filter(|p| matches!(p, cc_views::Prim::Line { element: Some(e), .. } if e.0 == vertical))
+        .count();
+    assert_eq!(lines, bars.len(), "one line per straight bar");
+    assert!(d.prims.iter().any(|p| matches!(p, cc_views::Prim::Text { text, .. } if *text == expected)));
+    // In a plan the horizontal bars run along the wall, at their spacing.
+    let plan = s.project().views.values().find(|v| v.is_plan()).map(|v| v.id.0).unwrap();
+    let h = run(&mut s, "bar_tag_create", json!({"view": plan, "set": horizontal, "position": [0.5, 0.5]}));
+    assert!(h["derived"]["text"].as_str().unwrap().contains(" c/15 C="), "{h}");
+    // Only plans, elevations and sections, and only reinforcement.
+    let schedule = id(&run(&mut s, "bending_schedule_create", json!({})));
+    let bad = json!({"view": schedule, "set": vertical, "position": [0, 0]});
+    assert_eq!(fails(&mut s, "bar_tag_create", bad), ErrorCode::InvalidArguments);
+    let bad = json!({"view": view, "set": wall, "position": [0, 0]});
+    assert_eq!(fails(&mut s, "bar_tag_create", bad), ErrorCode::InvalidArguments);
+    let bad = json!({"view": view, "set": vertical, "position": [0, 0], "multiplier": 0});
+    assert_eq!(fails(&mut s, "bar_tag_create", bad), ErrorCode::InvalidArguments);
+    assert_eq!(
+        fails(&mut s, "element_set", json!({"id": id(&tag), "params": {"set": wall}})),
+        ErrorCode::InvalidArguments
+    );
+    // Deleting the set deletes its tags; undo brings them back.
+    run(&mut s, "elements_delete", json!({"ids": [vertical]}));
+    assert!(s.project().element(ElementId(id(&tag))).is_none() && s.project().element(ElementId(id(&twice))).is_none());
+    assert!(s.project().element(ElementId(id(&h))).is_some());
+    run(&mut s, "undo", json!({}));
+    assert!(s.project().element(ElementId(id(&tag))).is_some());
+    // Deleting the wall takes its sets and their tags.
+    run(&mut s, "elements_delete", json!({"ids": [wall]}));
+    assert!(s.project().element(ElementId(id(&h))).is_none());
+}
+
+/// Crafted marking settings, frozen entries and tags are repaired on load.
+#[test]
+fn crafted_marking_and_tags_are_repaired() {
+    let mut s = Session::default();
+    let a = beam(&mut s, [0.0, 0.0], [5.0, 0.0]);
+    run(&mut s, "rebar_typical", json!({}));
+    run(&mut s, "bar_marks_update", json!({}));
+    let (bottom, ..) = beam_sets(&s, a);
+    let plan = s.project().views.values().find(|v| v.is_plan()).map(|v| v.id.0).unwrap();
+    let tag = id(&run(&mut s, "bar_tag_create", json!({"view": plan, "set": bottom, "position": [1, 1]})));
+    let mut p = s.project().clone();
+    p.bar_marking.stock_length = -1.0;
+    p.bar_marking.length_tolerance = 3.0;
+    p.bar_marking.prefix = "x".repeat(100);
+    p.bar_marking.frozen[0].shape.legs[0].length = -1.0;
+    p.bar_marking.frozen[1].diameter = 0.0;
+    let mut stray = p.element(ElementId(tag)).unwrap().clone();
+    stray.id = ElementId(p.alloc_id());
+    if let ElementKind::BarTag(t) = &mut stray.kind {
+        t.set = ElementId(424_242);
+    }
+    p.elements.insert(stray.id, stray);
+    if let Some(ElementKind::BarTag(t)) = p.elements.get_mut(&ElementId(tag)).map(|e| &mut e.kind) {
+        t.multiplier = 0;
+    }
+    let text = cc_core::to_ron(&p).unwrap();
+    let (q, repairs) = cc_core::from_ron_with_repairs(&text).unwrap();
+    // Stock length, tolerance, prefix, two frozen entries, the stray tag, the multiplier.
+    assert_eq!(repairs, 7, "{:?}", q.bar_marking);
+    assert_eq!((q.bar_marking.stock_length, q.bar_marking.length_tolerance), (12.0, 0.005));
+    assert_eq!(q.bar_marking.frozen.len(), 1);
+    assert_eq!(q.elements.values().filter(|e| matches!(e.kind, ElementKind::BarTag(_))).count(), 1);
+    let ElementKind::BarTag(t) = &q.element(ElementId(tag)).unwrap().kind else { panic!() };
+    assert_eq!(t.multiplier, 1);
+    // A project without marking settings writes none.
+    let plain = cc_core::to_ron(&cc_core::Project::from_template()).unwrap();
+    assert!(!plain.contains("bar_marking"));
+}
+
+/// Bars longer than the stock length need splices: listed by set and mark
+/// until the set cuts them; the bending schedule notes them.
+#[test]
+fn long_bars_are_flagged_until_spliced() {
+    let mut s = Session::default();
+    let b = beam(&mut s, [0.0, 0.0], [14.0, 0.0]);
+    let set = id(&run(&mut s, "rebar_create", json!({"host": b, "layout": "bottom", "max_length": 0})));
+    let check = run(&mut s, "bar_length_check", json!({}));
+    assert_eq!(check["max_length"], json!(12.0));
+    assert_eq!(check["count"], json!(2), "{check}");
+    let bar = &check["bars"][0];
+    assert_eq!((bar["set"].clone(), bar["host"].clone(), bar["mark"].clone()), (json!(set), json!(b), json!("N1")));
+    assert!((num(&bar["longest"]) - 13.95).abs() < 1e-9);
+    assert_eq!(run(&mut s, "bar_length_check", json!({"max_length": 14}))["count"], json!(0));
+    let view = id(&run(&mut s, "bending_schedule_create", json!({})));
+    let table = run(&mut s, "schedule_table", json!({"view": view}));
+    assert_eq!(table["headers"].as_array().unwrap().last().unwrap(), &json!(cc_engine::i18n::tr("col-note")));
+    assert_eq!(table["rows"][0]["cells"][8], json!(cc_engine::i18n::tr("bending-over-stock")));
+    // Spliced at 12 m: nothing to flag, and no note.
+    run(&mut s, "element_set", json!({"id": set, "params": {"splice": {"max_length": 12.0, "lap": 0.4}}}));
+    assert_eq!(run(&mut s, "bar_length_check", json!({}))["count"], json!(0));
+    let table = run(&mut s, "schedule_table", json!({"view": view}));
+    assert_eq!(table["headers"].as_array().unwrap().len(), 8);
+    // A shorter stock length flags the pieces again.
+    run(&mut s, "bar_marking_set", json!({"stock_length": 6.0}));
+    assert!(run(&mut s, "bar_length_check", json!({}))["count"].as_u64().unwrap() >= 2);
+}
+
+/// A set's partition, the mark given by hand and its type's steel grade go
+/// through IFC: the file says them in `ConstructCAD_Rebar` and the import
+/// reads them back, so the bars keep their mark and their part of the structure.
+#[test]
+fn partition_mark_and_grade_go_through_ifc() {
+    let mut s = Session::default();
+    let host = id(&run(&mut s, "beam_create", json!({"start": [0, 0], "end": [5, 0], "top_offset": 3.0})));
+    let args = json!({"host": host, "layout": "bottom", "count": 2, "partition": "BEAMS"});
+    let named = id(&run(&mut s, "rebar_create", args));
+    let plain = id(&run(&mut s, "rebar_create", json!({"host": host, "layout": "top", "count": 2})));
+    run(&mut s, "element_set", json!({"id": named, "params": {"bar_mark": "X1"}}));
+    let ty = s.project().element(cc_core::ElementId(named)).unwrap().type_id.0;
+    run(&mut s, "type_set", json!({"type": ty, "params": {"grade": "CA-50"}}));
+    let path = scratch("marks.ifc");
+    run(&mut s, "ifc_export", json!({"path": path}));
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("ConstructCAD_Rebar"), "the set's own property set");
+    for value in ["'Partition'", "'BEAMS'", "'BarMark'", "'X1'", "'Grade'", "'CA-50'"] {
+        assert!(text.contains(value), "{value}");
+    }
+    // The set without a hand-given mark writes the mark its bars have, for other programs to read.
+    assert!(text.contains("'Mark'") && text.contains("'N1'"), "the numbered mark");
+    let _ = plain;
+
+    let mut back = Session::default();
+    run(&mut back, "ifc_import", json!({"path": path}));
+    let bars: Vec<&cc_core::Element> =
+        back.project().elements.values().filter(|e| e.rebar_partition().is_some()).collect();
+    assert_eq!(bars.len(), 2);
+    let kept = bars.iter().find(|e| e.rebar_partition() == Some("BEAMS")).expect("the partition");
+    assert_eq!(kept.rebar_bar_mark(), Some("X1"));
+    let other = bars.iter().find(|e| e.rebar_partition() == Some("")).expect("the set without one");
+    assert_eq!(other.rebar_bar_mark(), None);
+    let grades: Vec<String> = bars
+        .iter()
+        .filter_map(|e| match back.project().element_type(e.type_id).map(|t| &t.data) {
+            Some(cc_core::TypeData::Rebar { grade, .. }) => Some(grade.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(grades.iter().all(|g| g == "CA-50"), "{grades:?}");
+    // Written again, the file says each thing once: the set is not kept as an imported one too.
+    let again = scratch("marks-again.ifc");
+    run(&mut back, "ifc_export", json!({"path": again}));
+    let text = std::fs::read_to_string(&again).unwrap();
+    assert_eq!(text.matches("ConstructCAD_Rebar").count(), 2, "one set per reinforcement element");
+    let marks = run(&mut back, "bar_marks_list", json!({}));
+    let names: Vec<&str> = marks["marks"].as_array().unwrap().iter().map(|m| m["mark"].as_str().unwrap()).collect();
+    assert!(names.contains(&"X1"), "{names:?}");
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(again);
 }

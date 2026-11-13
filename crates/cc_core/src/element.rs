@@ -93,6 +93,9 @@ pub enum ElementKind {
     MaskingRegion(crate::region::Region),
     /// The elevation of a point, written in one view.
     LevelMark(Box<crate::level_mark::LevelMark>),
+    /// The count, mark, diameter, spacing and length of a reinforcement
+    /// set's bars, written in one view.
+    BarTag(Box<crate::bar_tag::BarTag>),
     /// A 2D component placed in one view (construction details).
     DetailComponent(Box<crate::detail_component::DetailComponent>),
 }
@@ -138,6 +141,7 @@ impl Element {
             ElementKind::FilledRegion(_) => Category::FilledRegion,
             ElementKind::MaskingRegion(_) => Category::MaskingRegion,
             ElementKind::LevelMark(_) => Category::LevelMark,
+            ElementKind::BarTag(_) => Category::BarTag,
             ElementKind::DetailComponent(_) => Category::DetailComponent,
         }
     }
@@ -172,6 +176,7 @@ impl Element {
             ElementKind::DetailLine(l) => Some(l.view),
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some(r.view),
             ElementKind::LevelMark(m) => Some(m.view),
+            ElementKind::BarTag(t) => Some(t.view),
             ElementKind::DetailComponent(c) => Some(c.view),
             _ => None,
         }
@@ -187,6 +192,7 @@ impl Element {
             ElementKind::DetailLine(l) => &mut l.view,
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => &mut r.view,
             ElementKind::LevelMark(m) => &mut m.view,
+            ElementKind::BarTag(t) => &mut t.view,
             ElementKind::DetailComponent(c) => &mut c.view,
             _ => return false,
         };
@@ -350,6 +356,12 @@ impl Element {
                 }
             }
             ElementKind::LevelMark(m) => m.position += delta,
+            ElementKind::BarTag(t) => {
+                t.position += delta;
+                if let Some(l) = &mut t.leader {
+                    *l += delta;
+                }
+            }
             ElementKind::DetailComponent(c) => c.position += delta,
             ElementKind::Text(t) => {
                 t.position += delta;

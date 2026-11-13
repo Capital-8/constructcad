@@ -1,14 +1,19 @@
-//! Bar marks, bending schedules and the check of bar lengths (see
-//! `cc_core::bar_marks`, `cc_geom::bar_marks` and `cc_views::bending`).
+//! Bar marks, bending schedules, bar tags and the check of bar lengths (see
+//! `cc_core::bar_marks`, `cc_core::bar_tag`, `cc_geom::bar_marks` and
+//! `cc_views::bending`).
 
-use super::edit;
+use super::{add_element, created, edit};
 use crate::error::{EngineError, Result};
-use crate::refs::finite;
+use crate::refs::{self, Point, Ref, finite, point};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::bar_marks::{BarMarking, FrozenMark, MAX_FROZEN, MAX_MARK_TEXT, MAX_START};
-use cc_core::{BendingOptions, Category, ElementId, ElementKind, ScheduleDef, View, ViewId, ViewKind};
+use cc_core::bar_tag::{BarTag, BarTagParts};
+use cc_core::{
+    BendingOptions, Category, ElementId, ElementKind, ElementType, ElementTypeId, ScheduleDef, TypeData, View, ViewId,
+    ViewKind,
+};
 use cc_geom::bar_marks::{self as marks, BarMarks, Mark, MarkSource, to_mark_shape};
 use cc_geom::bar_shape::ShapeSummary;
 use schemars::JsonSchema;
@@ -408,4 +413,158 @@ impl Command for BendingScheduleCreate {
         })?;
         Ok(super::views::view_out(s, id))
     }
+}
+
+/// Whether `view` takes bar tags: plans, elevations and sections.
+pub(crate) fn takes_tags(view: &View) -> bool {
+    cc_views::bar_tags::takes_tags(view)
+}
+
+/// The parts of a tag's text to write.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default, Clone, Copy)]
+#[serde(deny_unknown_fields)]
+pub struct TagParts {
+    /// The number of bars (default true).
+    #[serde(default)]
+    pub count: Option<bool>,
+    /// The bar mark (default true).
+    #[serde(default)]
+    pub mark: Option<bool>,
+    /// The diameter in millimeters (default true).
+    #[serde(default)]
+    pub diameter: Option<bool>,
+    /// The spacing in centimeters, for sets with one (default true).
+    #[serde(default)]
+    pub spacing: Option<bool>,
+    /// The length of one bar in centimeters (default true).
+    #[serde(default)]
+    pub length: Option<bool>,
+}
+
+/// Tag a reinforcement set in a plan, an elevation or a section: a text
+/// such as `25 N1 Ø12.5 c/12 C=500` (the count, the mark, the diameter in
+/// millimeters, the spacing in centimeters for sets with one, the length of
+/// one bar in centimeters, `C=var` when they differ; a set of several marks
+/// shows its first and `+`), derived from the set each time; `multiplier`
+/// writes `2x` first for a set repeated on both faces. The view draws the
+/// set's bars as thin lines (dots where seen end-on), so the tag points at
+/// them. The tag goes with its view and its set. A project gets a bar tag
+/// type (2.5 mm text) with its first tag; `element_get` gives the text
+/// (`derived.text`) and `element_set` changes the tag's `params`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct BarTagCreate {
+    /// View id or name: a floor or ceiling plan, an elevation or a section.
+    pub view: Ref,
+    /// The reinforcement set (or shaped bars) to tag.
+    pub set: u64,
+    /// Where the text starts (its left end, on the baseline), in the view's drawing coordinates.
+    pub position: Point,
+    /// Where a leader from the text points (default: no leader).
+    #[serde(default)]
+    pub leader: Option<Point>,
+    /// How many times the set is repeated: 2 writes `2x` first (1 to 100; default 1).
+    #[serde(default)]
+    pub multiplier: Option<u32>,
+    /// Angle of the text, degrees counter-clockwise (default 0).
+    #[serde(default)]
+    pub rotation_deg: Option<f64>,
+    /// The parts of the text to write, `{count, mark, diameter, spacing, length}`, each true or false (default: all).
+    #[serde(default)]
+    pub parts: Option<TagParts>,
+    /// Bar tag type id or name (default: the default bar tag type).
+    #[serde(default, rename = "type")]
+    pub type_ref: Option<Ref>,
+}
+
+/// A bar tag type in the interface language: text 2.5 mm.
+fn new_type(id: ElementTypeId) -> ElementType {
+    ElementType {
+        id,
+        name: t!("tpl-type-bar-tag"),
+        data: TypeData::BarTag { text_size: cc_core::bar_tag::DEFAULT_TEXT_SIZE },
+        info: Default::default(),
+        uid: Default::default(),
+    }
+}
+
+impl Command for BarTagCreate {
+    const NAME: &'static str = "bar_tag_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let view_id = refs::view(p, &self.view)?;
+        let view = p.view(view_id).ok_or_else(|| EngineError::not_found("view"))?;
+        if !takes_tags(view) {
+            return Err(EngineError::invalid(t!("msg-bar-tag-view")));
+        }
+        let set = refs::element(p, self.set)?;
+        if !p.element(set).is_some_and(|e| matches!(e.kind, ElementKind::Rebar(_) | ElementKind::ShapedRebar(_))) {
+            return Err(EngineError::invalid(t!("msg-bar-tag-set")));
+        }
+        let level = view
+            .level()
+            .or_else(|| p.levels.first().map(|l| l.id))
+            .ok_or_else(|| EngineError::rejected("no levels"))?;
+        // A project gets its bar tag type with its first tag.
+        let ty = match (&self.type_ref, p.default_type(Category::BarTag)) {
+            (None, None) => None,
+            (r, _) => Some(refs::type_of(p, Category::BarTag, r.as_ref())?),
+        };
+        let parts = self.parts.unwrap_or_default();
+        let all = BarTagParts::default();
+        let tag = BarTag {
+            leader: self.leader.map(point).transpose()?,
+            rotation_deg: self.rotation_deg.map(|a| finite(a, "rotation_deg")).transpose()?.unwrap_or(0.0),
+            multiplier: self.multiplier.unwrap_or(1),
+            parts: BarTagParts {
+                count: parts.count.unwrap_or(all.count),
+                mark: parts.mark.unwrap_or(all.mark),
+                diameter: parts.diameter.unwrap_or(all.diameter),
+                spacing: parts.spacing.unwrap_or(all.spacing),
+                length: parts.length.unwrap_or(all.length),
+            },
+            ..BarTag::new(view_id, set, point(self.position)?)
+        };
+        if let Some(message) = tag.check() {
+            return Err(EngineError::invalid(message));
+        }
+        let kind = ElementKind::BarTag(Box::new(tag));
+        let id = edit(s, t!("tx-create-bar-tag"), |e| {
+            let type_id = match ty {
+                Some(t) => t,
+                None => {
+                    let id = ElementTypeId(e.alloc_id());
+                    e.add_type(new_type(id))
+                }
+            };
+            Ok(add_element(e, level, type_id, kind))
+        })?;
+        Ok(created(s, id))
+    }
+}
+
+/// Refuse a changed tag a view or set would not take, or with bad values.
+pub(crate) fn check_tag(p: &cc_core::Project, tag: &BarTag) -> Result<()> {
+    if let Some(message) = tag.check() {
+        return Err(EngineError::invalid(message));
+    }
+    if !p.view(tag.view).is_some_and(takes_tags) {
+        return Err(EngineError::invalid(t!("msg-bar-tag-view")));
+    }
+    if !p.element(tag.set).is_some_and(|e| matches!(e.kind, ElementKind::Rebar(_) | ElementKind::ShapedRebar(_))) {
+        return Err(EngineError::invalid(t!("msg-bar-tag-set")));
+    }
+    Ok(())
+}
+
+/// The text of tag `tag` as its view writes it.
+pub(crate) fn tag_text(s: &mut Session, tag: &BarTag) -> Option<String> {
+    cc_views::format::set_units(&s.project().units);
+    let view = tag.view;
+    s.view_geometry(view);
+    let p = s.project();
+    let g = s.geom_for(view);
+    let marks = marks::resolve(p, &g.rebar);
+    cc_views::bar_tags::text(p, g, &marks, tag)
 }

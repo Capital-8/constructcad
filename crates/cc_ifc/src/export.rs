@@ -1278,6 +1278,7 @@ impl<'a> Exporter<'a> {
     fn write_rebar(&mut self) {
         let project = self.project;
         let geom = self.geom;
+        let marks = cc_geom::bar_marks::resolve(project, &geom.rebar);
         for set in geom.rebar.values() {
             let Some(e) = project.element(set.element) else { continue };
             // Shaped bars carry no role (and any imported property sets).
@@ -1338,6 +1339,28 @@ impl<'a> Exporter<'a> {
             let product = self.w.add("IFCREINFORCINGBAR", attrs);
             self.products.insert(e.id, product);
             self.register(e, product);
+            // What a set says of its bars, for importers to restore ([`REBAR_PSET`]): its
+            // partition and the mark given by hand; and `Mark`, the mark its bars have when
+            // they all have one (an override, a frozen or a numbered mark), and its steel grade.
+            let label = |s: &str| Value::Typed("IFCLABEL", Box::new(s.into()));
+            let mut props: Vec<(&str, Value)> = Vec::new();
+            if let Some(partition) = e.rebar_partition().map(str::trim).filter(|p| !p.is_empty()) {
+                props.push(("Partition", label(partition)));
+            }
+            if let Some(mark) = e.rebar_bar_mark() {
+                props.push(("BarMark", label(mark)));
+            }
+            let texts: std::collections::BTreeSet<&str> =
+                marks.of_set(e.id).into_iter().map(|m| m.mark.as_str()).collect();
+            if let (1, Some(mark)) = (texts.len(), texts.first()) {
+                props.push(("Mark", label(mark)));
+            }
+            if !set.grade.is_empty() {
+                props.push(("Grade", label(&set.grade)));
+            }
+            if !props.is_empty() {
+                self.property_set(&format!("rebar-{}", e.id.0), REBAR_PSET, vec![product], props);
+            }
             for (i, set) in imported.iter().enumerate() {
                 if let Some(set) = self.imported_set(&format!("imported-{}-{i}", e.id), set) {
                     let gid = self.guid(&format!("imported-rel-{}-{i}", e.id));
@@ -1925,6 +1948,7 @@ impl<'a> Exporter<'a> {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }
@@ -3037,6 +3061,10 @@ pub const COLD_FORMED_CATEGORY: &str = "ColdFormed";
 pub const TOPOGRAPHY_PSET: &str = "ConstructCAD_Topography";
 /// The building pads of a terrain (see `Exporter::pads_set`).
 pub const PADS_PSET: &str = "ConstructCAD_Pads";
+/// What a reinforcement set says of its bars: `Partition`, `BarMark` (a mark
+/// given by hand), `Mark` (the mark its bars have, when they all have one)
+/// and `Grade` (see `Exporter::write_rebar`).
+pub const REBAR_PSET: &str = "ConstructCAD_Rebar";
 
 /// The framing's member sizes in [`ROOFING_PSET`]: member, width and height properties.
 pub const ROOFING_SIZES: [(&str, &str, &str); 4] = [

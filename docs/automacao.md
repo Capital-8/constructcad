@@ -389,6 +389,17 @@ ccad -p casa.ccad --save script paredes.ccmacro level="Pavimento 1"
 
 Os comandos também ajudam aceitando posições onde isso importa (`door_create` e `window_create` encontram a parede mais próxima de `point`; pisos, forros e telhados acompanham as paredes com `from_walls`). Para lógica entre passos, escreva um [script Lua](#scripts-lua), chame `ccad run` a partir de um script de shell ou use um agente via MCP.
 
+### Posições das barras e tabelas de armação
+
+Cada barra de armadura tem uma posição que identifica sua forma (mesmo diâmetro, aço, trechos e dobras, dentro da tolerância de comprimento, 5 mm por padrão, e de 1 grau): `bar_marks_list` lista as posições com a forma (`code`, por exemplo `L 30-470`), quantidade, comprimentos, pesos e conjuntos. As formas são numeradas por partição, depois por diâmetro e comprimento do maior para o menor; `element_set` dá a um conjunto sua própria posição (`bar_mark`); `bar_marks_update` fixa as posições mostradas, para que fiquem quando o modelo muda, e `bar_marks_renumber` renumera do início (`prefix`, `start`, `keep_overrides`). `bar_marking_set` muda a tolerância e o comprimento da barra comercial (`stock_length`), que `bar_length_check` usa para listar as barras que precisam de emenda. `bending_schedule_create` cria uma tabela com uma linha por posição (o desenho da forma nas folhas, seu código no CSV) e um resumo por diâmetro (`partitions`, `group_by_partition`, `waste_percent`); `bar_tag_create` escreve quantidade, posição, diâmetro, espaçamento e comprimento de um conjunto numa planta, elevação ou corte.
+
+```text
+{"command": "bar_marks_update", "args": {}}
+{"command": "bending_schedule_create", "args": {"partitions": ["PAREDES"], "waste_percent": 10}}
+{"command": "bar_tag_create", "args": {"view": 45, "set": 120, "position": [1, 1.5], "multiplier": 2}}
+{"command": "bar_length_check", "args": {"max_length": 12}}
+```
+
 ## Scripts Lua
 
 `ccad lua <arquivo>` executa um script em [Lua 5.4](https://www.lua.org/manual/5.4/) sobre a sessão. O script chama comandos com `ccad.run`, guarda os resultados em variáveis e faz laços, então o id criado num passo pode ser usado no seguinte. Os argumentos (nas mesmas formas do `run`: pares `chave=valor`, um objeto JSON, `@arquivo.json`) ficam em `ccad.args`; o que ele imprime vai para a saída padrão e o que ele retorna é impresso como JSON.

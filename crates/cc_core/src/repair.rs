@@ -49,6 +49,7 @@ fn element_is_valid(e: &Element) -> bool {
             kind && d.offset.is_finite() && finite_points(&[d.a, d.b])
         }
         ElementKind::LevelMark(m) => m.position.is_finite(),
+        ElementKind::BarTag(t) => t.is_valid(),
         ElementKind::Text(t) => {
             let leaders = t.leaders.iter().all(|l| l.end.is_finite() && l.elbow.is_none_or(|e| e.is_finite()));
             let width = t.width.is_none_or(|w| w.is_finite() && w > 0.0);
@@ -201,6 +202,7 @@ impl Project {
                 TypeData::LevelMark { text_size, datum, .. } => {
                     repairs += crate::level_mark::repair_type(text_size, datum)
                 }
+                TypeData::BarTag { text_size } => repairs += crate::bar_tag::repair_type(text_size),
                 TypeData::Room {}
                 | TypeData::CadImport {}
                 | TypeData::DetailLine {}
@@ -438,6 +440,13 @@ impl Project {
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),
+                        // A bar tag needs its view and its set.
+                        ElementKind::BarTag(t) => {
+                            self.view(t.view).is_some()
+                                && self.element(t.set).is_some_and(|s| {
+                                    matches!(s.kind, ElementKind::Rebar(_) | ElementKind::ShapedRebar(_))
+                                })
+                        }
                         ElementKind::CadImport(c) => self.view(c.view).is_some(),
                         ElementKind::DetailLine(l) => self.view(l.view).is_some(),
                         ElementKind::DetailComponent(c) => self.view(c.view).is_some(),
@@ -520,6 +529,7 @@ impl Project {
                 ElementKind::Pad(p) => repairs += p.repair(),
                 ElementKind::Stair(s) => repairs += s.layout.repair(),
                 ElementKind::LevelMark(m) => repairs += m.repair(),
+                ElementKind::BarTag(t) => repairs += t.repair(),
                 ElementKind::Ramp(r) => repairs += r.layout.repair(),
                 ElementKind::Railing(r) => {
                     if r.stair.is_some_and(|h| !stairs.contains(&h.host)) {

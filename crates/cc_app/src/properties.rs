@@ -1045,6 +1045,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         }
         ElementKind::Text(note) => text_props(ui, state, id, note),
         ElementKind::LevelMark(m) => crate::level_mark_ui::props(ui, state, id, m),
+        // Placed and changed through bar_tag_create and element_set.
+        ElementKind::BarTag(_) => {}
         ElementKind::CadImport(c) => crate::cad_ui::props(ui, state, id, c),
         ElementKind::DetailLine(l) => crate::detail_ui::props(ui, state, id, l),
         ElementKind::DetailComponent(c) => crate::detail_component_ui::props(ui, state, id, c),

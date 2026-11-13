@@ -958,6 +958,7 @@ fn view_takes(view: &cc_core::View, e: &ElementKind) -> bool {
     match e {
         ElementKind::Text(_) => !matches!(view.kind, V::Schedule { .. } | V::Sheet { .. }),
         ElementKind::Dimension(_) => view.takes_dimensions(),
+        ElementKind::BarTag(_) => super::bar_marks::takes_tags(view),
         ElementKind::LevelMark(_) => {
             matches!(view.kind, V::FloorPlan { .. } | V::CeilingPlan { .. } | V::Elevation { .. } | V::Section { .. })
         }

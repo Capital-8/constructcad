@@ -56,6 +56,8 @@ pub enum Category {
     MaskingRegion,
     /// Level marks: the elevation of a point in a plan, elevation or section.
     LevelMark,
+    /// Bar tags: the bars of a reinforcement set written in a view.
+    BarTag,
     /// Detail components: reusable 2D components placed in one view.
     DetailComponent,
     /// Cable trays: open runs carrying electrical circuits.
@@ -69,7 +71,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 39] = [
+    pub const ALL: [Category; 40] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -100,6 +102,7 @@ impl Category {
         Category::MaskingRegion,
         Category::DetailComponent,
         Category::LevelMark,
+        Category::BarTag,
         Category::CadImport,
         Category::Mass,
         Category::Shaft,
@@ -196,6 +199,7 @@ impl Category {
             Category::Dimension => "category-dimension",
             Category::Text => "category-text",
             Category::LevelMark => "category-level-mark",
+            Category::BarTag => "category-bar-tag",
             Category::TitleBlock => "category-title-block",
             Category::Column => "category-column",
             Category::Beam => "category-beam",
@@ -389,6 +393,10 @@ pub enum TypeData {
     /// Level marks with text of `text_size` paper millimeters, writing
     /// `datum` plus each level, followed by `finished_suffix` (the finished
     /// level) or `raw_suffix` (the raw, structural one).
+    /// Bar tags with text of `text_size` paper millimeters.
+    BarTag {
+        text_size: f64,
+    },
     LevelMark {
         text_size: f64,
         #[serde(default)]
@@ -641,6 +649,7 @@ impl TypeData {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }
@@ -719,6 +728,7 @@ impl TypeData {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }
@@ -941,6 +951,7 @@ impl ElementType {
             TypeData::Dimension { .. } => Category::Dimension,
             TypeData::Text { .. } => Category::Text,
             TypeData::LevelMark { .. } => Category::LevelMark,
+            TypeData::BarTag { .. } => Category::BarTag,
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Foundation { .. } => Category::Foundation,
@@ -1119,6 +1130,7 @@ impl ElementType {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }

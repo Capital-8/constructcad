@@ -390,8 +390,9 @@ impl Tool {
             Category::DetailLine => Tool::DetailLine,
             Category::LevelMark => Tool::LevelMark { type_id },
             Category::DetailComponent => Tool::DetailComponent { type_id },
-            // Imported, not drawn.
-            Category::CadImport
+            // Imported, not drawn; bar tags are placed by their command.
+            Category::BarTag
+            | Category::CadImport
             | Category::TitleBlock
             | Category::SteelBuilding
             | Category::Truss

@@ -243,6 +243,7 @@ registry![
         bar_marks::BarMarkingSet,
         bar_marks::BarLengthCheck,
         bar_marks::BendingScheduleCreate,
+        bar_marks::BarTagCreate,
         connection::ConnectionsCreate,
         analytical::AnalyticalModelGet,
         analytical::AnalyticalExport,

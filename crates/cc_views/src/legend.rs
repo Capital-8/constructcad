@@ -257,6 +257,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }

@@ -6,6 +6,7 @@
 
 pub mod arc;
 pub mod bar_marks;
+pub mod bar_tag;
 pub mod bracing;
 pub mod browser;
 pub mod cad;

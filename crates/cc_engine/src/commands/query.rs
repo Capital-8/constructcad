@@ -212,6 +212,11 @@ impl Command for ElementsList {
 pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     let e = s.project().element(id)?.clone();
     let params = super::cad::params(&e.kind);
+    // A bar tag's text, as its view writes it.
+    let tag_text = match &e.kind {
+        ElementKind::BarTag(t) => super::bar_marks::tag_text(s, t),
+        _ => None,
+    };
     // The marks of a reinforcement set's bars, each once.
     let bar_marks: Vec<String> = {
         let (p, g) = s.project_and_geometry();
@@ -285,6 +290,11 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             if let Some(g) = cc_geom::ramp_geom(p, &e, r) {
                 derived.insert("run".into(), json!(g.run()));
                 derived.insert("check".into(), json!(g.check));
+            }
+        }
+        ElementKind::BarTag(_) => {
+            if let Some(text) = &tag_text {
+                derived.insert("text".into(), json!(text));
             }
         }
         ElementKind::LevelMark(m) => {

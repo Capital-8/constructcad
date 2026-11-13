@@ -389,6 +389,17 @@ ccad -p house.ccad --save script walls.ccmacro level="Level 1"
 
 Commands also help by accepting positions where it matters (`door_create` and `window_create` find the wall nearest `point`; floors, ceilings and roofs follow the walls with `from_walls`). For logic between steps, write a [Lua script](#lua-scripts), call `ccad run` from a shell script or use an agent over MCP.
 
+### Bar marks and bending schedules
+
+Every reinforcing bar has a mark naming its shape (the same diameter, grade, legs and bends within the length tolerance, 5 mm by default, and 1 degree): `bar_marks_list` lists them with their shapes (`code`, e.g. `L 30-470`), counts, lengths, weights and sets. Shapes are numbered by partition, then diameter and length from the largest; `element_set` gives a set its own `bar_mark`; `bar_marks_update` freezes the marks shown so they stay when the model changes, and `bar_marks_renumber` starts again (`prefix`, `start`, `keep_overrides`). `bar_marking_set` changes the tolerance and the `stock_length` bars are bought in, which `bar_length_check` uses to list the bars that need splices. `bending_schedule_create` makes a schedule with a row per mark (a sketch of the shape on sheets, its code in CSV) and a summary per diameter (`partitions`, `group_by_partition`, `waste_percent`); `bar_tag_create` writes a set's count, mark, diameter, spacing and length in a plan, elevation or section.
+
+```text
+{"command": "bar_marks_update", "args": {}}
+{"command": "bending_schedule_create", "args": {"partitions": ["WALLS"], "waste_percent": 10}}
+{"command": "bar_tag_create", "args": {"view": 45, "set": 120, "position": [1, 1.5], "multiplier": 2}}
+{"command": "bar_length_check", "args": {"max_length": 12}}
+```
+
 ## Lua scripts
 
 `ccad lua <file>` runs a [Lua 5.4](https://www.lua.org/manual/5.4/) script over the session. The script calls commands with `ccad.run`, keeps their results in variables and loops, so an id created by one step can be used by the next. Its arguments (the same forms as `run`: `key=value` pairs, a JSON object, `@file.json`) are `ccad.args`; what it prints goes to standard output and what it returns is printed as JSON.

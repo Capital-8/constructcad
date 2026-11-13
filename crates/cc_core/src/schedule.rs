@@ -285,6 +285,7 @@ impl ScheduleField {
             | Category::MaskingRegion
             | Category::DetailComponent
             | Category::LevelMark
+            | Category::BarTag
             | Category::CadImport
             | Category::TitleBlock => {
                 return Vec::new();
@@ -348,6 +349,7 @@ impl ScheduleField {
             | Category::MaskingRegion
             | Category::DetailComponent
             | Category::LevelMark
+            | Category::BarTag
             | Category::CadImport
             | Category::TitleBlock => Vec::new(),
         }

@@ -1198,6 +1198,14 @@ impl Project {
         })
     }
 
+    /// The bar tags of reinforcement set `set`.
+    pub fn bar_tags_of(&self, set: ElementId) -> impl Iterator<Item = (&Element, &crate::bar_tag::BarTag)> {
+        self.elements.values().filter_map(move |e| match &e.kind {
+            ElementKind::BarTag(t) if t.set == set => Some((e, t.as_ref())),
+            _ => None,
+        })
+    }
+
     /// The valves on pipe `host`.
     pub fn valves_of(&self, host: ElementId) -> impl Iterator<Item = (&Element, &crate::Valve)> {
         self.elements.values().filter_map(move |e| match &e.kind {
