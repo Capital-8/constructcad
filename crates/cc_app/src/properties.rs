@@ -1352,7 +1352,7 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
     let (units, comma) = format::current();
     let unit = units.length.unit;
     let parse_units = units.clone();
-    let drag = DragValue::new(value)
+    let drag = number_drag(value)
         .speed(0.005)
         .custom_formatter(move |v, _| format::length_number_with(&units, comma, v))
         .custom_parser(move |s| format::parse_length_with(&parse_units, s));
@@ -1370,7 +1370,7 @@ pub fn size_drag(value: &mut f64) -> DragValue<'_> {
         return length_drag(value);
     }
     let parse_units = units.clone();
-    DragValue::new(value)
+    number_drag(value)
         .speed(0.001)
         .custom_formatter(move |v, _| format::inch_size_with(&units, comma, v))
         .custom_parser(move |s| format::parse_size_with(&parse_units, s))
@@ -1394,7 +1394,7 @@ pub fn slope_drag(value: &mut f64) -> DragValue<'_> {
         cc_core::SlopeUnit::Degrees => 0.01,
         cc_core::SlopeUnit::RisePer12 => 1.0 / 48.0,
     };
-    DragValue::new(value)
+    number_drag(value)
         .speed(speed)
         .custom_formatter(move |v, _| format::slope_with(&units, comma, v))
         .custom_parser(move |s| format::parse_slope_with(&parse_units, s))
@@ -1424,10 +1424,10 @@ pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
 fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
     let (units, comma) = format::current();
     if units.system() == cc_core::MeasurementSystem::Metric {
-        return DragValue::new(value).suffix(" mm");
+        return number_drag(value).suffix(" mm");
     }
     let parse_units = units.clone();
-    DragValue::new(value)
+    number_drag(value)
         .custom_formatter(move |v, _| show(&units, comma, v))
         .custom_parser(move |s| format::parse_paper_with(&parse_units, s))
 }
@@ -1502,16 +1502,26 @@ pub fn param_editor(
     }
 }
 
+/// A number field whose typed text is taken when the field is left (Enter,
+/// Tab or a click elsewhere), not at every key. A value written at every key
+/// goes through the model, which clamps or refuses half-typed numbers, and
+/// the field then shows the model's value in place of the text being typed
+/// (issue 319: `1` read `5`, `0.9` over `0.80` gave `0.9.80`). Dragging
+/// still changes the value as it moves.
+pub fn number_drag(value: &mut f64) -> DragValue<'_> {
+    DragValue::new(value).update_while_editing(false)
+}
+
 /// Drag value for a component parameter, with the unit of its kind.
 pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
     match kind {
         cc_core::ParamKind::Length => crate::properties::length_drag(value).speed(0.01),
-        cc_core::ParamKind::Angle => DragValue::new(value).speed(1.0).suffix("°"),
-        cc_core::ParamKind::Boolean => DragValue::new(value).range(0.0..=1.0).speed(1.0),
+        cc_core::ParamKind::Angle => number_drag(value).speed(1.0).suffix("°"),
+        cc_core::ParamKind::Boolean => number_drag(value).range(0.0..=1.0).speed(1.0),
         cc_core::ParamKind::Number
         | cc_core::ParamKind::Text
         | cc_core::ParamKind::Choice
-        | cc_core::ParamKind::Material => DragValue::new(value).speed(0.1),
+        | cc_core::ParamKind::Material => number_drag(value).speed(0.1),
     }
 }
 
