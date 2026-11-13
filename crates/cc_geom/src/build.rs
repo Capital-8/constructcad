@@ -164,6 +164,8 @@ pub struct ModelGeometry {
     pub beams: BTreeMap<ElementId, BeamGeom>,
     /// Reinforcement sets: their bars, placed in their hosts.
     pub rebar: BTreeMap<ElementId, crate::rebar::RebarGeom>,
+    /// Connections: their plates and bolts, from their members' geometry.
+    pub connections: BTreeMap<ElementId, crate::connection::ConnectionGeom>,
     /// Pipes, conduits and cable trays: their center lines and sections.
     pub segments: BTreeMap<ElementId, crate::mep::SegmentGeom>,
     /// Valves placed on their pipes.
@@ -396,6 +398,7 @@ impl ModelGeometry {
         geom.build_foundations(project);
         geom.build_structure(project);
         geom.rebar = crate::rebar::build_rebar(project, &geom.beams);
+        geom.build_connections(project);
         geom.build_components(project);
         geom.build_masses(project);
         geom.build_topographies(project);
@@ -523,6 +526,21 @@ impl ModelGeometry {
                 }
             }
             self.components.insert(e.id, parts);
+        }
+    }
+
+    /// Connections: the plates and bolts of each from its member (after the
+    /// beams' ends are resolved), one steel solid per connection.
+    fn build_connections(&mut self, project: &Project) {
+        self.connections = crate::connection::build_connections(project, &self.beams);
+        for g in self.connections.values() {
+            let faces = g.faces();
+            if faces.is_empty() {
+                continue;
+            }
+            let mut s = crate::connection::solid(project, g.element);
+            s.add_polygons(faces);
+            self.solids.push(s);
         }
     }
 

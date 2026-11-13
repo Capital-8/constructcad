@@ -55,7 +55,8 @@ pub fn is_structural(e: &cc_core::Element) -> bool {
         | ElementKind::Foundation(_)
         | ElementKind::Grid(_)
         | ElementKind::SteelBuilding(_)
-        | ElementKind::Truss(_) => true,
+        | ElementKind::Truss(_)
+        | ElementKind::Connection(_) => true,
         _ => false,
     }
 }
@@ -122,6 +123,7 @@ pub fn plan_of(
     }
     if !ceiling {
         draw_structure(&mut d, project, geom, level, cut_z, spacing, structural);
+        draw_connections(&mut d, project, geom, level, cut_z);
     }
     if !structural {
         draw_components(&mut d, project, geom, level, cut_z, ceiling, detail);
@@ -263,6 +265,16 @@ fn draw_masses(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level
                 angle: 0.0,
                 element: Some(*id),
             });
+        }
+    }
+}
+
+/// Connections whose member stands on `level`: their plates and bolts as
+/// they cut and show (see [`draw_mesh`]).
+fn draw_connections(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, cut_z: f64) {
+    for g in geom.connections.values() {
+        if project.element(g.member).is_some_and(|m| m.level == level) {
+            draw_mesh(d, &g.faces(), cut_z, false, g.element);
         }
     }
 }
@@ -1110,6 +1122,50 @@ mod tests {
             .count();
         assert_eq!(lines, 2);
     }
+
+    /// A connection draws its plate and bolts where its member stands.
+    #[test]
+    fn connections_draw_on_their_members_level() {
+        use cc_core::connection::{Connection, ConnectionKind, MemberEnd};
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let element = move |id, type_id, kind| Element {
+            id,
+            level,
+            type_id,
+            mark: String::new(),
+            comments: String::new(),
+            uid: Default::default(),
+            kind,
+            phase_created: Default::default(),
+            phase_demolished: None,
+            design_option: None,
+            paints: Vec::new(),
+        };
+        let conn = doc.edit("t", |e| {
+            let column_t = e.project().default_type(Category::Column).unwrap();
+            let ty = cc_core::ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::connection::host_type(ty, "Connection".into()));
+            let col = ElementId(e.alloc_id());
+            let column = cc_core::Column {
+                position: glam::DVec2::new(1.0, 1.0),
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: cc_core::WallTop::Unconnected,
+                structural: true,
+            };
+            e.add_element(element(col, column_t, ElementKind::Column(column)));
+            let id = ElementId(e.alloc_id());
+            let c = Connection::new(col, MemberEnd::Base, ConnectionKind::BasePlate);
+            e.add_element(element(id, ty, ElementKind::Connection(c)))
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 100);
+        let lines = d.prims.iter().filter(|p| matches!(p, Prim::Line { element: Some(e), .. } if *e == conn)).count();
+        assert!(lines >= 4, "the plate's outline at least: {lines}");
+    }
+
     /// A wall with a column standing in it, cut by the plan; the column is
     /// joined with the wall when `joined` (the wall cutting an architectural one).
     fn wall_and_column(structural: bool, joined: bool) -> (Drawing2D, ElementId, ElementId) {
