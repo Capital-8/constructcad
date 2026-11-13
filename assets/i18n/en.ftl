@@ -3436,3 +3436,4 @@ tx-bar-marking-set = Change bar marking
 tx-create-bar-tag = Create bar tag
 msg-bar-tag-view = Bar tags go in plans, elevations and sections.
 msg-bar-tag-set = A bar tag tags a reinforcement set.
+col-partition = Partition

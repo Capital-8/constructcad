@@ -1,5 +1,5 @@
-//! Bar marks and the check of bar lengths (see `cc_core::bar_marks` and
-//! `cc_geom::bar_marks`).
+//! Bar marks, bending schedules and the check of bar lengths (see
+//! `cc_core::bar_marks`, `cc_geom::bar_marks` and `cc_views::bending`).
 
 use super::edit;
 use crate::error::{EngineError, Result};
@@ -8,7 +8,7 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::bar_marks::{BarMarking, FrozenMark, MAX_FROZEN, MAX_MARK_TEXT, MAX_START};
-use cc_core::{ElementId, ElementKind};
+use cc_core::{BendingOptions, Category, ElementId, ElementKind, ScheduleDef, View, ViewId, ViewKind};
 use cc_geom::bar_marks::{self as marks, BarMarks, Mark, MarkSource, to_mark_shape};
 use cc_geom::bar_shape::ShapeSummary;
 use schemars::JsonSchema;
@@ -355,5 +355,57 @@ impl Command for BarLengthCheck {
             }
         }
         Ok(json!({ "max_length": max, "count": total, "bars": out }))
+    }
+}
+
+/// Create a bending schedule: a reinforcement schedule view with one row
+/// per bar mark (mark, diameter, grade, a sketch of the shape with its
+/// dimensions, the length of one bar in centimeters, the count, the total
+/// length and the weight, from the type's mass per meter or the diameter;
+/// rows of bars longer than the stock length noted) and, under it, a
+/// summary per diameter and grade (total length and weight; with
+/// `waste_percent`, the weight with the waste added). Totals add the bars
+/// exactly. It is placed on sheets, exported (`view_export`) and written to
+/// CSV (`schedule_export_csv`, shapes as codes such as `L 30-470`) like any
+/// schedule; `view_set` changes its `def.bending` options later.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct BendingScheduleCreate {
+    /// View name (default: the language's).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Only the sets of these partitions (default: every set; "" stands for sets without one).
+    #[serde(default)]
+    pub partitions: Vec<String>,
+    /// Rows under a heading per partition, each partition's marks counted on their own (default false).
+    #[serde(default)]
+    pub group_by_partition: bool,
+    /// Waste added in the summary, percent (0 to 100; default: no waste columns).
+    #[serde(default)]
+    pub waste_percent: Option<f64>,
+    /// Hide the totals row of the marks (default false).
+    #[serde(default)]
+    pub hide_totals: bool,
+}
+
+impl Command for BendingScheduleCreate {
+    const NAME: &'static str = "bending_schedule_create";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let options = BendingOptions {
+            partitions: self.partitions.iter().map(|p| p.trim().to_string()).collect(),
+            group_by_partition: self.group_by_partition,
+            waste_percent: self.waste_percent.map(|w| finite(w, "waste_percent")).transpose()?,
+        };
+        if let Some(message) = options.check() {
+            return Err(EngineError::invalid(message));
+        }
+        let def = ScheduleDef { bending: Some(options), hide_totals: self.hide_totals, ..Default::default() };
+        let name = self.name.unwrap_or_else(|| t!("default-bending-schedule-name"));
+        let id = edit(s, t!("tx-new-view"), |e| {
+            let id = ViewId(e.alloc_id());
+            Ok(e.add_view(View::new(id, name, 1, ViewKind::Schedule { category: Category::Rebar, def })))
+        })?;
+        Ok(super::views::view_out(s, id))
     }
 }

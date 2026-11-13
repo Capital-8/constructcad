@@ -729,6 +729,10 @@ impl Project {
         let title_blocks = self.title_blocks();
         for view in self.views.values_mut() {
             match &mut view.kind {
+                // A bending schedule's options within their limits.
+                ViewKind::Schedule { def, .. } => {
+                    repairs += def.bending.as_mut().map_or(0, crate::BendingOptions::repair);
+                }
                 ViewKind::Sheet { viewports, size, title_block, issue_date, fields, .. } => {
                     if title_block.is_some_and(|t| !title_blocks.contains(&t)) {
                         *title_block = title_blocks.first().copied();

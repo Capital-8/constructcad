@@ -1,11 +1,12 @@
-//! Bar marks and the bar length check (#286): identical bars share a mark
-//! across hosts, overrides win, frozen marks stay when the model changes,
-//! renumbering restarts and undoes; crafted settings are repaired.
+//! Bar marks, bending schedules and the bar length check (#286): identical
+//! bars share a mark across hosts, overrides win, frozen marks stay when the
+//! model changes, renumbering restarts and undoes; the bending schedule's
+//! totals add the bars exactly, and it goes on a sheet and to CSV.
 
 // Test helpers outside #[test] functions may fail loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use cc_core::{ElementId, RebarLayout};
+use cc_core::{BendingOptions, ElementId, RebarLayout};
 use cc_engine::{ErrorCode, Session};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -221,4 +222,167 @@ fn ring_bars_are_marked_as_arcs() {
     assert!((num(&m["unit_length"]) - std::f64::consts::PI * radius).abs() < 1e-9);
     assert!(m["code"].as_str().unwrap().starts_with("arc R="), "{}", m["code"]);
     assert_eq!(run(&mut s, "element_get", json!({"id": sets[0]}))["params"]["partition"], json!("WALL"));
+}
+
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("ccad-bar-marks-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir.join(name)
+}
+
+/// A reinforced model: beams, a wall and a slab, in partitions.
+fn reinforced(s: &mut Session) {
+    beam(s, [0.0, 0.0], [5.0, 0.0]);
+    beam(s, [0.0, 3.0], [5.0, 3.0]);
+    run(s, "rebar_typical", json!({}));
+    let wall = id(&run(s, "wall_create", json!({"start": [0, 6], "end": [4, 6], "height": 3.0})));
+    // Vertical bars with a 30 cm leg turned across the wall at their foot.
+    let args = json!({
+        "walls": [wall],
+        "partition": "WALLS",
+        "horizontal": {},
+        "vertical": {"bottom": {"across": 0.3}},
+        "ties": {"every_horizontal": 2, "every_vertical": 2}
+    });
+    run(s, "wall_rebar_create", args);
+    let slab = id(&run(s, "floor_create", json!({"boundary": [[0, 10], [4, 10], [4, 13], [0, 13]]})));
+    run(s, "slab_rebar_create", json!({"slabs": [slab], "partition": "SLAB"}));
+}
+
+/// The issue's "done when": a bending schedule of a reinforced model goes on
+/// a sheet and to CSV, and its totals per diameter equal the sums of its
+/// rows and of the individual bars; the waste is added; the partition
+/// filter and grouping work; the drawing has the sketches.
+#[test]
+fn bending_schedule_adds_up_goes_on_a_sheet_and_to_csv() {
+    let mut s = Session::default();
+    reinforced(&mut s);
+    let view = id(&run(&mut s, "bending_schedule_create", json!({"name": "Bending", "waste_percent": 10})));
+
+    // Exact sums: rows per diameter, the totals, and the bars one by one.
+    let options = BendingOptions { waste_percent: Some(10.0), ..Default::default() };
+    let (p, g) = s.project_and_geometry();
+    let b = cc_views::bending::bending(p, g, &options, &mut |_| true);
+    assert!(b.rows.len() >= 6, "{:?}", b.rows.len());
+    let mut by_bars: BTreeMap<i64, (f64, f64)> = BTreeMap::new();
+    for set in g.rebar.values() {
+        let e = by_bars.entry((set.diameter * 1e6).round() as i64).or_default();
+        for bar in &set.bars {
+            e.0 += bar.length();
+            e.1 += bar.length() * set.mass_per_meter();
+        }
+    }
+    assert_eq!(b.totals.len(), by_bars.len());
+    for t in &b.totals {
+        let rows: Vec<_> =
+            b.rows.iter().filter(|r| (b.marks.marks[r.mark].diameter - t.diameter).abs() < 1e-12).collect();
+        let (mut length, mut weight) = (0.0, 0.0);
+        for r in &rows {
+            (length, weight) = (length + r.length, weight + r.weight);
+        }
+        assert_eq!((length, weight), (t.length, t.weight), "the rows add up to the total");
+        let (l, w) = by_bars[&((t.diameter * 1e6).round() as i64)];
+        assert!((l - t.length).abs() < 1e-9 * l.max(1.0) && (w - t.weight).abs() < 1e-9 * w.max(1.0), "{t:?}");
+    }
+    let count: usize = b.rows.iter().map(|r| r.count).sum();
+    assert_eq!(count, g.rebar.values().map(|set| set.bars.len()).sum::<usize>(), "every bar is in a row");
+
+    // The table: rows per mark with shape codes, totals, the summary with waste.
+    let table = run(&mut s, "schedule_table", json!({"view": view}));
+    let rows = table["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), b.rows.len());
+    let codes: Vec<&str> = rows.iter().map(|r| r["cells"][3].as_str().unwrap()).collect();
+    assert!(codes.contains(&"straight 495"), "{codes:?}");
+    assert!(codes.iter().any(|c| c.starts_with("stirrup ")), "{codes:?}");
+    assert!(codes.iter().any(|c| c.starts_with("L 30-")), "the walls' bent vertical bars: {codes:?}");
+    let summary = &table["summary"];
+    assert_eq!(summary["caption"], json!(cc_engine::i18n::tr("bending-summary")));
+    let srows = summary["rows"].as_array().unwrap();
+    assert_eq!(srows.len(), b.totals.len());
+    for (row, t) in srows.iter().zip(&b.totals) {
+        assert_eq!(row["cells"][2], json!(cc_views::format::meters(t.length)));
+        let weight = format!("{} kg", cc_views::format::number(t.weight, 2));
+        assert_eq!(row["cells"][3], json!(weight));
+        let with_waste = format!("{} kg", cc_views::format::number(t.weight * 1.1, 2));
+        assert_eq!(row["cells"][5], json!(with_waste));
+    }
+    let all: f64 = b.totals.iter().map(|t| t.length).sum();
+    assert_eq!(summary["totals"][2], json!(cc_views::format::meters(all)));
+
+    // On a sheet, exported; and to CSV.
+    let sheet = id(&run(&mut s, "view_create", json!({"kind": "sheet"})));
+    run(&mut s, "sheet_place_view", json!({"sheet": sheet, "view": view}));
+    let svg = scratch("bending.svg");
+    run(&mut s, "sheet_export", json!({"sheet": sheet, "path": svg}));
+    let text = std::fs::read_to_string(&svg).unwrap();
+    assert!(text.contains("Bending") && text.contains("N1"), "the table on the sheet");
+    let csv = scratch("bending.csv");
+    let out = run(&mut s, "schedule_export_csv", json!({"view": view, "path": csv}));
+    assert_eq!(out["rows"], json!(b.rows.len()));
+    let text = std::fs::read_to_string(&csv).unwrap();
+    assert!(text.contains("straight 495") && text.contains(&cc_engine::i18n::tr("bending-summary")), "{text}");
+    assert!(text.contains(&cc_engine::i18n::tr("col-weight-with-waste")));
+
+    // The drawing: sketches with their dimensions in the shape column.
+    let d = s.drawing(cc_core::ViewId(view)).unwrap();
+    let texts: Vec<&str> = d
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            cc_views::Prim::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.contains(&"495"), "the straight bars' length: {texts:?}");
+    assert!(texts.contains(&"30"), "the bent legs: {texts:?}");
+    assert!(!texts.iter().any(|t| t.starts_with("straight")), "sketches, not codes");
+    let lines = d.prims.iter().filter(|p| matches!(p, cc_views::Prim::Line { .. })).count();
+    assert!(lines > 4 * (rows.len() + 3), "{lines}");
+
+    // Limited to a partition, and grouped.
+    let walls = id(&run(&mut s, "bending_schedule_create", json!({"partitions": ["walls"]})));
+    let (p, g) = s.project_and_geometry();
+    let only = BendingOptions { partitions: vec!["walls".into()], ..Default::default() };
+    let w = cc_views::bending::bending(p, g, &only, &mut |_| true);
+    assert!(!w.rows.is_empty() && w.rows.len() < b.rows.len());
+    assert!(w.rows.iter().all(|r| p.element(r.first).and_then(|e| e.rebar_partition()) == Some("WALLS")));
+    let t = run(&mut s, "schedule_table", json!({"view": walls}));
+    assert_eq!(t["rows"].as_array().unwrap().len(), w.rows.len());
+    let grouped = id(&run(&mut s, "bending_schedule_create", json!({"group_by_partition": true})));
+    let t = run(&mut s, "schedule_table", json!({"view": grouped}));
+    let headings: Vec<&str> = t["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["heading"] == json!(true))
+        .map(|r| r["cells"][0].as_str().unwrap())
+        .collect();
+    assert_eq!(headings, ["SLAB", "WALLS", cc_engine::i18n::tr("bending-no-partition").as_str()]);
+    // The options are checked, and changed like the view's other parameters.
+    assert_eq!(fails(&mut s, "bending_schedule_create", json!({"waste_percent": -1})), ErrorCode::InvalidArguments);
+    run(&mut s, "view_set", json!({"view": walls, "params": {"def": {"bending": {"partitions": ["SLAB"]}}}}));
+    let t = run(&mut s, "schedule_table", json!({"view": walls}));
+    assert!(t["rows"].as_array().unwrap().iter().all(|r| r["cells"][3] != json!("straight 495")));
+    // An ordinary reinforcement schedule lists the sets with their partition.
+    let plain = id(&run(&mut s, "view_create", json!({"kind": "schedule", "category": "rebar"})));
+    run(&mut s, "view_set", json!({"view": plain, "params": {"def": {"fields": ["Partition", "Weight"]}}}));
+    let t = run(&mut s, "schedule_table", json!({"view": plain}));
+    assert!(t["rows"].as_array().unwrap().iter().any(|r| r["cells"][0] == json!("WALLS")), "{t}");
+    let _ = std::fs::remove_file(svg);
+    let _ = std::fs::remove_file(csv);
+}
+
+/// Shape codes of a ring and an arc: the ring bars of a round slab and the
+/// horizontal bars of an arc wall.
+#[test]
+fn rings_and_arcs_have_their_codes() {
+    let mut s = Session::default();
+    let slab =
+        id(&run(&mut s, "floor_create", json!({"curves": [{"kind": "circle", "center": [0, 0], "radius": 2.0}]})));
+    run(&mut s, "slab_rebar_create", json!({"slabs": [slab], "layout": "radial", "layers": "top", "max_length": 0}));
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [10, 0], "end": [14, 0], "bulge": 0.4, "height": 3})));
+    run(&mut s, "wall_rebar_create", json!({"walls": [wall], "faces": "exterior"}));
+    let codes: Vec<String> = list(&mut s).iter().map(|m| m["code"].as_str().unwrap().to_string()).collect();
+    assert!(codes.iter().any(|c| c.starts_with("ring R=")), "{codes:?}");
+    assert!(codes.iter().any(|c| c.starts_with("arc R=")), "{codes:?}");
 }

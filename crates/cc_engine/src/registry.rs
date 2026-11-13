@@ -242,6 +242,7 @@ registry![
         bar_marks::BarMarksRenumber,
         bar_marks::BarMarkingSet,
         bar_marks::BarLengthCheck,
+        bar_marks::BendingScheduleCreate,
         connection::ConnectionsCreate,
         analytical::AnalyticalModelGet,
         analytical::AnalyticalExport,

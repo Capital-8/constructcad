@@ -3436,3 +3436,4 @@ tx-bar-marking-set = Zmień numerację prętów
 tx-create-bar-tag = Utwórz etykietę zbrojenia
 msg-bar-tag-view = Etykiety zbrojenia umieszcza się w rzutach, elewacjach i przekrojach.
 msg-bar-tag-set = Etykieta zbrojenia opisuje zestaw zbrojenia.
+col-partition = Partycja

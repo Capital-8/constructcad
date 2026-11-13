@@ -3436,3 +3436,4 @@ tx-bar-marking-set = Positionsnummerierung ändern
 tx-create-bar-tag = Bewehrungsbeschriftung erstellen
 msg-bar-tag-view = Bewehrungsbeschriftungen gehören in Grundrisse, Ansichten und Schnitte.
 msg-bar-tag-set = Eine Bewehrungsbeschriftung beschriftet einen Bewehrungssatz.
+col-partition = Bauteilgruppe

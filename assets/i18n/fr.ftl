@@ -3436,3 +3436,4 @@ tx-bar-marking-set = Modifier la numérotation des barres
 tx-create-bar-tag = Créer une étiquette d'armature
 msg-bar-tag-view = Les étiquettes d'armature vont dans les plans, élévations et coupes.
 msg-bar-tag-set = Une étiquette d'armature désigne un ensemble d'armatures.
+col-partition = Partition

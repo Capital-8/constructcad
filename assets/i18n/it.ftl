@@ -3436,3 +3436,4 @@ tx-bar-marking-set = Modifica la numerazione delle barre
 tx-create-bar-tag = Crea etichetta armatura
 msg-bar-tag-view = Le etichette armatura vanno in piante, prospetti e sezioni.
 msg-bar-tag-set = Un'etichetta armatura identifica un insieme di armature.
+col-partition = Partizione

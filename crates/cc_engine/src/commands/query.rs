@@ -627,6 +627,33 @@ impl Command for MaterialGet {
     }
 }
 
+/// A schedule table as JSON: translated headers, rows (with their element;
+/// group headings marked `heading`), totals and any table under it (`summary`, with its `caption`).
+fn table_json(table: &cc_views::Table, cell: &dyn Fn(&cc_views::Cell) -> String) -> Value {
+    let rows: Vec<Value> = table
+        .rows
+        .iter()
+        .map(|r| {
+            let mut row = json!({"element": r.element.0, "cells": r.cells.iter().map(cell).collect::<Vec<_>>()});
+            if r.heading {
+                row["heading"] = json!(true);
+            }
+            row
+        })
+        .collect();
+    let mut out = json!({
+        "headers": table.headers.iter().map(|h| crate::i18n::tr(h)).collect::<Vec<_>>(),
+        "rows": rows,
+        "totals": table.totals,
+    });
+    if let Some(caption) = table.caption {
+        out["caption"] = json!(crate::i18n::tr(caption));
+    }
+    if let Some(summary) = &table.summary {
+        out["summary"] = table_json(summary, cell);
+    }
+    out
+}
 /// The table of a schedule view: headers, one row per element (with its id) and totals,
 /// formatted with the project units.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -646,11 +673,7 @@ impl Command for ScheduleTable {
             cc_views::Cell::Text(t) => t.clone(),
             cc_views::Cell::Key(k) => crate::i18n::tr(k),
         };
-        Ok(json!({
-            "headers": table.headers.iter().map(|h| crate::i18n::tr(h)).collect::<Vec<_>>(),
-            "rows": table.rows.iter().map(|r| json!({"element": r.element.0, "cells": r.cells.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
-            "totals": table.totals,
-        }))
+        Ok(table_json(&table, &cell))
     }
 }
 

@@ -3436,3 +3436,4 @@ tx-bar-marking-set = 變更鋼筋編號設定
 tx-create-bar-tag = 建立鋼筋標籤
 msg-bar-tag-view = 鋼筋標籤可放在平面、立面及剖面中。
 msg-bar-tag-set = 鋼筋標籤用於標示鋼筋組。
+col-partition = 分區

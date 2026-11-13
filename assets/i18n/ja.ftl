@@ -3436,3 +3436,4 @@ tx-bar-marking-set = 鉄筋符号の設定を変更
 tx-create-bar-tag = 鉄筋タグを作成
 msg-bar-tag-view = 鉄筋タグは平面図、立面図、断面図に配置します。
 msg-bar-tag-set = 鉄筋タグは配筋セットに付けます。
+col-partition = 区分

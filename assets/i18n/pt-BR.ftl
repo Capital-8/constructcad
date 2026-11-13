@@ -3436,3 +3436,4 @@ tx-bar-marking-set = Alterar numeração das barras
 tx-create-bar-tag = Criar etiqueta de armadura
 msg-bar-tag-view = Etiquetas de armadura vão em plantas, elevações e cortes.
 msg-bar-tag-set = Uma etiqueta de armadura identifica um conjunto de armadura.
+col-partition = Partição
