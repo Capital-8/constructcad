@@ -15,6 +15,7 @@ mod commands;
 mod component_editor;
 mod component_env;
 mod component_sketch;
+mod connection_ui;
 mod curtain_ui;
 mod design_options_ui;
 mod detail_component_ui;

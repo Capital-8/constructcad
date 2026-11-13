@@ -134,6 +134,8 @@ pub enum UiCommand {
     Truss,
     BracesX,
     TypicalRebar,
+    /// Place connections of a kind on the selected members, else the active level's.
+    Connection(cc_core::connection::ConnectionKind),
     RebarView,
     SteelSchedule,
     StructuralPlan,
@@ -366,6 +368,7 @@ impl UiCommand {
         ]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
+        all.extend(cc_core::connection::ConnectionKind::ALL.map(Connection));
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
         all.extend([PlaceFixture, PlaceDevice, MepConnect, Systems, MepSizing, PlumbingPlan, ElectricalPlan]);
         all.extend([MepSchedules, PanelDiagram]);
@@ -545,6 +548,7 @@ impl UiCommand {
             Truss => Icon::Truss,
             BracesX => Icon::Brace,
             TypicalRebar => Icon::Rebar,
+            Connection(_) => Icon::Connection,
             RebarView => Icon::RebarView,
             SteelSchedule => Icon::Schedule,
             StructuralPlan => Icon::StructuralPlan,
@@ -762,6 +766,7 @@ impl UiCommand {
             Truss => t!("tool-truss"),
             BracesX => t!("action-braces-x"),
             TypicalRebar => t!("action-rebar-typical"),
+            Connection(kind) => crate::i18n::tr(kind.key()),
             RebarView => t!("action-rebar-view"),
             SteelSchedule => t!("action-steel-schedule"),
             StructuralPlan => t!("action-structural-plan"),
@@ -971,6 +976,13 @@ impl UiCommand {
             Truss => t!("cmd-desc-truss"),
             BracesX => t!("cmd-desc-braces-x"),
             TypicalRebar => t!("cmd-desc-rebar-typical"),
+            Connection(kind) => match kind {
+                cc_core::connection::ConnectionKind::BasePlate => t!("cmd-desc-base-plate"),
+                cc_core::connection::ConnectionKind::EndPlate => t!("cmd-desc-end-plate"),
+                cc_core::connection::ConnectionKind::FinPlate => t!("cmd-desc-fin-plate"),
+                cc_core::connection::ConnectionKind::TimberBolts => t!("cmd-desc-timber-bolts"),
+                cc_core::connection::ConnectionKind::Hanger => t!("cmd-desc-hanger"),
+            },
             RebarView => t!("cmd-desc-rebar-view"),
             SteelSchedule => t!("cmd-desc-steel-schedule"),
             StructuralPlan => t!("cmd-desc-structural-plan"),
@@ -1277,6 +1289,7 @@ impl UiCommand {
             Truss => "truss_create",
             BracesX => "braces_between_columns",
             TypicalRebar => "rebar_typical",
+            Connection(_) => "connections_create",
             RebarView | SteelSchedule | StructuralPlan => "view_create",
             NumberStructure => "structure_number",
             StructureTags => "view_set",
@@ -1953,6 +1966,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         }
         BracesX => crate::actions::braces_x(state),
         TypicalRebar => crate::actions::typical_rebar(state),
+        Connection(kind) => crate::connection_ui::place(state, kind),
         RebarView => crate::actions::open_rebar_view(state),
         SteelSchedule => {
             actions::new_schedule(state, Category::Rebar);

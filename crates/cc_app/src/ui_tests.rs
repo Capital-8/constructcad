@@ -3945,3 +3945,80 @@ fn wall_framing_properties_and_the_member_row() {
     let selection = &harness.state().selection;
     assert!(selection.len() == 1 && selection.contains(&host));
 }
+
+/// *Structure → Connections → Base Plate* (steel) places a base plate
+/// under each selected column, in one undo step, and says so.
+#[test]
+fn base_plate_button_places_connections_on_the_selected_columns() {
+    use cc_core::connection::ConnectionKind;
+    let mut state = sample_state();
+    let columns: Vec<cc_core::ElementId> =
+        state.project().elements_of(cc_core::Category::Column).map(|e| e.id).collect();
+    assert!(!columns.is_empty(), "the sample house has columns");
+    state.selection = columns.iter().copied().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let mut harness = ribbon_harness_sized(state, egui::vec2(2400.0, 150.0));
+    let label = crate::commands::UiCommand::Connection(ConnectionKind::BasePlate).label(harness.state());
+    harness.get_by_role_and_label(Role::Button, &label).click();
+    harness.run();
+    let state = harness.state();
+    let placed: Vec<cc_core::ElementId> = state
+        .project()
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            cc_core::ElementKind::Connection(c) => Some(c.member),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(placed.len(), columns.len());
+    assert!(columns.iter().all(|c| placed.contains(c)));
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    assert!(state.message.contains(&columns.len().to_string()), "{}", state.message);
+}
+
+/// Steel shows base, end and fin plates; timber bolted joints and hangers.
+#[test]
+fn connection_buttons_follow_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    use cc_core::connection::ConnectionKind;
+    for material in [M::Steel, M::Timber] {
+        let mut state = sample_state();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let harness = ribbon_harness_sized(state, egui::vec2(2400.0, 150.0));
+        for kind in ConnectionKind::ALL {
+            let label = crate::commands::UiCommand::Connection(kind).label(harness.state());
+            assert_eq!(
+                harness.query_by_label(&label).is_some(),
+                kind.material() == material,
+                "{kind:?} in {material:?}"
+            );
+        }
+    }
+}
+
+/// A connection's rows edit it through `element_set`.
+#[test]
+fn connection_properties_change_its_bolts() {
+    let mut state = sample_state();
+    let column = state.project().elements_of(cc_core::Category::Column).map(|e| e.id).next().unwrap();
+    let args = serde_json::json!({"kind": "base_plate", "members": [column.0]});
+    let out = state.session.execute("connections_create", args).unwrap();
+    let id = cc_core::ElementId(out["created"][0].as_u64().unwrap());
+    crate::connection_ui::edit(&mut state, id, "rows", |c| c.params.rows = 3);
+    let cc_core::ElementKind::Connection(c) = &state.project().element(id).unwrap().kind else {
+        panic!("a connection")
+    };
+    assert_eq!(c.params.rows, 3);
+    state.selection = [id].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    // Row labels are painted; the plate, bolt and anchor values are widgets.
+    let values = harness.query_all_by_role(Role::SpinButton).count();
+    assert!(values >= 9, "{values} value widgets");
+}

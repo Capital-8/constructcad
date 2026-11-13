@@ -53,7 +53,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Shaft => Icon::Shaft,
         Category::SteelBuilding => Icon::SteelBuilding,
         Category::Truss => Icon::Truss,
-        Category::Connection => Icon::Rebar,
+        Category::Connection => Icon::Connection,
         Category::WallFraming => Icon::WallFraming,
         Category::Topography => Icon::Topography,
         Category::Pad => Icon::Pad,
@@ -714,6 +714,7 @@ fn material_selector(ui: &mut Ui, state: &mut AppState) {
 fn structure_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
     use cc_core::StructuralMaterial as M;
+    use cc_core::connection::ConnectionKind as K;
     let m = state.prefs.structure_material;
     group(ui, t!("group-structure-material"), |ui| material_selector(ui, state));
     let (column, beam) = (StructurePlace(Category::Column, m), StructurePlace(Category::Beam, m));
@@ -734,12 +735,18 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
                 );
                 command_button(ui, state, LightSteelFrame);
             });
+            group(ui, t!("group-connections"), |ui| {
+                stacks(ui, state, &[&[Connection(K::BasePlate), Connection(K::EndPlate), Connection(K::FinPlate)]])
+            });
         }
         M::Timber => {
             group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam]));
             group(ui, t!("group-framing"), |ui| {
                 stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
                 command_button(ui, state, WoodFrame);
+            });
+            group(ui, t!("group-connections"), |ui| {
+                stacks(ui, state, &[&[Connection(K::TimberBolts), Connection(K::Hanger)]])
             });
         }
     }
