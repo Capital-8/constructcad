@@ -480,6 +480,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "name": v.name,
         "category": snake(&format!("{:?}", v.category())),
         "scale": v.scale,
+        "scale_text": cc_core::scale::label(s.project().measurement_system(), v.scale),
         "detail": v.detail.name(),
         "visual_style": v.style().name(),
         "params": params,
@@ -517,7 +518,9 @@ impl Command for ViewsList {
     }
 }
 
-/// A view with all its parameters (`params`, editable with `view_set`).
+/// A view with all its parameters (`params`, editable with `view_set`), its
+/// `scale` denominator and `scale_text`, the scale as the project writes it
+/// (`1:50`, or `1/4" = 1'-0"` in imperial projects).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewGet {

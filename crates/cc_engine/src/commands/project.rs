@@ -3,24 +3,36 @@
 use super::{edit, patch_value};
 use crate::error::{EngineError, Result};
 use crate::registry::{Command, CommandKind};
-use crate::session::{Session, guard, new_project};
+use crate::session::{Session, guard, new_project_with};
 use crate::t;
-use cc_core::Document;
+use cc_core::{Document, MeasurementSystem};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
-/// Start a new project from the template (unsaved changes are discarded).
+/// Start a new project from a template (unsaved changes are discarded).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ProjectNew {}
+pub struct ProjectNew {
+    /// The template: `metric` (the default; meters, metric sizes) or
+    /// `imperial` (feet and inches, round imperial sizes).
+    #[serde(default)]
+    pub template: Option<String>,
+}
 
 impl Command for ProjectNew {
     const NAME: &'static str = "project_new";
     const KIND: CommandKind = CommandKind::File;
     fn run(self, s: &mut Session) -> Result<Value> {
-        s.replace(Document::new(new_project()));
+        let system = match self.template.as_deref() {
+            None => MeasurementSystem::Metric,
+            Some(code) => MeasurementSystem::from_code(code).ok_or_else(|| {
+                let known: Vec<&str> = MeasurementSystem::ALL.iter().map(|m| m.code()).collect();
+                EngineError::invalid(format!("unknown template '{code}': use {}", known.join(" or ")))
+            })?,
+        };
+        s.replace(Document::new(new_project_with(system)));
         Ok(summary(s))
     }
 }
@@ -103,6 +115,7 @@ fn summary(s: &Session) -> Value {
         "types": p.types.len(),
         "views": p.views.len(),
         "materials": p.materials.len(),
+        "system": p.measurement_system().code(),
     })
 }
 

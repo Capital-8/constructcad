@@ -97,7 +97,7 @@ pub(crate) fn beam_exists(p: &Project, level: LevelId, a: DVec2, b: DVec2) -> bo
 
 /// The location elevation of new beams: `top_offset`, else the level's height.
 fn beam_top(p: &Project, level: LevelId, top_offset: Option<f64>) -> Result<f64> {
-    finite(top_offset.unwrap_or_else(|| p.level_height(level, 3.0)), "top_offset")
+    finite(top_offset.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "top_offset")
 }
 
 /// Create beams along `spans` (skipping those already modeled) in one undo step.
@@ -181,7 +181,7 @@ impl Command for ColumnsAtGrids {
                 position,
                 rotation_deg: finite(self.rotation.unwrap_or(0.0), "rotation")?,
                 base_offset: 0.0,
-                height: positive(self.height.unwrap_or_else(|| p.level_height(level, 3.0)), "height")?,
+                height: positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?,
                 top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_top(p, level)),
                 structural: self.structural.unwrap_or(true),
             })

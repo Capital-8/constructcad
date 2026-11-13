@@ -90,7 +90,7 @@ pub fn compose(
         let title = vp.center + DVec2::new(-half.x, -half.y - 7.0);
         d.text(title, &view.name, 3.0);
         if !matches!(view.kind, ViewKind::ThreeD { .. }) {
-            d.text(title - DVec2::new(0.0, 4.0), format!("1:{}", view.scale), 2.2);
+            d.text(title - DVec2::new(0.0, 4.0), crate::format::scale_with(&project.units, view.scale), 2.2);
         }
         d.line(title + DVec2::new(0.0, -0.8), title + DVec2::new(half.x.min(60.0), -0.8), LineStyle::Cut, None);
     }
@@ -233,6 +233,32 @@ mod tests {
         assert!(s.drawing.prims.iter().any(|q| matches!(q,
             Prim::Line { a, b, pen: Some(pen), .. }
                 if *a == DVec2::new(10.0, 10.0) && *b == DVec2::new(paper.x - 10.0, 10.0) && pen.weight == Some(0.7))));
+    }
+
+    #[test]
+    fn viewport_titles_write_the_scale_as_the_project_does() {
+        use cc_core::{MeasurementSystem, Viewport};
+        for (system, expected) in [(MeasurementSystem::Metric, "1:50"), (MeasurementSystem::Imperial, "1/4\" = 1'-0\"")]
+        {
+            let p = Project::from_template_system(system, &|_| None);
+            let plan = p.views.values().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap();
+            let mut sheet = p.views.values().find(|v| matches!(v.kind, ViewKind::Sheet { .. })).unwrap().clone();
+            if let ViewKind::Sheet { viewports, title_block, .. } = &mut sheet.kind {
+                *title_block = None;
+                *viewports = vec![Viewport { view: plan.id, center: DVec2::new(200.0, 150.0) }];
+            }
+            let s = compose(&p, &sheet, &env(), |_| Some(Rc::new(Drawing2D::default()))).unwrap();
+            let texts: Vec<&str> = s
+                .drawing
+                .prims
+                .iter()
+                .filter_map(|q| match q {
+                    Prim::Text { text, .. } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert!(texts.contains(&expected), "{system:?}: {texts:?}");
+        }
     }
 
     #[test]

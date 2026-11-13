@@ -36,7 +36,7 @@ fn next_rack_code(p: &Project) -> String {
 }
 
 /// Place a communications rack at `position` (on the wall, `offset` above
-/// the level, default 1.40 m) and create the data system its outlets are
+/// the level, default 1.40 m, 4'-6" in imperial projects) and create the data system its outlets are
 /// cabled to. The rack's mark and the system's code are `mark` (default
 /// the next free `R1`, `R2`…). A project without a rack type gets one.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
@@ -121,7 +121,7 @@ fn rack_system(p: &Project, rack: u64) -> Result<SystemId> {
 }
 
 /// Place a data (or voice) outlet at `position` (on the wall, `offset`
-/// above the level, default 0.30 m), cabled to `rack` (a rack element: its
+/// above the level, default 0.30 m, 1'-6" in imperial projects), cabled to `rack` (a rack element: its
 /// data system) or to the data system `system`; by default to the
 /// project's only rack, if it has one. `ports` picks a type with that many
 /// jacks (one cable each), made when the project has none; a project

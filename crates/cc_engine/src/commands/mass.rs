@@ -35,7 +35,7 @@ pub struct MassCreate {
     /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Height above the base, meters (default: up to the level above, else 3).
+    /// Height above the base, meters (default: up to the level above, else 3; 10'-0" in imperial projects).
     #[serde(default)]
     pub height: Option<f64>,
     /// Offset of the base from the level elevation, meters (default 0).
@@ -103,7 +103,7 @@ impl Command for MassCreate {
         let base_offset = finite(self.base_offset.unwrap_or(0.0), "base_offset")?;
         let height = match self.height {
             Some(h) => positive(h, "height")?,
-            None => p.level_height(level, 3.0).max(0.1),
+            None => p.level_height(level, p.defaults().story).max(0.1),
         };
         let (base, drawn) = match &self.curves {
             Some(_) if !self.outline.is_empty() => {

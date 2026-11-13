@@ -15,8 +15,6 @@ use cc_views::format;
 use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
 use std::hash::{Hash, Hasher};
 
-const SCALES: [u32; 12] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 500, 1000];
-
 pub(crate) fn key(parts: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     parts.hash(&mut h);
@@ -597,7 +595,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 let height = state.project().wall_height(&el, w);
                 readonly_row(ui, &t!("prop-height"), format::length(height));
                 let thickness = state.project().thickness_of(&el);
-                readonly_row(ui, &t!("prop-thickness"), format::length(thickness));
+                readonly_row(ui, &t!("prop-thickness"), format::size(thickness, format::MetricSize::Length));
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
             crate::curtain_ui::palette_rows(ui, state, &el, w);
@@ -786,7 +784,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     readonly_row(ui, &t!("prop-radius"), format::length(arc.radius));
                 }
                 if let Some(g) = state.session.geom().foundations.get(&id).cloned() {
-                    readonly_row(ui, &t!("col-area"), format::area(g.area()));
+                    readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area()));
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
@@ -903,7 +901,11 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let (bottom, top) = state.project().shaft_span(&el, sh);
                 readonly_row(ui, &t!("col-height"), format::length(top - bottom));
-                readonly_row(ui, &t!("col-area"), format::area(cc_geom::polygon::area(&sh.outline)));
+                readonly_row(
+                    ui,
+                    &field_label(cc_core::ScheduleField::Area),
+                    format::area(cc_geom::polygon::area(&sh.outline)),
+                );
             });
         }
         ElementKind::Sweep(sw) => {
@@ -1033,7 +1035,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("col-area"), format::area(f.area()));
+                readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(f.area()));
                 // Openings (shafts, stairwells): sketch one more.
                 row(ui, &t!("prop-roof-openings"), |ui| {
                     ui.label(f.openings.len().to_string());
@@ -1060,7 +1062,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let area = cc_geom::polygon::area(&c.boundary);
-                readonly_row(ui, &t!("col-area"), format::area(area));
+                readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(area));
             });
         }
         ElementKind::Roof(r) => {
@@ -1308,6 +1310,78 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
     if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", unit.symbol())) }
 }
 
+/// Drag value for a small size stored in meters (a layer, a section's side,
+/// a diameter, a riser): a length in metric projects (see [`length_drag`]),
+/// inches with a fraction in imperial ones (`3/4"`; a bare number typed is
+/// inches, see [`format::parse_size`]).
+pub fn size_drag(value: &mut f64) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    if units.system() == cc_core::MeasurementSystem::Metric {
+        return length_drag(value);
+    }
+    let parse_units = units.clone();
+    DragValue::new(value)
+        .speed(0.001)
+        .custom_formatter(move |v, _| format::inch_size_with(&units, comma, v))
+        .custom_parser(move |s| format::parse_size_with(&parse_units, s))
+}
+
+/// The header of a schedule field as a label in the current units: `Area
+/// (m²)` in metric projects, `Area` in imperial ones, whose values carry
+/// their own symbols (see [`cc_core::ScheduleField::key_in`]).
+pub fn field_label(field: cc_core::ScheduleField) -> String {
+    crate::i18n::tr(field.key_in(format::system()))
+}
+
+/// Drag value for a slope stored as rise over run, shown and typed in the
+/// project's slope unit (`8,3 %`, `4,76°`, `6:12`; a typed unit or ratio
+/// overrides it, see [`format::parse_slope`]).
+pub fn slope_drag(value: &mut f64) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    let parse_units = units.clone();
+    let speed = match units.slope.unit {
+        cc_core::SlopeUnit::Percent => 0.005,
+        cc_core::SlopeUnit::Degrees => 0.01,
+        cc_core::SlopeUnit::RisePer12 => 1.0 / 48.0,
+    };
+    DragValue::new(value)
+        .speed(speed)
+        .custom_formatter(move |v, _| format::slope_with(&units, comma, v))
+        .custom_parser(move |s| format::parse_slope_with(&parse_units, s))
+}
+
+/// Drag value for a size on paper stored in millimeters (text heights,
+/// bubbles, gaps, sheet sides): ` mm` after the number in metric
+/// projects; in imperial ones inches with a fraction (`3/32"`), typed in
+/// inches unless a unit says otherwise (see [`format::parse_paper`]).
+pub fn paper_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_with)
+}
+
+/// Drag value for a pen weight stored in millimeters: ` mm` after the
+/// number in metric projects, decimal inches in imperial ones (`0.010"`).
+pub fn weight_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_weight_with)
+}
+
+/// Drag value for a paper length shown as decimal inches in imperial
+/// projects (`0.125"`, drafting fill patterns), ` mm` after the number in
+/// metric ones.
+pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_weight_with)
+}
+
+fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    if units.system() == cc_core::MeasurementSystem::Metric {
+        return DragValue::new(value).suffix(" mm");
+    }
+    let parse_units = units.clone();
+    DragValue::new(value)
+        .custom_formatter(move |v, _| show(&units, comma, v))
+        .custom_parser(move |s| format::parse_paper_with(&parse_units, s))
+}
+
 /// A new value typed in a [`param_editor`].
 pub enum ParamEdit {
     Number(f64),
@@ -1452,11 +1526,11 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
         let ty = state.project().element_type(el.type_id);
         if let Some(d) = ty.and_then(|t| t.diameter()) {
-            readonly_row(ui, &t!("col-diameter"), format::length(d));
+            readonly_row(ui, &t!("col-diameter"), format::size(d, format::MetricSize::Length));
         }
         if let Some((width, height, style)) = ty.and_then(|t| t.tray_section()) {
-            readonly_row(ui, &t!("col-width"), format::length(width));
-            readonly_row(ui, &t!("col-height"), format::length(height));
+            readonly_row(ui, &t!("col-width"), format::size(width, format::MetricSize::Length));
+            readonly_row(ui, &t!("col-height"), format::size(height, format::MetricSize::Length));
             readonly_row(ui, &t!("prop-tray-style"), tr(style.key()));
         }
         readonly_row(ui, &t!("prop-length"), format::length(s.length()));
@@ -1494,7 +1568,7 @@ fn valve_props(ui: &mut Ui, state: &mut AppState, el: &Element, v: &cc_core::Val
         if let Some((_, _, system, diameter)) = &host {
             readonly_row(ui, &t!("col-system"), system.clone().unwrap_or_else(|| t!("value-none")));
             if let Some(d) = diameter {
-                readonly_row(ui, &t!("col-diameter"), format::length(*d));
+                readonly_row(ui, &t!("col-diameter"), format::size(*d, format::MetricSize::Length));
             }
         }
     });
@@ -1583,8 +1657,8 @@ fn topography_props(ui: &mut Ui, state: &mut AppState, el: &Element, t: &cc_core
         let Some(g) = geom else { return };
         readonly_row(ui, &t!("prop-lowest"), format::length(g.min_z));
         readonly_row(ui, &t!("prop-highest"), format::length(g.max_z));
-        readonly_row(ui, &t!("col-area"), format::area(g.area));
-        readonly_row(ui, &t!("col-volume"), format::volume(g.volume));
+        readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area));
+        readonly_row(ui, &field_label(cc_core::ScheduleField::Volume), format::volume(g.volume));
         for w in &g.warnings {
             readonly_row(ui, &t!("prop-warning"), crate::i18n::tr(&format!("topo-warning-{}", w.code())));
         }
@@ -1667,7 +1741,7 @@ fn pad_props(ui: &mut Ui, state: &mut AppState, el: &Element, p: &cc_core::pad::
     let geom = state.session.geom().pads.get(&id).cloned();
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
         let Some(g) = geom else { return };
-        readonly_row(ui, &t!("col-area"), format::area(g.area));
+        readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area));
         readonly_row(ui, &t!("col-cut-volume"), format::volume(g.cut));
         readonly_row(ui, &t!("col-fill-volume"), format::volume(g.fill));
         readonly_row(ui, &t!("prop-net-volume"), format::volume(g.fill - g.cut));
@@ -1944,9 +2018,7 @@ fn text_props(ui: &mut Ui, state: &mut AppState, id: ElementId, note: &cc_core::
         }
         if let Some(width) = note.width {
             let mut w = width;
-            let r = row(ui, &t!("prop-text-width"), |ui| {
-                ui.add(DragValue::new(&mut w).speed(1.0).range(5.0..=1000.0).suffix(" mm"))
-            });
+            let r = row(ui, &t!("prop-text-width"), |ui| ui.add(paper_drag(&mut w).speed(1.0).range(5.0..=1000.0)));
             if r.changed() {
                 set(state, "width", &|n| n.width = Some(w));
             }
@@ -2077,11 +2149,15 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
     section(ui, "dimensions", t!("section-dimensions"), |ui| match state.session.geom().rooms.get(&id).cloned() {
         Some(boundary) => {
             let area = cc_geom::polygon::area(&boundary);
-            readonly_row(ui, &t!("col-area"), format::area(area));
-            readonly_row(ui, &t!("col-perimeter"), format::length(cc_geom::polygon::perimeter(&boundary)));
+            readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(area));
+            readonly_row(
+                ui,
+                &field_label(cc_core::ScheduleField::Perimeter),
+                format::length(cc_geom::polygon::perimeter(&boundary)),
+            );
             readonly_row(ui, &t!("prop-volume"), format::volume(area * r.height));
         }
-        None => readonly_row(ui, &t!("col-area"), t!("room-not-enclosed")),
+        None => readonly_row(ui, &field_label(cc_core::ScheduleField::Area), t!("room-not-enclosed")),
     });
 }
 
@@ -2150,7 +2226,7 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         if !sets.is_empty() {
             let geom = state.session.geom();
             let weight: f64 = sets.iter().filter_map(|(id, ..)| geom.rebar.get(id)).map(|r| r.weight()).sum();
-            readonly_row(ui, &t!("col-weight"), format!("{} kg", format::number(weight, 2)));
+            readonly_row(ui, &t!("col-weight"), format::quantity(format::Quantity::Mass, weight, 2));
         }
     });
 }
@@ -2181,7 +2257,7 @@ fn rebar_dimensions(ui: &mut Ui, state: &mut AppState, id: cc_core::ElementId) {
             readonly_row(ui, &t!("col-bar-count"), set.count().to_string());
             readonly_row(ui, &t!("col-bar-length"), format::length(set.bar_length()));
             readonly_row(ui, &t!("prop-length"), format::length(set.total_length()));
-            readonly_row(ui, &t!("col-weight"), format!("{} kg", format::number(set.weight(), 2)));
+            readonly_row(ui, &t!("col-weight"), format::quantity(format::Quantity::Mass, set.weight(), 2));
         });
     }
 }
@@ -2250,7 +2326,11 @@ fn roofing_rows(ui: &mut Ui, state: &mut AppState, el: &Element) {
             if let Some(n) = spec.tiles(g.sloped_area) {
                 readonly_row(ui, &t!("col-tile-count"), format!("{n:.0}"));
             }
-            readonly_row(ui, &t!("col-weight"), format!("{:.0} kg", spec.weight_on(g.sloped_area)));
+            readonly_row(
+                ui,
+                &t!("col-weight"),
+                format::quantity(format::Quantity::Mass, spec.weight_on(g.sloped_area), 0),
+            );
         }
         if !g.members.is_empty() {
             if g.trusses > 0 {
@@ -2460,17 +2540,16 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
     }
     if let RoofShape::Gable { slope, ridge_deg } | RoofShape::Shed { slope, direction_deg: ridge_deg } = r.shape {
         let is_gable = matches!(r.shape, RoofShape::Gable { .. });
-        let mut pct = slope * 100.0;
-        let rs = row(ui, &t!("prop-slope"), |ui| {
-            ui.add(DragValue::new(&mut pct).speed(0.5).range(0.0..=200.0).suffix(" %"))
-        });
+        // Rise over run, shown in the project's slope unit.
+        let mut ratio = slope;
+        let rs = row(ui, &t!("prop-slope"), |ui| ui.add(slope_drag(&mut ratio).range(0.0..=2.0)));
         let mut dir = ridge_deg;
         let label = if is_gable { t!("prop-ridge-direction") } else { t!("prop-direction") };
         let rd = row(ui, &label, |ui| ui.add(DragValue::new(&mut dir).speed(1.0).suffix("°")));
         if rs.changed() || rd.changed() {
             modify(state, id, "shape", |e| {
                 if let ElementKind::Roof(r) = &mut e.kind {
-                    let (slope, angle) = (pct / 100.0, dir.rem_euclid(360.0));
+                    let (slope, angle) = (ratio, dir.rem_euclid(360.0));
                     r.shape = if is_gable {
                         RoofShape::Gable { slope, ridge_deg: angle }
                     } else {
@@ -2483,14 +2562,12 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
         finish(state, &rd);
     }
     if let RoofShape::Hip { slope } = r.shape {
-        let mut pct = slope * 100.0;
-        let rs = row(ui, &t!("prop-slope"), |ui| {
-            ui.add(DragValue::new(&mut pct).speed(0.5).range(0.0..=200.0).suffix(" %"))
-        });
+        let mut ratio = slope;
+        let rs = row(ui, &t!("prop-slope"), |ui| ui.add(slope_drag(&mut ratio).range(0.0..=2.0)));
         if rs.changed() {
             modify(state, id, "shape", |e| {
                 if let ElementKind::Roof(r) = &mut e.kind {
-                    r.shape = RoofShape::Hip { slope: pct / 100.0 };
+                    r.shape = RoofShape::Hip { slope: ratio };
                 }
             });
         }
@@ -2542,7 +2619,7 @@ fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core:
             Some(_) => 2,
         };
         let mut choice = current;
-        let mut pct = effective.get(i).copied().unwrap_or(slope) * 100.0;
+        let mut ratio = effective.get(i).copied().unwrap_or(slope);
         let label = t!("prop-roof-edge", "n" => i + 1, "length" => format::length(a.distance(b)));
         let mut drag = None;
         row(ui, &label, |ui| {
@@ -2555,7 +2632,7 @@ fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core:
                 },
             );
             if current == 2 {
-                drag = Some(ui.add(DragValue::new(&mut pct).speed(0.5).range(0.1..=200.0).suffix(" %")));
+                drag = Some(ui.add(slope_drag(&mut ratio).range(0.001..=2.0)));
             }
         });
         if choice != current {
@@ -2573,7 +2650,7 @@ fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core:
                             r.edge_slopes.resize(i + 1, None);
                         }
                         if let Some(s) = r.edge_slopes.get_mut(i) {
-                            *s = Some((pct / 100.0).max(0.001));
+                            *s = Some(ratio.max(0.001));
                         }
                     }
                 });
@@ -2618,18 +2695,18 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         section(ui, "graphics", t!("section-graphics"), |ui| {
             crate::graphics_dialog::view_rows(ui, state, id);
             let mut scale = view.scale;
+            let system = state.project().measurement_system();
             if crate::graphics_dialog::controlled(state, id, "scale") {
-                readonly_row(ui, &t!("prop-scale"), format!("1:{scale}"));
+                readonly_row(ui, &t!("prop-scale"), cc_core::scale::label(system, scale));
             } else {
                 row(ui, &t!("prop-scale"), |ui| {
-                    egui::ComboBox::from_id_salt(("scale", id.0)).selected_text(format!("1:{scale}")).show_ui(
-                        ui,
-                        |ui| {
-                            for s in SCALES {
-                                ui.selectable_value(&mut scale, s, format!("1:{s}"));
+                    egui::ComboBox::from_id_salt(("scale", id.0))
+                        .selected_text(cc_core::scale::label(system, scale))
+                        .show_ui(ui, |ui| {
+                            for &s in cc_core::scale::choices(system) {
+                                ui.selectable_value(&mut scale, s, cc_core::scale::label(system, s));
                             }
-                        },
-                    );
+                        });
                 });
             }
             if scale != view.scale {
@@ -2891,7 +2968,7 @@ fn viewport_props(ui: &mut Ui, state: &mut AppState, sheet: ViewId, index: usize
     section(ui, "position", t!("section-position"), |ui| {
         for (label, axis) in [(t!("prop-center-x"), 0), (t!("prop-center-y"), 1)] {
             let mut v = vp.center[axis];
-            let r = row(ui, &label, |ui| ui.add(DragValue::new(&mut v).speed(1.0).fixed_decimals(1).suffix(" mm")));
+            let r = row(ui, &label, |ui| ui.add(paper_drag(&mut v).speed(1.0).fixed_decimals(1)));
             if r.changed() {
                 crate::engine_edit::view(state, sheet, Some(key((sheet, index, axis))), |x| {
                     if let ViewKind::Sheet { viewports, .. } = &mut x.kind

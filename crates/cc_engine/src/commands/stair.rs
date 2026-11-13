@@ -52,7 +52,7 @@ pub struct StairCreate {
     /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Height when there is no level above (default 3).
+    /// Height when there is no level above (default 3; 10'-0" in imperial projects).
     #[serde(default)]
     pub height: Option<f64>,
     /// Level the stair rises to (default: the level above).
@@ -81,13 +81,13 @@ pub struct StairCreate {
     /// Landing depth along the first flight, meters (default: the stair width).
     #[serde(default)]
     pub landing: Option<f64>,
-    /// Clear gap between the flights of a U-shaped stair, meters (default 0.1).
+    /// Clear gap between the flights of a U-shaped stair, meters (default 0.1; 4" in imperial projects).
     #[serde(default)]
     pub gap: Option<f64>,
     /// Winder treads in the corner of an L-shaped stair instead of a landing (2 to 6).
     #[serde(default)]
     pub winders: Option<u32>,
-    /// Radius of the inner edge of a spiral stair, meters (default 0.15).
+    /// Radius of the inner edge of a spiral stair, meters (default 0.15; 6" in imperial projects).
     #[serde(default)]
     pub inner_radius: Option<f64>,
     /// Posts under the landings of an assembled stair, down to its base: a
@@ -110,8 +110,9 @@ pub struct StairCreate {
 
 impl StairCreate {
     /// The plan layout these parameters ask for.
-    pub fn layout(&self) -> Result<StairLayout> {
-        let mut layout = StairLayout::default();
+    pub fn layout(&self, defaults: &cc_core::Defaults) -> Result<StairLayout> {
+        let (gap, inner_radius, _) = defaults.flights;
+        let mut layout = StairLayout { gap, inner_radius, ..Default::default() };
         if let Some(shape) = justification(self.shape.as_deref(), &SHAPES, "shape")? {
             layout.shape = shape;
         }
@@ -184,7 +185,7 @@ impl Command for StairCreate {
         let top = top(p, self.top_level.as_ref(), None)?.unwrap_or_else(|| default_top(p, level));
         let height = match top {
             WallTop::Level { level: t, .. } => p.level_elevation(t) - p.level_elevation(level),
-            WallTop::Unconnected => self.height.unwrap_or(3.0),
+            WallTop::Unconnected => self.height.unwrap_or(p.defaults().story),
         };
         let stair = Stair {
             start: point(self.start)?,
@@ -192,7 +193,7 @@ impl Command for StairCreate {
             base_offset: 0.0,
             height: positive(height, "height")?,
             top,
-            layout: self.layout()?,
+            layout: self.layout(p.defaults())?,
         };
         create(s, t!("tx-create-stair"), level, Category::Stair, self.type_ref.as_ref(), ElementKind::Stair(stair))
     }
@@ -257,6 +258,9 @@ impl Command for StairCheck {
 /// A broken stair rule in words.
 pub fn issue_text(issue: &cc_core::StairIssue) -> String {
     use cc_core::StairIssue as I;
+    if cc_views::format::imperial() {
+        return imperial_issue_text(issue);
+    }
     let cm = |v: f64| format!("{:.1}", v * 100.0);
     match *issue {
         I::RiserTooHigh { riser, max } => t!("stair-issue-riser-high", "riser" => cm(riser), "limit" => cm(max)),
@@ -267,6 +271,24 @@ pub fn issue_text(issue: &cc_core::StairIssue) -> String {
         }
         I::LandingTooShort { landing, min } => {
             t!("stair-issue-landing-short", "landing" => cm(landing), "limit" => cm(min))
+        }
+    }
+}
+
+/// A broken stair rule in words, in inches.
+fn imperial_issue_text(issue: &cc_core::StairIssue) -> String {
+    use cc_core::StairIssue as I;
+    let i = cc_views::format::inch_size;
+    match *issue {
+        I::RiserTooHigh { riser, max } => t!("stair-imp-issue-riser-high", "riser" => i(riser), "limit" => i(max)),
+        I::RiserTooLow { riser, min } => t!("stair-imp-issue-riser-low", "riser" => i(riser), "limit" => i(min)),
+        I::TreadTooShort { tread, min } => t!("stair-imp-issue-tread-short", "tread" => i(tread), "limit" => i(min)),
+        I::BlondelOutOfRange { step, min, max } => {
+            t!("stair-imp-issue-blondel", "step" => i(step), "min" => i(min), "max" => i(max))
+        }
+        I::LandingTooShort { landing, min } => {
+            let l = cc_views::format::meters;
+            t!("stair-imp-issue-landing-short", "landing" => l(landing), "limit" => l(min))
         }
     }
 }

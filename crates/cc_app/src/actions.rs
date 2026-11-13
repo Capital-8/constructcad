@@ -318,8 +318,10 @@ pub fn guarded(state: &mut AppState, action: PendingAction) {
 
 pub fn run_pending(state: &mut AppState, action: PendingAction) {
     match action {
-        PendingAction::New => {
-            state.replace_document(Document::new(new_project()));
+        PendingAction::New(system) => {
+            state.replace_document(Document::new(cc_engine::new_project_with(system)));
+            // The New Project dialog picks it first next time.
+            state.prefs.new_project_system = system;
             state.message = t!("msg-new-project");
         }
         PendingAction::Open => open(state),
@@ -1281,7 +1283,7 @@ mod tests {
         assert_eq!(state.project().info.name, crate::home::sample_project("casa_simples").unwrap().info.name);
 
         run_pending(&mut state, PendingAction::Close);
-        run_pending(&mut state, PendingAction::New);
+        run_pending(&mut state, PendingAction::New(cc_core::MeasurementSystem::Metric));
         assert!(!state.show_home && state.project_open);
     }
 

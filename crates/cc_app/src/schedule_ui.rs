@@ -210,7 +210,10 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
             ui.set_min_height(220.0);
             ui.set_width(ui.available_width());
             for f in &available {
-                if ui.selectable_label(false, format!("+  {}", tr(f.key()))).on_hover_text(t!("schedule-add")).clicked()
+                if ui
+                    .selectable_label(false, format!("+  {}", crate::properties::field_label(*f)))
+                    .on_hover_text(t!("schedule-add"))
+                    .clicked()
                 {
                     let mut fields = chosen.clone();
                     fields.push(*f);
@@ -225,7 +228,7 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
             let n = chosen.len();
             for (i, f) in chosen.iter().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.label(tr(f.key()));
+                    ui.label(crate::properties::field_label(*f));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         if ui
@@ -255,7 +258,7 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
     ui.add_space(8.0);
 
     let none = t!("schedule-none");
-    let label = |f: Option<ScheduleField>| f.map_or(none.clone(), |f| tr(f.key()));
+    let label = |f: Option<ScheduleField>| f.map_or(none.clone(), crate::properties::field_label);
     egui::Grid::new("schedule-options").num_columns(2).spacing([14.0, 8.0]).show(ui, |ui| {
         ui.label(theme::muted(t!("schedule-sort")));
         ui.horizontal(|ui| {
@@ -263,7 +266,7 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
             egui::ComboBox::from_id_salt("schedule-sort").width(200.0).selected_text(label(sort)).show_ui(ui, |ui| {
                 ui.selectable_value(&mut sort, None, none.clone());
                 for f in &chosen {
-                    ui.selectable_value(&mut sort, Some(*f), tr(f.key()));
+                    ui.selectable_value(&mut sort, Some(*f), crate::properties::field_label(*f));
                 }
             });
             if sort != def.sort_by {
@@ -285,7 +288,7 @@ fn body(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def
                 |ui| {
                     ui.selectable_value(&mut field, None, none.clone());
                     for f in &chosen {
-                        ui.selectable_value(&mut field, Some(*f), tr(f.key()));
+                        ui.selectable_value(&mut field, Some(*f), crate::properties::field_label(*f));
                     }
                 },
             );

@@ -243,7 +243,7 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
         crate::commands::run(state, ctx, crate::commands::UiCommand::ToggleRibbon);
     }
     if new {
-        actions::guarded(state, PendingAction::New);
+        crate::new_project_dialog::open(state);
     }
     // The remaining commands act on the project, which the home screen hides.
     if state.show_home || !state.project_open {

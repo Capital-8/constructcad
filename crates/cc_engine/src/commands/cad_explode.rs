@@ -260,6 +260,19 @@ fn size_text(size: f64) -> String {
     s.strip_suffix(".0").map(str::to_string).unwrap_or(s)
 }
 
+/// The name of a new text type of `size` paper millimeters: `Text 2.5 mm`,
+/// or `Text 3/32"` in imperial projects.
+fn text_type_name(p: &cc_core::Project, size: f64) -> String {
+    match p.measurement_system() {
+        cc_core::MeasurementSystem::Metric => t!("tpl-type-text-size", "size" => size_text(size)),
+        cc_core::MeasurementSystem::Imperial => {
+            let (_, comma) = cc_views::format::current();
+            let size = cc_views::format::paper_with(&p.units, comma, size);
+            t!("tpl-imp-type-text-size", "size" => size)
+        }
+    }
+}
+
 /// A text size in tenths of a millimeter (the key of its type).
 fn size_key(size: f64) -> u64 {
     (size * 10.0).round().max(0.0) as u64
@@ -382,7 +395,8 @@ impl Command for CadExplode {
                     Some(t) => t,
                     None => {
                         let data = TypeData::Text { size, symbol: LeaderSymbol::Arrow };
-                        let t = new_type(e, t!("tpl-type-text-size", "size" => size_text(size)), data);
+                        let name = text_type_name(e.project(), size);
+                        let t = new_type(e, name, data);
                         types.push(t.0);
                         t
                     }

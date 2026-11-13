@@ -72,7 +72,7 @@ pub struct WallCreate {
     /// Wall type id or name (default: the default wall type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Unconnected height in meters (default 3).
+    /// Unconnected height in meters (default 3; 10'-0" in imperial projects).
     #[serde(default)]
     pub height: Option<f64>,
     /// Level the top is attached to, instead of a height.
@@ -111,7 +111,7 @@ impl Command for WallCreate {
             end,
             bulge,
             base_offset: finite(self.base_offset.unwrap_or(0.0), "base_offset")?,
-            height: positive(self.height.unwrap_or(3.0), "height")?,
+            height: positive(self.height.unwrap_or(p.defaults().story), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or(WallTop::Unconnected),
             location_line,
             ..Default::default()
@@ -309,7 +309,8 @@ pub struct SketchArgs {
     /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6).
+    /// Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in
+    /// imperial projects).
     /// Roofs: base above the level (default: top of the tallest wall).
     #[serde(default)]
     pub offset: Option<f64>,
@@ -409,7 +410,7 @@ impl Command for CeilingCreate {
         if let Some(at) = profile.openings.first().and_then(|o| o.first()) {
             return Err(super::sketch::sketch_error(cc_core::sketch::SketchError::Openings(*at)));
         }
-        let height_offset = finite(self.sketch.offset.unwrap_or(2.6), "offset")?;
+        let height_offset = finite(self.sketch.offset.unwrap_or(s.project().defaults().ceiling_offset), "offset")?;
         let ceiling = Ceiling { boundary: profile.outline, height_offset, cuts: Vec::new(), sketch: drawn };
         let kind = ElementKind::Ceiling(ceiling);
         create(s, t!("tx-create-ceiling"), level, Category::Ceiling, self.sketch.type_ref.as_ref(), kind)
@@ -670,7 +671,7 @@ impl Command for RoomCreate {
                 _ => None,
             }))
         });
-        let height = positive(self.height.unwrap_or_else(|| p.level_height(level, 3.0)), "height")?;
+        let height = positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?;
         let room = Room { position, number, name: self.name.unwrap_or_else(|| t!("room-default-name")), height };
         create(s, t!("tx-create-room"), level, Category::Room, None, ElementKind::Room(room))
     }
@@ -758,7 +759,7 @@ impl Command for ColumnCreate {
             position: point(self.position)?,
             rotation_deg: finite(self.rotation.unwrap_or(0.0), "rotation")?,
             base_offset: 0.0,
-            height: positive(self.height.unwrap_or_else(|| p.level_height(level, 3.0)), "height")?,
+            height: positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_top(p, level)),
             structural: self.structural.unwrap_or(true),
         };
@@ -814,7 +815,8 @@ impl Command for BeamCreate {
         }
         let p = s.project();
         let level = refs::level_or_first(p, self.level.as_ref())?;
-        let top_offset = finite(self.top_offset.unwrap_or_else(|| p.level_height(level, 3.0)), "top_offset")?;
+        let top_offset =
+            finite(self.top_offset.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "top_offset")?;
         let mut beam = Beam::new(start, end, top_offset);
         beam.end_offset = self.end_offset.map(|z| finite(z, "end_offset")).transpose()?;
         let lateral = [("center", BeamLateral::Center), ("left", BeamLateral::Left), ("right", BeamLateral::Right)];
@@ -868,7 +870,8 @@ impl Command for RailingCreate {
 /// (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m,
 /// ceiling lights at the level height, data outlets 0.30 m, racks 1.40 m,
 /// air terminals on the roof under them, earth electrodes 0.50 m below the
-/// level) and may be put on a circuit or system of their kind; lightning
+/// level; in imperial projects outlets 1'-6", switches 4'-0", boards and
+/// racks 4'-6", wall lights 7'-0") and may be put on a circuit or system of their kind; lightning
 /// protection devices join the first lightning protection system by default.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
