@@ -288,6 +288,13 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
 ```
 
+`wall_framing_create` frames straight walls in light steel or wood: one framing element per wall, owning ordinary columns (studs, king and jack studs, cripples) and beams (tracks or plates, headers, sills, blocking), made in one undo step and returned as `{framings: [{id, wall, members}]}`. `system` is `light_steel` (default) or `wood`; `spacing` is the stud spacing in meters (0.2 to 1.2; 0.4 and 0.6 by default); `stud_type`, `track_type` and `header_type` take an id or a name (default: the system's catalog types); `double_top` (wood) and `blocking` are booleans. Curved walls and walls already framed are refused before anything is made. The members are regenerated, with their ids kept, when `element_set` changes the framing's parameters or when the wall or its doors and windows change; a member edited or deleted directly is detached.
+
+```text
+{"command": "wall_framing_create", "args": {"walls": [12, 13], "system": "wood", "blocking": true}}
+{"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
+```
+
 ### Sheets and title blocks
 
 `sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).

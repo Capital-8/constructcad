@@ -288,6 +288,13 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
 ```
 
+`wall_framing_create` estrutura paredes retas em light steel frame ou madeira: um elemento de ossatura por parede, dono de pilares comuns (montantes, montantes duplos, montantes curtos) e vigas (guias ou soleiras, vergas, contravergas, bloqueadores), feitos num só passo de desfazer e devolvidos como `{framings: [{id, wall, members}]}`. `system` é `light_steel` (padrão) ou `wood`; `spacing` é o espaçamento dos montantes em metros (0,2 a 1,2; 0,4 e 0,6 por padrão); `stud_type`, `track_type` e `header_type` aceitam id ou nome (padrão: os tipos do catálogo do sistema); `double_top` (madeira) e `blocking` são booleanos. Paredes curvas e já estruturadas são recusadas antes de qualquer alteração. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros da ossatura ou quando a parede, suas portas ou janelas mudam; um elemento editado ou excluído diretamente fica desvinculado.
+
+```text
+{"command": "wall_framing_create", "args": {"walls": [12, 13], "system": "wood", "blocking": true}}
+{"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).
