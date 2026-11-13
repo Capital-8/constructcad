@@ -254,6 +254,18 @@ The *Beam* tool has two modes in the options bar, as the wall tool has: *Line* d
 - **Side bars**: *Add side bars* puts one bar on each side face at mid height; `rebar_create` with the `sides` layout takes a `count` per face, or a `spacing` that puts as many as keep them that far apart over the height.
 - **Lap splices**: a bar along a beam longer than the stock length (12 m, or 40' in imperial projects) is made of the fewest equal pieces, lapping by 40 bar diameters, and the splices of neighbouring bars are staggered by half a piece. `rebar_create` takes `max_length` (0 keeps whole bars) and `lap`. Schedules count and measure the pieces.
 
+## Column sections and their reinforcement
+
+A column type's section is a structural profile. Besides the standard shapes, the Profile Manager (*Structure → Profiles*) has *Annular sector*: the piece of a ring between an inner radius and an outer radius turning by an angle, as the columns that continue a cylindrical wall have (an inner radius of 0 makes a circular sector). The section is drawn symmetric about its vertical axis with the outer face up, and placed by the middle of its bounding box; turn each column on the circle with its rotation. Its area and the column's volume are the ring's, not those of the chords it is drawn with. L, T, U and other polygonal columns are sketched profiles (a new profile of the *Sketch* shape).
+
+`rebar_create` (command palette) reinforces a column of any section:
+
+- **Bars by face**: `perimeter` with `faces` takes the number of bars on each face of the section (its two corner bars included; the corner bars are shared between faces), in the order of the `derived.faces` that `element_get` lists for the column: counter-clockwise, an annular sector's outer arc first. On a curved face the bars stand at even angles. `face_spacing` puts on every face as many as keep them that far apart. A plain `count` is spread around the section, the corners first.
+- **Ties**: `stirrups` follow the outline of the section the cover inside it, a curved face as a curve, and their length is the true one.
+- **Cross-ties**: `ties` adds, every `spacing` up the column, a straight bar with a 135° hook at one end and a 180° hook at the other from each bar between corners to the bar opposite: straight across the section, or between the radial sides of a sector square to its axis. A tie whose line would leave the bars (between the radial sides of a thin ring) is not made.
+- **Lifts**: with `max_length` the vertical bars are cut in equal lifts no longer than it, each lapping the next by `lap` (default 40 bar diameters), all at the same heights.
+- **Every column of the type**: `same_type` gives the set to the other columns of the host's type in the same step.
+
 ## Structure by material
 
 The *Structure* tab starts with a *Material* group: *Concrete*, *Steel* and *Timber* buttons (one is always on; the choice is kept between sessions). The material swaps the groups made for it: concrete shows *Structure* (Column, Beam, Floor) and *Reinforcement*; steel shows *Structure* (Column, Beam, Bracing), the *Framing* grid group (Columns at Grids, Beams on Grids, Beams Between Columns, Grid Frame, Truss, Steel Building, Light Steel Frame) and *Connections* (Base Plate, End Plate, Fin Plate); timber shows *Structure* (Column, Beam, Bracing), the same grid group with Wood Frame in place of Steel Building and Light Steel Frame, and *Connections* (Bolted Joint, Hanger). Profiles, Foundation, Analytical, Documentation, Datum and Selection show for every material.

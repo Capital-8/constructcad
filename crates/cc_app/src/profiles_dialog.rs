@@ -471,7 +471,7 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
         for (param, value) in ordered_params(&detail) {
             // Lengths in millimeters (inches in imperial projects); the Z
             // section's lip angle in degrees.
-            let degrees = param == "angle";
+            let degrees = param == "angle" || param == "sweep";
             let inches = !degrees && cc_views::format::imperial();
             let mut shown = if degrees || inches { value } else { value * 1000.0 };
             // The symbol stays the label; what it measures is its tooltip.

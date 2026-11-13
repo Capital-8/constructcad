@@ -1238,6 +1238,7 @@ fn profiles_project() -> Project {
                     | ProfileShape::Round { .. }
                     | ProfileShape::ConcreteT { .. }
                     | ProfileShape::ConcreteL { .. }
+                    | ProfileShape::AnnularSector { .. }
                     | ProfileShape::Sketch(_)
             );
             let (pm, mat) = if concrete_shape {

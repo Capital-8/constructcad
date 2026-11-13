@@ -355,6 +355,18 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             }),
         );
     }
+    // A column's faces, in the order `rebar_create` takes bars face by face.
+    if matches!(e.kind, ElementKind::Column(_))
+        && let Some(ty) = p.element_type(e.type_id)
+    {
+        let faces: Vec<Value> = cc_geom::rebar::column_faces(p, &ty.data, 0.0)
+            .iter()
+            .map(|f| json!({"curved": f.is_curved(), "length": f.length()}))
+            .collect();
+        if !faces.is_empty() {
+            derived.insert("faces".into(), json!(faces));
+        }
+    }
     let pinned = p.is_pinned(id);
     let (phase_created, phase_demolished) = super::phases::element_phases_json(p, &e);
     let design_option = super::design_options::option_ref_json(p, e.design_option);

@@ -7,9 +7,17 @@
 //! follow the arc, each at its own radius, and the stirrups are radial. Top
 //! and bottom bars that do not fit side by side go in further layers, side
 //! bars run between them, and bars longer than the stock length are spliced.
+//!
+//! A column's bars stand around its section ([`crate::faces`]): a count
+//! spread around it, or so many on each face with the corner bars shared;
+//! its ties follow the section's outline, cross-ties link the bars between
+//! the corners to the bars opposite, and the vertical bars may be cut in
+//! lifts that lap.
 
 use crate::BeamGeom;
-use cc_core::{BarFace, ElementId, ElementKind, Project, RebarLayout, Splice, TypeData};
+use crate::faces::{self, FaceBar, SectionFace};
+use cc_core::profiles_project::SectorPlacement;
+use cc_core::{BarFace, ElementId, ElementKind, Project, Rebar, RebarLayout, Splice, TypeData};
 use glam::{DVec2, DVec3};
 use std::collections::BTreeMap;
 
@@ -162,6 +170,16 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
             *s = s.max(d);
         }
     }
+    // The first longitudinal set of each host: its cross-ties hook around those bars.
+    let mut main: BTreeMap<ElementId, (&Rebar, f64)> = BTreeMap::new();
+    for e in project.elements.values() {
+        if let ElementKind::Rebar(r) = &e.kind
+            && matches!(r.layout, RebarLayout::Longitudinal { .. })
+            && let Some(d) = diameter(project, e)
+        {
+            main.entry(r.host).or_insert((r, d));
+        }
+    }
     let mut out = BTreeMap::new();
     for e in project.elements.values() {
         let ElementKind::Rebar(r) = &e.kind else { continue };
@@ -181,9 +199,17 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
                 else {
                     continue;
                 };
-                let (base, top) = project.column_span(host, c);
-                let shape = (section.size(), project.section_is_round(data));
-                column_bars(shape, c.position, c.rotation_deg, (base, top), r.layout, r.cover, d, ds)
+                let outline = project.type_section(data).map(|s| s.outline.outer).unwrap_or_default();
+                let shape = ColumnShape {
+                    size: section.size(),
+                    round: project.section_is_round(data),
+                    sector: project.type_sector(data),
+                    boxed: is_box(&outline),
+                    outline,
+                };
+                let frame =
+                    ColumnFrame { position: c.position, rotation_deg: c.rotation_deg, z: project.column_span(host, c) };
+                column_bars(&shape, &frame, r, d, ds, main.get(&r.host).copied())
             }
             _ => continue,
         };
@@ -315,6 +341,8 @@ fn beam_bars(
             let heights = side_heights(count, spacing, inset, height - inset);
             runs(heights.into_iter().flat_map(|z| [(-v, z), (v, z)]).collect())
         }
+        // Cross-ties belong to columns.
+        RebarLayout::Ties { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = cover + d / 2.0;
             let (v, z0, z1) = ((g.half - inset).max(0.0), inset, (height - inset).max(inset));
@@ -326,45 +354,187 @@ fn beam_bars(
     }
 }
 
-/// Bars of a column: vertical bars around the section over its height,
-/// horizontal ties up the column.
-#[allow(clippy::too_many_arguments)]
-fn column_bars(
-    ((w, depth), round): ((f64, f64), bool),
+/// A column's section as its bars see it, in the column's own frame.
+struct ColumnShape {
+    /// Width and depth of its box.
+    size: (f64, f64),
+    round: bool,
+    /// An annular sector's ring (its faces are then exact arcs).
+    sector: Option<SectorPlacement>,
+    /// Whether the outline is that box and nothing else.
+    boxed: bool,
+    outline: Vec<DVec2>,
+}
+
+impl ColumnShape {
+    /// The section's faces `inset` inside it.
+    fn faces(&self, inset: f64) -> Vec<SectionFace> {
+        match &self.sector {
+            Some(s) => faces::sector_faces(s, inset),
+            None => faces::outline_faces(&self.outline, inset),
+        }
+    }
+
+    /// The longitudinal bars of the set `r` (bars `d` thick inside ties `ds` thick).
+    fn bars(&self, r: &Rebar, d: f64, ds: f64) -> Vec<FaceBar> {
+        let RebarLayout::Longitudinal { count, .. } = r.layout else { return Vec::new() };
+        let inset = r.cover + ds + d / 2.0;
+        let (w, depth) = self.size;
+        let bar = |at: DVec2, inward: DVec2, corner: bool| FaceBar { at, inward, corner };
+        if self.round {
+            return circle(count as usize, (w / 2.0 - inset).max(0.0))
+                .into_iter()
+                .map(|p| bar(p, -p.normalize_or_zero(), false))
+                .collect();
+        }
+        if self.boxed && r.faces.is_empty() {
+            let (a, b) = ((w / 2.0 - inset).max(0.0), (depth / 2.0 - inset).max(0.0));
+            return perimeter(count as usize, a, b)
+                .into_iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    // A bar between corners looks across the side it stands on.
+                    let inward =
+                        if (p.y.abs() - b).abs() < 1e-9 { -DVec2::Y * p.y.signum() } else { -DVec2::X * p.x.signum() };
+                    bar(p, inward, i < 4)
+                })
+                .collect();
+        }
+        faces::face_bars(&self.faces(inset), &r.faces, count as usize)
+    }
+}
+
+/// The faces of a column type's section `inset` inside it, in the order
+/// bars are given face by face: counter-clockwise, an annular sector's
+/// from its outer arc. Empty for other types and failed sections.
+pub fn column_faces(project: &Project, data: &TypeData, inset: f64) -> Vec<SectionFace> {
+    let TypeData::Column { section, .. } = data else { return Vec::new() };
+    let outline = project.type_section(data).map(|s| s.outline.outer).unwrap_or_default();
+    let shape = ColumnShape {
+        size: section.size(),
+        round: project.section_is_round(data),
+        sector: project.type_sector(data),
+        boxed: is_box(&outline),
+        outline,
+    };
+    shape.faces(inset)
+}
+
+/// Whether `outline` is its own bounding box: four corners, nothing else.
+fn is_box(outline: &[DVec2]) -> bool {
+    let lo = outline.iter().fold(DVec2::INFINITY, |m, p| m.min(*p));
+    let hi = outline.iter().fold(DVec2::NEG_INFINITY, |m, p| m.max(*p));
+    let at = |v: f64, a: f64, b: f64| (v - a).abs() < 1e-9 || (v - b).abs() < 1e-9;
+    outline.len() == 4 && outline.iter().all(|p| at(p.x, lo.x, hi.x) && at(p.y, lo.y, hi.y))
+}
+
+/// Where a column stands: its point, turn and base and top elevations.
+struct ColumnFrame {
     position: DVec2,
     rotation_deg: f64,
-    (base, top): (f64, f64),
-    layout: RebarLayout,
-    cover: f64,
+    z: (f64, f64),
+}
+
+/// Length of a tie's hook bent by `turn` radians: the bend around a pin
+/// three bar diameters across, then a straight end of five diameters (at
+/// least 5 cm).
+fn hook(turn: f64, d: f64) -> f64 {
+    turn * 2.0 * d + (5.0 * d).max(0.05)
+}
+
+/// Bars of a column: vertical bars around the section over its height
+/// (cut in lifts by a splice), horizontal ties up the column following its
+/// outline, and cross-ties between the bars of its longitudinal set `main`.
+fn column_bars(
+    shape: &ColumnShape,
+    frame: &ColumnFrame,
+    r: &Rebar,
     d: f64,
     ds: f64,
+    main: Option<(&Rebar, f64)>,
 ) -> Vec<Bar> {
-    let rot = DVec2::from_angle(rotation_deg.to_radians());
-    let place = |p: DVec2, z: f64| (position + rot.rotate(p)).extend(z);
-    match layout {
-        RebarLayout::Longitudinal { count, .. } => {
-            let inset = cover + ds + d / 2.0;
-            let plan = if round {
-                circle(count as usize, (w / 2.0 - inset).max(0.0))
-            } else {
-                perimeter(count as usize, (w / 2.0 - inset).max(0.0), (depth / 2.0 - inset).max(0.0))
-            };
-            plan.into_iter().map(|p| Bar::new(vec![place(p, base), place(p, top)], false)).collect()
+    let rot = DVec2::from_angle(frame.rotation_deg.to_radians());
+    let place = |p: DVec2, z: f64| (frame.position + rot.rotate(p)).extend(z);
+    let (base, top) = frame.z;
+    let (w, depth) = shape.size;
+    match r.layout {
+        RebarLayout::Longitudinal { .. } => {
+            // Every bar is cut at the same heights: the lifts the column is cast in.
+            let lifts = r.splice.map_or_else(|| vec![(0.0, top - base)], |s| s.pieces(top - base, 0));
+            let mut bars = Vec::new();
+            for bar in shape.bars(r, d, ds) {
+                for (from, to) in &lifts {
+                    if bars.len() >= MAX_BARS {
+                        return bars;
+                    }
+                    bars.push(Bar::new(vec![place(bar.at, base + from), place(bar.at, base + to)], false));
+                }
+            }
+            bars
         }
         // Side bars belong to beams.
         RebarLayout::Sides { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
-            let inset = cover + d / 2.0;
-            let outline = if round {
-                circle(ROUND, (w / 2.0 - inset).max(0.0))
-            } else {
+            let inset = r.cover + d / 2.0;
+            let (outline, length) = if shape.round {
+                (circle(ROUND, (w / 2.0 - inset).max(0.0)), None)
+            } else if shape.boxed {
                 let (a, b) = ((w / 2.0 - inset).max(0.0), (depth / 2.0 - inset).max(0.0));
-                vec![DVec2::new(-a, -b), DVec2::new(a, -b), DVec2::new(a, b), DVec2::new(-a, b)]
+                (vec![DVec2::new(-a, -b), DVec2::new(a, -b), DVec2::new(a, b), DVec2::new(-a, b)], None)
+            } else {
+                // Around the outline, its curved faces as curves.
+                let (points, length) = faces::face_loop(&shape.faces(inset));
+                (points, Some(length))
             };
-            stations(base + cover, top - cover, spacing)
+            if outline.len() < 3 {
+                return Vec::new();
+            }
+            stations(base + r.cover, top - r.cover, spacing)
                 .into_iter()
-                .map(|z| Bar::new(outline.iter().map(|p| place(*p, z)).collect(), true))
+                .map(|z| Bar {
+                    points: outline.iter().map(|p| place(*p, z)).collect(),
+                    closed: true,
+                    true_length: length,
+                })
                 .collect()
+        }
+        RebarLayout::Ties { spacing } => {
+            let Some((set, dm)) = main else { return Vec::new() };
+            let bars = shape.bars(set, dm, ds);
+            // The lines the main bars stand on, to find the bar opposite.
+            let lines = match shape.round || (shape.boxed && set.faces.is_empty()) {
+                true => faces::outline_faces(&bars.iter().filter(|b| b.corner).map(|b| b.at).collect::<Vec<_>>(), 0.0),
+                false => shape.faces(set.cover + ds + dm / 2.0),
+            };
+            let near = (3.0 * dm).max(0.03);
+            let mut ties: Vec<(DVec2, DVec2)> = Vec::new();
+            for bar in bars.iter().filter(|b| !b.corner) {
+                let Some(hit) = faces::across(&lines, bar.at, bar.inward, near) else { continue };
+                // Onto the bar that stands there, when one does.
+                let to = bars
+                    .iter()
+                    .map(|b| b.at)
+                    .filter(|p| p.distance(hit) < near)
+                    .min_by(|p, q| p.distance(hit).total_cmp(&q.distance(hit)))
+                    .unwrap_or(hit);
+                // One tie between two bars, whichever it was found from.
+                let same = |a: DVec2, b: DVec2| a.distance(b) < near;
+                if !ties.iter().any(|(p, q)| same(*p, to) && same(*q, bar.at)) {
+                    ties.push((bar.at, to));
+                }
+            }
+            let hooks = hook(0.75 * std::f64::consts::PI, d) + hook(std::f64::consts::PI, d);
+            let mut out = Vec::new();
+            for z in stations(base + r.cover, top - r.cover, spacing) {
+                for (a, b) in &ties {
+                    if out.len() >= MAX_BARS {
+                        return out;
+                    }
+                    let points = vec![place(*a, z), place(*b, z)];
+                    out.push(Bar { points, closed: false, true_length: Some(a.distance(*b) + hooks) });
+                }
+            }
+            out
         }
     }
 }

@@ -95,6 +95,18 @@ pub fn section_name_in(shape: &ProfileShape, material: ProfileMaterial, system: 
     }
 }
 
+/// An annular sector section in its type's frame: the ring's `center`, the
+/// unit `axis` from it through the middle of the sector, the radii and the
+/// angle it turns (radians).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SectorPlacement {
+    pub center: DVec2,
+    pub axis: DVec2,
+    pub r_in: f64,
+    pub r_out: f64,
+    pub sweep: f64,
+}
+
 /// `outline` mirrored across its vertical axis when `mirror`, then turned
 /// `rotation_deg` counterclockwise (a non-finite angle reads as none).
 fn place_outline(mut outline: SectionOutline, rotation_deg: f64, mirror: bool) -> SectionOutline {
@@ -141,7 +153,7 @@ impl ProfileShape {
     /// sketch with arc or ellipse segments.
     pub fn has_arcs(&self) -> bool {
         match self {
-            Self::Round { .. } | Self::RoundTube { .. } => true,
+            Self::Round { .. } | Self::RoundTube { .. } | Self::AnnularSector { .. } => true,
             Self::Sketch(s) => s
                 .outline
                 .iter()
@@ -277,6 +289,25 @@ impl Project {
     /// The profile a column or beam type points to, when it exists.
     pub fn type_profile_def(&self, data: &TypeData) -> Option<&ProfileDef> {
         type_profile(data).and_then(|id| self.profile(id))
+    }
+
+    /// The ring of a column or beam type whose section is an annular
+    /// sector, as the type places it (turned and mirrored).
+    pub fn type_sector(&self, data: &TypeData) -> Option<SectorPlacement> {
+        let s = section_data(data)?;
+        let shape = &s.profile.and_then(|id| self.profile(id))?.shape;
+        let ProfileShape::AnnularSector { r_in, r_out, sweep } = *shape else { return None };
+        let center = shape.sector_center()?;
+        let turn = if s.rotation_deg.is_finite() { s.rotation_deg.to_radians() } else { 0.0 };
+        let r = DVec2::from_angle(turn);
+        // The sector is symmetric about its own Y axis: a mirror leaves it as it is.
+        Some(SectorPlacement {
+            center: r.rotate(center),
+            axis: r.rotate(DVec2::Y),
+            r_in,
+            r_out,
+            sweep: sweep.to_radians(),
+        })
     }
 
     /// Whether a column or beam type's section is round (a solid or hollow

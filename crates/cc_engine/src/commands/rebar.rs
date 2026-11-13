@@ -7,7 +7,7 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::{
-    BarFace, Category, ElementId, ElementKind, ElementTypeId, Project, Rebar, RebarLayout, Splice, TypeData,
+    BarFace, Category, ElementId, ElementKind, ElementTypeId, FaceBars, Project, Rebar, RebarLayout, Splice, TypeData,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -36,7 +36,42 @@ fn host(p: &Project, id: u64) -> Result<(ElementId, bool)> {
 }
 
 fn rebar_kind(host: ElementId, layout: RebarLayout, cover: f64, splice: Option<Splice>) -> ElementKind {
-    ElementKind::Rebar(Rebar { host, layout, cover, splice })
+    ElementKind::Rebar(Rebar { host, layout, cover, splice, faces: Vec::new() })
+}
+
+/// The bars of a column face by face: `counts` (one per face of its
+/// section, corners included), or as many on every face as keep them
+/// `spacing` apart.
+fn face_bars(p: &Project, host: ElementId, counts: Option<&[u32]>, spacing: Option<f64>) -> Result<Vec<FaceBars>> {
+    if counts.is_none() && spacing.is_none() {
+        return Ok(Vec::new());
+    }
+    let data = p.element(host).and_then(|e| p.element_type(e.type_id)).map(|t| &t.data);
+    let faces = data.map_or(0, |d| cc_geom::rebar::column_faces(p, d, 0.0).len());
+    if faces == 0 {
+        return Err(EngineError::invalid("bars by face go in columns with a section"));
+    }
+    match (counts, spacing) {
+        (Some(counts), _) => {
+            if counts.len() != faces {
+                return Err(EngineError::invalid(format!(
+                    "the section has {faces} faces: give `faces` {faces} counts (see `derived.faces` of the column)"
+                )));
+            }
+            if counts.iter().any(|c| !(2..=FaceBars::MAX_COUNT).contains(c)) {
+                return Err(EngineError::invalid("each face takes 2 to 200 bars, its two corner bars included"));
+            }
+            Ok(counts.iter().map(|&count| FaceBars { count, spacing: 0.0 }).collect())
+        }
+        (None, Some(spacing)) => {
+            let spacing = finite(spacing, "face_spacing")?;
+            if spacing < 0.02 {
+                return Err(EngineError::invalid("face_spacing must be at least 0.02"));
+            }
+            Ok(vec![FaceBars { count: 0, spacing }; faces])
+        }
+        (None, None) => Ok(Vec::new()),
+    }
 }
 
 /// Stock length of bars, meters: 12 m, or 40' in imperial projects.
@@ -79,12 +114,23 @@ fn splice(p: &Project, type_id: ElementTypeId, max_length: Option<f64>, lap: Opt
 /// diameter, at least 2 cm) go in a second layer. Bars along a beam longer
 /// than `max_length` are made of pieces overlapping by `lap`, the splices of
 /// neighbouring bars staggered.
+///
+/// A column's `perimeter` bars are `count` spread around its section, or
+/// given face by face with `faces` (a bar count for each face of the
+/// section, its two corner bars included, the corner bars shared between
+/// faces; the column's `derived.faces` lists the faces in order) or
+/// `face_spacing`; on a curved face they stand at even angles. Its
+/// `stirrups` follow the section's outline, and `ties` adds cross-ties every
+/// `spacing`: a hooked bar from each bar between the corners to the bar
+/// opposite. With `max_length` a column's vertical bars are cut in lifts
+/// that lap by `lap`. `same_type` gives the set to every column (or beam) of
+/// the host's type.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct RebarCreate {
     /// Beam or column id.
     pub host: u64,
-    /// `top`, `bottom`, `perimeter`, `sides` or `stirrups`.
+    /// `top`, `bottom`, `perimeter`, `sides`, `stirrups` or `ties`.
     pub layout: String,
     /// Number of longitudinal bars (default: 2 in beams, 4 in columns), or of side bars on each
     /// side face (default 1, unless `spacing` is given).
@@ -108,6 +154,17 @@ pub struct RebarCreate {
     /// Lap length of the splices, meters (default: 40 bar diameters).
     #[serde(default)]
     pub lap: Option<f64>,
+    /// Columns, `perimeter`: the number of bars on each face of the section, in the order of
+    /// the column's `derived.faces`, the two corner bars of a face included (at least 2).
+    #[serde(default)]
+    pub faces: Option<Vec<u32>>,
+    /// Columns, `perimeter`: instead of `faces`, the largest distance between bars on every
+    /// face, meters.
+    #[serde(default)]
+    pub face_spacing: Option<f64>,
+    /// Also give the set to every other column (or beam) of the host's type (default false).
+    #[serde(default)]
+    pub same_type: Option<bool>,
 }
 
 impl Command for RebarCreate {
@@ -143,32 +200,64 @@ impl Command for RebarCreate {
                     (None, None) => RebarLayout::Sides { count: 1, spacing: 0.0 },
                 }
             }
-            "stirrups" => {
+            "stirrups" | "ties" => {
                 let spacing = finite(self.spacing.unwrap_or(default_spacing), "spacing")?;
                 if spacing < 0.02 {
                     return Err(EngineError::invalid("spacing must be at least 0.02"));
                 }
-                RebarLayout::Stirrups { spacing }
+                match self.layout.as_str() {
+                    "ties" if beam => return Err(EngineError::invalid("cross-ties go in columns")),
+                    "ties" => RebarLayout::Ties { spacing },
+                    _ => RebarLayout::Stirrups { spacing },
+                }
             }
             other => {
                 return Err(EngineError::invalid(format!(
-                    "layout must be top, bottom, perimeter, sides or stirrups, not '{other}'"
+                    "layout must be top, bottom, perimeter, sides, stirrups or ties, not '{other}'"
                 )));
             }
         };
-        let stirrups = matches!(layout, RebarLayout::Stirrups { .. });
+        let by_face = self.faces.is_some() || self.face_spacing.is_some();
+        if by_face && (beam || !matches!(layout, RebarLayout::Longitudinal { face: BarFace::Perimeter, .. })) {
+            return Err(EngineError::invalid("`faces` and `face_spacing` go with the `perimeter` bars of a column"));
+        }
+        let faces = face_bars(p, host_id, self.faces.as_deref(), self.face_spacing)?;
+        let stirrups = matches!(layout, RebarLayout::Stirrups { .. } | RebarLayout::Ties { .. });
         let type_id = match &self.type_ref {
             Some(r) => refs::type_of(p, Category::Rebar, Some(r))?,
             None => bar_type(p, if stirrups { stirrup_bar } else { main_bar })?,
         };
         let cover = finite(self.cover.unwrap_or(default_cover), "cover")?.max(0.0);
-        let splice = match beam && layout.runs_along() {
-            true => splice(p, type_id, self.max_length, self.lap)?,
-            false => None,
+        // Bars along a beam are spliced past the stock length; a column's only in the lifts asked for.
+        let splice = match (layout.runs_along(), beam, self.max_length) {
+            (true, true, _) | (true, false, Some(_)) => splice(p, type_id, self.max_length, self.lap)?,
+            _ => None,
         };
-        let kind = rebar_kind(host_id, layout, cover, splice);
-        let id = edit(s, t!("tx-create-rebar"), |e| Ok(add_element(e, level, type_id, kind)))?;
-        Ok(created(s, id))
+        let set = |host| ElementKind::Rebar(Rebar { host, layout, cover, splice, faces: faces.clone() });
+        // The other members of the host's type, each on its own level.
+        let host_type = p.element(host_id).map(|e| e.type_id);
+        let others: Vec<(ElementId, cc_core::LevelId)> = match self.same_type.unwrap_or(false) {
+            true => p
+                .elements
+                .values()
+                .filter(|e| e.id != host_id && Some(e.type_id) == host_type)
+                .filter(|e| matches!(e.kind, ElementKind::Beam(_) | ElementKind::Column(_)))
+                .map(|e| (e.id, e.level))
+                .collect(),
+            false => Vec::new(),
+        };
+        let (id, also) = edit(s, t!("tx-create-rebar"), |e| {
+            let id = add_element(e, level, type_id, set(host_id));
+            let also: Vec<ElementId> = others.iter().map(|(h, l)| add_element(e, *l, type_id, set(*h))).collect();
+            Ok((id, also))
+        })?;
+        let mut out = created(s, id);
+        if self.same_type.unwrap_or(false)
+            && let Some(map) = out.as_object_mut()
+        {
+            map.insert("also".into(), ids_json(&also));
+        }
+        Ok(out)
     }
 }
 

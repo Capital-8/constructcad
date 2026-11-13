@@ -13,6 +13,7 @@ pub mod coplanar;
 pub mod csg;
 pub mod curtain;
 mod cut;
+pub mod faces;
 pub mod level_mark;
 pub mod lightning;
 pub mod mass;

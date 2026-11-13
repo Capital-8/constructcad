@@ -791,16 +791,19 @@ No parameters.
 
 ### `rebar_create`
 
-*edit* — Add a set of bars to a beam or column: `layout` is `top` or `bottom` (beams), `perimeter` (columns) with `count` bars, `sides` (beams: `count` side bars on each side face, or as many as keep them `spacing` apart over the height), or `stirrups` every `spacing`. The bars are `cover` inside the faces (default 2.5 cm) and follow the host: along an arc beam they follow the arc, each at its own radius, and the stirrups are radial. Top and bottom bars that do not fit side by side (a clear distance of the bar diameter, at least 2 cm) go in a second layer. Bars along a beam longer than `max_length` are made of pieces overlapping by `lap`, the splices of neighbouring bars staggered.
+*edit* — Add a set of bars to a beam or column: `layout` is `top` or `bottom` (beams), `perimeter` (columns) with `count` bars, `sides` (beams: `count` side bars on each side face, or as many as keep them `spacing` apart over the height), or `stirrups` every `spacing`. The bars are `cover` inside the faces (default 2.5 cm) and follow the host: along an arc beam they follow the arc, each at its own radius, and the stirrups are radial. Top and bottom bars that do not fit side by side (a clear distance of the bar diameter, at least 2 cm) go in a second layer. Bars along a beam longer than `max_length` are made of pieces overlapping by `lap`, the splices of neighbouring bars staggered. A column's `perimeter` bars are `count` spread around its section, or given face by face with `faces` (a bar count for each face of the section, its two corner bars included, the corner bars shared between faces; the column's `derived.faces` lists the faces in order) or `face_spacing`; on a curved face they stand at even angles. Its `stirrups` follow the section's outline, and `ties` adds cross-ties every `spacing`: a hooked bar from each bar between the corners to the bar opposite. With `max_length` a column's vertical bars are cut in lifts that lap by `lap`. `same_type` gives the set to every column (or beam) of the host's type.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `host` | integer | required | Beam or column id. |
-| `layout` | string | required | `top`, `bottom`, `perimeter`, `sides` or `stirrups`. |
+| `layout` | string | required | `top`, `bottom`, `perimeter`, `sides`, `stirrups` or `ties`. |
 | `count` | integer | optional | Number of longitudinal bars (default: 2 in beams, 4 in columns), or of side bars on each side face (default 1, unless `spacing` is given). |
 | `cover` | number | optional | Concrete cover, meters (default 0.025; 1 1/2" in imperial projects). |
+| `face_spacing` | number | optional | Columns, `perimeter`: instead of `faces`, the largest distance between bars on every face, meters. |
+| `faces` | [id, …] | optional | Columns, `perimeter`: the number of bars on each face of the section, in the order of the column's `derived.faces`, the two corner bars of a face included (at least 2). |
 | `lap` | number | optional | Lap length of the splices, meters (default: 40 bar diameters). |
 | `max_length` | number | optional | Longest bar along a beam, meters (default: the stock length, 12 m, or 40' in imperial projects): longer bars are lap spliced. 0 keeps whole bars. |
+| `same_type` | boolean | optional | Also give the set to every other column (or beam) of the host's type (default false). |
 | `spacing` | number | optional | Stirrup spacing, meters (default 0.15; 6" in imperial projects), or the largest distance between side bars over the height when no `count` is given. |
 | `type` | id or name | optional | Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups; 1/2" and 3/8" in imperial projects). |
 
@@ -2571,7 +2574,7 @@ No parameters.
 | `name` | string | optional | Name (unique, ignoring case; default: from the shape and its size). |
 | `openings` | [[JSON, …], …] | optional | The openings of a sketched profile: each a closed loop of curves inside the outline. |
 | `params` | object | optional | Parameter values by name, meters (degrees for `angle`), over the shape's defaults; see `profile_get` `params` for the names. |
-| `shape` | string | optional | Shape code: `i`, `i_asym`, `channel`, `t`, `angle`, `cold_u`, `cold_lipped_u`, `cold_z`, `cold_hat`, `rect_tube`, `round_tube`, `rect`, `round`, `concrete_t`, `concrete_l` or `sketch` (the default with `curves`; required without them). |
+| `shape` | string | optional | Shape code: `i`, `i_asym`, `channel`, `t`, `angle`, `cold_u`, `cold_lipped_u`, `cold_z`, `cold_hat`, `rect_tube`, `round_tube`, `rect`, `round`, `concrete_t`, `concrete_l`, `annular_sector` (the piece of a ring between `r_in` and `r_out` turning by `sweep` degrees) or `sketch` (the default with `curves`; required without them). |
 | `sketch_params` | [object, …] | optional | Numeric parameters a sketched profile declares (lengths). |
 
 ### `profile_set`

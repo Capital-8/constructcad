@@ -12,6 +12,7 @@ mod browser_org;
 mod cad;
 mod cad_explode;
 mod callouts;
+mod column_sections;
 mod commands;
 mod component_env;
 mod component_script;
