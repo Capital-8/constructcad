@@ -279,7 +279,7 @@ Uma parede estrutural (a caixa *Estrutural* nas propriedades) mostra a seção *
 
 ## Armadura de lajes
 
-Um piso ou um radier mostra a seção *Armadura* nas propriedades. *Armadura típica* cria uma malha a cada 15 cm nas camadas superior e inferior, e o reforço em volta das aberturas; cada conjunto aparece então com o seu espaçamento e um botão *Remover*. `slab_rebar_create` (paleta de comandos) define todo o resto, para as lajes indicadas ou todos os pisos e radiers de um nível:
+Um piso estrutural (a caixa *Estrutural* nas propriedades) ou um radier mostra a seção *Armadura*. *Armadura típica* cria uma malha a cada 15 cm nas camadas superior e inferior, e o reforço em volta das aberturas; cada conjunto aparece então com o seu espaçamento e um botão *Remover*. `slab_rebar_create` (paleta de comandos) define todo o resto, para as lajes indicadas ou os pisos estruturais e radiers de um nível:
 
 - **Malha**: barras retas em duas direções, a primeira em `angle` (camada externa) e a segunda perpendicular a ela, com `spacing` e `cross_spacing`, `type` e `cross_type`; `layers` é `both`, `top` ou `bottom`.
 - **Radial**: `layout` `radial` cria barras de anel a cada `spacing` em torno de `center` (o meio da laje por padrão) e `radial_count` barras radiais do raio `start` até a borda; com `intermediate`, uma barra mais curta a partir desse raio fica entre cada duas.

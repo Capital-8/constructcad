@@ -51,11 +51,14 @@ pub struct TrimBars {
 /// ends of mesh bars at the slab's edge. Bars longer than `max_length` are
 /// lap spliced, neighbouring splices staggered. A slab with openings gets
 /// trimming bars around them (`trim`; `false` for none). One set per layer
-/// and direction, in one undo step; the bars follow the slab.
+/// and direction, in one undo step; the bars follow the slab. Without
+/// `slabs`, the structural floors (`floor_create` `structural`) and the
+/// foundation slabs are reinforced.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct SlabRebarCreate {
-    /// Floor and foundation slab ids (default: those of `level`, or of the project).
+    /// Floor and foundation slab ids (default: the structural floors and the foundation slabs
+    /// of `level`, or of the project).
     #[serde(default)]
     pub slabs: Vec<u64>,
     /// Level id or name, when no slabs are given.
@@ -152,8 +155,10 @@ fn hosts(p: &Project, ids: &[u64], level: Option<&Ref>) -> Result<Vec<Host>> {
             })
             .collect();
     }
+    // Without a list: the slabs that carry, not every floor finish.
     let level = level.map(|r| refs::level(p, r)).transpose()?;
-    Ok(p.elements.values().filter(|e| level.is_none_or(|l| e.level == l)).filter_map(slab).collect())
+    let carries = |e: &&cc_core::Element| !matches!(&e.kind, ElementKind::Floor(f) if !f.structural);
+    Ok(p.elements.values().filter(|e| level.is_none_or(|l| e.level == l)).filter(carries).filter_map(slab).collect())
 }
 
 fn spacing(value: f64, what: &str) -> Result<f64> {
