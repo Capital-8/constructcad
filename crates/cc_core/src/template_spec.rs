@@ -155,8 +155,8 @@ const METRIC: TemplateSpec = TemplateSpec {
 
 /// Millimeters in an inch, for annotation sizes on paper.
 const PAPER_INCH: f64 = 25.4;
-/// US tabloid paper (17" x 11"), in millimeters.
-const TABLOID: (f64, f64) = (17.0 * PAPER_INCH, 11.0 * PAPER_INCH);
+/// ANSI B paper (17" x 11"), in millimeters.
+const ANSI_B: (f64, f64) = (17.0 * PAPER_INCH, 11.0 * PAPER_INCH);
 
 const IMPERIAL: TemplateSpec = TemplateSpec {
     first_level: 10.0 * FOOT,
@@ -228,10 +228,11 @@ const IMPERIAL: TemplateSpec = TemplateSpec {
     model_scale: 96,
     // The metric sheet's viewports moved in proportion to the paper.
     sheet: (
-        SheetSize::Custom { width: TABLOID.0, height: TABLOID.1 },
+        SheetSize::AnsiB,
+        // ANSI B is SheetSize::default_for(Imperial).
         [
-            DVec2::new(130.0 * TABLOID.0 / 420.0, 160.0 * TABLOID.1 / 297.0),
-            DVec2::new(320.0 * TABLOID.0 / 420.0, 190.0 * TABLOID.1 / 297.0),
+            DVec2::new(130.0 * ANSI_B.0 / 420.0, 160.0 * ANSI_B.1 / 297.0),
+            DVec2::new(320.0 * ANSI_B.0 / 420.0, 190.0 * ANSI_B.1 / 297.0),
         ],
     ),
     library: &[
@@ -342,10 +343,11 @@ mod tests {
         assert_eq!(&scales[..11], [48, 48, 48, 48, 96, 96, 96, 96, 96, 48, 1]);
         // The sheet's viewports stay on its paper.
         let sheet = p.views.values().find_map(|v| match &v.kind {
-            ViewKind::Sheet { size, viewports, .. } => Some((size.size_mm(), viewports.clone())),
+            ViewKind::Sheet { size, viewports, .. } => Some((*size, size.size_mm(), viewports.clone())),
             _ => None,
         });
-        let Some((paper, viewports)) = sheet else { panic!("no sheet") };
+        let Some((size, paper, viewports)) = sheet else { panic!("no sheet") };
+        assert_eq!(size, crate::SheetSize::AnsiB);
         assert!((paper.x - 431.8).abs() < 1e-9 && (paper.y - 279.4).abs() < 1e-9);
         assert!(viewports.iter().all(|v| v.center.x > 0.0 && v.center.x < paper.x && v.center.y < paper.y));
     }

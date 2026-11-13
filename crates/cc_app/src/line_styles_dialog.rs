@@ -91,7 +91,13 @@ fn table(
         // The built-in styles, read only.
         for s in DetailStyle::ALL {
             ui.label(RichText::new(tr(s.key())).color(PALETTE.text_muted));
-            ui.label(RichText::new(format!("{:.2}", s.weight_mm())).color(PALETTE.text_muted));
+            // The number alone in metric projects, with the inch mark in imperial ones.
+            let weight = if cc_views::format::imperial() {
+                cc_views::format::paper_weight(s.weight_mm())
+            } else {
+                format!("{:.2}", s.weight_mm())
+            };
+            ui.label(RichText::new(weight).color(PALETTE.text_muted));
             ui.label(RichText::new(t!("ls-black")).color(PALETTE.text_muted));
             ui.label(RichText::new(pattern_label(s.pattern())).color(PALETTE.text_muted));
             ui.label(RichText::new(t!("ls-built-in")).color(PALETTE.text_faint));
@@ -125,7 +131,7 @@ fn table(
                 }
             });
             let mut w = s.weight_mm;
-            let r = ui.add(egui::DragValue::new(&mut w).speed(0.01).range(MIN_WEIGHT_MM..=MAX_WEIGHT_MM).suffix(" mm"));
+            let r = ui.add(crate::properties::weight_drag(&mut w).speed(0.01).range(MIN_WEIGHT_MM..=MAX_WEIGHT_MM));
             if r.changed() {
                 let command = cmd::LineStyleSet { style: style.clone(), weight: Some(w), ..Default::default() };
                 run(state, Some(key((id, "weight"))), command);

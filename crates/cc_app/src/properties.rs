@@ -1302,6 +1302,38 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
     if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", unit.symbol())) }
 }
 
+/// Drag value for a size on paper stored in millimeters (text heights,
+/// bubbles, gaps, sheet sides): ` mm` after the number in metric
+/// projects; in imperial ones inches with a fraction (`3/32"`), typed in
+/// inches unless a unit says otherwise (see [`format::parse_paper`]).
+pub fn paper_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_with)
+}
+
+/// Drag value for a pen weight stored in millimeters: ` mm` after the
+/// number in metric projects, decimal inches in imperial ones (`0.010"`).
+pub fn weight_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_weight_with)
+}
+
+/// Drag value for a paper length shown as decimal inches in imperial
+/// projects (`0.125"`, drafting fill patterns), ` mm` after the number in
+/// metric ones.
+pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_weight_with)
+}
+
+fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    if units.system() == cc_core::MeasurementSystem::Metric {
+        return DragValue::new(value).suffix(" mm");
+    }
+    let parse_units = units.clone();
+    DragValue::new(value)
+        .custom_formatter(move |v, _| show(&units, comma, v))
+        .custom_parser(move |s| format::parse_paper_with(&parse_units, s))
+}
+
 /// A new value typed in a [`param_editor`].
 pub enum ParamEdit {
     Number(f64),
@@ -1938,9 +1970,7 @@ fn text_props(ui: &mut Ui, state: &mut AppState, id: ElementId, note: &cc_core::
         }
         if let Some(width) = note.width {
             let mut w = width;
-            let r = row(ui, &t!("prop-text-width"), |ui| {
-                ui.add(DragValue::new(&mut w).speed(1.0).range(5.0..=1000.0).suffix(" mm"))
-            });
+            let r = row(ui, &t!("prop-text-width"), |ui| ui.add(paper_drag(&mut w).speed(1.0).range(5.0..=1000.0)));
             if r.changed() {
                 set(state, "width", &|n| n.width = Some(w));
             }
@@ -2885,7 +2915,7 @@ fn viewport_props(ui: &mut Ui, state: &mut AppState, sheet: ViewId, index: usize
     section(ui, "position", t!("section-position"), |ui| {
         for (label, axis) in [(t!("prop-center-x"), 0), (t!("prop-center-y"), 1)] {
             let mut v = vp.center[axis];
-            let r = row(ui, &label, |ui| ui.add(DragValue::new(&mut v).speed(1.0).fixed_decimals(1).suffix(" mm")));
+            let r = row(ui, &label, |ui| ui.add(paper_drag(&mut v).speed(1.0).fixed_decimals(1)));
             if r.changed() {
                 crate::engine_edit::view(state, sheet, Some(key((sheet, index, axis))), |x| {
                     if let ViewKind::Sheet { viewports, .. } = &mut x.kind

@@ -27,7 +27,8 @@ pub(crate) fn view_out(s: &Session, id: ViewId) -> Value {
 /// `drafting` (a 2D view independent of the model, showing only the text,
 /// dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the
 /// single-line diagram and load schedule of a distribution board; default
-/// the only board) or `sheet` (A3, numbered after the others, with the first title block type).
+/// the only board) or `sheet` (A3, ANSI B in imperial projects, numbered after the others, with
+/// the first title block type).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
@@ -209,9 +210,10 @@ impl Command for ViewCreate {
             }
             "sheet" => {
                 let n = count(p, ViewCategory::Sheet) + 101;
+                let size = SheetSize::default_for(p.measurement_system());
                 let kind = ViewKind::Sheet {
                     number: format!("A{n}"),
-                    size: SheetSize::A3,
+                    size,
                     portrait: false,
                     viewports: Vec::new(),
                     title_block: p.title_blocks().first().copied(),

@@ -265,7 +265,7 @@ fn line_cell(ui: &mut Ui, label: &str, lines: &mut LineGraphics, enabled: bool) 
             changed = true;
         }
         if let Some(w) = &mut lines.weight {
-            changed |= ui.add(egui::DragValue::new(w).range(0.05..=5.0).speed(0.01).suffix(" mm")).changed();
+            changed |= ui.add(crate::properties::weight_drag(w).range(0.05..=5.0).speed(0.01)).changed();
         }
         ui.separator();
         ui.label(RichText::new(t!("vg-pattern")).color(PALETTE.text_muted));

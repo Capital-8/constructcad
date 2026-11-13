@@ -54,7 +54,7 @@ fn details(system: MeasurementSystem) -> [String; 3] {
             [
                 t!("new-project-imperial-units", "sample" => length(12.0 * FOOT + 6.5 * INCH)),
                 t!("new-project-scales", "scales" => cc_core::scale::label(MeasurementSystem::Imperial, 48)),
-                t!("new-project-imperial-sheets", "size" => "11 × 17"),
+                t!("new-project-imperial-sheets", "size" => SheetSize::AnsiB.label()),
             ]
         }
     }
@@ -173,7 +173,7 @@ mod tests {
         let [units, scales, sheets] = details(MeasurementSystem::Imperial);
         assert!(units.contains("12'-6 1/2\""), "{units}");
         assert!(scales.contains("1/4\" = 1'-0\""), "{scales}");
-        assert!(sheets.contains("11 × 17"), "{sheets}");
+        assert!(sheets.contains("ANSI B"), "{sheets}");
         let [units, scales, sheets] = details(MeasurementSystem::Metric);
         assert!(units.contains("m²") && units.contains("m³"), "{units}");
         assert!(scales.contains("1:50, 1:100"), "{scales}");

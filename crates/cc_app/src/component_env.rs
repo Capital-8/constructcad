@@ -133,7 +133,8 @@ pub fn open_on(state: &mut AppState, type_id: ElementTypeId, sheet: Option<cc_co
         Some(TypeData::Component { def, .. }) if def.kind == cc_core::ComponentKind::TitleBlock
     );
     if title_block {
-        env.sheet = Some(crate::title_block_env::SheetEditor::new(sheet));
+        let system = state.project().measurement_system();
+        env.sheet = Some(crate::title_block_env::SheetEditor::new(sheet, system));
     }
     state.component_env = Some(env);
 }

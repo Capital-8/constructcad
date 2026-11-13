@@ -1992,7 +1992,7 @@ No parameters.
 | `finished_suffix` | string | optional | Text after the finished level (default: the language's, e.g. "(N.A.)"). |
 | `name` | string | optional | Type name (default: the language's). |
 | `raw_suffix` | string | optional | Text after the raw level (default: the language's, e.g. "(N.O.)"). |
-| `text_size` | number | optional | Text size, paper millimeters (default 2.5). |
+| `text_size` | number | optional | Text size, paper millimeters (default 2.5; 3/32", 2.38125, in imperial projects). |
 
 ### `text_add_leader`
 
@@ -2643,7 +2643,7 @@ No parameters.
 
 ### `view_create`
 
-*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan`, `electrical_plan`, `communications_plan` and `lightning_plan` (with `level`: the pipes, the conduits and devices, the structured cabling, or the lightning protection, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `drafting` (a 2D view independent of the model, showing only the text, dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the single-line diagram and load schedule of a distribution board; default the only board) or `sheet` (A3, numbered after the others, with the first title block type).
+*edit* — Create a view. `kind` is `floor_plan` or `ceiling_plan` (with `level`), `section` (with `start`, `end` and optional `depth`), `elevation` (with `direction`: north, south, east or west), `structural_plan` (with `level`: a formwork plan of the structure, tagged), `plumbing_plan`, `electrical_plan`, `communications_plan` and `lightning_plan` (with `level`: the pipes, the conduits and devices, the structured cabling, or the lightning protection, over the architecture, tagged), `three_d`, `analytical` (a 3D view of the analytical model), `rebar` (a 3D view of the reinforcement), `legend` (all types), `drafting` (a 2D view independent of the model, showing only the text, dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the single-line diagram and load schedule of a distribution board; default the only board) or `sheet` (A3, ANSI B in imperial projects, numbered after the others, with the first title block type).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2749,7 +2749,7 @@ No parameters.
 | `issue_date` | string | optional | Issue date, `YYYY-MM-DD`; empty to clear. |
 | `number` | string | optional | Sheet number. |
 | `portrait` | boolean | optional | The long side runs up. |
-| `size` | string or object | optional | Paper: `"A0"`…`"A4"`, or `{width, height}` in millimeters (50 to 5000). |
+| `size` | string or object | optional | Paper: `"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`, or `{width, height}` in millimeters (50 to 5000). |
 | `title_block` | id or name | optional | The title block type (id or name), or `null` for none. |
 
 ### `sheet_fields`

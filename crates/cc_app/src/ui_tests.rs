@@ -2961,6 +2961,7 @@ fn a_table_row_never_widens_its_dialog() {
 fn every_dialog_keeps_its_body_inside() {
     use crate::preferences::Section;
     type Open = Box<dyn Fn(&mut AppState)>;
+    type Make = fn() -> AppState;
     let mut opens: Vec<(String, Open)> = vec![
         ("project info".into(), Box::new(|s| s.dialogs.project_info = true)),
         ("units".into(), Box::new(|s| s.dialogs.units = true)),
@@ -2995,8 +2996,24 @@ fn every_dialog_keeps_its_body_inside() {
             }),
         ));
     }
-    for (name, open) in opens {
-        let mut state = sample_state();
+    let mut runs: Vec<(String, Open, Make)> =
+        opens.into_iter().map(|(name, open)| (name, open, sample_state as Make)).collect();
+    // Paper sizes read in inches in imperial projects: the dialogs showing them, again.
+    let imperial: Vec<(String, Open)> = vec![
+        ("line styles".into(), Box::new(crate::line_styles_dialog::open)),
+        ("fill patterns".into(), Box::new(crate::fill_patterns_dialog::open)),
+        ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
+        ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+    ];
+    runs.extend(imperial.into_iter().map(|(name, open)| (format!("{name} (imperial)"), open, imperial_state as _)));
+    let annotations = [cc_core::Category::Dimension, cc_core::Category::Text, cc_core::Category::Grid];
+    for t in imperial_state().project().types.values().filter(|t| annotations.contains(&t.category())) {
+        let id = t.id;
+        let open: Open = Box::new(move |s| s.dialogs.type_editor = Some(id));
+        runs.push((format!("type {} (imperial)", t.name), open, imperial_state));
+    }
+    for (name, open, make) in runs {
+        let mut state = make();
         open(&mut state);
         let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| crate::dialogs::show(ui.ctx(), state);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -3007,6 +3024,42 @@ fn every_dialog_keeps_its_body_inside() {
         }));
         assert!(result.is_ok(), "the dialog \"{name}\" overflows");
     }
+}
+
+/// A new imperial project, its units in force (as `AppState::sync` does each frame).
+fn imperial_state() -> AppState {
+    let project = cc_engine::new_project_with(cc_core::MeasurementSystem::Imperial);
+    let mut state = AppState::new(cc_core::Document::new(project));
+    state.project_open = true;
+    state.show_home = false;
+    state.sync();
+    state
+}
+
+/// In an imperial project a dimension type's text size reads in inches,
+/// and a bare number typed there is inches.
+#[test]
+fn paper_sizes_read_in_inches_in_imperial_projects() {
+    let mut state = imperial_state();
+    let dimension = state.project().default_type(cc_core::Category::Dimension).unwrap();
+    state.dialogs.type_editor = Some(dimension);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let size = |h: &Harness<'static, AppState>| match h.state().project().element_type(dimension).map(|t| &t.data) {
+        Some(cc_core::TypeData::Dimension { text_size, .. }) => *text_size,
+        other => panic!("not a dimension type: {other:?}"),
+    };
+    assert!((size(&harness) - 3.0 / 32.0 * 25.4).abs() < 1e-9);
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    assert!(values.iter().all(|v| !v.contains("mm")), "{values:?}");
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some("3/32\"")).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text("1/8");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!((size(&harness) - 3.175).abs() < 1e-9, "{}", size(&harness));
+    assert!(harness.query_all_by_role(Role::SpinButton).any(|n| n.value().as_deref() == Some("1/8\"")));
 }
 
 /// New asks for the template first: Cancel keeps the open project, the

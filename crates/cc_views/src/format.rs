@@ -191,6 +191,91 @@ pub fn scale_with(units: &Units, n: u32) -> String {
     cc_core::scale::label(units.system(), n)
 }
 
+/// Millimeters in an inch, for sizes on paper.
+const PAPER_INCH: f64 = 25.4;
+/// How far from a 1/64" step a paper size may be and still be written as
+/// that fraction, millimeters.
+const PAPER_FRACTION_TOLERANCE: f64 = 0.005;
+
+/// `value` with at most `decimals` places, trailing zeros dropped.
+fn trimmed_with(units: &Units, comma: bool, value: f64, decimals: usize) -> String {
+    let text = number_with(units, comma, value, decimals);
+    let (decimal, _) = units.style.separators(comma);
+    if !text.contains(decimal) {
+        return text;
+    }
+    let text = text.trim_end_matches('0');
+    text.strip_suffix(decimal).unwrap_or(text).to_string()
+}
+
+/// A size on paper (text heights, bubbles, gaps, sheet sides), stored in
+/// millimeters, with its unit: `2,5 mm` in metric projects; in imperial
+/// ones inches as a fraction to 1/64 (`3/32"`, `1 1/2"`, `17"`), or with
+/// three decimals when the size is not on a 1/64 step (`0.098"`).
+pub fn paper_with(units: &Units, comma: bool, mm: f64) -> String {
+    let mm = if mm.is_finite() { mm } else { 0.0 };
+    if units.system() == cc_core::MeasurementSystem::Metric {
+        return format!("{} mm", trimmed_with(units, comma, mm, 2));
+    }
+    let inches = mm.abs() / PAPER_INCH;
+    let steps = (inches * 64.0).round();
+    if (steps / 64.0 - inches).abs() * PAPER_INCH <= PAPER_FRACTION_TOLERANCE {
+        let (whole, num, _) = fraction(inches, 64);
+        let sign = if mm < 0.0 && (whole > 0.0 || num > 0) { "-" } else { "" };
+        format!("{sign}{}\"", mixed_inches(units, comma, inches, 64, false))
+    } else {
+        format!("{}\"", number_with(units, comma, mm / PAPER_INCH, 3))
+    }
+}
+
+/// A pen weight on paper, stored in millimeters: `0,25 mm` in metric
+/// projects, decimal inches in imperial ones (`0.010"`).
+pub fn paper_weight_with(units: &Units, comma: bool, mm: f64) -> String {
+    let mm = if mm.is_finite() { mm } else { 0.0 };
+    match units.system() {
+        cc_core::MeasurementSystem::Metric => format!("{} mm", number_with(units, comma, mm, 2)),
+        cc_core::MeasurementSystem::Imperial => format!("{}\"", number_with(units, comma, mm / PAPER_INCH, 3)),
+    }
+}
+
+/// Parse a size on paper, in millimeters: a bare number is millimeters in
+/// metric projects and inches in imperial ones; `mm`, `cm`, `in` or `"`
+/// after it say which. Fractions and mixed numbers are read (`3/32`,
+/// `1 1/2"`); `None` for anything else.
+pub fn parse_paper_with(units: &Units, text: &str) -> Option<f64> {
+    let t = text.trim();
+    let (negative, t) = match t.strip_prefix('-') {
+        Some(rest) => (true, rest.trim_start()),
+        None => (false, t),
+    };
+    let lower = t.to_lowercase();
+    let suffixes: [(&str, f64); 7] = [
+        ("mm", 1.0),
+        ("cm", 10.0),
+        ("inches", PAPER_INCH),
+        ("inch", PAPER_INCH),
+        ("in", PAPER_INCH),
+        ("\"", PAPER_INCH),
+        ("''", PAPER_INCH),
+    ];
+    let bare = match units.system() {
+        cc_core::MeasurementSystem::Metric => 1.0,
+        cc_core::MeasurementSystem::Imperial => PAPER_INCH,
+    };
+    let (number, per) = suffixes
+        .iter()
+        .find_map(|(suffix, per)| lower.strip_suffix(suffix).map(|n| (n.trim_end(), *per)))
+        .unwrap_or((lower.as_str(), bare));
+    // One sign, before the number.
+    if number.contains('-') && !number.contains('/') {
+        return None;
+    }
+    let mm = parse_mixed(number)? * per;
+    let mm = if negative { -mm } else { mm };
+    // Adding zero turns a negative zero into zero.
+    mm.is_finite().then_some(mm + 0.0)
+}
+
 /// Parse a number typed with either decimal symbol and optional grouping.
 pub fn parse_number(text: &str) -> Option<f64> {
     let t: String = text.trim().chars().filter(|c| !c.is_whitespace() && *c != '\u{202f}').collect();
@@ -348,6 +433,23 @@ pub fn parse_length(text: &str) -> Option<f64> {
     parse_length_with(&current().0, text)
 }
 
+/// A size on paper in the current units (see [`paper_with`]).
+pub fn paper(mm: f64) -> String {
+    let (u, c) = current();
+    paper_with(&u, c, mm)
+}
+
+/// A pen weight in the current units (see [`paper_weight_with`]).
+pub fn paper_weight(mm: f64) -> String {
+    let (u, c) = current();
+    paper_weight_with(&u, c, mm)
+}
+
+/// Parse a size on paper in the current units (see [`parse_paper_with`]).
+pub fn parse_paper(text: &str) -> Option<f64> {
+    parse_paper_with(&current().0, text)
+}
+
 /// Level elevation with an explicit sign, e.g. `+3,00`.
 pub fn elevation(value: f64) -> String {
     let sign = if value >= 0.0 { "+" } else { "-" };
@@ -484,5 +586,84 @@ mod tests {
         assert!(close(parse_length_with(&u, "6.5"), ft(0.0, 6.5)));
         u.length.unit = cc_core::LengthUnit::Foot;
         assert!(close(parse_length_with(&u, "1 1/2"), ft(1.5, 0.0)));
+    }
+
+    #[test]
+    fn paper_sizes_in_both_systems() {
+        let metric = Units::default();
+        assert_eq!(paper_with(&metric, true, 2.5), "2,5 mm");
+        assert_eq!(paper_with(&metric, false, 2.5), "2.5 mm");
+        assert_eq!(paper_with(&metric, true, 420.0), "420 mm");
+        assert_eq!(paper_with(&metric, true, 0.126), "0,13 mm");
+        assert_eq!(paper_with(&metric, true, f64::NAN), "0 mm");
+        assert_eq!(paper_weight_with(&metric, true, 0.25), "0,25 mm");
+        assert_eq!(paper_weight_with(&metric, false, 0.1), "0.10 mm");
+        let imperial = Units::imperial();
+        let inch = 25.4;
+        assert_eq!(paper_with(&imperial, false, 3.0 / 32.0 * inch), "3/32\"");
+        assert_eq!(paper_with(&imperial, false, 0.125 * inch), "1/8\"");
+        assert_eq!(paper_with(&imperial, false, 1.5 * inch), "1 1/2\"");
+        assert_eq!(paper_with(&imperial, false, 17.0 * inch), "17\"");
+        assert_eq!(paper_with(&imperial, false, 1.0 / 64.0 * inch), "1/64\"");
+        assert_eq!(paper_with(&imperial, false, 0.0), "0\"");
+        // Off the 1/64 steps: decimal inches.
+        assert_eq!(paper_with(&imperial, false, 2.5), "0.098\"");
+        // Within 0.005 mm of a step still reads as the fraction.
+        assert_eq!(paper_with(&imperial, false, 0.125 * inch + 0.004), "1/8\"");
+        assert_eq!(paper_weight_with(&imperial, false, 0.254), "0.010\"");
+        assert_eq!(paper_weight_with(&imperial, false, 0.25), "0.010\"");
+        assert_eq!(paper_weight_with(&imperial, false, 0.5), "0.020\"");
+    }
+
+    #[test]
+    fn parsing_paper_sizes() {
+        let close = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-9);
+        let metric = Units::default();
+        let imperial = Units::imperial();
+        let inch = 25.4;
+        for (units, text, want) in [
+            (&metric, "2,5", 2.5),
+            (&metric, "2.5 mm", 2.5),
+            (&metric, "1 cm", 10.0),
+            (&metric, "1/8\"", 0.125 * inch),
+            (&metric, "0.5 in", 0.5 * inch),
+            (&metric, "1/2", 0.5),
+            (&imperial, "1/8", 0.125 * inch),
+            (&imperial, "3/32\"", 3.0 / 32.0 * inch),
+            (&imperial, "1 1/2\"", 1.5 * inch),
+            (&imperial, "1-1/2\"", 1.5 * inch),
+            (&imperial, "0.098", 0.098 * inch),
+            (&imperial, "0,010\"", 0.01 * inch),
+            (&imperial, "2.5 mm", 2.5),
+            (&imperial, "2.5mm", 2.5),
+            (&imperial, "1 IN", inch),
+            (&imperial, "-1/2\"", -0.5 * inch),
+            (&imperial, "-1 1/2\"", -1.5 * inch),
+        ] {
+            assert!(close(parse_paper_with(units, text), want), "{text}: {:?}", parse_paper_with(units, text));
+        }
+        let zero = parse_paper_with(&imperial, "-0");
+        assert!(zero.is_some_and(|z| z == 0.0 && z.is_sign_positive()), "{zero:?}");
+        for bad in ["", "abc", "mm", "\"", "1/0", "1 2 3", "--1", "1e999", "inf", "NaN", "1/2/3", "- -1", "1 -mm"] {
+            assert_eq!(parse_paper_with(&imperial, bad), None, "{bad}");
+            assert_eq!(parse_paper_with(&metric, bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn paper_sizes_round_trip() {
+        let imperial = Units::imperial();
+        let metric = Units::default();
+        for step in 0..=(64 * 50) {
+            let mm = f64::from(step) / 64.0 * 25.4;
+            for (units, comma) in [(&imperial, false), (&imperial, true), (&metric, true), (&metric, false)] {
+                let text = paper_with(units, comma, mm);
+                let back = parse_paper_with(units, &text);
+                // Metric keeps two decimals: within 0.005 mm.
+                let metric = units.system() == cc_core::MeasurementSystem::Metric;
+                let tolerance = if metric { 0.005 + 1e-9 } else { 1e-9 };
+                assert!(back.is_some_and(|b| (b - mm).abs() <= tolerance), "{text}: {back:?} vs {mm}");
+            }
+        }
     }
 }
