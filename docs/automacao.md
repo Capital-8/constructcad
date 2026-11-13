@@ -288,6 +288,13 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
 ```
 
+`connections_create` coloca ligações de aço e madeira: `kind` é `base_plate` (em pilares), `end_plate`, `fin_plate`, `timber_bolts` ou `hanger` (em vigas); `members` os lista, senão `level` (por padrão o nível ativo) pega todos os seus pilares ou vigas. Só as extremidades que servem ao tipo ganham uma, as que já têm uma são puladas, e o resultado é `{created, skipped}` num só passo de desfazer. `params` muda os tamanhos padrão do tipo (metros; `thickness`, `width` e `length`, com 0 valendo a partir da seção, `bolt_diameter`, `rows`, `columns`, `spacing`, `edge`, `anchor_length`). Depois, `element_set` edita os tamanhos, não o elemento, a extremidade nem o tipo. As tabelas têm os campos `ConnectionKind`, `PlateMass` (kg), `BoltCount` e `BoltDiameter`.
+
+```text
+{"command": "connections_create", "args": {"kind": "end_plate", "members": [12, 13], "params": {"rows": 3, "bolt_diameter": 0.02}}}
+{"command": "element_set", "args": {"id": 42, "params": {"params": {"thickness": 0.02}}}}
+```
+
 `wall_framing_create` estrutura paredes retas em light steel frame ou madeira: um elemento de ossatura por parede, dono de pilares comuns (montantes, montantes duplos, montantes curtos) e vigas (guias ou soleiras, vergas, contravergas, bloqueadores), feitos num só passo de desfazer e devolvidos como `{framings: [{id, wall, members}]}`. `system` é `light_steel` (padrão) ou `wood`; `spacing` é o espaçamento dos montantes em metros (0,2 a 1,2; 0,4 e 0,6 por padrão); `stud_type`, `track_type` e `header_type` aceitam id ou nome (padrão: os tipos do catálogo do sistema); `double_top` (madeira) e `blocking` são booleanos. Paredes curvas e já estruturadas são recusadas antes de qualquer alteração. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros da ossatura ou quando a parede, suas portas ou janelas mudam; um elemento editado ou excluído diretamente fica desvinculado. As guias e soleiras padrão são as linhas do catálogo giradas 90 graus, deitadas (a largura da seção é a sua altura); um tipo dado é usado como desenha. A ossatura e seus elementos acompanham as fases, a opção de projeto e o nível da parede. Montantes não são unidos onde uma abertura chega à ponta da parede, onde duas aberturas ficam a menos de uns quatro montantes uma da outra, nem no canto entre duas paredes estruturadas; dividir uma parede estruturada reestrutura só a parte que fica com a ossatura.
 
 ```text

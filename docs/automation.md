@@ -288,6 +288,13 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
 ```
 
+`connections_create` places steel and timber connections: `kind` is `base_plate` (on columns), `end_plate`, `fin_plate`, `timber_bolts` or `hanger` (on beams); `members` lists them, else `level` (default the active level) takes all of its columns or beams. Only the ends that suit the kind get one, ends that already have one are skipped, and the result is `{created, skipped}` in one undo step. `params` changes the kind's default sizes (meters; `thickness`, `width` and `length`, 0 meaning from the section, `bolt_diameter`, `rows`, `columns`, `spacing`, `edge`, `anchor_length`). Later `element_set` edits the sizes, not the member, end or kind. Schedules have the fields `ConnectionKind`, `PlateMass` (kg), `BoltCount` and `BoltDiameter`.
+
+```text
+{"command": "connections_create", "args": {"kind": "end_plate", "members": [12, 13], "params": {"rows": 3, "bolt_diameter": 0.02}}}
+{"command": "element_set", "args": {"id": 42, "params": {"params": {"thickness": 0.02}}}}
+```
+
 `wall_framing_create` frames straight walls in light steel or wood: one framing element per wall, owning ordinary columns (studs, king and jack studs, cripples) and beams (tracks or plates, headers, sills, blocking), made in one undo step and returned as `{framings: [{id, wall, members}]}`. `system` is `light_steel` (default) or `wood`; `spacing` is the stud spacing in meters (0.2 to 1.2; 0.4 and 0.6 by default); `stud_type`, `track_type` and `header_type` take an id or a name (default: the system's catalog types); `double_top` (wood) and `blocking` are booleans. Curved walls and walls already framed are refused before anything is made. The members are regenerated, with their ids kept, when `element_set` changes the framing's parameters or when the wall or its doors and windows change; a member edited or deleted directly is detached. The default tracks and plates are the catalog rows turned 90 degrees, lying flat (the section's width is their height); a given type is used as it draws. The framing and its members follow the wall's phases, design option and level. Studs are not merged where an opening reaches a wall end, where two openings are closer than about four stud widths, or at the corner of two framed walls; splitting a framed wall reframes only the part that keeps the framing.
 
 ```text
