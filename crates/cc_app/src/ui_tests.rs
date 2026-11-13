@@ -3851,3 +3851,97 @@ fn truss_properties_regenerate_it() {
     let t = get(harness.state());
     assert_eq!((t.members.len(), t.detached.len()), (25, 0));
 }
+
+/// Light Steel Frame shows in the Steel framing group, Wood Frame in the
+/// Timber one, neither for concrete.
+#[test]
+fn wall_framing_buttons_follow_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    for (material, steel, wood) in [(M::Concrete, false, false), (M::Steel, true, false), (M::Timber, false, true)] {
+        let mut state = sample_state();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let harness = ribbon_harness(state, 1800.0);
+        assert_eq!(harness.query_by_label(&t!("action-light-steel-frame")).is_some(), steel, "{material:?}");
+        assert_eq!(harness.query_by_label(&t!("action-wood-frame")).is_some(), wood, "{material:?}");
+    }
+}
+
+/// *Structure → Light Steel Frame* opens the dialog; OK frames the selected
+/// wall only, in one undo step, and selects the framing.
+#[test]
+fn wall_framing_dialog_frames_the_selected_wall() {
+    use cc_core::wall_framing::FramingSystem;
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let args = serde_json::json!({"start": [100, 100], "end": [103.6, 100], "height": 3.0});
+    let wall = cc_core::ElementId(state.session.execute("wall_create", args).unwrap()["id"].as_u64().unwrap());
+    state.selection = [wall].into_iter().collect();
+    let depth = state.session.doc.undo_depth();
+    let mut harness = app_harness(state);
+    harness.get_by_role_and_label(Role::Button, &t!("action-light-steel-frame")).click();
+    harness.run();
+    let system = harness.state().dialogs.wall_framing.as_ref().map(|d| d.system);
+    assert_eq!(system, Some(FramingSystem::LightSteel));
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.wall_framing.is_none(), "OK was accepted: {:?}", state.message);
+    let framings: Vec<(cc_core::ElementId, cc_core::ElementId, usize)> = state
+        .project()
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            cc_core::ElementKind::WallFraming(f) => Some((e.id, f.wall, f.members.len())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(framings.len(), 1, "only the selected wall");
+    assert_eq!((framings[0].1, framings[0].2), (wall, 12), "10 studs and two tracks");
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    assert!(state.selection.contains(&framings[0].0));
+}
+
+/// A framing's rows edit it through `element_set`, *Reset Members* brings
+/// back a deleted stud, and a member's *Framing* row selects the framing.
+#[test]
+fn wall_framing_properties_and_the_member_row() {
+    use cc_core::wall_framing::{FramingRoleKind, WallFraming};
+    let mut state = sample_state();
+    let args = serde_json::json!({"start": [100, 100], "end": [103.6, 100], "height": 3.0});
+    let wall = state.session.execute("wall_create", args).unwrap()["id"].as_u64().unwrap();
+    let out = state.session.execute("wall_framing_create", serde_json::json!({"walls": [wall]})).unwrap();
+    let host = cc_core::ElementId(out["framings"][0]["id"].as_u64().unwrap());
+    let get = |s: &AppState| match &s.project().element(host).unwrap().kind {
+        cc_core::ElementKind::WallFraming(f) => (**f).clone(),
+        _ => panic!("not a wall framing"),
+    };
+    let studs = |f: &WallFraming| f.members.iter().filter(|m| m.role.kind == FramingRoleKind::Stud).count();
+    // The path the palette's rows take.
+    crate::wall_framing_ui::edit(&mut state, host, "spacing", |f| f.spacing = 0.6);
+    assert_eq!(studs(&get(&state)), 7);
+    let stud = get(&state).members.iter().find(|m| m.role.kind == FramingRoleKind::Stud).unwrap().id;
+    state.session.execute("elements_delete", serde_json::json!({"ids": [stud.0]})).unwrap();
+    assert_eq!(get(&state).detached.len(), 1);
+    state.selection = [host].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(
+        harness.query_by_label(&t!("action-reset-members")).is_some(),
+        "row labels are painted, the button is a widget"
+    );
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let f = get(harness.state());
+    assert_eq!((studs(&f), f.detached.len()), (7, 0));
+    let member = f.members[0].id;
+    harness.state_mut().selection = [member].into_iter().collect();
+    harness.run();
+    harness.get_by_label(&t!("action-select-framing")).click();
+    harness.run();
+    let selection = &harness.state().selection;
+    assert!(selection.len() == 1 && selection.contains(&host));
+}
