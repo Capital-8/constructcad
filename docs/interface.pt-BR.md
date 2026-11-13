@@ -277,6 +277,17 @@ Uma parede estrutural (a caixa *Estrutural* nas propriedades) mostra a seção *
 - **Grampos**: `ties` põe uma barra com ganchos atravessando a parede a cada n barras horizontais e a cada m barras verticais da face externa.
 - **Aberturas, encontros e emendas**: as barras param a um cobrimento de portas, janelas e extremidades livres; as horizontais vão até a extremidade unida a outra parede, onde começam as barras dessa parede; barras mais longas que `max_length` (padrão 12 m) são emendadas por traspasse `lap`, com as emendas vizinhas defasadas.
 
+## Armadura de lajes
+
+Um piso ou um radier mostra a seção *Armadura* nas propriedades. *Armadura típica* cria uma malha a cada 15 cm nas camadas superior e inferior, e o reforço em volta das aberturas; cada conjunto aparece então com o seu espaçamento e um botão *Remover*. `slab_rebar_create` (paleta de comandos) define todo o resto, para as lajes indicadas ou todos os pisos e radiers de um nível:
+
+- **Malha**: barras retas em duas direções, a primeira em `angle` (camada externa) e a segunda perpendicular a ela, com `spacing` e `cross_spacing`, `type` e `cross_type`; `layers` é `both`, `top` ou `bottom`.
+- **Radial**: `layout` `radial` cria barras de anel a cada `spacing` em torno de `center` (o meio da laje por padrão) e `radial_count` barras radiais do raio `start` até a borda; com `intermediate`, uma barra mais curta a partir desse raio fica entre cada duas.
+- **Recorte pela laje**: toda barra termina a um cobrimento da borda da laje e livre das aberturas e shafts. Onde o contorno foi desenhado com arcos ou círculos as barras terminam na curva verdadeira; em uma laje circular cada barra da malha tem o seu comprimento exato, e `element_get` lista as barras de um conjunto por comprimento em `derived.bars`.
+- **Pontas na borda**: `hook` dobra as pontas das barras da malha na borda da laje: para o meio da laje quando positivo (para baixo nas superiores, para cima nas inferiores), para fora quando negativo (para dentro da parede acima ou abaixo).
+- **Emendas**: barras mais longas que `max_length` (padrão 12 m) são emendadas por traspasse `lap`, com as emendas vizinhas defasadas; um anel cortado de barras comerciais vira peças que traspassam a seguinte ao longo do círculo.
+- **Aberturas**: uma laje com aberturas recebe reforço em cada camada: duas barras ao longo de cada lado de cada abertura, passando 40 diâmetros dela, e uma diagonal em cada canto. `trim` muda a quantidade, o espaçamento, a ancoragem e as diagonais, ou desliga o reforço (`false`).
+
 ## Estrutura por material
 
 A aba *Estrutura* começa com o grupo *Material*: botões *Concreto*, *Aço* e *Madeira* (um fica sempre ligado; a escolha é guardada entre sessões). O material troca os grupos feitos para ele: concreto mostra *Estrutura* (Pilar, Viga, Laje) e *Armadura*; aço mostra *Estrutura* (Pilar, Viga, Contraventamento), o grupo de grade *Estruturação* (Pilares nas grades, Vigas nas grades, Vigas entre pilares, Pórtico por grade, Treliça, Galpão metálico, Light Steel Frame) e *Ligações* (Placa de base, Placa de topo, Chapa de alma); madeira mostra *Estrutura* (Pilar, Viga, Contraventamento), o mesmo grupo de grade com Wood Frame no lugar de Galpão metálico e Estrutura de aço leve, e *Ligações* (Ligação parafusada, Suporte de viga). Perfis, Fundação, Analítico, Documentação, Referência e Seleção aparecem para todos os materiais.

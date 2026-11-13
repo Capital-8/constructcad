@@ -32,6 +32,7 @@ mod rooms;
 pub mod section;
 pub mod sizing;
 pub mod skeleton;
+mod slab_rebar;
 mod solid;
 pub mod stair;
 pub mod strip;

@@ -277,6 +277,17 @@ A structural wall (the *Structural* checkbox of its properties) shows a *Reinfor
 - **Ties**: `ties` puts a hooked bar across the wall at every n-th horizontal and every m-th vertical bar of the exterior face.
 - **Openings, joints and splices**: bars stop the cover clear of doors, windows and free ends; horizontal bars run to an end joined to another wall, where that wall's bars begin; bars longer than `max_length` (default 12 m) are lap spliced by `lap`, neighbouring splices staggered.
 
+## Slab reinforcement
+
+A floor or a foundation slab shows a *Reinforcement* section in its properties. *Typical Reinforcement* gives it a mesh every 15 cm in its top and bottom layers, and trimming bars around its openings; each set is then listed with its spacing and a *Remove* button. `slab_rebar_create` (command palette) sets everything else, for the given slabs or every floor and foundation slab of a level:
+
+- **Mesh**: straight bars in two directions, the first at `angle` (the outer layer) and the second square to it, with `spacing` and `cross_spacing`, `type` and `cross_type`; `layers` is `both`, `top` or `bottom`.
+- **Radial**: `layout` `radial` makes ring bars `spacing` apart around `center` (the middle of the slab by default) and `radial_count` radial bars from the radius `start` to the edge; with `intermediate`, a shorter bar from that radius runs between each two.
+- **Clipped to the slab**: every bar ends the cover inside the slab's edge and clear of its openings and shafts. Where the boundary was drawn with arcs or circles the bars end on the true curve, so in a circular slab each bar of a mesh has its own exact length; `element_get` lists a set's `derived.bars` by length.
+- **Edge ends**: `hook` bends the ends of mesh bars at the slab's edge: towards the middle of the slab when positive (down for top bars, up for bottom ones), out of it when negative (into the wall above or below).
+- **Splices**: bars longer than `max_length` (default 12 m) are lap spliced by `lap`, neighbouring splices staggered; a ring cut from stock is pieces that each lap the next around it.
+- **Openings**: a slab with openings gets trimming bars in each layer: two bars along each side of every opening, reaching 40 bar diameters past it, and a diagonal across each corner. `trim` changes the count, spacing, anchorage and diagonals, or turns them off (`false`).
+
 ## Structure by material
 
 The *Structure* tab starts with a *Material* group: *Concrete*, *Steel* and *Timber* buttons (one is always on; the choice is kept between sessions). The material swaps the groups made for it: concrete shows *Structure* (Column, Beam, Floor) and *Reinforcement*; steel shows *Structure* (Column, Beam, Bracing), the *Framing* grid group (Columns at Grids, Beams on Grids, Beams Between Columns, Grid Frame, Truss, Steel Building, Light Steel Frame) and *Connections* (Base Plate, End Plate, Fin Plate); timber shows *Structure* (Column, Beam, Bracing), the same grid group with Wood Frame in place of Steel Building and Light Steel Frame, and *Connections* (Bolted Joint, Hanger). Profiles, Foundation, Analytical, Documentation, Datum and Selection show for every material.

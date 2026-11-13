@@ -401,10 +401,15 @@ impl Project {
                         ElementKind::Door(h) | ElementKind::Window(h) => {
                             self.element(h.host).is_some_and(|w| w.as_wall().is_some())
                         }
-                        // Wall bars in walls, the other layouts in beams and columns.
-                        ElementKind::Rebar(r) => self.element(r.host).is_some_and(|h| match h.kind {
+                        // Wall bars in walls, slab bars in floors and foundation
+                        // slabs, the other layouts in beams and columns.
+                        ElementKind::Rebar(r) => self.element(r.host).is_some_and(|h| match &h.kind {
                             ElementKind::Wall(_) => r.layout.in_wall(),
-                            ElementKind::Beam(_) | ElementKind::Column(_) => !r.layout.in_wall(),
+                            ElementKind::Floor(_) => r.layout.in_slab(),
+                            ElementKind::Foundation(f) => {
+                                matches!(f.shape, crate::FoundationShape::Slab { .. }) && r.layout.in_slab()
+                            }
+                            ElementKind::Beam(_) | ElementKind::Column(_) => !r.layout.in_wall() && !r.layout.in_slab(),
                             _ => false,
                         }),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),

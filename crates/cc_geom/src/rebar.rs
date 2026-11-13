@@ -194,6 +194,16 @@ pub fn build_rebar(
             wall_sets.entry(r.host).or_default().push((r, d));
         }
     }
+    // The sets of each slab: the layers of a mesh are stacked by them.
+    let mut slab_sets: BTreeMap<ElementId, Vec<(&Rebar, f64)>> = BTreeMap::new();
+    for e in project.elements.values() {
+        if let ElementKind::Rebar(r) = &e.kind
+            && r.layout.in_slab()
+            && let Some(d) = diameter(project, e)
+        {
+            slab_sets.entry(r.host).or_default().push((r, d));
+        }
+    }
     let mut out = BTreeMap::new();
     for e in project.elements.values() {
         let ElementKind::Rebar(r) = &e.kind else { continue };
@@ -207,6 +217,19 @@ pub fn build_rebar(
                     continue;
                 };
                 beam_bars(g, *height, &r.layout, r.cover, d, ds, r.splice)
+            }
+            ElementKind::Floor(_) | ElementKind::Foundation(_) => {
+                let Some(slab) = crate::slab_rebar::Slab::of(project, host) else { continue };
+                // The largest bar of the other sets of the layer that an inner set lies inside.
+                let other = slab_sets
+                    .get(&r.host)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(s, _)| !std::ptr::eq(*s, r) && s.layout.slab_top() == r.layout.slab_top())
+                    .filter(|(s, _)| !matches!(s.layout, RebarLayout::SlabTrim { .. }) && !slab_inner(&s.layout))
+                    .map(|(_, d)| *d)
+                    .fold(0.0, f64::max);
+                crate::slab_rebar::slab_bars(&slab, r, d, other)
             }
             ElementKind::Wall(_) => {
                 let Some(g) = walls.get(&r.host) else { continue };
@@ -243,6 +266,16 @@ pub fn build_rebar(
         out.insert(e.id, RebarGeom { element: e.id, host: None, diameter: d, bars });
     }
     out
+}
+
+/// Whether a slab's set lies inside the other bars of its layer.
+fn slab_inner(layout: &RebarLayout) -> bool {
+    matches!(
+        layout,
+        RebarLayout::SlabStraight { inner: true, .. }
+            | RebarLayout::SlabRing { inner: true, .. }
+            | RebarLayout::SlabRadial { inner: true, .. }
+    )
 }
 
 /// What the set `r` needs to know of `all` the sets of its wall.
@@ -394,11 +427,15 @@ fn beam_bars(
             let heights = side_heights(count, spacing, inset, height - inset);
             runs(heights.into_iter().flat_map(|z| [(-v, z), (v, z)]).collect())
         }
-        // Cross-ties belong to columns, wall bars to walls.
+        // Cross-ties belong to columns, wall bars to walls, slab bars to slabs.
         RebarLayout::Ties { .. }
         | RebarLayout::WallHorizontal { .. }
         | RebarLayout::WallVertical { .. }
-        | RebarLayout::WallTies { .. } => Vec::new(),
+        | RebarLayout::WallTies { .. }
+        | RebarLayout::SlabStraight { .. }
+        | RebarLayout::SlabRing { .. }
+        | RebarLayout::SlabRadial { .. }
+        | RebarLayout::SlabTrim { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = cover + d / 2.0;
             let (v, z0, z1) = ((g.half - inset).max(0.0), inset, (height - inset).max(inset));
@@ -528,11 +565,15 @@ fn column_bars(
             }
             bars
         }
-        // Side bars belong to beams, wall bars to walls.
+        // Side bars belong to beams, wall bars to walls, slab bars to slabs.
         RebarLayout::Sides { .. }
         | RebarLayout::WallHorizontal { .. }
         | RebarLayout::WallVertical { .. }
-        | RebarLayout::WallTies { .. } => Vec::new(),
+        | RebarLayout::WallTies { .. }
+        | RebarLayout::SlabStraight { .. }
+        | RebarLayout::SlabRing { .. }
+        | RebarLayout::SlabRadial { .. }
+        | RebarLayout::SlabTrim { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = r.cover + d / 2.0;
             let (outline, length) = if shape.round {
