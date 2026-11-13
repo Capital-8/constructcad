@@ -1,7 +1,7 @@
 //! Light steel and wood framing of walls (see `cc_core::wall_framing`):
 //! the host element and the catalog types its members get by default.
 
-use super::structure_material::type_or_row;
+use super::structure_material::{type_or_row, type_or_turned_row};
 use super::{add_element, edit};
 use crate::error::{EngineError, Result};
 use crate::refs::{self, Ref};
@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 pub struct FramingRows {
     /// A column type of this row.
     pub stud: (&'static str, &'static str),
-    /// Beam types of these rows.
+    /// Beam types of these rows: the track turned 90 degrees to lie flat.
     pub track: (&'static str, &'static str),
     pub header: (&'static str, &'static str),
 }
@@ -53,10 +53,16 @@ pub fn new_wall_framing_type(id: ElementTypeId) -> ElementType {
 /// step with its parameters, its wall and the wall's doors and windows
 /// (`element_set` on the framing regenerates them, keeping their ids). A
 /// member edited or deleted by hand is detached and left alone, and
-/// deleting the wall deletes its framing and members. Default types come
+/// deleting the wall deletes its framing and members. The framing and its
+/// members follow the wall's phases, design option and level. Default types come
 /// from the profile catalog, made when missing:
 /// - light steel: `Ue 90x40x12x0,95` studs, `U 92x38x0,95` tracks and `Ue 140x40x12x0,95` headers;
 /// - wood: `Peça 6x8` studs and plates, and `Peça 6x16` headers.
+///
+/// The tracks and plates lie flat: their default beam type has the profile
+/// turned 90 degrees, so its depth runs across the wall and its width
+/// (38 mm, 6 cm) is their height. A given type is used as it draws: the
+/// height of its section is the height of the track.
 ///
 /// Curved walls, walls already framed and out-of-range values are refused
 /// before anything is made. One undo step; returns `framings`, each with its
@@ -139,7 +145,8 @@ impl Command for WallFramingCreate {
         let depth = s.doc.undo_depth();
         let result = (|| -> Result<Value> {
             template.stud_type = type_or_row(s, stud_given, Category::Column, rows.stud)?;
-            template.track_type = type_or_row(s, track_given, Category::Beam, rows.track)?;
+            // Tracks and plates lie flat: the section turned so its depth runs across the wall.
+            template.track_type = type_or_turned_row(s, track_given, Category::Beam, rows.track, 90.0)?;
             template.header_type = type_or_row(s, header_given, Category::Beam, rows.header)?;
             template.check_types(s.project()).map_err(EngineError::invalid)?;
             for &(wall, _) in &walls {
@@ -186,7 +193,7 @@ impl Command for WallFramingCreate {
 
 /// `element_get`'s derived values of a framing: its member ids by role
 /// kind, how many roles are detached, its wall's length and whether the
-/// layout reached the member limit (`at_limit`).
+/// layout would pass the member limit, so it has no members (`at_limit`).
 pub(crate) fn derived(p: &cc_core::Project, f: &WallFraming, out: &mut serde_json::Map<String, Value>) {
     let ids =
         |k: FramingRoleKind| -> Vec<u64> { f.members.iter().filter(|m| m.role.kind == k).map(|m| m.id.0).collect() };
@@ -206,5 +213,5 @@ pub(crate) fn derived(p: &cc_core::Project, f: &WallFraming, out: &mut serde_jso
     );
     out.insert("detached".into(), json!(f.detached.len()));
     out.insert("length".into(), json!(f.wall_length(p)));
-    out.insert("at_limit".into(), json!(f.layout(p).len() >= wf::MAX_MEMBERS));
+    out.insert("at_limit".into(), json!(f.check_size(p).is_err()));
 }

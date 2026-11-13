@@ -905,6 +905,8 @@ impl<'a> EditCtx<'a> {
         self.sync_dimensions();
         self.sync_phases();
         self.sync_options();
+        // Members take their host's phases and option once those are settled.
+        self.sync_member_phases();
         self.sync_sketches();
         self.sync_callouts();
         self.sync_views();

@@ -172,3 +172,163 @@ fn ifc_export_leaves_the_framing_out() {
     let uid = cc_ifc::guid::encode(s.project().element(ElementId(host)).unwrap().uid.0);
     assert!(!text.contains(&uid), "the framing itself is not exported");
 }
+
+/// The beam of a member and the size of its section as drawn: (across, up).
+fn beam_of(s: &Session, id: ElementId) -> (cc_core::Beam, (f64, f64)) {
+    let e = s.project().element(id).unwrap();
+    let ElementKind::Beam(b) = &e.kind else { panic!("a beam") };
+    (b.clone(), cc_core::steel_building::section_box(s.project(), e.type_id))
+}
+
+fn column_of(s: &Session, id: ElementId) -> cc_core::Column {
+    match &s.project().element(id).unwrap().kind {
+        ElementKind::Column(c) => c.clone(),
+        _ => panic!("a column"),
+    }
+}
+
+fn first(f: &WallFraming, kind: K) -> ElementId {
+    f.members.iter().find(|m| m.role.kind == kind).unwrap().id
+}
+
+/// The framing and its members.
+fn with_members(s: &Session, host: u64) -> Vec<ElementId> {
+    let mut ids = vec![ElementId(host)];
+    ids.extend(framing(s, host).members.iter().map(|m| m.id));
+    ids
+}
+
+#[test]
+fn light_steel_tracks_lie_flat_on_the_catalog_row() {
+    let mut s = Session::default();
+    let a = wall(&mut s, [0.0, 0.0], [3.6, 0.0]);
+    let f = frame(&mut s, json!({"walls": [a]}));
+    // `U 92x38x0,95` turned on its side: 92 mm across the wall, 38 mm high.
+    let (bottom, (across, up)) = beam_of(&s, first(&f, K::BottomTrack));
+    assert!((across - 0.092).abs() < 1e-6 && (up - 0.038).abs() < 1e-6, "{across} x {up}");
+    assert!((bottom.top_offset - 0.038).abs() < 1e-9, "the bottom track's top at the base plus 38 mm");
+    let (top, _) = beam_of(&s, first(&f, K::TopTrack));
+    assert!((top.top_offset - 3.0).abs() < 1e-9, "the top track's top at the wall top");
+    let stud = column_of(&s, first(&f, K::Stud));
+    assert!((stud.base_offset - 0.038).abs() < 1e-9, "the studs stand on the track");
+    assert!((stud.height - (3.0 - 2.0 * 0.038)).abs() < 1e-9, "and reach the top track: {}", stud.height);
+    // The type is the catalog row turned 90 degrees, made once.
+    let track_type = s.project().element(first(&f, K::BottomTrack)).unwrap().type_id;
+    let data = &s.project().element_type(track_type).unwrap().data;
+    assert!(
+        matches!(data, cc_core::TypeData::Beam { profile_rotation_deg, .. } if (*profile_rotation_deg - 90.0).abs() < 1e-9)
+    );
+    let b = wall(&mut s, [0.0, 5.0], [3.6, 5.0]);
+    let g = frame(&mut s, json!({"walls": [b]}));
+    assert_eq!(s.project().element(first(&g, K::BottomTrack)).unwrap().type_id, track_type, "reused");
+    // A header stands on edge: the 140 mm depth is its height.
+    let w = wall(&mut s, [0.0, 10.0], [3.6, 10.0]);
+    run(&mut s, "window_create", json!({"wall": w, "offset": 1.8}));
+    let h = frame(&mut s, json!({"walls": [w]}));
+    let (_, (across, up)) = beam_of(&s, first(&h, K::Header));
+    assert!((up - 0.14).abs() < 1e-6 && across < up, "{across} x {up}");
+}
+
+#[test]
+fn wood_plates_lie_flat_on_the_catalog_row() {
+    let mut s = Session::default();
+    let a = wall(&mut s, [0.0, 0.0], [3.6, 0.0]);
+    let f = frame(&mut s, json!({"walls": [a], "system": "wood"}));
+    // `Peça 6x8` on its side: 8 cm across the wall, 6 cm high.
+    let (bottom, (across, up)) = beam_of(&s, first(&f, K::BottomTrack));
+    assert!((across - 0.08).abs() < 1e-6 && (up - 0.06).abs() < 1e-6, "{across} x {up}");
+    assert!((bottom.top_offset - 0.06).abs() < 1e-9);
+    let stud = column_of(&s, first(&f, K::Stud));
+    assert!((stud.base_offset - 0.06).abs() < 1e-9);
+    assert!((stud.height - (3.0 - 3.0 * 0.06)).abs() < 1e-9, "under two top plates: {}", stud.height);
+}
+
+#[test]
+fn a_framing_follows_its_wall_when_demolished() {
+    let mut s = Session::default();
+    let phases = run(&mut s, "phases_list", json!({}));
+    let (existing, new) = (id(&phases[0]), id(&phases[1]));
+    let a = wall(&mut s, [0.0, 0.0], [3.6, 0.0]);
+    run(&mut s, "elements_phase_set", json!({"ids": [a], "created": existing}));
+    let host = first_framing(&run(&mut s, "wall_framing_create", json!({"walls": [a]})));
+    let phase_of = |s: &Session, id: ElementId| {
+        let e = s.project().element(id).unwrap();
+        (e.phase_created.0, e.phase_demolished.map(|p| p.0))
+    };
+    let before: Vec<_> = with_members(&s, host).iter().map(|m| phase_of(&s, *m)).collect();
+    let depth = s.doc.undo_depth();
+    run(&mut s, "elements_demolish", json!({"ids": [a], "phase": new}));
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    for m in with_members(&s, host) {
+        assert_eq!(phase_of(&s, m).1, Some(new), "{m:?} demolished with the wall");
+    }
+    run(&mut s, "undo", json!({}));
+    let after: Vec<_> = with_members(&s, host).iter().map(|m| phase_of(&s, *m)).collect();
+    assert_eq!(after, before);
+    assert!(after.iter().all(|p| p.1.is_none()));
+}
+
+#[test]
+fn a_framing_follows_its_walls_design_option() {
+    let mut s = Session::default();
+    let set = run(&mut s, "option_set_create", json!({"name": "Layout", "options": ["Open", "Split"]}));
+    let split = id(&set["options"][1]);
+    let a = wall(&mut s, [0.0, 0.0], [3.6, 0.0]);
+    run(&mut s, "elements_option_set", json!({"ids": [a], "option": "Layout: Split"}));
+    let option = |s: &Session, id: ElementId| s.project().element(id).unwrap().design_option.map(|o| o.0);
+    // Framed from the main model: the framing and its members go into the wall's option.
+    let host = first_framing(&run(&mut s, "wall_framing_create", json!({"walls": [a]})));
+    assert!(with_members(&s, host).iter().all(|m| option(&s, *m) == Some(split)));
+    // Moving the wall to the main model takes its framing along, in one step.
+    let depth = s.doc.undo_depth();
+    run(&mut s, "elements_option_set", json!({"ids": [a], "option": null}));
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    assert!(with_members(&s, host).iter().all(|m| option(&s, *m).is_none()));
+    run(&mut s, "undo", json!({}));
+    assert!(with_members(&s, host).iter().all(|m| option(&s, *m) == Some(split)));
+    // A main-model wall framed while editing an option stays in the main model.
+    let b = wall(&mut s, [0.0, 5.0], [3.6, 5.0]);
+    run(&mut s, "option_active_set", json!({"option": null}));
+    let b_option = option(&s, ElementId(b));
+    run(&mut s, "option_active_set", json!({"option": split}));
+    let other = first_framing(&run(&mut s, "wall_framing_create", json!({"walls": [b]})));
+    assert!(with_members(&s, other).iter().all(|m| option(&s, *m) == b_option));
+    // Members a regeneration adds keep the framing's option too.
+    run(&mut s, "element_set", json!({"id": other, "params": {"spacing": 0.2}}));
+    assert!(with_members(&s, other).iter().all(|m| option(&s, *m) == b_option));
+}
+
+#[test]
+fn too_many_members_are_refused_and_a_grown_wall_is_at_the_limit() {
+    let mut s = Session::default();
+    let long = wall(&mut s, [0.0, 0.0], [1000.0, 0.0]);
+    let depth = s.doc.undo_depth();
+    assert!(s.execute("wall_framing_create", json!({"walls": [long], "spacing": 0.2})).is_err());
+    assert_eq!(s.doc.undo_depth(), depth);
+    assert_eq!(framings(&s), 0);
+    let a = wall(&mut s, [0.0, 5.0], [3.6, 5.0]);
+    let host = first_framing(&run(&mut s, "wall_framing_create", json!({"walls": [a], "spacing": 0.2})));
+    let at_limit = |s: &mut Session| run(s, "element_get", json!({"id": host}))["derived"]["at_limit"].clone();
+    assert_eq!(at_limit(&mut s), json!(false));
+    run(&mut s, "element_set", json!({"id": a, "params": {"end": [1000.0, 5.0]}}));
+    assert_eq!(at_limit(&mut s), json!(true));
+    assert!(framing(&s, host).members.is_empty(), "no members past the limit");
+}
+
+#[test]
+fn a_framing_stays_on_its_walls_level() {
+    let mut s = Session::default();
+    let a = wall(&mut s, [0.0, 0.0], [3.6, 0.0]);
+    let host = first_framing(&run(&mut s, "wall_framing_create", json!({"walls": [a]})));
+    let upper = id(&run(&mut s, "level_create", json!({"name": "Upper", "elevation": 3.0})));
+    run(&mut s, "element_set", json!({"id": a, "level": upper}));
+    let level = |s: &Session, id: ElementId| s.project().element(id).unwrap().level.0;
+    assert_eq!(level(&s, ElementId(a)), upper, "the wall moved");
+    assert_eq!(level(&s, ElementId(host)), upper);
+    assert!(framing(&s, host).members.iter().all(|m| level(&s, m.id) == upper));
+}
+
+fn frame(s: &mut Session, args: Value) -> WallFraming {
+    let host = first_framing(&run(s, "wall_framing_create", args));
+    framing(s, host)
+}

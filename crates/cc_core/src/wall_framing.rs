@@ -520,6 +520,10 @@ impl MemberHost for WallFraming {
         ids
     }
 
+    fn fed_by(&self, e: &crate::Element) -> bool {
+        e.as_wall().is_some() || e.as_hosted().is_some()
+    }
+
     fn member_level(&self, project: &Project) -> Option<LevelId> {
         project.element(self.wall).map(|e| e.level)
     }

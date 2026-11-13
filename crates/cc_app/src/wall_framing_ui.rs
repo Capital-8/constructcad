@@ -70,12 +70,13 @@ fn choices(state: &AppState, category: Category, system: FramingSystem) -> Vec<(
 }
 
 /// The walls OK frames: the selected walls, or every wall of the active
-/// level when no wall is selected; only straight walls not framed yet.
+/// level when nothing is selected (a selection without walls frames
+/// nothing); only straight walls not framed yet.
 pub fn walls_to_frame(state: &AppState) -> Vec<ElementId> {
     let p = state.project();
     let selected: Vec<ElementId> =
         state.selection.iter().copied().filter(|id| p.element(*id).is_some_and(|e| e.as_wall().is_some())).collect();
-    let candidates = if selected.is_empty() {
+    let candidates = if state.selection.is_empty() {
         let Some(level) = state.active_level() else { return Vec::new() };
         p.elements.values().filter(|e| e.level == level && e.as_wall().is_some()).map(|e| e.id).collect()
     } else {
