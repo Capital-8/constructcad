@@ -55,9 +55,14 @@ struct Recorded {
     depth: usize,
 }
 
-/// A new project from the template, named in the active language.
+/// A new project from the metric template, named in the active language.
 pub fn new_project() -> Project {
-    Project::from_template_localized(&crate::i18n::try_tr)
+    new_project_with(cc_core::MeasurementSystem::Metric)
+}
+
+/// A new project from the template of `system`, named in the active language.
+pub fn new_project_with(system: cc_core::MeasurementSystem) -> Project {
+    Project::from_template_system(system, &crate::i18n::try_tr)
 }
 
 impl Default for Session {
@@ -560,6 +565,8 @@ impl Session {
         }
         let outer = self.nesting;
         self.nesting = outer.saturating_add(1);
+        // Names and messages a command writes follow the project's units.
+        self.sync_units();
         let result = if crate::extension::is_extension_name(name) {
             self.execute_extension(name, args, depth)
         } else {

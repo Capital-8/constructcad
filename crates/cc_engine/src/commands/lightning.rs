@@ -22,9 +22,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// Diameter of the conductor type a project gets with its first conductor, meters.
-const DEFAULT_DIAMETER: f64 = 0.008;
-
 fn parse_role(name: &str) -> Result<ConductorRole> {
     let wanted = name.trim().to_ascii_lowercase();
     ConductorRole::ALL.into_iter().find(|r| r.name() == wanted).ok_or_else(|| {
@@ -58,11 +55,17 @@ fn ensure_system(e: &mut EditCtx, system: Option<SystemId>) -> SystemId {
     id
 }
 
-/// A conductor type of `diameter`, named by it.
+/// A conductor type of `diameter`, named by it (in millimeters, or in
+/// inches in imperial units).
 pub fn new_conductor_type(id: ElementTypeId, diameter: f64, material: String) -> ElementType {
+    let name = if cc_views::format::imperial() {
+        t!("tpl-imp-type-lightning-conductor", "diameter" => cc_views::format::inch_size(diameter))
+    } else {
+        t!("tpl-type-lightning-conductor", "diameter" => format!("{:.0}", diameter * 1000.0))
+    };
     ElementType {
         id,
-        name: t!("tpl-type-lightning-conductor", "diameter" => format!("{:.0}", diameter * 1000.0)),
+        name,
         data: TypeData::LightningConductor { diameter, material },
         info: Default::default(),
         uid: Default::default(),
@@ -90,7 +93,9 @@ fn ensure_type(e: &mut EditCtx, ty: Option<ElementTypeId>, material: &str) -> El
         Some(t) => t,
         None => {
             let id = ElementTypeId(e.alloc_id());
-            e.add_type(new_conductor_type(id, DEFAULT_DIAMETER, material.to_string()))
+            // 8 mm, 3/8" in imperial projects.
+            let diameter = e.project().defaults().conductor.1;
+            e.add_type(new_conductor_type(id, diameter, material.to_string()))
         }
     }
 }
@@ -153,7 +158,7 @@ impl Command for LpsConductorCreate {
         let ty = conductor_type(p, self.type_ref.as_ref())?;
         let system = given_system(p, self.system.as_ref())?;
         let (offset, end_offset) = if vertical {
-            let top = self.offset.or(roof_start).unwrap_or_else(|| p.level_height(level, 2.8));
+            let top = self.offset.or(roof_start).unwrap_or_else(|| p.level_height(level, p.defaults().ceiling));
             (top, self.end_offset.unwrap_or(-EARTH_DEPTH))
         } else {
             let a = match self.offset.or(roof_start) {
@@ -287,7 +292,8 @@ impl Command for AirTerminalPlace {
         let position = point(self.position)?;
         let roof = roof_offset(s, level, position);
         let p = s.project();
-        let base_offset = finite(self.offset.or(roof).unwrap_or_else(|| p.level_height(level, 2.8)), "offset")?;
+        let base_offset =
+            finite(self.offset.or(roof).unwrap_or_else(|| p.level_height(level, p.defaults().ceiling)), "offset")?;
         let size = self.height.map(|h| positive(h, "height")).transpose()?;
         place(
             s,
@@ -387,12 +393,12 @@ fn place(
 }
 
 /// Create a lightning protection conductor type: a round conductor of
-/// `diameter` (meters, 2 to 50 mm; default 8 mm) in `material` (default:
+/// `diameter` (meters, 2 to 50 mm; default 8 mm, 3/8" in imperial projects) in `material` (default:
 /// copper, else the first metal), named by its diameter unless `name` is given.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct LpsConductorTypeCreate {
-    /// Diameter, meters.
+    /// Diameter, meters (default 0.008; 3/8" in imperial projects).
     #[serde(default)]
     pub diameter: Option<f64>,
     /// Material name.
@@ -408,7 +414,7 @@ impl Command for LpsConductorTypeCreate {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
-        let diameter = positive(self.diameter.unwrap_or(DEFAULT_DIAMETER), "diameter")?;
+        let diameter = positive(self.diameter.unwrap_or(p.defaults().conductor.1), "diameter")?;
         if !(MIN_CONDUCTOR_DIAMETER..=MAX_CONDUCTOR_DIAMETER).contains(&diameter) {
             return Err(EngineError::invalid(format!(
                 "diameter must be between {MIN_CONDUCTOR_DIAMETER} and {MAX_CONDUCTOR_DIAMETER} m"

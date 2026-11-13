@@ -2537,7 +2537,11 @@ impl<'a> Importer<'a> {
                 {
                     return Some(p.id);
                 }
-                self.p.free_profile_name(&cc_core::profiles_project::section_name(&read.shape, class))
+                self.p.free_profile_name(&cc_core::profiles_project::section_name_in(
+                    &read.shape,
+                    class,
+                    self.p.measurement_system(),
+                ))
             }
         };
         if self.p.profiles.len() >= MAX_PROFILES {

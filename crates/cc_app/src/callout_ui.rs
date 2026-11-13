@@ -94,7 +94,7 @@ pub fn tool(_ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, 
     let command = cmd::CalloutCreate {
         parent: Ref::Id(view.id.0),
         rect: [rect.min.to_array(), rect.max.to_array()],
-        scale: (options.scale > 0 && drafting.is_none()).then_some(options.scale),
+        scale: (options.scale > 0 && drafting.is_none()).then_some(options.scale.into()),
         name: None,
         drafting: drafting.map(|d| Ref::Id(d.0)),
     };
@@ -136,11 +136,14 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
     if o.drafting.is_none() {
         ui.label(t!("prop-scale"));
         let auto = t!("callout-scale-auto");
-        let text = if o.scale == 0 { auto.clone() } else { format!("1:{}", o.scale) };
+        let system = state.project().measurement_system();
+        let label = |s: u32| cc_core::scale::label(system, s);
+        let text = if o.scale == 0 { auto.clone() } else { label(o.scale) };
         egui::ComboBox::from_id_salt("callout-scale").selected_text(text).show_ui(ui, |ui| {
             ui.selectable_value(&mut o.scale, 0, auto);
-            for s in [1, 2, 5, 10, 20, 25, 50] {
-                ui.selectable_value(&mut o.scale, s, format!("1:{s}"));
+            // Detail scales: up to 1:50 (1/4" = 1'-0" in imperial projects).
+            for &s in cc_core::scale::choices(system).iter().filter(|s| **s <= 50) {
+                ui.selectable_value(&mut o.scale, s, label(s));
             }
         });
     }

@@ -12,59 +12,69 @@ pub fn default_top(project: &Project, level: LevelId) -> WallTop {
     }
 }
 
-/// Default roof base: the top of the tallest wall on the level.
+/// Default roof base: the top of the tallest wall on the level (else a
+/// story: 3 m, 10'-0" in imperial projects).
 pub fn default_roof_base(project: &Project, level: LevelId) -> f64 {
     project
         .walls()
         .filter(|(e, _)| e.level == level)
         .map(|(e, w)| project.wall_top_z(e, w) - project.level_elevation(level))
         .fold(None, |m: Option<f64>, h| Some(m.map_or(h, |m| m.max(h))))
-        .unwrap_or(3.0)
+        .unwrap_or(project.defaults().story)
 }
 
 /// Elevation of a new pipe's center line above its level: supply pipes run
-/// in the walls, drains under the floor.
-pub fn pipe_offset(kind: Option<cc_core::SystemKind>) -> f64 {
+/// in the walls (0.6 m up, 2'-0" in imperial projects), drains under the
+/// floor (0.3 m down, 1'-0").
+pub fn pipe_offset(project: &Project, kind: Option<cc_core::SystemKind>) -> f64 {
     use cc_core::SystemKind as K;
+    let (supply, drain) = project.defaults().pipes;
     match kind {
-        Some(K::ColdWater | K::HotWater | K::Vent) => 0.6,
-        Some(K::Sanitary | K::Rainwater) => -0.3,
+        Some(K::ColdWater | K::HotWater | K::Vent) => supply,
+        Some(K::Sanitary | K::Rainwater) => drain,
         _ => 0.0,
     }
 }
 
 /// Minimum fall of a horizontal drain of outside `diameter`, as in common
-/// drainage practice: 2 % up to 75 mm, 1 % from 100 mm.
-pub fn drain_slope(diameter: f64) -> f64 {
-    if diameter <= 0.0751 { 0.02 } else { 0.01 }
+/// drainage practice: 2 % up to 75 mm, 1 % from 100 mm (in imperial
+/// projects 1/4" per foot up to 3", 1/8" per foot from 4").
+pub fn drain_slope(project: &Project, diameter: f64) -> f64 {
+    let (small, small_fall, fall) = project.defaults().drain_fall;
+    if diameter <= small { small_fall } else { fall }
 }
 
-/// Elevation of a new conduit above its level: in the slab above (the level height).
+/// Elevation of a new conduit above its level: in the slab above (the level
+/// height, else 2.80 m; 9'-0" in imperial projects).
 pub fn conduit_offset(project: &Project, level: LevelId) -> f64 {
-    project.level_height(level, 2.8)
+    project.level_height(level, project.defaults().ceiling)
 }
 
 /// Elevation of a new cable tray's center line above its level: under the
-/// slab above, clear of it by 0.3 m.
+/// slab above, clear of it by 0.3 m (1'-0" in imperial projects).
 pub fn tray_offset(project: &Project, level: LevelId) -> f64 {
-    project.level_height(level, 2.8) - 0.3
+    let d = project.defaults();
+    project.level_height(level, d.ceiling) - d.tray_clearance
 }
 
 /// Usual mounting height of an electrical device above its level (lights:
-/// the ceiling, at the level height).
+/// the ceiling, at the level height); round inches in imperial projects
+/// (see [`cc_core::Defaults::devices`]).
 pub fn device_height(project: &Project, level: LevelId, device: cc_core::DeviceKind) -> f64 {
     use cc_core::DeviceKind as D;
+    let d = project.defaults();
+    let [outlet, switch, wall_light, panel, data_outlet, rack] = d.devices;
     match device {
-        D::Outlet | D::DedicatedOutlet => 0.3,
-        D::Switch => 1.1,
-        D::WallLight => 2.1,
-        D::Panel => 1.3,
-        D::DataOutlet => 0.3,
-        D::Rack => 1.4,
+        D::Outlet | D::DedicatedOutlet => outlet,
+        D::Switch => switch,
+        D::WallLight => wall_light,
+        D::Panel => panel,
+        D::DataOutlet => data_outlet,
+        D::Rack => rack,
         // Placing commands put air terminals on the roof under them.
-        D::AirTerminal => project.level_height(level, 2.8),
+        D::AirTerminal => project.level_height(level, d.ceiling),
         D::EarthElectrode => -cc_core::lightning::EARTH_DEPTH,
-        D::CeilingLight => project.level_height(level, 2.8),
+        D::CeilingLight => project.level_height(level, d.ceiling),
     }
 }
 

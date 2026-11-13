@@ -265,7 +265,7 @@ fn line_cell(ui: &mut Ui, label: &str, lines: &mut LineGraphics, enabled: bool) 
             changed = true;
         }
         if let Some(w) = &mut lines.weight {
-            changed |= ui.add(egui::DragValue::new(w).range(0.05..=5.0).speed(0.01).suffix(" mm")).changed();
+            changed |= ui.add(crate::properties::weight_drag(w).range(0.05..=5.0).speed(0.01)).changed();
         }
         ui.separator();
         ui.label(RichText::new(t!("vg-pattern")).color(PALETTE.text_muted));
@@ -772,7 +772,7 @@ fn params() -> Vec<FilterParam> {
 
 fn param_label(p: FilterParam) -> String {
     match p {
-        FilterParam::Field(f) => tr(f.key()),
+        FilterParam::Field(f) => crate::properties::field_label(f),
         FilterParam::Elevation => t!("vg-param-elevation"),
     }
 }
@@ -1069,8 +1069,6 @@ fn templates_dialog(ctx: &Context, state: &mut AppState) {
     }
 }
 
-const SCALES: [u32; 9] = [10, 20, 25, 50, 75, 100, 200, 250, 500];
-
 /// The template's properties, each with its "include" box. Returns whether
 /// Visibility/Graphics should open for it.
 fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, active: Option<ViewId>) -> bool {
@@ -1104,13 +1102,15 @@ fn template_form(ui: &mut Ui, state: &mut AppState, t: cc_core::ViewTemplate, ac
         changed |= crate::table::checkbox(ui, &mut include.scale).changed();
         ui.label(t!("prop-scale"));
         let mut scale = t.scale;
-        egui::ComboBox::from_id_salt(("tpl-scale", id)).selected_text(format!("1:{scale}")).show_ui(ui, |ui| {
-            for s in SCALES {
-                ui.selectable_value(&mut scale, s, format!("1:{s}"));
+        let system = state.project().measurement_system();
+        let label = |s: u32| cc_core::scale::label(system, s);
+        egui::ComboBox::from_id_salt(("tpl-scale", id)).selected_text(label(scale)).show_ui(ui, |ui| {
+            for &s in cc_core::scale::choices(system) {
+                ui.selectable_value(&mut scale, s, label(s));
             }
         });
         if scale != t.scale {
-            set.scale = Some(scale);
+            set.scale = Some(scale.into());
         }
         ui.end_row();
 

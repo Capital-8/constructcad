@@ -22,6 +22,33 @@ impl Default for Ref {
     }
 }
 
+/// A drawing scale: the denominator `N` of 1:`N` (`48`), or text read by
+/// `cc_core::scale::parse` (`"1:48"`, `"1/4\" = 1'-0\""`).
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ScaleArg {
+    Ratio(u32),
+    Text(String),
+}
+
+impl From<u32> for ScaleArg {
+    fn from(n: u32) -> Self {
+        ScaleArg::Ratio(n)
+    }
+}
+
+impl ScaleArg {
+    /// The denominator, at least 1; an unreadable text is invalid.
+    pub fn ratio(&self) -> Result<u32> {
+        match self {
+            ScaleArg::Ratio(n) => Ok((*n).max(1)),
+            ScaleArg::Text(t) => cc_core::scale::parse(t).ok_or_else(|| {
+                EngineError::invalid(format!("unreadable scale \"{t}\": write 1:50, 50 or a label like 1/4\" = 1'-0\""))
+            }),
+        }
+    }
+}
+
 /// A point in plan, `[x, y]` in meters.
 pub type Point = [f64; 2];
 

@@ -1,4 +1,4 @@
-use crate::{Category, ElementTypeId, LevelId, ViewId};
+use crate::{Category, ElementTypeId, LevelId, MeasurementSystem, ViewId};
 use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 
@@ -120,33 +120,159 @@ pub enum SheetSize {
         width: f64,
         height: f64,
     },
+    /// ANSI A, 11" × 8 1/2" (US letter).
+    AnsiA,
+    /// ANSI B, 17" × 11" (tabloid).
+    AnsiB,
+    /// ANSI C, 22" × 17".
+    AnsiC,
+    /// ANSI D, 34" × 22".
+    AnsiD,
+    /// ANSI E, 44" × 34".
+    AnsiE,
+    /// Architectural A, 12" × 9".
+    ArchA,
+    /// Architectural B, 18" × 12".
+    ArchB,
+    /// Architectural C, 24" × 18".
+    ArchC,
+    /// Architectural D, 36" × 24".
+    ArchD,
+    /// Architectural E1, 42" × 30".
+    ArchE1,
+    /// Architectural E, 48" × 36".
+    ArchE,
 }
 
+/// Millimeters in an inch, for paper sizes.
+const PAPER_INCH: f64 = 25.4;
+
 impl SheetSize {
-    pub const ALL: [SheetSize; 5] = [SheetSize::A0, SheetSize::A1, SheetSize::A2, SheetSize::A3, SheetSize::A4];
+    /// Every named size: the ISO A sizes, then ANSI, then architectural.
+    pub const ALL: [SheetSize; 16] = [
+        SheetSize::A0,
+        SheetSize::A1,
+        SheetSize::A2,
+        SheetSize::A3,
+        SheetSize::A4,
+        SheetSize::AnsiA,
+        SheetSize::AnsiB,
+        SheetSize::AnsiC,
+        SheetSize::AnsiD,
+        SheetSize::AnsiE,
+        SheetSize::ArchA,
+        SheetSize::ArchB,
+        SheetSize::ArchC,
+        SheetSize::ArchD,
+        SheetSize::ArchE1,
+        SheetSize::ArchE,
+    ];
+
+    /// The ISO A sizes.
+    const ISO: [SheetSize; 5] = [SheetSize::A0, SheetSize::A1, SheetSize::A2, SheetSize::A3, SheetSize::A4];
+
+    /// The US sizes: ANSI, then architectural.
+    const US: [SheetSize; 11] = [
+        SheetSize::AnsiA,
+        SheetSize::AnsiB,
+        SheetSize::AnsiC,
+        SheetSize::AnsiD,
+        SheetSize::AnsiE,
+        SheetSize::ArchA,
+        SheetSize::ArchB,
+        SheetSize::ArchC,
+        SheetSize::ArchD,
+        SheetSize::ArchE1,
+        SheetSize::ArchE,
+    ];
+
+    /// Every named size, the system's own first (metric: the A sizes;
+    /// imperial: ANSI and architectural), for pickers.
+    pub fn choices(system: MeasurementSystem) -> Vec<SheetSize> {
+        match system {
+            MeasurementSystem::Metric => Self::ISO.iter().chain(&Self::US).copied().collect(),
+            MeasurementSystem::Imperial => Self::US.iter().chain(&Self::ISO).copied().collect(),
+        }
+    }
+
+    /// The paper of a new sheet: A3, or ANSI B in imperial projects.
+    pub fn default_for(system: MeasurementSystem) -> SheetSize {
+        match system {
+            MeasurementSystem::Metric => SheetSize::A3,
+            MeasurementSystem::Imperial => SheetSize::AnsiB,
+        }
+    }
 
     /// Landscape paper size in millimeters (a custom size as typed, kept
     /// within [`MIN_PAPER_MM`] and [`MAX_PAPER_MM`]).
     pub fn size_mm(self) -> DVec2 {
+        let inches = |w: f64, h: f64| DVec2::new(w * PAPER_INCH, h * PAPER_INCH);
         match self {
             SheetSize::A0 => DVec2::new(1189.0, 841.0),
             SheetSize::A1 => DVec2::new(841.0, 594.0),
             SheetSize::A2 => DVec2::new(594.0, 420.0),
             SheetSize::A3 => DVec2::new(420.0, 297.0),
             SheetSize::A4 => DVec2::new(297.0, 210.0),
+            SheetSize::AnsiA => inches(11.0, 8.5),
+            SheetSize::AnsiB => inches(17.0, 11.0),
+            SheetSize::AnsiC => inches(22.0, 17.0),
+            SheetSize::AnsiD => inches(34.0, 22.0),
+            SheetSize::AnsiE => inches(44.0, 34.0),
+            SheetSize::ArchA => inches(12.0, 9.0),
+            SheetSize::ArchB => inches(18.0, 12.0),
+            SheetSize::ArchC => inches(24.0, 18.0),
+            SheetSize::ArchD => inches(36.0, 24.0),
+            SheetSize::ArchE1 => inches(42.0, 30.0),
+            SheetSize::ArchE => inches(48.0, 36.0),
             SheetSize::Custom { width, height } => DVec2::new(paper_side(width), paper_side(height)),
         }
     }
 
+    /// The size's name (`A3`, `ANSI B`, `ARCH D`); a custom size in
+    /// millimeters (see [`SheetSize::label_in`]).
     pub fn label(self) -> String {
-        match self {
-            SheetSize::A0 => "A0".into(),
-            SheetSize::A1 => "A1".into(),
-            SheetSize::A2 => "A2".into(),
-            SheetSize::A3 => "A3".into(),
-            SheetSize::A4 => "A4".into(),
-            SheetSize::Custom { width, height } => format!("{} × {} mm", width.round(), height.round()),
-        }
+        self.label_in(MeasurementSystem::Metric)
+    }
+
+    /// The size's name; a custom size in the system's paper unit
+    /// (`1000 × 594 mm`, `17" × 11"`).
+    pub fn label_in(self, system: MeasurementSystem) -> String {
+        let name = match self {
+            SheetSize::A0 => "A0",
+            SheetSize::A1 => "A1",
+            SheetSize::A2 => "A2",
+            SheetSize::A3 => "A3",
+            SheetSize::A4 => "A4",
+            SheetSize::AnsiA => "ANSI A",
+            SheetSize::AnsiB => "ANSI B",
+            SheetSize::AnsiC => "ANSI C",
+            SheetSize::AnsiD => "ANSI D",
+            SheetSize::AnsiE => "ANSI E",
+            SheetSize::ArchA => "ARCH A",
+            SheetSize::ArchB => "ARCH B",
+            SheetSize::ArchC => "ARCH C",
+            SheetSize::ArchD => "ARCH D",
+            SheetSize::ArchE1 => "ARCH E1",
+            SheetSize::ArchE => "ARCH E",
+            SheetSize::Custom { width, height } => {
+                return match system {
+                    MeasurementSystem::Metric => format!("{} × {} mm", width.round(), height.round()),
+                    MeasurementSystem::Imperial => {
+                        let inches = |mm: f64| crate::units::inch_text(mm / 1000.0);
+                        format!("{} × {}", inches(width), inches(height))
+                    }
+                };
+            }
+        };
+        name.to_string()
+    }
+
+    /// The named size called `name`, any case, with spaces, `_` or `-`
+    /// between its parts or none (`A3`, `ANSI B`, `ansi_b`, `ArchD`).
+    pub fn from_name(name: &str) -> Option<SheetSize> {
+        let key: String =
+            name.chars().filter(|c| !c.is_whitespace() && !matches!(c, '_' | '-')).collect::<String>().to_uppercase();
+        Self::ALL.into_iter().find(|s| s.label().replace(' ', "") == key)
     }
 
     /// A custom size within the limits, finite.
@@ -725,6 +851,70 @@ mod paper_tests {
         assert_eq!(sheet(wild, false).paper_mm(), Some(DVec2::new(MAX_PAPER_MM, MIN_PAPER_MM)));
         let tiny = SheetSize::Custom { width: 1.0, height: f64::NEG_INFINITY };
         assert_eq!(sheet(tiny, true).paper_mm(), Some(DVec2::new(MIN_PAPER_MM, MIN_PAPER_MM)));
+    }
+
+    #[test]
+    fn us_sheet_sizes() {
+        let inches = |s: SheetSize| s.size_mm() / 25.4;
+        for (size, w, h, label) in [
+            (SheetSize::AnsiA, 11.0, 8.5, "ANSI A"),
+            (SheetSize::AnsiB, 17.0, 11.0, "ANSI B"),
+            (SheetSize::AnsiC, 22.0, 17.0, "ANSI C"),
+            (SheetSize::AnsiD, 34.0, 22.0, "ANSI D"),
+            (SheetSize::AnsiE, 44.0, 34.0, "ANSI E"),
+            (SheetSize::ArchA, 12.0, 9.0, "ARCH A"),
+            (SheetSize::ArchB, 18.0, 12.0, "ARCH B"),
+            (SheetSize::ArchC, 24.0, 18.0, "ARCH C"),
+            (SheetSize::ArchD, 36.0, 24.0, "ARCH D"),
+            (SheetSize::ArchE1, 42.0, 30.0, "ARCH E1"),
+            (SheetSize::ArchE, 48.0, 36.0, "ARCH E"),
+        ] {
+            let i = inches(size);
+            assert!((i.x - w).abs() < 1e-9 && (i.y - h).abs() < 1e-9, "{label}: {i}");
+            assert_eq!(size.label(), label);
+            assert_eq!(size.label_in(MeasurementSystem::Imperial), label);
+            assert!(size.is_valid());
+            assert_eq!(SheetSize::from_name(label), Some(size));
+            assert_eq!(SheetSize::from_name(&label.to_lowercase().replace(' ', "_")), Some(size));
+            // Portrait turns it like the A sizes.
+            assert_eq!(sheet(size, true).paper_mm(), Some(DVec2::new(h * 25.4, w * 25.4)));
+        }
+        assert_eq!(SheetSize::from_name("a3"), Some(SheetSize::A3));
+        assert_eq!(SheetSize::from_name("ArchD"), Some(SheetSize::ArchD));
+        assert_eq!(SheetSize::from_name("ansi-e"), Some(SheetSize::AnsiE));
+        assert_eq!(SheetSize::from_name("Letter"), None);
+        assert_eq!(SheetSize::from_name(""), None);
+        let custom = SheetSize::Custom { width: 431.8, height: 279.4 };
+        assert_eq!(custom.label_in(MeasurementSystem::Imperial), "17\" × 11\"");
+        assert_eq!(custom.label_in(MeasurementSystem::Metric), "432 × 279 mm");
+    }
+
+    #[test]
+    fn choices_put_the_system_first() {
+        let metric = SheetSize::choices(MeasurementSystem::Metric);
+        let imperial = SheetSize::choices(MeasurementSystem::Imperial);
+        assert_eq!(metric[..5], [SheetSize::A0, SheetSize::A1, SheetSize::A2, SheetSize::A3, SheetSize::A4]);
+        assert_eq!(imperial[0], SheetSize::AnsiA);
+        assert_eq!(imperial[5], SheetSize::ArchA);
+        assert_eq!(imperial[11], SheetSize::A0);
+        // Both list every named size once.
+        for list in [&metric, &imperial] {
+            assert_eq!(list.len(), SheetSize::ALL.len());
+            assert!(SheetSize::ALL.iter().all(|s| list.contains(s)));
+        }
+        assert_eq!(SheetSize::ALL[..5], metric[..5]);
+        assert_eq!(SheetSize::default_for(MeasurementSystem::Metric), SheetSize::A3);
+        assert_eq!(SheetSize::default_for(MeasurementSystem::Imperial), SheetSize::AnsiB);
+    }
+
+    #[test]
+    fn us_sizes_round_trip() {
+        for size in SheetSize::ALL {
+            let view = sheet(size, false);
+            let text = ron::to_string(&view.kind).unwrap();
+            let back: ViewKind = ron::from_str(&text).unwrap();
+            assert_eq!(back, view.kind);
+        }
     }
 
     #[test]
