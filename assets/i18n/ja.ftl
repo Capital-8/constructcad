@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = 選択した壁（または現在のレベルの壁）に�
 # Connections
 category-connection = 接合部
 tpl-type-connection = 接合部
+col-connection-kind = 接合部の種類
+col-plate-mass = プレート質量
+col-bolt-count = ボルト本数
+col-bolt-diameter = ボルト径
+tx-create-connections = 接合部を作成
 connection-base-plate = ベースプレート
 connection-end-plate = エンドプレート
 connection-fin-plate = フィンプレート

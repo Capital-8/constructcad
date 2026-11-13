@@ -3260,6 +3260,11 @@ cmd-desc-wood-frame = ສ້າງໂຄງໄມ້ໃຫ້ຝາທີ່ເ�
 # Connections
 category-connection = ຂໍ້ຕໍ່
 tpl-type-connection = ຂໍ້ຕໍ່
+col-connection-kind = ປະເພດຂໍ້ຕໍ່
+col-plate-mass = ມວນແຜ່ນ
+col-bolt-count = ໂບລທ໌
+col-bolt-diameter = ເສັ້ນຜ່າໃຈກາງໂບລທ໌
+tx-create-connections = ສ້າງຂໍ້ຕໍ່
 connection-base-plate = ແຜ່ນຮອງຕີນເສົາ
 connection-end-plate = ແຜ່ນປາຍຄານ
 connection-fin-plate = ແຜ່ນຕໍ່ເອວຄານ

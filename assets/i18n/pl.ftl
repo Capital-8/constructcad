@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Tworzy szkielet drewniany zaznaczonych ścian (lub ścian 
 # Connections
 category-connection = Połączenia
 tpl-type-connection = Połączenie
+col-connection-kind = Rodzaj połączenia
+col-plate-mass = Masa blach
+col-bolt-count = Śruby
+col-bolt-diameter = Średnica śrub
+tx-create-connections = Utwórz połączenia
 connection-base-plate = Blacha podstawy
 connection-end-plate = Blacha czołowa
 connection-fin-plate = Blacha żeberkowa

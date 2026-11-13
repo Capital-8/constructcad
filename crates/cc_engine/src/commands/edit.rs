@@ -153,6 +153,11 @@ fn patched(
             }
             f.check_size(p).map_err(EngineError::invalid)?;
         }
+        cc_core::ElementKind::Connection(c) => {
+            if let cc_core::ElementKind::Connection(old) = &element.kind {
+                super::connection::check(old, c)?;
+            }
+        }
         _ => {}
     }
     Ok(kind)

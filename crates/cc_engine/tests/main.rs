@@ -13,6 +13,7 @@ mod callouts;
 mod commands;
 mod component_env;
 mod component_script;
+mod connections;
 mod curtain;
 mod design_options;
 mod detail;

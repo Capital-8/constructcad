@@ -92,6 +92,14 @@ pub enum ScheduleField {
     FillVolume,
     /// Estimated length of the horizontal cables from a data outlet to its rack.
     CableLength,
+    /// Kind of a connection (base plate, end plate…).
+    ConnectionKind,
+    /// Steel mass of a connection's plates, kilograms.
+    PlateMass,
+    /// Number of bolts of a connection.
+    BoltCount,
+    /// Bolt diameter of a connection.
+    BoltDiameter,
 }
 
 impl ScheduleField {
@@ -154,6 +162,10 @@ impl ScheduleField {
             ScheduleField::CutVolume => "col-cut-volume",
             ScheduleField::FillVolume => "col-fill-volume",
             ScheduleField::CableLength => "col-cable-length",
+            ScheduleField::ConnectionKind => "col-connection-kind",
+            ScheduleField::PlateMass => "col-plate-mass",
+            ScheduleField::BoltCount => "col-bolt-count",
+            ScheduleField::BoltDiameter => "col-bolt-diameter",
         }
     }
 
@@ -204,7 +216,9 @@ impl ScheduleField {
             Category::SteelBuilding => &[],
             Category::Truss => &[],
             Category::WallFraming => &[],
-            Category::Connection => &[],
+            Category::Connection => {
+                &[F::ConnectionKind, F::Host, F::PlateMass, F::BoltCount, F::BoltDiameter, F::Volume]
+            }
             Category::Topography => &[F::Area, F::Volume, F::Material, F::CutVolume, F::FillVolume],
             Category::Pad => &[F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Pipe => &[F::Diameter, F::Length, F::System, F::Slope, F::Material],
@@ -296,7 +310,9 @@ impl ScheduleField {
             Category::SteelBuilding => Vec::new(),
             Category::Truss => Vec::new(),
             Category::WallFraming => Vec::new(),
-            Category::Connection => Vec::new(),
+            Category::Connection => {
+                vec![F::Mark, F::ConnectionKind, F::PlateMass, F::BoltCount, F::BoltDiameter, F::Comments]
+            }
             Category::Topography => vec![F::Mark, F::Type, F::Level, F::Area, F::Volume],
             Category::Pad => vec![F::Mark, F::Type, F::Level, F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Grid

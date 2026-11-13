@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Estrutura as paredes selecionadas (ou as do nível ativo) 
 # Connections
 category-connection = Ligações
 tpl-type-connection = Ligação
+col-connection-kind = Tipo de ligação
+col-plate-mass = Massa das placas
+col-bolt-count = Parafusos
+col-bolt-diameter = Diâmetro do parafuso
+tx-create-connections = Criar ligações
 connection-base-plate = Placa de base
 connection-end-plate = Placa de topo
 connection-fin-plate = Chapa de alma

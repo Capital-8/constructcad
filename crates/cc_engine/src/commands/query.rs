@@ -398,6 +398,9 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("kind".into(), json!(v.kind.name()));
         derived.insert("diameter".into(), json!(v.diameter));
     }
+    if let Some(c) = geom.connections.get(&id) {
+        super::connection::derived(c, &mut derived);
+    }
     if let Some(t) = geom.segments.get(&id).and_then(|g| g.tray) {
         derived.insert("width".into(), json!(t.width));
         derived.insert("height".into(), json!(t.height));

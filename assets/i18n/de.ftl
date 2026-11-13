@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Versieht die ausgewählten Wände (oder die der aktiven Eb
 # Connections
 category-connection = Anschlüsse
 tpl-type-connection = Anschluss
+col-connection-kind = Anschlussart
+col-plate-mass = Plattenmasse
+col-bolt-count = Schrauben
+col-bolt-diameter = Schraubendurchmesser
+tx-create-connections = Anschlüsse erstellen
 connection-base-plate = Fußplatte
 connection-end-plate = Stirnplatte
 connection-fin-plate = Fahnenblech

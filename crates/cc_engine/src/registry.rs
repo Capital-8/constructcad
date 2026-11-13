@@ -233,6 +233,7 @@ registry![
         framing::TrussCreate,
         rebar::RebarCreate,
         rebar::RebarTypical,
+        connection::ConnectionsCreate,
         analytical::AnalyticalModelGet,
         analytical::AnalyticalExport,
         foundation::FootingCreate,

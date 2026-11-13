@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Frame the selected walls (or those of the active level) in
 # Connections
 category-connection = Connections
 tpl-type-connection = Connection
+col-connection-kind = Connection Kind
+col-plate-mass = Plate Mass
+col-bolt-count = Bolts
+col-bolt-diameter = Bolt Diameter
+tx-create-connections = Create Connections
 connection-base-plate = Base Plate
 connection-end-plate = End Plate
 connection-fin-plate = Fin Plate

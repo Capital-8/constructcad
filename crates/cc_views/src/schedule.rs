@@ -153,6 +153,8 @@ fn summable(field: ScheduleField) -> bool {
         ScheduleField::Length
             | ScheduleField::CutLength
             | ScheduleField::BarCount
+            | ScheduleField::PlateMass
+            | ScheduleField::BoltCount
             | ScheduleField::Weight
             | ScheduleField::Power
             | ScheduleField::DrainUnits
@@ -393,6 +395,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             .or(match &e.kind {
                 ElementKind::Rebar(r) => Some(r.host),
                 ElementKind::Valve(v) => Some(v.host),
+                ElementKind::Connection(c) => Some(c.member),
                 _ => None,
             })
             .and_then(|h| project.element(h))
@@ -523,6 +526,19 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
                 _ => Value::Missing,
             }
         }
+        F::ConnectionKind => match &e.kind {
+            ElementKind::Connection(c) => Value::Key(c.kind.key()),
+            _ => Value::Missing,
+        },
+        F::PlateMass => geom.connections.get(&e.id).map_or(Value::Missing, |g| Value::Weight(g.plate_mass())),
+        F::BoltCount => geom.connections.get(&e.id).map_or(Value::Missing, |g| Value::Count(g.bolt_count())),
+        F::BoltDiameter => geom.connections.get(&e.id).map_or(Value::Missing, |g| {
+            if format::imperial() {
+                Value::Text(format!("Ø {}\"", format::inches(g.bolt_diameter)))
+            } else {
+                Value::Text(format!("Ø {} mm", format::number(g.bolt_diameter * 1000.0, 0)))
+            }
+        }),
         F::Number => match &e.kind {
             ElementKind::Room(r) => text(&r.number),
             _ => Value::Missing,
@@ -578,6 +594,7 @@ pub fn field_value(
                         | TypeData::Conduit { diameter, .. },
                     ),
                 ) => Some(*diameter),
+                (ScheduleField::BoltDiameter, _) => geom.connections.get(&e.id).map(|g| g.bolt_diameter),
                 _ => t.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite()),
             };
             Some((t, number))

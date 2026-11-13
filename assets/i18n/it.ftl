@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Intelaia i muri selezionati (o quelli del livello attivo) 
 # Connections
 category-connection = Giunti
 tpl-type-connection = Giunto
+col-connection-kind = Tipologia di giunto
+col-plate-mass = Massa piastre
+col-bolt-count = Bulloni
+col-bolt-diameter = Diametro bulloni
+tx-create-connections = Crea giunti
 connection-base-plate = Piastra di base
 connection-end-plate = Piastra di testa
 connection-fin-plate = Piastra d'anima

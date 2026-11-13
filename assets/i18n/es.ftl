@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Entrama los muros seleccionados (o los del nivel activo) e
 # Connections
 category-connection = Uniones
 tpl-type-connection = Unión
+col-connection-kind = Clase de unión
+col-plate-mass = Masa de placas
+col-bolt-count = Pernos
+col-bolt-diameter = Diámetro del perno
+tx-create-connections = Crear uniones
 connection-base-plate = Placa base
 connection-end-plate = Placa de testa
 connection-fin-plate = Cartela de alma

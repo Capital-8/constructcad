@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = 为所选的墙（或当前楼层的墙）创建木骨架�
 # Connections
 category-connection = 节点
 tpl-type-connection = 节点
+col-connection-kind = 节点种类
+col-plate-mass = 钢板质量
+col-bolt-count = 螺栓数
+col-bolt-diameter = 螺栓直径
+tx-create-connections = 创建节点
 connection-base-plate = 柱脚底板
 connection-end-plate = 端板
 connection-fin-plate = 腹板连接板

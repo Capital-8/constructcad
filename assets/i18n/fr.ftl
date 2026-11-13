@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = Ossature les murs sélectionnés (ou ceux du niveau actif)
 # Connections
 category-connection = Assemblages
 tpl-type-connection = Assemblage
+col-connection-kind = Genre d'assemblage
+col-plate-mass = Masse des platines
+col-bolt-count = Boulons
+col-bolt-diameter = Diamètre des boulons
+tx-create-connections = Créer des assemblages
 connection-base-plate = Platine de pied
 connection-end-plate = Platine d'about
 connection-fin-plate = Gousset d'âme

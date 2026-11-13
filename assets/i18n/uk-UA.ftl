@@ -3259,6 +3259,11 @@ cmd-desc-wood-frame = Створює дерев'яний каркас виділ
 # Connections
 category-connection = З'єднання
 tpl-type-connection = З'єднання
+col-connection-kind = Вид з'єднання
+col-plate-mass = Маса пластин
+col-bolt-count = Болти
+col-bolt-diameter = Діаметр болтів
+tx-create-connections = Створити з'єднання
 connection-base-plate = Опорна плита
 connection-end-plate = Торцева пластина
 connection-fin-plate = Ребро на стінці

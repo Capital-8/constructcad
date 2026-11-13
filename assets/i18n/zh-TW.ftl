@@ -3258,6 +3258,11 @@ cmd-desc-wood-frame = 為所選的牆（或目前樓層的牆）建立木構架�
 # Connections
 category-connection = 接頭
 tpl-type-connection = 接頭
+col-connection-kind = 接頭類別
+col-plate-mass = 鋼板質量
+col-bolt-count = 螺栓數
+col-bolt-diameter = 螺栓直徑
+tx-create-connections = 建立接頭
 connection-base-plate = 柱底板
 connection-end-plate = 端板
 connection-fin-plate = 腹板連接板
