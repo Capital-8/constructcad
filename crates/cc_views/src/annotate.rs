@@ -133,11 +133,15 @@ pub fn section_label(project: &Project, data: &TypeData) -> Option<String> {
         TypeData::Foundation { kind: cc_core::FoundationKind::Pad, width, length, .. } => {
             format!("{}×{}", cm(*width), cm(*length))
         }
+        // A pile cap: its size and how many piles it stands on.
+        TypeData::Foundation { kind: cc_core::FoundationKind::PileCap, width, length, pile_cap: Some(cap), .. } => {
+            format!("{}×{} ({})", cm(*width), cm(*length), cap.layout.count())
+        }
         _ => return None,
     })
 }
 
-/// Tags of the beams, columns and pad footings of `level`: their mark and
+/// Tags of the beams, columns, pad footings and pile caps of `level`: their mark and
 /// section (`V1 15×40`). Beam tags run along the beam, beside it; column
 /// and footing tags sit above and to the right.
 pub fn structure_tags(

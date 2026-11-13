@@ -36,7 +36,8 @@ fn copy(s: &mut Session, ids: &[u64], transforms: &[PlanTransform], tx: String) 
     Ok(json!({ "created": ids_json(&created) }))
 }
 
-/// Delete elements (doors and windows of deleted walls go too; pinned elements stay).
+/// Delete elements (doors and windows of deleted walls go too, piles with their caps; pinned
+/// elements stay, and so do the piles of a cap that is not deleted).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementsDelete {
@@ -49,6 +50,9 @@ impl Command for ElementsDelete {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let ids = refs::elements(s.project(), &self.ids)?;
+        // A cap's piles go only with their cap (it would put them back).
+        let owned = super::piles::owned_piles(s.project(), &ids);
+        let ids: Vec<_> = ids.into_iter().filter(|id| !owned.contains(id)).collect();
         let (free, pinned) = unpinned(s.project(), ids);
         edit(s, t!("tx-delete"), |e| {
             for id in &free {
@@ -56,7 +60,11 @@ impl Command for ElementsDelete {
             }
             Ok(())
         })?;
-        Ok(json!({ "deleted": ids_json(&free), "pinned_skipped": ids_json(&pinned) }))
+        Ok(json!({
+            "deleted": ids_json(&free),
+            "pinned_skipped": ids_json(&pinned),
+            "cap_piles_skipped": ids_json(&owned),
+        }))
     }
 }
 

@@ -27,7 +27,7 @@ import ifcopenshell.validate
 ELEMENTS = (
     "IfcWall", "IfcDoor", "IfcWindow", "IfcSlab", "IfcCovering", "IfcRoof",
     "IfcColumn", "IfcBeam", "IfcStair", "IfcRailing",
-    "IfcFooting", "IfcReinforcingBar", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
+    "IfcFooting", "IfcPile", "IfcReinforcingBar", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
     "IfcPipeSegment", "IfcStairFlight", "IfcMember",
     "IfcCableCarrierSegment", "IfcPipeFitting", "IfcCableCarrierFitting", "IfcOutlet", "IfcSwitchingDevice", "IfcElectricDistributionBoard",
     "IfcPlate", "IfcMechanicalFastener",

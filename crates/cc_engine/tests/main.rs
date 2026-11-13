@@ -42,6 +42,7 @@ mod multi_edit;
 mod obj;
 mod pad;
 mod phases;
+mod piles;
 mod profiles;
 mod project_templates;
 mod regions;

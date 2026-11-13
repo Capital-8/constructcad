@@ -660,6 +660,42 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     });
 }
 
+/// A pile cap type's piles: the layout (read only), spacing, edge distance,
+/// and the piles' length and embedment.
+fn pile_cap_rows(ui: &mut Ui, state: &mut AppState, tid: ElementTypeId, cap: &cc_core::pile::PileCap) {
+    fn set(d: &mut TypeData) -> Option<&mut cc_core::pile::PileCap> {
+        match d {
+            TypeData::Foundation { pile_cap: Some(cap), .. } => Some(cap),
+            _ => None,
+        }
+    }
+    readonly_row(ui, &t!("prop-pile-layout"), format!("{} ({})", tr(cap.layout.key()), cap.layout.count()));
+    if !matches!(cap.layout, cc_core::pile::PileLayout::Single | cc_core::pile::PileLayout::Circle { .. }) {
+        length_row(ui, state, &t!("prop-pile-spacing"), tid, "pcs", cap.spacing, |d, v| {
+            if let Some(c) = set(d) {
+                c.spacing = v.clamp(cc_core::pile::MIN_SPACING, cc_core::pile::MAX_SPACING);
+            }
+        });
+    }
+    if !matches!(cap.layout, cc_core::pile::PileLayout::Circle { ring_width: Some(_), .. }) {
+        length_row(ui, state, &t!("prop-edge-distance"), tid, "pce", cap.edge_distance, |d, v| {
+            if let Some(c) = set(d) {
+                c.edge_distance = v.clamp(cc_core::pile::MIN_EDGE_DISTANCE, cc_core::pile::MAX_EDGE_DISTANCE);
+            }
+        });
+    }
+    length_row(ui, state, &t!("prop-pile-length"), tid, "pcl", cap.pile_length, |d, v| {
+        if let Some(c) = set(d) {
+            c.pile_length = v.clamp(cc_core::pile::MIN_PILE_LENGTH, cc_core::pile::MAX_PILE_LENGTH);
+        }
+    });
+    length_row(ui, state, &t!("prop-embedment"), tid, "pcm", cap.embedment, |d, v| {
+        if let Some(c) = set(d) {
+            c.embedment = v.clamp(0.0, cc_core::pile::MAX_EMBEDMENT);
+        }
+    });
+}
+
 /// Section and layout parameters of columns, beams, stairs, ramps and railings.
 /// A strip footing type's beam on top (an inverted T): a checkbox, and with
 /// it the edge thickness of the footing and the beam's width and height.
@@ -708,7 +744,7 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let tid = ty.id;
     match ty.data {
         TypeData::Column { .. } | TypeData::Beam { .. } => profile_rows(ui, state, ty),
-        TypeData::Foundation { kind, width, length, thickness, .. } => {
+        TypeData::Foundation { kind, width, length, thickness, ref pile_cap, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
                 let mut k = kind;
                 row(ui, &t!("prop-foundation-kind"), |ui| {
@@ -723,13 +759,17 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                 });
                 if k != kind {
                     update(state, tid, "fk", |t| {
-                        if let TypeData::Foundation { kind, .. } = &mut t.data {
+                        if let TypeData::Foundation { kind, pile_cap, .. } = &mut t.data {
                             *kind = k;
+                            // A pile cap holds its piles' layout; other kinds none.
+                            *pile_cap =
+                                (k == cc_core::FoundationKind::PileCap).then(|| pile_cap.clone().unwrap_or_default());
                         }
                     });
                     state.session.doc.break_merge();
                 }
-                if kind != cc_core::FoundationKind::Slab {
+                // A pile cap's size follows from its layout.
+                if !matches!(kind, cc_core::FoundationKind::Slab | cc_core::FoundationKind::PileCap) {
                     length_row(ui, state, &t!("col-width"), tid, "fw", width, |d, v| {
                         if let TypeData::Foundation { width, .. } = d {
                             *width = v.max(0.05);
@@ -756,6 +796,9 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         }
                     },
                 );
+                if let Some(cap) = pile_cap {
+                    pile_cap_rows(ui, state, tid, cap);
+                }
             });
             if kind == cc_core::FoundationKind::Strip {
                 strip_haunch_rows(ui, state, ty);

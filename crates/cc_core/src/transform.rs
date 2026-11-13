@@ -154,6 +154,10 @@ impl Element {
                     d.offset = -d.offset;
                 }
             }
+            ElementKind::Pile(pile) => {
+                p(&mut pile.position);
+                pile.rotation_deg = t.apply_angle_deg(pile.rotation_deg);
+            }
             ElementKind::BarTag(tag) => {
                 p(&mut tag.position);
                 if let Some(l) = &mut tag.leader {
@@ -409,6 +413,14 @@ impl crate::Project {
                 .filter(|e| matches!(&e.kind, ElementKind::Valve(v) if set.contains(&v.host)))
                 .cloned(),
         );
+        // A copied pile cap takes its piles along.
+        out.extend(
+            self.elements
+                .values()
+                .filter(|e| !set.contains(&e.id))
+                .filter(|e| matches!(&e.kind, ElementKind::Pile(p) if p.cap.is_some_and(|c| set.contains(&c.cap))))
+                .cloned(),
+        );
         // A copied wall takes its framing along.
         out.extend(
             self.elements
@@ -536,6 +548,13 @@ impl crate::EditCtx<'_> {
                 let Some(ElementKind::Pad(p)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 if let Some(n) = remap.get(&p.host) {
                     p.host = *n;
+                }
+            }
+            // Copied piles belong to the copies of their caps; copied alone, they are free.
+            for id in &created[first..] {
+                let Some(ElementKind::Pile(p)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                if let Some(r) = p.cap {
+                    p.cap = remap.get(&r.cap).map(|n| crate::pile::PileCapRef { cap: *n, ..r });
                 }
             }
             // Copied valves sit on the copies of their pipes, else on the pipe they came from.

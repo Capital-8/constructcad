@@ -46,8 +46,12 @@ mod tests {
             }
         }
         // Keys built at runtime from the model crates.
-        let runtime =
-            cc_core::Category::ALL.map(|c| c.key()).into_iter().chain(cc_core::ViewCategory::ALL.map(|c| c.key()));
+        let runtime = cc_core::Category::ALL
+            .map(|c| c.key())
+            .into_iter()
+            .chain(cc_core::ViewCategory::ALL.map(|c| c.key()))
+            .chain(cc_core::FoundationKind::ALL.map(|k| k.key()))
+            .chain(cc_core::pile::PileKind::ALL.map(|k| k.key()));
         missing.extend(runtime.filter(|k| !messages.contains_key(*k)).map(String::from));
         let project = cc_core::Project::from_template();
         let geom = cc_geom::ModelGeometry::build(&project);

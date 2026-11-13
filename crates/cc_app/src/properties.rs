@@ -545,6 +545,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         ElementKind::Mass(m) => mass_props(ui, state, &el, m),
         ElementKind::Topography(t) => topography_props(ui, state, &el, t),
         ElementKind::Pad(p) => pad_props(ui, state, &el, p),
+        ElementKind::Pile(p) => pile_props(ui, state, &el, p),
         ElementKind::Component(c) => component_props(ui, state, &el, c),
         ElementKind::Wall(w) => {
             section(ui, "constraints", t!("section-constraints"), |ui| wall_constraints(ui, state, &el, w));
@@ -819,6 +820,10 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area()));
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
+                if state.project().pile_cap(&el).is_some() {
+                    let piles = state.project().piles_of(id).count();
+                    readonly_row(ui, &t!("col-pile-count"), piles.to_string());
+                }
             });
             // A foundation slab takes a mesh, like a floor; a strip its own bars.
             if !matches!(f.shape, cc_core::FoundationShape::Pad { .. }) {
@@ -1775,6 +1780,40 @@ fn topography_props(ui: &mut Ui, state: &mut AppState, el: &Element, t: &cc_core
         }
         if row(ui, "", |ui| ui.button(t!("edit-boundary")).clicked()) {
             crate::sketch_mode::edit_boundary(state);
+        }
+    });
+}
+
+/// A pile: its level, head and toe (a pile cap's follow the cap, read
+/// only), its length and volume, and its cap.
+fn pile_props(ui: &mut Ui, state: &mut AppState, el: &Element, p: &cc_core::pile::Pile) {
+    let id = el.id;
+    section(ui, "constraints", t!("section-constraints"), |ui| match p.cap {
+        Some(_) => {
+            readonly_row(ui, &t!("prop-level"), state.project().level_name(el.level).to_string());
+            readonly_row(ui, &t!("col-cut-off"), format::length(p.cut_off));
+            readonly_row(ui, &t!("col-toe"), format::length(p.toe));
+        }
+        None => {
+            level_row(ui, state, el);
+            length_row(ui, state, &t!("col-cut-off"), id, "cut-off", p.cut_off, |e, v| {
+                if let ElementKind::Pile(p) = &mut e.kind {
+                    p.cut_off = v;
+                }
+            });
+            length_row(ui, state, &t!("col-toe"), id, "toe", p.toe, |e, v| {
+                if let ElementKind::Pile(p) = &mut e.kind {
+                    p.toe = v;
+                }
+            });
+        }
+    });
+    section(ui, "dimensions", t!("section-dimensions"), |ui| {
+        readonly_row(ui, &t!("prop-length"), format::length(p.length()));
+        readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
+        if let Some(cap) = p.cap.and_then(|c| state.project().element(c.cap)) {
+            let name = if cap.mark.is_empty() { cap.id.to_string() } else { cap.mark.clone() };
+            readonly_row(ui, &t!("col-host"), name);
         }
     });
 }

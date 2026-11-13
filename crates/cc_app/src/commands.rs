@@ -1748,6 +1748,8 @@ fn place_label(category: Category) -> String {
         Category::WallFraming => t!("category-wall-framing"),
         Category::Topography => t!("tool-topography"),
         Category::Pad => t!("tool-pad"),
+        // Made by commands (pile caps, `pile_create`), not drawn.
+        Category::Pile => t!("category-pile"),
     }
 }
 
@@ -1794,6 +1796,7 @@ fn place_description(category: Category) -> String {
         Category::WallFraming => t!("cmd-desc-light-steel-frame"),
         Category::Topography => t!("cmd-desc-topography"),
         Category::Pad => t!("cmd-desc-pad"),
+        Category::Pile => t!("category-pile"),
     }
 }
 

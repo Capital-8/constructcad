@@ -96,6 +96,8 @@ pub enum ElementKind {
     /// The count, mark, diameter, spacing and length of a reinforcement
     /// set's bars, written in one view.
     BarTag(Box<crate::bar_tag::BarTag>),
+    /// A pile: free, or one of a pile cap's (see [`crate::pile`]).
+    Pile(crate::pile::Pile),
     /// A 2D component placed in one view (construction details).
     DetailComponent(Box<crate::detail_component::DetailComponent>),
 }
@@ -142,6 +144,7 @@ impl Element {
             ElementKind::MaskingRegion(_) => Category::MaskingRegion,
             ElementKind::LevelMark(_) => Category::LevelMark,
             ElementKind::BarTag(_) => Category::BarTag,
+            ElementKind::Pile(_) => Category::Pile,
             ElementKind::DetailComponent(_) => Category::DetailComponent,
         }
     }
@@ -356,6 +359,8 @@ impl Element {
                 }
             }
             ElementKind::LevelMark(m) => m.position += delta,
+            // A cap's piles go back to their places (see `crate::pile`).
+            ElementKind::Pile(p) => p.position += delta,
             ElementKind::BarTag(t) => {
                 t.position += delta;
                 if let Some(l) = &mut t.leader {

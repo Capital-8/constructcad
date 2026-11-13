@@ -43,6 +43,7 @@ pub mod paint;
 pub mod pat;
 mod persist;
 pub mod phase;
+pub mod pile;
 pub mod profile;
 pub mod profile_catalog;
 pub mod profile_sweep;
