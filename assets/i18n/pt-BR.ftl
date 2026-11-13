@@ -1479,7 +1479,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = Contraventamento em X
 action-rebar-typical = Armadura típica
 action-rebar-view = Vista de armaduras
 action-steel-schedule = Tabela de aço
@@ -1488,7 +1487,6 @@ action-number-structure = Numerar estrutura
 action-structure-tags = Etiquetas estruturais
 action-remove-rebar = Remover
 cmd-desc-truss = Monta uma treliça paramétrica de aço ou madeira: clique as duas pontas; a barra de opções define forma (plana, uma água, duas águas), padrão (Pratt, Howe, Warren, pendural, dois pendurais, Fink), altura, painéis, cópias e espaçamento. Banzos e diagonais são vigas e montantes são pilares, mantidos em dia com a treliça.
-cmd-desc-braces-x = Contraventa o vão entre os dois pilares selecionados com duas barras cruzadas, da base de cada um ao topo do outro.
 cmd-desc-rebar-typical = Dá às vigas e pilares selecionados (ou a todos do nível ativo) sem armadura uma armadura típica: barras longitudinais e estribos.
 cmd-desc-rebar-view = Abre uma vista 3D das armaduras sobre o modelo esmaecido.
 cmd-desc-steel-schedule = Cria uma tabela de aço: cada conjunto de barras com elemento, diâmetro, quantidade, comprimento da barra, comprimento total e peso.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Tipo do banzo inferior
 label-web-type = Tipo das diagonais
 label-post-type = Tipo dos montantes
 msg-truss-material = Treliças são de aço ou madeira: escolha um deles em Material.
+
+# Parametric bracing
+category-bracing = Contraventamentos
+tpl-type-bracing = Contraventamento
+tx-create-bracing = Criar contraventamento
+action-bracing = Contraventamento
+cmd-desc-bracing = Contraventa um vão de pórtico, pavimento por pavimento: com dois pilares selecionados usa o vão entre eles; senão, clique os eixos dos dois pilares. Padrões em X, diagonal, V, V invertido (chevron) e K; as barras são vigas mantidas em dia com o contraventamento.
+hint-bracing = Clique os eixos dos dois pilares do vão · Esc encerra
+bracing-v = Em V
+bracing-chevron = V invertido (chevron)
+bracing-diagonal = Diagonal
+bracing-x = Em X
+bracing-k = Em K
+prop-bracing-stories = Pavimentos
+prop-bracing-story-height = Altura do pavimento
+prop-bracing-flip = Inverter diagonal
+prop-bracing-alternate = Alternar diagonais
+label-brace-type = Tipo das barras
+msg-bracing-material = Contraventamentos são de aço ou madeira: escolha um deles em Material.
 
 # Wall framing
 category-wall-framing = Ossaturas de parede

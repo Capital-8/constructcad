@@ -1460,7 +1460,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = Stężenia krzyżowe X
 action-rebar-typical = Zbrojenie typowe
 action-rebar-view = Widok zbrojenia
 action-steel-schedule = Zestawienie stali
@@ -1469,7 +1468,6 @@ action-number-structure = Numeruj konstrukcję
 action-structure-tags = Etykiety konstrukcyjne
 action-remove-rebar = Usuń
 cmd-desc-truss = Tworzy parametryczną kratownicę stalową lub drewnianą: kliknij jej dwa końce; pasek opcji ustala kształt (płaska, jednospadowa, dwuspadowa), układ (Pratt, Howe, Warren, jednowieszakowa, dwuwieszakowa, Fink), wysokość, przęsła, kopie i rozstaw. Pasy i krzyżulce to belki, słupki to słupy, aktualizowane razem z kratownicą.
-cmd-desc-braces-x = Stęż pole między dwoma zaznaczonymi słupami dwoma prętami krzyżującymi się od podstawy każdego do wierzchu drugiego.
 cmd-desc-rebar-typical = Nadaj zaznaczonym belkom i słupom (lub wszystkim na aktywnym poziomie) bez zbrojenia zbrojenie typowe: pręty podłużne i strzemiona.
 cmd-desc-rebar-view = Otwórz widok 3D prętów zbrojeniowych na tle słabo narysowanego modelu.
 cmd-desc-steel-schedule = Utwórz zestawienie stali: każdy zestaw prętów z elementem nośnym, średnicą, liczbą, długością pręta, długością całkowitą i masą.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Typ pasa dolnego
 label-web-type = Typ krzyżulców
 label-post-type = Typ słupków
 msg-truss-material = Kratownice są stalowe lub drewniane: wybierz jedno w Materiale.
+
+# Parametric bracing
+category-bracing = Stężenia
+tpl-type-bracing = Stężenie
+tx-create-bracing = Utwórz stężenie
+action-bracing = Stężenie
+cmd-desc-bracing = Stęża pole ramy, kondygnacja po kondygnacji: przy dwóch zaznaczonych słupach używa pola między nimi; w przeciwnym razie kliknij osie dwóch słupów. Układy X, ukośny, V, odwrócone V (chevron) i K; pręty są belkami utrzymywanymi w zgodzie ze stężeniem.
+hint-bracing = Kliknij osie dwóch słupów pola · Esc kończy
+bracing-v = Typu V
+bracing-chevron = Odwrócone V (chevron)
+bracing-diagonal = Ukośne
+bracing-x = Typu X
+bracing-k = Typu K
+prop-bracing-stories = Kondygnacje
+prop-bracing-story-height = Wysokość kondygnacji
+prop-bracing-flip = Odwróć ukośnik
+prop-bracing-alternate = Naprzemienne ukośniki
+label-brace-type = Typ prętów
+msg-bracing-material = Stężenia są stalowe lub drewniane: wybierz jedno w Materiale.
 
 # Wall framing
 category-wall-framing = Szkielety ścian

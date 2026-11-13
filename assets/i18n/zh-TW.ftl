@@ -1460,7 +1460,6 @@ truss-panels-auto = 自動
 truss-pratt = 普拉特式
 truss-howe = 豪式
 truss-warren = 華倫式
-action-braces-x = X 型支撐
 action-rebar-typical = 典型鋼筋配置
 action-rebar-view = 鋼筋檢視
 action-steel-schedule = 鋼材明細表
@@ -1469,7 +1468,6 @@ action-number-structure = 結構編號
 action-structure-tags = 結構標籤
 action-remove-rebar = 移除
 cmd-desc-truss = 配置參數化鋼或木桁架：點選兩端；選項列設定形狀（平行、單坡、雙坡）、腹桿形式（Pratt、Howe、Warren、單柱式、雙柱式、芬克式）、高度、節間、副本數與間距。弦桿與斜桿為梁，直桿為柱，隨桁架更新。
-cmd-desc-braces-x = 在選取的兩根柱之間以兩根交叉斜撐加固跨距，斜撐從各柱底部延伸至另一根柱的頂部。
 cmd-desc-rebar-typical = 為選取的梁和柱（或目前樓層的所有梁柱）配置典型鋼筋：縱向鋼筋和箍筋。
 cmd-desc-rebar-view = 開啟鋼筋的 3D 檢視，並以淡化方式顯示繪製的模型。
 cmd-desc-steel-schedule = 建立鋼筋明細表：列出每組鋼筋的主體、直徑、數量、單根長度、總長度和重量。
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = 下弦桿類型
 label-web-type = 斜桿類型
 label-post-type = 直桿類型
 msg-truss-material = 桁架為鋼或木：請在「材料」中選擇其一。
+
+# Parametric bracing
+category-bracing = 支撐
+tpl-type-bracing = 支撐
+tx-create-bracing = 建立支撐
+action-bracing = 支撐
+cmd-desc-bracing = 逐層支撐構架的一個跨間：選取兩根柱子時使用它們之間的跨間；否則點按兩根柱子的軸線。樣式有 X 型、單斜撐、V 型、人字型（倒 V）和 K 型；斜撐是隨支撐保持同步的梁。
+hint-bracing = 點按跨間兩根柱子的軸線 · Esc 結束
+bracing-v = V 型
+bracing-chevron = 人字型（倒 V）
+bracing-diagonal = 單斜撐
+bracing-x = X 型
+bracing-k = K 型
+prop-bracing-stories = 樓層數
+prop-bracing-story-height = 樓層高度
+prop-bracing-flip = 翻轉斜撐
+prop-bracing-alternate = 斜撐逐層交替
+label-brace-type = 斜撐類型
+msg-bracing-material = 支撐為鋼或木：請在「材料」中選擇其一。
 
 # Wall framing
 category-wall-framing = 牆骨架

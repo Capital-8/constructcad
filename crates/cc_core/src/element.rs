@@ -75,6 +75,8 @@ pub enum ElementKind {
     SteelBuilding(Box<crate::steel_building::SteelBuilding>),
     /// A parametric truss: it owns the beams and columns of its chords and web.
     Truss(Box<crate::truss::Truss>),
+    /// A parametric bracing: it owns the braces of one bay of a frame.
+    Bracing(Box<crate::bracing::Bracing>),
     /// Light steel or wood framing of a wall: it owns the studs and the beams of its tracks, headers and sills.
     WallFraming(Box<crate::wall_framing::WallFraming>),
     /// A steel or timber joint at one end of a column or beam (placed by its member).
@@ -127,6 +129,7 @@ impl Element {
             ElementKind::Shaft(_) => Category::Shaft,
             ElementKind::SteelBuilding(_) => Category::SteelBuilding,
             ElementKind::Truss(_) => Category::Truss,
+            ElementKind::Bracing(_) => Category::Bracing,
             ElementKind::WallFraming(_) => Category::WallFraming,
             ElementKind::Connection(_) => Category::Connection,
             ElementKind::Topography(_) => Category::Topography,
@@ -345,6 +348,10 @@ impl Element {
             ElementKind::Truss(t) => {
                 t.start += delta;
                 t.end += delta;
+            }
+            ElementKind::Bracing(b) => {
+                b.start += delta;
+                b.end += delta;
             }
             // Placed by its wall.
             ElementKind::WallFraming(_) => {}

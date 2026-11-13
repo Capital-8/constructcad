@@ -5,6 +5,7 @@
 
 mod actions;
 mod app;
+mod bracing_ui;
 mod browser;
 mod browser_org_dialog;
 mod cad_ui;

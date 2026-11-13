@@ -1900,6 +1900,7 @@ impl<'a> Exporter<'a> {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Bracing {}
             | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => {

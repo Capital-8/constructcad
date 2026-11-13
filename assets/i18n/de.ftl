@@ -1460,7 +1460,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = Kreuzverband
 action-rebar-typical = Regelbewehrung
 action-rebar-view = Bewehrungsansicht
 action-steel-schedule = Stahlliste
@@ -1469,7 +1468,6 @@ action-number-structure = Tragwerk nummerieren
 action-structure-tags = Tragwerksbeschriftung
 action-remove-rebar = Entfernen
 cmd-desc-truss = Legt einen parametrischen Fachwerkträger aus Stahl oder Holz an: Klicken Sie seine beiden Enden; die Optionsleiste legt Form (flach, Pult, Sattel), Ausfachung (Pratt, Howe, Warren, einfaches Hängewerk, doppeltes Hängewerk, Fink), Höhe, Felder, Kopien und Abstand fest. Gurte und Diagonalen sind Träger, Pfosten sind Stützen, die dem Fachwerkträger folgen.
-cmd-desc-braces-x = Das Feld zwischen den beiden ausgewählten Stützen mit zwei Streben aussteifen, die sich vom Fuß der einen zum Kopf der anderen kreuzen.
 cmd-desc-rebar-typical = Den ausgewählten Trägern und Stützen (oder allen der aktiven Ebene) ohne Bewehrung eine Regelbewehrung geben: Längsstäbe und Bügel.
 cmd-desc-rebar-view = Eine 3D-Ansicht der Bewehrungsstäbe über dem blass dargestellten Modell öffnen.
 cmd-desc-steel-schedule = Eine Stahlliste erstellen: jeder Stabsatz mit Host, Durchmesser, Anzahl, Stablänge, Gesamtlänge und Gewicht.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Untergurttyp
 label-web-type = Diagonalentyp
 label-post-type = Pfostentyp
 msg-truss-material = Fachwerkträger sind aus Stahl oder Holz: Wählen Sie eines unter Material.
+
+# Parametric bracing
+category-bracing = Verbände
+tpl-type-bracing = Verband
+tx-create-bracing = Verband erstellen
+action-bracing = Verband
+cmd-desc-bracing = Steift ein Rahmenfeld geschossweise aus: Mit zwei ausgewählten Stützen wird das Feld zwischen ihnen verwendet; sonst die Achsen der beiden Stützen anklicken. Muster: X, Diagonale, V, umgekehrtes V (Chevron) und K; die Streben sind Träger, die mit dem Verband aktuell gehalten werden.
+hint-bracing = Achsen der beiden Stützen des Feldes anklicken · Esc beendet
+bracing-v = V-Verband
+bracing-chevron = Umgekehrtes V (Chevron)
+bracing-diagonal = Diagonale
+bracing-x = Kreuzverband (X)
+bracing-k = K-Verband
+prop-bracing-stories = Geschosse
+prop-bracing-story-height = Geschosshöhe
+prop-bracing-flip = Diagonale umkehren
+prop-bracing-alternate = Diagonalen abwechseln
+label-brace-type = Strebentyp
+msg-bracing-material = Verbände sind aus Stahl oder Holz: Wählen Sie eines unter Material.
 
 # Wall framing
 category-wall-framing = Wandständerwerke

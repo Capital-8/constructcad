@@ -53,6 +53,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Shaft => Icon::Shaft,
         Category::SteelBuilding => Icon::SteelBuilding,
         Category::Truss => Icon::Truss,
+        Category::Bracing => Icon::Brace,
         Category::Connection => Icon::Connection,
         Category::WallFraming => Icon::WallFraming,
         Category::Topography => Icon::Topography,
@@ -726,7 +727,7 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
             group(ui, t!("group-reinforcement"), |ui| stacks(ui, state, &[&[TypicalRebar, RebarView, SteelSchedule]]));
         }
         M::Steel => {
-            group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam, BracesX]));
+            group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam, Bracing]));
             group(ui, t!("group-framing"), |ui| {
                 stacks(
                     ui,
@@ -740,7 +741,7 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
             });
         }
         M::Timber => {
-            group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam]));
+            group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam, Bracing]));
             group(ui, t!("group-framing"), |ui| {
                 stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
                 command_button(ui, state, WoodFrame);
@@ -1298,6 +1299,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("hint-footing")));
             }
             Tool::Truss { .. } => crate::truss_ui::tool_options(ui, state),
+            Tool::Bracing { .. } => crate::bracing_ui::tool_options(ui, state),
             Tool::Stair { .. } => crate::stair_ui::tool_options(ui, state),
             Tool::Ramp { .. } => crate::stair_ui::ramp_tool_options(ui, state),
             Tool::Pipe { type_id } => segment_options(ui, state, type_id, Run::Pipe),

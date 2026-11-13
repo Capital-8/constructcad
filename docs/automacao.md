@@ -306,6 +306,14 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
 ```
 
+`bracing_create` contraventa um vão de pórtico: um elemento hospedeiro cujas barras são vigas comuns, criado em um passo de desfazer e devolvido como `{id, members}`. O vão vai de `start` a `end` (os eixos dos dois pilares) ou fica entre os dois `columns`, de quem toma a base e a altura; `pattern` é `x`, `diagonal` (com `flip` e `alternate`), `v`, `chevron` ou `k`; `stories` pavimentos de altura `height` ficam um sobre o outro a partir de `base_offset`; `material` (`steel` ou `timber`) escolhe a linha de catálogo do tipo padrão das barras. `element_set` muda seus parâmetros e regenera as barras mantendo seus ids.
+
+```text
+{"command": "bracing_create", "args": {"start": [0, 0], "end": [6, 0], "pattern": "chevron", "height": 3, "stories": 4}}
+{"command": "bracing_create", "args": {"columns": [12, 13], "pattern": "k", "stories": 2}}
+{"command": "element_set", "args": {"id": 42, "params": {"pattern": "X"}}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).

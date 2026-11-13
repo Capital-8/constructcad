@@ -951,19 +951,6 @@ pub fn export_analytical(state: &mut AppState) {
 }
 
 /// X bracing between the two selected columns.
-pub fn braces_x(state: &mut AppState) {
-    let columns = selected_columns(state);
-    let made = run_with_type(state, Category::Beam, |_, type_ref| cc_engine::commands::framing::BracesBetweenColumns {
-        columns,
-        pattern: Some("x".into()),
-        type_ref: Some(type_ref),
-    });
-    if let Some(out) = made {
-        let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
-        state.selection = ids.map(cc_core::ElementId).collect();
-    }
-}
-
 /// Typical reinforcement for the selected beams and columns, or all of the active level.
 pub fn typical_rebar(state: &mut AppState) {
     let project = state.project();

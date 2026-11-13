@@ -38,6 +38,8 @@ pub enum Category {
     SteelBuilding,
     /// Parametric trusses: hosts of chords, diagonals and posts.
     Truss,
+    /// Parametric bracings: hosts of the braces of a bay of a frame.
+    Bracing,
     /// Light steel and wood framing of walls: hosts of studs, tracks, headers and sills.
     WallFraming,
     /// Terrain surfaces.
@@ -67,7 +69,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 38] = [
+    pub const ALL: [Category; 39] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -103,6 +105,7 @@ impl Category {
         Category::Shaft,
         Category::SteelBuilding,
         Category::Truss,
+        Category::Bracing,
         Category::WallFraming,
         Category::Topography,
         Category::Pad,
@@ -203,6 +206,7 @@ impl Category {
             Category::Shaft => "category-shaft",
             Category::SteelBuilding => "category-steel-building",
             Category::Truss => "category-truss",
+            Category::Bracing => "category-bracing",
             Category::Connection => "category-connection",
             Category::WallFraming => "category-wall-framing",
             Category::Topography => "category-topography",
@@ -532,6 +536,8 @@ pub enum TypeData {
     SteelBuilding {},
     /// Trusses (no properties of their own; types name them).
     Truss {},
+    /// Bracings (no properties of their own; types name them).
+    Bracing {},
     /// Connections (no properties of their own; types name them).
     Connection {},
     /// Wall framings (no properties of their own; types name them).
@@ -624,6 +630,7 @@ impl TypeData {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Bracing {}
             | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => Vec::new(),
@@ -701,6 +708,7 @@ impl TypeData {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Bracing {}
             | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => {}
@@ -860,6 +868,7 @@ impl ElementType {
             TypeData::Shaft {} => Category::Shaft,
             TypeData::SteelBuilding {} => Category::SteelBuilding,
             TypeData::Truss {} => Category::Truss,
+            TypeData::Bracing {} => Category::Bracing,
             TypeData::Connection {} => Category::Connection,
             TypeData::WallFraming {} => Category::WallFraming,
             TypeData::Topography { .. } => Category::Topography,
@@ -1022,6 +1031,7 @@ impl ElementType {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Bracing {}
             | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => "",

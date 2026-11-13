@@ -233,6 +233,7 @@ impl ScheduleField {
             Category::Shaft => &[F::Area, F::Height],
             Category::SteelBuilding => &[],
             Category::Truss => &[],
+            Category::Bracing => &[],
             Category::WallFraming => &[],
             Category::Connection => {
                 &[F::ConnectionKind, F::Host, F::PlateMass, F::BoltCount, F::BoltDiameter, F::Volume]
@@ -327,6 +328,7 @@ impl ScheduleField {
             Category::Shaft => vec![F::Mark, F::Type, F::Level, F::Area, F::Height],
             Category::SteelBuilding => Vec::new(),
             Category::Truss => Vec::new(),
+            Category::Bracing => Vec::new(),
             Category::WallFraming => Vec::new(),
             Category::Connection => {
                 vec![F::Mark, F::ConnectionKind, F::PlateMass, F::BoltCount, F::BoltDiameter, F::Comments]

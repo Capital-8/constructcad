@@ -3800,7 +3800,7 @@ fn structure_material_selector_swaps_groups() {
     state.prefs.structure_material = cc_core::StructuralMaterial::Concrete;
     let mut harness = ribbon_harness(state, 1600.0);
     let rebar = crate::commands::UiCommand::TypicalRebar.label(harness.state());
-    let braces = crate::commands::UiCommand::BracesX.label(harness.state());
+    let braces = crate::commands::UiCommand::Bracing.label(harness.state());
     assert!(harness.query_by_label(&rebar).is_some(), "concrete shows reinforcement");
     assert!(harness.query_by_label(&braces).is_none());
     harness.get_by_label(&crate::i18n::tr("profile-material-steel")).click();
@@ -3985,6 +3985,81 @@ fn truss_tool_options_make_a_parametric_truss() {
     assert_eq!((t.shape, t.pattern, t.panels, t.copies), (TrussShape::Gable, TrussPattern::KingPost, 4, 3));
     assert_eq!(t.members.len(), 33);
     assert!(state.project().types.values().any(|x| x.name == "Peça 6x16"), "timber chords");
+}
+
+/// The Bracing command shows for steel and timber (not concrete) and, with
+/// no two columns selected, starts the tool with the tab's material.
+#[test]
+fn bracing_tool_follows_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    for (material, shown) in [(M::Concrete, false), (M::Steel, true), (M::Timber, true)] {
+        let mut state = sample_state();
+        state.selection.clear();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let mut harness = ribbon_harness(state, 1600.0);
+        let label = crate::commands::UiCommand::Bracing.label(harness.state());
+        assert_eq!(harness.query_by_label(&label).is_some(), shown, "{material:?}");
+        if shown {
+            harness.get_by_role_and_label(Role::Button, &label).click();
+            harness.run();
+            assert_eq!(harness.state().tool, crate::tools::Tool::Bracing { material });
+        }
+    }
+}
+
+/// The tool's options make a parametric bracing, two selected columns give
+/// the command their bay, and the palette's rows regenerate the braces.
+#[test]
+fn bracing_options_columns_and_properties() {
+    use cc_core::bracing::BracingPattern;
+    let mut state = sample_state();
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    state.bracing =
+        crate::tools::BracingOptions { pattern: BracingPattern::K, height: 3.0, stories: 2, ..Default::default() };
+    let level = state.project().levels[0].id;
+    let (a, b) = (glam::DVec2::new(100.0, 100.0), glam::DVec2::new(105.0, 100.0));
+    let command = crate::tools::bracing_command(&state.bracing, cc_core::StructuralMaterial::Steel, level, a, b);
+    let out = state.session.run(command).expect("bracing");
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let get = |s: &AppState, id: cc_core::ElementId| match &s.project().element(id).unwrap().kind {
+        cc_core::ElementKind::Bracing(b) => (**b).clone(),
+        _ => panic!("not a bracing"),
+    };
+    assert_eq!(get(&state, host).members.len(), 8, "four braces per storey");
+    // The path the palette's rows take.
+    crate::bracing_ui::edit(&mut state, host, "pattern", |b| b.pattern = BracingPattern::Chevron);
+    assert_eq!(get(&state, host).members.len(), 4);
+    // Two selected columns: the command braces their bay and selects the bracing.
+    let column = |s: &mut AppState, x: f64| {
+        let args = serde_json::json!({"position": [x, 120.0], "height": 6.0});
+        let id = s.session.execute("column_create", args).unwrap()["id"].as_u64().unwrap();
+        let free = serde_json::json!({"id": id, "params": {"top": "Unconnected"}});
+        s.session.execute("element_set", free).unwrap();
+        cc_core::ElementId(id)
+    };
+    state.selection = [column(&mut state, 100.0), column(&mut state, 104.0)].into_iter().collect();
+    crate::bracing_ui::start(&mut state);
+    let made = *state.selection.iter().next().expect("the new bracing is selected");
+    let bay = get(&state, made);
+    assert_eq!((bay.pattern, bay.stories), (BracingPattern::K, 2));
+    assert!(
+        (bay.height - 3.0).abs() < 1e-9 && (bay.length() - 4.0).abs() < 1e-9,
+        "the columns' height over two storeys"
+    );
+    // A deleted brace is detached; the palette's Reset Members brings it back.
+    let brace = bay.members[0].id;
+    state.session.execute("elements_delete", serde_json::json!({"ids": [brace.0]})).unwrap();
+    assert_eq!(get(&state, made).detached.len(), 1);
+    state.selection = [made].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let bay = get(harness.state(), made);
+    assert_eq!((bay.members.len(), bay.detached.len()), (8, 0));
 }
 
 /// A truss's rows edit it through `element_set`: new panels regenerate it,
