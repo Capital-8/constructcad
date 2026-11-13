@@ -8,7 +8,7 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::level_mark::{LevelMark, MAX_LEVEL};
-use cc_core::{Category, ElementKind, ElementType, ElementTypeId, TypeData, ViewKind};
+use cc_core::{Category, ElementKind, ElementType, ElementTypeId, MeasurementSystem, TypeData, ViewKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -97,7 +97,8 @@ impl Command for LevelMarkCreate {
                 Some(t) => t,
                 None => {
                     let id = ElementTypeId(e.alloc_id());
-                    e.add_type(new_type(id, None))
+                    let system = e.project().measurement_system();
+                    e.add_type(new_type(id, None, system))
                 }
             };
             Ok(add_element(e, level, type_id, kind))
@@ -106,17 +107,25 @@ impl Command for LevelMarkCreate {
     }
 }
 
-/// A level mark type in the interface language: text 2.5 mm, the project's
-/// zero written as `datum` (0 by default).
-fn new_type(id: ElementTypeId, name: Option<String>) -> ElementType {
-    ElementType {
-        id,
-        name: name.unwrap_or_else(|| t!("tpl-type-level-mark")),
-        data: cc_core::level_mark::default_type(&crate::i18n::tr),
-        info: Default::default(),
-        uid: Default::default(),
-    }
+/// A level mark type in the interface language: text 2.5 mm (3/32" in
+/// imperial projects), the project's zero written as `datum` (0 by default).
+fn new_type(id: ElementTypeId, name: Option<String>, system: MeasurementSystem) -> ElementType {
+    let mut data = cc_core::level_mark::default_type(&crate::i18n::tr);
+    let default_name = match system {
+        MeasurementSystem::Metric => t!("tpl-type-level-mark"),
+        MeasurementSystem::Imperial => {
+            if let TypeData::LevelMark { text_size, .. } = &mut data {
+                *text_size = IMPERIAL_TEXT_SIZE;
+            }
+            t!("tpl-imp-type-level-mark")
+        }
+    };
+    ElementType { id, name: name.unwrap_or(default_name), data, info: Default::default(), uid: Default::default() }
 }
+
+/// Text size of an imperial project's default level mark type: 3/32",
+/// paper millimeters.
+const IMPERIAL_TEXT_SIZE: f64 = 3.0 / 32.0 * 25.4;
 
 /// Create a level mark type: the text size, the datum (the value written
 /// for the project's zero, e.g. 100 when the ground floor is +100.00) and
@@ -128,7 +137,7 @@ pub struct LevelMarkTypeCreate {
     /// Type name (default: the language's).
     #[serde(default)]
     pub name: Option<String>,
-    /// Text size, paper millimeters (default 2.5).
+    /// Text size, paper millimeters (default 2.5; 3/32", 2.38125, in imperial projects).
     #[serde(default)]
     pub text_size: Option<f64>,
     /// Value written for the project's zero, meters (default 0).
@@ -159,7 +168,7 @@ impl Command for LevelMarkTypeCreate {
         let datum = level_value(self.datum, "datum")?;
         let id = edit(s, t!("tx-create-level-mark-type"), |e| {
             let id = ElementTypeId(e.alloc_id());
-            let mut ty = new_type(id, self.name.clone());
+            let mut ty = new_type(id, self.name.clone(), e.project().measurement_system());
             if let TypeData::LevelMark { text_size, datum: d, finished_suffix, raw_suffix } = &mut ty.data {
                 *text_size = size.unwrap_or(*text_size);
                 *d = datum.unwrap_or(*d);

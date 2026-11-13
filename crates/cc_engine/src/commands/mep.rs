@@ -132,9 +132,10 @@ pub(crate) fn joined_offset(
 /// down to `end_offset`), in a plumbing system. Its center line starts
 /// `offset` above the level (default: where it starts on a pipe of its
 /// system, such as the end of a run or a riser; else 0.60 m for supply and
-/// vent pipes, -0.30 m for drains). Drains fall along the flow by `slope` (percent;
-/// default 2 % up to 75 mm, 1 % above); other pipes are level unless
-/// `end_offset` or `slope` says otherwise.
+/// vent pipes, -0.30 m for drains; 2'-0" and -1'-0" in imperial projects).
+/// Drains fall along the flow by `slope` (percent; default 2 % up to 75 mm,
+/// 1 % above; in imperial projects 1/4" per foot up to 3", 1/8" above);
+/// other pipes are level unless `end_offset` or `slope` says otherwise.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct PipeCreate {
@@ -176,7 +177,7 @@ impl Command for PipeCreate {
         }
         let kind = system.and_then(|id| p.system(id)).map(|sys| sys.kind);
         let offset = self.offset.unwrap_or_else(|| {
-            let wanted = pipe_offset(kind);
+            let wanted = pipe_offset(p, kind);
             joined_offset(p, level, self.start, Category::Pipe, system, wanted).unwrap_or(wanted)
         });
         let mut seg = segment(self.start, self.end, offset, self.end_offset)?;
@@ -184,7 +185,7 @@ impl Command for PipeCreate {
             let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
             let slope = match self.slope {
                 Some(percent) => finite(percent, "slope")? / 100.0,
-                None if kind.is_some_and(SystemKind::is_drainage) => drain_slope(diameter),
+                None if kind.is_some_and(SystemKind::is_drainage) => drain_slope(p, diameter),
                 None => 0.0,
             };
             seg.end_offset = seg.start_offset - slope * seg.plan_length();
@@ -833,7 +834,7 @@ impl Command for MepConnect {
                     if k.system.is_drainage() {
                         // Down from the outlet, then falling towards the drain.
                         let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
-                        let zp = zq + crate::defaults::drain_slope(diameter) * dist;
+                        let zp = zq + crate::defaults::drain_slope(p, diameter) * dist;
                         if zc - zp > 0.01 {
                             branches.push(piece(at, at, zc, zp));
                         }
@@ -898,7 +899,7 @@ impl Command for MepConnect {
                         let type_id = pipe_type_for(p, need).unwrap_or(run_el.type_id);
                         let diameter = p.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(need);
                         let dist = q.distance(c.position);
-                        let zp = if drain { zq + crate::defaults::drain_slope(diameter) * dist } else { zq };
+                        let zp = if drain { zq + crate::defaults::drain_slope(p, diameter) * dist } else { zq };
                         let systems = seg.systems.clone();
                         if drain && base - zp > 0.01 {
                             let mut drop = MepSegment::new(c.position, c.position, base);

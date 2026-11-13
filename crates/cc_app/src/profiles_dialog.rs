@@ -386,6 +386,42 @@ fn ordered_params(detail: &Value) -> Vec<(String, f64)> {
 }
 
 /// A value with about four significant digits.
+/// A profile's section properties as shown (label, value, unit), from
+/// `get` (SI values): cm², cm⁴, cm³, cm and kg/m in metric projects; in²,
+/// in⁴, in³, in and lb/ft in imperial ones.
+fn section_rows(
+    get: &dyn Fn(&str) -> f64,
+    system: cc_core::MeasurementSystem,
+) -> [(&'static str, f64, &'static str); 9] {
+    let mass = cc_views::format::Quantity::LinearMass;
+    let linear_mass = get("linear_mass") * mass.per_si(system);
+    if system == cc_core::MeasurementSystem::Metric {
+        return [
+            ("profile-prop-area", get("area") * 1e4, "cm²"),
+            ("profile-prop-mass", linear_mass, "kg/m"),
+            ("profile-prop-ix", get("ix") * 1e8, "cm⁴"),
+            ("profile-prop-iy", get("iy") * 1e8, "cm⁴"),
+            ("profile-prop-wx", get("wx") * 1e6, "cm³"),
+            ("profile-prop-wy", get("wy") * 1e6, "cm³"),
+            ("profile-prop-rx", get("rx") * 1e2, "cm"),
+            ("profile-prop-ry", get("ry") * 1e2, "cm"),
+            ("profile-prop-j", get("j") * 1e8, "cm⁴"),
+        ];
+    }
+    let inch = cc_core::units::INCH;
+    [
+        ("profile-prop-area", get("area") / inch.powi(2), "in²"),
+        ("profile-prop-mass", linear_mass, "lb/ft"),
+        ("profile-prop-ix", get("ix") / inch.powi(4), "in⁴"),
+        ("profile-prop-iy", get("iy") / inch.powi(4), "in⁴"),
+        ("profile-prop-wx", get("wx") / inch.powi(3), "in³"),
+        ("profile-prop-wy", get("wy") / inch.powi(3), "in³"),
+        ("profile-prop-rx", get("rx") / inch, "in"),
+        ("profile-prop-ry", get("ry") / inch, "in"),
+        ("profile-prop-j", get("j") / inch.powi(4), "in⁴"),
+    ]
+}
+
 fn number(v: f64) -> String {
     let a = v.abs();
     if !v.is_finite() {
@@ -433,17 +469,22 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
         let shape = detail["shape"].as_str().unwrap_or_default();
         table::readonly_row(ui, &t!("prop-shape"), shape_label(shape));
         for (param, value) in ordered_params(&detail) {
-            // Lengths in millimeters; the Z section's lip angle in degrees.
+            // Lengths in millimeters (inches in imperial projects); the Z
+            // section's lip angle in degrees.
             let degrees = param == "angle";
-            let mut shown = if degrees { value } else { value * 1000.0 };
+            let inches = !degrees && cc_views::format::imperial();
+            let mut shown = if degrees || inches { value } else { value * 1000.0 };
             // The symbol stays the label; what it measures is its tooltip.
             let tip = crate::i18n::try_tr(&param_key(&param));
             let r = table::row_tip(ui, &param, tip.as_deref(), |ui| {
+                if inches {
+                    return ui.add(crate::properties::size_drag(&mut shown).range(0.0..=f64::MAX));
+                }
                 let suffix = if degrees { "°" } else { " mm" };
                 ui.add(egui::DragValue::new(&mut shown).speed(0.5).range(0.0..=f64::MAX).max_decimals(2).suffix(suffix))
             });
             if r.changed() {
-                let v = if degrees { shown } else { shown / 1000.0 };
+                let v = if degrees || inches { shown } else { shown / 1000.0 };
                 let command = cmd::ProfileSet {
                     profile: profile(),
                     params: Some(BTreeMap::from([(param.clone(), v)])),
@@ -463,17 +504,7 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
     let p = &detail["properties"];
     let get = |k: &str| p[k].as_f64().unwrap_or(f64::NAN);
     table::section(ui, "profiles-properties", t!("profiles-properties"), |ui| {
-        let rows = [
-            ("profile-prop-area", get("area") * 1e4, "cm²"),
-            ("profile-prop-mass", get("linear_mass"), "kg/m"),
-            ("profile-prop-ix", get("ix") * 1e8, "cm⁴"),
-            ("profile-prop-iy", get("iy") * 1e8, "cm⁴"),
-            ("profile-prop-wx", get("wx") * 1e6, "cm³"),
-            ("profile-prop-wy", get("wy") * 1e6, "cm³"),
-            ("profile-prop-rx", get("rx") * 1e2, "cm"),
-            ("profile-prop-ry", get("ry") * 1e2, "cm"),
-            ("profile-prop-j", get("j") * 1e8, "cm⁴"),
-        ];
+        let rows = section_rows(&get, cc_views::format::system());
         for (label, value, unit) in rows {
             table::readonly_row(ui, &tr(label), format!("{} {unit}", number(value)));
         }
@@ -563,7 +594,9 @@ fn preview(ui: &mut Ui, detail: &Value) {
         painter.line_segment([at - vec2(5.0, -5.0), at + vec2(5.0, -5.0)], cross);
     }
     let font = egui::FontId::proportional(11.0);
-    let mm = |v: f64| format!("{} mm", number(v * 1000.0));
+    let mm = |v: f64| {
+        if cc_views::format::imperial() { cc_views::format::inch_size(v) } else { format!("{} mm", number(v * 1000.0)) }
+    };
     let bottom = Pos2::new(rect.center().x, rect.bottom() - 4.0);
     painter.text(bottom, egui::Align2::CENTER_BOTTOM, format!("bf = {}", mm(size.x)), font.clone(), palette.text_muted);
     let left = Pos2::new(rect.left() + 6.0, rect.top() + 4.0);
@@ -716,6 +749,29 @@ mod tests {
     fn shape_keys_use_hyphens() {
         assert_eq!(shape_key("cold_lipped_u"), "profile-shape-cold-lipped-u");
         assert_eq!(material_for("cold_z"), ProfileMaterial::ColdFormed);
+    }
+
+    #[test]
+    fn section_properties_in_both_systems() {
+        // A 1" x 1" square bar of steel.
+        let inch = cc_core::units::INCH;
+        let props = |k: &str| match k {
+            "area" => inch * inch,
+            "linear_mass" => 7850.0 * inch * inch,
+            "ix" | "iy" => inch.powi(4) / 12.0,
+            "wx" | "wy" => inch.powi(3) / 6.0,
+            "rx" | "ry" => inch / 12f64.sqrt(),
+            _ => 0.0,
+        };
+        let imperial = section_rows(&props, cc_core::MeasurementSystem::Imperial);
+        let (_, area, unit) = imperial[0];
+        assert!((area - 1.0).abs() < 1e-9 && unit == "in²");
+        let (_, mass, unit) = imperial[1];
+        assert_eq!((number(mass), unit), ("3.40".to_string(), "lb/ft"));
+        assert!((imperial[2].1 - 1.0 / 12.0).abs() < 1e-9 && imperial[2].2 == "in⁴");
+        let metric = section_rows(&props, cc_core::MeasurementSystem::Metric);
+        assert_eq!((number(metric[0].1), metric[0].2), ("6.45".to_string(), "cm²"));
+        assert_eq!(metric[1].2, "kg/m");
     }
 
     #[test]

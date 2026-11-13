@@ -63,6 +63,11 @@ fn length(ui: &mut Ui, value: &mut f64, max: f64) -> Response {
     ui.add(crate::properties::length_drag(value).speed(0.005).range(0.0..=max))
 }
 
+/// A small size (a waist, a stringer, a gap): inches in imperial projects.
+fn size(ui: &mut Ui, value: &mut f64, max: f64) -> Response {
+    ui.add(crate::properties::size_drag(value).range(0.0..=max))
+}
+
 /// A riser count, 0 shown as automatic.
 fn count(ui: &mut Ui, value: &mut u32) -> Response {
     ui.add(
@@ -92,8 +97,11 @@ pub fn layout_controls(ui: &mut Ui, salt: u64, layout: &mut StairLayout, table: 
             DragValue::new(&mut layout.tread)
                 .speed(0.005)
                 .range(0.0..=2.0)
-                .custom_formatter(|n, _| if n < 1e-9 { t!("stair-auto") } else { cc_views::format::length(n) })
-                .custom_parser(cc_views::format::parse_length),
+                .custom_formatter(|n, _| {
+                    use cc_views::format::{MetricSize, size};
+                    if n < 1e-9 { t!("stair-auto") } else { size(n, MetricSize::Length) }
+                })
+                .custom_parser(cc_views::format::parse_size),
         )
     });
     e.add(&r);
@@ -110,7 +118,7 @@ pub fn layout_controls(ui: &mut Ui, salt: u64, layout: &mut StairLayout, table: 
         e.add(&r);
     }
     if layout.shape == StairShape::UShaped {
-        let r = field(ui, table, &t!("prop-stair-gap"), |ui| length(ui, &mut layout.gap, 10.0));
+        let r = field(ui, table, &t!("prop-stair-gap"), |ui| size(ui, &mut layout.gap, 10.0));
         e.add(&r);
     }
     if layout.shape == StairShape::LShaped {
@@ -154,7 +162,7 @@ pub fn build_rows(ui: &mut Ui, salt: u64, build: &mut StairBuild) -> Edited {
     match build.construction {
         StairConstruction::Solid => {}
         StairConstruction::CastInPlace => {
-            let r = row(ui, &t!("prop-stair-waist"), |ui| length(ui, &mut build.waist, 1.0));
+            let r = row(ui, &t!("prop-stair-waist"), |ui| size(ui, &mut build.waist, 1.0));
             e.add(&r);
         }
         StairConstruction::Assembled => {
@@ -175,7 +183,7 @@ pub fn build_rows(ui: &mut Ui, salt: u64, build: &mut StairBuild) -> Edited {
                 (t!("prop-stair-tread-thickness"), &mut build.tread_thickness),
                 (t!("prop-stair-post-width"), &mut build.post_width),
             ] {
-                let r = row(ui, &label, |ui| length(ui, value, 1.0));
+                let r = row(ui, &label, |ui| size(ui, value, 1.0));
                 e.add(&r);
             }
             let r = row(ui, &t!("prop-stair-closed-risers"), |ui| crate::table::checkbox(ui, &mut build.closed_risers));
@@ -219,12 +227,14 @@ pub fn rules_rows(ui: &mut Ui, salt: u64, rules: &mut StairRules, max_riser: f64
         (t!("prop-stair-blondel-min"), &mut rules.blondel_min),
         (t!("prop-stair-blondel-max"), &mut rules.blondel_max),
     ] {
-        let r = row(ui, &label, |ui| length(ui, value, 2.0));
+        // Inches in imperial projects.
+        let r = row(ui, &label, |ui| ui.add(crate::properties::size_drag(value).range(0.0..=2.0)));
         e.add(&r);
     }
     // Blondel's step at the highest riser, as a hint of what the type gives.
     let g = rules.tread_for(max_riser, tread);
-    readonly_row(ui, &t!("prop-stair-blondel"), cc_views::format::length(2.0 * max_riser + g));
+    let step = cc_views::format::size(2.0 * max_riser + g, cc_views::format::MetricSize::Length);
+    readonly_row(ui, &t!("prop-stair-blondel"), step);
     e
 }
 
@@ -232,10 +242,12 @@ pub fn rules_rows(ui: &mut Ui, salt: u64, rules: &mut StairRules, max_riser: f64
 pub fn check_rows(ui: &mut Ui, g: &cc_geom::StairGeom) {
     use cc_views::format;
     readonly_row(ui, &t!("col-risers"), g.risers.to_string());
-    readonly_row(ui, &t!("col-riser-height"), format::length(g.riser));
-    readonly_row(ui, &t!("col-tread"), format::length(g.tread));
+    // Riser, tread and step in inches in imperial projects.
+    let size = |v: f64| format::size(v, format::MetricSize::Length);
+    readonly_row(ui, &t!("col-riser-height"), size(g.riser));
+    readonly_row(ui, &t!("col-tread"), size(g.tread));
     readonly_row(ui, &t!("col-run"), format::length(g.run()));
-    readonly_row(ui, &t!("prop-stair-blondel"), format::length(g.check.blondel));
+    readonly_row(ui, &t!("prop-stair-blondel"), size(g.check.blondel));
     if g.check.ok() {
         ui.label(RichText::new(t!("stair-check-ok")).color(PALETTE.success));
     }
@@ -288,15 +300,17 @@ pub fn tool_options(ui: &mut Ui, state: &mut AppState) {
     ui.label(crate::theme::muted(t!("hint-stair")));
 }
 
-/// A slope as a percentage drag (stored as rise over run); `zero` names 0.
+/// A slope drag (stored as rise over run) in the project's slope unit;
+/// `zero` names 0.
 fn percent(ui: &mut Ui, value: &mut f64, zero: Option<String>) -> Response {
-    let mut pct = *value * 100.0;
-    let r = ui.add(DragValue::new(&mut pct).speed(0.05).range(0.0..=100.0).custom_formatter(move |n, _| match &zero {
+    let mut v = *value;
+    let (units, comma) = cc_views::format::current();
+    let r = ui.add(crate::properties::slope_drag(&mut v).range(0.0..=1.0).custom_formatter(move |n, _| match &zero {
         Some(z) if n < 1e-6 => z.clone(),
-        _ => format!("{n:.2} %"),
+        _ => cc_views::format::slope_with(&units, comma, n),
     }));
     if r.changed() {
-        *value = pct / 100.0;
+        *value = v;
     }
     r
 }

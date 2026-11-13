@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
-pub const FORMAT_VERSION: u32 = 27;
+/// 28: the ANSI and architectural sheet sizes, and the slope unit
+/// `RisePer12` (`6:12`), which older builds cannot read.
+pub const FORMAT_VERSION: u32 = 28;
 
 /// Largest project file read, bytes (pictures and textures are kept in it).
 pub const MAX_FILE_BYTES: u64 = 1 << 30;
@@ -74,7 +76,8 @@ pub fn from_ron_with_repairs_localized(
     // design options (older files have none, everything in the main model);
     // version 24 adds material textures and painted faces (older files have none);
     // version 25 adds custom fill patterns (older files have none); version 27 adds
-    // structural profiles (older files: one per distinct column and beam section).
+    // structural profiles (older files: one per distinct column and beam section);
+    // version 28 adds the ANSI and architectural sheet sizes (older files have none).
     let mut project = file.project;
     if file.format_version < 11 {
         project.ensure_phases(&|key| crate::project::template_default(key).to_string());
@@ -368,7 +371,7 @@ mod tests {
             }
         }
         p.profiles.clear();
-        let text = to_ron(&p).unwrap().replacen("format_version: 27", "format_version: 26", 1);
+        let text = to_ron(&p).unwrap().replacen(&format!("format_version: {FORMAT_VERSION}"), "format_version: 26", 1);
         let back = from_ron(&text).unwrap();
         assert!(!back.profiles.is_empty());
         assert!(back.types.values().all(|t| !matches!(

@@ -2961,6 +2961,7 @@ fn a_table_row_never_widens_its_dialog() {
 fn every_dialog_keeps_its_body_inside() {
     use crate::preferences::Section;
     type Open = Box<dyn Fn(&mut AppState)>;
+    type Make = fn() -> AppState;
     let mut opens: Vec<(String, Open)> = vec![
         ("project info".into(), Box::new(|s| s.dialogs.project_info = true)),
         ("units".into(), Box::new(|s| s.dialogs.units = true)),
@@ -2979,6 +2980,7 @@ fn every_dialog_keeps_its_body_inside() {
         ("phases".into(), Box::new(crate::phases_dialog::open)),
         ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
         ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+        ("new project".into(), Box::new(crate::new_project_dialog::open)),
     ];
     for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
@@ -2994,8 +2996,24 @@ fn every_dialog_keeps_its_body_inside() {
             }),
         ));
     }
-    for (name, open) in opens {
-        let mut state = sample_state();
+    let mut runs: Vec<(String, Open, Make)> =
+        opens.into_iter().map(|(name, open)| (name, open, sample_state as Make)).collect();
+    // Paper sizes read in inches in imperial projects: the dialogs showing them, again.
+    let imperial: Vec<(String, Open)> = vec![
+        ("line styles".into(), Box::new(crate::line_styles_dialog::open)),
+        ("fill patterns".into(), Box::new(crate::fill_patterns_dialog::open)),
+        ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
+        ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+    ];
+    runs.extend(imperial.into_iter().map(|(name, open)| (format!("{name} (imperial)"), open, imperial_state as _)));
+    let annotations = [cc_core::Category::Dimension, cc_core::Category::Text, cc_core::Category::Grid];
+    for t in imperial_state().project().types.values().filter(|t| annotations.contains(&t.category())) {
+        let id = t.id;
+        let open: Open = Box::new(move |s| s.dialogs.type_editor = Some(id));
+        runs.push((format!("type {} (imperial)", t.name), open, imperial_state));
+    }
+    for (name, open, make) in runs {
+        let mut state = make();
         open(&mut state);
         let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| crate::dialogs::show(ui.ctx(), state);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -3006,6 +3024,156 @@ fn every_dialog_keeps_its_body_inside() {
         }));
         assert!(result.is_ok(), "the dialog \"{name}\" overflows");
     }
+}
+
+/// A new imperial project, its units in force (as `AppState::sync` does each frame).
+fn imperial_state() -> AppState {
+    let project = cc_engine::new_project_with(cc_core::MeasurementSystem::Imperial);
+    let mut state = AppState::new(cc_core::Document::new(project));
+    state.project_open = true;
+    state.show_home = false;
+    state.sync();
+    state
+}
+
+/// In an imperial project a dimension type's text size reads in inches,
+/// and a bare number typed there is inches.
+#[test]
+fn paper_sizes_read_in_inches_in_imperial_projects() {
+    let mut state = imperial_state();
+    let dimension = state.project().default_type(cc_core::Category::Dimension).unwrap();
+    state.dialogs.type_editor = Some(dimension);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let size = |h: &Harness<'static, AppState>| match h.state().project().element_type(dimension).map(|t| &t.data) {
+        Some(cc_core::TypeData::Dimension { text_size, .. }) => *text_size,
+        other => panic!("not a dimension type: {other:?}"),
+    };
+    assert!((size(&harness) - 3.0 / 32.0 * 25.4).abs() < 1e-9);
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    assert!(values.iter().all(|v| !v.contains("mm")), "{values:?}");
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some("3/32\"")).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text("1/8");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!((size(&harness) - 3.175).abs() < 1e-9, "{}", size(&harness));
+    assert!(harness.query_all_by_role(Role::SpinButton).any(|n| n.value().as_deref() == Some("1/8\"")));
+}
+
+/// In an imperial project a pipe type's diameter reads in inches without
+/// feet and a bare number typed is inches; a stair type's riser too; the
+/// schedule field labels name no metric unit; and the tools' sizes follow
+/// the project's system.
+#[test]
+fn small_sizes_read_in_inches_in_imperial_projects() {
+    let mut state = imperial_state();
+    let inch = cc_core::units::INCH;
+    let pipe = state.project().types.values().find(|t| matches!(t.data, cc_core::TypeData::Pipe { .. })).unwrap().id;
+    state.dialogs.type_editor = Some(pipe);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let diameter = |h: &Harness<'static, AppState>| h.state().project().element_type(pipe).and_then(|t| t.diameter());
+    assert_eq!(diameter(&harness), Some(0.5 * inch));
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    assert!(values.iter().any(|v| v == "1/2\""), "{values:?}");
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some("1/2\"")).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text("3/4");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(diameter(&harness).is_some_and(|d| (d - 0.75 * inch).abs() < 1e-12), "{:?}", diameter(&harness));
+
+    let mut state = imperial_state();
+    let stair = state.project().default_type(cc_core::Category::Stair).unwrap();
+    state.dialogs.type_editor = Some(stair);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    // The riser and the tread, in inches; the width, in feet and inches.
+    for want in ["7 3/4\"", "10\"", "3'-0\""] {
+        assert!(values.iter().any(|v| v == want), "{want}: {values:?}");
+    }
+    assert!(values.iter().all(|v| !v.contains("mm") && !v.contains(" m")), "{values:?}");
+
+    let state = imperial_state();
+    use cc_core::ScheduleField as F;
+    for field in [F::Length, F::Thickness, F::Area, F::Perimeter, F::Volume, F::Height] {
+        let label = crate::properties::field_label(field);
+        assert!(!label.contains("(m") && !label.contains("m²") && !label.contains("m³"), "{label}");
+    }
+    // New walls are 10'-0" tall, the offset 3'-0"; a metric project brings 3 m back.
+    let foot = cc_core::units::FOOT;
+    assert!((state.wall_height - 10.0 * foot).abs() < 1e-9 && (state.modify.offset - 3.0 * foot).abs() < 1e-9);
+    let mut state = state;
+    state.replace_document(cc_core::Document::new(cc_engine::new_project_with(cc_core::MeasurementSystem::Metric)));
+    state.sync();
+    assert_eq!((state.wall_height, state.modify.offset), (3.0, 1.0));
+}
+
+/// New asks for the template first: Cancel keeps the open project, the
+/// Imperial card and Create make an imperial project and remember the
+/// choice, and with unsaved changes the question about them comes after
+/// Create, the project still in place.
+#[test]
+fn new_asks_for_the_template() {
+    use cc_core::MeasurementSystem;
+    let state = sample_state();
+    let uid = state.project().info.uid;
+    let mut harness = themed_harness(state, egui::vec2(1000.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state);
+    });
+    let new = |h: &mut Harness<'static, AppState>| {
+        crate::commands::run(h.state_mut(), &egui::Context::default(), crate::commands::UiCommand::New);
+        h.run();
+    };
+
+    new(&mut harness);
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Metric));
+    assert_eq!(harness.state().project().info.uid, uid, "nothing replaced yet");
+    let label = t!("new-project-metric");
+    assert_eq!(harness.get_by_label(&label).accesskit_node().role(), Role::RadioButton);
+    harness.get_by_role_and_label(Role::Button, &t!("action-cancel")).click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.new_project, None);
+    assert_eq!(harness.state().project().info.uid, uid, "Cancel keeps the project");
+
+    new(&mut harness);
+    harness.get_by_label(&t!("new-project-imperial")).click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Imperial));
+    harness.get_by_role_and_label(Role::Button, &t!("new-project-create")).click();
+    harness.run();
+    let state = harness.state();
+    assert_eq!(state.dialogs.new_project, None);
+    assert_ne!(state.project().info.uid, uid, "a new project");
+    assert_eq!(state.project().measurement_system(), MeasurementSystem::Imperial);
+    assert_eq!(state.prefs.new_project_system, MeasurementSystem::Imperial, "remembered");
+    let imperial = state.project().info.uid;
+
+    // Unsaved changes: the template first, then the question about them.
+    let set = cc_engine::commands::project::ProjectInfoSet {
+        name: Some("Changed".into()),
+        number: None,
+        client: None,
+        address: None,
+        author: None,
+        fields: None,
+    };
+    crate::actions::run_command(harness.state_mut(), set);
+    assert!(harness.state().session.doc.is_dirty());
+    new(&mut harness);
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Imperial), "the last choice first");
+    harness.get_by_label(&t!("new-project-metric")).click();
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    let state = harness.state();
+    assert_eq!(state.dialogs.new_project, None);
+    assert_eq!(state.dialogs.confirm, Some(crate::state::PendingAction::New(MeasurementSystem::Metric)));
+    assert_eq!(state.project().info.uid, imperial, "kept until the changes are answered");
 }
 
 /// Issue #159: the Detail Line tool takes typed values after the first

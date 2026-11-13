@@ -7,19 +7,24 @@ use crate::refs::{self, Point, Ref, point};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
-use cc_core::{Callout, CropBox, Project, View, ViewCategory, ViewId};
+use cc_core::{Callout, CropBox, MeasurementSystem, Project, View, ViewCategory, ViewId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// Standard scales a detail view's default is picked from.
-const SCALES: [u32; 12] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 250, 500];
+/// Standard metric scales a detail view's default is picked from.
+const METRIC_SCALES: [u32; 12] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 250, 500];
 
 /// The default scale of a detail of a view at 1:`parent`: the largest
-/// standard scale at most a fifth of it (1:50 gives 1:10).
-pub fn detail_scale(parent: u32) -> u32 {
+/// standard scale of the project's `system` at most a fifth of it (1:50
+/// gives 1:10; `1/4" = 1'-0"` gives `1 1/2" = 1'-0"`).
+pub fn detail_scale(system: MeasurementSystem, parent: u32) -> u32 {
     let target = (parent / 5).max(1);
-    SCALES.iter().copied().filter(|s| *s <= target).max().unwrap_or(1)
+    let scales: &[u32] = match system {
+        MeasurementSystem::Metric => &METRIC_SCALES,
+        MeasurementSystem::Imperial => cc_core::scale::choices(system),
+    };
+    scales.iter().copied().filter(|s| *s <= target).max().unwrap_or(1)
 }
 
 /// The rectangle with corners `a` and `b`, checked.
@@ -75,10 +80,12 @@ pub struct CalloutCreate {
     /// Two opposite corners of the rectangle, in the parent's drawing
     /// coordinates (meters; in sections and elevations `y` is the height).
     pub rect: [Point; 2],
-    /// Scale denominator of the detail view (default: a standard scale about
-    /// five times larger than the parent's, 1:10 under 1:50).
+    /// Scale of the detail view: the denominator, or text such as `"1:10"`
+    /// or an imperial label like `"1 1/2\" = 1'-0\""` (default: a standard
+    /// scale of the project's units about five times larger than the
+    /// parent's, 1:10 under 1:50).
     #[serde(default)]
-    pub scale: Option<u32>,
+    pub scale: Option<refs::ScaleArg>,
     /// Name of the detail view (default "Detail N").
     #[serde(default)]
     pub name: Option<String>,
@@ -125,7 +132,11 @@ impl Command for CalloutCreate {
         }
         let n = p.views.values().filter(|v| v.is_detail()).count() + 1;
         let name = self.name.map(|n| n.trim().to_string()).unwrap_or_else(|| t!("default-callout-name", "n" => n));
-        let scale = self.scale.unwrap_or_else(|| detail_scale(parent.scale)).max(1);
+        let scale = match &self.scale {
+            Some(sc) => sc.ratio()?,
+            None => detail_scale(p.measurement_system(), parent.scale),
+        }
+        .max(1);
         let id = edit(s, t!("tx-create-callout"), |e| {
             let id = ViewId(e.alloc_id());
             let mut view = View::new(id, name, scale, parent.kind.clone());

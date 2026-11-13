@@ -20,11 +20,13 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// A paper size: `"A0"`…`"A4"`, or `{width, height}` in millimeters.
+/// A paper size by name (`"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`,
+/// `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`), or `{width, height}` in millimeters.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum SizeArg {
-    /// `"A0"`, `"A1"`, `"A2"`, `"A3"` or `"A4"`.
+    /// A named size, any case, spaces or `_` optional: `"A0"`…`"A4"`,
+    /// `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH D"`, `"ARCH E1"`, `"ARCH E"`.
     Iso(String),
     /// A custom paper, millimeters.
     Custom {
@@ -38,18 +40,12 @@ pub enum SizeArg {
 impl SizeArg {
     fn size(&self) -> Result<SheetSize> {
         let size = match self {
-            SizeArg::Iso(s) => match s.trim().to_ascii_uppercase().as_str() {
-                "A0" => SheetSize::A0,
-                "A1" => SheetSize::A1,
-                "A2" => SheetSize::A2,
-                "A3" => SheetSize::A3,
-                "A4" => SheetSize::A4,
-                other => {
-                    return Err(EngineError::invalid(format!(
-                        "unknown paper '{other}' (A0 to A4, or {{width, height}})"
-                    )));
-                }
-            },
+            SizeArg::Iso(s) => SheetSize::from_name(s).ok_or_else(|| {
+                EngineError::invalid(format!(
+                    "unknown paper '{}' (A0 to A4, ANSI A to ANSI E, ARCH A to ARCH E, or {{width, height}})",
+                    s.trim()
+                ))
+            })?,
             SizeArg::Custom { width, height } => SheetSize::Custom { width: *width, height: *height },
         };
         if !size.is_valid() {
@@ -110,7 +106,8 @@ pub struct SheetSet {
     /// Sheet number.
     #[serde(default)]
     pub number: Option<String>,
-    /// Paper: `"A0"`…`"A4"`, or `{width, height}` in millimeters (50 to 5000).
+    /// Paper: `"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`,
+    /// or `{width, height}` in millimeters (50 to 5000).
     #[serde(default)]
     pub size: Option<SizeArg>,
     /// The long side runs up.

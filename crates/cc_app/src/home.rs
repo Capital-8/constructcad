@@ -55,7 +55,7 @@ fn sidebar(ui: &mut Ui, state: &mut AppState) {
         actions::guarded(state, PendingAction::Open);
     }
     if side_button(ui, Icon::New, &t!("action-new")).clicked() {
-        actions::guarded(state, PendingAction::New);
+        crate::new_project_dialog::open(state);
     }
     ui.add_space(16.0);
     ui.separator();

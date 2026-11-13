@@ -50,6 +50,7 @@ pub mod recovery;
 pub mod region;
 mod repair;
 pub mod roofing;
+pub mod scale;
 mod schedule;
 pub mod section_props;
 pub mod shaft;
@@ -59,6 +60,8 @@ pub mod sketch_edit;
 pub mod stair;
 pub mod structural_profile;
 pub mod sweep;
+mod template_spec;
+pub use template_spec::Defaults;
 pub mod title_block;
 pub mod topography;
 pub mod transform;
@@ -120,7 +123,7 @@ pub use types::{
     Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, TypeData, TypeInfo,
     WallFunction, stair_layout,
 };
-pub use units::{AreaUnit, LengthUnit, NumberStyle, SlopeUnit, Units, VolumeUnit};
+pub use units::{AreaUnit, LengthUnit, MeasurementSystem, NumberStyle, SlopeUnit, Units, VolumeUnit};
 pub use view::{
     CameraState, DetailLevel, Direction, Looking, MAX_PAPER_MM, MAX_SECTION_SEGMENT, MIN_PAPER_MM, MepDiscipline,
     SheetSize, Underlay, UnderlayLevel, UnderlayPlan, View, ViewCategory, ViewKind, Viewport, VisualStyle,

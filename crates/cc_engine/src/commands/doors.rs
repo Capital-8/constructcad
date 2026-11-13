@@ -32,7 +32,8 @@ const MIN_PANE: f64 = 0.2;
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DoorTypeCreate {
-    /// Type name, unique among door types (default: the component's name and size in centimeters).
+    /// Type name, unique among door types (default: the component's name and size, in centimeters; in feet
+    /// and inches in imperial projects).
     #[serde(default)]
     pub name: Option<String>,
     /// `swing` (default) or `french`.
@@ -41,13 +42,15 @@ pub struct DoorTypeCreate {
     /// Number of leaves: 1 (default) or 2.
     #[serde(default)]
     pub leaves: Option<u8>,
-    /// Width of the opening, meters (default 0.8 for one leaf, 1.4 for two).
+    /// Width of the opening, meters (default 0.8 for one leaf, 1.4 for two; 2'-8" and 5'-0" in imperial
+    /// projects).
     #[serde(default)]
     pub width: Option<f64>,
-    /// Height of the opening, meters (default 2.1, French doors 2.2).
+    /// Height of the opening, meters (default 2.1, French doors 2.2; 6'-8" in imperial projects).
     #[serde(default)]
     pub height: Option<f64>,
-    /// French doors: height of the solid bottom rail of each leaf, meters (default 0.4).
+    /// French doors: height of the solid bottom rail of each leaf, meters (default 0.4; 1'-4" in imperial
+    /// projects).
     #[serde(default)]
     pub bottom_rail: Option<f64>,
     /// Material of the leaves (default: the template's wood, if the project has it).
@@ -96,10 +99,14 @@ impl Command for DoorTypeCreate {
             n => return Err(EngineError::invalid(format!("a door has 1 or 2 leaves, not {n}"))),
         };
         let double = operation.leaves() == 2;
-        let width = in_range(self.width.unwrap_or(if double { 1.4 } else { 0.8 }), (MIN_WIDTH, MAX_WIDTH), "width")?;
-        let height =
-            in_range(self.height.unwrap_or(if glazed { 2.2 } else { 2.1 }), (MIN_HEIGHT, MAX_HEIGHT), "height")?;
-        let bottom_rail = self.bottom_rail.unwrap_or(openings::BOTTOM_RAIL);
+        let [one, two, swing_height, french_height, rail] = p.defaults().door;
+        let width = in_range(self.width.unwrap_or(if double { two } else { one }), (MIN_WIDTH, MAX_WIDTH), "width")?;
+        let height = in_range(
+            self.height.unwrap_or(if glazed { french_height } else { swing_height }),
+            (MIN_HEIGHT, MAX_HEIGHT),
+            "height",
+        )?;
+        let bottom_rail = self.bottom_rail.unwrap_or(rail);
         if glazed {
             // Under the head and the leaf's top rail, some glass is left.
             let max = height - openings::FRAME - openings::STILE - MIN_PANE;
@@ -128,7 +135,13 @@ impl Command for DoorTypeCreate {
             }
             Some(name) => name,
             None => {
-                let base = format!("{component} {:.0}x{:.0}", width * 100.0, height * 100.0);
+                let base = if p.measurement_system() == cc_core::MeasurementSystem::Imperial {
+                    // As the template names them: `Door 2'-8" x 6'-8"`.
+                    let l = cc_views::format::length;
+                    format!("{component} {} x {}", l(width), l(height))
+                } else {
+                    format!("{component} {:.0}x{:.0}", width * 100.0, height * 100.0)
+                };
                 let mut name = base.clone();
                 let mut i = 1;
                 while taken(&name) && i < 10_000 {
