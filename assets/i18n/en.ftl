@@ -1479,7 +1479,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = X Bracing
 action-rebar-typical = Typical Reinforcement
 action-rebar-view = Reinforcement View
 action-steel-schedule = Steel Schedule
@@ -1488,7 +1487,6 @@ action-number-structure = Number Structure
 action-structure-tags = Structural Tags
 action-remove-rebar = Remove
 cmd-desc-truss = Lay out a parametric steel or timber truss: click its two ends; the options bar sets its shape (flat, mono, gable), pattern (Pratt, Howe, Warren, king post, queen post, Fink), height, panels, copies and spacing. Chords and diagonals are beams and posts are columns, kept in step with the truss.
-cmd-desc-braces-x = Brace the bay between the two selected columns with two members crossing from the base of each to the top of the other.
 cmd-desc-rebar-typical = Give the selected beams and columns (or all of the active level) without reinforcement a typical one: longitudinal bars and stirrups.
 cmd-desc-rebar-view = Open a 3D view of the reinforcing bars over the model drawn faint.
 cmd-desc-steel-schedule = Create a steel schedule: each set of bars with its host, diameter, count, bar length, total length and weight.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Bottom chord type
 label-web-type = Diagonal type
 label-post-type = Post type
 msg-truss-material = Trusses are steel or timber: pick one under Material.
+
+# Parametric bracing
+category-bracing = Bracings
+tpl-type-bracing = Bracing
+tx-create-bracing = Create bracing
+action-bracing = Bracing
+cmd-desc-bracing = Brace a bay of a frame, storey by storey: with two columns selected it uses the bay between them; otherwise click the axes of the two columns. X, diagonal, V, chevron (inverted V) and K patterns; the braces are beams kept in step with the bracing.
+hint-bracing = Click the axes of the bay's two columns · Esc ends
+bracing-v = V bracing
+bracing-chevron = Chevron (inverted V)
+bracing-diagonal = Diagonal
+bracing-x = X bracing
+bracing-k = K bracing
+prop-bracing-stories = Storeys
+prop-bracing-story-height = Storey height
+prop-bracing-flip = Flip diagonal
+prop-bracing-alternate = Alternate diagonals
+label-brace-type = Brace type
+msg-bracing-material = Bracings are steel or timber: pick one under Material.
 
 # Wall framing
 category-wall-framing = Wall framings

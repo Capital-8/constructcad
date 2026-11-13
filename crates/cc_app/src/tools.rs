@@ -65,6 +65,10 @@ pub enum Tool {
     Truss {
         material: cc_core::StructuralMaterial,
     },
+    /// Click the two column axes of a braced bay (options in `AppState::bracing`).
+    Bracing {
+        material: cc_core::StructuralMaterial,
+    },
     Stair {
         type_id: ElementTypeId,
     },
@@ -205,6 +209,7 @@ impl Tool {
             Tool::Beam { .. } => "tool-beam",
             Tool::Footing { .. } => "tool-footing",
             Tool::Truss { .. } => "tool-truss",
+            Tool::Bracing { .. } => "action-bracing",
             Tool::Stair { .. } => "tool-stair",
             Tool::Ramp { .. } => "tool-ramp",
             Tool::Railing { .. } => "tool-railing",
@@ -324,6 +329,7 @@ impl Tool {
             Tool::Beam { material, .. } => Tool::Beam { type_id: id, material },
             Tool::Footing { .. } => Tool::Footing { type_id: id },
             Tool::Truss { material } => Tool::Truss { material },
+            Tool::Bracing { material } => Tool::Bracing { material },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Ramp { .. } => Tool::Ramp { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
@@ -389,6 +395,7 @@ impl Tool {
             | Category::TitleBlock
             | Category::SteelBuilding
             | Category::Truss
+            | Category::Bracing
             | Category::Connection
             | Category::WallFraming => return None,
         })
@@ -1598,6 +1605,7 @@ pub fn handle(
         (Tool::Beam { type_id, .. }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Truss { material }, Some(level)) => truss_tool(ui, resp, painter, state, level, *material, xf),
+        (Tool::Bracing { material }, Some(level)) => bracing_tool(ui, resp, painter, state, level, *material, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Ramp { type_id }, Some(level)) => ramp_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, _) if state.railing_host.on => {
@@ -2008,6 +2016,91 @@ fn truss_tool(
             None => state.interaction.anchor = Some(s.point),
             Some(a) if a.distance(s.point) >= *cc_core::truss::LENGTH.start() => {
                 let command = truss_command(&state.truss, material, level, a, s.point);
+                if let Some(out) = crate::actions::run_command(state, command)
+                    && let Some(id) = out["id"].as_u64()
+                {
+                    state.selection = [ElementId(id)].into_iter().collect();
+                }
+                state.interaction.anchor = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Bracing tool options, kept between uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BracingOptions {
+    pub pattern: cc_core::bracing::BracingPattern,
+    /// One storey, meters.
+    pub height: f64,
+    pub stories: u32,
+    /// A diagonal rises toward the first click instead of the second.
+    pub flip: bool,
+    /// Diagonals change direction storey by storey.
+    pub alternate: bool,
+}
+
+impl Default for BracingOptions {
+    fn default() -> Self {
+        Self {
+            pattern: Default::default(),
+            height: cc_core::bracing::DEFAULT_HEIGHT,
+            stories: 1,
+            flip: false,
+            alternate: false,
+        }
+    }
+}
+
+/// The command the tool runs for a braced bay from `a` to `b`.
+pub fn bracing_command(
+    o: &BracingOptions,
+    material: cc_core::StructuralMaterial,
+    level: LevelId,
+    a: DVec2,
+    b: DVec2,
+) -> cc_engine::commands::bracing::BracingCreate {
+    cc_engine::commands::bracing::BracingCreate {
+        start: Some(a.to_array()),
+        end: Some(b.to_array()),
+        pattern: Some(o.pattern.code().into()),
+        height: Some(o.height),
+        stories: Some(o.stories),
+        flip: o.flip,
+        alternate: o.alternate,
+        material: Some(material.code().into()),
+        level: Some(Ref::Id(level.0)),
+        ..Default::default()
+    }
+}
+
+/// Two clicks: the column axes of a bay, braced with the options bar's
+/// values and the Structure tab's material; the new bracing is selected.
+fn bracing_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    material: cc_core::StructuralMaterial,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let crossings = grid_crossings(state.project());
+    let anchor = state.interaction.anchor;
+    let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
+    draw_snap(painter, xf, s);
+    if let Some(a) = anchor {
+        painter.line_segment([xf.to_screen(a), xf.to_screen(s.point)], Stroke::new(1.5, PREVIEW));
+        temp_dimension(painter, xf, a, s.point, None, None, 0.1);
+    }
+    if resp.clicked() {
+        match anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) >= *cc_core::bracing::LENGTH.start() => {
+                let command = bracing_command(&state.bracing, material, level, a, s.point);
                 if let Some(out) = crate::actions::run_command(state, command)
                     && let Some(id) = out["id"].as_u64()
                 {

@@ -1479,7 +1479,6 @@ truss-panels-auto = 自動
 truss-pratt = プラットトラス
 truss-howe = ハウトラス
 truss-warren = ワレントラス
-action-braces-x = Xブレース
 action-rebar-typical = 標準配筋
 action-rebar-view = 配筋ビュー
 action-steel-schedule = 鉄筋/鋼材集計表
@@ -1488,7 +1487,6 @@ action-number-structure = 構造部材の番号付け
 action-structure-tags = 構造タグ
 action-remove-rebar = 削除
 cmd-desc-truss = 鉄骨または木造のパラメトリックなトラスを配置します。両端をクリックし、オプションバーで形状（平行、片流れ、切妻）、ラチス形式（Pratt、Howe、Warren、キングポスト、クイーンポスト、フィンク）、高さ、パネル数、コピー数、間隔を設定します。弦材と斜材は梁、束材は柱で、トラスに合わせて更新されます。
-cmd-desc-braces-x = 選択した 2 本の柱の間のスパンに、それぞれのベースからもう一方のトップへと交差する 2 つの部材でブレースを架けます。
 cmd-desc-rebar-typical = 配筋のない選択した梁や柱 (またはアクティブレベルのすべて) に標準配筋 (主筋と帯筋) を適用します。
 cmd-desc-rebar-view = 薄く描画されたモデルの上に補強鉄筋を表示する 3D ビューを開きます。
 cmd-desc-steel-schedule = 鉄筋集計表を作成します: ホスト、直径、本数、鉄筋長さ、合計長さ、重量ごとの各鉄筋セット。
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = 下弦材タイプ
 label-web-type = 斜材タイプ
 label-post-type = 束材タイプ
 msg-truss-material = トラスは鉄骨または木造です。「材料」でいずれかを選んでください。
+
+# Parametric bracing
+category-bracing = ブレース
+tpl-type-bracing = ブレース
+tx-create-bracing = ブレースを作成
+action-bracing = ブレース
+cmd-desc-bracing = 骨組の 1 スパンを階ごとにブレースで補剛します。柱を 2 本選択している場合はその間のスパンを使用し、それ以外は 2 本の柱の軸をクリックします。パターンは X 形、片流れ（斜材 1 本）、V 形、逆 V 形（シェブロン）、K 形。斜材はブレースに追従する梁です。
+hint-bracing = スパンの 2 本の柱の軸をクリック · Esc で終了
+bracing-v = V 形
+bracing-chevron = 逆 V 形（シェブロン）
+bracing-diagonal = 斜材 1 本
+bracing-x = X 形
+bracing-k = K 形
+prop-bracing-stories = 階数
+prop-bracing-story-height = 階高
+prop-bracing-flip = 斜材を反転
+prop-bracing-alternate = 斜材を階ごとに交互
+label-brace-type = 斜材のタイプ
+msg-bracing-material = ブレースは鉄骨または木造です。「材料」でいずれかを選んでください。
 
 # Wall framing
 category-wall-framing = 壁下地フレーム

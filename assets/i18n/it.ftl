@@ -1460,7 +1460,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = Controventi a X
 action-rebar-typical = Armatura tipo
 action-rebar-view = Vista delle armature
 action-steel-schedule = Abaco delle armature
@@ -1469,7 +1468,6 @@ action-number-structure = Numera la struttura
 action-structure-tags = Etichette strutturali
 action-remove-rebar = Rimuovi
 cmd-desc-truss = Disegna una travatura reticolare parametrica in acciaio o legno: fai clic sui due estremi; la barra delle opzioni ne imposta forma (piana, a una falda, a due falde), schema (Pratt, Howe, Warren, monaco, due monaci, Fink), altezza, pannelli, copie e interasse. Correnti e diagonali sono travi, montanti sono pilastri, aggiornati con la travatura.
-cmd-desc-braces-x = Controventa la campata tra i due pilastri selezionati con due aste che si incrociano dalla base di ciascuno alla sommità dell'altro.
 cmd-desc-rebar-typical = Assegna alle travi e ai pilastri selezionati (o a tutti quelli del livello attivo) privi di armatura un'armatura tipo: barre longitudinali e staffe.
 cmd-desc-rebar-view = Apri una vista 3D delle barre d'armatura sopra il modello disegnato in tenue.
 cmd-desc-steel-schedule = Crea un abaco delle armature: ogni gruppo di barre con il suo elemento ospite, diametro, numero, lunghezza della barra, lunghezza totale e peso.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Tipo di corrente inferiore
 label-web-type = Tipo di diagonali
 label-post-type = Tipo di montanti
 msg-truss-material = Le travature sono in acciaio o legno: sceglierne uno in Materiale.
+
+# Parametric bracing
+category-bracing = Controventi
+tpl-type-bracing = Controvento
+tx-create-bracing = Crea controvento
+action-bracing = Controvento
+cmd-desc-bracing = Controventa una campata di telaio, piano per piano: con due pilastri selezionati usa la campata tra di essi; altrimenti fare clic sugli assi dei due pilastri. Schemi a X, diagonale, V, V rovescia (chevron) e K; le aste sono travi mantenute aggiornate con il controvento.
+hint-bracing = Fare clic sugli assi dei due pilastri della campata · Esc termina
+bracing-v = A V
+bracing-chevron = V rovescia (chevron)
+bracing-diagonal = Diagonale
+bracing-x = A X
+bracing-k = A K
+prop-bracing-stories = Piani
+prop-bracing-story-height = Altezza di piano
+prop-bracing-flip = Inverti diagonale
+prop-bracing-alternate = Alterna diagonali
+label-brace-type = Tipo delle aste
+msg-bracing-material = I controventi sono in acciaio o legno: sceglierne uno in Materiale.
 
 # Wall framing
 category-wall-framing = Telai di parete

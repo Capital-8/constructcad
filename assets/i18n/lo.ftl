@@ -1431,7 +1431,6 @@ truss-panels-auto = ອັດຕະໂນມັດ
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = ຄໍ້າຢັນຮູບຕົວ X
 action-rebar-typical = ເຫຼັກເສີມມາດຕະຖານ
 action-rebar-view = ມຸມມອງເຫຼັກເສີມ
 action-steel-schedule = ຕາຕະລາງລາຍການເຫຼັກ
@@ -1440,7 +1439,6 @@ action-number-structure = ໃສ່ໝາຍເລກໂຄງສ້າງ
 action-structure-tags = ປ້າຍກຳກັບໂຄງສ້າງ
 action-remove-rebar = ລຶບອອກ
 cmd-desc-truss = ວາງໂຄງຖັກແບບພາຣາມິເຕີຂອງເຫຼັກ ຫຼື ໄມ້: ຄລິກສອງປາຍ; ແຖບຕົວເລືອກກຳນົດຮູບຮ່າງ (ພຽງ, ຄ້ອຍດຽວ, ຈົ່ວ), ຮູບແບບ (Pratt, Howe, Warren, ເສົາກາງດຽວ, ເສົາຄູ່, Fink), ຄວາມສູງ, ຈຳນວນຊ່ອງ, ສຳເນົາ ແລະ ໄລຍະຫ່າງ. ຄານເທິງລຸ່ມ ແລະ ທະແຍງແມ່ນຄານ, ເສົາຕັ້ງແມ່ນເສົາ, ປ່ຽນຕາມໂຄງຖັກ.
-cmd-desc-braces-x = ຄໍ້າຢັນຊ່ອງຫວ່າງລະຫວ່າງສອງເສົາທີ່ເລືອກ ດ້ວຍສອງທ່ອນໄຂວ່ກັນຈາກໂຄນຂອງແຕ່ລະຕົ້ນໄປຫາຫົວຂອງອີກຕົ້ນໜຶ່ງ.
 cmd-desc-rebar-typical = ໃສ່ເຫຼັກເສີມມາດຕະຖານໃຫ້ແກ່ຄານ ແລະ ເສົາທີ່ເລືອກ (ຫຼື ທັງໝົດໃນຊັ້ນທີ່ກຳລັງເຮັດວຽກຢູ່) ທີ່ຍັງບໍ່ມີເຫຼັກເສີມ: ເຫຼັກຕາມລວງຍາວ ແລະ ເຫຼັກປອກ.
 cmd-desc-rebar-view = ເປີດມຸມມອງ 3 ມິຕິ (3D) ຂອງເຫຼັກເສີມ ໂດຍໃຫ້ຕົວແບບສະແດງເປັນເສັ້ນຈາງໆ.
 cmd-desc-steel-schedule = ສ້າງຕາຕະລາງລາຍການເຫຼັກ: ແຕ່ລະຊຸດເຫຼັກພ້ອມດ້ວຍອົງອາຄານທີ່ຕັ້ງຢູ່, ເສັ້ນຜ່າສູນກາງ, ຈຳນວນ, ຄວາມຍາວຕໍ່ເສັ້ນ, ຄວາມຍາວລວມ ແລະ ນໍ້າໜັກ.
@@ -3266,6 +3264,25 @@ label-bottom-chord-type = ປະເພດຄານລຸ່ມ
 label-web-type = ປະເພດທະແຍງ
 label-post-type = ປະເພດເສົາຕັ້ງ
 msg-truss-material = ໂຄງຖັກເປັນເຫຼັກ ຫຼື ໄມ້: ເລືອກໜຶ່ງຢ່າງໃນ ວັດສະດຸ.
+
+# Parametric bracing
+category-bracing = ຄໍ້າຢັນ
+tpl-type-bracing = ຄໍ້າຢັນ
+tx-create-bracing = ສ້າງຄໍ້າຢັນ
+action-bracing = ຄໍ້າຢັນ
+cmd-desc-bracing = ຄໍ້າຢັນຊ່ວງໜຶ່ງຂອງໂຄງ ເທື່ອລະຊັ້ນ: ຖ້າເລືອກເສົາ 2 ຕົ້ນ ຈະໃຊ້ຊ່ວງລະຫວ່າງເສົາທັງສອງ; ຖ້າບໍ່ດັ່ງນັ້ນ ໃຫ້ຄລິກແກນຂອງເສົາສອງຕົ້ນ. ຮູບແບບ X, ທະແຍງ, V, V ປີ້ນ (chevron) ແລະ K; ທ່ອນຄໍ້າຢັນແມ່ນຄານທີ່ປັບຕາມຄໍ້າຢັນສະເໝີ.
+hint-bracing = ຄລິກແກນຂອງເສົາສອງຕົ້ນຂອງຊ່ວງ · Esc ສິ້ນສຸດ
+bracing-v = ຮູບຕົວ V
+bracing-chevron = V ປີ້ນ (chevron)
+bracing-diagonal = ທະແຍງ
+bracing-x = ຮູບຕົວ X
+bracing-k = ຮູບຕົວ K
+prop-bracing-stories = ຈຳນວນຊັ້ນ
+prop-bracing-story-height = ຄວາມສູງຂອງຊັ້ນ
+prop-bracing-flip = ປີ້ນທະແຍງ
+prop-bracing-alternate = ສະຫຼັບທະແຍງ
+label-brace-type = ປະເພດທ່ອນຄໍ້າຢັນ
+msg-bracing-material = ຄໍ້າຢັນເປັນເຫຼັກ ຫຼື ໄມ້: ເລືອກໜຶ່ງຢ່າງໃນ ວັດສະດຸ.
 
 # Wall framing
 category-wall-framing = ໂຄງຝາ

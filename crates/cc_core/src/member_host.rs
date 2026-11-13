@@ -1,5 +1,5 @@
 //! Member hosts: elements with no geometry of their own (steel buildings,
-//! trusses) that own ordinary columns and beams laid out from their
+//! trusses, bracings, wall framings) that own ordinary columns and beams laid out from their
 //! parameters. Every edit keeps them in step ([`crate::EditCtx`] runs
 //! [`crate::EditCtx::sync_member_hosts`]): a changed host rewrites its
 //! members in place, keeping their ids while their roles exist; a member
@@ -75,6 +75,7 @@ impl ElementKind {
         match self {
             ElementKind::SteelBuilding(b) => Some(b.as_ref() as &dyn MemberHost),
             ElementKind::Truss(t) => Some(t.as_ref() as &dyn MemberHost),
+            ElementKind::Bracing(b) => Some(b.as_ref() as &dyn MemberHost),
             ElementKind::WallFraming(f) => Some(f.as_ref() as &dyn MemberHost),
             _ => None,
         }
@@ -84,6 +85,7 @@ impl ElementKind {
         match self {
             ElementKind::SteelBuilding(b) => Some(b.as_mut() as &mut dyn MemberHost),
             ElementKind::Truss(t) => Some(t.as_mut() as &mut dyn MemberHost),
+            ElementKind::Bracing(b) => Some(b.as_mut() as &mut dyn MemberHost),
             ElementKind::WallFraming(f) => Some(f.as_mut() as &mut dyn MemberHost),
             _ => None,
         }

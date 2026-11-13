@@ -1460,7 +1460,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = Arriostramiento en X
 action-rebar-typical = Armadura típica
 action-rebar-view = Vista de armaduras
 action-steel-schedule = Tabla de acero
@@ -1469,7 +1468,6 @@ action-number-structure = Numerar estructura
 action-structure-tags = Etiquetas estructurales
 action-remove-rebar = Quitar
 cmd-desc-truss = Traza una cercha paramétrica de acero o madera: haga clic en sus dos extremos; la barra de opciones define la forma (plana, a un agua, a dos aguas), el patrón (Pratt, Howe, Warren, pendolón, doble pendolón, Fink), la altura, los paneles, las copias y la separación. Cordones y diagonales son vigas y montantes son pilares, que siguen a la cercha.
-cmd-desc-braces-x = Arriostra el vano entre los dos pilares seleccionados con dos barras que se cruzan desde la base de cada uno hasta la parte superior del otro.
 cmd-desc-rebar-typical = Da a las vigas y pilares seleccionados (o a todos los del nivel activo) sin armadura una armadura típica: barras longitudinales y estribos.
 cmd-desc-rebar-view = Abre una vista 3D de las barras de armadura sobre el modelo dibujado atenuado.
 cmd-desc-steel-schedule = Crea una tabla de acero: cada conjunto de barras con su anfitrión, diámetro, cantidad, longitud de barra, longitud total y peso.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Tipo de cordón inferior
 label-web-type = Tipo de diagonales
 label-post-type = Tipo de montantes
 msg-truss-material = Las cerchas son de acero o madera: elija uno en Material.
+
+# Parametric bracing
+category-bracing = Arriostramientos
+tpl-type-bracing = Arriostramiento
+tx-create-bracing = Crear arriostramiento
+action-bracing = Arriostramiento
+cmd-desc-bracing = Arriostra un vano de pórtico, planta por planta: con dos pilares seleccionados usa el vano entre ellos; si no, haga clic en los ejes de los dos pilares. Patrones en X, diagonal, V, V invertida (chevron) y K; las barras son vigas que se mantienen al día con el arriostramiento.
+hint-bracing = Haga clic en los ejes de los dos pilares del vano · Esc termina
+bracing-v = En V
+bracing-chevron = V invertida (chevron)
+bracing-diagonal = Diagonal
+bracing-x = En X
+bracing-k = En K
+prop-bracing-stories = Plantas
+prop-bracing-story-height = Altura de planta
+prop-bracing-flip = Invertir diagonal
+prop-bracing-alternate = Alternar diagonales
+label-brace-type = Tipo de las barras
+msg-bracing-material = Los arriostramientos son de acero o madera: elija uno en Material.
 
 # Wall framing
 category-wall-framing = Entramados de muro

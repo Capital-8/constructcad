@@ -141,6 +141,8 @@ pub struct AppState {
     pub dim_continuous: bool,
     /// Options of the truss tool.
     pub truss: crate::tools::TrussOptions,
+    /// Options of the bracing tool.
+    pub bracing: crate::tools::BracingOptions,
     /// Options of the pipe, conduit and device tools.
     pub mep: crate::tools::MepOptions,
     /// Options of the Curtain Grid tool.
@@ -269,6 +271,7 @@ impl AppState {
             modify: Default::default(),
             dim_continuous: false,
             truss: Default::default(),
+            bracing: Default::default(),
             mep: Default::default(),
             curtain: Default::default(),
             paint_material: String::new(),
@@ -389,6 +392,7 @@ impl AppState {
             (&mut self.wall_height, 3.0, 10.0 * FOOT),
             (&mut self.modify.offset, 1.0, 3.0 * FOOT),
             (&mut self.truss.height, 1.0, 3.0 * FOOT),
+            (&mut self.bracing.height, 3.0, 10.0 * FOOT),
             (&mut self.stair_layout.gap, metric_flights.0, us_flights.0),
             (&mut self.stair_layout.inner_radius, metric_flights.1, us_flights.1),
             (&mut self.ramp_layout.gap, metric_flights.0, us_flights.0),

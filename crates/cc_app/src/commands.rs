@@ -132,7 +132,8 @@ pub enum UiCommand {
     AnalyticalView,
     AnalyticalExport,
     Truss,
-    BracesX,
+    /// Brace the bay between two selected columns, else start the Bracing tool.
+    Bracing,
     TypicalRebar,
     /// Place connections of a kind on the selected members, else the active level's.
     Connection(cc_core::connection::ConnectionKind),
@@ -367,7 +368,7 @@ impl UiCommand {
             StructuralSchedules,
         ]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
-        all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
+        all.extend([AnalyticalView, AnalyticalExport, Truss, Bracing, TypicalRebar, RebarView, SteelSchedule]);
         all.extend(cc_core::connection::ConnectionKind::ALL.map(Connection));
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
         all.extend([PlaceFixture, PlaceDevice, MepConnect, Systems, MepSizing, PlumbingPlan, ElectricalPlan]);
@@ -546,7 +547,7 @@ impl UiCommand {
             SlabJoinSupports => Icon::SlabSupports,
             AnalyticalView | AnalyticalExport => Icon::Analytical,
             Truss => Icon::Truss,
-            BracesX => Icon::Brace,
+            Bracing => Icon::Brace,
             TypicalRebar => Icon::Rebar,
             Connection(_) => Icon::Connection,
             RebarView => Icon::RebarView,
@@ -764,7 +765,7 @@ impl UiCommand {
             AnalyticalView => t!("action-analytical-view"),
             AnalyticalExport => t!("action-analytical-export"),
             Truss => t!("tool-truss"),
-            BracesX => t!("action-braces-x"),
+            Bracing => t!("action-bracing"),
             TypicalRebar => t!("action-rebar-typical"),
             Connection(kind) => crate::i18n::tr(kind.key()),
             RebarView => t!("action-rebar-view"),
@@ -974,7 +975,7 @@ impl UiCommand {
             AnalyticalView => t!("cmd-desc-analytical-view"),
             AnalyticalExport => t!("cmd-desc-analytical-export"),
             Truss => t!("cmd-desc-truss"),
-            BracesX => t!("cmd-desc-braces-x"),
+            Bracing => t!("cmd-desc-bracing"),
             TypicalRebar => t!("cmd-desc-rebar-typical"),
             Connection(kind) => match kind {
                 cc_core::connection::ConnectionKind::BasePlate => t!("cmd-desc-base-plate"),
@@ -1287,7 +1288,7 @@ impl UiCommand {
             AnalyticalView => "view_create",
             AnalyticalExport => "analytical_export",
             Truss => "truss_create",
-            BracesX => "braces_between_columns",
+            Bracing => "bracing_create",
             TypicalRebar => "rebar_typical",
             Connection(_) => "connections_create",
             RebarView | SteelSchedule | StructuralPlan => "view_create",
@@ -1505,7 +1506,9 @@ impl UiCommand {
             Truss if state.prefs.structure_material == cc_core::StructuralMaterial::Concrete => {
                 Some(t!("msg-truss-material"))
             }
-            BracesX if crate::actions::selected_columns(state).len() != 2 => Some(t!("msg-columns-two-exactly")),
+            Bracing if state.prefs.structure_material == cc_core::StructuralMaterial::Concrete => {
+                Some(t!("msg-bracing-material"))
+            }
             TypicalRebar if project.default_type(Category::Rebar).is_none() => Some(t!("msg-no-rebar-type")),
             StructuralPlan | PlumbingPlan | ElectricalPlan | CommunicationsPlan | LightningPlan | EarthRing
                 if project.levels.is_empty() =>
@@ -1580,6 +1583,7 @@ impl UiCommand {
             PlaceDevice => is_component_group(state, ComponentGroup::Device),
             PlaceDeviceOf(device) => is_component_group(state, ComponentGroup::Own(device)),
             Truss => matches!(tool, Tool::Truss { .. }),
+            Bracing => matches!(tool, Tool::Bracing { .. }),
             StructureTags => crate::actions::active_floor_plan(state).is_some_and(|(_, tags)| tags),
             Select if state.sketch.is_some() => {
                 state.sketch.as_ref().is_some_and(|s| s.draw == crate::sketch_mode::Draw::Select)
@@ -1738,6 +1742,7 @@ fn place_label(category: Category) -> String {
         Category::Shaft => t!("tool-shaft"),
         Category::SteelBuilding => t!("category-steel-building"),
         Category::Truss => t!("category-truss"),
+        Category::Bracing => t!("category-bracing"),
         Category::Connection => t!("category-connection"),
         Category::WallFraming => t!("category-wall-framing"),
         Category::Topography => t!("tool-topography"),
@@ -1782,6 +1787,7 @@ fn place_description(category: Category) -> String {
         Category::Shaft => t!("cmd-desc-shaft"),
         Category::SteelBuilding => t!("cmd-desc-steel-building"),
         Category::Truss => t!("cmd-desc-truss"),
+        Category::Bracing => t!("cmd-desc-bracing"),
         Category::Connection => t!("category-connection"),
         Category::WallFraming => t!("cmd-desc-light-steel-frame"),
         Category::Topography => t!("cmd-desc-topography"),
@@ -1964,7 +1970,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
                 state.message = t!("hint-truss");
             }
         }
-        BracesX => crate::actions::braces_x(state),
+        Bracing => crate::bracing_ui::start(state),
         TypicalRebar => crate::actions::typical_rebar(state),
         Connection(kind) => crate::connection_ui::place(state, kind),
         RebarView => crate::actions::open_rebar_view(state),

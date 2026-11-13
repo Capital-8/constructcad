@@ -108,6 +108,7 @@ fn element_is_valid(e: &Element) -> bool {
         // Out-of-range values are reset by `repair_member_hosts`, which keeps the members.
         ElementKind::SteelBuilding(_) => true,
         ElementKind::Truss(t) => t.start.is_finite() && t.end.is_finite(),
+        ElementKind::Bracing(b) => b.start.is_finite() && b.end.is_finite(),
         // Its numbers are reset by repair_member_hosts; its wall is checked with the hosts.
         ElementKind::WallFraming(_) => true,
         // Out-of-range values are reset by `repair_connections`.
@@ -215,6 +216,7 @@ impl Project {
                 | TypeData::Shaft {}
                 | TypeData::SteelBuilding {}
                 | TypeData::Truss {}
+                | TypeData::Bracing {}
                 | TypeData::Connection {}
                 | TypeData::WallFraming {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {

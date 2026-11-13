@@ -1460,7 +1460,6 @@ truss-panels-auto = auto
 truss-pratt = Pratt
 truss-howe = Howe
 truss-warren = Warren
-action-braces-x = Contreventement en X
 action-rebar-typical = Armatures types
 action-rebar-view = Vue des armatures
 action-steel-schedule = Nomenclature des aciers
@@ -1469,7 +1468,6 @@ action-number-structure = Numéroter la structure
 action-structure-tags = Étiquettes de structure
 action-remove-rebar = Retirer
 cmd-desc-truss = Trace une ferme paramétrique en acier ou en bois : cliquez ses deux extrémités ; la barre d'options règle sa forme (plate, monopente, deux pentes), son treillis (Pratt, Howe, Warren, poinçon, double poinçon, Fink), sa hauteur, ses panneaux, ses copies et leur entraxe. Membrures et diagonales sont des poutres, montants des poteaux, tenus à jour avec la ferme.
-cmd-desc-braces-x = Contreventer la travée entre les deux poteaux sélectionnés avec deux barres se croisant de la base de chacun au sommet de l'autre.
 cmd-desc-rebar-typical = Donner aux poutres et poteaux sélectionnés (ou à tous ceux du niveau actif) sans armatures un ferraillage type : barres longitudinales et cadres.
 cmd-desc-rebar-view = Ouvrir une vue 3D des barres d'armature sur la maquette dessinée en estompé.
 cmd-desc-steel-schedule = Créer une nomenclature des aciers : chaque lot de barres avec son hôte, son diamètre, son nombre, sa longueur de barre, sa longueur totale et son poids.
@@ -3264,6 +3262,25 @@ label-bottom-chord-type = Type de membrure inférieure
 label-web-type = Type de diagonales
 label-post-type = Type de montants
 msg-truss-material = Les fermes sont en acier ou en bois : choisissez-en un dans Matériau.
+
+# Parametric bracing
+category-bracing = Contreventements
+tpl-type-bracing = Contreventement
+tx-create-bracing = Créer un contreventement
+action-bracing = Contreventement
+cmd-desc-bracing = Contrevente une travée de portique, étage par étage : avec deux poteaux sélectionnés, il utilise la travée entre eux ; sinon, cliquez les axes des deux poteaux. Motifs en X, diagonale, V, V inversé (chevron) et K ; les barres sont des poutres tenues à jour avec le contreventement.
+hint-bracing = Cliquez les axes des deux poteaux de la travée · Échap termine
+bracing-v = En V
+bracing-chevron = V inversé (chevron)
+bracing-diagonal = Diagonale
+bracing-x = En X
+bracing-k = En K
+prop-bracing-stories = Étages
+prop-bracing-story-height = Hauteur d'étage
+prop-bracing-flip = Inverser la diagonale
+prop-bracing-alternate = Alterner les diagonales
+label-brace-type = Type des barres
+msg-bracing-material = Les contreventements sont en acier ou en bois : choisissez-en un dans Matériau.
 
 # Wall framing
 category-wall-framing = Ossatures de mur

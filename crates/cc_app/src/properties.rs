@@ -539,6 +539,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     match &el.kind {
         ElementKind::SteelBuilding(b) => crate::steel_building_ui::props(ui, state, id, b),
         ElementKind::Truss(t) => crate::truss_ui::props(ui, state, id, t),
+        ElementKind::Bracing(b) => crate::bracing_ui::props(ui, state, id, b),
         ElementKind::WallFraming(f) => crate::wall_framing_ui::props(ui, state, id, f),
         ElementKind::Connection(c) => crate::connection_ui::props(ui, state, id, c),
         ElementKind::Mass(m) => mass_props(ui, state, &el, m),

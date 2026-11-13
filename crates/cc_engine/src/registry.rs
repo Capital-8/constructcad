@@ -231,6 +231,7 @@ registry![
         framing::BraceCreate,
         framing::BracesBetweenColumns,
         framing::TrussCreate,
+        bracing::BracingCreate,
         rebar::RebarCreate,
         rebar::RebarTypical,
         connection::ConnectionsCreate,

@@ -56,6 +56,7 @@ pub fn is_structural(e: &cc_core::Element) -> bool {
         | ElementKind::Grid(_)
         | ElementKind::SteelBuilding(_)
         | ElementKind::Truss(_)
+        | ElementKind::Bracing(_)
         | ElementKind::Connection(_) => true,
         _ => false,
     }
@@ -957,8 +958,12 @@ fn draw_steel_buildings(
 
 /// Trusses of a plan's level: each copy's span line, thin and dashed, as
 /// the truss's own line so it can be picked (its members draw themselves).
+/// A bracing draws its bay line the same way.
 fn draw_trusses(d: &mut Drawing2D, project: &Project, level: LevelId, shown: &dyn Fn(&cc_core::Element) -> bool) {
     for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
+        if let ElementKind::Bracing(b) = &e.kind {
+            d.line(b.start, b.end, LineStyle::Hidden, Some(e.id));
+        }
         let ElementKind::Truss(t) = &e.kind else { continue };
         for [a, b] in t.span_lines() {
             d.line(a, b, LineStyle::Hidden, Some(e.id));
