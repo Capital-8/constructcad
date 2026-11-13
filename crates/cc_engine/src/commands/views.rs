@@ -3,7 +3,7 @@
 use super::query::view_json;
 use super::{edit, patch_variant};
 use crate::error::{EngineError, Result};
-use crate::refs::{self, Point, Ref, point, positive};
+use crate::refs::{self, Point, Ref, ScaleArg, point, positive};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
@@ -27,7 +27,8 @@ pub(crate) fn view_out(s: &Session, id: ViewId) -> Value {
 /// `drafting` (a 2D view independent of the model, showing only the text,
 /// dimensions and imported drawings placed in it; 1:10 by default), `schedule` (with `category`), `panel_diagram` (with `panel`: the
 /// single-line diagram and load schedule of a distribution board; default
-/// the only board) or `sheet` (A3, numbered after the others, with the first title block type).
+/// the only board) or `sheet` (A3, ANSI B in imperial projects, numbered after the others, with
+/// the first title block type).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewCreate {
@@ -55,9 +56,10 @@ pub struct ViewCreate {
     /// Elevations: `north`, `south` (default), `east` or `west`.
     #[serde(default)]
     pub direction: Option<String>,
-    /// Scale denominator (e.g. 50 for 1:50).
+    /// Scale: the denominator (e.g. 50 for 1:50), or text such as `"1:50"`
+    /// or an imperial label like `"1/4\" = 1'-0\""` (48).
     #[serde(default)]
-    pub scale: Option<u32>,
+    pub scale: Option<ScaleArg>,
     /// Distribution board element id, for a panel diagram.
     #[serde(default)]
     pub panel: Option<u64>,
@@ -72,6 +74,7 @@ impl Command for ViewCreate {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
+        let given_scale = self.scale.as_ref().map(ScaleArg::ratio).transpose()?;
         let (name, scale, kind, tx) = match self.kind.as_str() {
             "floor_plan" | "ceiling_plan" => {
                 let level = refs::level_or_first(p, self.level.as_ref())?;
@@ -207,9 +210,10 @@ impl Command for ViewCreate {
             }
             "sheet" => {
                 let n = count(p, ViewCategory::Sheet) + 101;
+                let size = SheetSize::default_for(p.measurement_system());
                 let kind = ViewKind::Sheet {
                     number: format!("A{n}"),
-                    size: SheetSize::A3,
+                    size,
                     portrait: false,
                     viewports: Vec::new(),
                     title_block: p.title_blocks().first().copied(),
@@ -221,7 +225,7 @@ impl Command for ViewCreate {
             other => return Err(EngineError::invalid(format!("unknown view kind '{other}'"))),
         };
         let name = self.name.unwrap_or(name);
-        let scale = self.scale.unwrap_or(scale).max(1);
+        let scale = given_scale.unwrap_or(scale).max(1);
         let id = edit(s, tx, |e| {
             let id = ViewId(e.alloc_id());
             Ok(e.add_view(View::new(id, name, scale, kind)))
@@ -248,9 +252,10 @@ pub struct ViewSet {
     /// plans keep theirs.
     #[serde(default)]
     pub name: Option<String>,
-    /// Scale denominator (e.g. 100 for 1:100).
+    /// Scale: the denominator (e.g. 100 for 1:100), or text such as
+    /// `"1:100"` or an imperial label like `"1/8\" = 1'-0\""` (96).
     #[serde(default)]
-    pub scale: Option<u32>,
+    pub scale: Option<ScaleArg>,
     /// Fields of the view's parameters to change, shaped like `params` in `view_get`.
     #[serde(default)]
     pub params: Option<Value>,
@@ -301,6 +306,7 @@ impl Command for ViewSet {
         {
             return Err(EngineError::invalid("the name is empty"));
         }
+        let scale = self.scale.as_ref().map(ScaleArg::ratio).transpose()?;
         let phase = self.phase.as_ref().map(|r| refs::phase(p, r)).transpose()?;
         let detail = self.detail.as_deref().map(refs::detail_level).transpose()?;
         let visual_style = self.visual_style.as_deref().map(refs::visual_style).transpose()?;
@@ -333,8 +339,8 @@ impl Command for ViewSet {
             if let Some(f) = phase_filter {
                 new.phase_filter = f;
             }
-            if let Some(sc) = self.scale {
-                new.scale = sc.max(1);
+            if let Some(sc) = scale {
+                new.scale = sc;
             }
             if let Some(k) = &kind {
                 new.kind = k.clone();
@@ -356,8 +362,8 @@ impl Command for ViewSet {
             if let Some(n) = self.name {
                 v.name = n.trim().to_string();
             }
-            if let Some(sc) = self.scale {
-                v.scale = sc.max(1);
+            if let Some(sc) = scale {
+                v.scale = sc;
             }
             if let Some(k) = kind {
                 v.kind = k;

@@ -169,6 +169,24 @@ impl ScheduleField {
         }
     }
 
+    /// Translation key of the column header in a project of `system`. The
+    /// metric headers of lengths, areas and volumes name their unit
+    /// (`Length (m)`); imperial values carry their own marks and symbols
+    /// (`12'-6"`, `100.00 ft²`), so those headers name none.
+    pub fn key_in(self, system: crate::MeasurementSystem) -> &'static str {
+        if system == crate::MeasurementSystem::Metric {
+            return self.key();
+        }
+        match self {
+            ScheduleField::Length => "col-imp-length",
+            ScheduleField::Thickness => "col-imp-thickness",
+            ScheduleField::Area => "col-imp-area",
+            ScheduleField::Perimeter => "col-imp-perimeter",
+            ScheduleField::Volume => "col-imp-volume",
+            _ => self.key(),
+        }
+    }
+
     /// Fields that make sense for `category`, in a sensible order.
     pub fn available(category: Category) -> Vec<ScheduleField> {
         use ScheduleField as F;

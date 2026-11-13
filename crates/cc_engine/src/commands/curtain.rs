@@ -37,7 +37,8 @@ fn check_system(p: &Project, system: &CurtainSystem) -> Result<()> {
 
 /// Create a curtain wall type: walls of it are a grid of panels and
 /// mullions. `curtain` changes the defaults (vertical and horizontal lines
-/// every 1.5 m, glass panels, 5 x 15 cm mullions inside and around) and is
+/// every 1.5 m, glass panels, 5 x 15 cm mullions inside and around; in
+/// imperial projects lines every 5'-0" and 2" x 6" mullions) and is
 /// shaped like `params.curtain` in `type_get`: `vertical` and `horizontal`
 /// {layout: `None`, `FixedDistance`, `FixedNumber` or `MaxSpacing`,
 /// spacing, count, justification: `Start`, `Center` or `End`}, `panel`
@@ -68,6 +69,19 @@ impl Command for CurtainTypeCreate {
             &template_material(p, "tpl-mat-glass"),
             &template_material(p, "tpl-mat-steel"),
         );
+        // Round sizes of the project's measurement system.
+        let (spacing, width, depth, glass) = p.defaults().curtain;
+        system.vertical.spacing = spacing;
+        system.horizontal.spacing = spacing;
+        for m in [&mut system.vertical_mullion, &mut system.horizontal_mullion, &mut system.border_mullion]
+            .into_iter()
+            .flatten()
+        {
+            (m.width, m.depth) = (width, depth);
+        }
+        if let cc_core::curtain::CurtainPanel::Glass { thickness, .. } = &mut system.panel {
+            *thickness = glass;
+        }
         if let Some(patch) = &self.curtain {
             system = patch_value(&system, patch)?;
         }

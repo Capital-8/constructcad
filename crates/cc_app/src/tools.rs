@@ -911,9 +911,25 @@ pub(crate) fn underlay_snap(drawing: &Drawing2D, raw: DVec2, r: f64, out: &mut c
     }
 }
 
-/// Increment for rounding free coordinates at the current zoom.
+/// Increment for rounding free coordinates at the current zoom: 1 cm to
+/// 10 m in metric projects, 1/2" to 20'-0" in imperial ones, so drawn
+/// lengths land on round values of the project's system.
 pub(crate) fn round_step(scale: f64) -> f64 {
-    [0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0].into_iter().find(|s| s * scale >= 6.0).unwrap_or(10.0)
+    use cc_core::units::{FOOT, INCH};
+    let (steps, last): (&[f64], f64) = if format::imperial() {
+        (&[INCH / 2.0, INCH, 3.0 * INCH, 6.0 * INCH, FOOT, 2.0 * FOOT, 5.0 * FOOT, 10.0 * FOOT], 20.0 * FOOT)
+    } else {
+        (&[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0], 10.0)
+    };
+    steps.iter().copied().find(|s| s * scale >= 6.0).unwrap_or(last)
+}
+
+/// `meters` rounded to a millimeter, or to 1/16" in imperial projects
+/// (component reference planes and sketches), to 1e-7 m so it writes short.
+pub(crate) fn round_fine(meters: f64) -> f64 {
+    let step = if format::imperial() { cc_core::units::INCH / 16.0 } else { 0.001 };
+    let v = (meters / step).round() * step;
+    (v * 1e7).round() / 1e7
 }
 
 /// Snap `raw` to model points, wall lines, alignments and angle/length
@@ -2396,7 +2412,11 @@ fn stair_tool(
             painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
         }
         let end = g.walkline.last().map_or(a, |p| p.truncate());
-        let text = t!("label-stair", "risers" => g.risers, "run" => format::meters(g.run()));
+        let text = if format::imperial() {
+            t!("label-imp-stair", "risers" => g.risers, "run" => format::meters(g.run()))
+        } else {
+            t!("label-stair", "risers" => g.risers, "run" => format::meters(g.run()))
+        };
         label(painter, xf.to_screen(end), text);
     }
     if resp.clicked() {
@@ -2447,7 +2467,11 @@ fn ramp_tool(
             painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
         }
         let end = g.walkline.last().map_or(a, |p| p.truncate());
-        let text = t!("label-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()));
+        let text = if format::imperial() {
+            t!("label-imp-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()))
+        } else {
+            t!("label-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()))
+        };
         label(painter, xf.to_screen(end), text);
     }
     if resp.clicked() {

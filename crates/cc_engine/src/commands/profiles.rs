@@ -339,7 +339,11 @@ impl Command for ProfileCreate {
         check_shape(&shape)?;
         let name = match &self.name {
             Some(n) => profile_name(p, n, None)?,
-            None => p.free_profile_name(&cc_core::profiles_project::section_name(&shape, material)),
+            None => p.free_profile_name(&cc_core::profiles_project::section_name_in(
+                &shape,
+                material,
+                p.measurement_system(),
+            )),
         };
         let mut def = ProfileDef {
             id: ProfileId(0),

@@ -175,6 +175,24 @@ fn length_row(
     finish(state, &r);
 }
 
+/// A row editing a small size of a type (see [`crate::properties::size_drag`]).
+fn size_row(
+    ui: &mut Ui,
+    state: &mut AppState,
+    label: &str,
+    tid: ElementTypeId,
+    field: &str,
+    value: f64,
+    set: impl FnOnce(&mut TypeData, f64),
+) {
+    let mut v = value;
+    let r = row(ui, label, |ui| ui.add(crate::properties::size_drag(&mut v).range(0.001..=20.0)));
+    if r.changed() {
+        update(state, tid, field, |t| set(&mut t.data, v));
+    }
+    finish(state, &r);
+}
+
 /// Component name and kind, the editor button and this type's parameter values.
 fn component_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let TypeData::Component { component, def } = &ty.data else { return };
@@ -266,7 +284,7 @@ fn parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         }
         match ty.data {
             TypeData::Ceiling { thickness, .. } => {
-                length_row(ui, state, &t!("prop-thickness"), tid, "thk", thickness, |d, v| {
+                size_row(ui, state, &t!("prop-thickness"), tid, "thk", thickness, |d, v| {
                     if let TypeData::Ceiling { thickness, .. } = d {
                         *thickness = v;
                     }
@@ -440,9 +458,14 @@ fn roofing(
     }
     if let Some(spec) = covering.map(TileKind::spec) {
         readonly_row(ui, &t!("prop-min-slope"), format::slope(spec.min_slope));
-        readonly_row(ui, &t!("prop-covering-weight"), format!("{:.0} kg/m²", spec.weight));
+        readonly_row(ui, &t!("prop-covering-weight"), format::quantity(format::Quantity::AreaMass, spec.weight, 0));
         if let Some(n) = spec.per_m2 {
-            readonly_row(ui, &t!("prop-tiles-per-m2"), format!("{n:.1}"));
+            if format::imperial() {
+                let foot = cc_core::units::FOOT;
+                readonly_row(ui, &t!("prop-imp-tiles-per-ft2"), format::number(n * foot * foot, 1));
+            } else {
+                readonly_row(ui, &t!("prop-tiles-per-m2"), format!("{n:.1}"));
+            }
         }
     }
     let mut system = framing.system;
@@ -479,7 +502,7 @@ fn roofing(
         let size = *pick(&mut framing.clone());
         for (axis, value) in [("w", size.width), ("h", size.height)] {
             let caption = format!("{} ({})", tr(label), if axis == "w" { t!("col-width") } else { t!("col-height") });
-            length_row(ui, state, &caption, tid, &format!("{label}-{axis}"), value, |d, v| {
+            size_row(ui, state, &caption, tid, &format!("{label}-{axis}"), value, |d, v| {
                 if let TypeData::Roof { framing, .. } = d {
                     let s = pick(framing);
                     if axis == "w" {
@@ -592,7 +615,7 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     state.session.doc.break_merge();
                 }
                 let mut thk = layer.thickness;
-                let r = ui.add(crate::properties::length_drag(&mut thk).speed(0.002).range(0.001..=2.0));
+                let r = ui.add(crate::properties::size_drag(&mut thk).range(0.001..=2.0));
                 if r.changed() {
                     let mut l = layers.clone();
                     l[i].thickness = thk;
@@ -677,11 +700,19 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         }
                     });
                 }
-                length_row(ui, state, &t!("col-thickness"), tid, "ft", thickness, |d, v| {
-                    if let TypeData::Foundation { thickness, .. } = d {
-                        *thickness = v.max(0.05);
-                    }
-                });
+                size_row(
+                    ui,
+                    state,
+                    &crate::properties::field_label(cc_core::ScheduleField::Thickness),
+                    tid,
+                    "ft",
+                    thickness,
+                    |d, v| {
+                        if let TypeData::Foundation { thickness, .. } = d {
+                            *thickness = v.max(0.05);
+                        }
+                    },
+                );
             });
         }
         TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
@@ -691,12 +722,12 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         *width = v.max(0.3);
                     }
                 });
-                length_row(ui, state, &t!("prop-max-riser"), tid, "sr", max_riser, |d, v| {
+                size_row(ui, state, &t!("prop-max-riser"), tid, "sr", max_riser, |d, v| {
                     if let TypeData::Stair { max_riser, .. } = d {
                         *max_riser = v.clamp(0.05, 0.5);
                     }
                 });
-                length_row(ui, state, &t!("col-tread"), tid, "st", tread, |d, v| {
+                size_row(ui, state, &t!("col-tread"), tid, "st", tread, |d, v| {
                     if let TypeData::Stair { tread, .. } = d {
                         *tread = v.clamp(0.1, 1.0);
                     }
@@ -733,7 +764,7 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         }
         TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
-                length_row(ui, state, &t!("col-diameter"), tid, "pd", diameter, |d, v| {
+                size_row(ui, state, &t!("col-diameter"), tid, "pd", diameter, |d, v| {
                     if let TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } = d {
                         *diameter = v.clamp(0.005, 2.0);
                     }
@@ -743,7 +774,7 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         TypeData::LightningConductor { diameter, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
                 use cc_core::lightning::{MAX_CONDUCTOR_DIAMETER, MIN_CONDUCTOR_DIAMETER};
-                length_row(ui, state, &t!("col-diameter"), tid, "cd", diameter, |d, v| {
+                size_row(ui, state, &t!("col-diameter"), tid, "cd", diameter, |d, v| {
                     if let TypeData::LightningConductor { diameter, .. } = d {
                         *diameter = v.clamp(MIN_CONDUCTOR_DIAMETER, MAX_CONDUCTOR_DIAMETER);
                     }
@@ -752,12 +783,12 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
         }
         TypeData::CableTray { width, height, style, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {
-                length_row(ui, state, &t!("col-width"), tid, "tw", width, |d, v| {
+                size_row(ui, state, &t!("col-width"), tid, "tw", width, |d, v| {
                     if let TypeData::CableTray { width, .. } = d {
                         *width = v.clamp(0.02, cc_core::mep::MAX_TRAY_WIDTH);
                     }
                 });
-                length_row(ui, state, &t!("col-height"), tid, "th", height, |d, v| {
+                size_row(ui, state, &t!("col-height"), tid, "th", height, |d, v| {
                     if let TypeData::CableTray { height, .. } = d {
                         *height = v.clamp(0.01, cc_core::mep::MAX_TRAY_HEIGHT);
                     }
@@ -805,11 +836,19 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                         *width = v.clamp(0.3, 50.0);
                     }
                 });
-                length_row(ui, state, &t!("col-thickness"), tid, "rt", thickness, |d, v| {
-                    if let TypeData::Ramp { thickness, .. } = d {
-                        *thickness = v.clamp(0.01, 5.0);
-                    }
-                });
+                size_row(
+                    ui,
+                    state,
+                    &crate::properties::field_label(cc_core::ScheduleField::Thickness),
+                    tid,
+                    "rt",
+                    thickness,
+                    |d, v| {
+                        if let TypeData::Ramp { thickness, .. } = d {
+                            *thickness = v.clamp(0.01, 5.0);
+                        }
+                    },
+                );
             });
             crate::table::section(ui, "type-ramp-rules", t!("section-ramp-rules"), |ui| {
                 let mut r = rules;
@@ -886,10 +925,15 @@ fn set_profile(t: &mut ElementType, f: impl FnOnce(&mut Option<ProfileId>, &mut 
     }
 }
 
-/// A profile's depth and width (`d × bf`) in millimeters, unturned.
+/// A profile's depth and width (`d × bf`) in millimeters (in inches in
+/// imperial projects), unturned.
 fn profile_size(project: &cc_core::Project, id: ProfileId) -> Option<String> {
     let outline = project.profile(id)?.shape.outline().ok()?;
     let (lo, hi) = outline.bbox();
+    if format::imperial() {
+        let i = format::inch_size;
+        return Some(format!("{} × {}", i(hi.y - lo.y), i(hi.x - lo.x)));
+    }
     let mm = |v: f64| {
         let v = v * 1000.0;
         format::number(v, if (v - v.round()).abs() < 0.05 { 0 } else { 1 })

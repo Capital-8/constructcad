@@ -11,9 +11,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// Default concrete cover, meters.
-const COVER: f64 = 0.025;
-
 /// The bar type nearest `diameter`.
 fn bar_type(p: &Project, diameter: f64) -> Result<ElementTypeId> {
     p.types_of(Category::Rebar)
@@ -54,13 +51,14 @@ pub struct RebarCreate {
     /// Number of longitudinal bars (default: 2 in beams, 4 in columns).
     #[serde(default)]
     pub count: Option<u32>,
-    /// Stirrup spacing, meters (default 0.15).
+    /// Stirrup spacing, meters (default 0.15; 6" in imperial projects).
     #[serde(default)]
     pub spacing: Option<f64>,
-    /// Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups).
+    /// Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups; 1/2" and 3/8" in imperial
+    /// projects).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Concrete cover, meters (default 0.025).
+    /// Concrete cover, meters (default 0.025; 1 1/2" in imperial projects).
     #[serde(default)]
     pub cover: Option<f64>,
 }
@@ -70,6 +68,7 @@ impl Command for RebarCreate {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
+        let [default_cover, default_spacing, main_bar, _, stirrup_bar] = p.defaults().rebar;
         let (host_id, beam) = host(p, self.host)?;
         let level = p.element(host_id).map(|e| e.level).ok_or_else(|| EngineError::not_found("host"))?;
         let count = self.count.unwrap_or(if beam { 2 } else { 4 });
@@ -82,7 +81,7 @@ impl Command for RebarCreate {
             "bottom" => longitudinal(BarFace::Bottom),
             "perimeter" => longitudinal(BarFace::Perimeter),
             "stirrups" => {
-                let spacing = finite(self.spacing.unwrap_or(0.15), "spacing")?;
+                let spacing = finite(self.spacing.unwrap_or(default_spacing), "spacing")?;
                 if spacing < 0.02 {
                     return Err(EngineError::invalid("spacing must be at least 0.02"));
                 }
@@ -97,9 +96,9 @@ impl Command for RebarCreate {
         let stirrups = matches!(layout, RebarLayout::Stirrups { .. });
         let type_id = match &self.type_ref {
             Some(r) => refs::type_of(p, Category::Rebar, Some(r))?,
-            None => bar_type(p, if stirrups { 0.005 } else { 0.010 })?,
+            None => bar_type(p, if stirrups { stirrup_bar } else { main_bar })?,
         };
-        let cover = finite(self.cover.unwrap_or(COVER), "cover")?.max(0.0);
+        let cover = finite(self.cover.unwrap_or(default_cover), "cover")?.max(0.0);
         let kind = rebar_kind(host_id, layout, cover);
         let id = edit(s, t!("tx-create-rebar"), |e| Ok(add_element(e, level, type_id, kind)))?;
         Ok(created(s, id))
@@ -141,7 +140,8 @@ impl Command for RebarTypical {
         } else {
             self.elements.iter().map(|id| host(p, *id)).collect::<Result<_>>()?
         };
-        let (main, top, ties) = (bar_type(p, 0.010)?, bar_type(p, 0.008)?, bar_type(p, 0.005)?);
+        let [cover, spacing, main_bar, top_bar, stirrup_bar] = p.defaults().rebar;
+        let (main, top, ties) = (bar_type(p, main_bar)?, bar_type(p, top_bar)?, bar_type(p, stirrup_bar)?);
         let mut todo = Vec::new();
         let mut skipped = 0;
         for (id, beam) in hosts {
@@ -150,22 +150,22 @@ impl Command for RebarTypical {
                 skipped += 1;
                 continue;
             }
-            let stirrups = RebarLayout::Stirrups { spacing: 0.15 };
+            let stirrups = RebarLayout::Stirrups { spacing };
             if beam {
                 let wide = matches!(p.element_type(e.type_id).map(|t| &t.data), Some(TypeData::Beam { width, .. }) if *width >= 0.2 - 1e-9);
                 let bottom = RebarLayout::Longitudinal { face: BarFace::Bottom, count: if wide { 3 } else { 2 } };
-                todo.push((e.level, main, rebar_kind(id, bottom, COVER)));
+                todo.push((e.level, main, rebar_kind(id, bottom, cover)));
                 todo.push((
                     e.level,
                     top,
-                    rebar_kind(id, RebarLayout::Longitudinal { face: BarFace::Top, count: 2 }, COVER),
+                    rebar_kind(id, RebarLayout::Longitudinal { face: BarFace::Top, count: 2 }, cover),
                 ));
             } else {
                 let round = p.element_type(e.type_id).is_some_and(|t| p.section_is_round(&t.data));
                 let bars = RebarLayout::Longitudinal { face: BarFace::Perimeter, count: if round { 6 } else { 4 } };
-                todo.push((e.level, main, rebar_kind(id, bars, COVER)));
+                todo.push((e.level, main, rebar_kind(id, bars, cover)));
             }
-            todo.push((e.level, ties, rebar_kind(id, stirrups, COVER)));
+            todo.push((e.level, ties, rebar_kind(id, stirrups, cover)));
         }
         if todo.is_empty() {
             return Ok(json!({"created": [], "skipped": skipped}));

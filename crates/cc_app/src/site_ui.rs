@@ -188,11 +188,7 @@ fn form(ui: &mut Ui, state: &mut AppState, d: &mut SiteDialog, import: &mut bool
         row_label(ui, t!("site-elevation"));
         ui.horizontal(|ui| {
             ui.add(
-                egui::DragValue::new(&mut d.site.elevation)
-                    .range(cc_core::site::ELEVATION_RANGE)
-                    .speed(0.1)
-                    .max_decimals(2)
-                    .suffix(" m"),
+                crate::properties::length_drag(&mut d.site.elevation).range(cc_core::site::ELEVATION_RANGE).speed(0.1),
             );
             let busy = d.elevation.is_some();
             if ui
@@ -254,7 +250,11 @@ fn form(ui: &mut Ui, state: &mut AppState, d: &mut SiteDialog, import: &mut bool
         row_label(ui, t!("site-extent"));
         let mut side = d.extent * 2.0;
         let range = (EXTENT_RANGE.start() * 2.0)..=(EXTENT_RANGE.end() * 2.0);
-        if ui.add(egui::Slider::new(&mut side, range).suffix(" m").step_by(10.0)).changed() {
+        let slider = egui::Slider::new(&mut side, range)
+            .step_by(10.0)
+            .custom_formatter(|v, _| cc_views::format::length(v))
+            .custom_parser(cc_views::format::parse_length);
+        if ui.add(slider).changed() {
             d.extent = side / 2.0;
         }
         ui.end_row();
@@ -378,14 +378,14 @@ fn map(ui: &mut Ui, d: &mut SiteDialog) {
 
     // Attribution (required) and the scale.
     let mpp = 156_543.033_92 * d.site.latitude.to_radians().cos() / scale;
-    let bar_m = nice_length(mpp * 100.0);
+    let (bar_m, bar_text) = scale_bar(mpp * 100.0, cc_views::format::imperial());
     let bar_px = (bar_m / mpp) as f32;
     let base = rect.left_bottom() + vec2(10.0, -10.0);
     painter.line_segment([base, base + vec2(bar_px, 0.0)], Stroke::new(3.0, Color32::from_gray(40)));
     painter.text(
         base + vec2(0.0, -4.0),
         egui::Align2::LEFT_BOTTOM,
-        format_length(bar_m),
+        bar_text,
         egui::FontId::proportional(11.0),
         Color32::from_gray(30),
     );
@@ -417,6 +417,26 @@ fn nice_length(max: f64) -> f64 {
 
 fn format_length(m: f64) -> String {
     if m >= 1000.0 { format!("{} km", m / 1000.0) } else { format!("{m} m") }
+}
+
+/// Feet in a mile.
+const MILE_FEET: f64 = 5280.0;
+
+/// The scale bar for at most `max` meters: its length in meters and its
+/// text, in meters and kilometers, or in feet and miles when `imperial`.
+fn scale_bar(max: f64, imperial: bool) -> (f64, String) {
+    if !imperial {
+        let m = nice_length(max);
+        return (m, format_length(m));
+    }
+    let foot = cc_core::units::FOOT;
+    let feet = max / foot;
+    if feet >= MILE_FEET {
+        let miles = nice_length(feet / MILE_FEET);
+        return (miles * MILE_FEET * foot, format!("{miles} mi"));
+    }
+    let feet = nice_length(feet);
+    (feet * foot, format!("{feet} ft"))
 }
 
 // --- Tiles ---
@@ -810,6 +830,12 @@ mod tests {
         assert_eq!(nice_length(260.0), 200.0);
         assert_eq!(nice_length(7.0), 5.0);
         assert_eq!(format_length(2000.0), "2 km");
+        assert_eq!(scale_bar(130.0, false), (100.0, "100 m".to_string()));
+        // 130 m is 426 ft: a 200 ft bar; 20 km is 12.4 miles: a 10 mi bar.
+        let (m, text) = scale_bar(130.0, true);
+        assert!((m - 200.0 * cc_core::units::FOOT).abs() < 1e-9 && text == "200 ft", "{text}");
+        let (m, text) = scale_bar(20_000.0, true);
+        assert!((m - 10.0 * 5280.0 * cc_core::units::FOOT).abs() < 1e-6 && text == "10 mi", "{text}");
     }
 
     #[test]
