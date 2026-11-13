@@ -99,13 +99,9 @@ pub fn plan_annotations(
 }
 
 /// A section size: centimeters, without decimals when whole, or inches
-/// with a fraction in imperial units.
+/// with a fraction and the inch mark in imperial units.
 fn cm(meters: f64) -> String {
-    if format::imperial() {
-        return format::inches(meters);
-    }
-    let v = meters * 100.0;
-    if (v - v.round()).abs() < 1e-6 { format!("{v:.0}") } else { format!("{v:.1}") }
+    format::size(meters, format::MetricSize::CmTag)
 }
 
 /// A steel or cold-formed profile's name (`IPE 200`), else the section's size in

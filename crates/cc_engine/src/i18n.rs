@@ -322,4 +322,32 @@ mod tests {
             }
         }
     }
+
+    /// The imperial template is named in every language, and no type name
+    /// there states a metric size.
+    #[test]
+    fn imperial_template_names_in_every_language() {
+        let metric_units = [" cm", " mm", " см", " мм", " ຊມ", " ມມ", "公分", "公尺"];
+        let metric_ends = [" m", " м", " ມ"];
+        for lang in Language::ALL {
+            let messages = parse_messages(lang.source());
+            let asked = std::cell::RefCell::new(Vec::new());
+            let project = cc_core::Project::from_template_system(cc_core::MeasurementSystem::Imperial, &|k| {
+                asked.borrow_mut().push(k.to_string());
+                messages.get(k).cloned()
+            });
+            let missing: Vec<_> = asked.borrow().iter().filter(|k| !messages.contains_key(*k)).cloned().collect();
+            assert!(missing.is_empty(), "{lang:?}: missing template names: {missing:?}");
+            for t in project.types.values() {
+                let name = &t.name;
+                assert!(
+                    !metric_units.iter().any(|u| name.contains(u)) && !metric_ends.iter().any(|u| name.ends_with(u)),
+                    "{lang:?}: {name}"
+                );
+                for layer in t.layers() {
+                    assert!(project.materials.iter().any(|m| m.name == layer.material), "{}", layer.material);
+                }
+            }
+        }
+    }
 }

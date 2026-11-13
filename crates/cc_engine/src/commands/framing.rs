@@ -236,7 +236,7 @@ impl Command for TrussCreate {
             None => TrussPattern::Pratt,
         };
         let (start, end) = (point(self.start)?, point(self.end)?);
-        let bottom = self.bottom_offset.unwrap_or_else(|| p.level_height(level, 3.0) - self.height);
+        let bottom = self.bottom_offset.unwrap_or_else(|| p.level_height(level, p.defaults().story) - self.height);
         let placeholder = ElementTypeId(0);
         let mut truss = Truss {
             start,

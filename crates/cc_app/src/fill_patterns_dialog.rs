@@ -372,7 +372,8 @@ fn details(ui: &mut Ui, state: &mut AppState, selected: Pattern, draft: &mut Opt
     });
     ui.add_space(6.0);
     ui.label(RichText::new(t!("fp-families")).strong());
-    ui.label(RichText::new(t!("fp-families-hint")).size(11.0).color(PALETTE.text_faint));
+    let hint = if in_inches(&fp) { t!("fp-families-hint-inches") } else { t!("fp-families-hint") };
+    ui.label(RichText::new(hint).size(11.0).color(PALETTE.text_faint));
     families(ui, state, &fp, draft);
     ui.add_space(6.0);
     preview(ui, state.project(), selected);
@@ -403,19 +404,43 @@ fn line_arg(l: &PatternLine) -> cmd::LineArg {
     cmd::LineArg { angle: l.angle, origin: Some(l.origin), offset: l.offset, dashes: Some(l.dashes.clone()) }
 }
 
-/// Dash lengths typed as numbers separated by commas or spaces.
-fn parse_dashes(text: &str) -> Option<Vec<f64>> {
-    text.split([',', ' ', ';']).filter(|s| !s.trim().is_empty()).map(|s| s.trim().parse::<f64>().ok()).collect()
+/// Whether a pattern's lengths read in inches: a drafting pattern (paper
+/// millimeters) of an imperial project. Model patterns stay millimeters.
+fn in_inches(fp: &FillPattern) -> bool {
+    fp.kind == FillPatternKind::Drafting && cc_views::format::imperial()
 }
 
-fn dashes_text(d: &[f64]) -> String {
-    d.iter().map(|v| format!("{v}")).collect::<Vec<_>>().join(", ")
+/// Millimeters in an inch, for paper lengths.
+const PAPER_INCH: f64 = 25.4;
+
+/// Dash lengths typed as numbers separated by commas or spaces, in
+/// millimeters (inches when `inches`).
+fn parse_dashes(text: &str, inches: bool) -> Option<Vec<f64>> {
+    let per = if inches { PAPER_INCH } else { 1.0 };
+    text.split([',', ' ', ';'])
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().parse::<f64>().ok().filter(|v| v.is_finite()).map(|v| v * per))
+        .collect()
+}
+
+fn dashes_text(d: &[f64], inches: bool) -> String {
+    let text = |v: f64| {
+        if !inches {
+            return format!("{v}");
+        }
+        // Inches to four places, trailing zeros dropped.
+        let s = format!("{:.4}", v / PAPER_INCH);
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        if s == "-0" { "0".to_string() } else { s.to_string() }
+    };
+    d.iter().map(|v| text(*v)).collect::<Vec<_>>().join(", ")
 }
 
 /// The table of line families: angle, origin, offset, dashes, and a row
 /// remover; *Add line family* below.
 fn families(ui: &mut Ui, state: &mut AppState, fp: &FillPattern, draft: &mut Option<(u64, String)>) {
     let id = fp.id;
+    let inches = in_inches(fp);
     let mut lines = fp.lines.clone();
     let mut changed: Option<Option<u64>> = None;
     let mut remove = None;
@@ -435,7 +460,12 @@ fn families(ui: &mut Ui, state: &mut AppState, fp: &FillPattern, draft: &mut Opt
             ui.end_row();
             for (i, l) in lines.iter_mut().enumerate() {
                 let mut drag = |ui: &mut Ui, v: &mut f64, field: &str, suffix: &str| {
-                    let r = ui.add(egui::DragValue::new(v).speed(0.1).max_decimals(4).suffix(suffix));
+                    // Lengths of drafting patterns in imperial projects in decimal inches.
+                    let r = if inches && field != "angle" {
+                        ui.add(crate::properties::decimal_paper_drag(v).speed(0.1))
+                    } else {
+                        ui.add(egui::DragValue::new(v).speed(0.1).max_decimals(4).suffix(suffix))
+                    };
                     if r.changed() {
                         changed = Some(Some(key((id, i, field.to_string()))));
                     }
@@ -449,8 +479,8 @@ fn families(ui: &mut Ui, state: &mut AppState, fp: &FillPattern, draft: &mut Opt
                 drag(ui, &mut l.offset[0], "shift", "");
                 drag(ui, &mut l.offset[1], "spacing", "");
                 let field = key((id, i, "dashes"));
-                if let Some(text) = text_field(ui, draft, field, &dashes_text(&l.dashes), 130.0) {
-                    match parse_dashes(&text) {
+                if let Some(text) = text_field(ui, draft, field, &dashes_text(&l.dashes, inches), 130.0) {
+                    match parse_dashes(&text, inches) {
                         Some(d) => {
                             l.dashes = d;
                             changed = Some(None);

@@ -76,6 +76,12 @@ pub(crate) fn add_device_type(e: &mut EditCtx, device: DeviceKind, ports: Option
     if device == DeviceKind::DataOutlet {
         name = t!("type-data-outlet-ports", "ports" => def.mep.map_or(1, |m| m.cables()));
     }
+    if e.project().measurement_system() == cc_core::MeasurementSystem::Imperial {
+        // Round inches and feet: a 60 cm rack is 2'-0", a 2.4 m rod 8'-0".
+        for p in def.params.iter_mut().filter(|p| p.kind == cc_core::ParamKind::Length) {
+            p.value = cc_core::units::round_imperial(p.value);
+        }
+    }
     ensure_material(e, "tpl-mat-steel", MaterialClass::Metal, [160, 165, 170]);
     ensure_material(e, "tpl-mat-pvc", MaterialClass::Plastic, [236, 236, 230]);
     ensure_material(e, "tpl-mat-copper", MaterialClass::Metal, [184, 115, 51]);

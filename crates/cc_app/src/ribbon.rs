@@ -1052,16 +1052,19 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
     let project = state.project();
     let kind = system.and_then(|id| project.system(id)).map(|s| s.kind);
     let default_offset = match (run, state.active_level()) {
-        (Run::Pipe, _) => cc_engine::pipe_offset(kind),
+        (Run::Pipe, _) => cc_engine::pipe_offset(project, kind),
         (Run::Conduit, Some(level)) => cc_engine::conduit_offset(project, level),
         (Run::Tray, Some(level)) => cc_engine::tray_offset(project, level),
         // Conductors lie on the roof under them unless an elevation is given.
         (Run::Conductor, _) => 0.0,
-        (_, None) => 2.8,
+        (_, None) => project.defaults().ceiling,
     };
     let diameter = project.element_type(type_id).and_then(|t| t.diameter()).unwrap_or(0.1);
-    let default_slope =
-        if kind.is_some_and(cc_core::SystemKind::is_drainage) { cc_engine::drain_slope(diameter) * 100.0 } else { 0.0 };
+    let default_slope = if kind.is_some_and(cc_core::SystemKind::is_drainage) {
+        cc_engine::drain_slope(project, diameter) * 100.0
+    } else {
+        0.0
+    };
     ui.label(t!("prop-elevation-offset"));
     let mut offset = state.mep.offset.unwrap_or(default_offset);
     if ui.add(crate::properties::length_drag(&mut offset).speed(0.01)).changed() {
@@ -1075,9 +1078,10 @@ fn segment_options(ui: &mut Ui, state: &mut AppState, type_id: cc_core::ElementT
     }
     if pipe {
         ui.label(t!("col-slope"));
-        let mut slope = state.mep.slope.unwrap_or(default_slope);
-        if ui.add(DragValue::new(&mut slope).speed(0.1).range(-20.0..=20.0).suffix(" %")).changed() {
-            state.mep.slope = Some(slope);
+        // Kept in percent; shown and typed in the project's slope unit.
+        let mut slope = state.mep.slope.unwrap_or(default_slope) / 100.0;
+        if ui.add(crate::properties::slope_drag(&mut slope).range(-0.2..=0.2)).changed() {
+            state.mep.slope = Some(slope * 100.0);
         }
     }
     ui.separator();
