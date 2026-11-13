@@ -234,6 +234,7 @@ registry![
         bracing::BracingCreate,
         rebar::RebarCreate,
         rebar::RebarTypical,
+        wall_rebar::WallRebarCreate,
         connection::ConnectionsCreate,
         analytical::AnalyticalModelGet,
         analytical::AnalyticalExport,

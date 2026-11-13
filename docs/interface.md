@@ -266,6 +266,17 @@ A column type's section is a structural profile. Besides the standard shapes, th
 - **Lifts**: with `max_length` the vertical bars are cut in equal lifts no longer than it, each lapping the next by `lap` (default 40 bar diameters), all at the same heights.
 - **Every column of the type**: `same_type` gives the set to the other columns of the host's type in the same step.
 
+## Wall reinforcement
+
+A structural wall (the *Structural* checkbox of its properties) shows a *Reinforcement* section. *Typical Reinforcement* gives it horizontal and vertical bars every 15 cm near both faces; each set is then listed with its spacing, which can be edited, and a *Remove* button. `wall_rebar_create` (command palette) sets everything else, for the given walls or every structural wall of a level:
+
+- **Faces and covers**: `faces` is `both`, `exterior` or `interior`; `cover_exterior` and `cover_interior` give each face its own cover (a tank's wet and dry faces). The bars lie inside the faces of the wall's structural core, so finishes are not counted.
+- **Horizontal bars**: a `spacing`, or `zones` of spacing by height from the base, closest at the bottom. In an arc wall they are ring bars: each follows the arc at its own radius and is exactly that long in schedules.
+- **Vertical bars**: a `spacing` along the wall's centerline (an even angle in an arc wall), from `from` to `to` above the base, starting `offset` after the wall's start: a second call with half the spacing as `offset` and `to` 1.5 adds the additional bars of the bottom 1.5 m between the main ones. `bottom` and `top` bend the ends: `across` the wall (towards the outside of the bar's face when positive), then `along` the bar (back beside it when positive), so `{"across": 0.12, "along": 0.60}` at the bottom turns the bar 12 cm into the slab and 60 cm up again.
+- **Layers**: `outer` says which family is nearest the faces (`horizontal` by default); the other lies inside it.
+- **Ties**: `ties` puts a hooked bar across the wall at every n-th horizontal and every m-th vertical bar of the exterior face.
+- **Openings, joints and splices**: bars stop the cover clear of doors, windows and free ends; horizontal bars run to an end joined to another wall, where that wall's bars begin; bars longer than `max_length` (default 12 m) are lap spliced by `lap`, neighbouring splices staggered.
+
 ## Structure by material
 
 The *Structure* tab starts with a *Material* group: *Concrete*, *Steel* and *Timber* buttons (one is always on; the choice is kept between sessions). The material swaps the groups made for it: concrete shows *Structure* (Column, Beam, Floor) and *Reinforcement*; steel shows *Structure* (Column, Beam, Bracing), the *Framing* grid group (Columns at Grids, Beams on Grids, Beams Between Columns, Grid Frame, Truss, Steel Building, Light Steel Frame) and *Connections* (Base Plate, End Plate, Fin Plate); timber shows *Structure* (Column, Beam, Bracing), the same grid group with Wood Frame in place of Steel Building and Light Steel Frame, and *Connections* (Bolted Joint, Hanger). Profiles, Foundation, Analytical, Documentation, Datum and Selection show for every material.

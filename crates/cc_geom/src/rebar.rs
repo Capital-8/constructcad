@@ -34,7 +34,7 @@ const MAX_STIRRUPS: usize = 2000;
 const MAX_LAYERS: usize = 4;
 
 /// At most this many bars in one set, splice pieces included.
-const MAX_BARS: usize = 20_000;
+pub(crate) const MAX_BARS: usize = 20_000;
 
 /// Least clear distance between parallel bars: the bar diameter, and 20 mm.
 fn clear_distance(d: f64) -> f64 {
@@ -158,7 +158,11 @@ fn diameter(project: &Project, e: &cc_core::Element) -> Option<f64> {
 }
 
 /// Bars of every reinforcement set whose host has a body.
-pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> BTreeMap<ElementId, RebarGeom> {
+pub fn build_rebar(
+    project: &Project,
+    beams: &BTreeMap<ElementId, BeamGeom>,
+    walls: &BTreeMap<ElementId, crate::WallGeom>,
+) -> BTreeMap<ElementId, RebarGeom> {
     // The largest stirrup of each host: longitudinal bars sit inside it.
     let mut stirrup: BTreeMap<ElementId, f64> = BTreeMap::new();
     for e in project.elements.values() {
@@ -180,6 +184,16 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
             main.entry(r.host).or_insert((r, d));
         }
     }
+    // The sets of each wall, by family and face: layers and ties are placed by them.
+    let mut wall_sets: BTreeMap<ElementId, Vec<(&Rebar, f64)>> = BTreeMap::new();
+    for e in project.elements.values() {
+        if let ElementKind::Rebar(r) = &e.kind
+            && r.layout.in_wall()
+            && let Some(d) = diameter(project, e)
+        {
+            wall_sets.entry(r.host).or_default().push((r, d));
+        }
+    }
     let mut out = BTreeMap::new();
     for e in project.elements.values() {
         let ElementKind::Rebar(r) = &e.kind else { continue };
@@ -192,7 +206,12 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
                 let Some(TypeData::Beam { height, .. }) = project.element_type(host.type_id).map(|t| &t.data) else {
                     continue;
                 };
-                beam_bars(g, *height, r.layout, r.cover, d, ds, r.splice)
+                beam_bars(g, *height, &r.layout, r.cover, d, ds, r.splice)
+            }
+            ElementKind::Wall(_) => {
+                let Some(g) = walls.get(&r.host) else { continue };
+                let all = wall_sets.get(&r.host).map_or(&[][..], |v| v.as_slice());
+                crate::wall_rebar::wall_bars(g, r, d, &wall_context(r, all))
             }
             ElementKind::Column(c) => {
                 let Some(data @ TypeData::Column { section, .. }) = project.element_type(host.type_id).map(|t| &t.data)
@@ -224,6 +243,40 @@ pub fn build_rebar(project: &Project, beams: &BTreeMap<ElementId, BeamGeom>) -> 
         out.insert(e.id, RebarGeom { element: e.id, host: None, diameter: d, bars });
     }
     out
+}
+
+/// What the set `r` needs to know of `all` the sets of its wall.
+fn wall_context<'a>(r: &Rebar, all: &[(&'a Rebar, f64)]) -> crate::wall_rebar::WallSets<'a> {
+    use RebarLayout::{WallHorizontal as H, WallVertical as V};
+    let horizontal = |s: &Rebar| matches!(s.layout, H { .. });
+    let on = |side| move |(s, _): &&(&'a Rebar, f64)| s.layout.wall_side() == Some(side);
+    // The other family near the same face.
+    let other = all
+        .iter()
+        .filter(|(s, _)| s.layout.wall_side() == r.layout.wall_side() && horizontal(s) != horizontal(r))
+        .filter(|(s, _)| matches!(s.layout, H { .. } | V { .. }))
+        .map(|(_, d)| *d)
+        .fold(0.0, f64::max);
+    let first = |side, wanted: bool| {
+        all.iter()
+            .filter(on(side))
+            .find(|(s, _)| matches!(s.layout, H { .. } | V { .. }) && horizontal(s) == wanted)
+            .copied()
+    };
+    // The interior face's outer layer: the set not marked `inner`, else any.
+    let interior = all
+        .iter()
+        .filter(on(cc_core::WallSide::Interior))
+        .filter(|(s, _)| matches!(&s.layout, H { inner: false, .. } | V { inner: false, .. }))
+        .chain(all.iter().filter(on(cc_core::WallSide::Interior)))
+        .map(|(s, d)| (s.cover, *d))
+        .next();
+    crate::wall_rebar::WallSets {
+        other,
+        horizontal: first(cc_core::WallSide::Exterior, true),
+        vertical: first(cc_core::WallSide::Exterior, false),
+        interior,
+    }
 }
 
 /// A shaped bar in the model, `z` up (its level's elevation): closed when its
@@ -281,7 +334,7 @@ fn side_heights(count: u32, spacing: f64, lo: f64, hi: f64) -> Vec<f64> {
 fn beam_bars(
     g: &BeamGeom,
     height: f64,
-    layout: RebarLayout,
+    layout: &RebarLayout,
     cover: f64,
     d: f64,
     ds: f64,
@@ -320,7 +373,7 @@ fn beam_bars(
         bars
     };
     let inset = cover + ds + d / 2.0;
-    match layout {
+    match *layout {
         RebarLayout::Longitudinal { face, count } => {
             let half = (g.half - inset).max(0.0);
             let step = d + clear_distance(d);
@@ -341,8 +394,11 @@ fn beam_bars(
             let heights = side_heights(count, spacing, inset, height - inset);
             runs(heights.into_iter().flat_map(|z| [(-v, z), (v, z)]).collect())
         }
-        // Cross-ties belong to columns.
-        RebarLayout::Ties { .. } => Vec::new(),
+        // Cross-ties belong to columns, wall bars to walls.
+        RebarLayout::Ties { .. }
+        | RebarLayout::WallHorizontal { .. }
+        | RebarLayout::WallVertical { .. }
+        | RebarLayout::WallTies { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = cover + d / 2.0;
             let (v, z0, z1) = ((g.half - inset).max(0.0), inset, (height - inset).max(inset));
@@ -472,8 +528,11 @@ fn column_bars(
             }
             bars
         }
-        // Side bars belong to beams.
-        RebarLayout::Sides { .. } => Vec::new(),
+        // Side bars belong to beams, wall bars to walls.
+        RebarLayout::Sides { .. }
+        | RebarLayout::WallHorizontal { .. }
+        | RebarLayout::WallVertical { .. }
+        | RebarLayout::WallTies { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = r.cover + d / 2.0;
             let (outline, length) = if shape.round {

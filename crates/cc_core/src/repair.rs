@@ -60,18 +60,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Beam(b) => {
             b.top_offset.is_finite() && b.end_offset.is_none_or(f64::is_finite) && finite_points(&[b.start, b.end])
         }
-        ElementKind::Rebar(r) => {
-            let layout = match r.layout {
-                crate::RebarLayout::Longitudinal { count, .. } => (1..=200).contains(&count),
-                crate::RebarLayout::Stirrups { spacing } | crate::RebarLayout::Ties { spacing } => {
-                    spacing.is_finite() && spacing >= 0.02
-                }
-                crate::RebarLayout::Sides { count, spacing } => {
-                    count <= 200 && spacing.is_finite() && (count > 0 || spacing >= 0.02)
-                }
-            };
-            layout && r.cover.is_finite() && r.cover >= 0.0
-        }
+        ElementKind::Rebar(r) => r.layout.is_valid() && r.cover.is_finite() && r.cover >= 0.0,
         ElementKind::ShapedRebar(r) => r.is_valid(),
         ElementKind::Foundation(f) => {
             let shape = match &f.shape {
@@ -412,9 +401,12 @@ impl Project {
                         ElementKind::Door(h) | ElementKind::Window(h) => {
                             self.element(h.host).is_some_and(|w| w.as_wall().is_some())
                         }
-                        ElementKind::Rebar(r) => self
-                            .element(r.host)
-                            .is_some_and(|h| matches!(h.kind, ElementKind::Beam(_) | ElementKind::Column(_))),
+                        // Wall bars in walls, the other layouts in beams and columns.
+                        ElementKind::Rebar(r) => self.element(r.host).is_some_and(|h| match h.kind {
+                            ElementKind::Wall(_) => r.layout.in_wall(),
+                            ElementKind::Beam(_) | ElementKind::Column(_) => !r.layout.in_wall(),
+                            _ => false,
+                        }),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),

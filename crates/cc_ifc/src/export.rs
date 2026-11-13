@@ -1274,9 +1274,13 @@ impl<'a> Exporter<'a> {
             // Shaped bars carry no role (and any imported property sets).
             let (kind, imported) = match &e.kind {
                 ElementKind::Rebar(r) => match r.layout {
-                    cc_core::RebarLayout::Longitudinal { .. } => ("MAIN", &[][..]),
+                    cc_core::RebarLayout::Longitudinal { .. }
+                    | cc_core::RebarLayout::WallHorizontal { .. }
+                    | cc_core::RebarLayout::WallVertical { .. } => ("MAIN", &[][..]),
                     cc_core::RebarLayout::Sides { .. } => ("EDGE", &[][..]),
-                    cc_core::RebarLayout::Stirrups { .. } | cc_core::RebarLayout::Ties { .. } => ("LIGATURE", &[][..]),
+                    cc_core::RebarLayout::Stirrups { .. }
+                    | cc_core::RebarLayout::Ties { .. }
+                    | cc_core::RebarLayout::WallTies { .. } => ("LIGATURE", &[][..]),
                 },
                 ElementKind::ShapedRebar(r) => ("NOTDEFINED", &r.properties[..]),
                 _ => continue,

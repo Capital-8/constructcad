@@ -62,6 +62,7 @@ pub mod types;
 pub mod valve;
 pub mod views;
 pub mod wall_framing;
+pub mod wall_rebar;
 
 use crate::error::{EngineError, Result};
 use crate::session::Session;

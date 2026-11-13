@@ -37,6 +37,7 @@ pub mod stair;
 pub mod strip;
 pub mod topography;
 mod wall;
+mod wall_rebar;
 
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{
