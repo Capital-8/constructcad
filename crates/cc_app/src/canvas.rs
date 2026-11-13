@@ -372,15 +372,21 @@ pub fn view_toolbar(
     nav: ZoomNav,
 ) -> Option<ZoomCommand> {
     let painter = ui.painter_at(rect);
-    let size = egui::vec2(if scale.is_some() { 110.0 } else { 52.0 }, 28.0);
+    let font = egui::FontId::new(12.0, theme::semibold());
+    let text = scale.map(cc_views::format::scale);
+    // Wide enough for a long imperial label (`3/16" = 1'-0"`).
+    let text_width = text
+        .as_ref()
+        .map(|t| painter.layout_no_wrap(t.clone(), font.clone(), PALETTE.text_muted).size().x)
+        .unwrap_or(0.0);
+    let size = egui::vec2(if text.is_some() { (text_width + 64.0).max(110.0) } else { 52.0 }, 28.0);
     let bar = Rect::from_min_size(rect.right_bottom() - size - egui::vec2(12.0, 12.0), size);
     painter.rect_filled(bar.translate(egui::vec2(0.0, 1.0)), 7.0, egui::Color32::from_black_alpha(18));
     painter.rect_filled(bar, 7.0, PALETTE.panel);
     painter.rect_stroke(bar, 7.0, egui::Stroke::new(1.0, PALETTE.border), egui::StrokeKind::Inside);
-    if let Some(scale) = scale {
+    if let Some(text) = text {
         let label = egui::pos2(bar.left() + 12.0, bar.center().y);
-        let font = egui::FontId::new(12.0, theme::semibold());
-        painter.text(label, egui::Align2::LEFT_CENTER, format!("1:{scale}"), font, PALETTE.text_muted);
+        painter.text(label, egui::Align2::LEFT_CENTER, text, font, PALETTE.text_muted);
     }
     let button = Rect::from_center_size(egui::pos2(bar.right() - 30.0, bar.center().y), egui::vec2(24.0, 22.0));
     let arrow = Rect::from_center_size(egui::pos2(bar.right() - 11.0, bar.center().y), egui::vec2(14.0, 22.0));

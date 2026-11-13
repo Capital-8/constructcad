@@ -42,6 +42,7 @@ mod material_browser;
 mod mcp_bridge;
 mod modify;
 mod modify3d;
+mod new_project_dialog;
 mod obj_ui;
 mod opening_place;
 mod paint;

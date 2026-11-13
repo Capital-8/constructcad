@@ -1784,7 +1784,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
     state.ribbon_peek = false;
     match command {
         Home => state.show_home = true,
-        New => actions::guarded(state, PendingAction::New),
+        New => crate::new_project_dialog::open(state),
         Open => actions::guarded(state, PendingAction::Open),
         Save => {
             actions::save(state, false);

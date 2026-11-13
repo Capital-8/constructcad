@@ -65,6 +65,24 @@ impl Default for DimensionStyle {
 }
 
 impl DimensionStyle {
+    /// The default style of a project of `system`: in imperial projects
+    /// round inches on paper (1/8" marks and extensions, 1/16" gaps, the
+    /// text 1/32" off the line).
+    pub fn of(system: crate::MeasurementSystem) -> Self {
+        if system == crate::MeasurementSystem::Metric {
+            return Self::default();
+        }
+        const INCH: f64 = 25.4;
+        DimensionStyle {
+            mark_size: INCH / 8.0,
+            witness_gap: INCH / 16.0,
+            witness_extension: INCH / 8.0,
+            line_extension: INCH / 8.0,
+            text_offset: INCH / 32.0,
+            ..Self::default()
+        }
+    }
+
     /// `value` written with the prefix and the suffix.
     pub fn label(&self, value: &str) -> String {
         format!("{}{value}{}", self.prefix, self.suffix)

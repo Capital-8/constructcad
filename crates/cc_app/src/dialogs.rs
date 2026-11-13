@@ -49,6 +49,8 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::plugins_ui::show(ctx, state);
     // After the library window, which opens it over itself.
     crate::preferences::show(ctx, state);
+    // Before the unsaved changes question its Create may ask.
+    crate::new_project_dialog::show(ctx, state);
     confirm(ctx, state);
     error(ctx, state);
     about(ctx, state);

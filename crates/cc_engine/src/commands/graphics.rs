@@ -913,9 +913,10 @@ pub struct TemplateSet {
     /// New name.
     #[serde(default)]
     pub name: Option<String>,
-    /// Scale denominator.
+    /// Scale: the denominator (e.g. 50 for 1:50), or text such as `"1:50"`
+    /// or an imperial label like `"1/4\" = 1'-0\""` (48).
     #[serde(default)]
-    pub scale: Option<u32>,
+    pub scale: Option<refs::ScaleArg>,
     /// Plans: cut plane height, meters.
     #[serde(default)]
     pub cut_height: Option<f64>,
@@ -965,8 +966,8 @@ impl Command for TemplateSet {
         if let Some(n) = &self.name {
             t.name = template_name(p, n, Some(id))?;
         }
-        if let Some(sc) = self.scale {
-            t.scale = sc.max(1);
+        if let Some(sc) = &self.scale {
+            t.scale = sc.ratio()?;
         }
         if let Some(h) = self.cut_height {
             t.cut_height = refs::finite(h, "cut_height")?;

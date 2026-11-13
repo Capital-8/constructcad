@@ -146,10 +146,10 @@ pub fn snap(view: &ComponentView, p: DVec2, tol: f64) -> (DVec2, bool) {
         }
     }
     if !on_u {
-        pos.x = (pos.x * 1000.0).round() / 1000.0;
+        pos.x = crate::tools::round_fine(pos.x);
     }
     if !on_v {
-        pos.y = (pos.y * 1000.0).round() / 1000.0;
+        pos.y = crate::tools::round_fine(pos.y);
     }
     (pos, on_u || on_v)
 }

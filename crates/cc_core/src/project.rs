@@ -1,8 +1,9 @@
+use crate::dim_style::DimensionStyle;
 use crate::material::Material;
 use crate::{
     CameraState, Category, ColumnSection, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId,
-    FoundationKind, Layer, LayerFunction, LevelId, SectionShape, SheetSize, TypeData, View, ViewCategory, ViewId,
-    ViewKind, Viewport, WallFunction,
+    FoundationKind, Layer, LayerFunction, LevelId, SectionShape, TypeData, View, ViewCategory, ViewId, ViewKind,
+    Viewport, WallFunction,
 };
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
@@ -180,11 +181,24 @@ impl Project {
         Self::from_template_localized(&|_| None)
     }
 
-    /// A new project from the template, naming levels, materials, types and views
-    /// with `translate(key)` (keys `tpl-*`), falling back to Portuguese.
+    /// A new project from the metric template, naming levels, materials,
+    /// types and views with `translate(key)` (keys `tpl-*`), falling back to Portuguese.
     pub fn from_template_localized(translate: &dyn Fn(&str) -> Option<String>) -> Self {
-        let n = |key: &str| translate(key).unwrap_or_else(|| template_default(key).to_string());
+        Self::from_template_system(crate::MeasurementSystem::Metric, translate)
+    }
+
+    /// A new project from the template of `system`, named like
+    /// [`Self::from_template_localized`]. Both templates have the same
+    /// levels, types and views in the same order; the imperial one shows feet
+    /// and inches and sizes its types in round inches.
+    pub fn from_template_system(system: crate::MeasurementSystem, translate: &dyn Fn(&str) -> Option<String>) -> Self {
+        let s = crate::template_spec::TemplateSpec::of(system);
+        let n = |key: &str| {
+            let key = s.library_key(key);
+            translate(key).unwrap_or_else(|| template_default(key).to_string())
+        };
         let mut p = Self::empty();
+        p.units = system.units();
         p.info = ProjectInfo {
             uid: crate::Uid::default(),
             name: n("tpl-project-name"),
@@ -199,7 +213,7 @@ impl Project {
         let first = LevelId(p.alloc_id());
         p.levels = vec![
             Level { id: ground, name: n("tpl-level-ground"), elevation: 0.0 },
-            Level { id: first, name: n("tpl-level-first"), elevation: 3.0 },
+            Level { id: first, name: n("tpl-level-first"), elevation: s.first_level },
         ];
         use crate::material::MaterialClass as C;
         p.materials = [
@@ -240,217 +254,148 @@ impl Project {
             component: names.window_for(op).clone(),
             def: crate::openings::operable_window_def(&names, size, m, op),
         };
-        let types = [
+        let masonry = |(key, plaster, core): (&str, f64, f64)| {
+            let layers = vec![
+                finish(&n("tpl-mat-plaster"), plaster),
+                layer(&n("tpl-mat-masonry"), core),
+                finish(&n("tpl-mat-plaster"), plaster),
+            ];
+            (n(key), TypeData::Wall { layers, function: WallFunction::Exterior, curtain: None })
+        };
+        let column = |key: &str, section: ColumnSection, material: &str| {
+            let material = n(material);
+            let data =
+                TypeData::Column { section, material, profile: None, profile_rotation_deg: 0.0, profile_mirror: false };
+            (n(key), data)
+        };
+        let beam = |key: &str, (width, height): (f64, f64), shape: SectionShape, material: &str| {
+            let material = n(material);
+            let data = TypeData::Beam {
+                width,
+                height,
+                material,
+                shape,
+                profile: None,
+                profile_rotation_deg: 0.0,
+                profile_mirror: false,
+            };
+            (n(key), data)
+        };
+
+        // The types in the order they get their ids (the same in every system).
+        let (partition, partition_thickness) = s.partition;
+        let mut types = vec![
+            masonry(s.masonry[0]),
+            masonry(s.masonry[1]),
             (
-                &n("tpl-type-masonry-15"),
+                n(partition),
                 TypeData::Wall {
-                    layers: vec![
-                        finish(&n("tpl-mat-plaster"), 0.02),
-                        layer(&n("tpl-mat-masonry"), 0.11),
-                        finish(&n("tpl-mat-plaster"), 0.02),
-                    ],
-                    function: WallFunction::Exterior,
-                    curtain: None,
-                },
-            ),
-            (
-                &n("tpl-type-masonry-25"),
-                TypeData::Wall {
-                    layers: vec![
-                        finish(&n("tpl-mat-plaster"), 0.025),
-                        layer(&n("tpl-mat-masonry"), 0.20),
-                        finish(&n("tpl-mat-plaster"), 0.025),
-                    ],
-                    function: WallFunction::Exterior,
-                    curtain: None,
-                },
-            ),
-            (
-                &n("tpl-type-drywall-10"),
-                TypeData::Wall {
-                    layers: vec![layer(&n("tpl-mat-gypsum"), 0.10)],
+                    layers: vec![layer(&n("tpl-mat-gypsum"), partition_thickness)],
                     function: WallFunction::Interior,
                     curtain: None,
                 },
             ),
-            (&n("tpl-type-door-80"), door(0.8, 2.1, &n("tpl-mat-wood"))),
-            (&n("tpl-type-door-90"), door(0.9, 2.1, &n("tpl-mat-wood"))),
-            (&n("tpl-type-window-120"), window(1.2, 1.2, 1.0, &n("tpl-mat-glass"))),
-            (&n("tpl-type-window-150"), window(1.5, 1.0, 1.1, &n("tpl-mat-glass"))),
+        ];
+        for (key, w, h) in s.doors {
+            types.push((n(key), door(w, h, &n("tpl-mat-wood"))));
+        }
+        for (key, w, h, sill) in s.windows {
+            types.push((n(key), window(w, h, sill, &n("tpl-mat-glass"))));
+        }
+        use crate::WindowOperation as W;
+        let operations = [W::SideHungLeft, W::DoubleSideHung, W::TopHung, W::Sliding];
+        for ((key, w, h, sill), op) in s.operable.into_iter().zip(operations) {
+            types.push((n(key), operable((w, h, sill), &n("tpl-mat-glass"), op)));
+        }
+        let (slab, screed, concrete) = s.slab;
+        let (column_rect, side) = s.column_rect;
+        let (column_round, diameter) = s.column_round;
+        let (concrete_beam, beam_width, beam_height) = s.beam;
+        let (h_column, h_size, h_web, h_flange) = s.column_steel_h;
+        let (tube, tube_size, tube_wall) = s.column_steel_tube;
+        let (beam_i, [i_width, i_height, i_web, i_flange]) = s.beam_steel_i;
+        types.extend([
             (
-                &n("tpl-type-window-casement-60"),
-                operable((0.6, 1.0, 1.1), &n("tpl-mat-glass"), crate::WindowOperation::SideHungLeft),
-            ),
-            (
-                &n("tpl-type-window-double-120"),
-                operable((1.2, 1.2, 1.0), &n("tpl-mat-glass"), crate::WindowOperation::DoubleSideHung),
-            ),
-            (
-                &n("tpl-type-window-top-hung-60"),
-                operable((0.6, 0.6, 1.5), &n("tpl-mat-glass"), crate::WindowOperation::TopHung),
-            ),
-            (
-                &n("tpl-type-window-sliding-150"),
-                operable((1.5, 1.2, 1.0), &n("tpl-mat-glass"), crate::WindowOperation::Sliding),
-            ),
-            (
-                &n("tpl-type-slab-12"),
+                n(slab),
                 TypeData::Floor {
-                    layers: vec![finish(&n("tpl-mat-screed"), 0.03), layer(&n("tpl-mat-concrete"), 0.12)],
+                    layers: vec![finish(&n("tpl-mat-screed"), screed), layer(&n("tpl-mat-concrete"), concrete)],
                 },
             ),
-            (&n("tpl-type-ceiling-gypsum"), TypeData::Ceiling { thickness: 0.02, material: n("tpl-mat-gypsum") }),
-            (
-                &n("tpl-type-column-rect"),
-                TypeData::Column {
-                    section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
-                    material: n("tpl-mat-concrete"),
-                    profile: None,
-                    profile_rotation_deg: 0.0,
-                    profile_mirror: false,
+            (n("tpl-type-ceiling-gypsum"), TypeData::Ceiling { thickness: s.ceiling, material: n("tpl-mat-gypsum") }),
+            column(column_rect, ColumnSection::Rectangular { width: side, depth: side }, "tpl-mat-concrete"),
+            column(column_round, ColumnSection::Round { diameter }, "tpl-mat-concrete"),
+            beam(concrete_beam, (beam_width, beam_height), SectionShape::Solid, "tpl-mat-concrete"),
+            column(
+                h_column,
+                ColumnSection::Profile {
+                    width: h_size,
+                    depth: h_size,
+                    shape: SectionShape::I { web: h_web, flange: h_flange },
                 },
+                "tpl-mat-steel",
             ),
-            (
-                &n("tpl-type-column-round"),
-                TypeData::Column {
-                    section: ColumnSection::Round { diameter: 0.3 },
-                    material: n("tpl-mat-concrete"),
-                    profile: None,
-                    profile_rotation_deg: 0.0,
-                    profile_mirror: false,
+            column(
+                tube,
+                ColumnSection::Profile {
+                    width: tube_size,
+                    depth: tube_size,
+                    shape: SectionShape::Tube { wall: tube_wall },
                 },
+                "tpl-mat-steel",
             ),
+            beam(beam_i, (i_width, i_height), SectionShape::I { web: i_web, flange: i_flange }, "tpl-mat-steel"),
+        ]);
+        for (key, diameter) in s.rebars {
+            types.push((n(key), TypeData::Rebar { diameter, material: n("tpl-mat-steel") }));
+        }
+        let kinds = [FoundationKind::Pad, FoundationKind::Strip, FoundationKind::Slab];
+        for ((key, width, length, thickness), kind) in s.footings.into_iter().zip(kinds) {
+            let material = n("tpl-mat-concrete");
+            types.push((n(key), TypeData::Foundation { kind, width, length, thickness, material }));
+        }
+        let (stair, stair_width, max_riser, tread) = s.stair;
+        let (railing, railing_height, post_spacing) = s.railing;
+        types.extend([
             (
-                &n("tpl-type-beam"),
-                TypeData::Beam {
-                    width: 0.15,
-                    height: 0.4,
-                    material: n("tpl-mat-concrete"),
-                    shape: SectionShape::Solid,
-                    profile: None,
-                    profile_rotation_deg: 0.0,
-                    profile_mirror: false,
-                },
-            ),
-            (
-                &n("tpl-type-column-steel-h"),
-                TypeData::Column {
-                    section: ColumnSection::Profile {
-                        width: 0.2,
-                        depth: 0.2,
-                        shape: SectionShape::I { web: 0.009, flange: 0.015 },
-                    },
-                    material: n("tpl-mat-steel"),
-                    profile: None,
-                    profile_rotation_deg: 0.0,
-                    profile_mirror: false,
-                },
-            ),
-            (
-                &n("tpl-type-column-steel-tube"),
-                TypeData::Column {
-                    section: ColumnSection::Profile {
-                        width: 0.15,
-                        depth: 0.15,
-                        shape: SectionShape::Tube { wall: 0.006 },
-                    },
-                    material: n("tpl-mat-steel"),
-                    profile: None,
-                    profile_rotation_deg: 0.0,
-                    profile_mirror: false,
-                },
-            ),
-            (
-                &n("tpl-type-beam-steel-i"),
-                TypeData::Beam {
-                    width: 0.15,
-                    height: 0.3,
-                    material: n("tpl-mat-steel"),
-                    shape: SectionShape::I { web: 0.0071, flange: 0.0107 },
-                    profile: None,
-                    profile_rotation_deg: 0.0,
-                    profile_mirror: false,
-                },
-            ),
-            (&n("tpl-type-rebar-5"), TypeData::Rebar { diameter: 0.005, material: n("tpl-mat-steel") }),
-            (&n("tpl-type-rebar-8"), TypeData::Rebar { diameter: 0.008, material: n("tpl-mat-steel") }),
-            (&n("tpl-type-rebar-10"), TypeData::Rebar { diameter: 0.010, material: n("tpl-mat-steel") }),
-            (&n("tpl-type-rebar-12"), TypeData::Rebar { diameter: 0.0125, material: n("tpl-mat-steel") }),
-            (&n("tpl-type-rebar-16"), TypeData::Rebar { diameter: 0.016, material: n("tpl-mat-steel") }),
-            (
-                &n("tpl-type-footing-pad"),
-                TypeData::Foundation {
-                    kind: FoundationKind::Pad,
-                    width: 1.0,
-                    length: 1.0,
-                    thickness: 0.4,
-                    material: n("tpl-mat-concrete"),
-                },
-            ),
-            (
-                &n("tpl-type-footing-strip"),
-                TypeData::Foundation {
-                    kind: FoundationKind::Strip,
-                    width: 0.2,
-                    length: 1.0,
-                    thickness: 0.4,
-                    material: n("tpl-mat-concrete"),
-                },
-            ),
-            (
-                &n("tpl-type-footing-slab"),
-                TypeData::Foundation {
-                    kind: FoundationKind::Slab,
-                    width: 1.0,
-                    length: 1.0,
-                    thickness: 0.3,
-                    material: n("tpl-mat-concrete"),
-                },
-            ),
-            (
-                &n("tpl-type-stair"),
+                n(stair),
                 TypeData::Stair {
-                    width: 1.0,
-                    max_riser: 0.18,
-                    tread: 0.28,
+                    width: stair_width,
+                    max_riser,
+                    tread,
                     material: n("tpl-mat-concrete"),
                     build: Default::default(),
-                    rules: Default::default(),
+                    rules: crate::template_spec::Defaults::of(system).stair_rules,
                 },
             ),
-            (&n("tpl-type-railing"), TypeData::Railing { height: 1.1, post_spacing: 1.2, material: n("tpl-mat-wood") }),
-            (&n("tpl-type-pipe-20"), TypeData::Pipe { diameter: 0.020, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-pipe-25"), TypeData::Pipe { diameter: 0.025, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-pipe-32"), TypeData::Pipe { diameter: 0.032, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-pipe-sewer-40"), TypeData::Pipe { diameter: 0.040, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-pipe-sewer-50"), TypeData::Pipe { diameter: 0.050, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-pipe-sewer-75"), TypeData::Pipe { diameter: 0.075, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-pipe-sewer-100"), TypeData::Pipe { diameter: 0.100, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-conduit-20"), TypeData::Conduit { diameter: 0.020, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-conduit-25"), TypeData::Conduit { diameter: 0.025, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-conduit-32"), TypeData::Conduit { diameter: 0.032, material: n("tpl-mat-pvc") }),
-            (&n("tpl-type-room"), TypeData::Room {}),
-            (&n("tpl-type-grid"), TypeData::Grid { bubble: 8.0 }),
-            (&n("tpl-type-dimension"), TypeData::Dimension { text_size: 2.5, style: Default::default() }),
-            (&n("tpl-type-text"), TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
-            (&n("tpl-type-text-large"), TypeData::Text { size: 3.5, symbol: crate::LeaderSymbol::Arrow }),
-            (
-                &n("tpl-type-roof-tile"),
-                TypeData::Roof {
-                    layers: vec![finish(&n("tpl-mat-roof-tile"), 0.05), layer(&n("tpl-mat-wood"), 0.10)],
-                    covering: None,
-                    framing: Default::default(),
-                },
-            ),
-        ];
+            (n(railing), TypeData::Railing { height: railing_height, post_spacing, material: n("tpl-mat-wood") }),
+        ]);
+        for (key, diameter) in s.pipes {
+            types.push((n(key), TypeData::Pipe { diameter, material: n("tpl-mat-pvc") }));
+        }
+        for (key, diameter) in s.conduits {
+            types.push((n(key), TypeData::Conduit { diameter, material: n("tpl-mat-pvc") }));
+        }
+        types.extend([
+            (n("tpl-type-room"), TypeData::Room {}),
+            (n(s.grid.0), TypeData::Grid { bubble: s.grid.1 }),
+            (n(s.dimension.0), TypeData::Dimension { text_size: s.dimension.1, style: DimensionStyle::of(system) }),
+        ]);
+        for (key, size) in s.texts {
+            types.push((n(key), TypeData::Text { size, symbol: crate::LeaderSymbol::Arrow }));
+        }
+        types.push((
+            n("tpl-type-roof-tile"),
+            TypeData::Roof {
+                layers: vec![finish(&n("tpl-mat-roof-tile"), s.roof.0), layer(&n("tpl-mat-wood"), s.roof.1)],
+                covering: None,
+                framing: Default::default(),
+            },
+        ));
         for (name, data) in types {
             let id = ElementTypeId(p.alloc_id());
-            p.types.insert(
-                id,
-                ElementType { id, name: name.into(), data, info: Default::default(), uid: Default::default() },
-            );
+            p.types.insert(id, ElementType { id, name, data, info: Default::default(), uid: Default::default() });
         }
-        for (component, name, def) in crate::component::library(&n) {
+        for (component, name, def) in s.sized_library(&n, crate::component::library(&n)) {
             let id = ElementTypeId(p.alloc_id());
             let data = TypeData::Component { component, def };
             p.types.insert(id, ElementType { id, name, data, info: Default::default(), uid: Default::default() });
@@ -463,14 +408,15 @@ impl Project {
             p.views.insert(id, View::new(id, name, scale, kind));
             id
         };
-        let plan = add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::floor_plan(ground));
-        add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::floor_plan(first));
-        add_view(&mut p, &n("tpl-level-ground"), 50, ViewKind::ceiling_plan(ground));
-        add_view(&mut p, &n("tpl-level-first"), 50, ViewKind::ceiling_plan(first));
+        let (plan_scale, model_scale) = (s.plan_scale, s.model_scale);
+        let plan = add_view(&mut p, &n("tpl-level-ground"), plan_scale, ViewKind::floor_plan(ground));
+        add_view(&mut p, &n("tpl-level-first"), plan_scale, ViewKind::floor_plan(first));
+        add_view(&mut p, &n("tpl-level-ground"), plan_scale, ViewKind::ceiling_plan(ground));
+        add_view(&mut p, &n("tpl-level-first"), plan_scale, ViewKind::ceiling_plan(first));
         let threed = add_view(
             &mut p,
             "{3D}",
-            100,
+            model_scale,
             ViewKind::ThreeD { camera: CameraState::default(), analytical: false, rebar: false },
         );
         for (name, direction) in [
@@ -479,10 +425,10 @@ impl Project {
             (&n("tpl-elev-east"), Direction::East),
             (&n("tpl-elev-west"), Direction::West),
         ] {
-            add_view(&mut p, name, 100, ViewKind::Elevation { direction });
+            add_view(&mut p, name, model_scale, ViewKind::Elevation { direction });
         }
         let all_types: Vec<_> = p.types.values().filter(|t| t.category().is_model()).map(|t| t.id).collect();
-        add_view(&mut p, &n("tpl-legend"), 50, ViewKind::Legend { types: all_types });
+        add_view(&mut p, &n("tpl-legend"), plan_scale, ViewKind::Legend { types: all_types });
         for (name, category) in [
             (&n("tpl-schedule-doors"), Category::Door),
             (&n("tpl-schedule-windows"), Category::Window),
@@ -491,27 +437,25 @@ impl Project {
         ] {
             add_view(&mut p, name, 1, ViewKind::Schedule { category, def: Default::default() });
         }
+        let (size, [plan_at, threed_at]) = s.sheet;
         add_view(
             &mut p,
             &n("tpl-sheet-plans"),
             1,
             ViewKind::Sheet {
                 number: "A101".into(),
-                size: SheetSize::A3,
+                size,
                 portrait: false,
                 title_block: None,
                 fields: Default::default(),
                 issue_date: String::new(),
-                viewports: vec![
-                    Viewport { view: plan, center: DVec2::new(130.0, 160.0) },
-                    Viewport { view: threed, center: DVec2::new(320.0, 190.0) },
-                ],
+                viewports: vec![Viewport { view: plan, center: plan_at }, Viewport { view: threed, center: threed_at }],
             },
         );
         let tb = p.add_standard_title_block(&n);
         p.give_sheets_title_block(tb);
         p.ensure_phases(&n);
-        p.add_french_doors(&names, &n);
+        p.add_french_doors(&names, &n, &s.french_doors);
         p.ensure_uids();
         // Last, so the ids of everything above stay as they were.
         p.convert_sections_to_profiles(&n);
@@ -521,14 +465,17 @@ impl Project {
     /// The template's French doors (glazed, from the floor), of one leaf
     /// and of two, shown in its legend. Added last, so the ids of what came
     /// before stay as they were.
-    fn add_french_doors(&mut self, names: &crate::openings::OpeningNames, n: &dyn Fn(&str) -> String) {
+    fn add_french_doors(
+        &mut self,
+        names: &crate::openings::OpeningNames,
+        n: &dyn Fn(&str) -> String,
+        doors: &[crate::template_spec::Sized2; 2],
+    ) {
         use crate::DoorOperation as D;
         let (wood, glass) = (n("tpl-mat-wood"), n("tpl-mat-glass"));
         let mut added = Vec::new();
-        for (key, size, op) in [
-            ("tpl-type-french-door-80", (0.8, 2.2), D::SingleSwingLeft),
-            ("tpl-type-french-door-double-140", (1.4, 2.2), D::DoubleDoor),
-        ] {
+        for ((key, width, height), op) in doors.iter().copied().zip([D::SingleSwingLeft, D::DoubleDoor]) {
+            let size = (width, height);
             let def = crate::openings::french_door_def(
                 names,
                 (size.0, size.1, crate::openings::BOTTOM_RAIL),
@@ -585,15 +532,23 @@ impl Project {
     }
 
     /// Add default room, grid and dimension types to projects created before
-    /// those categories existed.
+    /// those categories existed, sized and named (in Portuguese) like the
+    /// template of the project's measurement system.
     pub fn ensure_annotation_types(&mut self) {
+        let s = crate::template_spec::TemplateSpec::of(self.measurement_system());
+        let n = |key: &str| template_default(s.library_key(key)).to_string();
+        let concrete = n("tpl-mat-concrete");
+        let (column_key, side) = s.column_rect;
+        let (beam_key, beam_width, beam_height) = s.beam;
+        let (stair_key, stair_width, max_riser, tread) = s.stair;
+        let (railing_key, railing_height, post_spacing) = s.railing;
         let defaults = [
             (
                 Category::Column,
-                "tpl-type-column-rect",
+                column_key,
                 TypeData::Column {
-                    section: ColumnSection::Rectangular { width: 0.2, depth: 0.2 },
-                    material: template_default("tpl-mat-concrete").to_string(),
+                    section: ColumnSection::Rectangular { width: side, depth: side },
+                    material: concrete.clone(),
                     profile: None,
                     profile_rotation_deg: 0.0,
                     profile_mirror: false,
@@ -601,11 +556,11 @@ impl Project {
             ),
             (
                 Category::Beam,
-                "tpl-type-beam",
+                beam_key,
                 TypeData::Beam {
-                    width: 0.15,
-                    height: 0.4,
-                    material: template_default("tpl-mat-concrete").to_string(),
+                    width: beam_width,
+                    height: beam_height,
+                    material: concrete.clone(),
                     shape: SectionShape::Solid,
                     profile: None,
                     profile_rotation_deg: 0.0,
@@ -614,97 +569,81 @@ impl Project {
             ),
             (
                 Category::Stair,
-                "tpl-type-stair",
+                stair_key,
                 TypeData::Stair {
-                    width: 1.0,
-                    max_riser: 0.18,
-                    tread: 0.28,
-                    material: template_default("tpl-mat-concrete").to_string(),
+                    width: stair_width,
+                    max_riser,
+                    tread,
+                    material: concrete.clone(),
                     build: Default::default(),
-                    rules: Default::default(),
+                    rules: crate::template_spec::Defaults::of(self.measurement_system()).stair_rules,
                 },
             ),
             (
                 Category::Railing,
-                "tpl-type-railing",
-                TypeData::Railing {
-                    height: 1.1,
-                    post_spacing: 1.2,
-                    material: template_default("tpl-mat-wood").to_string(),
-                },
+                railing_key,
+                TypeData::Railing { height: railing_height, post_spacing, material: n("tpl-mat-wood") },
             ),
             (Category::Room, "tpl-type-room", TypeData::Room {}),
-            (Category::Grid, "tpl-type-grid", TypeData::Grid { bubble: 8.0 }),
+            (Category::Grid, s.grid.0, TypeData::Grid { bubble: s.grid.1 }),
             (
                 Category::Dimension,
-                "tpl-type-dimension",
-                TypeData::Dimension { text_size: 2.5, style: Default::default() },
+                s.dimension.0,
+                TypeData::Dimension { text_size: s.dimension.1, style: DimensionStyle::of(self.measurement_system()) },
             ),
-            (Category::Text, "tpl-type-text", TypeData::Text { size: 2.5, symbol: crate::LeaderSymbol::Arrow }),
+            (Category::Text, s.texts[0].0, TypeData::Text { size: s.texts[0].1, symbol: crate::LeaderSymbol::Arrow }),
         ];
         for (category, key, data) in defaults {
             if self.default_type(category).is_none() {
                 let id = ElementTypeId(self.alloc_id());
-                let name = template_default(key).to_string();
-                self.types
-                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+                self.types.insert(
+                    id,
+                    ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
+                );
             }
         }
         // Projects created before foundations get a pad, a strip and a slab type.
         if self.default_type(Category::Foundation).is_none() {
-            let concrete = template_default("tpl-mat-concrete").to_string();
-            for (key, kind, width, thickness) in [
-                ("tpl-type-footing-pad", crate::FoundationKind::Pad, 1.0, 0.4),
-                ("tpl-type-footing-strip", crate::FoundationKind::Strip, 0.2, 0.4),
-                ("tpl-type-footing-slab", crate::FoundationKind::Slab, 1.0, 0.3),
-            ] {
+            let kinds = [crate::FoundationKind::Pad, crate::FoundationKind::Strip, crate::FoundationKind::Slab];
+            for ((key, width, length, thickness), kind) in s.footings.into_iter().zip(kinds) {
                 let id = ElementTypeId(self.alloc_id());
-                let data = TypeData::Foundation { kind, width, length: 1.0, thickness, material: concrete.clone() };
-                let name = template_default(key).to_string();
-                self.types
-                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+                let data = TypeData::Foundation { kind, width, length, thickness, material: concrete.clone() };
+                self.types.insert(
+                    id,
+                    ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
+                );
             }
         }
         // Projects created before reinforcement get the usual bar diameters, in steel.
         if self.default_type(Category::Rebar).is_none() {
-            let steel = template_default("tpl-mat-steel").to_string();
+            let steel = n("tpl-mat-steel");
             if !self.materials.iter().any(|m| m.name == steel) {
                 let mut m = Material::new(steel.as_str(), [140, 146, 152]);
                 crate::material::template_properties(&mut m, crate::material::MaterialClass::Metal);
                 self.materials.push(m);
             }
-            for (key, diameter) in [
-                ("tpl-type-rebar-5", 0.005),
-                ("tpl-type-rebar-8", 0.008),
-                ("tpl-type-rebar-10", 0.010),
-                ("tpl-type-rebar-12", 0.0125),
-                ("tpl-type-rebar-16", 0.016),
-            ] {
+            for (key, diameter) in s.rebars {
                 let id = ElementTypeId(self.alloc_id());
                 let data = TypeData::Rebar { diameter, material: steel.clone() };
-                let name = template_default(key).to_string();
-                self.types
-                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+                self.types.insert(
+                    id,
+                    ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
+                );
             }
         }
         // Projects created before building services get pipes, conduits, the
         // fixtures and devices of the library and the usual plumbing systems.
         if self.default_type(Category::Pipe).is_none() {
-            let n = |key: &str| template_default(key).to_string();
             let pvc = n("tpl-mat-pvc");
             if !self.materials.iter().any(|m| m.name == pvc) {
                 let mut m = Material::new(pvc.as_str(), [236, 236, 230]);
                 crate::material::template_properties(&mut m, crate::material::MaterialClass::Plastic);
                 self.materials.push(m);
             }
-            let types = [
-                ("tpl-type-pipe-20", TypeData::Pipe { diameter: 0.020, material: pvc.clone() }),
-                ("tpl-type-pipe-25", TypeData::Pipe { diameter: 0.025, material: pvc.clone() }),
-                ("tpl-type-pipe-sewer-50", TypeData::Pipe { diameter: 0.050, material: pvc.clone() }),
-                ("tpl-type-pipe-sewer-100", TypeData::Pipe { diameter: 0.100, material: pvc.clone() }),
-            ];
-            for (key, data) in types {
+            // Two supply pipes and two drain pipes.
+            for (key, diameter) in [0, 1, 4, 6].into_iter().filter_map(|i| s.pipes.get(i).copied()) {
                 let id = ElementTypeId(self.alloc_id());
+                let data = TypeData::Pipe { diameter, material: pvc.clone() };
                 self.types.insert(
                     id,
                     ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
@@ -712,7 +651,7 @@ impl Project {
             }
             // Projects without the library get all of it below.
             if self.default_type(Category::Component).is_some() {
-                for (component, name, def) in crate::component::mep_library(&n) {
+                for (component, name, def) in s.sized_library(&n, crate::component::mep_library(&n)) {
                     let id = ElementTypeId(self.alloc_id());
                     let data = TypeData::Component { component, def };
                     self.types.insert(
@@ -726,18 +665,18 @@ impl Project {
             }
         }
         if self.default_type(Category::Conduit).is_none() {
-            let pvc = template_default("tpl-mat-pvc").to_string();
-            for (key, diameter) in [("tpl-type-conduit-20", 0.020), ("tpl-type-conduit-25", 0.025)] {
+            let pvc = n("tpl-mat-pvc");
+            for (key, diameter) in s.conduits.into_iter().take(2) {
                 let id = ElementTypeId(self.alloc_id());
                 let data = TypeData::Conduit { diameter, material: pvc.clone() };
-                let name = template_default(key).to_string();
-                self.types
-                    .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
+                self.types.insert(
+                    id,
+                    ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
+                );
             }
         }
         // Projects created before components get the default library.
         if self.default_type(Category::Component).is_none() {
-            let n = |key: &str| template_default(key).to_string();
             use crate::material::MaterialClass as C;
             for (key, color, class) in
                 [("tpl-mat-fabric", [120, 132, 150], C::Fabric), ("tpl-mat-porcelain", [240, 240, 236], C::Ceramic)]
@@ -749,13 +688,25 @@ impl Project {
                     self.materials.push(m);
                 }
             }
-            for (component, name, def) in crate::component::library(&n) {
+            for (component, name, def) in s.sized_library(&n, crate::component::library(&n)) {
                 let id = ElementTypeId(self.alloc_id());
                 let data = TypeData::Component { component, def };
                 self.types
                     .insert(id, ElementType { id, name, data, info: Default::default(), uid: crate::Uid::generate() });
             }
         }
+    }
+
+    /// The measurement system of the project: imperial when its lengths
+    /// show in an imperial unit (see [`crate::Units::system`]).
+    pub fn measurement_system(&self) -> crate::MeasurementSystem {
+        self.units.system()
+    }
+
+    /// The sizes and rules things made outside the template get in this
+    /// project's measurement system.
+    pub fn defaults(&self) -> &'static crate::Defaults {
+        crate::Defaults::of(self.measurement_system())
     }
 
     /// Add the usual plumbing systems (names and codes from `n`, keys `tpl-sys-*`).
@@ -1534,6 +1485,56 @@ pub fn template_default(key: &str) -> &'static str {
         "tpl-phase-filter-previous-new" => "Mostrar anterior + novo",
         "tpl-phase-filter-previous" => "Mostrar fase anterior",
         "tpl-phase-filter-demo-new" => "Mostrar demolição + novo",
+        // The imperial template's names.
+        "tpl-imp-type-masonry-6" => "Alvenaria 6\"",
+        "tpl-imp-type-masonry-10" => "Alvenaria 10\"",
+        "tpl-imp-type-drywall-4" => "Divisória gesso 4 7/8\"",
+        "tpl-imp-type-door-32" => "Porta 2'-8\" x 6'-8\"",
+        "tpl-imp-type-door-36" => "Porta 3'-0\" x 6'-8\"",
+        "tpl-imp-type-window-48" => "Janela 4'-0\" x 4'-0\"",
+        "tpl-imp-type-window-60" => "Janela 5'-0\" x 3'-6\"",
+        "tpl-imp-type-window-casement-24" => "Janela de abrir 2'-0\" x 3'-6\"",
+        "tpl-imp-type-window-double-48" => "Janela de abrir 2 folhas 4'-0\" x 4'-0\"",
+        "tpl-imp-type-window-top-hung-24" => "Janela maxim-ar 2'-0\" x 2'-0\"",
+        "tpl-imp-type-window-sliding-60" => "Janela de correr 5'-0\" x 4'-0\"",
+        "tpl-imp-type-slab-5" => "Laje 5\"",
+        "tpl-imp-type-column-rect" => "Pilar 8\" x 8\"",
+        "tpl-imp-type-column-round" => "Pilar circular 12\"",
+        "tpl-imp-type-beam" => "Viga 6\" x 16\"",
+        "tpl-imp-type-column-steel-h" => "Pilar metálico H 8\" x 8\"",
+        "tpl-imp-type-column-steel-tube" => "Pilar metálico tubo 6\" x 6\" x 1/4\"",
+        "tpl-imp-type-beam-steel-i" => "Viga metálica I 12\" x 6 1/2\"",
+        "tpl-imp-type-rebar-3" => "Barra #3",
+        "tpl-imp-type-rebar-4" => "Barra #4",
+        "tpl-imp-type-rebar-5" => "Barra #5",
+        "tpl-imp-type-rebar-6" => "Barra #6",
+        "tpl-imp-type-rebar-8" => "Barra #8",
+        "tpl-imp-type-footing-pad" => "Sapata 3'-0\" x 3'-0\" x 12\"",
+        "tpl-imp-type-footing-strip" => "Viga baldrame 8\" x 16\"",
+        "tpl-imp-type-footing-slab" => "Radier 12\"",
+        "tpl-imp-type-stair" => "Escada 3'-0\"",
+        "tpl-imp-type-railing" => "Guarda-corpo 3'-6\"",
+        "tpl-imp-type-pipe-1-2" => "Tubo PVC soldável 1/2\"",
+        "tpl-imp-type-pipe-3-4" => "Tubo PVC soldável 3/4\"",
+        "tpl-imp-type-pipe-1" => "Tubo PVC soldável 1\"",
+        "tpl-imp-type-pipe-sewer-1-1-2" => "Tubo PVC esgoto 1 1/2\"",
+        "tpl-imp-type-pipe-sewer-2" => "Tubo PVC esgoto 2\"",
+        "tpl-imp-type-pipe-sewer-3" => "Tubo PVC esgoto 3\"",
+        "tpl-imp-type-pipe-sewer-4" => "Tubo PVC esgoto 4\"",
+        "tpl-imp-type-conduit-1-2" => "Eletroduto flexível 1/2\"",
+        "tpl-imp-type-conduit-3-4" => "Eletroduto flexível 3/4\"",
+        "tpl-imp-type-conduit-1" => "Eletroduto flexível 1\"",
+        "tpl-imp-type-grid" => "Eixo 3/8\"",
+        "tpl-imp-type-dimension" => "Cota linear 3/32\"",
+        "tpl-imp-type-text" => "Texto 3/32\"",
+        "tpl-imp-type-text-large" => "Texto 1/8\"",
+        "tpl-imp-type-french-door-32" => "Porta-janela 2'-8\" x 6'-8\"",
+        "tpl-imp-type-french-door-double-60" => "Porta-janela 2 folhas 5'-0\" x 6'-8\"",
+        "tpl-imp-type-table" => "Mesa 4'-0\" x 2'-6\"",
+        "tpl-imp-type-bed" => "Cama casal 5'-0\" x 6'-8\"",
+        "tpl-imp-type-wardrobe" => "Armário 5'-0\"",
+        "tpl-imp-type-kitchen-sink" => "Pia inox 4'-0\"",
+        "tpl-imp-type-floor-drain" => "Ralo sifonado 6\"",
         _ => "?",
     }
 }
@@ -1602,6 +1603,7 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 #[cfg(test)]
 mod sheet_order_tests {
     use super::*;
+    use crate::SheetSize;
 
     #[test]
     fn sheets_sort_by_number_naturally() {

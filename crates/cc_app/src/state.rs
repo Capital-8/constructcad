@@ -30,7 +30,8 @@ pub enum RibbonTab {
 /// An action that discards unsaved changes, waiting for confirmation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PendingAction {
-    New,
+    /// A new project from the template of this measurement system.
+    New(cc_core::MeasurementSystem),
     Open,
     OpenPath(std::path::PathBuf),
     OpenSample(&'static str),
@@ -64,6 +65,8 @@ pub struct Dialogs {
     /// Schedule whose definition dialog is open.
     pub schedule_def: Option<ViewId>,
     pub confirm: Option<PendingAction>,
+    /// The New Project dialog, with the template picked in it.
+    pub new_project: Option<cc_core::MeasurementSystem>,
     pub error: Option<String>,
     pub about: bool,
     /// Plumbing systems and electrical circuits.
@@ -173,6 +176,9 @@ pub struct AppState {
     pub typed: crate::tools::TypedInput,
     /// Default height for new walls.
     pub wall_height: f64,
+    /// The measurement system the tools' sizes were last set for (see
+    /// [`AppState::follow_system`]).
+    pub tool_system: cc_core::MeasurementSystem,
     /// Location line for new walls.
     pub wall_location_line: cc_core::LocationLine,
     /// Plan layout for new stairs (shape, turn, landing, winders, radius).
@@ -281,6 +287,7 @@ impl AppState {
             key_buffer: String::new(),
             typed: Default::default(),
             wall_height: 3.0,
+            tool_system: cc_core::MeasurementSystem::Metric,
             wall_location_line: Default::default(),
             stair_layout: Default::default(),
             sweep: Default::default(),
@@ -321,7 +328,16 @@ impl AppState {
     /// Replace the document (new/open), resetting view state.
     pub fn replace_document(&mut self, doc: Document) {
         let message = std::mem::take(&mut self.message);
-        let wall_height = self.wall_height;
+        // Kept, as the tools' other sizes are reset to the metric defaults
+        // (`follow_system` then sets them for the new project).
+        let imperial_default = 10.0 * cc_core::units::FOOT;
+        let wall_height = if self.tool_system == cc_core::MeasurementSystem::Imperial
+            && (self.wall_height - imperial_default).abs() < 1e-9
+        {
+            3.0
+        } else {
+            self.wall_height
+        };
         let mut textures: Vec<_> = self.view3d.values().filter_map(|v| v.texture).collect();
         textures.append(&mut self.textures_to_free);
         let generation = self.generation + 1;
@@ -349,10 +365,44 @@ impl AppState {
         self.wall_height = wall_height;
     }
 
+    /// Tool sizes still at one measurement system's default take the other
+    /// system's when the project's changes (a new imperial project, or its
+    /// units switched): new walls 3 m or 10'-0" tall, offsets and truss
+    /// depths 1 m or 3'-0", the gaps and spiral radii of new stairs and
+    /// ramps (see [`cc_core::Defaults::flights`]). Sizes the user typed stay.
+    pub fn follow_system(&mut self) {
+        use cc_core::units::FOOT;
+        let system = self.session.doc.project.measurement_system();
+        if system == self.tool_system {
+            return;
+        }
+        let imperial = system == cc_core::MeasurementSystem::Imperial;
+        let (metric_flights, us_flights) = (
+            cc_core::Defaults::of(cc_core::MeasurementSystem::Metric).flights,
+            cc_core::Defaults::of(cc_core::MeasurementSystem::Imperial).flights,
+        );
+        for (value, metric, us) in [
+            (&mut self.wall_height, 3.0, 10.0 * FOOT),
+            (&mut self.modify.offset, 1.0, 3.0 * FOOT),
+            (&mut self.truss.height, 1.0, 3.0 * FOOT),
+            (&mut self.stair_layout.gap, metric_flights.0, us_flights.0),
+            (&mut self.stair_layout.inner_radius, metric_flights.1, us_flights.1),
+            (&mut self.ramp_layout.gap, metric_flights.0, us_flights.0),
+            (&mut self.ramp_layout.inner_radius, metric_flights.2, us_flights.2),
+        ] {
+            let (from, to) = if imperial { (metric, us) } else { (us, metric) };
+            if (*value - from).abs() < 1e-9 {
+                *value = to;
+            }
+        }
+        self.tool_system = system;
+    }
+
     /// Rebuild derived geometry after model changes and drop stale selection.
     pub fn sync(&mut self) {
         // Drawings, schedules and fields format quantities with the project units.
         cc_views::format::set_units(&self.session.doc.project.units);
+        self.follow_system();
         // New elements are built in the active view's phase.
         let project = &self.session.doc.project;
         let view = self.active_view.and_then(|v| project.view(v)).filter(|v| v.kind.is_phased());

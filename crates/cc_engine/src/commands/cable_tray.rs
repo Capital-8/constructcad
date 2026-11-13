@@ -14,10 +14,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// Section of the cable tray type a project gets with its first tray, meters.
-const DEFAULT_WIDTH: f64 = 0.2;
-const DEFAULT_HEIGHT: f64 = 0.1;
-
 /// The material of new cable trays and valves: the project's first metal, else its first material.
 pub(crate) fn metal(p: &Project) -> String {
     p.materials
@@ -28,9 +24,12 @@ pub(crate) fn metal(p: &Project) -> String {
         .unwrap_or_default()
 }
 
-/// A cable tray type of `width` × `height` and `style`, named by its section.
+/// A cable tray type of `width` × `height` and `style`, named by its
+/// section (in millimeters, or in inches in imperial units).
 pub fn new_tray_type(id: ElementTypeId, width: f64, height: f64, style: TrayStyle, material: String) -> ElementType {
-    let mm = |v: f64| format!("{:.0}", v * 1000.0);
+    let mm = |v: f64| {
+        if cc_views::format::imperial() { cc_views::format::inch_size(v) } else { format!("{:.0}", v * 1000.0) }
+    };
     ElementType {
         id,
         name: t!("tpl-type-cable-tray", "width" => mm(width), "height" => mm(height)),
@@ -66,7 +65,7 @@ fn size(v: f64, what: &str, max: f64) -> Result<f64> {
 /// end of a run; else 0.30 m under the level above). Trays meet other trays
 /// at their ends or along them (elbows, tees and crosses are derived), not
 /// conduits or pipes. A project without a cable tray type gets one (200 ×
-/// 100 mm, ladder).
+/// 100 mm, 8" × 4" in imperial projects; ladder).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CableTrayCreate {
@@ -122,7 +121,8 @@ impl Command for CableTrayCreate {
                 Some(t) => t,
                 None => {
                     let id = ElementTypeId(e.alloc_id());
-                    e.add_type(new_tray_type(id, DEFAULT_WIDTH, DEFAULT_HEIGHT, TrayStyle::Ladder, material))
+                    let (width, height) = e.project().defaults().tray;
+                    e.add_type(new_tray_type(id, width, height, TrayStyle::Ladder, material))
                 }
             };
             Ok(add_element(e, level, type_id, ElementKind::CableTray(seg)))
@@ -132,7 +132,7 @@ impl Command for CableTrayCreate {
 }
 
 /// Create a cable tray type: an open channel `width` × `height` (meters;
-/// default 0.2 × 0.1, at most 2 × 1), built as `style` says (`ladder`, the
+/// default 0.2 × 0.1, 8" × 4" in imperial projects; at most 2 × 1), built as `style` says (`ladder`, the
 /// default, `solid_bottom` or `perforated`), in `material` (default: the
 /// project's first metal). The name defaults to its section.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
@@ -160,8 +160,9 @@ impl Command for CableTrayTypeCreate {
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
-        let width = size(self.width.unwrap_or(DEFAULT_WIDTH), "width", MAX_TRAY_WIDTH)?;
-        let height = size(self.height.unwrap_or(DEFAULT_HEIGHT), "height", MAX_TRAY_HEIGHT)?;
+        let (default_width, default_height) = p.defaults().tray;
+        let width = size(self.width.unwrap_or(default_width), "width", MAX_TRAY_WIDTH)?;
+        let height = size(self.height.unwrap_or(default_height), "height", MAX_TRAY_HEIGHT)?;
         let style = self.style.as_deref().map(parse_style).transpose()?.unwrap_or_default();
         let material = match &self.material {
             Some(m) => refs::material(p, &Ref::Name(m.clone()))?,

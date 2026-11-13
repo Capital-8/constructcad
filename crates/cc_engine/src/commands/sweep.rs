@@ -17,13 +17,20 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// The sweep type a project gets with its first sweep: a baseboard.
+/// The sweep type a project gets with its first sweep: a baseboard (10 cm
+/// tall, 4" in imperial projects; see [`cc_core::Defaults::baseboard`]).
 pub fn new_sweep_type(p: &Project, id: ElementTypeId) -> ElementType {
+    let (key, thickness, height) = p.defaults().baseboard;
+    let profile = if p.measurement_system() == cc_core::MeasurementSystem::Metric {
+        baseboard()
+    } else {
+        vec![DVec2::ZERO, DVec2::new(thickness, 0.0), DVec2::new(thickness, height), DVec2::new(0.0, height)]
+    };
     ElementType {
         id,
-        name: t!("tpl-type-baseboard"),
+        name: crate::i18n::tr(key),
         data: TypeData::Sweep {
-            profile: baseboard(),
+            profile,
             material: p.materials.first().map(|m| m.name.clone()).unwrap_or_default(),
             sketch: None,
         },
