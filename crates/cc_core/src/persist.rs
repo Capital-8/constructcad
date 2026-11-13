@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Current file format version. Bump when the schema changes incompatibly.
+/// 28: the ANSI and architectural sheet sizes, and the slope unit
+/// `RisePer12` (`6:12`), which older builds cannot read.
 pub const FORMAT_VERSION: u32 = 28;
 
 /// Largest project file read, bytes (pictures and textures are kept in it).

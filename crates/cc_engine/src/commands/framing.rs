@@ -220,8 +220,10 @@ impl Command for TrussCreate {
         }
         let height = positive(self.height, "height")?;
         let level = refs::level_or_first(p, self.level.as_ref())?;
-        let bottom =
-            finite(self.bottom_offset.unwrap_or_else(|| p.level_height(level, 3.0) - height), "bottom_offset")?;
+        let bottom = finite(
+            self.bottom_offset.unwrap_or_else(|| p.level_height(level, p.defaults().story) - height),
+            "bottom_offset",
+        )?;
         let n = self.panels.map_or_else(|| (length / 1.5).round().max(1.0) as usize, |k| k as usize).clamp(1, 100);
         let pattern = self.pattern.as_deref().unwrap_or("pratt");
         let web = diagonals(pattern, n)?;

@@ -1,3 +1,4 @@
+use crate::dim_style::DimensionStyle;
 use crate::material::Material;
 use crate::{
     CameraState, Category, ColumnSection, Direction, Element, ElementId, ElementKind, ElementType, ElementTypeId,
@@ -363,7 +364,7 @@ impl Project {
                     tread,
                     material: n("tpl-mat-concrete"),
                     build: Default::default(),
-                    rules: Default::default(),
+                    rules: crate::template_spec::Defaults::of(system).stair_rules,
                 },
             ),
             (n(railing), TypeData::Railing { height: railing_height, post_spacing, material: n("tpl-mat-wood") }),
@@ -377,7 +378,7 @@ impl Project {
         types.extend([
             (n("tpl-type-room"), TypeData::Room {}),
             (n(s.grid.0), TypeData::Grid { bubble: s.grid.1 }),
-            (n(s.dimension.0), TypeData::Dimension { text_size: s.dimension.1, style: Default::default() }),
+            (n(s.dimension.0), TypeData::Dimension { text_size: s.dimension.1, style: DimensionStyle::of(system) }),
         ]);
         for (key, size) in s.texts {
             types.push((n(key), TypeData::Text { size, symbol: crate::LeaderSymbol::Arrow }));
@@ -575,7 +576,7 @@ impl Project {
                     tread,
                     material: concrete.clone(),
                     build: Default::default(),
-                    rules: Default::default(),
+                    rules: crate::template_spec::Defaults::of(self.measurement_system()).stair_rules,
                 },
             ),
             (
@@ -588,7 +589,7 @@ impl Project {
             (
                 Category::Dimension,
                 s.dimension.0,
-                TypeData::Dimension { text_size: s.dimension.1, style: Default::default() },
+                TypeData::Dimension { text_size: s.dimension.1, style: DimensionStyle::of(self.measurement_system()) },
             ),
             (Category::Text, s.texts[0].0, TypeData::Text { size: s.texts[0].1, symbol: crate::LeaderSymbol::Arrow }),
         ];
@@ -700,6 +701,12 @@ impl Project {
     /// show in an imperial unit (see [`crate::Units::system`]).
     pub fn measurement_system(&self) -> crate::MeasurementSystem {
         self.units.system()
+    }
+
+    /// The sizes and rules things made outside the template get in this
+    /// project's measurement system.
+    pub fn defaults(&self) -> &'static crate::Defaults {
+        crate::Defaults::of(self.measurement_system())
     }
 
     /// Add the usual plumbing systems (names and codes from `n`, keys `tpl-sys-*`).

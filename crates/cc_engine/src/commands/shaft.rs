@@ -64,7 +64,7 @@ pub struct ShaftCreate {
     /// Top above `top_level`, meters (default 0).
     #[serde(default)]
     pub top_offset: Option<f64>,
-    /// Height when there is no level above, meters (default 3).
+    /// Height when there is no level above, meters (default 3; 10'-0" in imperial projects).
     #[serde(default)]
     pub height: Option<f64>,
     /// Type id or name (default: the category's default type).
@@ -93,7 +93,7 @@ impl Command for ShaftCreate {
         let level = refs::level_or_first(p, self.level.as_ref())?;
         let base_offset = finite(self.base_offset.unwrap_or(0.0), "base_offset")?;
         let top = top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_shaft_top(p, level));
-        let height = positive(self.height.unwrap_or(3.0), "height")?;
+        let height = positive(self.height.unwrap_or(p.defaults().story), "height")?;
         let shaft = Shaft { outline, base_offset, height, top, sketch: drawn };
         if !shaft.is_valid() {
             return Err(EngineError::invalid("the outline encloses no area"));

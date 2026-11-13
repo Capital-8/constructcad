@@ -772,7 +772,7 @@ fn params() -> Vec<FilterParam> {
 
 fn param_label(p: FilterParam) -> String {
     match p {
-        FilterParam::Field(f) => tr(f.key()),
+        FilterParam::Field(f) => crate::properties::field_label(f),
         FilterParam::Elevation => t!("vg-param-elevation"),
     }
 }

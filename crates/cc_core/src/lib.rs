@@ -61,6 +61,7 @@ pub mod stair;
 pub mod structural_profile;
 pub mod sweep;
 mod template_spec;
+pub use template_spec::Defaults;
 pub mod title_block;
 pub mod topography;
 pub mod transform;

@@ -426,7 +426,7 @@ No parameters.
 | `start` | [x, y] | required | Start point of the wall line. |
 | `base_offset` | number | optional | Base offset from the level, meters. |
 | `bulge` | number | optional | Arc walls: tan(sweep / 4), positive when the arc turns counter-clockwise from `start` to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given. |
-| `height` | number | optional | Unconnected height in meters (default 3). |
+| `height` | number | optional | Unconnected height in meters (default 3; 10'-0" in imperial projects). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `location_line` | string | optional | Which line of the wall `start`-`end` is: `Centerline` (default), `CoreCenter`, `FinishExterior`, `FinishInterior`, `CoreExterior` or `CoreInterior`. |
 | `major_arc` | boolean | optional | With `radius`: take the longer of the two arcs (default: the shorter). |
@@ -438,7 +438,7 @@ No parameters.
 
 ### `curtain_type_create`
 
-*edit* — Create a curtain wall type: walls of it are a grid of panels and mullions. `curtain` changes the defaults (vertical and horizontal lines every 1.5 m, glass panels, 5 x 15 cm mullions inside and around) and is shaped like `params.curtain` in `type_get`: `vertical` and `horizontal` {layout: `None`, `FixedDistance`, `FixedNumber` or `MaxSpacing`, spacing, count, justification: `Start`, `Center` or `End`}, `panel` {kind: `Glass` or `Solid`, thickness, material} or {kind: `Empty`} or {kind: `Component`, component: type id}, and `vertical_mullion`, `horizontal_mullion`, `border_mullion` {width, depth, material} or null for none. Place walls of it with `wall_create`.
+*edit* — Create a curtain wall type: walls of it are a grid of panels and mullions. `curtain` changes the defaults (vertical and horizontal lines every 1.5 m, glass panels, 5 x 15 cm mullions inside and around; in imperial projects lines every 5'-0" and 2" x 6" mullions) and is shaped like `params.curtain` in `type_get`: `vertical` and `horizontal` {layout: `None`, `FixedDistance`, `FixedNumber` or `MaxSpacing`, spacing, count, justification: `Start`, `Center` or `End`}, `panel` {kind: `Glass` or `Solid`, thickness, material} or {kind: `Empty`} or {kind: `Component`, component: type id}, and `vertical_mullion`, `horizontal_mullion`, `border_mullion` {width, depth, material} or null for none. Place walls of it with `wall_create`.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -499,14 +499,14 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `bottom_rail` | number | optional | French doors: height of the solid bottom rail of each leaf, meters (default 0.4). |
+| `bottom_rail` | number | optional | French doors: height of the solid bottom rail of each leaf, meters (default 0.4; 1'-4" in imperial projects). |
 | `glass` | string | optional | French doors: material of the panes (default: the template's glass, if the project has it). |
-| `height` | number | optional | Height of the opening, meters (default 2.1, French doors 2.2). |
+| `height` | number | optional | Height of the opening, meters (default 2.1, French doors 2.2; 6'-8" in imperial projects). |
 | `leaves` | integer | optional | Number of leaves: 1 (default) or 2. |
 | `material` | string | optional | Material of the leaves (default: the template's wood, if the project has it). |
-| `name` | string | optional | Type name, unique among door types (default: the component's name and size in centimeters). |
+| `name` | string | optional | Type name, unique among door types (default: the component's name and size, in centimeters; in feet and inches in imperial projects). |
 | `style` | string | optional | `swing` (default) or `french`. |
-| `width` | number | optional | Width of the opening, meters (default 0.8 for one leaf, 1.4 for two). |
+| `width` | number | optional | Width of the opening, meters (default 0.8 for one leaf, 1.4 for two; 2'-8" and 5'-0" in imperial projects). |
 
 ### `window_create`
 
@@ -532,7 +532,7 @@ No parameters.
 | `curves` | [JSON, …] | optional | The outline drawn with curves (lines, arcs, circles, ellipses, rectangles, polygons) instead of `boundary`; loops inside the outline are openings (floors and roofs). The element keeps the curves (see `sketch_get`). |
 | `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
-| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
+| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in imperial projects). Roofs: base above the level (default: top of the tallest wall). |
 | `openings` | [[[x, y], …], …] | optional | Openings through the slab (shafts, stairwells): closed outlines inside the boundary, apart from each other. |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
 
@@ -564,7 +564,7 @@ No parameters.
 | `curves` | [JSON, …] | optional | The outline drawn with curves (lines, arcs, circles, ellipses, rectangles, polygons) instead of `boundary`; loops inside the outline are openings (floors and roofs). The element keeps the curves (see `sketch_get`). |
 | `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
-| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
+| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in imperial projects). Roofs: base above the level (default: top of the tallest wall). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
 
 ### `roof_create`
@@ -578,7 +578,7 @@ No parameters.
 | `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `holes` | [[[x, y], …], …] | optional | Openings through the roof (courtyards): closed outlines inside the boundary, apart from each other. Pitched roofs slope down to their eaves too. |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
-| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
+| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in imperial projects). Roofs: base above the level (default: top of the tallest wall). |
 | `overhang` | number | optional | Overhang beyond the outline, meters (default 0.5). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
 
@@ -755,9 +755,9 @@ No parameters.
 | `host` | integer | required | Beam or column id. |
 | `layout` | string | required | `top`, `bottom`, `perimeter` or `stirrups`. |
 | `count` | integer | optional | Number of longitudinal bars (default: 2 in beams, 4 in columns). |
-| `cover` | number | optional | Concrete cover, meters (default 0.025). |
-| `spacing` | number | optional | Stirrup spacing, meters (default 0.15). |
-| `type` | id or name | optional | Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups). |
+| `cover` | number | optional | Concrete cover, meters (default 0.025; 1 1/2" in imperial projects). |
+| `spacing` | number | optional | Stirrup spacing, meters (default 0.15; 6" in imperial projects). |
+| `type` | id or name | optional | Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups; 1/2" and 3/8" in imperial projects). |
 
 ### `rebar_typical`
 
@@ -820,7 +820,7 @@ No parameters.
 | `curves` | [JSON, …] | optional | The outline drawn with curves (lines, arcs, circles, ellipses, rectangles, polygons) instead of `boundary`; loops inside the outline are openings (floors and roofs). The element keeps the curves (see `sketch_get`). |
 | `from_walls` | boolean | optional | Follow the outer boundary of the walls of the level, leaving interior walls out (exterior faces; interior faces for ceilings). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
-| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6). Roofs: base above the level (default: top of the tallest wall). |
+| `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in imperial projects). Roofs: base above the level (default: top of the tallest wall). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
 
 ### `footings_under_columns`
@@ -851,9 +851,9 @@ No parameters.
 |---|---|---|---|
 | `start` | [x, y] | required | Start of the run (center of the first step's edge). |
 | `direction` | number | optional | Direction of the first flight in plan, degrees counter-clockwise from +X. |
-| `gap` | number | optional | Clear gap between the flights of a U-shaped stair, meters (default 0.1). |
-| `height` | number | optional | Height when there is no level above (default 3). |
-| `inner_radius` | number | optional | Radius of the inner edge of a spiral stair, meters (default 0.15). |
+| `gap` | number | optional | Clear gap between the flights of a U-shaped stair, meters (default 0.1; 4" in imperial projects). |
+| `height` | number | optional | Height when there is no level above (default 3; 10'-0" in imperial projects). |
+| `inner_radius` | number | optional | Radius of the inner edge of a spiral stair, meters (default 0.15; 6" in imperial projects). |
 | `landing` | number | optional | Landing depth along the first flight, meters (default: the stair width). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `number_start` | integer | optional | Number of the first tread (default 1), from -9999 to 9999: another value continues the count of a stair below, for instance. |
@@ -909,9 +909,9 @@ No parameters.
 |---|---|---|---|
 | `start` | [x, y] | required | Foot of the ramp (middle of its lower edge). |
 | `direction` | number | optional | Direction of the first flight in plan, degrees counter-clockwise from +X. |
-| `gap` | number | optional | Clear gap between the flights of a U-shaped ramp, meters (default 0.1). |
-| `height` | number | optional | Height when there is no level above (default 3). |
-| `inner_radius` | number | optional | Radius of the inner edge of a spiral ramp, meters (default 1.5). |
+| `gap` | number | optional | Clear gap between the flights of a U-shaped ramp, meters (default 0.1; 4" in imperial projects). |
+| `height` | number | optional | Height when there is no level above (default 3; 10'-0" in imperial projects). |
+| `inner_radius` | number | optional | Radius of the inner edge of a spiral ramp, meters (default 1.5; 5'-0" in imperial projects). |
 | `landing` | number | optional | Landing length, meters (default: the type's shortest landing). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `shape` | string | optional | Plan shape: `straight` (default), `l_shaped`, `u_shaped` or `spiral`. |
@@ -945,7 +945,7 @@ No parameters.
 | `base_offset` | number | optional | Offset of the base from the level elevation, meters (default 0). |
 | `curves` | [JSON, …] | optional | The base outline drawn with curves (lines, arcs, circles, ellipses, rectangles, polygons) in one loop, instead of `outline`; the mass keeps them. |
 | `floors` | [id or name, …] | optional | Levels (ids or names) where mass floors are taken (default: every level the mass spans). |
-| `height` | number | optional | Height above the base, meters (default: up to the level above, else 3). |
+| `height` | number | optional | Height above the base, meters (default: up to the level above, else 3; 10'-0" in imperial projects). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `outline` | [[x, y], …] | optional | Base outline `[[x, y], …]` in plan, closed (at least three points); or `curves`. |
 | `top` | [[x, y], …] | optional | Top outline of a loft `[[x, y], …]` (default: the base outline, an extrusion). |
@@ -1038,7 +1038,7 @@ No parameters.
 |---|---|---|---|
 | `base_offset` | number | optional | Bottom above the level, meters (default 0). |
 | `curves` | [JSON, …] | optional | The outline drawn with curves (lines, arcs, circles, rectangles…). |
-| `height` | number | optional | Height when there is no level above, meters (default 3). |
+| `height` | number | optional | Height when there is no level above, meters (default 3; 10'-0" in imperial projects). |
 | `level` | id or name | optional | Level id or name of the bottom (default: the lowest level). |
 | `outline` | [[x, y], …] | optional | Outline `[[x, y], …]` in plan, closed (at least three points); or `curves`. |
 | `top_level` | id or name | optional | Level the shaft rises to (default: the highest level above its own). |
@@ -1059,7 +1059,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `base_depth` | number | optional | Depth of the flat base below the lowest point of the surface, meters (default 2). |
+| `base_depth` | number | optional | Depth of the flat base below the lowest point of the surface, meters (default 2; 6'-0" in imperial projects). |
 | `boundary` | [[x, y], …] | optional | Boundary `[[x, y], …]` in plan, closed (at least three points); or `curves`. |
 | `curves` | [JSON, …] | optional | The boundary drawn with curves (lines, arcs, circles, rectangles…). |
 | `level` | id or name | optional | Level id or name the elevations are measured from (default: the lowest level). |
@@ -1084,7 +1084,7 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `contour_interval` | number | optional | Spacing of the contour lines, meters (default 1). |
+| `contour_interval` | number | optional | Spacing of the contour lines, meters (default 1; 1'-0" in imperial projects). |
 | `major_every` | integer | optional | Every this many contours, a major one (default 5). |
 | `material` | string | optional | Material name (default: the project's earth material, added if missing). |
 | `name` | string | optional | Type name (default: the template's terrain name). |
@@ -1161,12 +1161,12 @@ No parameters.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `max_flight_rise` | number | optional | Highest rise of one flight, meters (default 0.80). |
+| `max_flight_rise` | number | optional | Highest rise of one flight, meters (default 0.80; 30" in imperial projects). |
 | `max_slope` | number | optional | Steepest slope, percent (default 8.33). |
-| `min_landing` | number | optional | Shortest landing, meters (default 1.20). |
+| `min_landing` | number | optional | Shortest landing, meters (default 1.20; 60" in imperial projects). |
 | `name` | string | optional | Type name (default: the template's ramp name). |
-| `thickness` | number | optional | Slab thickness, meters (default 0.15). |
-| `width` | number | optional | Width, meters (default 1.2). |
+| `thickness` | number | optional | Slab thickness, meters (default 0.15; 6" in imperial projects). |
+| `width` | number | optional | Width, meters (default 1.2; 4'-0" in imperial projects). |
 
 ### `railing_create`
 
@@ -1181,7 +1181,7 @@ No parameters.
 
 ### `component_place`
 
-*edit* — Place a component (furniture, plumbing fixture, electrical device…) of a component type. Electrical devices default to their usual mounting height (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m, ceiling lights at the level height, data outlets 0.30 m, racks 1.40 m, air terminals on the roof under them, earth electrodes 0.50 m below the level) and may be put on a circuit or system of their kind; lightning protection devices join the first lightning protection system by default.
+*edit* — Place a component (furniture, plumbing fixture, electrical device…) of a component type. Electrical devices default to their usual mounting height (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m, ceiling lights at the level height, data outlets 0.30 m, racks 1.40 m, air terminals on the roof under them, earth electrodes 0.50 m below the level; in imperial projects outlets 1'-6", switches 4'-0", boards and racks 4'-6", wall lights 7'-0") and may be put on a circuit or system of their kind; lightning protection devices join the first lightning protection system by default.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1196,7 +1196,7 @@ No parameters.
 
 ### `pipe_create`
 
-*edit* — Create a pipe from `start` to `end` (or a vertical riser at `start` up or down to `end_offset`), in a plumbing system. Its center line starts `offset` above the level (default: where it starts on a pipe of its system, such as the end of a run or a riser; else 0.60 m for supply and vent pipes, -0.30 m for drains). Drains fall along the flow by `slope` (percent; default 2 % up to 75 mm, 1 % above); other pipes are level unless `end_offset` or `slope` says otherwise.
+*edit* — Create a pipe from `start` to `end` (or a vertical riser at `start` up or down to `end_offset`), in a plumbing system. Its center line starts `offset` above the level (default: where it starts on a pipe of its system, such as the end of a run or a riser; else 0.60 m for supply and vent pipes, -0.30 m for drains; 2'-0" and -1'-0" in imperial projects). Drains fall along the flow by `slope` (percent; default 2 % up to 75 mm, 1 % above; in imperial projects 1/4" per foot up to 3", 1/8" above); other pipes are level unless `end_offset` or `slope` says otherwise.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1225,7 +1225,7 @@ No parameters.
 
 ### `cable_tray_create`
 
-*edit* — Create a cable tray from `start` to `end` (or a vertical run at `start` to `end_offset`) carrying `circuits`. Its center line runs `offset` above the level (default: where it starts on another cable tray, such as the end of a run; else 0.30 m under the level above). Trays meet other trays at their ends or along them (elbows, tees and crosses are derived), not conduits or pipes. A project without a cable tray type gets one (200 × 100 mm, ladder).
+*edit* — Create a cable tray from `start` to `end` (or a vertical run at `start` to `end_offset`) carrying `circuits`. Its center line runs `offset` above the level (default: where it starts on another cable tray, such as the end of a run; else 0.30 m under the level above). Trays meet other trays at their ends or along them (elbows, tees and crosses are derived), not conduits or pipes. A project without a cable tray type gets one (200 × 100 mm, 8" × 4" in imperial projects; ladder).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1239,7 +1239,7 @@ No parameters.
 
 ### `cable_tray_type_create`
 
-*edit* — Create a cable tray type: an open channel `width` × `height` (meters; default 0.2 × 0.1, at most 2 × 1), built as `style` says (`ladder`, the default, `solid_bottom` or `perforated`), in `material` (default: the project's first metal). The name defaults to its section.
+*edit* — Create a cable tray type: an open channel `width` × `height` (meters; default 0.2 × 0.1, 8" × 4" in imperial projects; at most 2 × 1), built as `style` says (`ladder`, the default, `solid_bottom` or `perforated`), in `material` (default: the project's first metal). The name defaults to its section.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1297,11 +1297,11 @@ No parameters.
 
 ### `lps_conductor_type_create`
 
-*edit* — Create a lightning protection conductor type: a round conductor of `diameter` (meters, 2 to 50 mm; default 8 mm) in `material` (default: copper, else the first metal), named by its diameter unless `name` is given.
+*edit* — Create a lightning protection conductor type: a round conductor of `diameter` (meters, 2 to 50 mm; default 8 mm, 3/8" in imperial projects) in `material` (default: copper, else the first metal), named by its diameter unless `name` is given.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `diameter` | number | optional | Diameter, meters. |
+| `diameter` | number | optional | Diameter, meters (default 0.008; 3/8" in imperial projects). |
 | `material` | string | optional | Material name. |
 | `name` | string | optional | Type name. |
 
@@ -1355,7 +1355,7 @@ No parameters.
 
 ### `rack_place`
 
-*edit* — Place a communications rack at `position` (on the wall, `offset` above the level, default 1.40 m) and create the data system its outlets are cabled to. The rack's mark and the system's code are `mark` (default the next free `R1`, `R2`…). A project without a rack type gets one.
+*edit* — Place a communications rack at `position` (on the wall, `offset` above the level, default 1.40 m, 4'-6" in imperial projects) and create the data system its outlets are cabled to. The rack's mark and the system's code are `mark` (default the next free `R1`, `R2`…). A project without a rack type gets one.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -1368,7 +1368,7 @@ No parameters.
 
 ### `data_outlet_place`
 
-*edit* — Place a data (or voice) outlet at `position` (on the wall, `offset` above the level, default 0.30 m), cabled to `rack` (a rack element: its data system) or to the data system `system`; by default to the project's only rack, if it has one. `ports` picks a type with that many jacks (one cable each), made when the project has none; a project without a data outlet type gets one (two jacks).
+*edit* — Place a data (or voice) outlet at `position` (on the wall, `offset` above the level, default 0.30 m, 1'-6" in imperial projects), cabled to `rack` (a rack element: its data system) or to the data system `system`; by default to the project's only rack, if it has one. `ports` picks a type with that many jacks (one cable each), made when the project has none; a project without a data outlet type gets one (two jacks).
 
 | Parameter | Type | | Description |
 |---|---|---|---|

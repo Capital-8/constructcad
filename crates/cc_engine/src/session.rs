@@ -565,6 +565,8 @@ impl Session {
         }
         let outer = self.nesting;
         self.nesting = outer.saturating_add(1);
+        // Names and messages a command writes follow the project's units.
+        self.sync_units();
         let result = if crate::extension::is_extension_name(name) {
             self.execute_extension(name, args, depth)
         } else {

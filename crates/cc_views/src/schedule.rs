@@ -46,6 +46,9 @@ enum Value {
     Key(&'static str),
     Count(usize),
     Length(f64),
+    /// A small length (a thickness, a riser, a tray's section): as a length
+    /// in metric projects, in inches without feet in imperial ones.
+    Size(f64),
     Area(f64),
     Volume(f64),
     Money(f64),
@@ -67,11 +70,13 @@ impl Value {
             Value::Key(k) => Cell::Key(k),
             Value::Count(n) => Cell::Text(n.to_string()),
             Value::Length(v) => Cell::Text(format::meters(*v)),
+            Value::Size(v) if format::imperial() => Cell::Text(format::inch_size(*v)),
+            Value::Size(v) => Cell::Text(format::meters(*v)),
             Value::Area(v) => Cell::Text(format::area(*v)),
             Value::Money(v) => Cell::Text(format::money(*v)),
             Value::Volume(v) => Cell::Text(format::volume(*v)),
-            Value::Weight(v) => Cell::Text(format!("{} kg", format::number(*v, 2))),
-            Value::LinearMass(v) => Cell::Text(format!("{} kg/m", format::number(*v, 2))),
+            Value::Weight(v) => Cell::Text(format::quantity(format::Quantity::Mass, *v, 2)),
+            Value::LinearMass(v) => Cell::Text(format::quantity(format::Quantity::LinearMass, *v, 2)),
             Value::Power(v) => Cell::Text(format!("{} VA", format::number(*v, 0))),
             Value::Number(v) => Cell::Text(format::number(*v, 1)),
             Value::Missing => Cell::Text(String::new()),
@@ -82,6 +87,7 @@ impl Value {
         match self {
             Value::Count(n) => Some(*n as f64),
             Value::Length(v)
+            | Value::Size(v)
             | Value::Area(v)
             | Value::Volume(v)
             | Value::Money(v)
@@ -191,7 +197,8 @@ fn wall_area(project: &Project, e: &Element, w: &cc_core::Wall, cache: &mut Memo
 /// for tubes and Ø for round sections.
 fn section_text(section: cc_core::ColumnSection) -> String {
     use cc_core::{ColumnSection as C, SectionShape as S};
-    let l = format::length;
+    // Lengths in metric projects, inches in imperial ones (`8" × 8"`).
+    let l = |v: f64| format::size(v, format::MetricSize::Length);
     match section {
         C::Rectangular { width, depth } | C::Profile { width, depth, shape: S::Solid } => {
             format!("{} × {}", l(width), l(depth))
@@ -217,7 +224,7 @@ fn section_text(section: cc_core::ColumnSection) -> String {
 /// profile's name otherwise.
 fn profile_text(def: &cc_core::structural_profile::ProfileDef) -> String {
     use cc_core::structural_profile::ProfileShape as P;
-    let l = format::length;
+    let l = |v: f64| format::size(v, format::MetricSize::Length);
     match def.shape {
         P::Rect { b, h, .. } => format!("{} × {}", l(b), l(h)),
         P::Round { d } => format!("Ø {}", l(d)),
@@ -334,7 +341,8 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             (ElementKind::Door(_) | ElementKind::Window(_), _) => {
                 ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(_, h)| Value::Length(h))
             }
-            (_, Some(TypeData::Railing { height, .. } | TypeData::CableTray { height, .. })) => Value::Length(*height),
+            (_, Some(TypeData::Railing { height, .. })) => Value::Length(*height),
+            (_, Some(TypeData::CableTray { height, .. })) => Value::Size(*height),
             (ElementKind::Component(_), _) => {
                 cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.2))
             }
@@ -344,9 +352,8 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             _ if matches!(e.kind, ElementKind::Door(_) | ElementKind::Window(_)) => {
                 ty.and_then(|t| t.opening_size()).map_or(Value::Missing, |(w, _)| Value::Length(w))
             }
-            Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. } | TypeData::CableTray { width, .. }) => {
-                Value::Length(*width)
-            }
+            Some(TypeData::Stair { width, .. } | TypeData::Ramp { width, .. }) => Value::Length(*width),
+            Some(TypeData::CableTray { width, .. }) => Value::Size(*width),
             _ => cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.0)),
         },
         F::Depth => cached_extents(project, e, cache).map_or(Value::Missing, |s| Value::Length(s.1)),
@@ -362,7 +369,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             _ => Value::Missing,
         },
         F::Thickness => match ty {
-            Some(t) if t.thickness() > 0.0 => Value::Length(t.thickness()),
+            Some(t) if t.thickness() > 0.0 => Value::Size(t.thickness()),
             _ => Value::Missing,
         },
         F::Area => match &e.kind {
@@ -437,17 +444,11 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
         F::Material => ty.map_or(Value::Missing, |t| text(t.main_material())),
         F::Diameter => {
             match valve_pipe(project, e).map_or(ty, |pipe| project.element_type(pipe.type_id)).map(|t| &t.data) {
-                Some(
-                    TypeData::Rebar { diameter, .. }
-                    | TypeData::Pipe { diameter, .. }
-                    | TypeData::Conduit { diameter, .. }
-                    | TypeData::LightningConductor { diameter, .. },
-                ) if format::imperial() => Value::Text(format!("Ø {}\"", format::inches(*diameter))),
                 Some(TypeData::Rebar { diameter, .. } | TypeData::LightningConductor { diameter, .. }) => {
-                    Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 1)))
+                    Value::Text(format!("Ø {}", format::size(*diameter, format::MetricSize::Mm(1))))
                 }
                 Some(TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. }) => {
-                    Value::Text(format!("Ø {} mm", format::number(diameter * 1000.0, 0)))
+                    Value::Text(format!("Ø {}", format::size(*diameter, format::MetricSize::Mm(0))))
                 }
                 _ => Value::Missing,
             }
@@ -534,7 +535,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
         F::Risers | F::RiserHeight | F::Run => match &e.kind {
             ElementKind::Stair(s) => match cc_geom::stair_geom(project, e, s) {
                 Some(g) if field == F::Risers => Value::Count(g.risers),
-                Some(g) if field == F::RiserHeight => Value::Length(g.riser),
+                Some(g) if field == F::RiserHeight => Value::Size(g.riser),
                 Some(g) => Value::Length(g.run()),
                 None => Value::Missing,
             },
@@ -658,7 +659,7 @@ pub fn schedule_where(
                 match f {
                     ScheduleField::Length | ScheduleField::CutLength => format::meters(sum),
                     ScheduleField::BarCount => format::number(sum, 0),
-                    ScheduleField::Weight => format!("{} kg", format::number(sum, 2)),
+                    ScheduleField::Weight => format::quantity(format::Quantity::Mass, sum, 2),
                     ScheduleField::Volume | ScheduleField::CutVolume | ScheduleField::FillVolume => format::volume(sum),
                     ScheduleField::Area => format::area(sum),
                     ScheduleField::Cost => format::money(sum),
@@ -673,7 +674,7 @@ pub fn schedule_where(
     };
 
     Table {
-        headers: fields.iter().map(|f| f.key()).collect(),
+        headers: fields.iter().map(|f| f.key_in(project.measurement_system())).collect(),
         rows: rows
             .into_iter()
             .map(|(e, values)| Row { element: e.id, cells: values.iter().map(Value::cell).collect() })

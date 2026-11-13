@@ -63,6 +63,20 @@ pub fn inch_text(meters: f64) -> String {
     }
 }
 
+/// A metric size turned into a round imperial one: the nearest inch up to
+/// a foot, else the nearest 6" (0.1 m is 4", 0.6 m 2'-0", 2.4 m 8'-0").
+pub fn round_imperial(meters: f64) -> f64 {
+    if !meters.is_finite() {
+        return 0.0;
+    }
+    let inches = meters / INCH;
+    let step = if inches.abs() <= 12.0 { 1.0 } else { 6.0 };
+    let rounded = (inches / step).round() * step;
+    // A size never rounds down to nothing.
+    let rounded = if rounded == 0.0 && inches != 0.0 { inches.signum() * 0.25 } else { rounded };
+    rounded * INCH
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum LengthUnit {
     Millimeter,
@@ -199,15 +213,18 @@ pub enum SlopeUnit {
     #[default]
     Percent,
     Degrees,
+    /// The rise per 12 of run, the customary way of US roofs (`6:12`).
+    RisePer12,
 }
 
 impl SlopeUnit {
-    pub const ALL: [SlopeUnit; 2] = [SlopeUnit::Percent, SlopeUnit::Degrees];
+    pub const ALL: [SlopeUnit; 3] = [SlopeUnit::Percent, SlopeUnit::Degrees, SlopeUnit::RisePer12];
 
     pub fn symbol(self) -> &'static str {
         match self {
             SlopeUnit::Percent => "%",
             SlopeUnit::Degrees => "°",
+            SlopeUnit::RisePer12 => ":12",
         }
     }
 }
@@ -297,12 +314,14 @@ impl Default for Units {
 
 impl Units {
     /// US customary units: feet and inches to 1/16", square feet, cubic
-    /// feet, point decimals with comma groups.
+    /// feet, slopes as the rise per 12 (`6:12`), point decimals with comma
+    /// groups.
     pub fn imperial() -> Self {
         Self {
             length: Format { unit: LengthUnit::FeetInches, decimals: 4, symbol: false },
             area: Format { unit: AreaUnit::SquareFoot, decimals: 2, symbol: true },
             volume: Format { unit: VolumeUnit::CubicFoot, decimals: 2, symbol: true },
+            slope: Format { unit: SlopeUnit::RisePer12, decimals: 2, symbol: true },
             style: NumberStyle::PointDecimalCommaGroups,
             ..Self::default()
         }
@@ -352,6 +371,17 @@ mod tests {
         assert_eq!(MeasurementSystem::from_code("us"), None);
         assert_eq!(MeasurementSystem::default(), MeasurementSystem::Metric);
         assert_eq!(Units::default().system(), MeasurementSystem::Metric);
+    }
+
+    #[test]
+    fn round_imperial_sizes() {
+        let inches = |m: f64| round_imperial(m) / INCH;
+        for (m, want) in [(0.1, 4.0), (0.03, 1.0), (0.6, 24.0), (0.45, 18.0), (2.4, 96.0), (1.0, 42.0), (0.0, 0.0)] {
+            assert!((inches(m) - want).abs() < 1e-9, "{m}: {}", inches(m));
+        }
+        assert!((inches(0.002) - 0.25).abs() < 1e-9);
+        assert_eq!(round_imperial(f64::NAN), 0.0);
+        assert!((inches(-0.6) + 24.0).abs() < 1e-9);
     }
 
     #[test]

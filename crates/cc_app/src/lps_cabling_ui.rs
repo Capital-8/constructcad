@@ -60,6 +60,15 @@ fn number(v: &Value, decimals: usize) -> String {
     v.as_f64().map_or_else(|| String::from("–"), |x| cc_views::format::number(x, decimals))
 }
 
+/// A length in meters from a command's output: `12,5 m` in metric projects
+/// (as always), feet and inches in imperial ones.
+pub fn meters_text(v: &Value, decimals: usize) -> String {
+    match v.as_f64() {
+        Some(m) if cc_views::format::imperial() => cc_views::format::length(m),
+        _ => format!("{} m", number(v, decimals)),
+    }
+}
+
 /// The coverage check, for the class picked in the dialog (computed again
 /// when the class or the model changes).
 fn lps_check(ctx: &Context, state: &mut AppState) {
@@ -103,10 +112,10 @@ fn lps_body(ui: &mut Ui, out: &Value, class: &mut LpsClass) {
         });
         ui.end_row();
         ui.label(t!("lps-sphere-radius"));
-        ui.label(format!("{} m", number(&out["sphere_radius"], 0)));
+        ui.label(meters_text(&out["sphere_radius"], 0));
         ui.end_row();
         ui.label(t!("lps-mesh-width"));
-        ui.label(format!("{} m", number(&out["mesh_width"], 0)));
+        ui.label(meters_text(&out["mesh_width"], 0));
         ui.end_row();
         ui.label(t!("lps-air-points"));
         ui.label(out["air_points"].to_string());
@@ -180,8 +189,8 @@ fn cabling_body(ui: &mut Ui, out: &Value) {
             ui.label(r["code"].as_str().unwrap_or(""));
             ui.label(r["outlets"].to_string());
             ui.label(r["cables"].to_string());
-            ui.label(format!("{} m", number(&r["cable_length"], 1)));
-            ui.label(format!("{} m", number(&r["longest_cable"], 1)));
+            ui.label(meters_text(&r["cable_length"], 1));
+            ui.label(meters_text(&r["longest_cable"], 1));
             let over = r["over_limit"].as_u64().unwrap_or(0);
             let color = if over > 0 { PALETTE.warning } else { PALETTE.text_muted };
             ui.label(RichText::new(over.to_string()).color(color));
@@ -189,6 +198,11 @@ fn cabling_body(ui: &mut Ui, out: &Value) {
         }
     });
     ui.add_space(6.0);
-    let limit = number(&out["max_link_length"], 0);
-    ui.label(RichText::new(t!("cabling-note", "limit" => limit)).size(11.0).color(PALETTE.text_faint));
+    let note = if cc_views::format::imperial() {
+        let limit = out["max_link_length"].as_f64().map_or_else(String::new, cc_views::format::length);
+        t!("cabling-imp-note", "limit" => limit, "slack" => cc_views::format::length(cc_core::mep::CABLE_SLACK))
+    } else {
+        t!("cabling-note", "limit" => number(&out["max_link_length"], 0))
+    };
+    ui.label(RichText::new(note).size(11.0).color(PALETTE.text_faint));
 }

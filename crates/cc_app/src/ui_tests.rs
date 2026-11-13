@@ -3062,6 +3062,57 @@ fn paper_sizes_read_in_inches_in_imperial_projects() {
     assert!(harness.query_all_by_role(Role::SpinButton).any(|n| n.value().as_deref() == Some("1/8\"")));
 }
 
+/// In an imperial project a pipe type's diameter reads in inches without
+/// feet and a bare number typed is inches; a stair type's riser too; the
+/// schedule field labels name no metric unit; and the tools' sizes follow
+/// the project's system.
+#[test]
+fn small_sizes_read_in_inches_in_imperial_projects() {
+    let mut state = imperial_state();
+    let inch = cc_core::units::INCH;
+    let pipe = state.project().types.values().find(|t| matches!(t.data, cc_core::TypeData::Pipe { .. })).unwrap().id;
+    state.dialogs.type_editor = Some(pipe);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let diameter = |h: &Harness<'static, AppState>| h.state().project().element_type(pipe).and_then(|t| t.diameter());
+    assert_eq!(diameter(&harness), Some(0.5 * inch));
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    assert!(values.iter().any(|v| v == "1/2\""), "{values:?}");
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some("1/2\"")).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text("3/4");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(diameter(&harness).is_some_and(|d| (d - 0.75 * inch).abs() < 1e-12), "{:?}", diameter(&harness));
+
+    let mut state = imperial_state();
+    let stair = state.project().default_type(cc_core::Category::Stair).unwrap();
+    state.dialogs.type_editor = Some(stair);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    // The riser and the tread, in inches; the width, in feet and inches.
+    for want in ["7 3/4\"", "10\"", "3'-0\""] {
+        assert!(values.iter().any(|v| v == want), "{want}: {values:?}");
+    }
+    assert!(values.iter().all(|v| !v.contains("mm") && !v.contains(" m")), "{values:?}");
+
+    let state = imperial_state();
+    use cc_core::ScheduleField as F;
+    for field in [F::Length, F::Thickness, F::Area, F::Perimeter, F::Volume, F::Height] {
+        let label = crate::properties::field_label(field);
+        assert!(!label.contains("(m") && !label.contains("m²") && !label.contains("m³"), "{label}");
+    }
+    // New walls are 10'-0" tall, the offset 3'-0"; a metric project brings 3 m back.
+    let foot = cc_core::units::FOOT;
+    assert!((state.wall_height - 10.0 * foot).abs() < 1e-9 && (state.modify.offset - 3.0 * foot).abs() < 1e-9);
+    let mut state = state;
+    state.replace_document(cc_core::Document::new(cc_engine::new_project_with(cc_core::MeasurementSystem::Metric)));
+    state.sync();
+    assert_eq!((state.wall_height, state.modify.offset), (3.0, 1.0));
+}
+
 /// New asks for the template first: Cancel keeps the open project, the
 /// Imperial card and Create make an imperial project and remember the
 /// choice, and with unsaved changes the question about them comes after

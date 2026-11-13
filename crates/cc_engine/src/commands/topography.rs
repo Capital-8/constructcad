@@ -10,8 +10,8 @@ use crate::session::Session;
 use crate::t;
 use cc_core::material::{Material, MaterialClass};
 use cc_core::topography::{
-    DEFAULT_BASE_DEPTH, DEFAULT_CONTOUR_INTERVAL, DEFAULT_MAJOR_EVERY, EARTH_COLOR, MAX_OUTLINE, MAX_POINTS,
-    MIN_CONTOUR_INTERVAL, Topography, clean_points, earth_material,
+    DEFAULT_MAJOR_EVERY, EARTH_COLOR, MAX_OUTLINE, MAX_POINTS, MIN_CONTOUR_INTERVAL, Topography, clean_points,
+    earth_material,
 };
 use cc_core::{Category, ElementId, ElementKind, ElementType, ElementTypeId, TypeData};
 use glam::{DVec2, DVec3};
@@ -40,14 +40,15 @@ pub(crate) fn checked_points(list: &[Point3]) -> Result<Vec<DVec3>> {
     Ok(clean_points(&points3(list)?))
 }
 
-/// A terrain type for a project that has none, in `material`.
-pub fn new_topography_type(id: ElementTypeId, material: String) -> ElementType {
+/// A terrain type for a project of `system` that has none, in `material`
+/// (contours every meter, every foot in imperial projects).
+pub fn new_topography_type(id: ElementTypeId, material: String, system: cc_core::MeasurementSystem) -> ElementType {
     ElementType {
         id,
         name: t!("tpl-type-topography"),
         data: TypeData::Topography {
             material,
-            contour_interval: DEFAULT_CONTOUR_INTERVAL,
+            contour_interval: cc_core::Defaults::of(system).terrain.0,
             major_every: DEFAULT_MAJOR_EVERY,
         },
         info: Default::default(),
@@ -95,7 +96,8 @@ pub struct TopographyCreate {
     /// Level id or name the elevations are measured from (default: the lowest level).
     #[serde(default)]
     pub level: Option<Ref>,
-    /// Depth of the flat base below the lowest point of the surface, meters (default 2).
+    /// Depth of the flat base below the lowest point of the surface, meters (default 2; 6'-0" in imperial
+    /// projects).
     #[serde(default)]
     pub base_depth: Option<f64>,
     /// Type id or name (default: the category's default type).
@@ -127,7 +129,7 @@ impl Command for TopographyCreate {
                 "the boundary needs 3 to {MAX_OUTLINE} points (give boundary, curves, or at least three points around)"
             )));
         }
-        let base_depth = positive(self.base_depth.unwrap_or(DEFAULT_BASE_DEPTH), "base_depth")?;
+        let base_depth = positive(self.base_depth.unwrap_or(s.project().defaults().terrain.1), "base_depth")?;
         let topo = Topography { points, boundary, base_depth, sketch: drawn };
         if !topo.is_valid() {
             return Err(EngineError::invalid("the boundary encloses no area"));
@@ -144,7 +146,7 @@ impl Command for TopographyCreate {
                 None => {
                     let material = ensure_earth(e);
                     let id = ElementTypeId(e.alloc_id());
-                    e.add_type(new_topography_type(id, material))
+                    e.add_type(new_topography_type(id, material, e.project().measurement_system()))
                 }
             };
             Ok(add_element(e, level, type_id, ElementKind::Topography(topo)))
@@ -248,7 +250,7 @@ pub struct TopographyTypeCreate {
     /// Material name (default: the project's earth material, added if missing).
     #[serde(default)]
     pub material: Option<String>,
-    /// Spacing of the contour lines, meters (default 1).
+    /// Spacing of the contour lines, meters (default 1; 1'-0" in imperial projects).
     #[serde(default)]
     pub contour_interval: Option<f64>,
     /// Every this many contours, a major one (default 5).
@@ -264,7 +266,8 @@ impl Command for TopographyTypeCreate {
             Some(m) => Some(refs::material(s.project(), &Ref::Name(m))?),
             None => None,
         };
-        let interval = positive(self.contour_interval.unwrap_or(DEFAULT_CONTOUR_INTERVAL), "contour_interval")?;
+        let default_interval = s.project().defaults().terrain.0;
+        let interval = positive(self.contour_interval.unwrap_or(default_interval), "contour_interval")?;
         if interval < MIN_CONTOUR_INTERVAL {
             return Err(EngineError::invalid(format!("contour_interval must be at least {MIN_CONTOUR_INTERVAL}")));
         }
@@ -279,7 +282,7 @@ impl Command for TopographyTypeCreate {
                 None => ensure_earth(e),
             };
             let id = ElementTypeId(e.alloc_id());
-            let mut ty = new_topography_type(id, material);
+            let mut ty = new_topography_type(id, material, e.project().measurement_system());
             if let TypeData::Topography { contour_interval, major_every, .. } = &mut ty.data {
                 (*contour_interval, *major_every) = (interval, major);
             }

@@ -214,8 +214,8 @@ pub fn plane_from_line(kind: ComponentViewKind, a: DVec2, b: DVec2) -> Option<(P
         (ComponentViewKind::ThreeD, _) => return None,
     };
     let at = if vertical { (a.x + b.x) / 2.0 } else { (a.y + b.y) / 2.0 };
-    // To the millimeter.
-    Some((axis, (at * 1000.0).round() / 1000.0))
+    // To the millimeter (1/16" in imperial projects).
+    Some((axis, crate::tools::round_fine(at)))
 }
 
 /// The plane of `view` whose line passes within `tol` (model units) of `p`.
@@ -270,7 +270,7 @@ pub fn connector_from_click(
             .min_by(|a, b| a.0.total_cmp(&b.0));
         match near {
             Some((_, name)) => name.clone(),
-            None => format!("{}", (at * 1000.0).round() / 1000.0),
+            None => format!("{}", crate::tools::round_fine(at)),
         }
     };
     let (u, v) = (snap(true, p.x), snap(false, p.y));

@@ -1332,7 +1332,8 @@ fn plane_props(ui: &mut Ui, state: &mut AppState, def: &ComponentDef, name: &str
     crate::table::row(ui, &t!("comp-env-at"), |ui| {
         at = crate::component_env::draft_field(ui, state, &format!("tb-plane-at:{name}"), &plane.at, 160.0)
     });
-    crate::table::readonly_row(ui, &t!("prop-value"), value.map_or_else(String::new, |v| format!("{v} mm")));
+    let shown = |v: f64| if cc_views::format::imperial() { cc_views::format::paper(v) } else { format!("{v} mm") };
+    crate::table::readonly_row(ui, &t!("prop-value"), value.map_or_else(String::new, shown));
     if at.is_some() || rename.is_some() {
         let command =
             cmd::ComponentRefPlaneSet { type_ref: t.clone(), name: name.to_string(), at, rename: rename.clone() };

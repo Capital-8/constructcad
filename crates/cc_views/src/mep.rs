@@ -192,11 +192,8 @@ pub(crate) fn valve_symbol(
 /// Tag text of a cable tray: its section (width × height, mm or inches) and
 /// the circuits it carries.
 fn tray_tag(project: &Project, e: &Element, width: f64, height: f64) -> String {
-    let size = if format::imperial() {
-        format!("{}\"×{}\"", format::inches(width), format::inches(height))
-    } else {
-        format!("{}×{}", format::number(width * 1000.0, 0), format::number(height * 1000.0, 0))
-    };
+    let mm = |v: f64| format::size(v, format::MetricSize::MmNumber(0));
+    let size = format!("{}×{}", mm(width), mm(height));
     let codes: Vec<&str> = e.systems().iter().filter_map(|s| project.system(*s)).map(|s| s.label()).collect();
     if codes.is_empty() { size } else { format!("{size} ({})", codes.join(", ")) }
 }
@@ -296,11 +293,7 @@ fn circle(c: DVec2, r: f64) -> Vec<DVec2> {
 /// Tag text of a segment: its systems' codes and its diameter.
 fn tag(project: &Project, e: &Element, diameter: f64) -> String {
     let codes: Vec<&str> = e.systems().iter().filter_map(|s| project.system(*s)).map(|s| s.label()).collect();
-    let size = if format::imperial() {
-        format!("Ø{}\"", format::inches(diameter))
-    } else {
-        format!("Ø{}", format::number(diameter * 1000.0, 0))
-    };
+    let size = format!("Ø{}", format::size(diameter, format::MetricSize::MmNumber(0)));
     match e.kind {
         // Conduits carry circuit numbers; pipes their system code.
         ElementKind::Conduit(_) if !codes.is_empty() => format!("{size} ({})", codes.join(", ")),

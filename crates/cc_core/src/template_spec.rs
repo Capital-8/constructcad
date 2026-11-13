@@ -7,7 +7,7 @@
 //! values are written in inches or feet and kept exact multiples of 1/16".
 
 use crate::units::{FOOT, INCH};
-use crate::{MeasurementSystem, SheetSize};
+use crate::{MeasurementSystem, RampRules, SheetSize, StairRules, TreadRule};
 use glam::DVec2;
 
 /// A name key and a value.
@@ -22,6 +22,8 @@ pub(crate) type Sized3 = (&'static str, f64, f64, f64);
 pub(crate) type SizedLibraryType = (&'static str, &'static str, &'static [Sized1]);
 
 pub(crate) struct TemplateSpec {
+    /// The system the template measures in.
+    pub system: MeasurementSystem,
     /// Elevation of the upper level.
     pub first_level: f64,
     /// The two masonry walls: key, plaster on each side, masonry core.
@@ -99,6 +101,7 @@ impl TemplateSpec {
 }
 
 const METRIC: TemplateSpec = TemplateSpec {
+    system: MeasurementSystem::Metric,
     first_level: 3.0,
     masonry: [("tpl-type-masonry-15", 0.02, 0.11), ("tpl-type-masonry-25", 0.025, 0.20)],
     partition: ("tpl-type-drywall-10", 0.10),
@@ -159,6 +162,7 @@ const PAPER_INCH: f64 = 25.4;
 const ANSI_B: (f64, f64) = (17.0 * PAPER_INCH, 11.0 * PAPER_INCH);
 
 const IMPERIAL: TemplateSpec = TemplateSpec {
+    system: MeasurementSystem::Imperial,
     first_level: 10.0 * FOOT,
     masonry: [
         ("tpl-imp-type-masonry-6", 0.75 * INCH, 4.5 * INCH),
@@ -199,7 +203,9 @@ const IMPERIAL: TemplateSpec = TemplateSpec {
         ("tpl-imp-type-footing-strip", 8.0 * INCH, 3.0 * FOOT, 16.0 * INCH),
         ("tpl-imp-type-footing-slab", 3.0 * FOOT, 3.0 * FOOT, 12.0 * INCH),
     ],
-    stair: ("tpl-imp-type-stair", 3.0 * FOOT, 7.0 * INCH, 11.0 * INCH),
+    // The customary limits: risers up to 7 3/4", treads of 10" (see the
+    // stair rules of `IMPERIAL_DEFAULTS`).
+    stair: ("tpl-imp-type-stair", 3.0 * FOOT, 7.75 * INCH, 10.0 * INCH),
     railing: ("tpl-imp-type-railing", 42.0 * INCH, 4.0 * FOOT),
     pipes: [
         ("tpl-imp-type-pipe-1-2", 0.5 * INCH),
@@ -248,15 +254,143 @@ const IMPERIAL: TemplateSpec = TemplateSpec {
     ],
 };
 
+/// Sizes and rules that commands and tools give what they create outside
+/// the template, per measurement system (meters; see [`Defaults::of`] and
+/// [`crate::Project::defaults`]). The metric values are the ones these
+/// places always used; the imperial ones are round customary sizes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Defaults {
+    /// Story height when there is no level above (walls, columns, stairs,
+    /// ramps, masses, shafts, roofs).
+    pub story: f64,
+    /// Ceiling height when there is no level above (conduits, cable trays,
+    /// ceiling lights, air terminals).
+    pub ceiling: f64,
+    /// Height of new ceilings above their level.
+    pub ceiling_offset: f64,
+    /// The ramp type made with the first ramp: name key, width, slab.
+    pub ramp: (&'static str, f64, f64),
+    /// The rules of new ramp types.
+    pub ramp_rules: RampRules,
+    /// The rules of the template's stair type.
+    pub stair_rules: StairRules,
+    /// New stairs and ramps: the gap between U-shaped flights, the inner
+    /// radius of a spiral stair and of a spiral ramp.
+    pub flights: (f64, f64, f64),
+    /// The baseboard made with the first sweep: name key, thickness, height.
+    pub baseboard: (&'static str, f64, f64),
+    /// The cable tray type made with the first tray: width, height.
+    pub tray: (f64, f64),
+    /// How far a new cable tray runs under the level above.
+    pub tray_clearance: f64,
+    /// The conductor type made with the first conductor: name key (with a
+    /// `diameter` placeholder), diameter.
+    pub conductor: (&'static str, f64),
+    /// New door types: width of one leaf, of two leaves, height, French
+    /// door height, French door bottom rail.
+    pub door: [f64; 5],
+    /// Elevation of new supply pipes and of new drains above their level.
+    pub pipes: (f64, f64),
+    /// Least fall of a horizontal drain: up to the first diameter the
+    /// second slope, larger ones the third.
+    pub drain_fall: (f64, f64, f64),
+    /// Mounting height of new outlets, switches, wall lights, boards, data
+    /// outlets and racks.
+    pub devices: [f64; 6],
+    /// New terrain types: contour interval; new terrains: base depth.
+    pub terrain: (f64, f64),
+    /// New curtain wall types: grid spacing, mullion width and depth, glass.
+    pub curtain: (f64, f64, f64, f64),
+    /// Rebar: cover, stirrup spacing, and the diameters of the bar types
+    /// sought for main bars, top bars and stirrups.
+    pub rebar: [f64; 5],
+}
+
+impl Defaults {
+    pub fn of(system: MeasurementSystem) -> &'static Defaults {
+        match system {
+            MeasurementSystem::Metric => &METRIC_DEFAULTS,
+            MeasurementSystem::Imperial => &IMPERIAL_DEFAULTS,
+        }
+    }
+}
+
+const METRIC_DEFAULTS: Defaults = Defaults {
+    story: 3.0,
+    ceiling: 2.8,
+    ceiling_offset: 2.6,
+    ramp: ("tpl-type-ramp", 1.2, 0.15),
+    ramp_rules: RampRules { max_slope: 0.0833, max_flight_rise: 0.8, min_landing: 1.2 },
+    stair_rules: StairRules {
+        tread_rule: TreadRule::Fixed,
+        min_riser: 0.16,
+        min_tread: 0.28,
+        blondel_min: 0.63,
+        blondel_max: 0.65,
+    },
+    flights: (0.1, 0.15, 1.5),
+    baseboard: ("tpl-type-baseboard", 0.015, 0.1),
+    tray: (0.2, 0.1),
+    tray_clearance: 0.3,
+    conductor: ("tpl-type-lightning-conductor", 0.008),
+    door: [0.8, 1.4, 2.1, 2.2, crate::openings::BOTTOM_RAIL],
+    pipes: (0.6, -0.3),
+    drain_fall: (0.0751, 0.02, 0.01),
+    devices: [0.3, 1.1, 2.1, 1.3, 0.3, 1.4],
+    terrain: (crate::topography::DEFAULT_CONTOUR_INTERVAL, crate::topography::DEFAULT_BASE_DEPTH),
+    curtain: (1.5, 0.05, 0.15, 0.024),
+    rebar: [0.025, 0.15, 0.010, 0.008, 0.005],
+};
+
+const IMPERIAL_DEFAULTS: Defaults = Defaults {
+    story: 10.0 * FOOT,
+    ceiling: 9.0 * FOOT,
+    ceiling_offset: 8.0 * FOOT,
+    ramp: ("tpl-imp-type-ramp", 4.0 * FOOT, 6.0 * INCH),
+    // A 1:12 slope, 30" of rise per run, 60" landings.
+    ramp_rules: RampRules { max_slope: 1.0 / 12.0, max_flight_rise: 30.0 * INCH, min_landing: 60.0 * INCH },
+    // Risers of 4" or more, treads of 10" or more, 2R + T from 24" to 25".
+    stair_rules: StairRules {
+        tread_rule: TreadRule::Fixed,
+        min_riser: 4.0 * INCH,
+        min_tread: 10.0 * INCH,
+        blondel_min: 24.0 * INCH,
+        blondel_max: 25.0 * INCH,
+    },
+    flights: (4.0 * INCH, 6.0 * INCH, 5.0 * FOOT),
+    baseboard: ("tpl-imp-type-baseboard", 0.625 * INCH, 4.0 * INCH),
+    tray: (8.0 * INCH, 4.0 * INCH),
+    tray_clearance: 1.0 * FOOT,
+    conductor: ("tpl-imp-type-lightning-conductor", 0.375 * INCH),
+    door: [32.0 * INCH, 60.0 * INCH, 80.0 * INCH, 80.0 * INCH, 16.0 * INCH],
+    pipes: (2.0 * FOOT, -FOOT),
+    // 1/4" per foot up to 3", 1/8" per foot from 4".
+    drain_fall: (3.01 * INCH, 0.25 / 12.0, 0.125 / 12.0),
+    devices: [18.0 * INCH, 48.0 * INCH, 7.0 * FOOT, 54.0 * INCH, 18.0 * INCH, 54.0 * INCH],
+    terrain: (1.0 * FOOT, 6.0 * FOOT),
+    // Lines every 5'-0", 2" x 6" mullions, 1" insulating glass.
+    curtain: (5.0 * FOOT, 2.0 * INCH, 6.0 * INCH, 1.0 * INCH),
+    rebar: [1.5 * INCH, 6.0 * INCH, 0.5 * INCH, 0.375 * INCH, 0.375 * INCH],
+};
+
 impl TemplateSpec {
     /// `library` (component, type name, definition, as the component
     /// library makes it with names from `n`) with the types whose name
-    /// states a size given that size in this system.
+    /// states a size given that size in this system; in imperial projects
+    /// the other sizes rounded to whole inches (feet and half feet above a
+    /// foot, see [`crate::units::round_imperial`]).
     pub(crate) fn sized_library(
         &self,
         n: &dyn Fn(&str) -> String,
         mut library: Vec<(String, String, crate::ComponentDef)>,
     ) -> Vec<(String, String, crate::ComponentDef)> {
+        if self.system == MeasurementSystem::Imperial {
+            for (_, _, def) in library.iter_mut() {
+                for p in def.params.iter_mut().filter(|p| p.kind == crate::ParamKind::Length) {
+                    p.value = crate::units::round_imperial(p.value);
+                }
+            }
+        }
         for (_, key, params) in self.library {
             let name = n(key);
             for (_, _, def) in library.iter_mut().filter(|(_, type_name, _)| *type_name == name) {
@@ -429,6 +563,69 @@ mod tests {
         let table = p.types.values().find(|t| t.name == "Mesa 4'-0\" x 2'-6\"").expect("table");
         let TypeData::Component { def, .. } = &table.data else { panic!("not a component") };
         assert!(def.params.iter().any(|p| (p.value - 48.0 * crate::units::INCH).abs() < 1e-12));
+    }
+
+    #[test]
+    fn metric_defaults_are_the_ones_always_used() {
+        let d = crate::Defaults::of(MeasurementSystem::Metric);
+        assert_eq!(d.stair_rules, crate::StairRules::default());
+        assert_eq!(d.ramp_rules, crate::RampRules::default());
+        assert_eq!(d.door[4], crate::openings::BOTTOM_RAIL);
+        assert_eq!(d.terrain.0, crate::topography::DEFAULT_CONTOUR_INTERVAL);
+        let (stair, ramp) = (crate::StairLayout::default(), crate::RampLayout::default());
+        assert_eq!(d.flights, (stair.gap, stair.inner_radius, ramp.inner_radius));
+        assert_eq!(d.flights.0, ramp.gap);
+        assert_eq!(Project::from_template().defaults().story, 3.0);
+        assert_eq!(imperial().defaults().story, 10.0 * crate::units::FOOT);
+    }
+
+    #[test]
+    fn imperial_defaults_are_round_inches() {
+        let d = crate::Defaults::of(MeasurementSystem::Imperial);
+        let r = &d.stair_rules;
+        let mut sizes = vec![
+            d.story,
+            d.ceiling,
+            d.ceiling_offset,
+            d.ramp.1,
+            d.ramp.2,
+            d.baseboard.1,
+            d.baseboard.2,
+            d.tray.0,
+            d.tray.1,
+        ];
+        sizes.extend([d.tray_clearance, d.conductor.1, d.pipes.0, -d.pipes.1, d.terrain.0, d.terrain.1]);
+        sizes.extend([r.min_riser, r.min_tread, r.blondel_min, r.blondel_max, d.flights.0, d.flights.1, d.flights.2]);
+        sizes.extend([d.ramp_rules.max_flight_rise, d.ramp_rules.min_landing, d.curtain.0, d.curtain.1, d.curtain.2]);
+        sizes.extend(d.door.iter().chain(&d.devices).chain(&d.rebar));
+        for v in sizes {
+            assert!(sixteenths(v), "{v} m is not a whole 1/16\"");
+        }
+        // The template's stair keeps its own rules: 16 risers of 7 1/2" and
+        // 10" treads make 25".
+        let p = imperial();
+        let stair = p.types.values().find(|t| t.category() == Category::Stair).expect("stair");
+        let TypeData::Stair { max_riser, tread, rules, .. } = &stair.data else { panic!("a stair type") };
+        assert_eq!(rules, &d.stair_rules);
+        let check = crate::StairCheck::new(16, 7.5 * crate::units::INCH, *tread, *max_riser, rules, None);
+        assert!(check.ok(), "{:?}", check.issues);
+    }
+
+    #[test]
+    fn imperial_library_sizes_are_round_inches() {
+        let p = imperial();
+        let mut checked = 0;
+        for t in p.types.values() {
+            let TypeData::Component { def, .. } = &t.data else { continue };
+            if !def.sheet.is_empty() || def.opening.is_some() {
+                continue;
+            }
+            for param in def.params.iter().filter(|p| p.kind == crate::ParamKind::Length && p.value != 0.0) {
+                assert!(sixteenths(param.value.abs()), "{} {}: {}", t.name, param.name, param.value);
+                checked += 1;
+            }
+        }
+        assert!(checked > 20, "{checked}");
     }
 
     #[test]
