@@ -820,8 +820,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
-            // A foundation slab takes a mesh, like a floor.
-            if matches!(f.shape, cc_core::FoundationShape::Slab { .. }) {
+            // A foundation slab takes a mesh, like a floor; a strip its own bars.
+            if !matches!(f.shape, cc_core::FoundationShape::Pad { .. }) {
                 reinforcement(ui, state, id);
             }
         }
@@ -1086,7 +1086,20 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     opening_rows(ui, state, id, &f.openings, true)
                 });
             }
-            reinforcement(ui, state, id);
+            section(ui, "structural", t!("section-structural"), |ui| {
+                let mut on = f.structural;
+                if row(ui, &t!("prop-structural"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
+                    modify(state, id, "structural", |e| {
+                        if let ElementKind::Floor(f) = &mut e.kind {
+                            f.structural = on;
+                        }
+                    });
+                }
+            });
+            // A structural slab's reinforcement (and any sets another floor has).
+            if f.structural || state.project().rebar_of(id).next().is_some() {
+                reinforcement(ui, state, id);
+            }
         }
         ElementKind::Ceiling(c) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -1339,7 +1352,7 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
     let (units, comma) = format::current();
     let unit = units.length.unit;
     let parse_units = units.clone();
-    let drag = DragValue::new(value)
+    let drag = number_drag(value)
         .speed(0.005)
         .custom_formatter(move |v, _| format::length_number_with(&units, comma, v))
         .custom_parser(move |s| format::parse_length_with(&parse_units, s));
@@ -1357,7 +1370,7 @@ pub fn size_drag(value: &mut f64) -> DragValue<'_> {
         return length_drag(value);
     }
     let parse_units = units.clone();
-    DragValue::new(value)
+    number_drag(value)
         .speed(0.001)
         .custom_formatter(move |v, _| format::inch_size_with(&units, comma, v))
         .custom_parser(move |s| format::parse_size_with(&parse_units, s))
@@ -1381,7 +1394,7 @@ pub fn slope_drag(value: &mut f64) -> DragValue<'_> {
         cc_core::SlopeUnit::Degrees => 0.01,
         cc_core::SlopeUnit::RisePer12 => 1.0 / 48.0,
     };
-    DragValue::new(value)
+    number_drag(value)
         .speed(speed)
         .custom_formatter(move |v, _| format::slope_with(&units, comma, v))
         .custom_parser(move |s| format::parse_slope_with(&parse_units, s))
@@ -1411,10 +1424,10 @@ pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
 fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
     let (units, comma) = format::current();
     if units.system() == cc_core::MeasurementSystem::Metric {
-        return DragValue::new(value).suffix(" mm");
+        return number_drag(value).suffix(" mm");
     }
     let parse_units = units.clone();
-    DragValue::new(value)
+    number_drag(value)
         .custom_formatter(move |v, _| show(&units, comma, v))
         .custom_parser(move |s| format::parse_paper_with(&parse_units, s))
 }
@@ -1489,16 +1502,26 @@ pub fn param_editor(
     }
 }
 
+/// A number field whose typed text is taken when the field is left (Enter,
+/// Tab or a click elsewhere), not at every key. A value written at every key
+/// goes through the model, which clamps or refuses half-typed numbers, and
+/// the field then shows the model's value in place of the text being typed
+/// (issue 319: `1` read `5`, `0.9` over `0.80` gave `0.9.80`). Dragging
+/// still changes the value as it moves.
+pub fn number_drag(value: &mut f64) -> DragValue<'_> {
+    DragValue::new(value).update_while_editing(false)
+}
+
 /// Drag value for a component parameter, with the unit of its kind.
 pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
     match kind {
         cc_core::ParamKind::Length => crate::properties::length_drag(value).speed(0.01),
-        cc_core::ParamKind::Angle => DragValue::new(value).speed(1.0).suffix("°"),
-        cc_core::ParamKind::Boolean => DragValue::new(value).range(0.0..=1.0).speed(1.0),
+        cc_core::ParamKind::Angle => number_drag(value).speed(1.0).suffix("°"),
+        cc_core::ParamKind::Boolean => number_drag(value).range(0.0..=1.0).speed(1.0),
         cc_core::ParamKind::Number
         | cc_core::ParamKind::Text
         | cc_core::ParamKind::Choice
-        | cc_core::ParamKind::Material => DragValue::new(value).speed(0.1),
+        | cc_core::ParamKind::Material => number_drag(value).speed(0.1),
     }
 }
 
@@ -2232,10 +2255,16 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
             readonly_row(ui, label, format!("1/{every_horizontal} × 1/{every_vertical}"));
         }
         // A slab's bars by their spacing, its radial and trimming bars by their count.
-        L::SlabStraight { spacing, .. } | L::SlabRing { spacing, .. } => {
+        L::SlabStraight { spacing, .. }
+        | L::SlabRing { spacing, .. }
+        | L::StripTransverse { spacing, .. }
+        | L::StripLongitudinal { spacing, .. } => {
             length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
                 if let ElementKind::Rebar(x) = &mut e.kind
-                    && let L::SlabStraight { spacing, .. } | L::SlabRing { spacing, .. } = &mut x.layout
+                    && let L::SlabStraight { spacing, .. }
+                    | L::SlabRing { spacing, .. }
+                    | L::StripTransverse { spacing, .. }
+                    | L::StripLongitudinal { spacing, .. } = &mut x.layout
                 {
                     *spacing = v.max(cc_core::wall_bars::MIN_SPACING);
                 }
@@ -2305,6 +2334,12 @@ fn rebar_role(layout: &cc_core::RebarLayout) -> String {
         cc_core::RebarLayout::SlabStraight { top, angle_deg, .. } => {
             format!("{} {angle_deg:.0}° · {}", t!("bars-slab-straight"), slab_layer(*top))
         }
+        cc_core::RebarLayout::StripTransverse { top, .. } => {
+            format!("{} · {}", t!("bars-strip-transverse"), slab_layer(*top))
+        }
+        cc_core::RebarLayout::StripLongitudinal { top, .. } => {
+            format!("{} · {}", t!("bars-strip-longitudinal"), slab_layer(*top))
+        }
         cc_core::RebarLayout::SlabRing { top, .. } => format!("{} · {}", t!("bars-slab-ring"), slab_layer(*top)),
         cc_core::RebarLayout::SlabRadial { top, .. } => format!("{} · {}", t!("bars-slab-radial"), slab_layer(*top)),
         cc_core::RebarLayout::SlabTrim { top, .. } => format!("{} · {}", t!("bars-slab-trim"), slab_layer(*top)),
@@ -2342,11 +2377,17 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         }
         let wall = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Wall(_)));
         if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
-            let slab = matches!(
-                state.project().element(host).map(|e| &e.kind),
-                Some(ElementKind::Floor(_) | ElementKind::Foundation(_))
+            let kind = state.project().element(host).map(|e| e.kind.clone());
+            let strip = matches!(
+                &kind,
+                Some(ElementKind::Foundation(f)) if matches!(f.shape, cc_core::FoundationShape::Strip { .. })
             );
-            if wall {
+            let slab = !strip && matches!(&kind, Some(ElementKind::Floor(_) | ElementKind::Foundation(_)));
+            if strip {
+                let command =
+                    cc_engine::commands::strip_rebar::StripRebarCreate { strips: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else if wall {
                 let command =
                     cc_engine::commands::wall_rebar::WallRebarCreate { walls: vec![host.0], ..Default::default() };
                 crate::actions::run_command(state, command);

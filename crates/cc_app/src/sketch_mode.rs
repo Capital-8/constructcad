@@ -675,7 +675,9 @@ fn create(
         ..Default::default()
     };
     let out = match category {
-        Category::Floor => crate::actions::run_command(state, FloorCreate { sketch, openings: Vec::new() }),
+        Category::Floor => {
+            crate::actions::run_command(state, FloorCreate { sketch, openings: Vec::new(), structural: None })
+        }
         Category::Ceiling => crate::actions::run_command(state, CeilingCreate { sketch }),
         Category::Foundation => {
             crate::actions::run_command(state, cc_engine::commands::foundation::FoundationSlabCreate { sketch })

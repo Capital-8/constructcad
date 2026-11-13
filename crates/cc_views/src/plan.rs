@@ -318,6 +318,13 @@ fn draw_structure(
                 } else {
                     d.polyline(&g.footprint, true, LineStyle::Hidden, id);
                 }
+                // The beam on top of a haunched strip: its two faces.
+                if let (Some(body), Some(h)) = (g.body(), data.and_then(|t| t.strip_haunch())) {
+                    let style = if bottom <= cut_z && cut_z <= top { LineStyle::Projection } else { LineStyle::Hidden };
+                    for v in [-h.beam_width / 2.0, h.beam_width / 2.0] {
+                        d.polyline(&body.line(v), false, style, id);
+                    }
+                }
             }
             (ElementKind::Beam(_), Some(TypeData::Beam { .. })) => {
                 // The body as framed into columns and other beams.

@@ -110,7 +110,7 @@ fn spread(n: usize, half: f64) -> Vec<f64> {
 }
 
 /// Positions `spacing` apart filling `[a, b]`, centered.
-fn stations(a: f64, b: f64, spacing: f64) -> Vec<f64> {
+pub(crate) fn stations(a: f64, b: f64, spacing: f64) -> Vec<f64> {
     if b < a || spacing <= 0.0 {
         return Vec::new();
     }
@@ -162,6 +162,7 @@ pub fn build_rebar(
     project: &Project,
     beams: &BTreeMap<ElementId, BeamGeom>,
     walls: &BTreeMap<ElementId, crate::WallGeom>,
+    foundations: &BTreeMap<ElementId, crate::FoundationGeom>,
 ) -> BTreeMap<ElementId, RebarGeom> {
     // The largest stirrup of each host: longitudinal bars sit inside it.
     let mut stirrup: BTreeMap<ElementId, f64> = BTreeMap::new();
@@ -217,6 +218,40 @@ pub fn build_rebar(
                     continue;
                 };
                 beam_bars(g, *height, &r.layout, r.cover, d, ds, r.splice)
+            }
+            // A strip footing: its own bars, or those of a beam in its beam part.
+            ElementKind::Foundation(f) if matches!(f.shape, cc_core::FoundationShape::Strip { .. }) => {
+                let Some(g) = foundations.get(&r.host).and_then(|f| f.strip.as_ref()) else { continue };
+                let Some(data @ TypeData::Foundation { width, thickness, .. }) =
+                    project.element_type(host.type_id).map(|t| &t.data)
+                else {
+                    continue;
+                };
+                let section = crate::strip_rebar::StripSection {
+                    width: *width,
+                    thickness: *thickness,
+                    haunch: data.strip_haunch(),
+                };
+                if r.layout.in_strip() {
+                    // The bars along the strip lie inside those across it, in the same layer.
+                    let across = |s: &Rebar| match (&s.layout, &r.layout) {
+                        (
+                            RebarLayout::StripTransverse { top: a, .. },
+                            RebarLayout::StripLongitudinal { top: b, .. },
+                        ) => a == b,
+                        _ => false,
+                    };
+                    let other = project
+                        .rebar_of(r.host)
+                        .filter(|(_, s)| across(s))
+                        .filter_map(|(e, _)| diameter(project, e))
+                        .fold(0.0, f64::max);
+                    crate::strip_rebar::strip_bars(g, &section, r, d, other)
+                } else {
+                    // As a beam as wide as the beam part and as deep as the whole section.
+                    let part = BeamGeom { half: section.beam_half(), ..g.clone() };
+                    beam_bars(&part, data.foundation_depth(), &r.layout, r.cover, d, ds, r.splice)
+                }
             }
             ElementKind::Floor(_) | ElementKind::Foundation(_) => {
                 let Some(slab) = crate::slab_rebar::Slab::of(project, host) else { continue };
@@ -435,7 +470,9 @@ fn beam_bars(
         | RebarLayout::SlabStraight { .. }
         | RebarLayout::SlabRing { .. }
         | RebarLayout::SlabRadial { .. }
-        | RebarLayout::SlabTrim { .. } => Vec::new(),
+        | RebarLayout::SlabTrim { .. }
+        | RebarLayout::StripTransverse { .. }
+        | RebarLayout::StripLongitudinal { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = cover + d / 2.0;
             let (v, z0, z1) = ((g.half - inset).max(0.0), inset, (height - inset).max(inset));
@@ -573,7 +610,9 @@ fn column_bars(
         | RebarLayout::SlabStraight { .. }
         | RebarLayout::SlabRing { .. }
         | RebarLayout::SlabRadial { .. }
-        | RebarLayout::SlabTrim { .. } => Vec::new(),
+        | RebarLayout::SlabTrim { .. }
+        | RebarLayout::StripTransverse { .. }
+        | RebarLayout::StripLongitudinal { .. } => Vec::new(),
         RebarLayout::Stirrups { spacing } => {
             let inset = r.cover + d / 2.0;
             let (outline, length) = if shape.round {

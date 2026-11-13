@@ -115,6 +115,13 @@ impl BeamGeom {
         pts
     }
 
+    /// The line `v` across the body from its start face to its end face
+    /// (chords along an arc): an edge of its section in plan.
+    pub fn line(&self, v: f64) -> Vec<DVec2> {
+        let n = self.stations();
+        (0..=n).map(|i| self.world(self.station_u(i as f64 / n as f64, v), v)).collect()
+    }
+
     /// Number of pieces the body is swept in: 1 for a straight beam, the
     /// chords of an arc.
     fn stations(&self) -> usize {

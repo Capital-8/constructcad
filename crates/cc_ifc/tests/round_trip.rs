@@ -470,8 +470,7 @@ fn floor_openings_and_foundation_slabs_round_trip() {
     };
     let mut floor = cc_core::Floor::new(square(0.0, 0.0, 10.0), 3.0);
     floor.openings = vec![square(1.0, 1.0, 2.0), square(5.0, 5.0, 3.0)];
-    let raft =
-        cc_core::Foundation { shape: FoundationShape::Slab { boundary: square(0.0, 0.0, 12.0) }, top_offset: -0.1 };
+    let raft = cc_core::Foundation::new(FoundationShape::Slab { boundary: square(0.0, 0.0, 12.0) }, -0.1);
     for (type_id, kind) in [(floor_t, ElementKind::Floor(floor)), (slab_t, ElementKind::Foundation(raft))] {
         let id = cc_core::ElementId(project.alloc_id());
         let e = Element {

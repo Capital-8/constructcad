@@ -351,7 +351,7 @@ impl Project {
         let kinds = [FoundationKind::Pad, FoundationKind::Strip, FoundationKind::Slab];
         for ((key, width, length, thickness), kind) in s.footings.into_iter().zip(kinds) {
             let material = n("tpl-mat-concrete");
-            types.push((n(key), TypeData::Foundation { kind, width, length, thickness, material }));
+            types.push((n(key), TypeData::Foundation { kind, width, length, thickness, material, haunch: None }));
         }
         let (stair, stair_width, max_riser, tread) = s.stair;
         let (railing, railing_height, post_spacing) = s.railing;
@@ -607,7 +607,8 @@ impl Project {
             let kinds = [crate::FoundationKind::Pad, crate::FoundationKind::Strip, crate::FoundationKind::Slab];
             for ((key, width, length, thickness), kind) in s.footings.into_iter().zip(kinds) {
                 let id = ElementTypeId(self.alloc_id());
-                let data = TypeData::Foundation { kind, width, length, thickness, material: concrete.clone() };
+                let data =
+                    TypeData::Foundation { kind, width, length, thickness, material: concrete.clone(), haunch: None };
                 self.types.insert(
                     id,
                     ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
