@@ -534,6 +534,7 @@ No parameters.
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `offset` | number | optional | Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in imperial projects). Roofs: base above the level (default: top of the tallest wall). |
 | `openings` | [[[x, y], …], …] | optional | Openings through the slab (shafts, stairwells): closed outlines inside the boundary, apart from each other. |
+| `structural` | boolean | optional | A structural slab, one that takes reinforcement (default false). |
 | `type` | id or name | optional | Type id or name (default: the category's default type). |
 
 ### `floor_opening_add`
@@ -837,7 +838,7 @@ No parameters.
 
 ### `slab_rebar_create`
 
-*edit* — Reinforce slabs: floors and foundation slabs of any boundary. `layout` is `mesh` (default): straight bars in two directions, `angle` and square to it, `spacing` (and `cross_spacing`) apart; or `radial`: ring bars `spacing` apart around `center` and `radial_count` radial bars, with shorter bars from `intermediate` between them. The bars go in the `top` and `bottom` layers (`layers`), `cover` inside the faces of the slab's structure, its edge and its openings: each bar is clipped to the true boundary (arcs and circles as drawn), so every bar has its own length (`element_get` lists a set's `derived.bars` by length). `hook` bends the ends of mesh bars at the slab's edge. Bars longer than `max_length` are lap spliced, neighbouring splices staggered. A slab with openings gets trimming bars around them (`trim`; `false` for none). One set per layer and direction, in one undo step; the bars follow the slab.
+*edit* — Reinforce slabs: floors and foundation slabs of any boundary. `layout` is `mesh` (default): straight bars in two directions, `angle` and square to it, `spacing` (and `cross_spacing`) apart; or `radial`: ring bars `spacing` apart around `center` and `radial_count` radial bars, with shorter bars from `intermediate` between them. The bars go in the `top` and `bottom` layers (`layers`), `cover` inside the faces of the slab's structure, its edge and its openings: each bar is clipped to the true boundary (arcs and circles as drawn), so every bar has its own length (`element_get` lists a set's `derived.bars` by length). `hook` bends the ends of mesh bars at the slab's edge. Bars longer than `max_length` are lap spliced, neighbouring splices staggered. A slab with openings gets trimming bars around them (`trim`; `false` for none). One set per layer and direction, in one undo step; the bars follow the slab. Without `slabs`, the structural floors (`floor_create` `structural`) and the foundation slabs are reinforced.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -854,7 +855,7 @@ No parameters.
 | `level` | id or name | optional | Level id or name, when no slabs are given. |
 | `max_length` | number | optional | Longest bar, meters (default: the stock length, 12 m, or 40' in imperial projects): longer bars are lap spliced. 0 keeps whole bars. |
 | `radial_count` | integer | optional | `radial`: the number of radial bars (default: as many as keep them `spacing` apart at the edge). |
-| `slabs` | [id, …] | optional | Floor and foundation slab ids (default: those of `level`, or of the project). |
+| `slabs` | [id, …] | optional | Floor and foundation slab ids (default: the structural floors and the foundation slabs of `level`, or of the project). |
 | `spacing` | number | optional | Distance between the bars of a mesh, or between ring bars, meters (default 0.15; 6" in imperial projects). |
 | `start` | number | optional | `radial`: the radius the radial bars start at, meters (default 0: the center). |
 | `trim` | JSON | optional | Trimming bars around openings: their values, or `false` for none (default: two bars along each side reaching 40 diameters past the opening, and a diagonal across each corner). |

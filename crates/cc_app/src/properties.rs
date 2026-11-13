@@ -1086,7 +1086,20 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     opening_rows(ui, state, id, &f.openings, true)
                 });
             }
-            reinforcement(ui, state, id);
+            section(ui, "structural", t!("section-structural"), |ui| {
+                let mut on = f.structural;
+                if row(ui, &t!("prop-structural"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
+                    modify(state, id, "structural", |e| {
+                        if let ElementKind::Floor(f) = &mut e.kind {
+                            f.structural = on;
+                        }
+                    });
+                }
+            });
+            // A structural slab's reinforcement (and any sets another floor has).
+            if f.structural || state.project().rebar_of(id).next().is_some() {
+                reinforcement(ui, state, id);
+            }
         }
         ElementKind::Ceiling(c) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {

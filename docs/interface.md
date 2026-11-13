@@ -279,7 +279,7 @@ A structural wall (the *Structural* checkbox of its properties) shows a *Reinfor
 
 ## Slab reinforcement
 
-A floor or a foundation slab shows a *Reinforcement* section in its properties. *Typical Reinforcement* gives it a mesh every 15 cm in its top and bottom layers, and trimming bars around its openings; each set is then listed with its spacing and a *Remove* button. `slab_rebar_create` (command palette) sets everything else, for the given slabs or every floor and foundation slab of a level:
+A structural floor (the *Structural* checkbox of its properties) or a foundation slab shows a *Reinforcement* section. *Typical Reinforcement* gives it a mesh every 15 cm in its top and bottom layers, and trimming bars around its openings; each set is then listed with its spacing and a *Remove* button. `slab_rebar_create` (command palette) sets everything else, for the given slabs or the structural floors and foundation slabs of a level:
 
 - **Mesh**: straight bars in two directions, the first at `angle` (the outer layer) and the second square to it, with `spacing` and `cross_spacing`, `type` and `cross_type`; `layers` is `both`, `top` or `bottom`.
 - **Radial**: `layout` `radial` makes ring bars `spacing` apart around `center` (the middle of the slab by default) and `radial_count` radial bars from the radius `start` to the edge; with `intermediate`, a shorter bar from that radius runs between each two.

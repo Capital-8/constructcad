@@ -396,8 +396,8 @@ fn structural_walls_show_their_reinforcement() {
     assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none(), "reinforced now");
 }
 
-/// A floor's palette offers its reinforcement: the typical button makes a
-/// mesh in its top and bottom layers (#282).
+/// A structural floor's palette offers its reinforcement: the typical button
+/// makes a mesh in its top and bottom layers (#282).
 #[test]
 fn floors_show_their_reinforcement() {
     let mut state = sample_state();
@@ -408,6 +408,11 @@ fn floors_show_their_reinforcement() {
     let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
         crate::properties::show(ui, state);
     });
+    harness.run();
+    // Not on a floor that carries nothing.
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none());
+    let params = serde_json::json!({"id": floor.0, "params": {"structural": true}});
+    harness.state_mut().session.execute("element_set", params).unwrap();
     harness.run();
     harness.get_by_label(&t!("action-rebar-typical")).click();
     harness.run();

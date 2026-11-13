@@ -279,9 +279,16 @@ fn only_slabs_are_reinforced_and_values_are_checked() {
     }
     // The beam and column command does not take slabs, nor a slab the bars of a wall.
     assert_eq!(fails(&mut s, "rebar_create", json!({"host": slab.0, "layout": "top"})), ErrorCode::InvalidArguments);
-    // Without a list: every floor and foundation slab.
+    // Without a list: the structural floors and the foundation slabs, not every floor.
+    let none = run(&mut s, "slab_rebar_create", json!({"layers": "bottom"}));
+    assert_eq!((created(&none).len(), none["slabs"].as_u64()), (0, Some(0)));
+    run(&mut s, "element_set", json!({"id": slab.0, "params": {"structural": true}}));
+    let carrying = json!({"boundary": [[30, 0], [34, 0], [34, 4], [30, 4]], "structural": true});
+    let second = id(&run(&mut s, "floor_create", carrying));
+    let raft = id(&run(&mut s, "foundation_slab_create", json!({"boundary": [[40, 0], [44, 0], [44, 4], [40, 4]]})));
     let all = run(&mut s, "slab_rebar_create", json!({"layers": "bottom"}));
-    assert_eq!((created(&all).len(), all["slabs"].as_u64()), (2, Some(1)));
+    assert_eq!((created(&all).len(), all["slabs"].as_u64()), (6, Some(3)));
+    run(&mut s, "elements_delete", json!({"ids": [second.0, raft.0]}));
     // `element_set` changes a set and refuses values out of range.
     let set = created(&all)[0];
     let before = s.geometry().rebar[&set].count();

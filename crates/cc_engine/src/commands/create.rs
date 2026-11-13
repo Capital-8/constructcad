@@ -384,6 +384,9 @@ pub struct FloorCreate {
     /// the boundary, apart from each other.
     #[serde(default)]
     pub openings: Vec<Vec<Point>>,
+    /// A structural slab, one that takes reinforcement (default false).
+    #[serde(default)]
+    pub structural: Option<bool>,
 }
 
 impl Command for FloorCreate {
@@ -400,6 +403,7 @@ impl Command for FloorCreate {
             None => self.openings.iter().map(|o| points(o)).collect::<Result<_>>()?,
         };
         floor.sketch = drawn;
+        floor.structural = self.structural.unwrap_or(false);
         check_openings(&floor.boundary, &floor.openings)?;
         create(
             s,

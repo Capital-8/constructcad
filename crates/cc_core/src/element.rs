@@ -592,12 +592,15 @@ pub struct Floor {
     /// when the outline is edited without them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sketch: Option<crate::sketch::Sketch>,
+    /// A structural slab: one that takes reinforcement.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub structural: bool,
 }
 
 impl Floor {
     /// A floor over `boundary` with no openings.
     pub fn new(boundary: Vec<DVec2>, height_offset: f64) -> Self {
-        Self { boundary, height_offset, openings: Vec::new(), cuts: Vec::new(), sketch: None }
+        Self { boundary, height_offset, openings: Vec::new(), cuts: Vec::new(), sketch: None, structural: false }
     }
 
     /// Its openings and the shafts' cuts.

@@ -337,7 +337,7 @@ Um pilar que continua uma parede cilíndrica tem um perfil `annular_sector`; `re
 `slab_rebar_create` arma pisos e radiers de qualquer contorno: uma malha, ou barras de anel e radiais, recortadas pelo contorno verdadeiro e em volta das aberturas, com reforço de aberturas. Uma laje circular com tampa de inspeção, armada em cima e embaixo:
 
 ```text
-{"command": "floor_create", "args": {"curves": [{"kind": "circle", "center": [0, 0], "radius": 2.0}, {"kind": "rectangle", "corner": [-0.3, -0.3], "opposite": [0.3, 0.3]}]}}
+{"command": "floor_create", "args": {"structural": true, "curves": [{"kind": "circle", "center": [0, 0], "radius": 2.0}, {"kind": "rectangle", "corner": [-0.3, -0.3], "opposite": [0.3, 0.3]}]}}
 {"command": "slab_rebar_create", "args": {"slabs": [42], "type": "Barra Ø 8,0 mm", "spacing": 0.15, "cover": 0.03}}
 {"command": "slab_rebar_create", "args": {"slabs": [42], "layout": "radial", "layers": "bottom", "spacing": 0.20, "radial_count": 24, "intermediate": 1.0}}
 {"command": "element_get", "args": {"id": 43}}
