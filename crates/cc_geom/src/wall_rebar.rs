@@ -23,6 +23,9 @@ pub(crate) struct WallSets<'a> {
     pub horizontal: Option<(&'a Rebar, f64)>,
     pub vertical: Option<(&'a Rebar, f64)>,
     pub interior: Option<(f64, f64)>,
+    /// How far horizontal bars run past the wall's start and end, where
+    /// another wall carries on in the same line (0: they stop at the joint).
+    pub past: (f64, f64),
 }
 
 /// Offset of the face of the wall's structure on `side`.
@@ -105,9 +108,10 @@ pub(crate) fn wall_bars(g: &WallGeom, r: &Rebar, d: f64, sets: &WallSets) -> Vec
                 let z = g.base_z + h;
                 for (a, b) in solid_runs(g, *side, z) {
                     // The cover at free ends and openings; at an end joined to
-                    // another wall the bar runs to the joint, where that wall's begin.
-                    let a = if g.start_joined && (a - range.0).abs() < 1e-6 { a } else { a + cover };
-                    let b = if g.end_joined && (b - range.1).abs() < 1e-6 { b } else { b - cover };
+                    // another wall the bar runs to the joint, where that wall's begin,
+                    // or past it to lap with them.
+                    let a = if g.start_joined && (a - range.0).abs() < 1e-6 { a - sets.past.0 / k } else { a + cover };
+                    let b = if g.end_joined && (b - range.1).abs() < 1e-6 { b + sets.past.1 / k } else { b - cover };
                     if b - a < 1e-6 {
                         continue;
                     }
@@ -158,7 +162,7 @@ pub(crate) fn wall_bars(g: &WallGeom, r: &Rebar, d: f64, sets: &WallSets) -> Vec
             }
             bars
         }
-        RebarLayout::WallTies { every_horizontal, every_vertical } => {
+        RebarLayout::WallTies { every_horizontal, every_vertical, hooks } => {
             let (Some((h, dh)), Some((vs, dv))) = (sets.horizontal, sets.vertical) else { return Vec::new() };
             let (RebarLayout::WallHorizontal { zones, .. }, RebarLayout::WallVertical { spacing, offset, .. }) =
                 (&h.layout, &vs.layout)
@@ -169,7 +173,7 @@ pub(crate) fn wall_bars(g: &WallGeom, r: &Rebar, d: f64, sets: &WallSets) -> Vec
             let (cover_in, d_in) = sets.interior.unwrap_or((h.cover, dh));
             let v0 = line(g, WallSide::Exterior, h.cover.min(vs.cover) + dh.min(dv) / 2.0);
             let v1 = line(g, WallSide::Interior, cover_in + d_in / 2.0);
-            let hooks = 2.0 * (0.75 * std::f64::consts::PI * 2.0 * d + (5.0 * d).max(0.05));
+            let hooks: f64 = hooks.iter().map(|a| crate::rebar::hook(a.to_radians(), d)).sum();
             let range = (g.start_ext.0, g.end_ext.0);
             let us: Vec<f64> =
                 stations(range, *spacing, *offset, vs.cover).into_iter().step_by(*every_vertical as usize).collect();

@@ -259,3 +259,35 @@ fn a_circular_raft_keeps_its_true_curve() {
     run(&mut s, "element_set", json!({"id": raft.0, "params": square}));
     assert!(close(s.geometry().foundations[&raft].area(), 16.0));
 }
+
+/// The ring bars of a footing made of two strips lap at the joints when asked.
+#[test]
+fn the_bars_along_a_ring_of_strips_lap_at_its_joints() {
+    let mut s = Session::default();
+    let a = id(&run(&mut s, "strip_footing_create", json!({"start": [3, 0], "end": [-3, 0], "bulge": 1.0})));
+    let b = id(&run(&mut s, "strip_footing_create", json!({"start": [-3, 0], "end": [3, 0], "bulge": 1.0})));
+    let base =
+        json!({"strips": [a.0, b.0], "layers": "bottom", "transverse_spacing": 0, "cover": 0.05, "max_length": 0});
+    let plain = created(&run(&mut s, "strip_rebar_create", base.clone()));
+    let mut args = base;
+    args["lap_at_joins"] = json!(true);
+    args["lap"] = json!(0.5);
+    args["max_length"] = json!(12.0);
+    let lapped = created(&run(&mut s, "strip_rebar_create", args));
+    let geom = s.geometry().clone();
+    let (plain, lapped) = (&geom.rebar[&plain[0]], &geom.rebar[&lapped[0]]);
+    assert!(plain.count() > 0 && plain.count() == lapped.count());
+    for (p, l) in plain.bars.iter().zip(&lapped.bars) {
+        let radius = p.points[0].truncate().length();
+        // Half a ring less the cover at each end; lapped: half a ring and 0.25 m past each joint.
+        assert!(close(p.length(), (PI * 3.0 - 0.10) * radius / 3.0), "{}", p.length());
+        assert!(close(l.length(), PI * radius + 0.5), "{} at {radius}", l.length());
+        assert!(l.points.iter().all(|q| close(q.truncate().length(), radius)));
+    }
+    // A strip that stands alone has no joint to lap at.
+    let alone = id(&run(&mut s, "strip_footing_create", json!({"start": [20, 0], "end": [26, 0]})));
+    let args =
+        json!({"strips": [alone.0], "layers": "bottom", "transverse_spacing": 0, "cover": 0.05, "lap_at_joins": true});
+    let sets = created(&run(&mut s, "strip_rebar_create", args));
+    assert!(s.geometry().rebar[&sets[0]].bars.iter().all(|bar| close(bar.length(), 6.0 - 0.10)));
+}

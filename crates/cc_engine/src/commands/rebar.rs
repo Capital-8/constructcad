@@ -36,7 +36,7 @@ fn host(p: &Project, id: u64) -> Result<(ElementId, bool)> {
 }
 
 fn rebar_kind(host: ElementId, layout: RebarLayout, cover: f64, splice: Option<Splice>) -> ElementKind {
-    ElementKind::Rebar(Rebar { host, layout, cover, splice, faces: Vec::new() })
+    ElementKind::Rebar(Rebar { host, layout, cover, splice, faces: Vec::new(), lap_at_joins: false })
 }
 
 /// The bars of a column face by face: `counts` (one per face of its
@@ -159,6 +159,12 @@ pub struct RebarCreate {
     /// Lap length of the splices, meters (default: 40 bar diameters).
     #[serde(default)]
     pub lap: Option<f64>,
+    /// Beams, bars along the beam: run them half a lap past each end joined to another
+    /// beam that carries on in the same line (the beams of a ring), so the bars of the
+    /// two lap there (default false: they stop the cover short of the end). The lap is `lap`,
+    /// or 40 bar diameters where bars are kept whole (`max_length` 0).
+    #[serde(default)]
+    pub lap_at_joins: Option<bool>,
     /// Columns, `perimeter`: the number of bars on each face of the section, in the order of
     /// the column's `derived.faces`, the two corner bars of a face included (at least 2).
     #[serde(default)]
@@ -238,8 +244,11 @@ impl Command for RebarCreate {
             (true, true, _) | (true, false, Some(_)) => splice(p, type_id, self.max_length, self.lap)?,
             _ => None,
         };
-        let set =
-            |host| ElementKind::Rebar(Rebar { host, layout: layout.clone(), cover, splice, faces: faces.clone() });
+        let lap_at_joins = beam && layout.runs_along() && self.lap_at_joins.unwrap_or(false);
+        let set = |host| {
+            let (layout, faces) = (layout.clone(), faces.clone());
+            ElementKind::Rebar(Rebar { host, layout, cover, splice, faces, lap_at_joins })
+        };
         // The other members of the host's type, each on its own level.
         let host_type = p.element(host_id).map(|e| e.type_id);
         let others: Vec<(ElementId, cc_core::LevelId)> = match self.same_type.unwrap_or(false) {

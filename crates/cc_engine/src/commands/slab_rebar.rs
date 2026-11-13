@@ -298,7 +298,7 @@ impl Command for SlabRebarCreate {
             Ok(todo
                 .into_iter()
                 .map(|(host, level, ty, layout, splice)| {
-                    let rebar = Rebar { host, layout, cover, splice, faces: Vec::new() };
+                    let rebar = Rebar { host, layout, cover, splice, faces: Vec::new(), lap_at_joins: false };
                     add_element(e, level, ty, ElementKind::Rebar(rebar))
                 })
                 .collect::<Vec<_>>())

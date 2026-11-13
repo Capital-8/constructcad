@@ -803,6 +803,7 @@ No parameters.
 | `face_spacing` | number | optional | Columns, `perimeter`: instead of `faces`, the largest distance between bars on every face, meters. |
 | `faces` | [id, …] | optional | Columns, `perimeter`: the number of bars on each face of the section, in the order of the column's `derived.faces`, the two corner bars of a face included (at least 2). |
 | `lap` | number | optional | Lap length of the splices, meters (default: 40 bar diameters). |
+| `lap_at_joins` | boolean | optional | Beams, bars along the beam: run them half a lap past each end joined to another beam that carries on in the same line (the beams of a ring), so the bars of the two lap there (default false: they stop the cover short of the end). The lap is `lap`, or 40 bar diameters where bars are kept whole (`max_length` 0). |
 | `max_length` | number | optional | Longest bar along a beam, meters (default: the stock length, 12 m, or 40' in imperial projects): longer bars are lap spliced. 0 keeps whole bars. |
 | `same_type` | boolean | optional | Also give the set to every other column (or beam) of the host's type (default false). |
 | `spacing` | number | optional | Stirrup spacing, meters (default 0.15; 6" in imperial projects), or the largest distance between side bars over the height when no `count` is given. |
@@ -829,6 +830,7 @@ No parameters.
 | `faces` | string | optional | The faces reinforced: `both` (default), `exterior` or `interior`. |
 | `horizontal` | object | optional | The horizontal bars. |
 | `lap` | number | optional | Lap length of the splices, meters (default: 40 bar diameters). |
+| `lap_at_joins` | boolean | optional | Run the horizontal bars half a lap past each end joined to another wall that carries on in the same line (the walls of a cylinder), so the bars of the two lap there (default false: they meet end to end at the joint). The lap is `lap`, or 40 bar diameters where bars are kept whole (`max_length` 0). |
 | `level` | id or name | optional | Level id or name, when no walls are given. |
 | `max_length` | number | optional | Longest bar, meters (default: the stock length, 12 m, or 40' in imperial projects): longer bars are lap spliced. 0 keeps whole bars. |
 | `outer` | string | optional | The bars nearest the faces: `horizontal` (default) or `vertical`; the other family lies inside them. |
@@ -870,6 +872,7 @@ No parameters.
 | `beam` | JSON | optional | The bars of the beam part: their values, or `false` for none. |
 | `cover` | number | optional | Concrete cover, meters (default 0.025; 1 1/2" in imperial projects). |
 | `lap` | number | optional | Lap length of the splices, meters (default: 40 bar diameters). |
+| `lap_at_joins` | boolean | optional | Run the bars along the strip half a lap past each end joined to another strip that carries on in the same line (the strips of a ring footing), so the bars of the two lap there (default false: they stop the cover short of the end). The lap is `lap`, or 40 bar diameters where bars are kept whole (`max_length` 0). |
 | `layers` | string | optional | The layers of the footing reinforced: `both` (default), `top` or `bottom`. |
 | `level` | id or name | optional | Level id or name, when no strips are given. |
 | `longitudinal_spacing` | number | optional | Distance between the bars along the footing, across it, meters (default 0.15; 0 for none). |

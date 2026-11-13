@@ -2251,7 +2251,7 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
             });
         }
         // ...and its ties by the bars they skip.
-        L::WallTies { every_horizontal, every_vertical } => {
+        L::WallTies { every_horizontal, every_vertical, .. } => {
             readonly_row(ui, label, format!("1/{every_horizontal} × 1/{every_vertical}"));
         }
         // A slab's bars by their spacing, its radial and trimming bars by their count.

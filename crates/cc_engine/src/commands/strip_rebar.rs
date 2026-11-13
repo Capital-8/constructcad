@@ -96,6 +96,12 @@ pub struct StripRebarCreate {
     /// Lap length of the splices, meters (default: 40 bar diameters).
     #[serde(default)]
     pub lap: Option<f64>,
+    /// Run the bars along the strip half a lap past each end joined to another strip that
+    /// carries on in the same line (the strips of a ring footing), so the bars of the two
+    /// lap there (default false: they stop the cover short of the end). The lap is `lap`,
+    /// or 40 bar diameters where bars are kept whole (`max_length` 0).
+    #[serde(default)]
+    pub lap_at_joins: Option<bool>,
 }
 
 /// The strips to reinforce, and whether each has a beam on top.
@@ -224,11 +230,13 @@ impl Command for StripRebarCreate {
         if todo.is_empty() {
             return Ok(json!({"created": [], "strips": 0}));
         }
+        let lap_at_joins = self.lap_at_joins.unwrap_or(false);
         let created = edit(s, t!("tx-create-rebar"), |e| {
             Ok(todo
                 .into_iter()
                 .map(|(host, level, ty, layout, splice)| {
-                    let rebar = Rebar { host, layout, cover, splice, faces: Vec::new() };
+                    let lap_at_joins = lap_at_joins && layout.runs_along();
+                    let rebar = Rebar { host, layout, cover, splice, faces: Vec::new(), lap_at_joins };
                     add_element(e, level, ty, ElementKind::Rebar(rebar))
                 })
                 .collect::<Vec<_>>())

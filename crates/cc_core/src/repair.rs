@@ -1309,7 +1309,14 @@ mod tests {
             Splice { max_length: 2.0, lap: 1.5 },
         ] {
             let layout = RebarLayout::Sides { count: 1, spacing: 0.0 };
-            let rebar = Rebar { host: ids[0], layout, cover: 0.025, splice: Some(splice), faces: Vec::new() };
+            let rebar = Rebar {
+                host: ids[0],
+                layout,
+                cover: 0.025,
+                splice: Some(splice),
+                faces: Vec::new(),
+                lap_at_joins: false,
+            };
             bars.push(add(&mut p, bar_t, ElementKind::Rebar(rebar)));
         }
         assert!(p.repair() >= 5);
