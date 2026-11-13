@@ -44,6 +44,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     crate::profiles_dialog::show(ctx, state);
     crate::grid_frame_ui::show(ctx, state);
     crate::steel_building_ui::show(ctx, state);
+    crate::wall_framing_ui::show(ctx, state);
     crate::library::show(ctx, state);
     crate::obj_ui::show(ctx, state);
     crate::plugins_ui::drain_messages(state);

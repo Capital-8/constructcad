@@ -539,6 +539,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     match &el.kind {
         ElementKind::SteelBuilding(b) => crate::steel_building_ui::props(ui, state, id, b),
         ElementKind::Truss(t) => crate::truss_ui::props(ui, state, id, t),
+        ElementKind::WallFraming(f) => crate::wall_framing_ui::props(ui, state, id, f),
         ElementKind::Mass(m) => mass_props(ui, state, &el, m),
         ElementKind::Topography(t) => topography_props(ui, state, &el, t),
         ElementKind::Pad(p) => pad_props(ui, state, &el, p),
@@ -1085,6 +1086,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             roofing_rows(ui, state, &el);
         }
     }
+    crate::wall_framing_ui::member_row(ui, state, id);
 
     // Rooms, grids and dimensions have their own identity rows; only model elements carry a mark.
     let mut identity = vec![(t!("col-comments"), "comments", el.comments.clone())];

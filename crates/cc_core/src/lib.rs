@@ -72,6 +72,7 @@ pub mod truss;
 mod types;
 pub mod units;
 mod view;
+pub mod wall_framing;
 pub mod wall_ops;
 
 pub use cad::{CadColorMode, CadDrawing, CadImport, CadLayer, CadPrim, CadUnit};

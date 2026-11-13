@@ -3236,6 +3236,7 @@ tpl-type-steel-building = ອາຄານໂຄງເຫຼັກ
 category-truss = ໂຄງຫຼັງຄາ
 tpl-type-truss = ໂຄງຫຼັງຄາ
 tx-steel-building = ສ້າງອາຄານໂຄງເຫຼັກ
+tx-wall-framing = ສ້າງໂຄງຝາ
 action-steel-building = ອາຄານໂຄງເຫຼັກ
 dlg-steel-building = ອາຄານໂຄງເຫຼັກ
 section-steel-building = ອາຄານໂຄງເຫຼັກ
@@ -3265,6 +3266,29 @@ label-bottom-chord-type = ປະເພດຄານລຸ່ມ
 label-web-type = ປະເພດທະແຍງ
 label-post-type = ປະເພດເສົາຕັ້ງ
 msg-truss-material = ໂຄງຖັກເປັນເຫຼັກ ຫຼື ໄມ້: ເລືອກໜຶ່ງຢ່າງໃນ ວັດສະດຸ.
+
+# Wall framing
+category-wall-framing = ໂຄງຝາ
+tpl-type-wall-framing = ໂຄງຝາ
+framing-light-steel = ໂຄງເຫຼັກເບົາ
+framing-wood = ໂຄງໄມ້
+action-light-steel-frame = ໂຄງເຫຼັກເບົາ
+action-wood-frame = ໂຄງໄມ້
+dlg-wall-framing = ໂຄງຝາ
+section-wall-framing = ໂຄງ
+prop-wall-framing = ໂຄງ
+prop-framing-system = ລະບົບ
+prop-stud-spacing = ໄລຍະຫ່າງເສົາຕັ້ງ
+label-stud-type = ປະເພດເສົາຕັ້ງ
+label-track-type = ປະເພດລາງ ແລະ ແຜ່ນ
+label-header-type = ປະເພດຄານຂອບເທິງ ແລະ ລຸ່ມ
+prop-double-top = ແຜ່ນເທິງຄູ່
+prop-blocking = ໄມ້ຂວາງ
+action-select-framing = ເລືອກ
+msg-no-walls-to-frame = ບໍ່ມີຝາຊື່ທີ່ຍັງບໍ່ມີໂຄງ: ເລືອກຝາ ຫຼື ເປີດແຜນຜັງຂອງຊັ້ນຂອງມັນ.
+msg-walls-framed = ສ້າງໂຄງໃຫ້ { $walls } ຝາ ດ້ວຍ { $count } ຊິ້ນ.
+cmd-desc-light-steel-frame = ສ້າງໂຄງເຫຼັກເບົາໃຫ້ຝາທີ່ເລືອກ (ຫຼື ຝາຂອງຊັ້ນປັດຈຸບັນ): ເສົາຕັ້ງເຫຼັກຂຶ້ນຮູບເຢັນທຸກ 0,4 m ລະຫວ່າງລາງ, ເສົາຄູ່, ຄານຂອບເທິງ, ຄານຂອບລຸ່ມ ແລະ ເສົາສັ້ນທີ່ປະຕູ ແລະ ປ່ອງຢ້ຽມ, ປ່ຽນຕາມຝາ ແລະ ຊ່ອງເປີດ.
+cmd-desc-wood-frame = ສ້າງໂຄງໄມ້ໃຫ້ຝາທີ່ເລືອກ (ຫຼື ຝາຂອງຊັ້ນປັດຈຸບັນ): ເສົາຕັ້ງທຸກ 0,6 m ລະຫວ່າງແຜ່ນລຸ່ມ ແລະ ແຜ່ນເທິງຄູ່, ເສົາຄູ່, ຄານຂອບເທິງ, ຄານຂອບລຸ່ມ ແລະ ເສົາສັ້ນທີ່ປະຕູ ແລະ ປ່ອງຢ້ຽມ, ປ່ຽນຕາມຝາ ແລະ ຊ່ອງເປີດ.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = ຝາກໍ່ 6"

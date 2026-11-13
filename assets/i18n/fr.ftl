@@ -3234,6 +3234,7 @@ tpl-type-steel-building = Bâtiment métallique
 category-truss = Fermes
 tpl-type-truss = Ferme
 tx-steel-building = Créer un bâtiment métallique
+tx-wall-framing = Ossaturer des murs
 action-steel-building = Bâtiment métallique
 dlg-steel-building = Bâtiment métallique
 section-steel-building = Bâtiment métallique
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = Type de membrure inférieure
 label-web-type = Type de diagonales
 label-post-type = Type de montants
 msg-truss-material = Les fermes sont en acier ou en bois : choisissez-en un dans Matériau.
+
+# Wall framing
+category-wall-framing = Ossatures de mur
+tpl-type-wall-framing = Ossature de mur
+framing-light-steel = Ossature acier légère
+framing-wood = Ossature bois
+action-light-steel-frame = Ossature acier légère
+action-wood-frame = Ossature bois
+dlg-wall-framing = Ossature de mur
+section-wall-framing = Ossature
+prop-wall-framing = Ossature
+prop-framing-system = Système
+prop-stud-spacing = Entraxe des montants
+label-stud-type = Type de montants
+label-track-type = Type de rails et lisses
+label-header-type = Type de linteaux et appuis
+prop-double-top = Double sablière
+prop-blocking = Entretoises
+action-select-framing = Sélectionner
+msg-no-walls-to-frame = Aucun mur droit sans ossature : sélectionnez des murs ou ouvrez un plan de leur niveau.
+msg-walls-framed = { $walls } murs ossaturés avec { $count } éléments.
+cmd-desc-light-steel-frame = Ossature les murs sélectionnés (ou ceux du niveau actif) en acier léger : montants formés à froid tous les 0,4 m entre rails, montants doubles, linteaux, appuis et montants courts aux portes et fenêtres, tenus à jour avec le mur et ses ouvertures.
+cmd-desc-wood-frame = Ossature les murs sélectionnés (ou ceux du niveau actif) en bois : montants tous les 0,6 m entre lisse basse et double sablière, montants doubles, linteaux, appuis et montants courts aux portes et fenêtres, tenus à jour avec le mur et ses ouvertures.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Maçonnerie 6"

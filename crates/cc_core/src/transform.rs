@@ -211,6 +211,8 @@ impl Element {
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(p),
             ElementKind::SteelBuilding(b) => b.transform(t),
             ElementKind::Truss(tr) => tr.transform(t),
+            // Placed by its wall.
+            ElementKind::WallFraming(_) => {}
             ElementKind::Pad(pad) => pad.outline.iter_mut().for_each(p),
             ElementKind::Topography(topo) => {
                 topo.boundary.iter_mut().for_each(p);
@@ -394,9 +396,17 @@ impl crate::Project {
                 .filter(|e| matches!(&e.kind, ElementKind::Valve(v) if set.contains(&v.host)))
                 .cloned(),
         );
+        // A copied wall takes its framing along.
+        out.extend(
+            self.elements
+                .values()
+                .filter(|e| !set.contains(&e.id))
+                .filter(|e| matches!(&e.kind, ElementKind::WallFraming(f) if set.contains(&f.wall)))
+                .cloned(),
+        );
         // A copied member host makes its own members: its originals are not copied.
         let managed: std::collections::BTreeSet<ElementId> =
-            set.iter().flat_map(|id| self.host_members_of(*id)).collect();
+            out.iter().flat_map(|e| self.host_members_of(e.id)).collect();
         out.retain(|e| !managed.contains(&e.id));
         out
     }
@@ -449,6 +459,8 @@ impl crate::Project {
                 .find(|t| t.id == v.host)
                 .or_else(|| self.element(v.host))
                 .is_some_and(|t| matches!(t.kind, ElementKind::Pipe(_))),
+            // Only with its wall: the wall it came from has a framing already.
+            ElementKind::WallFraming(f) => set.iter().any(|w| w.id == f.wall && w.as_wall().is_some()),
             _ => true,
         };
         type_ok && other_ok && self.level(e.level).is_some()
@@ -512,6 +524,13 @@ impl crate::EditCtx<'_> {
                 let Some(ElementKind::Valve(v)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 if let Some(n) = remap.get(&v.host) {
                     v.host = *n;
+                }
+            }
+            // Copied framings frame the copies of their walls.
+            for id in &created[first..] {
+                let Some(ElementKind::WallFraming(f)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                if let Some(n) = remap.get(&f.wall) {
+                    f.wall = *n;
                 }
             }
             // Copied railings follow the copies of their stairs, or become free.

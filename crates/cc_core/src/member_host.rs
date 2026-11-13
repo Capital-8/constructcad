@@ -7,7 +7,7 @@
 //! alone from then on. Each host keeps its own typed roles; the shared code
 //! sees them as [`RoleKey`]s, whose order is the typed roles' order.
 
-use crate::{Category, Element, ElementId, ElementKind, ElementTypeId, Project};
+use crate::{Category, Element, ElementId, ElementKind, ElementTypeId, LevelId, Project};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::RangeInclusive;
 
@@ -46,6 +46,27 @@ pub trait MemberHost {
     /// From a file: numbers back to their defaults, types to the category's
     /// default; returns the repairs, `None` when the host must go.
     fn repair_parameters(&mut self, project: &Project) -> Option<usize>;
+
+    /// Other elements whose change regenerates the host (a wall framing's
+    /// wall and the wall's doors and windows). An edit regenerates the host
+    /// when it changes, adds or removes one of them, edits one's type, or
+    /// touches an element one of them hosted before the edit (a removed or
+    /// re-hosted door or window). None by default.
+    fn inputs(&self, _project: &Project) -> Vec<ElementId> {
+        Vec::new()
+    }
+
+    /// Whether an element like `e` can be one of its inputs (a wall, a door
+    /// or a window): an edit touching none, and no type, skips the scan.
+    fn fed_by(&self, _e: &Element) -> bool {
+        false
+    }
+
+    /// The level its members go on when it is not the host's own (a wall
+    /// framing's members are on its wall's level).
+    fn member_level(&self, _project: &Project) -> Option<LevelId> {
+        None
+    }
 }
 
 impl ElementKind {
@@ -54,6 +75,7 @@ impl ElementKind {
         match self {
             ElementKind::SteelBuilding(b) => Some(b.as_ref() as &dyn MemberHost),
             ElementKind::Truss(t) => Some(t.as_ref() as &dyn MemberHost),
+            ElementKind::WallFraming(f) => Some(f.as_ref() as &dyn MemberHost),
             _ => None,
         }
     }
@@ -62,6 +84,7 @@ impl ElementKind {
         match self {
             ElementKind::SteelBuilding(b) => Some(b.as_mut() as &mut dyn MemberHost),
             ElementKind::Truss(t) => Some(t.as_mut() as &mut dyn MemberHost),
+            ElementKind::WallFraming(f) => Some(f.as_mut() as &mut dyn MemberHost),
             _ => None,
         }
     }
@@ -80,6 +103,14 @@ impl Project {
             .and_then(|e| e.member_host())
             .map(|h| h.member_list().into_iter().map(|(_, id)| id).collect())
             .unwrap_or_default()
+    }
+
+    /// The host that manages `member`, if any.
+    pub fn member_host_of(&self, member: ElementId) -> Option<ElementId> {
+        self.elements
+            .values()
+            .find(|e| e.member_host().is_some_and(|h| h.member_list().iter().any(|(_, id)| *id == member)))
+            .map(|e| e.id)
     }
 }
 
@@ -120,7 +151,8 @@ impl crate::EditCtx<'_> {
     ///    member list for the detached roles; the element stays as the user
     ///    left it);
     /// 2. a host the edit added or changed, or whose member types it
-    ///    changed, gets the members of its layout (except detached roles):
+    ///    changed, or touched one of its inputs (see [`MemberHost::inputs`]),
+    ///    gets the members of its layout (except detached roles):
     ///    existing ones rewritten in place (same ids), missing ones added,
     ///    those whose role is gone deleted. A host the edit added (a copy, a
     ///    paste) keeps none of the members it lists and gets its own: the
@@ -140,7 +172,12 @@ impl crate::EditCtx<'_> {
         let mut removed: BTreeSet<ElementId> = BTreeSet::new();
         let mut reshaped: BTreeSet<ElementId> = BTreeSet::new();
         let mut moved_phase: BTreeSet<ElementId> = BTreeSet::new();
+        let mut touched: Vec<(ElementId, Option<ElementId>)> = Vec::new();
+        // The touched elements, before and after (what may feed a host).
+        let mut seen: Vec<&Element> = Vec::new();
         for (id, before) in self.element_changes() {
+            seen.extend(before.into_iter().chain(p.element(id)));
+            touched.push((id, before.and_then(|b| b.as_hosted()).map(|h| h.host)));
             match (before, p.element(id)) {
                 (None, Some(_)) => {
                     added.insert(id);
@@ -167,7 +204,14 @@ impl crate::EditCtx<'_> {
         let mut regenerate: Vec<ElementId> = Vec::new();
         for e in p.elements.values() {
             let Some(h) = e.member_host() else { continue };
-            let host_changed = changed.contains(&e.id) || h.member_types().iter().any(|t| types.contains(t));
+            let fed = !types.is_empty() || seen.iter().any(|x| h.fed_by(x));
+            let inputs = if fed { h.inputs(p) } else { Vec::new() };
+            // A changed wall or opening, an edited opening type, or a door or window that left the wall.
+            let input_changed = !inputs.is_empty()
+                && (touched.iter().any(|(id, was)| inputs.contains(id) || was.is_some_and(|w| inputs.contains(&w)))
+                    || inputs.iter().filter_map(|i| p.element(*i)).any(|x| types.contains(&x.type_id)));
+            let host_changed =
+                changed.contains(&e.id) || input_changed || h.member_types().iter().any(|t| types.contains(t));
             let taken: Vec<RoleKey> = h
                 .member_list()
                 .into_iter()
@@ -200,6 +244,40 @@ impl crate::EditCtx<'_> {
         }
     }
 
+    /// After the phase and design option syncs: the members of a host whose
+    /// phases or option this edit changed (a wall framing follows its wall
+    /// there, after [`Self::sync_member_hosts`] ran), and the members this
+    /// edit added (which `sync_options` may have put in the active option),
+    /// take the host's phases and option.
+    pub(crate) fn sync_member_phases(&mut self) {
+        type Phases = (crate::PhaseId, Option<crate::PhaseId>, Option<crate::OptionId>);
+        let p = self.project();
+        let changes = self.element_changes();
+        if !changes.iter().any(|(id, _)| p.element(*id).is_some_and(|e| e.member_host().is_some())) {
+            return;
+        }
+        let added: BTreeSet<ElementId> = changes.iter().filter(|(_, b)| b.is_none()).map(|(id, _)| *id).collect();
+        let mut fixes: Vec<(ElementId, Phases)> = Vec::new();
+        for &(id, before) in &changes {
+            let Some(e) = p.element(id) else { continue };
+            let Some(h) = e.member_host() else { continue };
+            let phases = (e.phase_created, e.phase_demolished, e.design_option);
+            let moved = before.is_none_or(|b| (b.phase_created, b.phase_demolished, b.design_option) != phases);
+            for (_, m) in h.member_list() {
+                if (moved || added.contains(&m))
+                    && p.element(m).is_some_and(|x| (x.phase_created, x.phase_demolished, x.design_option) != phases)
+                {
+                    fixes.push((m, phases));
+                }
+            }
+        }
+        for (id, phases) in fixes {
+            if let Some(x) = self.element_mut(id) {
+                (x.phase_created, x.phase_demolished, x.design_option) = phases;
+            }
+        }
+    }
+
     /// Give host `host` the members of its layout (see
     /// [`Self::sync_member_hosts`]); `added` when this edit added it,
     /// `follow` when its phases or design option changed.
@@ -207,8 +285,8 @@ impl crate::EditCtx<'_> {
         let p = self.project();
         let Some(e) = p.element(host) else { return };
         let Some(h) = e.member_host() else { return };
-        let (level, phase_created, phase_demolished, design_option) =
-            (e.level, e.phase_created, e.phase_demolished, e.design_option);
+        let (level, own_level) = (h.member_level(p).unwrap_or(e.level), e.level);
+        let (phase_created, phase_demolished, design_option) = (e.phase_created, e.phase_demolished, e.design_option);
         let phases = (phase_created, phase_demolished, design_option);
         let listed = h.member_list();
         // A copy or a paste keeps none of the members it lists: they are the
@@ -276,6 +354,12 @@ impl crate::EditCtx<'_> {
                 paints: Vec::new(),
             });
             kept.push((role, id));
+        }
+        // A host that puts its members elsewhere (a wall framing) stays on their level.
+        if level != own_level
+            && let Some(x) = self.element_mut(host)
+        {
+            x.level = level;
         }
         kept.sort_by_key(|m| m.0);
         if kept != listed

@@ -86,6 +86,7 @@ mod update;
 mod update_install;
 mod view3d;
 mod view_cube;
+mod wall_framing_ui;
 
 fn main() -> eframe::Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();

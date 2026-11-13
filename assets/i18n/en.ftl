@@ -3234,6 +3234,7 @@ tpl-type-steel-building = Steel building
 category-truss = Trusses
 tpl-type-truss = Truss
 tx-steel-building = Create steel building
+tx-wall-framing = Frame walls
 action-steel-building = Steel Building
 dlg-steel-building = Steel Building
 section-steel-building = Steel Building
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = Bottom chord type
 label-web-type = Diagonal type
 label-post-type = Post type
 msg-truss-material = Trusses are steel or timber: pick one under Material.
+
+# Wall framing
+category-wall-framing = Wall framings
+tpl-type-wall-framing = Wall framing
+framing-light-steel = Light Steel Frame
+framing-wood = Wood Frame
+action-light-steel-frame = Light Steel Frame
+action-wood-frame = Wood Frame
+dlg-wall-framing = Wall Framing
+section-wall-framing = Framing
+prop-wall-framing = Framing
+prop-framing-system = System
+prop-stud-spacing = Stud spacing
+label-stud-type = Stud type
+label-track-type = Track and plate type
+label-header-type = Header and sill type
+prop-double-top = Double top plate
+prop-blocking = Blocking
+action-select-framing = Select
+msg-no-walls-to-frame = No straight unframed walls: select walls, or open a plan of their level.
+msg-walls-framed = { $walls } walls framed with { $count } members.
+cmd-desc-light-steel-frame = Frame the selected walls (or those of the active level) in light steel: cold-formed studs every 0.4 m between tracks, king and jack studs, headers, sills and cripples at doors and windows, kept in step with the wall and its openings.
+cmd-desc-wood-frame = Frame the selected walls (or those of the active level) in timber: studs every 0.6 m between a sole plate and a double top plate, king and jack studs, headers, sills and cripples at doors and windows, kept in step with the wall and its openings.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Masonry 6"

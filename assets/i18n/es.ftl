@@ -3234,6 +3234,7 @@ tpl-type-steel-building = Nave metálica
 category-truss = Cerchas
 tpl-type-truss = Cercha
 tx-steel-building = Crear nave metálica
+tx-wall-framing = Enmarcar muros
 action-steel-building = Nave metálica
 dlg-steel-building = Nave metálica
 section-steel-building = Nave metálica
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = Tipo de cordón inferior
 label-web-type = Tipo de diagonales
 label-post-type = Tipo de montantes
 msg-truss-material = Las cerchas son de acero o madera: elija uno en Material.
+
+# Wall framing
+category-wall-framing = Entramados de muro
+tpl-type-wall-framing = Entramado de muro
+framing-light-steel = Entramado de acero ligero
+framing-wood = Entramado de madera
+action-light-steel-frame = Entramado de acero ligero
+action-wood-frame = Entramado de madera
+dlg-wall-framing = Entramado de muro
+section-wall-framing = Entramado
+prop-wall-framing = Entramado
+prop-framing-system = Sistema
+prop-stud-spacing = Separación de montantes
+label-stud-type = Tipo de montantes
+label-track-type = Tipo de canales y soleras
+label-header-type = Tipo de dinteles y antepechos
+prop-double-top = Solera superior doble
+prop-blocking = Bloqueos
+action-select-framing = Seleccionar
+msg-no-walls-to-frame = Ningún muro recto sin entramado: seleccione muros o abra una planta de su nivel.
+msg-walls-framed = { $walls } muros entramados con { $count } piezas.
+cmd-desc-light-steel-frame = Entrama los muros seleccionados (o los del nivel activo) en acero ligero: montantes conformados en frío cada 0,4 m entre canales, montantes dobles, dinteles, antepechos y montantes cortos en puertas y ventanas, que siguen al muro y sus aberturas.
+cmd-desc-wood-frame = Entrama los muros seleccionados (o los del nivel activo) en madera: montantes cada 0,6 m entre solera inferior y solera superior doble, montantes dobles, dinteles, antepechos y montantes cortos en puertas y ventanas, que siguen al muro y sus aberturas.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mampostería 6"

@@ -75,6 +75,8 @@ pub enum ElementKind {
     SteelBuilding(Box<crate::steel_building::SteelBuilding>),
     /// A parametric truss: it owns the beams and columns of its chords and web.
     Truss(Box<crate::truss::Truss>),
+    /// Light steel or wood framing of a wall: it owns the studs and the beams of its tracks, headers and sills.
+    WallFraming(Box<crate::wall_framing::WallFraming>),
     /// A terrain surface from measured points inside a boundary.
     Topography(crate::topography::Topography),
     /// A building pad graded into its terrain.
@@ -123,6 +125,7 @@ impl Element {
             ElementKind::Shaft(_) => Category::Shaft,
             ElementKind::SteelBuilding(_) => Category::SteelBuilding,
             ElementKind::Truss(_) => Category::Truss,
+            ElementKind::WallFraming(_) => Category::WallFraming,
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
             ElementKind::DetailLine(_) => Category::DetailLine,
@@ -340,6 +343,8 @@ impl Element {
                 t.start += delta;
                 t.end += delta;
             }
+            // Placed by its wall.
+            ElementKind::WallFraming(_) => {}
             ElementKind::Topography(t) => {
                 t.boundary.iter_mut().for_each(|p| *p += delta);
                 t.points.iter_mut().for_each(|p| *p += delta.extend(0.0));

@@ -53,6 +53,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Shaft => Icon::Shaft,
         Category::SteelBuilding => Icon::SteelBuilding,
         Category::Truss => Icon::Truss,
+        Category::WallFraming => Icon::WallFraming,
         Category::Topography => Icon::Topography,
         Category::Pad => Icon::Pad,
         Category::Sweep => Icon::Sweep,
@@ -730,12 +731,14 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
                     state,
                     &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss, SteelBuilding]],
                 );
+                command_button(ui, state, LightSteelFrame);
             });
         }
         M::Timber => {
             group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam]));
             group(ui, t!("group-framing"), |ui| {
                 stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
+                command_button(ui, state, WoodFrame);
             });
         }
     }

@@ -108,6 +108,8 @@ fn element_is_valid(e: &Element) -> bool {
         // Out-of-range values are reset by `repair_member_hosts`, which keeps the members.
         ElementKind::SteelBuilding(_) => true,
         ElementKind::Truss(t) => t.start.is_finite() && t.end.is_finite(),
+        // Its numbers are reset by repair_member_hosts; its wall is checked with the hosts.
+        ElementKind::WallFraming(_) => true,
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
     }
@@ -210,7 +212,8 @@ impl Project {
                 | TypeData::Mass { .. }
                 | TypeData::Shaft {}
                 | TypeData::SteelBuilding {}
-                | TypeData::Truss {} => {}
+                | TypeData::Truss {}
+                | TypeData::WallFraming {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
                     for (r, d) in
                         [(cut_slope, crate::pad::DEFAULT_CUT_SLOPE), (fill_slope, crate::pad::DEFAULT_FILL_SLOPE)]
@@ -415,6 +418,7 @@ impl Project {
                         ElementKind::Valve(v) => {
                             self.element(v.host).is_some_and(|h| matches!(h.kind, ElementKind::Pipe(_)))
                         }
+                        ElementKind::WallFraming(f) => self.element(f.wall).is_some_and(|w| w.as_wall().is_some()),
                         _ => true,
                     };
                     !(type_ok && level_ok && host_ok && element_is_valid(e))
@@ -429,6 +433,8 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
+        // One framing per wall.
+        repairs += self.repair_wall_framings();
         // Member hosts: numbers, types and members (after invalid elements went).
         repairs += self.repair_member_hosts();
         // Dimension ends referencing missing elements or bad numbers become free.

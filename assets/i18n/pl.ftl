@@ -3234,6 +3234,7 @@ tpl-type-steel-building = Hala stalowa
 category-truss = Kratownice
 tpl-type-truss = Kratownica
 tx-steel-building = Utwórz halę stalową
+tx-wall-framing = Szkieletowanie ścian
 action-steel-building = Hala stalowa
 dlg-steel-building = Hala stalowa
 section-steel-building = Hala stalowa
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = Typ pasa dolnego
 label-web-type = Typ krzyżulców
 label-post-type = Typ słupków
 msg-truss-material = Kratownice są stalowe lub drewniane: wybierz jedno w Materiale.
+
+# Wall framing
+category-wall-framing = Szkielety ścian
+tpl-type-wall-framing = Szkielet ściany
+framing-light-steel = Lekki szkielet stalowy
+framing-wood = Szkielet drewniany
+action-light-steel-frame = Lekki szkielet stalowy
+action-wood-frame = Szkielet drewniany
+dlg-wall-framing = Szkielet ściany
+section-wall-framing = Szkielet
+prop-wall-framing = Szkielet
+prop-framing-system = System
+prop-stud-spacing = Rozstaw słupków
+label-stud-type = Typ słupków
+label-track-type = Typ prowadnic i podwalin
+label-header-type = Typ nadproży i podokienników
+prop-double-top = Podwójny oczep
+prop-blocking = Rygle
+action-select-framing = Zaznacz
+msg-no-walls-to-frame = Brak prostych ścian bez szkieletu: zaznacz ściany lub otwórz rzut ich poziomu.
+msg-walls-framed = Utworzono szkielety { $walls } ścian z { $count } elementów.
+cmd-desc-light-steel-frame = Tworzy lekki szkielet stalowy zaznaczonych ścian (lub ścian aktywnego poziomu): słupki z kształtowników giętych co 0,4 m między prowadnicami, słupki podwójne, nadproża, podokienniki i krótkie słupki przy drzwiach i oknach, aktualizowane razem ze ścianą i jej otworami.
+cmd-desc-wood-frame = Tworzy szkielet drewniany zaznaczonych ścian (lub ścian aktywnego poziomu): słupki co 0,6 m między podwaliną a podwójnym oczepem, słupki podwójne, nadproża, podokienniki i krótkie słupki przy drzwiach i oknach, aktualizowane razem ze ścianą i jej otworami.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mur 6"

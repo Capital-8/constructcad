@@ -3234,6 +3234,7 @@ tpl-type-steel-building = 钢结构建筑
 category-truss = 桁架
 tpl-type-truss = 桁架
 tx-steel-building = 创建钢结构建筑
+tx-wall-framing = 创建墙体骨架
 action-steel-building = 钢结构建筑
 dlg-steel-building = 钢结构建筑
 section-steel-building = 钢结构建筑
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = 下弦杆类型
 label-web-type = 斜杆类型
 label-post-type = 竖杆类型
 msg-truss-material = 桁架为钢或木：请在"材料"中选择其一。
+
+# Wall framing
+category-wall-framing = 墙骨架
+tpl-type-wall-framing = 墙骨架
+framing-light-steel = 轻钢龙骨
+framing-wood = 木骨架
+action-light-steel-frame = 轻钢龙骨
+action-wood-frame = 木骨架
+dlg-wall-framing = 墙骨架
+section-wall-framing = 骨架
+prop-wall-framing = 骨架
+prop-framing-system = 系统
+prop-stud-spacing = 立柱间距
+label-stud-type = 立柱类型
+label-track-type = 天地龙骨类型
+label-header-type = 过梁与窗台梁类型
+prop-double-top = 双顶梁
+prop-blocking = 横撑
+action-select-framing = 选择
+msg-no-walls-to-frame = 没有尚未加骨架的直墙：请选择墙，或打开其楼层的平面图。
+msg-walls-framed = 已为 { $walls } 面墙创建骨架，共 { $count } 个构件。
+cmd-desc-light-steel-frame = 为所选的墙（或当前楼层的墙）创建轻钢龙骨：天地龙骨之间每 0.4 m 一根冷弯立柱，门窗处有双立柱、过梁、窗台梁和短柱，随墙及洞口更新。
+cmd-desc-wood-frame = 为所选的墙（或当前楼层的墙）创建木骨架：底梁与双顶梁之间每 0.6 m 一根立柱，门窗处有双立柱、过梁、窗台梁和短柱，随墙及洞口更新。
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌体墙 6"

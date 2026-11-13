@@ -3234,6 +3234,7 @@ tpl-type-steel-building = Stahlhalle
 category-truss = Fachwerkbinder
 tpl-type-truss = Fachwerkbinder
 tx-steel-building = Stahlhalle erstellen
+tx-wall-framing = Wände rahmen
 action-steel-building = Stahlhalle
 dlg-steel-building = Stahlhalle
 section-steel-building = Stahlhalle
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = Untergurttyp
 label-web-type = Diagonalentyp
 label-post-type = Pfostentyp
 msg-truss-material = Fachwerkträger sind aus Stahl oder Holz: Wählen Sie eines unter Material.
+
+# Wall framing
+category-wall-framing = Wandständerwerke
+tpl-type-wall-framing = Wandständerwerk
+framing-light-steel = Stahlleichtbau
+framing-wood = Holzrahmenbau
+action-light-steel-frame = Stahlleichtbau
+action-wood-frame = Holzrahmenbau
+dlg-wall-framing = Wandständerwerk
+section-wall-framing = Ständerwerk
+prop-wall-framing = Ständerwerk
+prop-framing-system = System
+prop-stud-spacing = Ständerabstand
+label-stud-type = Ständertyp
+label-track-type = Typ der Schienen und Schwellen
+label-header-type = Typ der Stürze und Brüstungsriegel
+prop-double-top = Doppeltes Rähm
+prop-blocking = Zwischenriegel
+action-select-framing = Auswählen
+msg-no-walls-to-frame = Keine geraden Wände ohne Ständerwerk: Wählen Sie Wände aus oder öffnen Sie einen Grundriss ihrer Ebene.
+msg-walls-framed = { $walls } Wände mit { $count } Bauteilen ausgefacht.
+cmd-desc-light-steel-frame = Versieht die ausgewählten Wände (oder die der aktiven Ebene) mit Stahlleichtbau-Ständerwerk: kaltgeformte Ständer alle 0,4 m zwischen Schienen, Doppelständer, Stürze, Brüstungsriegel und kurze Ständer an Türen und Fenstern, die der Wand und ihren Öffnungen folgen.
+cmd-desc-wood-frame = Versieht die ausgewählten Wände (oder die der aktiven Ebene) mit Holzrahmenbau-Ständerwerk: Ständer alle 0,6 m zwischen Schwelle und doppeltem Rähm, Doppelständer, Stürze, Brüstungsriegel und kurze Ständer an Türen und Fenstern, die der Wand und ihren Öffnungen folgen.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mauerwerk 6"

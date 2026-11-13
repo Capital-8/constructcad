@@ -145,6 +145,14 @@ fn patched(
                 super::detail_component::check(old, c)?;
             }
         }
+        cc_core::ElementKind::WallFraming(f) => {
+            if let cc_core::ElementKind::WallFraming(old) = &element.kind
+                && old.wall != f.wall
+            {
+                return Err(EngineError::invalid("a framing stays on its wall: delete it and frame the other wall"));
+            }
+            f.check_size(p).map_err(EngineError::invalid)?;
+        }
         _ => {}
     }
     Ok(kind)

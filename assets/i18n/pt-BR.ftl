@@ -3234,6 +3234,7 @@ tpl-type-steel-building = Galpão metálico
 category-truss = Treliças
 tpl-type-truss = Treliça
 tx-steel-building = Criar galpão metálico
+tx-wall-framing = Criar enquadramento de parede
 action-steel-building = Galpão metálico
 dlg-steel-building = Galpão metálico
 section-steel-building = Galpão metálico
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = Tipo do banzo inferior
 label-web-type = Tipo das diagonais
 label-post-type = Tipo dos montantes
 msg-truss-material = Treliças são de aço ou madeira: escolha um deles em Material.
+
+# Wall framing
+category-wall-framing = Ossaturas de parede
+tpl-type-wall-framing = Ossatura de parede
+framing-light-steel = Light Steel Frame
+framing-wood = Wood Frame
+action-light-steel-frame = Light Steel Frame
+action-wood-frame = Wood Frame
+dlg-wall-framing = Ossatura de parede
+section-wall-framing = Ossatura
+prop-wall-framing = Ossatura
+prop-framing-system = Sistema
+prop-stud-spacing = Espaçamento dos montantes
+label-stud-type = Tipo dos montantes
+label-track-type = Tipo das guias e soleiras
+label-header-type = Tipo das vergas e contravergas
+prop-double-top = Frechal duplo
+prop-blocking = Bloqueadores
+action-select-framing = Selecionar
+msg-no-walls-to-frame = Nenhuma parede reta sem ossatura: selecione paredes ou abra uma planta do nível delas.
+msg-walls-framed = { $walls } paredes estruturadas com { $count } peças.
+cmd-desc-light-steel-frame = Estrutura as paredes selecionadas (ou as do nível ativo) em light steel frame: montantes formados a frio a cada 0,4 m entre guias, montantes duplos, vergas, contravergas e montantes curtos em portas e janelas, acompanhando a parede e suas aberturas.
+cmd-desc-wood-frame = Estrutura as paredes selecionadas (ou as do nível ativo) em wood frame: montantes a cada 0,6 m entre soleira e frechal duplo, montantes duplos, vergas, contravergas e montantes curtos em portas e janelas, acompanhando a parede e suas aberturas.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Alvenaria 6"

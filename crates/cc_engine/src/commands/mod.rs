@@ -59,6 +59,7 @@ pub mod topography;
 pub mod types;
 pub mod valve;
 pub mod views;
+pub mod wall_framing;
 
 use crate::error::{EngineError, Result};
 use crate::session::Session;

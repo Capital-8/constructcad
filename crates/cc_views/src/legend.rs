@@ -258,6 +258,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::WallFraming {}
             | TypeData::Topography { .. }
             | TypeData::Pad { .. } => {}
         }

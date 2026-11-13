@@ -3234,6 +3234,7 @@ tpl-type-steel-building = 鋼構建築
 category-truss = 桁架
 tpl-type-truss = 桁架
 tx-steel-building = 建立鋼構建築
+tx-wall-framing = 建立牆體骨架
 action-steel-building = 鋼構建築
 dlg-steel-building = 鋼構建築
 section-steel-building = 鋼構建築
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = 下弦桿類型
 label-web-type = 斜桿類型
 label-post-type = 直桿類型
 msg-truss-material = 桁架為鋼或木：請在「材料」中選擇其一。
+
+# Wall framing
+category-wall-framing = 牆骨架
+tpl-type-wall-framing = 牆骨架
+framing-light-steel = 輕鋼構架
+framing-wood = 木構架
+action-light-steel-frame = 輕鋼構架
+action-wood-frame = 木構架
+dlg-wall-framing = 牆骨架
+section-wall-framing = 骨架
+prop-wall-framing = 骨架
+prop-framing-system = 系統
+prop-stud-spacing = 立柱間距
+label-stud-type = 立柱類型
+label-track-type = 軌道與板材類型
+label-header-type = 過梁與窗台梁類型
+prop-double-top = 雙頂板
+prop-blocking = 橫撐
+action-select-framing = 選取
+msg-no-walls-to-frame = 沒有尚未加骨架的直牆：請選取牆，或開啟其樓層的平面圖。
+msg-walls-framed = 已為 { $walls } 面牆建立骨架，共 { $count } 個構件。
+cmd-desc-light-steel-frame = 為所選的牆（或目前樓層的牆）建立輕鋼構架：天地軌道之間每 0.4 m 一支冷軋立柱，門窗處有雙立柱、過梁、窗台梁與短柱，隨牆與開口更新。
+cmd-desc-wood-frame = 為所選的牆（或目前樓層的牆）建立木構架：底板與雙頂板之間每 0.6 m 一支立柱，門窗處有雙立柱、過梁、窗台梁與短柱，隨牆與開口更新。
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌體牆 6"

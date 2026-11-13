@@ -260,7 +260,8 @@ impl Category {
 }
 
 /// The element that decides an element's phases: the wall of a door or
-/// window, the beam or column of a rebar set, the stair of a railing.
+/// window, the beam or column of a rebar set, the stair of a railing, the
+/// wall of a wall framing.
 pub fn phase_host(e: &Element) -> Option<ElementId> {
     match &e.kind {
         ElementKind::Door(h) | ElementKind::Window(h) => Some(h.host),
@@ -268,6 +269,7 @@ pub fn phase_host(e: &Element) -> Option<ElementId> {
         ElementKind::Pad(p) => Some(p.host),
         ElementKind::Valve(v) => Some(v.host),
         ElementKind::Railing(r) => r.stair.map(|h| h.host),
+        ElementKind::WallFraming(f) => Some(f.wall),
         _ => None,
     }
 }

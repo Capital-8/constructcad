@@ -3235,6 +3235,7 @@ tpl-type-steel-building = Сталева будівля
 category-truss = Ферми
 tpl-type-truss = Ферма
 tx-steel-building = Створити сталеву будівлю
+tx-wall-framing = Каркас стін
 action-steel-building = Сталева будівля
 dlg-steel-building = Сталева будівля
 section-steel-building = Сталева будівля
@@ -3264,6 +3265,29 @@ label-bottom-chord-type = Тип нижнього пояса
 label-web-type = Тип розкосів
 label-post-type = Тип стояків
 msg-truss-material = Ферми бувають сталеві або дерев'яні: виберіть одне в «Матеріал».
+
+# Wall framing
+category-wall-framing = Каркаси стін
+tpl-type-wall-framing = Каркас стіни
+framing-light-steel = ЛСТК-каркас
+framing-wood = Дерев'яний каркас
+action-light-steel-frame = ЛСТК-каркас
+action-wood-frame = Дерев'яний каркас
+dlg-wall-framing = Каркас стіни
+section-wall-framing = Каркас
+prop-wall-framing = Каркас
+prop-framing-system = Система
+prop-stud-spacing = Крок стояків
+label-stud-type = Тип стояків
+label-track-type = Тип напрямних і обв'язок
+label-header-type = Тип перемичок і підвіконних ригелів
+prop-double-top = Подвійна верхня обв'язка
+prop-blocking = Розпірки
+action-select-framing = Виділити
+msg-no-walls-to-frame = Немає прямих стін без каркаса: виділіть стіни або відкрийте план їхнього рівня.
+msg-walls-framed = Каркаси { $walls } стін створено з { $count } елементів.
+cmd-desc-light-steel-frame = Створює легкий сталевий каркас виділених стін (або стін активного рівня): холодногнуті стояки кожні 0,4 м між напрямними, подвійні стояки, перемички, підвіконні ригелі й короткі стояки біля дверей і вікон, що оновлюються разом зі стіною та її отворами.
+cmd-desc-wood-frame = Створює дерев'яний каркас виділених стін (або стін активного рівня): стояки кожні 0,6 м між нижньою та подвійною верхньою обв'язкою, подвійні стояки, перемички, підвіконні ригелі й короткі стояки біля дверей і вікон, що оновлюються разом зі стіною та її отворами.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Кладка завтовшки 6"

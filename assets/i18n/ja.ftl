@@ -3234,6 +3234,7 @@ tpl-type-steel-building = 鉄骨建屋
 category-truss = トラス
 tpl-type-truss = トラス
 tx-steel-building = 鉄骨建屋を作成
+tx-wall-framing = 壁の下地を作成
 action-steel-building = 鉄骨建屋
 dlg-steel-building = 鉄骨建屋
 section-steel-building = 鉄骨建屋
@@ -3263,6 +3264,29 @@ label-bottom-chord-type = 下弦材タイプ
 label-web-type = 斜材タイプ
 label-post-type = 束材タイプ
 msg-truss-material = トラスは鉄骨または木造です。「材料」でいずれかを選んでください。
+
+# Wall framing
+category-wall-framing = 壁下地フレーム
+tpl-type-wall-framing = 壁下地フレーム
+framing-light-steel = 軽量鉄骨下地
+framing-wood = 木造枠組
+action-light-steel-frame = 軽量鉄骨下地
+action-wood-frame = 木造枠組
+dlg-wall-framing = 壁下地フレーム
+section-wall-framing = 下地フレーム
+prop-wall-framing = 下地フレーム
+prop-framing-system = 工法
+prop-stud-spacing = 間柱間隔
+label-stud-type = 間柱タイプ
+label-track-type = ランナー・土台タイプ
+label-header-type = まぐさ・窓台タイプ
+prop-double-top = ダブル頭つなぎ
+prop-blocking = 胴つなぎ
+action-select-framing = 選択
+msg-no-walls-to-frame = 下地のない直線の壁がありません。壁を選択するか、そのレベルの平面図を開いてください。
+msg-walls-framed = { $walls } 枚の壁に { $count } 本の部材で下地を作成しました。
+cmd-desc-light-steel-frame = 選択した壁（または現在のレベルの壁）に軽量鉄骨下地を作成します。ランナー間に 0.4 m ごとの冷間成形間柱、開口部には二重の柱、まぐさ、窓台、短い間柱を配置し、壁と開口部に合わせて更新します。
+cmd-desc-wood-frame = 選択した壁（または現在のレベルの壁）に木造枠組下地を作成します。土台とダブル頭つなぎの間に 0.6 m ごとの間柱、開口部には二重の柱、まぐさ、窓台、短い間柱を配置し、壁と開口部に合わせて更新します。
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 煉瓦造 6"
