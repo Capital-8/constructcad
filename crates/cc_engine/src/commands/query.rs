@@ -228,8 +228,14 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         }
         ElementKind::Beam(b) => {
             derived.insert("length".into(), json!(b.length()));
-            if b.end_offset.is_some() {
+            if b.end_offset.is_some() || b.arc().is_some() {
                 derived.insert("true_length".into(), json!(b.true_length()));
+            }
+            if let Some(arc) = b.arc() {
+                // The location line's circle and the turn from start to end.
+                derived.insert("center".into(), json!(arc.center.to_array()));
+                derived.insert("radius".into(), json!(arc.radius));
+                derived.insert("sweep".into(), json!(arc.sweep.to_degrees()));
             }
         }
         ElementKind::Foundation(f) if matches!(f.shape, cc_core::FoundationShape::Strip { .. }) => {
@@ -247,6 +253,10 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         ElementKind::Sweep(sw) => {
             derived.insert("length".into(), json!(sw.length()));
         }
+        ElementKind::SteelBuilding(b) => super::steel_building::derived(p, b, &mut derived),
+        ElementKind::WallFraming(f) => super::wall_framing::derived(p, f, &mut derived),
+        ElementKind::Truss(t) => super::framing::derived(t, &mut derived),
+        ElementKind::Bracing(b) => super::bracing::derived(b, &mut derived),
         ElementKind::Shaft(sh) => {
             let (bottom, top) = p.shaft_span(&e, sh);
             derived.insert("bottom".into(), json!(bottom));
@@ -345,6 +355,18 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             }),
         );
     }
+    // A column's faces, in the order `rebar_create` takes bars face by face.
+    if matches!(e.kind, ElementKind::Column(_))
+        && let Some(ty) = p.element_type(e.type_id)
+    {
+        let faces: Vec<Value> = cc_geom::rebar::column_faces(p, &ty.data, 0.0)
+            .iter()
+            .map(|f| json!({"curved": f.is_curved(), "length": f.length()}))
+            .collect();
+        if !faces.is_empty() {
+            derived.insert("faces".into(), json!(faces));
+        }
+    }
     let pinned = p.is_pinned(id);
     let (phase_created, phase_demolished) = super::phases::element_phases_json(p, &e);
     let design_option = super::design_options::option_ref_json(p, e.design_option);
@@ -395,6 +417,9 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("kind".into(), json!(v.kind.name()));
         derived.insert("diameter".into(), json!(v.diameter));
     }
+    if let Some(c) = geom.connections.get(&id) {
+        super::connection::derived(c, &mut derived);
+    }
     if let Some(t) = geom.segments.get(&id).and_then(|g| g.tray) {
         derived.insert("width".into(), json!(t.width));
         derived.insert("height".into(), json!(t.height));
@@ -405,6 +430,14 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("bar_length".into(), json!(set.bar_length()));
         derived.insert("total_length".into(), json!(set.total_length()));
         derived.insert("weight".into(), json!(set.weight()));
+        // The bars by length (to the millimeter), longest first: a slab's bars each have their own.
+        let mut lengths: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
+        for bar in &set.bars {
+            *lengths.entry((bar.length() * 1000.0).round() as i64).or_default() += 1;
+        }
+        let bars: Vec<Value> =
+            lengths.iter().rev().map(|(mm, count)| json!({"length": *mm as f64 / 1000.0, "count": count})).collect();
+        derived.insert("bars".into(), json!(bars));
     }
     if let Some(lines) = geom.roof_ridges.get(&id) {
         // Ridges, hips and valleys in plan.
@@ -477,6 +510,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "name": v.name,
         "category": snake(&format!("{:?}", v.category())),
         "scale": v.scale,
+        "scale_text": cc_core::scale::label(s.project().measurement_system(), v.scale),
         "detail": v.detail.name(),
         "visual_style": v.style().name(),
         "params": params,
@@ -514,7 +548,9 @@ impl Command for ViewsList {
     }
 }
 
-/// A view with all its parameters (`params`, editable with `view_set`).
+/// A view with all its parameters (`params`, editable with `view_set`), its
+/// `scale` denominator and `scale_text`, the scale as the project writes it
+/// (`1:50`, or `1/4" = 1'-0"` in imperial projects).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewGet {

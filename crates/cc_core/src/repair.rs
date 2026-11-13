@@ -60,13 +60,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Beam(b) => {
             b.top_offset.is_finite() && b.end_offset.is_none_or(f64::is_finite) && finite_points(&[b.start, b.end])
         }
-        ElementKind::Rebar(r) => {
-            let layout = match r.layout {
-                crate::RebarLayout::Longitudinal { count, .. } => (1..=200).contains(&count),
-                crate::RebarLayout::Stirrups { spacing } => spacing.is_finite() && spacing >= 0.02,
-            };
-            layout && r.cover.is_finite() && r.cover >= 0.0
-        }
+        ElementKind::Rebar(r) => r.layout.is_valid() && r.cover.is_finite() && r.cover >= 0.0,
         ElementKind::ShapedRebar(r) => r.is_valid(),
         ElementKind::Foundation(f) => {
             let shape = match &f.shape {
@@ -105,6 +99,14 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
+        // Out-of-range values are reset by `repair_member_hosts`, which keeps the members.
+        ElementKind::SteelBuilding(_) => true,
+        ElementKind::Truss(t) => t.start.is_finite() && t.end.is_finite(),
+        ElementKind::Bracing(b) => b.start.is_finite() && b.end.is_finite(),
+        // Its numbers are reset by repair_member_hosts; its wall is checked with the hosts.
+        ElementKind::WallFraming(_) => true,
+        // Out-of-range values are reset by `repair_connections`.
+        ElementKind::Connection(_) => true,
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
     }
@@ -205,7 +207,12 @@ impl Project {
                 | TypeData::FilledRegion { .. }
                 | TypeData::MaskingRegion {}
                 | TypeData::Mass { .. }
-                | TypeData::Shaft {} => {}
+                | TypeData::Shaft {}
+                | TypeData::SteelBuilding {}
+                | TypeData::Truss {}
+                | TypeData::Bracing {}
+                | TypeData::Connection {}
+                | TypeData::WallFraming {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
                     for (r, d) in
                         [(cut_slope, crate::pad::DEFAULT_CUT_SLOPE), (fill_slope, crate::pad::DEFAULT_FILL_SLOPE)]
@@ -272,10 +279,15 @@ impl Project {
                 TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
                     repairs += usize::from(fix_positive(diameter, 0.025));
                 }
-                TypeData::Foundation { width, length, thickness, .. } => {
+                TypeData::Foundation { width, length, thickness, haunch, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(length, 1.0))
                         + usize::from(fix_positive(thickness, 0.4));
+                    // A haunch that makes no section: a plain strip.
+                    if haunch.is_some_and(|h| !h.fits(*width, *thickness)) {
+                        *haunch = None;
+                        repairs += 1;
+                    }
                 }
                 TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
@@ -394,9 +406,21 @@ impl Project {
                         ElementKind::Door(h) | ElementKind::Window(h) => {
                             self.element(h.host).is_some_and(|w| w.as_wall().is_some())
                         }
-                        ElementKind::Rebar(r) => self
-                            .element(r.host)
-                            .is_some_and(|h| matches!(h.kind, ElementKind::Beam(_) | ElementKind::Column(_))),
+                        // Wall bars in walls, slab bars in floors and foundation
+                        // slabs, the other layouts in beams and columns.
+                        ElementKind::Rebar(r) => self.element(r.host).is_some_and(|h| match &h.kind {
+                            ElementKind::Wall(_) => r.layout.in_wall(),
+                            ElementKind::Floor(_) => r.layout.in_slab(),
+                            ElementKind::Foundation(f) => match f.shape {
+                                crate::FoundationShape::Slab { .. } => r.layout.in_slab(),
+                                crate::FoundationShape::Strip { .. } => r.layout.fits_strip(),
+                                crate::FoundationShape::Pad { .. } => false,
+                            },
+                            ElementKind::Beam(_) | ElementKind::Column(_) => {
+                                !r.layout.in_wall() && !r.layout.in_slab() && !r.layout.in_strip()
+                            }
+                            _ => false,
+                        }),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),
@@ -410,6 +434,8 @@ impl Project {
                         ElementKind::Valve(v) => {
                             self.element(v.host).is_some_and(|h| matches!(h.kind, ElementKind::Pipe(_)))
                         }
+                        ElementKind::WallFraming(f) => self.element(f.wall).is_some_and(|w| w.as_wall().is_some()),
+                        ElementKind::Connection(c) => self.element(c.member).is_some_and(|m| c.fits(&m.kind)),
                         _ => true,
                     };
                     !(type_ok && level_ok && host_ok && element_is_valid(e))
@@ -424,6 +450,12 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
+        // One framing per wall.
+        repairs += self.repair_wall_framings();
+        // Member hosts: numbers, types and members (after invalid elements went).
+        repairs += self.repair_member_hosts();
+        // Connections: one per member end, numbers in range.
+        repairs += self.repair_connections();
         // Dimension ends referencing missing elements or bad numbers become free.
         let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
         let level_ids: Vec<_> = self.levels.iter().map(|l| l.id).collect();
@@ -556,12 +588,13 @@ impl Project {
                 r.edge_slopes.pop();
             }
         }
-        // Arc walls and arc strip footings: a bulge that is not a number makes
+        // Arc walls, arc beams and arc strip footings: a bulge that is not a number makes
         // them straight, one past a nearly full circle is clamped, a negligible
         // one is dropped.
         for e in self.elements.values_mut() {
             let bulge = match &mut e.kind {
                 ElementKind::Wall(w) => &mut w.bulge,
+                ElementKind::Beam(b) => &mut b.bulge,
                 ElementKind::Foundation(crate::Foundation {
                     shape: crate::FoundationShape::Strip { bulge, .. },
                     ..
@@ -575,6 +608,33 @@ impl Project {
             };
             if fixed.to_bits() != bulge.to_bits() {
                 *bulge = fixed;
+                repairs += 1;
+            }
+        }
+        // Bars by face out of range: spread around the section again.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Rebar(r) = &mut e.kind
+                && (r.faces.len() > crate::FaceBars::MAX_FACES || r.faces.iter().any(|f| !f.is_valid()))
+            {
+                r.faces.clear();
+                repairs += 1;
+            }
+        }
+        // Lap splices out of range: whole bars.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Rebar(r) = &mut e.kind
+                && r.splice.is_some_and(|s| !s.is_valid())
+            {
+                r.splice = None;
+                repairs += 1;
+            }
+        }
+        // An arc beam is level.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Beam(b) = &mut e.kind
+                && b.bulge != 0.0
+                && b.end_offset.take().is_some()
+            {
                 repairs += 1;
             }
         }
@@ -1208,6 +1268,71 @@ mod tests {
         assert!(crate::arc::Arc::bulge_through(DVec2::ZERO, DVec2::X, DVec2::new(2.0, 0.0)).is_none());
     }
 
+    /// Crafted arc beams: their bulges are repaired like walls', an arc
+    /// beam is level, and lap splices out of range are dropped.
+    #[test]
+    fn arc_beams_and_splices_are_repaired() {
+        use crate::{Beam, Rebar, RebarLayout, Splice};
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let beam_t = p.default_type(Category::Beam).unwrap();
+        let bar_t = p.default_type(Category::Rebar).unwrap();
+        let add = |p: &mut Project, type_id, kind| {
+            let id = ElementId(p.alloc_id());
+            let e = Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            };
+            p.elements.insert(id, e);
+            id
+        };
+        let mut ids = Vec::new();
+        for bulge in [f64::NAN, 1e6, 1e-9, 0.5] {
+            let mut beam = Beam::new(DVec2::ZERO, DVec2::new(4.0, 0.0), 3.0);
+            beam.bulge = bulge;
+            beam.end_offset = Some(3.5);
+            ids.push(add(&mut p, beam_t, ElementKind::Beam(beam)));
+        }
+        let mut bars = Vec::new();
+        for splice in [
+            Splice { max_length: 12.0, lap: 0.5 },
+            Splice { max_length: f64::NAN, lap: 0.5 },
+            Splice { max_length: 2.0, lap: 1.5 },
+        ] {
+            let layout = RebarLayout::Sides { count: 1, spacing: 0.0 };
+            let rebar = Rebar { host: ids[0], layout, cover: 0.025, splice: Some(splice), faces: Vec::new() };
+            bars.push(add(&mut p, bar_t, ElementKind::Rebar(rebar)));
+        }
+        assert!(p.repair() >= 5);
+        let beams: Vec<(f64, Option<f64>)> = ids
+            .iter()
+            .map(|id| match &p.element(*id).unwrap().kind {
+                ElementKind::Beam(b) => (b.bulge, b.end_offset),
+                _ => panic!("a beam"),
+            })
+            .collect();
+        // Straight beams keep their slope; arc beams lose it.
+        assert_eq!(beams, vec![(0.0, Some(3.5)), (crate::arc::MAX_BULGE, None), (0.0, Some(3.5)), (0.5, None)]);
+        let splices: Vec<bool> = bars
+            .iter()
+            .map(|id| match &p.element(*id).unwrap().kind {
+                ElementKind::Rebar(r) => r.splice.is_some(),
+                _ => panic!("rebar"),
+            })
+            .collect();
+        assert_eq!(splices, vec![true, false, false]);
+        assert_eq!(p.repair(), 0);
+    }
+
     /// Crafted arc strip footings: their bulges are repaired like walls'.
     #[test]
     fn degenerate_arc_strips_are_repaired() {
@@ -1224,7 +1349,7 @@ mod tests {
                 type_id,
                 mark: String::new(),
                 comments: String::new(),
-                kind: ElementKind::Foundation(crate::Foundation { shape, top_offset: 0.0 }),
+                kind: ElementKind::Foundation(crate::Foundation::new(shape, 0.0)),
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,

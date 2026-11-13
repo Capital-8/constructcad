@@ -163,6 +163,11 @@ pub fn sizing(ctx: &Context, state: &mut AppState) {
             let n = |v: &serde_json::Value, d: usize| {
                 v.as_f64().map_or(String::from("–"), |x| cc_views::format::number(x, d))
             };
+            // Millimeters, or inches in imperial projects.
+            let diameter = |v: &serde_json::Value| {
+                use cc_views::format::{MetricSize, size};
+                v.as_f64().map_or(String::from("–"), |mm| size(mm / 1000.0, MetricSize::MmNumber(0)))
+            };
             let status = |ok: &serde_json::Value| {
                 if ok.as_bool() == Some(true) {
                     RichText::new(t!("sizing-ok")).color(PALETTE.text_muted)
@@ -202,13 +207,12 @@ pub fn sizing(ctx: &Context, state: &mut AppState) {
                         ui.label(format!("E{}", p["id"]));
                         let unit = if p["kind"] == "sanitary" { t!("col-drain-units") } else { t!("sizing-weights") };
                         ui.label(format!("{} {unit}", n(&p["load"], 1)));
-                        ui.label(if p["flow_l_s"].is_null() {
-                            "–".into()
-                        } else {
-                            format!("{} l/s", n(&p["flow_l_s"], 2))
+                        ui.label(match p["flow_l_s"].as_f64() {
+                            None => "–".into(),
+                            Some(flow) => cc_views::format::quantity(cc_views::format::Quantity::Flow, flow, 2),
                         });
-                        ui.label(format!("Ø{}", n(&p["diameter_mm"], 0)));
-                        ui.label(format!("Ø{}", n(&p["required_mm"], 0)));
+                        ui.label(format!("Ø{}", diameter(&p["diameter_mm"])));
+                        ui.label(format!("Ø{}", diameter(&p["required_mm"])));
                         ui.label(status(&p["ok"]));
                         ui.end_row();
                     }
@@ -246,7 +250,7 @@ pub fn sizing(ctx: &Context, state: &mut AppState) {
                     ui.label(if c["length_m"].is_null() {
                         "–".into()
                     } else {
-                        format!("{} m", n(&c["length_m"], 1))
+                        crate::lps_cabling_ui::meters_text(&c["length_m"], 1)
                     });
                     ui.label(if c["voltage_drop_pct"].is_null() {
                         "–".into()

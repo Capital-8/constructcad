@@ -72,7 +72,7 @@ pub struct WallCreate {
     /// Wall type id or name (default: the default wall type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Unconnected height in meters (default 3).
+    /// Unconnected height in meters (default 3; 10'-0" in imperial projects).
     #[serde(default)]
     pub height: Option<f64>,
     /// Level the top is attached to, instead of a height.
@@ -111,7 +111,7 @@ impl Command for WallCreate {
             end,
             bulge,
             base_offset: finite(self.base_offset.unwrap_or(0.0), "base_offset")?,
-            height: positive(self.height.unwrap_or(3.0), "height")?,
+            height: positive(self.height.unwrap_or(p.defaults().story), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or(WallTop::Unconnected),
             location_line,
             ..Default::default()
@@ -164,6 +164,23 @@ pub(crate) fn check_arc(p: &Project, type_id: cc_core::ElementTypeId, wall: &Wal
     // The tightest face may be the location line moved by up to the whole thickness.
     if arc.radius <= thickness + 1e-3 {
         return Err(EngineError::rejected("the arc is too tight for the thickness of the wall"));
+    }
+    Ok(())
+}
+
+/// An arc beam is level and must leave room inside its curve for its width.
+pub(crate) fn check_beam_arc(p: &Project, type_id: cc_core::ElementTypeId, beam: &Beam) -> Result<()> {
+    let Some(arc) = beam.arc() else { return Ok(()) };
+    if beam.rise().abs() > 1e-9 {
+        return Err(EngineError::invalid("an arc beam is level: it takes no end_offset"));
+    }
+    let width = match p.element_type(type_id).map(|t| &t.data) {
+        Some(cc_core::TypeData::Beam { width, .. }) => *width,
+        _ => 0.0,
+    };
+    // The tightest face may be the location line moved by up to the whole width.
+    if arc.radius <= width + 1e-3 {
+        return Err(EngineError::rejected("the arc is too tight for the width of the beam"));
     }
     Ok(())
 }
@@ -309,7 +326,8 @@ pub struct SketchArgs {
     /// Type id or name (default: the category's default type).
     #[serde(default, rename = "type")]
     pub type_ref: Option<Ref>,
-    /// Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6).
+    /// Floors: top above the level (default 0). Ceilings: bottom above the level (default 2.6; 8'-0" in
+    /// imperial projects).
     /// Roofs: base above the level (default: top of the tallest wall).
     #[serde(default)]
     pub offset: Option<f64>,
@@ -366,6 +384,9 @@ pub struct FloorCreate {
     /// the boundary, apart from each other.
     #[serde(default)]
     pub openings: Vec<Vec<Point>>,
+    /// A structural slab, one that takes reinforcement (default false).
+    #[serde(default)]
+    pub structural: Option<bool>,
 }
 
 impl Command for FloorCreate {
@@ -382,6 +403,7 @@ impl Command for FloorCreate {
             None => self.openings.iter().map(|o| points(o)).collect::<Result<_>>()?,
         };
         floor.sketch = drawn;
+        floor.structural = self.structural.unwrap_or(false);
         check_openings(&floor.boundary, &floor.openings)?;
         create(
             s,
@@ -409,7 +431,7 @@ impl Command for CeilingCreate {
         if let Some(at) = profile.openings.first().and_then(|o| o.first()) {
             return Err(super::sketch::sketch_error(cc_core::sketch::SketchError::Openings(*at)));
         }
-        let height_offset = finite(self.sketch.offset.unwrap_or(2.6), "offset")?;
+        let height_offset = finite(self.sketch.offset.unwrap_or(s.project().defaults().ceiling_offset), "offset")?;
         let ceiling = Ceiling { boundary: profile.outline, height_offset, cuts: Vec::new(), sketch: drawn };
         let kind = ElementKind::Ceiling(ceiling);
         create(s, t!("tx-create-ceiling"), level, Category::Ceiling, self.sketch.type_ref.as_ref(), kind)
@@ -670,7 +692,7 @@ impl Command for RoomCreate {
                 _ => None,
             }))
         });
-        let height = positive(self.height.unwrap_or_else(|| p.level_height(level, 3.0)), "height")?;
+        let height = positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?;
         let room = Room { position, number, name: self.name.unwrap_or_else(|| t!("room-default-name")), height };
         create(s, t!("tx-create-room"), level, Category::Room, None, ElementKind::Room(room))
     }
@@ -758,7 +780,7 @@ impl Command for ColumnCreate {
             position: point(self.position)?,
             rotation_deg: finite(self.rotation.unwrap_or(0.0), "rotation")?,
             base_offset: 0.0,
-            height: positive(self.height.unwrap_or_else(|| p.level_height(level, 3.0)), "height")?,
+            height: positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_top(p, level)),
             structural: self.structural.unwrap_or(true),
         };
@@ -766,8 +788,10 @@ impl Command for ColumnCreate {
     }
 }
 
-/// Create a beam from `start` to `end`; its location line is `top_offset` above the level
-/// (default: the level's height), at the top of the section unless `vertical` says otherwise.
+/// Create a beam from `start` to `end`, straight or, for an arc beam, through `mid` (or with a
+/// `bulge` or a `radius`); its location line is `top_offset` above the level (default: the
+/// level's height), at the top of the section unless `vertical` says otherwise. An arc beam is
+/// level and joins columns and other beams at its ends like a straight one.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct BeamCreate {
@@ -793,6 +817,20 @@ pub struct BeamCreate {
     /// Height of the section at the location elevation: `top` (default), `center` or `bottom`.
     #[serde(default)]
     pub vertical: Option<String>,
+    /// Arc beams: a point the location line passes through between `start` and `end`.
+    #[serde(default)]
+    pub mid: Option<Point>,
+    /// Arc beams: `tan(sweep / 4)`, positive when the arc turns counter-clockwise from `start`
+    /// to `end` (1 is a half circle; at most 10 either way). Ignored when `mid` is given.
+    #[serde(default)]
+    pub bulge: Option<f64>,
+    /// Arc beams: the radius in meters, positive when the arc turns counter-clockwise from
+    /// `start` to `end`, negative when clockwise. Ignored when `mid` or `bulge` is given.
+    #[serde(default)]
+    pub radius: Option<f64>,
+    /// With `radius`: take the longer of the two arcs (default: the shorter).
+    #[serde(default)]
+    pub major_arc: Option<bool>,
 }
 
 /// A beam justification by name.
@@ -814,9 +852,12 @@ impl Command for BeamCreate {
         }
         let p = s.project();
         let level = refs::level_or_first(p, self.level.as_ref())?;
-        let top_offset = finite(self.top_offset.unwrap_or_else(|| p.level_height(level, 3.0)), "top_offset")?;
+        let top_offset =
+            finite(self.top_offset.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "top_offset")?;
         let mut beam = Beam::new(start, end, top_offset);
         beam.end_offset = self.end_offset.map(|z| finite(z, "end_offset")).transpose()?;
+        beam.bulge = arc_bulge(start, end, self.mid, self.bulge, self.radius, self.major_arc)?;
+        check_beam_arc(p, refs::type_of(p, Category::Beam, self.type_ref.as_ref())?, &beam)?;
         let lateral = [("center", BeamLateral::Center), ("left", BeamLateral::Left), ("right", BeamLateral::Right)];
         let vertical = [("top", BeamVertical::Top), ("center", BeamVertical::Center), ("bottom", BeamVertical::Bottom)];
         if let Some(j) = justification(self.lateral.as_deref(), &lateral, "lateral")? {
@@ -868,7 +909,8 @@ impl Command for RailingCreate {
 /// (outlets 0.30 m, switches 1.10 m, boards 1.30 m, wall lights 2.10 m,
 /// ceiling lights at the level height, data outlets 0.30 m, racks 1.40 m,
 /// air terminals on the roof under them, earth electrodes 0.50 m below the
-/// level) and may be put on a circuit or system of their kind; lightning
+/// level; in imperial projects outlets 1'-6", switches 4'-0", boards and
+/// racks 4'-6", wall lights 7'-0") and may be put on a circuit or system of their kind; lightning
 /// protection devices join the first lightning protection system by default.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

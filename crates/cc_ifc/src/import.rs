@@ -257,7 +257,7 @@ fn roof_outline(faces: &[Vec<DVec3>]) -> Option<(Vec<Vec<DVec2>>, f64, Option<DV
     Some((loops, slope.unwrap_or(0.0), uphill))
 }
 
-/// An arc wall: an axis on a circular arc and a footprint whose points all
+/// An arc wall (or arc beam): an axis on a circular arc and a footprint whose points all
 /// lie on two circles concentric with it, at equal distances from the axis.
 /// Returns its ends, bulge and thickness.
 fn arc_wall(axis: &[DVec2], footprint: &[DVec2]) -> Option<(DVec2, DVec2, f64, f64)> {
@@ -1909,9 +1909,16 @@ impl<'a> Importer<'a> {
                 matches!(d, TypeData::Foundation { kind: FoundationKind::Slab, thickness: t, .. }
                     if (t - thickness).abs() < TYPE_TOL)
             },
-            || TypeData::Foundation { kind: FoundationKind::Slab, width: 1.0, length: 1.0, thickness, material },
+            || TypeData::Foundation {
+                kind: FoundationKind::Slab,
+                width: 1.0,
+                length: 1.0,
+                thickness,
+                material,
+                haunch: None,
+            },
         );
-        let foundation = Foundation { shape: FoundationShape::Slab { boundary }, top_offset: z1 - elevation };
+        let foundation = Foundation::new(FoundationShape::Slab { boundary }, z1 - elevation);
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Foundation(foundation));
         true
     }
@@ -2537,7 +2544,11 @@ impl<'a> Importer<'a> {
                 {
                     return Some(p.id);
                 }
-                self.p.free_profile_name(&cc_core::profiles_project::section_name(&read.shape, class))
+                self.p.free_profile_name(&cc_core::profiles_project::section_name_in(
+                    &read.shape,
+                    class,
+                    self.p.measurement_system(),
+                ))
             }
         };
         if self.p.profiles.len() >= MAX_PROFILES {
@@ -2995,6 +3006,14 @@ impl<'a> Importer<'a> {
         }
         let (_, body) = self.product(e);
         let Some((_, z1)) = body.z_range() else { return false };
+        // An arc beam: an axis on a circular arc and a band between two
+        // circles concentric with it, extruded upwards.
+        if let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical())
+            && let Some((start, end, bulge, width)) = arc_wall(&body.axis_points, &ex.footprint())
+        {
+            let read = self.rect_section(id, width, ex.vector.z.abs());
+            return self.add_beam(id, e, (start, end), bulge, read, z1);
+        }
         // A plan footprint extruded upwards along an axis: the axis keeps the
         // beam's own length (the body's ends include its joins).
         if let Some((a, b)) = body.axis
@@ -3011,7 +3030,7 @@ impl<'a> Importer<'a> {
             let n = dir.perp() * ((v0 + v1) / 2.0);
             let (width, height) = (v1 - v0, ex.vector.z.abs());
             let read = self.rect_section(id, width, height);
-            return self.add_beam(id, e, (a + n, b + n), read, z1);
+            return self.add_beam(id, e, (a + n, b + n), 0.0, read, z1);
         }
         let Some(ex) = body.sole_extrusion_with_voids().cloned() else { return false };
         if ex.is_vertical() {
@@ -3025,7 +3044,7 @@ impl<'a> Importer<'a> {
             let (along, len, across) = if w >= h { (xw, w, h) } else { (xw.perp(), h, w) };
             let height = ex.vector.z.abs();
             let read = self.rect_section(id, across, height);
-            return self.add_beam(id, e, (c - along * len / 2.0, c + along * len / 2.0), read, z1);
+            return self.add_beam(id, e, (c - along * len / 2.0, c + along * len / 2.0), 0.0, read, z1);
         }
         // A section extruded along the beam, level.
         let Some(dir) = ex.vector.truncate().try_normalize().filter(|_| ex.vector.normalize().z.abs() < 0.1) else {
@@ -3059,11 +3078,20 @@ impl<'a> Importer<'a> {
         };
         let Some((v0, v1)) = range(world.iter().map(|w| (w.truncate() - a).dot(n))) else { return false };
         let shift = n * ((v0 + v1) / 2.0);
-        self.add_beam(id, e, (a + shift, b + shift), read, z1)
+        self.add_beam(id, e, (a + shift, b + shift), 0.0, read, z1)
     }
 
-    /// A native beam along `start`-`end` with its top at `z1`, its type of the section `read`.
-    fn add_beam(&mut self, id: u32, e: &Entity, (start, end): (DVec2, DVec2), read: ReadSection, z1: f64) -> bool {
+    /// A native beam along `start`-`end` (an arc with a `bulge`) with its top
+    /// at `z1`, its type of the section `read`.
+    fn add_beam(
+        &mut self,
+        id: u32,
+        e: &Entity,
+        (start, end): (DVec2, DVec2),
+        bulge: f64,
+        read: ReadSection,
+        z1: f64,
+    ) -> bool {
         if start.distance(end) < 0.01 || !(start.is_finite() && end.is_finite() && z1.is_finite()) {
             return false;
         }
@@ -3109,7 +3137,8 @@ impl<'a> Importer<'a> {
             |d| same_section(d, profile, turn, &data),
             || data.clone(),
         );
-        let beam = Beam::new(start, end, z1 - elevation);
+        let mut beam = Beam::new(start, end, z1 - elevation);
+        beam.bulge = bulge;
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Beam(beam));
         true
     }

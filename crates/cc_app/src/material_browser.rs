@@ -11,6 +11,7 @@ use cc_core::Material;
 use cc_core::material::{Behavior, Finish, MaterialClass, PatternFill};
 use cc_engine::Ref;
 use cc_engine::commands::materials;
+use cc_views::format;
 use egui::{Color32, Context, DragValue, Pos2, Rect, RichText, Sense, Stroke, Ui, vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -405,7 +406,17 @@ fn optional_value(
         if crate::table::checkbox(ui, &mut on).changed() {
             update(state, &m.name, field, |x| set(x, if on { Some(value.unwrap_or(0.0)) } else { None }));
         }
-        if let Some(mut v) = value {
+        // Densities and strengths read in lb/ft³ and ksi in imperial projects.
+        let quantity = match unit {
+            "kg/m³" => Some(format::Quantity::Density),
+            "MPa" => Some(format::Quantity::Stress),
+            _ => None,
+        };
+        let system = format::system();
+        let per = quantity.map_or(1.0, |q| q.per_si(system));
+        let unit = quantity.map_or(unit, |q| q.symbol(system));
+        if let Some(stored) = value {
+            let mut v = stored * per;
             let speed = (v.abs() * 0.01).max(1e-6);
             let small = v != 0.0 && v.abs() < 1e-3;
             let mut drag = DragValue::new(&mut v).speed(speed);
@@ -421,7 +432,7 @@ fn optional_value(
             }
             let r = ui.add(drag);
             if r.changed() {
-                update(state, &m.name, field, |x| set(x, Some(v)));
+                update(state, &m.name, field, |x| set(x, Some(v / per)));
             }
             done(state, &r);
         } else {

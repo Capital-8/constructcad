@@ -74,7 +74,7 @@ pub fn value(key: &str, ctx: &FieldCtx) -> Option<String> {
             .position(|id| *id == ctx.sheet.id)
             .map_or(String::new(), |i| (i + 1).to_string()),
         "sheet_scale" => sheet_scale(p, viewports, ctx.as_indicated),
-        "paper" => size.label(),
+        "paper" => size.label_in(p.measurement_system()),
         "project_name" => info.name.clone(),
         "project_number" => info.number.clone(),
         "client" => info.client.clone(),
@@ -108,7 +108,7 @@ fn sheet_scale(p: &Project, viewports: &[cc_core::Viewport], as_indicated: &str)
         .map(|v| v.scale);
     match scales.next() {
         None => String::new(),
-        Some(first) if scales.all(|s| s == first) => format!("1:{first}"),
+        Some(first) if scales.all(|s| s == first) => crate::format::scale_with(&p.units, first),
         Some(_) => as_indicated.to_string(),
     }
 }

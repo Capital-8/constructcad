@@ -49,18 +49,25 @@ pub enum Tool {
     },
     Column {
         type_id: ElementTypeId,
+        /// Started from the Structure tab: its type list keeps to this material.
+        material: Option<cc_core::StructuralMaterial>,
     },
     Beam {
         type_id: ElementTypeId,
+        material: Option<cc_core::StructuralMaterial>,
     },
     /// Click to place a pad footing; Space turns it by 90°. With a strip
     /// type, draw strip footings as walls are drawn (lines or arcs).
     Footing {
         type_id: ElementTypeId,
     },
-    /// Click the two ends of a truss (options in `AppState::truss`); `type_id` is its chord type.
+    /// Click the two ends of a truss (options in `AppState::truss`) of the Structure tab's material.
     Truss {
-        type_id: ElementTypeId,
+        material: cc_core::StructuralMaterial,
+    },
+    /// Click the two column axes of a braced bay (options in `AppState::bracing`).
+    Bracing {
+        material: cc_core::StructuralMaterial,
     },
     Stair {
         type_id: ElementTypeId,
@@ -202,6 +209,7 @@ impl Tool {
             Tool::Beam { .. } => "tool-beam",
             Tool::Footing { .. } => "tool-footing",
             Tool::Truss { .. } => "tool-truss",
+            Tool::Bracing { .. } => "action-bracing",
             Tool::Stair { .. } => "tool-stair",
             Tool::Ramp { .. } => "tool-ramp",
             Tool::Railing { .. } => "tool-railing",
@@ -253,10 +261,9 @@ impl Tool {
             | Tool::Room { type_id }
             | Tool::Grid { type_id }
             | Tool::Dimension { type_id, .. }
-            | Tool::Column { type_id }
-            | Tool::Beam { type_id }
+            | Tool::Column { type_id, .. }
+            | Tool::Beam { type_id, .. }
             | Tool::Footing { type_id }
-            | Tool::Truss { type_id }
             | Tool::Stair { type_id }
             | Tool::Ramp { type_id }
             | Tool::Railing { type_id }
@@ -274,6 +281,14 @@ impl Tool {
         }
     }
 
+    /// The structural material a column or beam tool's types keep to.
+    pub fn material(&self) -> Option<cc_core::StructuralMaterial> {
+        match self {
+            Tool::Column { material, .. } | Tool::Beam { material, .. } => *material,
+            _ => None,
+        }
+    }
+
     pub fn category(&self) -> Option<Category> {
         match self {
             Tool::Wall { .. } => Some(Category::Wall),
@@ -284,7 +299,6 @@ impl Tool {
             Tool::Column { .. } => Some(Category::Column),
             Tool::Beam { .. } => Some(Category::Beam),
             Tool::Footing { .. } => Some(Category::Foundation),
-            Tool::Truss { .. } => Some(Category::Beam),
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Ramp { .. } => Some(Category::Ramp),
             Tool::Railing { .. } => Some(Category::Railing),
@@ -311,10 +325,11 @@ impl Tool {
             Tool::Room { .. } => Tool::Room { type_id: id },
             Tool::Grid { .. } => Tool::Grid { type_id: id },
             Tool::Dimension { mode, .. } => Tool::Dimension { type_id: id, mode },
-            Tool::Column { .. } => Tool::Column { type_id: id },
-            Tool::Beam { .. } => Tool::Beam { type_id: id },
+            Tool::Column { material, .. } => Tool::Column { type_id: id, material },
+            Tool::Beam { material, .. } => Tool::Beam { type_id: id, material },
             Tool::Footing { .. } => Tool::Footing { type_id: id },
-            Tool::Truss { .. } => Tool::Truss { type_id: id },
+            Tool::Truss { material } => Tool::Truss { material },
+            Tool::Bracing { material } => Tool::Bracing { material },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Ramp { .. } => Tool::Ramp { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
@@ -358,8 +373,8 @@ impl Tool {
             Category::Room => Tool::Room { type_id },
             Category::Grid => Tool::Grid { type_id },
             Category::Dimension => Tool::Dimension { type_id, mode: DimensionMode::Aligned },
-            Category::Column => Tool::Column { type_id },
-            Category::Beam => Tool::Beam { type_id },
+            Category::Column => Tool::Column { type_id, material: None },
+            Category::Beam => Tool::Beam { type_id, material: None },
             Category::Foundation | Category::Rebar => Tool::Footing { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Ramp => Tool::Ramp { type_id },
@@ -376,7 +391,13 @@ impl Tool {
             Category::LevelMark => Tool::LevelMark { type_id },
             Category::DetailComponent => Tool::DetailComponent { type_id },
             // Imported, not drawn.
-            Category::CadImport | Category::TitleBlock => return None,
+            Category::CadImport
+            | Category::TitleBlock
+            | Category::SteelBuilding
+            | Category::Truss
+            | Category::Bracing
+            | Category::Connection
+            | Category::WallFraming => return None,
         })
     }
 }
@@ -897,9 +918,25 @@ pub(crate) fn underlay_snap(drawing: &Drawing2D, raw: DVec2, r: f64, out: &mut c
     }
 }
 
-/// Increment for rounding free coordinates at the current zoom.
+/// Increment for rounding free coordinates at the current zoom: 1 cm to
+/// 10 m in metric projects, 1/2" to 20'-0" in imperial ones, so drawn
+/// lengths land on round values of the project's system.
 pub(crate) fn round_step(scale: f64) -> f64 {
-    [0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0].into_iter().find(|s| s * scale >= 6.0).unwrap_or(10.0)
+    use cc_core::units::{FOOT, INCH};
+    let (steps, last): (&[f64], f64) = if format::imperial() {
+        (&[INCH / 2.0, INCH, 3.0 * INCH, 6.0 * INCH, FOOT, 2.0 * FOOT, 5.0 * FOOT, 10.0 * FOOT], 20.0 * FOOT)
+    } else {
+        (&[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0], 10.0)
+    };
+    steps.iter().copied().find(|s| s * scale >= 6.0).unwrap_or(last)
+}
+
+/// `meters` rounded to a millimeter, or to 1/16" in imperial projects
+/// (component reference planes and sketches), to 1e-7 m so it writes short.
+pub(crate) fn round_fine(meters: f64) -> f64 {
+    let step = if format::imperial() { cc_core::units::INCH / 16.0 } else { 0.001 };
+    let v = (meters / step).round() * step;
+    (v * 1e7).round() / 1e7
 }
 
 /// Snap `raw` to model points, wall lines, alignments and angle/length
@@ -979,6 +1016,13 @@ fn model_snaps(project: &Project, geom: &ModelGeometry, level: Option<LevelId>) 
                 Some(a) => arcs.push(a),
                 None => lines.push((w.start, w.end)),
             }
+        } else if let ElementKind::Beam(b) = &e.kind
+            && let Some(a) = b.arc()
+        {
+            // An arc beam's location line: its ends, its middle and the arc itself.
+            ends.extend([b.start, b.end]);
+            mids.push(a.point(a.length() * 0.5));
+            arcs.push(a);
         } else if let Some(s) = e.as_segment() {
             // Pipe and conduit ends, and runs to branch from.
             ends.extend([s.start, s.end]);
@@ -1564,10 +1608,11 @@ pub fn handle(
         }
         (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
         (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Column { type_id }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Column { type_id, .. }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Beam { type_id, .. }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Truss { type_id }, Some(level)) => truss_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Truss { material }, Some(level)) => truss_tool(ui, resp, painter, state, level, *material, xf),
+        (Tool::Bracing { material }, Some(level)) => bracing_tool(ui, resp, painter, state, level, *material, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Ramp { type_id }, Some(level)) => ramp_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, _) if state.railing_host.on => {
@@ -1718,11 +1763,17 @@ pub fn component_group(project: &Project, type_id: ElementTypeId) -> ComponentGr
 /// The types the options bar offers to a tool of `category` placing `type_id`:
 /// all of the category, but for components only those placed by the same
 /// tool (fixtures, electrical devices, a device with its own tool, the rest).
-pub fn tool_types(project: &Project, category: Category, type_id: ElementTypeId) -> Vec<(ElementTypeId, String)> {
+pub fn tool_types(
+    project: &Project,
+    category: Category,
+    type_id: ElementTypeId,
+    material: Option<cc_core::StructuralMaterial>,
+) -> Vec<(ElementTypeId, String)> {
     let group = (category == Category::Component).then(|| component_group(project, type_id));
     project
         .types_of(category)
         .filter(|t| group.is_none_or(|g| component_group(project, t.id) == g))
+        .filter(|t| material.is_none_or(|m| project.structural_material(&t.data) == Some(m)))
         .map(|t| (t.id, t.name.clone()))
         .collect()
 }
@@ -1891,32 +1942,70 @@ fn segment_tool(
 /// Truss tool options, kept between uses.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrussOptions {
-    /// Distance between the chord axes, meters.
+    pub shape: cc_core::truss::TrussShape,
+    pub pattern: cc_core::truss::TrussPattern,
+    /// Chord to chord (flat), or the rise (mono, gable), meters.
     pub height: f64,
     /// Number of panels; 0 picks about one per 1.5 m.
     pub panels: u32,
-    /// `pratt`, `howe` or `warren`.
-    pub pattern: &'static str,
+    pub copies: u32,
+    /// Copy to copy, meters.
+    pub spacing: f64,
 }
 
 impl Default for TrussOptions {
     fn default() -> Self {
-        Self { height: 1.0, panels: 0, pattern: "pratt" }
+        Self {
+            shape: Default::default(),
+            pattern: Default::default(),
+            height: cc_core::truss::DEFAULT_HEIGHT,
+            panels: 0,
+            copies: 1,
+            spacing: cc_core::truss::DEFAULT_SPACING,
+        }
     }
 }
 
-/// The truss patterns, with their translation keys.
-pub const TRUSS_PATTERNS: [(&str, &str); 3] =
-    [("pratt", "truss-pratt"), ("howe", "truss-howe"), ("warren", "truss-warren")];
+/// The command the tool runs for a truss from `a` to `b`.
+pub fn truss_command(
+    o: &TrussOptions,
+    material: cc_core::StructuralMaterial,
+    level: LevelId,
+    a: DVec2,
+    b: DVec2,
+) -> cc_engine::commands::framing::TrussCreate {
+    // Auto panels on a gable: the engine's default is even already.
+    let panels = (o.panels > 0).then(|| {
+        if o.shape == cc_core::truss::TrussShape::Gable && !o.panels.is_multiple_of(2) {
+            o.panels + 1
+        } else {
+            o.panels
+        }
+    });
+    cc_engine::commands::framing::TrussCreate {
+        start: a.to_array(),
+        end: b.to_array(),
+        height: o.height,
+        panels,
+        pattern: Some(o.pattern.code().into()),
+        shape: Some(o.shape.code().into()),
+        copies: Some(o.copies),
+        spacing: Some(o.spacing),
+        material: Some(material.code().into()),
+        level: Some(Ref::Id(level.0)),
+        ..Default::default()
+    }
+}
 
-/// Two clicks: the ends of a truss, laid out with the options bar's height, panels and pattern.
+/// Two clicks: the ends of a truss, laid out with the options bar's values
+/// and the Structure tab's material; the new truss is selected.
 fn truss_tool(
     ui: &Ui,
     resp: &Response,
     painter: &Painter,
     state: &mut AppState,
     level: LevelId,
-    type_id: ElementTypeId,
+    material: cc_core::StructuralMaterial,
     xf: &Xf,
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
@@ -1932,21 +2021,97 @@ fn truss_tool(
     if resp.clicked() {
         match anchor {
             None => state.interaction.anchor = Some(s.point),
-            Some(a) if a.distance(s.point) > 0.1 => {
-                let options = state.truss.clone();
-                let command = cc_engine::commands::framing::TrussCreate {
-                    start: a.to_array(),
-                    end: s.point.to_array(),
-                    height: options.height,
-                    panels: (options.panels > 0).then_some(options.panels),
-                    pattern: Some(options.pattern.to_string()),
-                    level: Some(Ref::Id(level.0)),
-                    chord_type: Some(Ref::Id(type_id.0)),
-                    ..Default::default()
-                };
-                if let Some(out) = crate::actions::run_command(state, command) {
-                    let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
-                    state.selection = ids.map(ElementId).collect();
+            Some(a) if a.distance(s.point) >= *cc_core::truss::LENGTH.start() => {
+                let command = truss_command(&state.truss, material, level, a, s.point);
+                if let Some(out) = crate::actions::run_command(state, command)
+                    && let Some(id) = out["id"].as_u64()
+                {
+                    state.selection = [ElementId(id)].into_iter().collect();
+                }
+                state.interaction.anchor = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Bracing tool options, kept between uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BracingOptions {
+    pub pattern: cc_core::bracing::BracingPattern,
+    /// One storey, meters.
+    pub height: f64,
+    pub stories: u32,
+    /// A diagonal rises toward the first click instead of the second.
+    pub flip: bool,
+    /// Diagonals change direction storey by storey.
+    pub alternate: bool,
+}
+
+impl Default for BracingOptions {
+    fn default() -> Self {
+        Self {
+            pattern: Default::default(),
+            height: cc_core::bracing::DEFAULT_HEIGHT,
+            stories: 1,
+            flip: false,
+            alternate: false,
+        }
+    }
+}
+
+/// The command the tool runs for a braced bay from `a` to `b`.
+pub fn bracing_command(
+    o: &BracingOptions,
+    material: cc_core::StructuralMaterial,
+    level: LevelId,
+    a: DVec2,
+    b: DVec2,
+) -> cc_engine::commands::bracing::BracingCreate {
+    cc_engine::commands::bracing::BracingCreate {
+        start: Some(a.to_array()),
+        end: Some(b.to_array()),
+        pattern: Some(o.pattern.code().into()),
+        height: Some(o.height),
+        stories: Some(o.stories),
+        flip: o.flip,
+        alternate: o.alternate,
+        material: Some(material.code().into()),
+        level: Some(Ref::Id(level.0)),
+        ..Default::default()
+    }
+}
+
+/// Two clicks: the column axes of a bay, braced with the options bar's
+/// values and the Structure tab's material; the new bracing is selected.
+fn bracing_tool(
+    ui: &Ui,
+    resp: &Response,
+    painter: &Painter,
+    state: &mut AppState,
+    level: LevelId,
+    material: cc_core::StructuralMaterial,
+    xf: &Xf,
+) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let shift = ui.input(|i| i.modifiers.shift);
+    let crossings = grid_crossings(state.project());
+    let anchor = state.interaction.anchor;
+    let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
+    draw_snap(painter, xf, s);
+    if let Some(a) = anchor {
+        painter.line_segment([xf.to_screen(a), xf.to_screen(s.point)], Stroke::new(1.5, PREVIEW));
+        temp_dimension(painter, xf, a, s.point, None, None, 0.1);
+    }
+    if resp.clicked() {
+        match anchor {
+            None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) >= *cc_core::bracing::LENGTH.start() => {
+                let command = bracing_command(&state.bracing, material, level, a, s.point);
+                if let Some(out) = crate::actions::run_command(state, command)
+                    && let Some(id) = out["id"].as_u64()
+                {
+                    state.selection = [ElementId(id)].into_iter().collect();
                 }
                 state.interaction.anchor = None;
             }
@@ -2007,11 +2172,12 @@ fn footing_tool(
 }
 
 /// Whether `type_id` is a strip footing type.
-/// The ends and the arc of an arc wall or arc strip footing: what the
-/// curvature handle of a selected element bends.
+/// The ends and the arc of an arc wall, arc beam or arc strip footing: what
+/// the curvature handle of a selected element bends.
 fn bendable(e: &cc_core::Element) -> Option<(DVec2, DVec2, cc_core::arc::Arc)> {
     match &e.kind {
         ElementKind::Wall(w) => Some((w.start, w.end, w.arc()?)),
+        ElementKind::Beam(b) => Some((b.start, b.end, b.arc()?)),
         ElementKind::Foundation(f) => match &f.shape {
             cc_core::FoundationShape::Strip { start, end, .. } => Some((*start, *end, f.shape.arc()?)),
             _ => None,
@@ -2020,10 +2186,11 @@ fn bendable(e: &cc_core::Element) -> Option<(DVec2, DVec2, cc_core::arc::Arc)> {
     }
 }
 
-/// Give a wall or strip footing a new bulge (the curvature handle's edit).
+/// Give a wall, beam or strip footing a new bulge (the curvature handle's edit).
 fn set_bulge(e: &mut cc_core::Element, to: f64) {
     match &mut e.kind {
         ElementKind::Wall(w) => w.bulge = to,
+        ElementKind::Beam(b) => b.bulge = to,
         ElementKind::Foundation(f) => {
             if let cc_core::FoundationShape::Strip { bulge, .. } = &mut f.shape {
                 *bulge = to;
@@ -2266,6 +2433,18 @@ fn align_grid_end(
 }
 
 /// Two clicks: start and end of a beam. Its top is at the level above by default.
+/// The command the beam tool runs for a beam from `a` to `b` (an arc with a `bulge`).
+pub fn beam_command(level: LevelId, type_id: ElementTypeId, a: DVec2, b: DVec2, bulge: f64) -> create::BeamCreate {
+    create::BeamCreate {
+        start: a.to_array(),
+        end: b.to_array(),
+        level: Some(Ref::Id(level.0)),
+        type_ref: Some(Ref::Id(type_id.0)),
+        bulge: (bulge != 0.0).then_some(bulge),
+        ..Default::default()
+    }
+}
+
 fn beam_tool(
     ui: &Ui,
     resp: &Response,
@@ -2281,28 +2460,71 @@ fn beam_tool(
     let anchor = state.interaction.anchor;
     let s = snap_at(state, Some(level), raw, anchor, &crossings, xf.scale, shift);
     draw_snap(painter, xf, s);
+    // As wide as the type's section (its profile turned in the type).
+    let project = state.project();
+    let section = project.element_type(type_id).and_then(|t| project.type_section(&t.data));
+    let width = section.map(|s| s.outline.bbox()).map_or(0.15, |(lo, hi)| hi.x - lo.x);
+    let width = if width.is_finite() && width > 0.0 { width } else { 0.15 };
+    // Arc mode: the start, the end, then a point on the arc (or a typed radius).
+    let arc_end = state.interaction.points.first().copied().filter(|_| state.beam_arc);
+    if let (Some(a), Some(b)) = (anchor, arc_end) {
+        let p = s.point;
+        let radius = state.typed.length_value();
+        let bulge = match radius {
+            Some(r) => bulge_with_radius(a, b, p, r),
+            None => cc_core::arc::Arc::bulge_through(a, p, b),
+        };
+        match bulge {
+            Some(bulge) => arc_preview(painter, xf, a, b, bulge, 0.0, width / 2.0),
+            None => paint_wall_preview(painter, xf, a, b, 0.0, width / 2.0),
+        }
+        if let Some(arc) = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge)) {
+            label(
+                painter,
+                xf.to_screen(p),
+                format!("R {}  {}", format::length(arc.radius), format::length(arc.length())),
+            );
+        }
+        let enter = ui.input(|i| i.key_pressed(Key::Enter)) && radius.is_some();
+        if resp.clicked() || enter {
+            match bulge {
+                Some(bulge) => {
+                    let command = beam_command(level, type_id, a, b, bulge);
+                    let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
+                    run_create(state, command);
+                    state.interaction.anchor = Some(b);
+                    state.interaction.points.clear();
+                    state.typed.clear();
+                    chain_placed(state, before, depth);
+                }
+                None if radius.is_some() => state.message = t!("msg-arc-radius-short"),
+                None => state.message = t!("msg-arc-collinear"),
+            }
+        }
+        return;
+    }
     if let Some(a) = state.interaction.anchor {
-        // As wide as the type's section (its profile turned in the type).
-        let project = state.project();
-        let section = project.element_type(type_id).and_then(|t| project.type_section(&t.data));
-        let width = section.map(|s| s.outline.bbox()).map_or(0.15, |(lo, hi)| hi.x - lo.x);
-        let width = if width.is_finite() && width > 0.0 { width } else { 0.15 };
-        let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
-        let pts = vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
-        painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+        if state.beam_arc {
+            painter.line_segment([xf.to_screen(a), xf.to_screen(s.point)], Stroke::new(1.0, PREVIEW));
+        } else {
+            let n = (s.point - a).normalize_or_zero().perp() * (width / 2.0);
+            let pts =
+                vec![xf.to_screen(a - n), xf.to_screen(s.point - n), xf.to_screen(s.point + n), xf.to_screen(a + n)];
+            painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5, PREVIEW)));
+        }
         temp_dimension(painter, xf, a, s.point, None, None, width / 2.0);
     }
     if resp.clicked() {
         match state.interaction.anchor {
             None => state.interaction.anchor = Some(s.point),
+            Some(a) if a.distance(s.point) > 0.05 && state.beam_arc => {
+                // The end of the arc; the next click places a point on it.
+                state.interaction.points = vec![s.point];
+                state.message = t!("hint-wall-arc-point");
+                state.typed.clear();
+            }
             Some(a) if a.distance(s.point) > 0.05 => {
-                let command = create::BeamCreate {
-                    start: a.to_array(),
-                    end: s.point.to_array(),
-                    level: Some(Ref::Id(level.0)),
-                    type_ref: Some(Ref::Id(type_id.0)),
-                    ..Default::default()
-                };
+                let command = beam_command(level, type_id, a, s.point, 0.0);
                 let (before, depth) = (chain_at(state), state.session.doc.undo_depth());
                 run_create(state, command);
                 state.interaction.anchor = Some(s.point);
@@ -2347,7 +2569,11 @@ fn stair_tool(
             painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
         }
         let end = g.walkline.last().map_or(a, |p| p.truncate());
-        let text = t!("label-stair", "risers" => g.risers, "run" => format::meters(g.run()));
+        let text = if format::imperial() {
+            t!("label-imp-stair", "risers" => g.risers, "run" => format::meters(g.run()))
+        } else {
+            t!("label-stair", "risers" => g.risers, "run" => format::meters(g.run()))
+        };
         label(painter, xf.to_screen(end), text);
     }
     if resp.clicked() {
@@ -2398,7 +2624,11 @@ fn ramp_tool(
             painter.add(egui::Shape::closed_line(pts, Stroke::new(1.0, PREVIEW)));
         }
         let end = g.walkline.last().map_or(a, |p| p.truncate());
-        let text = t!("label-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()));
+        let text = if format::imperial() {
+            t!("label-imp-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()))
+        } else {
+            t!("label-ramp", "flights" => g.check.flights, "run" => format::meters(g.run()))
+        };
         label(painter, xf.to_screen(end), text);
     }
     if resp.clicked() {
@@ -4050,7 +4280,7 @@ mod tests {
         let group = |id| component_group(&project, id);
         for (device, wanted) in [(false, ComponentGroup::Fixture), (true, ComponentGroup::Device)] {
             let first = mep_component_type(&project, device).expect("the template has one");
-            let listed = tool_types(&project, Category::Component, first);
+            let listed = tool_types(&project, Category::Component, first, None);
             assert!(listed.iter().any(|(id, _)| *id == first));
             assert!(listed.iter().all(|(id, _)| group(*id) == wanted), "{wanted:?}: {listed:?}");
             let key = Tool::Component { type_id: first }.name_key(&project);
@@ -4061,13 +4291,13 @@ mod tests {
             .find(|t| group(t.id) == ComponentGroup::Generic)
             .map(|t| t.id)
             .expect("the template has furniture");
-        let listed = tool_types(&project, Category::Component, furniture);
+        let listed = tool_types(&project, Category::Component, furniture, None);
         assert!(!listed.is_empty() && listed.iter().all(|(id, _)| group(*id) == ComponentGroup::Generic));
         assert!(listed.len() < project.types_of(Category::Component).count());
         assert_eq!(Tool::Component { type_id: furniture }.name_key(&project), "tool-component");
         // Other categories keep every type.
         let wall = project.types_of(Category::Wall).next().map(|t| t.id).unwrap();
-        assert_eq!(tool_types(&project, Category::Wall, wall).len(), project.types_of(Category::Wall).count());
+        assert_eq!(tool_types(&project, Category::Wall, wall, None).len(), project.types_of(Category::Wall).count());
     }
 
     /// The curvature handle bends arc strip footings as it bends arc walls
@@ -4101,6 +4331,39 @@ mod tests {
         assert!(!crate::engine_edit::element(&mut state, arc, None, |e| set_bulge(e, 1e3)));
         assert_eq!(element(&state, arc), kept);
         assert!(!state.message.is_empty());
+    }
+
+    /// The beam tool's command makes a straight beam or, with a bulge, an
+    /// arc beam, which then has the curvature handle and snaps by its arc.
+    #[test]
+    fn the_beam_tool_draws_arc_beams() {
+        let mut state = AppState::new(cc_core::Document::new(crate::actions::new_project()));
+        let level = state.project().levels.first().map(|l| l.id).unwrap();
+        let type_id = state.project().default_type(Category::Beam).unwrap();
+        let (a, b) = (DVec2::new(2.5, 0.0), DVec2::new(0.0, 2.5));
+        let made = |state: &mut AppState, command: create::BeamCreate| {
+            ElementId(state.session.run(command).unwrap()["id"].as_u64().unwrap())
+        };
+        let straight = made(&mut state, beam_command(level, type_id, a + DVec2::X * 10.0, b + DVec2::X * 10.0, 0.0));
+        let bulge = cc_core::arc::Arc::bulge_through(a, DVec2::from_angle(0.7) * 2.5, b).unwrap();
+        let arc = made(&mut state, beam_command(level, type_id, a, b, bulge));
+        let element = |state: &AppState, id| state.project().element(id).cloned().unwrap();
+        assert!(bendable(&element(&state, straight)).is_none());
+        let (a2, b2, curve) = bendable(&element(&state, arc)).expect("an arc beam has a handle");
+        assert_eq!((a2, b2), (a, b));
+        assert!((curve.radius - 2.5).abs() < 1e-9 && curve.center.length() < 1e-9);
+        // The handle bends it through the engine, in one undo step.
+        let tighter = cc_core::arc::Arc::bulge_through(a, DVec2::new(2.5, 2.5), b).unwrap();
+        let depth = state.session.doc.undo_depth();
+        assert!(crate::engine_edit::element(&mut state, arc, None, |e| set_bulge(e, tighter)));
+        assert_eq!(state.session.doc.undo_depth(), depth + 1);
+        let (.., bent) = bendable(&element(&state, arc)).unwrap();
+        assert!(bent.point(bent.length() * 0.5).distance(DVec2::new(2.5, 2.5)) < 1e-9);
+        // Its ends, middle and arc are snap targets.
+        state.sync();
+        let snaps = model_snaps_cached(&mut state, Some(level));
+        assert!(snaps.arcs.iter().any(|c| (c.radius - bent.radius).abs() < 1e-9));
+        assert!(snaps.ends.contains(&a) && snaps.ends.contains(&b));
     }
 
     #[test]

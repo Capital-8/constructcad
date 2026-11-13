@@ -9,6 +9,74 @@ pub const INCH: f64 = 0.0254;
 /// Meters in a foot (exact, by definition).
 pub const FOOT: f64 = 0.3048;
 
+/// The system a project measures in: what its template sizes its types in
+/// and what its units show. Not stored: a project is imperial when its
+/// length unit is (see [`Units::system`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum MeasurementSystem {
+    /// Meters and millimeters.
+    #[default]
+    Metric,
+    /// US customary feet and inches.
+    Imperial,
+}
+
+impl MeasurementSystem {
+    pub const ALL: [MeasurementSystem; 2] = [MeasurementSystem::Metric, MeasurementSystem::Imperial];
+
+    /// The code commands use: `metric` or `imperial`.
+    pub fn code(self) -> &'static str {
+        match self {
+            MeasurementSystem::Metric => "metric",
+            MeasurementSystem::Imperial => "imperial",
+        }
+    }
+
+    /// The system of a code (case and surrounding spaces ignored).
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.code().eq_ignore_ascii_case(code.trim()))
+    }
+
+    /// The units a new project of this system shows.
+    pub fn units(self) -> Units {
+        match self {
+            MeasurementSystem::Metric => Units::default(),
+            MeasurementSystem::Imperial => Units::imperial(),
+        }
+    }
+}
+
+/// A length in inches with sixteenths as a fraction, with the inch mark:
+/// `8"`, `6 1/2"`, `5/16"` (rounded to the nearest sixteenth).
+pub fn inch_text(meters: f64) -> String {
+    let sixteenths = if meters.is_finite() { (meters / INCH * 16.0).round() as i64 } else { 0 };
+    let (sign, sixteenths) = if sixteenths < 0 { ("-", -sixteenths) } else { ("", sixteenths) };
+    let (whole, mut num, mut den) = (sixteenths / 16, sixteenths % 16, 16);
+    while num != 0 && num % 2 == 0 {
+        num /= 2;
+        den /= 2;
+    }
+    match (whole, num) {
+        (w, 0) => format!("{sign}{w}\""),
+        (0, n) => format!("{sign}{n}/{den}\""),
+        (w, n) => format!("{sign}{w} {n}/{den}\""),
+    }
+}
+
+/// A metric size turned into a round imperial one: the nearest inch up to
+/// a foot, else the nearest 6" (0.1 m is 4", 0.6 m 2'-0", 2.4 m 8'-0").
+pub fn round_imperial(meters: f64) -> f64 {
+    if !meters.is_finite() {
+        return 0.0;
+    }
+    let inches = meters / INCH;
+    let step = if inches.abs() <= 12.0 { 1.0 } else { 6.0 };
+    let rounded = (inches / step).round() * step;
+    // A size never rounds down to nothing.
+    let rounded = if rounded == 0.0 && inches != 0.0 { inches.signum() * 0.25 } else { rounded };
+    rounded * INCH
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum LengthUnit {
     Millimeter,
@@ -145,15 +213,18 @@ pub enum SlopeUnit {
     #[default]
     Percent,
     Degrees,
+    /// The rise per 12 of run, the customary way of US roofs (`6:12`).
+    RisePer12,
 }
 
 impl SlopeUnit {
-    pub const ALL: [SlopeUnit; 2] = [SlopeUnit::Percent, SlopeUnit::Degrees];
+    pub const ALL: [SlopeUnit; 3] = [SlopeUnit::Percent, SlopeUnit::Degrees, SlopeUnit::RisePer12];
 
     pub fn symbol(self) -> &'static str {
         match self {
             SlopeUnit::Percent => "%",
             SlopeUnit::Degrees => "°",
+            SlopeUnit::RisePer12 => ":12",
         }
     }
 }
@@ -243,15 +314,23 @@ impl Default for Units {
 
 impl Units {
     /// US customary units: feet and inches to 1/16", square feet, cubic
-    /// feet, point decimals with comma groups.
+    /// feet, slopes as the rise per 12 (`6:12`), point decimals with comma
+    /// groups.
     pub fn imperial() -> Self {
         Self {
             length: Format { unit: LengthUnit::FeetInches, decimals: 4, symbol: false },
             area: Format { unit: AreaUnit::SquareFoot, decimals: 2, symbol: true },
             volume: Format { unit: VolumeUnit::CubicFoot, decimals: 2, symbol: true },
+            slope: Format { unit: SlopeUnit::RisePer12, decimals: 2, symbol: true },
             style: NumberStyle::PointDecimalCommaGroups,
             ..Self::default()
         }
+    }
+
+    /// The measurement system these units belong to: imperial when lengths
+    /// are in an imperial unit, else metric.
+    pub fn system(&self) -> MeasurementSystem {
+        if self.length.unit.is_imperial() { MeasurementSystem::Imperial } else { MeasurementSystem::Metric }
     }
 
     /// Clamp decimals to [`MAX_DECIMALS`]; returns whether anything changed.
@@ -275,5 +354,43 @@ impl Units {
             changed = true;
         }
         changed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn measurement_systems() {
+        for s in MeasurementSystem::ALL {
+            assert_eq!(MeasurementSystem::from_code(s.code()), Some(s));
+            assert_eq!(s.units().system(), s);
+        }
+        assert_eq!(MeasurementSystem::from_code(" Imperial "), Some(MeasurementSystem::Imperial));
+        assert_eq!(MeasurementSystem::from_code("us"), None);
+        assert_eq!(MeasurementSystem::default(), MeasurementSystem::Metric);
+        assert_eq!(Units::default().system(), MeasurementSystem::Metric);
+    }
+
+    #[test]
+    fn round_imperial_sizes() {
+        let inches = |m: f64| round_imperial(m) / INCH;
+        for (m, want) in [(0.1, 4.0), (0.03, 1.0), (0.6, 24.0), (0.45, 18.0), (2.4, 96.0), (1.0, 42.0), (0.0, 0.0)] {
+            assert!((inches(m) - want).abs() < 1e-9, "{m}: {}", inches(m));
+        }
+        assert!((inches(0.002) - 0.25).abs() < 1e-9);
+        assert_eq!(round_imperial(f64::NAN), 0.0);
+        assert!((inches(-0.6) + 24.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn inches_as_text() {
+        assert_eq!(inch_text(8.0 * INCH), "8\"");
+        assert_eq!(inch_text(6.5 * INCH), "6 1/2\"");
+        assert_eq!(inch_text(5.0 / 16.0 * INCH), "5/16\"");
+        assert_eq!(inch_text(0.0), "0\"");
+        assert_eq!(inch_text(-0.25 * INCH), "-1/4\"");
+        assert_eq!(inch_text(f64::NAN), "0\"");
     }
 }

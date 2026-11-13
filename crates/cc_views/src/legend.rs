@@ -176,11 +176,18 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                 d.fill(r.to_vec(), POCHE, None);
                 d.polyline(&r, true, LineStyle::Projection, None);
             }
-            TypeData::Foundation { kind, width, thickness, .. } => {
-                // Section: a pad or strip its width wide, a slab as a band.
+            data @ TypeData::Foundation { kind, width, thickness, .. } => {
+                // Section: a pad or strip its width wide (a haunched strip as an inverted T), a slab as a band.
                 let w = if *kind == cc_core::FoundationKind::Slab { sample } else { *width };
-                let r = [o, o + DVec2::new(w, 0.0), o + DVec2::new(w, *thickness), o + DVec2::new(0.0, *thickness)];
-                d.fill(r.to_vec(), POCHE, None);
+                let r: Vec<DVec2> = match data.strip_haunch() {
+                    Some(h) => {
+                        h.outline(*width, *thickness).iter().map(|p| o + DVec2::new(p.x + w / 2.0, p.y)).collect()
+                    }
+                    None => {
+                        vec![o, o + DVec2::new(w, 0.0), o + DVec2::new(w, *thickness), o + DVec2::new(0.0, *thickness)]
+                    }
+                };
+                d.fill(r.clone(), POCHE, None);
                 d.polyline(&r, true, LineStyle::Cut, None);
             }
             TypeData::Stair { tread, max_riser, .. } => {
@@ -256,6 +263,11 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             | TypeData::MaskingRegion {}
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
+            | TypeData::SteelBuilding {}
+            | TypeData::Truss {}
+            | TypeData::Bracing {}
+            | TypeData::Connection {}
+            | TypeData::WallFraming {}
             | TypeData::Topography { .. }
             | TypeData::Pad { .. } => {}
         }

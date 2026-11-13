@@ -30,6 +30,7 @@ ELEMENTS = (
     "IfcFooting", "IfcReinforcingBar", "IfcFurniture", "IfcSanitaryTerminal", "IfcLightFixture", "IfcBuildingElementProxy",
     "IfcPipeSegment", "IfcStairFlight", "IfcMember",
     "IfcCableCarrierSegment", "IfcPipeFitting", "IfcCableCarrierFitting", "IfcOutlet", "IfcSwitchingDevice", "IfcElectricDistributionBoard",
+    "IfcPlate", "IfcMechanicalFastener",
 )
 REL_TOL = 1e-3
 STATUSES = {"NEW", "EXISTING", "DEMOLISH", "TEMPORARY", "OTHER", "NOTKNOWN", "UNSET"}

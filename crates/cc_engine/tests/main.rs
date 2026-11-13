@@ -5,14 +5,18 @@
 // Test helpers outside #[test] functions may fail loudly.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod arc_beams;
 mod arc_strip_footings;
+mod bracing;
 mod browser_org;
 mod cad;
 mod cad_explode;
 mod callouts;
+mod column_sections;
 mod commands;
 mod component_env;
 mod component_script;
+mod connections;
 mod curtain;
 mod design_options;
 mod detail;
@@ -27,6 +31,7 @@ mod gltf;
 mod graph;
 mod graphics;
 mod image;
+mod imperial_text;
 mod level_heights;
 mod level_rename;
 mod lightning_cabling;
@@ -37,20 +42,28 @@ mod obj;
 mod pad;
 mod phases;
 mod profiles;
+mod project_templates;
 mod regions;
+mod ring_footings;
 mod section_marks;
 mod shaft;
 mod skp;
+mod slab_rebar;
+mod steel_building;
+mod structure_materials;
 mod structure_stress;
 mod textures_paint;
 mod title_block_migration;
 mod title_blocks;
 mod topography;
+mod truss;
 mod underlay;
 mod view_detailing;
 mod visual_style;
 mod wall_attach;
+mod wall_framing;
 mod wall_location_joins;
+mod wall_rebar;
 mod window_operation;
 
 /// Every `.rs` file of `tests/` is declared above, so none is skipped.

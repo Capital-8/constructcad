@@ -21,7 +21,7 @@ use crate::theme::{self, PALETTE};
 use cc_core::profile::ProfilePoint;
 use cc_core::sketch::SketchCurve;
 use cc_core::title_block::{SHEET_HEIGHT, SHEET_WIDTH, SheetPieces, SheetShape, SheetText, TextAnchor};
-use cc_core::{ComponentDef, ElementTypeId, PlaneAxis, SheetSize, TypeData, ViewId, ViewKind};
+use cc_core::{ComponentDef, ElementTypeId, MeasurementSystem, PlaneAxis, SheetSize, TypeData, ViewId, ViewKind};
 use cc_engine::commands::component_piece::{ExprArg, SketchPointArg};
 use cc_engine::commands::sheets::{
     ComponentSheetPieceAdd, ComponentSheetPieceDelete, ComponentSheetPieceSet, SheetPieceArg,
@@ -68,8 +68,11 @@ pub struct SheetEditor {
 }
 
 impl SheetEditor {
-    pub fn new(sheet: Option<ViewId>) -> Self {
-        let preview = sheet.map_or(Preview::Paper { size: SheetSize::A3, portrait: false }, Preview::Sheet);
+    /// The editor of `sheet`'s title block, else previewed on the paper of
+    /// a new sheet of the project's `system`.
+    pub fn new(sheet: Option<ViewId>, system: MeasurementSystem) -> Self {
+        let size = SheetSize::default_for(system);
+        let preview = sheet.map_or(Preview::Paper { size, portrait: false }, Preview::Sheet);
         Self { sheet, preview, raw_keys: false, editing: None, camera: None, drag_from: None, grip: None, moving: None }
     }
 }
@@ -143,14 +146,15 @@ pub fn paper(state: &AppState, preview: Preview) -> DVec2 {
     }
 }
 
-/// The `paper` field of the preview: the size's label (`A1`, …).
+/// The `paper` field of the preview: the size's label (`A1`, `ANSI B`, …).
 fn paper_label(state: &AppState, preview: Preview) -> String {
+    let system = state.project().measurement_system();
     match preview {
         Preview::Sheet(id) => match state.project().view(id).map(|v| &v.kind) {
-            Some(ViewKind::Sheet { size, .. }) => size.label(),
+            Some(ViewKind::Sheet { size, .. }) => size.label_in(system),
             _ => SheetSize::A3.label(),
         },
-        Preview::Paper { size, .. } => size.label(),
+        Preview::Paper { size, .. } => size.label_in(system),
     }
 }
 
@@ -1328,7 +1332,8 @@ fn plane_props(ui: &mut Ui, state: &mut AppState, def: &ComponentDef, name: &str
     crate::table::row(ui, &t!("comp-env-at"), |ui| {
         at = crate::component_env::draft_field(ui, state, &format!("tb-plane-at:{name}"), &plane.at, 160.0)
     });
-    crate::table::readonly_row(ui, &t!("prop-value"), value.map_or_else(String::new, |v| format!("{v} mm")));
+    let shown = |v: f64| if cc_views::format::imperial() { cc_views::format::paper(v) } else { format!("{v} mm") };
+    crate::table::readonly_row(ui, &t!("prop-value"), value.map_or_else(String::new, shown));
     if at.is_some() || rename.is_some() {
         let command =
             cmd::ComponentRefPlaneSet { type_ref: t.clone(), name: name.to_string(), at, rename: rename.clone() };
@@ -1598,13 +1603,14 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
     };
     let mut preview = ed.preview;
     let mut raw = ed.raw_keys;
+    let choices = SheetSize::choices(state.project().measurement_system());
     ui.horizontal(|ui| {
         ui.label(t!("tb-preview"));
         egui::ComboBox::from_id_salt("tb-preview").selected_text(label(preview)).width(170.0).show_ui(ui, |ui| {
             if let Some(id) = ed.sheet {
                 ui.selectable_value(&mut preview, Preview::Sheet(id), label(Preview::Sheet(id)));
             }
-            for size in SheetSize::ALL {
+            for size in choices {
                 for portrait in [false, true] {
                     let p = Preview::Paper { size, portrait };
                     ui.selectable_value(&mut preview, p, label(p));
@@ -1671,8 +1677,8 @@ fn params(ui: &mut Ui, state: &mut AppState, def: &ComponentDef) {
     }
     let Some(ed) = editor(state) else { return };
     let paper = paper(state, ed.preview);
-    crate::table::readonly_row(ui, &t!("tb-sheet-width"), format!("{} mm", paper.x));
-    crate::table::readonly_row(ui, &t!("tb-sheet-height"), format!("{} mm", paper.y));
+    crate::table::readonly_row(ui, &t!("tb-sheet-width"), cc_views::format::paper(paper.x));
+    crate::table::readonly_row(ui, &t!("tb-sheet-height"), cc_views::format::paper(paper.y));
 }
 
 #[cfg(test)]
@@ -1845,7 +1851,7 @@ mod tests {
             _ => panic!("a sheet"),
         };
         assert_eq!(field_value(&state, &ed, &def, "sheet_number"), Some(number));
-        let sample = SheetEditor::new(None);
+        let sample = SheetEditor::new(None, MeasurementSystem::Metric);
         assert_eq!(field_value(&state, &sample, &def, "sheet_number").as_deref(), Some("A101"));
         assert_eq!(field_value(&state, &sample, &def, "paper").as_deref(), Some("A3"));
         assert_eq!(field_value(&state, &sample, &def, "nothing"), None);
@@ -1898,7 +1904,7 @@ mod tests {
 
     #[test]
     fn quick_edit_does_not_offer_title_blocks() {
-        assert!(!crate::component_editor::kinds().contains(&cc_core::ComponentKind::TitleBlock));
+        assert!(!crate::new_component_dialog::kinds().contains(&cc_core::ComponentKind::TitleBlock));
     }
 
     #[test]

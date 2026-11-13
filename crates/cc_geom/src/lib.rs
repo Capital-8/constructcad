@@ -8,10 +8,12 @@ pub mod analytical;
 mod beam;
 mod build;
 pub mod component;
+pub mod connection;
 pub mod coplanar;
 pub mod csg;
 pub mod curtain;
 mod cut;
+pub mod faces;
 pub mod level_mark;
 pub mod lightning;
 pub mod mass;
@@ -30,11 +32,14 @@ mod rooms;
 pub mod section;
 pub mod sizing;
 pub mod skeleton;
+mod slab_rebar;
 mod solid;
 pub mod stair;
 pub mod strip;
+mod strip_rebar;
 pub mod topography;
 mod wall;
+mod wall_rebar;
 
 pub use beam::{BeamEnd, BeamGeom};
 pub use build::{

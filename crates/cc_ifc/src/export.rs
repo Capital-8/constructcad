@@ -4,6 +4,7 @@ use crate::args;
 use crate::guid::{encode, guid};
 use crate::schema::{ElementClass, TypeLayout, element_class};
 use crate::step::{Header, Id, StepWriter, Value, opt_str, reals};
+use cc_core::connection::ConnectionKind;
 use cc_core::structural_profile::{ProfileMaterial, ProfileShape, SectionOutline};
 use cc_core::{Element, ElementId, ElementKind, ElementTypeId, LevelId, Project, RoofShape, TypeData, Uid};
 use cc_geom::{FRAME_COLOR, ModelGeometry, WallGeom, opening_parts, polygon};
@@ -12,6 +13,11 @@ use std::collections::{BTreeMap, HashMap};
 
 /// Openings extend this far beyond each wall face so the boolean cut is clean.
 const OPENING_CLEARANCE: f64 = 0.05;
+
+/// Names of a connection's parts (and of their types).
+const PLATE: &str = "Plate";
+const BOLT: &str = "Bolt";
+const ANCHOR_BOLT: &str = "Anchor Bolt";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ExportOptions {
@@ -226,6 +232,7 @@ impl<'a> Exporter<'a> {
         }
         self.write_structure();
         self.write_rebar();
+        self.write_connections();
         self.write_components();
         self.write_segments();
         self.write_valves();
@@ -988,9 +995,10 @@ impl<'a> Exporter<'a> {
                     let section = project.type_section(&ty.data).map(|s| s.outline);
                     let rect = section.as_ref().is_none_or(is_box);
                     let level = g.slope.abs() < 1e-12;
-                    // A level profile square at both ends: the section swept along the axis.
+                    let arc = g.arc.is_some();
+                    // A straight level profile square at both ends: the section swept along the axis.
                     let swept = match &section {
-                        Some(outline) if level && !rect && g.is_square() => {
+                        Some(outline) if level && !rect && !arc && g.is_square() => {
                             self.type_profile(e.type_id).map(|profile| (profile, outline.bbox()))
                         }
                         _ => None,
@@ -1014,6 +1022,20 @@ impl<'a> Exporter<'a> {
                         let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
                         g.add_to(&mut s);
                         vec![self.faceted_brep(&s.faces, level_z)]
+                    } else if let Some(a) = &g.arc {
+                        // A rectangle along an arc: its outline of arcs and lines extruded up.
+                        let (h, l, r) = (g.half, (g.start_ext.0, g.end_ext.0), (g.start_ext.1, g.end_ext.1));
+                        let profile = self.arc_band_profile([
+                            a.at(r.0, -h),
+                            a.at((r.0 + r.1) * 0.5, -h),
+                            a.at(r.1, -h),
+                            a.at(l.1, h),
+                            a.at((l.0 + l.1) * 0.5, h),
+                            a.at(l.0, h),
+                        ]);
+                        let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, g.z_range.0 - level_z)));
+                        let depth = g.z_range.1 - g.z_range.0;
+                        vec![self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth])]
                     } else if g.is_square() {
                         let part = cc_geom::BoxPart {
                             origin: g.origin,
@@ -1032,9 +1054,8 @@ impl<'a> Exporter<'a> {
                         vec![self.extrude_polygon(&profile, position, self.dir_z, depth)]
                     };
                     // The location line, which keeps the beam's own length.
-                    let axis_start = self.point2(g.origin);
-                    let axis_end = self.point2(g.world(g.length, 0.0));
-                    axis = Some(self.w.add("IFCPOLYLINE", args![vec![axis_start, axis_end]]));
+                    let points: Vec<Id> = g.axis().into_iter().map(|p| self.point2(p)).collect();
+                    axis = Some(self.w.add("IFCPOLYLINE", args![points]));
                     let q = vec![("Length", Quantity::Length(g.cut_length())), ("NetVolume", Quantity::Volume(volume))];
                     let product =
                         StructureProduct::new("IFCBEAM", "BEAM", items).quantities("Qto_BeamBaseQuantities", q);
@@ -1045,9 +1066,17 @@ impl<'a> Exporter<'a> {
                     let frame = Frame::at(DVec3::new(0.0, 0.0, g.z_range.0 - level_z));
                     let position = self.placement3(frame);
                     let depth = g.z_range.1 - g.z_range.0;
-                    let item = match &g.arc {
+                    // A haunched strip: its section swept along it, as a closed shell.
+                    let shell = g.body().map(|body| {
+                        let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
+                        body.add_to(&mut s);
+                        self.faceted_brep(&s.faces, level_z)
+                    });
+                    let brep = shell.is_some();
+                    let item = match (shell, &g.arc) {
+                        (Some(shell), _) => shell,
                         // An arc strip: its outline of arcs and lines extruded.
-                        Some(a) => {
+                        (None, Some(a)) => {
                             let (h, l, r) = (a.half, a.left, a.right);
                             let profile = self.arc_band_profile([
                                 a.world(r.0, -h),
@@ -1059,7 +1088,7 @@ impl<'a> Exporter<'a> {
                             ]);
                             self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth])
                         }
-                        None => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
+                        (None, None) => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
                     };
                     let area = g.area();
                     let q = vec![
@@ -1070,8 +1099,9 @@ impl<'a> Exporter<'a> {
                         cc_core::FoundationKind::Pad => StructureProduct::new("IFCFOOTING", "PAD_FOOTING", vec![item])
                             .quantities("Qto_FootingBaseQuantities", q),
                         cc_core::FoundationKind::Strip => {
-                            StructureProduct::new("IFCFOOTING", "STRIP_FOOTING", vec![item])
-                                .quantities("Qto_FootingBaseQuantities", q)
+                            let product = StructureProduct::new("IFCFOOTING", "STRIP_FOOTING", vec![item])
+                                .quantities("Qto_FootingBaseQuantities", q);
+                            if brep { product.brep() } else { product }
                         }
                         cc_core::FoundationKind::Slab => {
                             let q = vec![
@@ -1253,8 +1283,18 @@ impl<'a> Exporter<'a> {
             // Shaped bars carry no role (and any imported property sets).
             let (kind, imported) = match &e.kind {
                 ElementKind::Rebar(r) => match r.layout {
-                    cc_core::RebarLayout::Longitudinal { .. } => ("MAIN", &[][..]),
-                    cc_core::RebarLayout::Stirrups { .. } => ("LIGATURE", &[][..]),
+                    cc_core::RebarLayout::Longitudinal { .. }
+                    | cc_core::RebarLayout::WallHorizontal { .. }
+                    | cc_core::RebarLayout::WallVertical { .. }
+                    | cc_core::RebarLayout::SlabStraight { .. }
+                    | cc_core::RebarLayout::SlabRing { .. }
+                    | cc_core::RebarLayout::SlabRadial { .. }
+                    | cc_core::RebarLayout::StripTransverse { .. }
+                    | cc_core::RebarLayout::StripLongitudinal { .. } => ("MAIN", &[][..]),
+                    cc_core::RebarLayout::Sides { .. } | cc_core::RebarLayout::SlabTrim { .. } => ("EDGE", &[][..]),
+                    cc_core::RebarLayout::Stirrups { .. }
+                    | cc_core::RebarLayout::Ties { .. }
+                    | cc_core::RebarLayout::WallTies { .. } => ("LIGATURE", &[][..]),
                 },
                 ElementKind::ShapedRebar(r) => ("NOTDEFINED", &r.properties[..]),
                 _ => continue,
@@ -1400,6 +1440,177 @@ impl<'a> Exporter<'a> {
                     self.w.add("IFCRELDEFINESBYPROPERTIES", args![gid, n.clone(), n.clone(), n, vec![product], set]);
                 }
             }
+        }
+    }
+
+    /// Connections: an `IfcElementAssembly` per connection (`USERDEFINED`,
+    /// its kind's code as `ObjectType`) aggregating an `IfcPlate` per plate
+    /// (boxes as extruded rectangles) and an `IfcMechanicalFastener` per
+    /// bolt (extruded circles, its washers too; `ANCHORBOLT` under base
+    /// plates, else `BOLT`), tied to its member by an
+    /// `IfcRelConnectsElements`. Connections that built nothing are left out.
+    fn write_connections(&mut self) {
+        let project = self.project;
+        let geom = self.geom;
+        let n = Value::Null;
+        let material = cc_geom::connection::steel_material(project).map(str::to_string);
+        for g in geom.connections.values().filter(|g| g.warning.is_none()) {
+            let Some(e) = project.element(g.element) else { continue };
+            let Some(storey) = self.storey_placement(e.level) else { continue };
+            let level_z = project.level_elevation(e.level);
+            let placement = self.local_placement(Some(storey), Frame::at(DVec3::ZERO));
+            let gid = self.guid_of(e.uid, &format!("element-{}", e.id));
+            let assembly = self.w.add(
+                "IFCELEMENTASSEMBLY",
+                args![
+                    gid,
+                    n.clone(),
+                    project.type_name(e.type_id),
+                    opt_str(&e.comments),
+                    g.kind.code(),
+                    placement,
+                    n.clone(),
+                    opt_str(&e.mark),
+                    Value::Enum("NOTDEFINED"),
+                    Value::Enum("USERDEFINED")
+                ],
+            );
+            self.products.insert(e.id, assembly);
+            self.register(e, assembly);
+            let style = self.material_style(material.as_deref().unwrap_or("Steel"));
+            let mut parts = Vec::new();
+            for (i, plate) in g.plates.iter().enumerate() {
+                let items: Vec<Id> = plate.blocks.iter().map(|b| self.block_solid(b, level_z)).collect();
+                for &item in &items {
+                    self.styled(item, style);
+                }
+                let local = self.local_placement(Some(placement), Frame::at(DVec3::ZERO));
+                let shape = self.shape(items, None);
+                let gid = self.guid(&format!("connection-plate-{}-{i}", e.id));
+                let part = self.w.add(
+                    "IFCPLATE",
+                    args![
+                        gid,
+                        n.clone(),
+                        PLATE,
+                        n.clone(),
+                        n.clone(),
+                        local,
+                        shape,
+                        n.clone(),
+                        Value::Enum("NOTDEFINED")
+                    ],
+                );
+                self.connection_part_type(e.type_id, PLATE, "NOTDEFINED", part);
+                parts.push(part);
+            }
+            let (name, predefined) =
+                if g.kind == ConnectionKind::BasePlate { (ANCHOR_BOLT, "ANCHORBOLT") } else { (BOLT, "BOLT") };
+            for (i, bolt) in g.bolts.iter().enumerate() {
+                let items: Vec<Id> = std::iter::once(&bolt.shank)
+                    .chain(&bolt.washers)
+                    .filter_map(|r| self.rod_solid(r, level_z))
+                    .collect();
+                if items.is_empty() {
+                    continue;
+                }
+                for &item in &items {
+                    self.styled(item, style);
+                }
+                let local = self.local_placement(Some(placement), Frame::at(DVec3::ZERO));
+                let shape = self.shape(items, None);
+                let gid = self.guid(&format!("connection-bolt-{}-{i}", e.id));
+                let part = self.w.add(
+                    "IFCMECHANICALFASTENER",
+                    args![
+                        gid,
+                        n.clone(),
+                        name,
+                        n.clone(),
+                        n.clone(),
+                        local,
+                        shape,
+                        n.clone(),
+                        bolt.shank.diameter,
+                        bolt.shank.length(),
+                        Value::Enum(predefined)
+                    ],
+                );
+                self.connection_part_type(e.type_id, name, predefined, part);
+                parts.push(part);
+            }
+            if let Some(material) = &material {
+                let m = self.material(material);
+                self.associate_material(&format!("mat-connection-{}", e.id), parts.clone(), m);
+            }
+            if !parts.is_empty() {
+                self.aggregate(&format!("agg-connection-{}", e.id), assembly, parts);
+            }
+            if let Some(&member) = self.products.get(&g.member) {
+                let gid = self.guid(&format!("connects-{}", e.id));
+                self.w.add(
+                    "IFCRELCONNECTSELEMENTS",
+                    args![gid, n.clone(), n.clone(), n.clone(), n.clone(), member, assembly],
+                );
+            }
+        }
+    }
+
+    /// A connection's box as a rectangle extruded along its third axis, in
+    /// the coordinates of a placement at the level's elevation.
+    fn block_solid(&mut self, b: &cc_geom::connection::Block, level_z: f64) -> Id {
+        let z = b.z();
+        let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![self.origin2, Value::Null]);
+        let profile = self
+            .w
+            .add("IFCRECTANGLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, position2, b.size.x, b.size.y]);
+        let origin = b.center - z * (b.size.z / 2.0) - DVec3::Z * level_z;
+        let position = self.placement3(Frame { origin, x: b.x, z });
+        self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, b.size.z])
+    }
+
+    /// A bolt or washer as a circle extruded along it (`None` when it has no length).
+    fn rod_solid(&mut self, r: &cc_geom::connection::Rod, level_z: f64) -> Option<Id> {
+        let axis = (r.b - r.a).try_normalize()?;
+        let profile =
+            self.w.add("IFCCIRCLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, Value::Null, r.diameter / 2.0]);
+        let frame = Frame { origin: r.a - DVec3::Z * level_z, x: axis.any_orthonormal_vector(), z: axis };
+        let position = self.placement3(frame);
+        Some(self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, r.length()]))
+    }
+
+    /// The `IfcPlateType` or `IfcMechanicalFastenerType` of a connection
+    /// type's parts named `name` (written once), with `part` among its objects.
+    fn connection_part_type(&mut self, type_id: ElementTypeId, name: &'static str, predefined: &'static str, part: Id) {
+        let key = (type_id, name);
+        if !self.member_types.contains_key(&key) {
+            let n = Value::Null;
+            let gid = self.guid(&format!("connection-type-{type_id}-{name}"));
+            let ty_name = format!("{} - {name}", self.project.type_name(type_id));
+            let mut attrs = args![
+                gid,
+                n.clone(),
+                ty_name,
+                n.clone(),
+                n.clone(),
+                n.clone(),
+                n.clone(),
+                n.clone(),
+                n.clone(),
+                Value::Enum(predefined)
+            ];
+            // IFC4 ADD2 TC1: a fastener type also has NominalDiameter and NominalLength.
+            let entity = if name == PLATE {
+                "IFCPLATETYPE"
+            } else {
+                attrs.extend(args![n.clone(), n]);
+                "IFCMECHANICALFASTENERTYPE"
+            };
+            let t = self.w.add(entity, attrs);
+            self.member_types.insert(key, (t, Vec::new()));
+        }
+        if let Some((_, objects)) = self.member_types.get_mut(&key) {
+            objects.push(part);
         }
     }
 
@@ -1708,7 +1919,7 @@ impl<'a> Exporter<'a> {
             args![gid, n.clone(), ty.name.as_str(), description, n.clone(), n.clone(), n.clone(), n.clone(), n.clone()];
         let (entity, extra): (&str, Vec<Value>) = match ty.data {
             // Rooms, grids, dimensions, texts, detail lines, regions, level marks,
-            // imported drawings, masses, shafts and pads have no IFC type object.
+            // imported drawings, masses, shafts, steel buildings, trusses and pads have no IFC type object.
             TypeData::Room {}
             | TypeData::Grid { .. }
             | TypeData::Dimension { .. }
@@ -1720,6 +1931,11 @@ impl<'a> Exporter<'a> {
             | TypeData::MaskingRegion {}
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
+            | TypeData::SteelBuilding {}
+            | TypeData::Truss {}
+            | TypeData::Bracing {}
+            | TypeData::Connection {}
+            | TypeData::WallFraming {}
             | TypeData::Pad { .. } => {
                 return None;
             }

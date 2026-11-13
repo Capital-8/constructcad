@@ -123,6 +123,7 @@ fn slope_name(u: SlopeUnit) -> String {
     match u {
         SlopeUnit::Percent => t!("unit-percent"),
         SlopeUnit::Degrees => t!("unit-degrees"),
+        SlopeUnit::RisePer12 => t!("unit-rise-per-12"),
     }
 }
 
@@ -176,7 +177,7 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         }
         ui.end_row();
 
-        ui.label(t!("col-length"));
+        ui.label(crate::properties::field_label(cc_core::ScheduleField::Length));
         unit_combo(ui, state, "length", u.length.unit, &LengthUnit::ALL, length_name, |u, v| u.length.unit = v);
         if u.length.unit.is_fractional() {
             precision(ui, state, u.length.decimals);
@@ -190,7 +191,7 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         ui.label(RichText::new(format::length_with(&u, comma, sample)).monospace());
         ui.end_row();
 
-        ui.label(t!("col-area"));
+        ui.label(crate::properties::field_label(cc_core::ScheduleField::Area));
         unit_combo(ui, state, "area", u.area.unit, &AreaUnit::ALL, area_name, |u, v| u.area.unit = v);
         decimals(ui, state, "area-decimals", u.area.decimals, |u, v| u.area.decimals = v);
         symbol(ui, state, "area-symbol", u.area.symbol, |u, v| u.area.symbol = v);
@@ -198,7 +199,7 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         ui.label(RichText::new(format::area_with(&u, comma, sample)).monospace());
         ui.end_row();
 
-        ui.label(t!("col-volume"));
+        ui.label(crate::properties::field_label(cc_core::ScheduleField::Volume));
         unit_combo(ui, state, "volume", u.volume.unit, &VolumeUnit::ALL, volume_name, |u, v| u.volume.unit = v);
         decimals(ui, state, "volume-decimals", u.volume.decimals, |u, v| u.volume.decimals = v);
         symbol(ui, state, "volume-symbol", u.volume.symbol, |u, v| u.volume.symbol = v);

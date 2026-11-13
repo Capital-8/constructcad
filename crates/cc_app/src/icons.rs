@@ -79,6 +79,9 @@ pub enum Icon {
     Column,
     Beam,
     ColumnsAtGrids,
+    GridFrame,
+    SteelBuilding,
+    WallFraming,
     AlignGridEnds,
     BeamsOnGrids,
     BeamsBetweenColumns,
@@ -90,6 +93,7 @@ pub enum Icon {
     Analytical,
     Truss,
     Brace,
+    Connection,
     Rebar,
     RebarView,
     StructuralPlan,
@@ -195,7 +199,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 180] = [
+    pub const ALL: [Icon; 184] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -264,6 +268,9 @@ impl Icon {
         Icon::Column,
         Icon::Beam,
         Icon::ColumnsAtGrids,
+        Icon::GridFrame,
+        Icon::SteelBuilding,
+        Icon::WallFraming,
         Icon::AlignGridEnds,
         Icon::BeamsOnGrids,
         Icon::BeamsBetweenColumns,
@@ -275,6 +282,7 @@ impl Icon {
         Icon::Analytical,
         Icon::Truss,
         Icon::Brace,
+        Icon::Connection,
         Icon::Rebar,
         Icon::RebarView,
         Icon::StructuralPlan,
@@ -449,6 +457,9 @@ impl Icon {
             Icon::Column => include_str!("../../../assets/icons/ui/column.svg"),
             Icon::Beam => include_str!("../../../assets/icons/ui/beam.svg"),
             Icon::ColumnsAtGrids => include_str!("../../../assets/icons/ui/columns-at-grids.svg"),
+            Icon::GridFrame => include_str!("../../../assets/icons/ui/grid-frame.svg"),
+            Icon::SteelBuilding => include_str!("../../../assets/icons/ui/steel-building.svg"),
+            Icon::WallFraming => include_str!("../../../assets/icons/ui/wall-framing.svg"),
             Icon::AlignGridEnds => include_str!("../../../assets/icons/ui/align-grid-ends.svg"),
             Icon::BeamsOnGrids => include_str!("../../../assets/icons/ui/beams-on-grids.svg"),
             Icon::BeamsBetweenColumns => include_str!("../../../assets/icons/ui/beams-between-columns.svg"),
@@ -460,6 +471,7 @@ impl Icon {
             Icon::Analytical => include_str!("../../../assets/icons/ui/analytical.svg"),
             Icon::Truss => include_str!("../../../assets/icons/ui/truss.svg"),
             Icon::Brace => include_str!("../../../assets/icons/ui/brace.svg"),
+            Icon::Connection => include_str!("../../../assets/icons/ui/connection.svg"),
             Icon::Rebar => include_str!("../../../assets/icons/ui/rebar.svg"),
             Icon::RebarView => include_str!("../../../assets/icons/ui/rebar-view.svg"),
             Icon::StructuralPlan => include_str!("../../../assets/icons/ui/structural-plan.svg"),

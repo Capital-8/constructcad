@@ -71,6 +71,16 @@ pub enum ElementKind {
     Sweep(crate::profile_sweep::Sweep),
     /// A vertical opening through floors, ceilings and roofs.
     Shaft(crate::shaft::Shaft),
+    /// A parametric steel building: it owns the columns and beams of its frames.
+    SteelBuilding(Box<crate::steel_building::SteelBuilding>),
+    /// A parametric truss: it owns the beams and columns of its chords and web.
+    Truss(Box<crate::truss::Truss>),
+    /// A parametric bracing: it owns the braces of one bay of a frame.
+    Bracing(Box<crate::bracing::Bracing>),
+    /// Light steel or wood framing of a wall: it owns the studs and the beams of its tracks, headers and sills.
+    WallFraming(Box<crate::wall_framing::WallFraming>),
+    /// A steel or timber joint at one end of a column or beam (placed by its member).
+    Connection(crate::connection::Connection),
     /// A terrain surface from measured points inside a boundary.
     Topography(crate::topography::Topography),
     /// A building pad graded into its terrain.
@@ -117,6 +127,11 @@ impl Element {
             ElementKind::Mass(_) => Category::Mass,
             ElementKind::Sweep(_) => Category::Sweep,
             ElementKind::Shaft(_) => Category::Shaft,
+            ElementKind::SteelBuilding(_) => Category::SteelBuilding,
+            ElementKind::Truss(_) => Category::Truss,
+            ElementKind::Bracing(_) => Category::Bracing,
+            ElementKind::WallFraming(_) => Category::WallFraming,
+            ElementKind::Connection(_) => Category::Connection,
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
             ElementKind::DetailLine(_) => Category::DetailLine,
@@ -212,6 +227,7 @@ impl Element {
     pub fn drawn_sketch_mut(&mut self) -> Option<&mut Option<crate::sketch::Sketch>> {
         match &mut self.kind {
             ElementKind::Floor(f) => Some(&mut f.sketch),
+            ElementKind::Foundation(f) if matches!(f.shape, FoundationShape::Slab { .. }) => Some(&mut f.sketch),
             ElementKind::Ceiling(c) => Some(&mut c.sketch),
             ElementKind::Roof(r) => Some(&mut r.sketch),
             ElementKind::Mass(m) => Some(&mut m.sketch),
@@ -227,6 +243,7 @@ impl Element {
     pub fn drawn_sketch(&self) -> Option<&crate::sketch::Sketch> {
         match &self.kind {
             ElementKind::Floor(f) => f.sketch.as_ref(),
+            ElementKind::Foundation(f) => f.sketch.as_ref(),
             ElementKind::Ceiling(c) => c.sketch.as_ref(),
             ElementKind::Roof(r) => r.sketch.as_ref(),
             ElementKind::Mass(m) => m.sketch.as_ref(),
@@ -243,6 +260,10 @@ impl Element {
     pub fn sketched_profile(&self) -> Option<(&[DVec2], &[Vec<DVec2>])> {
         match &self.kind {
             ElementKind::Floor(f) => Some((&f.boundary, &f.openings)),
+            ElementKind::Foundation(f) => match &f.shape {
+                FoundationShape::Slab { boundary } => Some((boundary, &[])),
+                _ => None,
+            },
             ElementKind::Ceiling(c) => Some((&c.boundary, &[])),
             ElementKind::Roof(r) => Some((&r.footprint, &r.holes)),
             ElementKind::Mass(m) => Some((&m.outline, &[])),
@@ -329,6 +350,17 @@ impl Element {
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Sweep(s) => s.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(|p| *p += delta),
+            ElementKind::SteelBuilding(b) => b.origin += delta,
+            ElementKind::Truss(t) => {
+                t.start += delta;
+                t.end += delta;
+            }
+            ElementKind::Bracing(b) => {
+                b.start += delta;
+                b.end += delta;
+            }
+            // Placed by its wall.
+            ElementKind::WallFraming(_) => {}
             ElementKind::Topography(t) => {
                 t.boundary.iter_mut().for_each(|p| *p += delta);
                 t.points.iter_mut().for_each(|p| *p += delta.extend(0.0));
@@ -350,7 +382,11 @@ impl Element {
             ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
             ElementKind::ShapedRebar(r) => r.points_mut().for_each(|p| *p += delta.extend(0.0)),
             // Placed by their hosts.
-            ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
+            ElementKind::Door(_)
+            | ElementKind::Window(_)
+            | ElementKind::Rebar(_)
+            | ElementKind::Valve(_)
+            | ElementKind::Connection(_) => {}
         }
     }
 }
@@ -562,12 +598,15 @@ pub struct Floor {
     /// when the outline is edited without them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sketch: Option<crate::sketch::Sketch>,
+    /// A structural slab: one that takes reinforcement.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub structural: bool,
 }
 
 impl Floor {
     /// A floor over `boundary` with no openings.
     pub fn new(boundary: Vec<DVec2>, height_offset: f64) -> Self {
-        Self { boundary, height_offset, openings: Vec::new(), cuts: Vec::new(), sketch: None }
+        Self { boundary, height_offset, openings: Vec::new(), cuts: Vec::new(), sketch: None, structural: false }
     }
 
     /// Its openings and the shafts' cuts.
@@ -965,6 +1004,15 @@ pub struct Beam {
     pub join_start: bool,
     #[serde(default = "yes")]
     pub join_end: bool,
+    /// Bulge of an arc beam (`tan(sweep / 4)`, positive when it turns
+    /// counter-clockwise from `start` to `end`; see [`crate::arc`]); 0 for a
+    /// straight beam. An arc beam is level: it has no `end_offset`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub bulge: f64,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl Beam {
@@ -973,9 +1021,17 @@ impl Beam {
         self.end_offset.map_or(0.0, |end| end - self.top_offset)
     }
 
-    /// Length along the slope.
+    /// Length along the slope, or along the arc of an arc beam.
     pub fn true_length(&self) -> f64 {
-        self.length().hypot(self.rise())
+        match self.arc() {
+            Some(arc) => arc.length(),
+            None => self.length().hypot(self.rise()),
+        }
+    }
+
+    /// The arc of the location line (`None` for a straight beam).
+    pub fn arc(&self) -> Option<crate::arc::Arc> {
+        crate::arc::Arc::from_bulge(self.start, self.end, self.bulge)
     }
 
     /// A beam whose ends may join.
@@ -989,9 +1045,11 @@ impl Beam {
             vertical: BeamVertical::Top,
             join_start: true,
             join_end: true,
+            bulge: 0.0,
         }
     }
 
+    /// Distance between the ends (the chord of an arc beam).
     pub fn length(&self) -> f64 {
         self.start.distance(self.end)
     }
@@ -1055,6 +1113,25 @@ impl FoundationShape {
 pub struct Foundation {
     pub shape: FoundationShape,
     pub top_offset: f64,
+    /// The curves a slab's boundary was drawn with (see [`crate::sketch`]);
+    /// dropped when the boundary is edited without them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sketch: Option<crate::sketch::Sketch>,
+}
+
+impl Foundation {
+    /// A foundation of `shape`, its top `top_offset` above its level.
+    pub fn new(shape: FoundationShape, top_offset: f64) -> Self {
+        Self { shape, top_offset, sketch: None }
+    }
+
+    /// Plan area of a slab, exact along the arcs and circles of its sketch
+    /// (the boundary's points are chords); `None` for pads and strips.
+    pub fn slab_area(&self) -> Option<f64> {
+        let FoundationShape::Slab { boundary } = &self.shape else { return None };
+        let drawn = self.sketch.as_ref().filter(|s| s.is_curved()).and_then(|s| s.area().ok());
+        Some(drawn.unwrap_or_else(|| polygon_area(boundary)))
+    }
 }
 
 /// Where a set of longitudinal bars lies in its host's section.
@@ -1079,22 +1156,418 @@ impl BarFace {
     }
 }
 
-/// How a set of bars is laid out in its host.
+/// The face of a wall a layer of bars lies near: its exterior (left) face
+/// or its interior (right) one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum WallSide {
+    #[default]
+    Exterior,
+    Interior,
+}
+
+impl WallSide {
+    pub const ALL: [WallSide; 2] = [WallSide::Exterior, WallSide::Interior];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            WallSide::Exterior => "wall-side-exterior",
+            WallSide::Interior => "wall-side-interior",
+        }
+    }
+
+    /// 1 towards the wall's left (exterior) face, -1 towards its right.
+    pub fn sign(self) -> f64 {
+        match self {
+            WallSide::Exterior => 1.0,
+            WallSide::Interior => -1.0,
+        }
+    }
+}
+
+/// The spacing of a wall's horizontal bars up to a height above its base;
+/// the last zone of a set runs to the top of the wall.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SpacingZone {
+    pub up_to: f64,
+    pub spacing: f64,
+}
+
+/// How an end of a wall's vertical bar is bent: `across` the wall (towards
+/// the outside of its own face when positive, towards the other face when
+/// negative; 0 for a straight end), then `along` (back beside the bar when
+/// positive, on past its end when negative; 0 for none). An L hook has only
+/// `across`; a bar turned into the slab and up again has both.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct BarEnd {
+    #[serde(default)]
+    pub across: f64,
+    #[serde(default)]
+    pub along: f64,
+}
+
+impl BarEnd {
+    /// Longest leg of a bent end, meters.
+    pub const MAX_LEG: f64 = 5.0;
+
+    pub fn is_straight(&self) -> bool {
+        self.across == 0.0 && self.along == 0.0
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let leg = |v: f64| v.is_finite() && v.abs() <= Self::MAX_LEG;
+        // A leg along the bar needs one across it first.
+        leg(self.across) && leg(self.along) && (self.along == 0.0 || self.across != 0.0)
+    }
+
+    /// Length of the legs.
+    pub fn length(&self) -> f64 {
+        self.across.abs() + self.along.abs()
+    }
+}
+
+/// Limits of wall reinforcement.
+pub mod wall_bars {
+    /// Least spacing of bars, meters.
+    pub const MIN_SPACING: f64 = 0.02;
+    /// Most spacing zones of one set of horizontal bars.
+    pub const MAX_ZONES: usize = 32;
+    /// Ties are placed at most every this many bars.
+    pub const MAX_EVERY: u32 = 100;
+}
+
+/// How a set of bars is laid out in its host.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RebarLayout {
     /// `count` bars running along the host, on `face`.
     Longitudinal { face: BarFace, count: u32 },
     /// Closed stirrups (ties) around the section every `spacing` along the host.
     Stirrups { spacing: f64 },
+    /// Side (skin) bars running along a beam on both side faces, between its
+    /// top and bottom bars: `count` on each face, or with a count of 0 as
+    /// many as keep them at most `spacing` apart over the height.
+    Sides { count: u32, spacing: f64 },
+    /// Cross-ties of a column every `spacing` up it: a straight bar with a
+    /// hook at each end from every bar of its longitudinal set that is not
+    /// at a corner, across the section to the bar opposite.
+    Ties { spacing: f64 },
+    /// Horizontal bars near one face of a wall (ring bars in an arc wall),
+    /// spaced up the wall by `zones` from its base. `inner` puts them inside
+    /// the vertical bars of that face instead of outside them.
+    WallHorizontal {
+        side: WallSide,
+        zones: Vec<SpacingZone>,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// Vertical bars near one face of a wall every `spacing` along it (from
+    /// `offset` after its start: half a spacing interleaves a second set),
+    /// from `from` to `to` above its base (`to` 0: the top), their ends bent
+    /// as `bottom` and `top` say. `inner` as for horizontal bars.
+    WallVertical {
+        side: WallSide,
+        spacing: f64,
+        #[serde(default)]
+        offset: f64,
+        #[serde(default)]
+        from: f64,
+        #[serde(default)]
+        to: f64,
+        #[serde(default)]
+        bottom: BarEnd,
+        #[serde(default)]
+        top: BarEnd,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// Ties between the two faces of a wall: a hooked bar across it at
+    /// every `every_horizontal`-th horizontal bar and `every_vertical`-th
+    /// vertical bar of its exterior face.
+    WallTies { every_horizontal: u32, every_vertical: u32 },
+    /// Straight bars of a slab's top or bottom layer, `spacing` apart, in
+    /// the direction `angle_deg` from the plan's X axis, each clipped to the
+    /// slab's boundary and openings. `inner` puts them inside the bars of
+    /// the other direction of that layer. `hook` bends the ends at the
+    /// slab's edge by that length: towards the middle of the slab when
+    /// positive (down for top bars), out of it when negative (into the wall
+    /// above a top bar or below a bottom one); 0 for straight ends.
+    SlabStraight {
+        top: bool,
+        angle_deg: f64,
+        spacing: f64,
+        #[serde(default)]
+        inner: bool,
+        #[serde(default)]
+        hook: f64,
+    },
+    /// Ring bars of a slab's layer around `center` (default: the middle of
+    /// the slab), `spacing` apart, clipped to the slab.
+    SlabRing {
+        top: bool,
+        spacing: f64,
+        #[serde(default)]
+        center: Option<DVec2>,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// `count` radial bars of a slab's layer around `center`, from the
+    /// radius `start` to the slab's edge; with an `intermediate` radius, a
+    /// shorter bar from there to the edge between each two.
+    SlabRadial {
+        top: bool,
+        count: u32,
+        #[serde(default)]
+        center: Option<DVec2>,
+        #[serde(default)]
+        start: f64,
+        #[serde(default)]
+        intermediate: f64,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// Bars across a strip footing (radial in an arc strip) every `spacing`
+    /// along it. Bottom bars are straight; a top bar follows the top of the
+    /// footing (up its slopes and flat between the faces of its beam) and
+    /// its ends turn down to the bottom layer, closing the edges.
+    StripTransverse { top: bool, spacing: f64 },
+    /// Bars along a strip footing (ring bars in an arc strip) `spacing`
+    /// apart across it, in its bottom layer or under its top, following its
+    /// slopes; top bars leave the width of the beam to the beam's own.
+    StripLongitudinal { top: bool, spacing: f64 },
+    /// Trimming bars around each opening of a slab, in one layer: `count`
+    /// bars `spacing` apart along each side of the opening, reaching
+    /// `anchorage` past it, and with `diagonals` one bar across each corner.
+    SlabTrim {
+        top: bool,
+        count: u32,
+        spacing: f64,
+        anchorage: f64,
+        #[serde(default)]
+        diagonals: bool,
+    },
 }
 
-/// A set of reinforcing bars in a beam or column (`host`), `cover` from its
-/// faces; the type gives the bar diameter. The bars follow their host.
+/// Limits of slab reinforcement.
+pub mod slab_bars {
+    /// Most radial bars of one set.
+    pub const MAX_RADIAL: u32 = 2000;
+    /// Most trimming bars along one side of an opening.
+    pub const MAX_TRIM: u32 = 10;
+    /// Longest anchorage, hook or start radius, meters.
+    pub const MAX_LENGTH: f64 = 50.0;
+}
+
+/// The longitudinal bars on one face of a column's section: `count` of them
+/// evenly spread, the two at the face's ends (the corners, shared with the
+/// faces beside it) included, so at least 2; or with a count of 0 as many
+/// as keep them at most `spacing` apart.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FaceBars {
+    pub count: u32,
+    #[serde(default)]
+    pub spacing: f64,
+}
+
+impl FaceBars {
+    /// Most bars on one face.
+    pub const MAX_COUNT: u32 = 200;
+    /// Most faces a set lists.
+    pub const MAX_FACES: usize = 64;
+
+    pub fn is_valid(&self) -> bool {
+        self.count <= Self::MAX_COUNT && self.spacing.is_finite() && (self.count > 0 || self.spacing >= 0.02)
+    }
+
+    /// Bars strictly between the corners of a face `length` long.
+    pub fn between(&self, length: f64) -> usize {
+        if self.count > 0 {
+            return self.count.min(Self::MAX_COUNT).saturating_sub(2) as usize;
+        }
+        if !(length.is_finite() && length > 0.0 && self.spacing.is_finite() && self.spacing > 0.0) {
+            return 0;
+        }
+        (((length / self.spacing) - 1e-9).ceil().max(1.0) as usize - 1).min(Self::MAX_COUNT as usize)
+    }
+}
+
+impl RebarLayout {
+    /// Whether the bars run along the host (and so may be spliced).
+    pub fn runs_along(&self) -> bool {
+        !matches!(
+            self,
+            RebarLayout::Stirrups { .. }
+                | RebarLayout::Ties { .. }
+                | RebarLayout::WallTies { .. }
+                | RebarLayout::SlabTrim { .. }
+                | RebarLayout::StripTransverse { .. }
+        )
+    }
+
+    /// Whether the set reinforces a wall.
+    pub fn in_wall(&self) -> bool {
+        matches!(
+            self,
+            RebarLayout::WallHorizontal { .. } | RebarLayout::WallVertical { .. } | RebarLayout::WallTies { .. }
+        )
+    }
+
+    /// Whether the set reinforces a slab (a floor or a foundation slab).
+    pub fn in_slab(&self) -> bool {
+        matches!(
+            self,
+            RebarLayout::SlabStraight { .. }
+                | RebarLayout::SlabRing { .. }
+                | RebarLayout::SlabRadial { .. }
+                | RebarLayout::SlabTrim { .. }
+        )
+    }
+
+    /// Whether the set is one of a strip footing's own (across or along its footing slab).
+    pub fn in_strip(&self) -> bool {
+        matches!(self, RebarLayout::StripTransverse { .. } | RebarLayout::StripLongitudinal { .. })
+    }
+
+    /// Whether a strip footing may host the set: its own layouts, and those
+    /// of a beam (for the beam on top of it, or its whole section).
+    pub fn fits_strip(&self) -> bool {
+        self.in_strip()
+            || matches!(
+                self,
+                RebarLayout::Stirrups { .. }
+                    | RebarLayout::Sides { .. }
+                    | RebarLayout::Longitudinal { face: BarFace::Top | BarFace::Bottom, .. }
+            )
+    }
+
+    /// Whether a slab's set lies in its top layer.
+    pub fn slab_top(&self) -> Option<bool> {
+        match self {
+            RebarLayout::SlabStraight { top, .. }
+            | RebarLayout::SlabRing { top, .. }
+            | RebarLayout::SlabRadial { top, .. }
+            | RebarLayout::SlabTrim { top, .. } => Some(*top),
+            _ => None,
+        }
+    }
+
+    /// The face of a wall the set lies near.
+    pub fn wall_side(&self) -> Option<WallSide> {
+        match self {
+            RebarLayout::WallHorizontal { side, .. } | RebarLayout::WallVertical { side, .. } => Some(*side),
+            _ => None,
+        }
+    }
+
+    /// Whether the values are usable (finite and within their limits).
+    pub fn is_valid(&self) -> bool {
+        let spaced = |s: f64| s.is_finite() && s >= wall_bars::MIN_SPACING;
+        match self {
+            RebarLayout::Longitudinal { count, .. } => (1..=200).contains(count),
+            RebarLayout::Stirrups { spacing } | RebarLayout::Ties { spacing } => spaced(*spacing),
+            RebarLayout::Sides { count, spacing } => {
+                *count <= 200 && spacing.is_finite() && (*count > 0 || spaced(*spacing))
+            }
+            RebarLayout::WallHorizontal { zones, .. } => {
+                (1..=wall_bars::MAX_ZONES).contains(&zones.len())
+                    && zones.iter().all(|z| spaced(z.spacing) && z.up_to.is_finite() && z.up_to >= 0.0)
+                    && zones.windows(2).all(|w| w[0].up_to < w[1].up_to)
+            }
+            RebarLayout::WallVertical { spacing, offset, from, to, bottom, top, .. } => {
+                spaced(*spacing)
+                    && offset.is_finite()
+                    && from.is_finite()
+                    && to.is_finite()
+                    && *from >= 0.0
+                    && (*to == 0.0 || *to > *from)
+                    && bottom.is_valid()
+                    && top.is_valid()
+            }
+            RebarLayout::StripTransverse { spacing, .. } | RebarLayout::StripLongitudinal { spacing, .. } => {
+                spaced(*spacing)
+            }
+            RebarLayout::SlabStraight { angle_deg, spacing, hook, .. } => {
+                spaced(*spacing) && angle_deg.is_finite() && hook.is_finite() && hook.abs() <= slab_bars::MAX_LENGTH
+            }
+            RebarLayout::SlabRing { spacing, center, .. } => spaced(*spacing) && center.is_none_or(|c| c.is_finite()),
+            RebarLayout::SlabRadial { count, center, start, intermediate, .. } => {
+                let radius = |r: f64| r.is_finite() && (0.0..=slab_bars::MAX_LENGTH).contains(&r);
+                (1..=slab_bars::MAX_RADIAL).contains(count)
+                    && center.is_none_or(|c| c.is_finite())
+                    && radius(*start)
+                    && radius(*intermediate)
+            }
+            RebarLayout::SlabTrim { count, spacing, anchorage, .. } => {
+                (1..=slab_bars::MAX_TRIM).contains(count)
+                    && spaced(*spacing)
+                    && anchorage.is_finite()
+                    && (0.0..=slab_bars::MAX_LENGTH).contains(anchorage)
+            }
+            RebarLayout::WallTies { every_horizontal, every_vertical } => {
+                (1..=wall_bars::MAX_EVERY).contains(every_horizontal)
+                    && (1..=wall_bars::MAX_EVERY).contains(every_vertical)
+            }
+        }
+    }
+}
+
+/// Lap splices: a bar longer than `max_length` (the stock length) is made of
+/// pieces overlapping by `lap`, the splices of neighbouring bars staggered.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Splice {
+    pub max_length: f64,
+    pub lap: f64,
+}
+
+impl Splice {
+    /// Shortest stock length and lap accepted, meters.
+    pub const MIN_LENGTH: f64 = 1.0;
+    pub const MIN_LAP: f64 = 0.05;
+
+    /// Usable: finite, a stock of at least [`Self::MIN_LENGTH`] and a lap
+    /// from [`Self::MIN_LAP`] to half the stock.
+    pub fn is_valid(&self) -> bool {
+        self.max_length.is_finite()
+            && self.lap.is_finite()
+            && self.max_length >= Self::MIN_LENGTH
+            && self.lap >= Self::MIN_LAP
+            && self.lap <= self.max_length * 0.5
+    }
+
+    /// The pieces of bar number `index` of a set, `length` long: `(from,
+    /// to)` along it. A bar within the stock length is one piece; a longer
+    /// one is cut in the fewest equal pieces, and odd bars are cut half a
+    /// piece off the even ones so that neighbours never splice together.
+    pub fn pieces(&self, length: f64, index: usize) -> Vec<(f64, f64)> {
+        if !self.is_valid() || !length.is_finite() || length <= self.max_length + 1e-9 {
+            return vec![(0.0, length)];
+        }
+        // `n` pieces overlapping by `lap` cover `n * pitch + lap`.
+        let n = (((length - self.lap) / (self.max_length - self.lap)) - 1e-9).ceil().clamp(2.0, 10_000.0);
+        let pitch = (length - self.lap) / n;
+        let n = n as usize;
+        let shift = if index % 2 == 1 { pitch * 0.5 } else { 0.0 };
+        let mut cuts: Vec<f64> = (0..n).map(|i| shift + pitch * i as f64).collect();
+        if shift > 0.0 {
+            cuts.insert(0, 0.0);
+        }
+        (0..cuts.len()).map(|i| (cuts[i], cuts.get(i + 1).map_or(length, |next| next + self.lap))).collect()
+    }
+}
+
+/// A set of reinforcing bars in a beam, column, wall or slab (`host`), `cover`
+/// from its faces; the type gives the bar diameter. The bars follow their host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rebar {
     pub host: ElementId,
     pub layout: RebarLayout,
     pub cover: f64,
+    /// Lap splices of the bars running along a beam, or the lifts of a
+    /// column's vertical bars (none: whole bars).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub splice: Option<Splice>,
+    /// A column's longitudinal bars face by face, in the order of the faces
+    /// of its section (empty: `count` bars spread around it).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub faces: Vec<FaceBars>,
 }
 
 /// Reinforcing bars of any shape (bars bent to a schedule's shape codes,

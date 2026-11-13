@@ -390,6 +390,69 @@ fn framed_beams_round_trip() {
     }
 }
 
+/// An arc beam between two columns is written as its outline of true arcs,
+/// extruded, with its axis on the arc, and comes back as an arc beam.
+#[test]
+fn arc_beams_round_trip() {
+    use cc_core::{Beam, Column, Document, WallTop};
+    let mut doc = Document::new(Project::from_template());
+    let mut beam_id = cc_core::ElementId(0);
+    doc.edit("ring", |e| {
+        let level = e.project().levels[0].id;
+        let add = |e: &mut cc_core::EditCtx, category, kind| {
+            let type_id = e.project().default_type(category).unwrap();
+            let id = cc_core::ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Uid::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            });
+            id
+        };
+        for position in [DVec2::new(2.5, 0.0), DVec2::new(0.0, 2.5)] {
+            let column = Column {
+                position,
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: WallTop::Unconnected,
+                structural: true,
+            };
+            add(e, Category::Column, ElementKind::Column(column));
+        }
+        let mut beam = Beam::new(DVec2::new(2.5, 0.0), DVec2::new(0.0, 2.5), 3.0);
+        beam.bulge = (std::f64::consts::FRAC_PI_2 / 4.0).tan();
+        beam_id = add(e, Category::Beam, ElementKind::Beam(beam));
+    });
+    let original = doc.project;
+    let text = export(&original, &ExportOptions::default());
+    let curve = text.lines().find(|l| l.contains("=IFCINDEXEDPOLYCURVE(")).expect("an outline of arcs");
+    assert_eq!(curve.matches("IFCARCINDEX").count(), 2, "{curve}");
+    let (imported, report) = round_trip(&original);
+    assert_eq!(report.imported.get(&Category::Beam), Some(&1), "{report:?}");
+    let uid = original.element(beam_id).unwrap().uid;
+    let back = imported.elements.values().find(|e| e.uid == uid).expect("the beam");
+    let (ElementKind::Beam(a), ElementKind::Beam(b)) = (&original.element(beam_id).unwrap().kind, &back.kind) else {
+        panic!("came back as {:?}", back.kind);
+    };
+    close2(a.start, b.start, 1e-6, "arc beam start");
+    close2(a.end, b.end, 1e-6, "arc beam end");
+    close(a.bulge, b.bulge, 1e-6, "arc beam bulge");
+    close(a.top_offset, b.top_offset, 1e-6, "arc beam elevation");
+    // The same body: framed into the same columns, the same volume.
+    let (before, after) = (cc_geom::ModelGeometry::build(&original), cc_geom::ModelGeometry::build(&imported));
+    close(before.volume(beam_id), after.volume(back.id), 1e-6, "arc beam volume");
+    assert!(matches!(after.beams[&back.id].start, cc_geom::BeamEnd::Column(_)));
+}
+
 /// A floor with a shaft and a stairwell, and a foundation slab, come back
 /// as native elements; the floor's openings are voids of its profile.
 #[test]
@@ -407,8 +470,7 @@ fn floor_openings_and_foundation_slabs_round_trip() {
     };
     let mut floor = cc_core::Floor::new(square(0.0, 0.0, 10.0), 3.0);
     floor.openings = vec![square(1.0, 1.0, 2.0), square(5.0, 5.0, 3.0)];
-    let raft =
-        cc_core::Foundation { shape: FoundationShape::Slab { boundary: square(0.0, 0.0, 12.0) }, top_offset: -0.1 };
+    let raft = cc_core::Foundation::new(FoundationShape::Slab { boundary: square(0.0, 0.0, 12.0) }, -0.1);
     for (type_id, kind) in [(floor_t, ElementKind::Floor(floor)), (slab_t, ElementKind::Foundation(raft))] {
         let id = cc_core::ElementId(project.alloc_id());
         let e = Element {
@@ -1175,6 +1237,7 @@ fn profiles_project() -> Project {
                     | ProfileShape::Round { .. }
                     | ProfileShape::ConcreteT { .. }
                     | ProfileShape::ConcreteL { .. }
+                    | ProfileShape::AnnularSector { .. }
                     | ProfileShape::Sketch(_)
             );
             let (pm, mat) = if concrete_shape {

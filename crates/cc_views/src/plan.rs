@@ -50,7 +50,14 @@ pub fn is_structural(e: &cc_core::Element) -> bool {
     match &e.kind {
         ElementKind::Wall(w) => w.structural,
         ElementKind::Column(c) => c.structural,
-        ElementKind::Floor(_) | ElementKind::Beam(_) | ElementKind::Foundation(_) | ElementKind::Grid(_) => true,
+        ElementKind::Floor(_)
+        | ElementKind::Beam(_)
+        | ElementKind::Foundation(_)
+        | ElementKind::Grid(_)
+        | ElementKind::SteelBuilding(_)
+        | ElementKind::Truss(_)
+        | ElementKind::Bracing(_)
+        | ElementKind::Connection(_) => true,
         _ => false,
     }
 }
@@ -117,6 +124,7 @@ pub fn plan_of(
     }
     if !ceiling {
         draw_structure(&mut d, project, geom, level, cut_z, spacing, structural);
+        draw_connections(&mut d, project, geom, level, cut_z);
     }
     if !structural {
         draw_components(&mut d, project, geom, level, cut_z, ceiling, detail);
@@ -125,6 +133,10 @@ pub fn plan_of(
         draw_masses(&mut d, project, geom, level, cut_z);
     }
     draw_shafts(&mut d, project, level, cut_z);
+    if !ceiling {
+        draw_steel_buildings(&mut d, project, level, &shown);
+        draw_trusses(&mut d, project, level, &shown);
+    }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
         if let Some(g) = geom.walls.get(&e.id) {
@@ -258,6 +270,16 @@ fn draw_masses(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level
     }
 }
 
+/// Connections whose member stands on `level`: their plates and bolts as
+/// they cut and show (see [`draw_mesh`]).
+fn draw_connections(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, level: LevelId, cut_z: f64) {
+    for g in geom.connections.values() {
+        if project.element(g.member).is_some_and(|m| m.level == level) {
+            draw_mesh(d, &g.faces(), cut_z, false, g.element);
+        }
+    }
+}
+
 fn draw_mesh(d: &mut Drawing2D, faces: &[Vec<glam::DVec3>], cut_z: f64, ceiling: bool, id: cc_core::ElementId) {
     let plan = cc_geom::mesh_plan(faces, cut_z);
     let id = Some(id);
@@ -296,6 +318,13 @@ fn draw_structure(
                 } else {
                     d.polyline(&g.footprint, true, LineStyle::Hidden, id);
                 }
+                // The beam on top of a haunched strip: its two faces.
+                if let (Some(body), Some(h)) = (g.body(), data.and_then(|t| t.strip_haunch())) {
+                    let style = if bottom <= cut_z && cut_z <= top { LineStyle::Projection } else { LineStyle::Hidden };
+                    for v in [-h.beam_width / 2.0, h.beam_width / 2.0] {
+                        d.polyline(&body.line(v), false, style, id);
+                    }
+                }
             }
             (ElementKind::Beam(_), Some(TypeData::Beam { .. })) => {
                 // The body as framed into columns and other beams.
@@ -312,7 +341,7 @@ fn draw_structure(
                 } else {
                     LineStyle::Projection
                 };
-                d.polyline(&g.footprint(), true, style, id);
+                d.polyline(&g.outline(), true, style, id);
             }
             (ElementKind::Stair(st), Some(TypeData::Stair { .. })) => {
                 if let Some(g) = cc_geom::stair_geom(project, e, st) {
@@ -919,6 +948,36 @@ fn section_mark(
     crate::SectionHandle { view: cc_core::ViewId(0), start, end, segments, pieces, radius: r, head: half_base }
 }
 
+/// Steel buildings of a plan's level: their column lines' rectangle, thin
+/// and dashed, as the building's own lines so it can be picked (its
+/// columns and beams draw themselves).
+fn draw_steel_buildings(
+    d: &mut Drawing2D,
+    project: &Project,
+    level: LevelId,
+    shown: &dyn Fn(&cc_core::Element) -> bool,
+) {
+    for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
+        let ElementKind::SteelBuilding(b) = &e.kind else { continue };
+        d.polyline(&b.footprint(), true, LineStyle::Hidden, Some(e.id));
+    }
+}
+
+/// Trusses of a plan's level: each copy's span line, thin and dashed, as
+/// the truss's own line so it can be picked (its members draw themselves).
+/// A bracing draws its bay line the same way.
+fn draw_trusses(d: &mut Drawing2D, project: &Project, level: LevelId, shown: &dyn Fn(&cc_core::Element) -> bool) {
+    for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
+        if let ElementKind::Bracing(b) = &e.kind {
+            d.line(b.start, b.end, LineStyle::Hidden, Some(e.id));
+        }
+        let ElementKind::Truss(t) = &e.kind else { continue };
+        for [a, b] in t.span_lines() {
+            d.line(a, b, LineStyle::Hidden, Some(e.id));
+        }
+    }
+}
+
 /// Shafts in a plan: those on its level and those its cut plane passes
 /// through, as their outline crossed by its two diagonals (the usual
 /// symbol of an opening through the floors).
@@ -999,6 +1058,125 @@ mod tests {
     use super::*;
     use crate::Prim;
     use cc_core::{Category, Document, Element, ElementId, Hosted, Wall};
+
+    /// A steel building draws its footprint dashed as its own lines, so it
+    /// can be picked; its members draw themselves.
+    #[test]
+    fn steel_buildings_draw_their_footprint() {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let host = doc.edit("t", |e| {
+            let column = e.project().default_type(Category::Column).unwrap();
+            let beam = e.project().default_type(Category::Beam).unwrap();
+            let ty = cc_core::ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::steel_building::host_type(ty, "Steel building".into()));
+            let b = cc_core::steel_building::SteelBuilding::new(column, beam, None);
+            let id = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id: ty,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind: ElementKind::SteelBuilding(Box::new(b)),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 100);
+        let lines = d
+            .prims
+            .iter()
+            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Hidden, element: Some(e), .. } if *e == host))
+            .count();
+        assert_eq!(lines, 4);
+        // Mid-bay on a long side: nothing else is there.
+        assert_eq!(d.hit_test(DVec2::new(0.0, 3.0), 0.01), Some(host));
+    }
+    /// A truss draws each copy's span line dashed as its own line, so it can
+    /// be picked; its members draw themselves.
+    #[test]
+    fn trusses_draw_their_span_lines() {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let host = doc.edit("t", |e| {
+            let column = e.project().default_type(Category::Column).unwrap();
+            let beam = e.project().default_type(Category::Beam).unwrap();
+            let ty = cc_core::ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::truss::host_type(ty, "Truss".into()));
+            let mut t = cc_core::truss::Truss::new(beam, beam, column);
+            (t.copies, t.spacing, t.base_offset) = (2, 3.0, 2.0);
+            let id = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id: ty,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind: ElementKind::Truss(Box::new(t)),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 100);
+        let lines = d
+            .prims
+            .iter()
+            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Hidden, element: Some(e), .. } if *e == host))
+            .count();
+        assert_eq!(lines, 2);
+    }
+
+    /// A connection draws its plate and bolts where its member stands.
+    #[test]
+    fn connections_draw_on_their_members_level() {
+        use cc_core::connection::{Connection, ConnectionKind, MemberEnd};
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let element = move |id, type_id, kind| Element {
+            id,
+            level,
+            type_id,
+            mark: String::new(),
+            comments: String::new(),
+            uid: Default::default(),
+            kind,
+            phase_created: Default::default(),
+            phase_demolished: None,
+            design_option: None,
+            paints: Vec::new(),
+        };
+        let conn = doc.edit("t", |e| {
+            let column_t = e.project().default_type(Category::Column).unwrap();
+            let ty = cc_core::ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::connection::host_type(ty, "Connection".into()));
+            let col = ElementId(e.alloc_id());
+            let column = cc_core::Column {
+                position: glam::DVec2::new(1.0, 1.0),
+                rotation_deg: 0.0,
+                base_offset: 0.0,
+                height: 3.0,
+                top: cc_core::WallTop::Unconnected,
+                structural: true,
+            };
+            e.add_element(element(col, column_t, ElementKind::Column(column)));
+            let id = ElementId(e.alloc_id());
+            let c = Connection::new(col, MemberEnd::Base, ConnectionKind::BasePlate);
+            e.add_element(element(id, ty, ElementKind::Connection(c)))
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 100);
+        let lines = d.prims.iter().filter(|p| matches!(p, Prim::Line { element: Some(e), .. } if *e == conn)).count();
+        assert!(lines >= 4, "the plate's outline at least: {lines}");
+    }
 
     /// A wall with a column standing in it, cut by the plan; the column is
     /// joined with the wall when `joined` (the wall cutting an architectural one).

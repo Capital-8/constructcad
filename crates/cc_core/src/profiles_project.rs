@@ -72,6 +72,41 @@ pub fn section_name(shape: &ProfileShape, material: ProfileMaterial) -> String {
     }
 }
 
+/// [`section_name`], or in an imperial project the same name with every
+/// size in inches (`I 8"x8"x5/16"x7/16"`, `Rect 8"x8"`, `Ø12"`).
+pub fn section_name_in(shape: &ProfileShape, material: ProfileMaterial, system: crate::MeasurementSystem) -> String {
+    if system == crate::MeasurementSystem::Metric {
+        return section_name(shape, material);
+    }
+    let i = crate::units::inch_text;
+    match *shape {
+        ProfileShape::I { d, bf, tw, tf, .. } => format!("I {}x{}x{}x{}", i(d), i(bf), i(tw), i(tf)),
+        ProfileShape::Channel { d, bf, tw, tf, .. } => format!("U {}x{}x{}x{}", i(d), i(bf), i(tw), i(tf)),
+        ProfileShape::Angle { h, b, t, .. } => format!("L {}x{}x{}", i(h), i(b), i(t)),
+        ProfileShape::RectTube { h, b, t, .. } => format!("Tube {}x{}x{}", i(h), i(b), i(t)),
+        ProfileShape::RoundTube { d, t } => format!("Ø{}x{}", i(d), i(t)),
+        ProfileShape::Rect { b, h, .. } => format!("Rect {}x{}", i(b), i(h)),
+        ProfileShape::Round { d } => format!("Ø{}", i(d)),
+        ProfileShape::Sketch(_) => "Sketch".to_string(),
+        _ => {
+            let values: Vec<String> = shape.params().into_iter().map(|(_, v)| i(v)).collect();
+            format!("{} {}", shape.code(), values.join("x"))
+        }
+    }
+}
+
+/// An annular sector section in its type's frame: the ring's `center`, the
+/// unit `axis` from it through the middle of the sector, the radii and the
+/// angle it turns (radians).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SectorPlacement {
+    pub center: DVec2,
+    pub axis: DVec2,
+    pub r_in: f64,
+    pub r_out: f64,
+    pub sweep: f64,
+}
+
 /// `outline` mirrored across its vertical axis when `mirror`, then turned
 /// `rotation_deg` counterclockwise (a non-finite angle reads as none).
 fn place_outline(mut outline: SectionOutline, rotation_deg: f64, mirror: bool) -> SectionOutline {
@@ -118,7 +153,7 @@ impl ProfileShape {
     /// sketch with arc or ellipse segments.
     pub fn has_arcs(&self) -> bool {
         match self {
-            Self::Round { .. } | Self::RoundTube { .. } => true,
+            Self::Round { .. } | Self::RoundTube { .. } | Self::AnnularSector { .. } => true,
             Self::Sketch(s) => s
                 .outline
                 .iter()
@@ -254,6 +289,25 @@ impl Project {
     /// The profile a column or beam type points to, when it exists.
     pub fn type_profile_def(&self, data: &TypeData) -> Option<&ProfileDef> {
         type_profile(data).and_then(|id| self.profile(id))
+    }
+
+    /// The ring of a column or beam type whose section is an annular
+    /// sector, as the type places it (turned and mirrored).
+    pub fn type_sector(&self, data: &TypeData) -> Option<SectorPlacement> {
+        let s = section_data(data)?;
+        let shape = &s.profile.and_then(|id| self.profile(id))?.shape;
+        let ProfileShape::AnnularSector { r_in, r_out, sweep } = *shape else { return None };
+        let center = shape.sector_center()?;
+        let turn = if s.rotation_deg.is_finite() { s.rotation_deg.to_radians() } else { 0.0 };
+        let r = DVec2::from_angle(turn);
+        // The sector is symmetric about its own Y axis: a mirror leaves it as it is.
+        Some(SectorPlacement {
+            center: r.rotate(center),
+            axis: r.rotate(DVec2::Y),
+            r_in,
+            r_out,
+            sweep: sweep.to_radians(),
+        })
     }
 
     /// Whether a column or beam type's section is round (a solid or hollow
@@ -452,7 +506,7 @@ impl Project {
         if self.profiles.contains_key(&pid) {
             return None;
         }
-        let name = self.free_profile_name(&section_name(&shape, material));
+        let name = self.free_profile_name(&section_name_in(&shape, material, self.measurement_system()));
         let def = ProfileDef {
             id: pid,
             uid: Uid::generate(),

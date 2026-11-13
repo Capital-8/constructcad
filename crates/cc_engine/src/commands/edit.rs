@@ -107,10 +107,24 @@ fn patched(
     if std::mem::discriminant(&kind) != std::mem::discriminant(&element.kind) {
         return Err(EngineError::invalid("params cannot change the element's category"));
     }
+    if let Some(new) = kind.member_host() {
+        if let Some(old) = element.kind.member_host()
+            && new.member_list() != old.member_list()
+        {
+            return Err(EngineError::invalid(
+                "a host keeps its own members: change its parameters, or edit a member to detach it",
+            ));
+        }
+        new.check_parameters(p).map_err(EngineError::invalid)?;
+    }
     match &kind {
         cc_core::ElementKind::Wall(w) => {
             super::create::check_bulge(w.bulge)?;
             super::create::check_arc(p, type_id.unwrap_or(element.type_id), w)?;
+        }
+        cc_core::ElementKind::Beam(b) => {
+            super::create::check_bulge(b.bulge)?;
+            super::create::check_beam_arc(p, type_id.unwrap_or(element.type_id), b)?;
         }
         cc_core::ElementKind::Foundation(f) => {
             if let cc_core::FoundationShape::Strip { bulge, .. } = f.shape {
@@ -133,6 +147,19 @@ fn patched(
         cc_core::ElementKind::DetailComponent(c) => {
             if let cc_core::ElementKind::DetailComponent(old) = &element.kind {
                 super::detail_component::check(old, c)?;
+            }
+        }
+        cc_core::ElementKind::WallFraming(f) => {
+            if let cc_core::ElementKind::WallFraming(old) = &element.kind
+                && old.wall != f.wall
+            {
+                return Err(EngineError::invalid("a framing stays on its wall: delete it and frame the other wall"));
+            }
+            f.check_size(p).map_err(EngineError::invalid)?;
+        }
+        cc_core::ElementKind::Connection(c) => {
+            if let cc_core::ElementKind::Connection(old) = &element.kind {
+                super::connection::check(old, c)?;
             }
         }
         _ => {}

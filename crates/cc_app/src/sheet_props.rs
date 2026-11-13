@@ -6,7 +6,7 @@ use crate::state::AppState;
 use crate::t;
 use crate::table::{row, section};
 use cc_core::{ElementTypeId, MAX_PAPER_MM, MIN_PAPER_MM, SheetSize, TypeData, View, ViewId, ViewKind};
-use egui::{DragValue, Response, Ui};
+use egui::{Response, Ui};
 use std::hash::{Hash, Hasher};
 
 fn key(parts: impl Hash) -> u64 {
@@ -81,7 +81,8 @@ pub fn rows(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         });
     }
 
-    // Paper: A0–A4 or custom, and portrait.
+    // Paper: a named size (the project's system's first) or custom, and portrait.
+    let choices = SheetSize::choices(state.project().measurement_system());
     let custom = matches!(size, SheetSize::Custom { .. });
     let custom_label = t!("prop-paper-custom");
     let mut choice: Option<SheetSize> = (!custom).then_some(*size);
@@ -90,7 +91,7 @@ pub fn rows(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         ui.horizontal(|ui| {
             let shown = if custom { custom_label.clone() } else { size.label() };
             egui::ComboBox::from_id_salt(("size", id.0)).selected_text(shown).width(90.0).show_ui(ui, |ui| {
-                for s in SheetSize::ALL {
+                for s in choices {
                     ui.selectable_value(&mut choice, Some(s), s.label());
                 }
                 ui.selectable_value(&mut choice, None, custom_label.clone());
@@ -121,9 +122,9 @@ pub fn rows(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         let r = row(ui, &t!("prop-paper-dimensions"), |ui| {
             ui.horizontal(|ui| {
                 let range = MIN_PAPER_MM..=MAX_PAPER_MM;
-                let a = ui.add(DragValue::new(&mut w).range(range.clone()).speed(1.0).suffix(" mm"));
+                let a = ui.add(crate::properties::paper_drag(&mut w).range(range.clone()).speed(1.0));
                 ui.label("×");
-                let b = ui.add(DragValue::new(&mut h).range(range).speed(1.0).suffix(" mm"));
+                let b = ui.add(crate::properties::paper_drag(&mut h).range(range).speed(1.0));
                 a | b
             })
             .inner

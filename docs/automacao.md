@@ -77,6 +77,10 @@ ccad -p casa.ccad --save run elements_option_set 'ids=[31]' option="Entrada: Mar
 ccad -p casa.ccad --save run view_options_set view=Térreo set=Entrada option=Marquise
 ```
 
+**Escalas.** A `scale` de uma vista é o denominador `N` de 1:`N`. `view_create`, `view_set`, `template_set` e `callout_create` também a aceitam como texto: `"1:50"` ou, em projetos imperiais, um rótulo como `"1/4\" = 1'-0\""` (48) ou `"1\" = 20'"` (240). `view_get` acrescenta `scale_text`, a escala como o projeto a escreve (`1:50`, ou `1/4" = 1'-0"` em projetos imperiais), e a escala padrão de uma chamada de detalhe num projeto imperial é uma escala imperial.
+
+**Sistemas de medida.** Os parâmetros e resultados dos comandos são SI, quaisquer que sejam as unidades do projeto (metros, metros quadrados e cúbicos, graus, quilogramas; inclinações em porcentagem quando o comando diz), assim como os arquivos, o IFC e o DXF; `project_info` informa o `system`. O que um comando escreve como texto segue o projeto: num projeto imperial, os tipos que ele cria sob demanda recebem nomes e medidas em polegadas redondas (`Rampa 4'-0"`, `Rodapé 4"`, `Eletrocalha 8"×4"`, `Condutor Ø3/8"`, tipos de porta `2'-8" x 6'-8"`, perfis `I 8"x8"x1/4"x3/8"`; padrões como alturas de parede e de pavimento, cotas de tubos e dispositivos, quedas de esgoto, cobrimento de armaduras e curvas de nível também são imperiais, como diz a descrição de cada parâmetro), as mensagens de verificação (`stair_check`, `ramp_check`) escrevem polegadas e inclinações por 12, e as tabelas (`schedule_table`, `schedule_export_csv`) escrevem `lb` e `lb/ft` para pesos, polegadas para espessuras, diâmetros e espelhos, e cabeçalhos sem unidades métricas. As seções de condutores continuam em mm².
+
 **Vistas de desenho.** `view_create` com `kind: "drafting"` cria uma vista 2D independente do modelo (categoria `drafting`, 1:10 a menos que `scale` diga outra coisa): ela não desenha a geometria do modelo, só os elementos colocados nela — `text_create`, `dimension_create` (e as formas em cadeia e ordenada), `cad_import` e `image_import` a aceitam como `view`. `view_get` mostra sua `scale` e `detail`, `view_set` os altera (ela não tem fase nem estilo visual) e `view_graphics_set` oculta ou sobrepõe suas categorias. Vai para folhas com `sheet_place_view` e é exportada com `view_export` (PNG, SVG, PDF, DXF) como as outras vistas; `view_delete` exclui o que foi desenhado nela.
 
 **Chamadas de detalhe e vistas de detalhe.** `callout_create` desenha uma chamada de detalhe numa planta, planta de forro, corte ou elevação (`parent`): `rect` são dois cantos opostos nas coordenadas de desenho da vista (metros; `y` é a altura em cortes e elevações). Ela cria uma vista de detalhe dessa região (chamada `Detalhe N` a menos que `name` diga outra coisa, na escala `scale`, por padrão uma escala usual cerca de cinco vezes maior que a da vista: 1:10 sob 1:50) do mesmo tipo da vista, que continua ligada ao modelo: segue o nível, a linha de corte ou a direção da vista mãe, mostra o modelo como ela (fase, nível de detalhe, estilo visual, gráficos) e é recortada pelo retângulo, e suas próprias linhas de detalhe, regiões, componentes de detalhe, textos e cotas são desenhados inteiros. Com `drafting`, a chamada aponta para essa vista de desenho existente (sem recorte; uma chamada por vista de desenho). A vista mãe desenha a chamada como um retângulo de cantos arredondados e uma marca: o número do detalhe na folha sobre o número da folha depois de colocado, senão a última palavra do nome sobre um traço. `view_get` mostra `crop` (`[[x mín, y mín], [x máx, y máx]]`) e `callout` (`parent`, `parent_name`, `rect`, `drafting`); `view_set` `crop` move ou redimensiona a chamada de uma vista de detalhe (são um só retângulo), recorta qualquer planta, corte ou elevação, ou com `null` volta a mostrar tudo (uma chamada precisa do seu retângulo); numa vista de desenho apontada por uma chamada, move essa chamada. `callouts_list` lista as chamadas desenhadas numa vista, `callout_remove` remove uma chamada e mantém a vista, `view_delete` de uma vista de detalhe remove sua chamada, e excluir a vista mãe deixa os detalhes como vistas recortadas comuns. As plantas não desenham a vista de detalhe de um corte ou elevação como outra marca de corte ou elevação. Arquivos cujas chamadas apontam para vistas inexistentes, ou cujos recortes não são retângulos válidos, são reparados ao abrir.
@@ -266,9 +270,99 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "profiles_list", "args": {"material": "steel"}}
 ```
 
+### Estrutura por material e pórticos por grade
+
+`structural_type_for` (`category` pilar ou viga, `material` concrete, steel ou timber) devolve o primeiro tipo desse material, ou cria um padrão do catálogo. `grid_frame_create` coloca pilares em cada pavimento de uma faixa de níveis e vigas nos níveis superiores sobre as grades (`grids` padrão todas, `base_level`/`top_level` padrão os dois primeiros níveis, `column_type`/`beam_type` ou um `material`), com vigas secundárias opcionais em cada vão, num só passo de desfazer (no máximo 2000 elementos); devolve os ids e o número de pulados.
+
+```text
+{"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
+```
+
+`steel_building_create` cria um galpão metálico paramétrico: pórticos de pilares e vigas de cobertura em `bays` módulos, com terças e longarinas (`null` desliga uma delas), como pilares e vigas comuns num só passo de desfazer; os tipos padrão são o `W310x38,7` do catálogo. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros do galpão; um elemento editado ou excluído diretamente fica desvinculado e não é mexido. Os elementos acompanham as fases e a opção de projeto do galpão, e uma cópia ou colagem faz os seus próprios. `element_get` lista `derived.members`, `detached` e `at_limit` (o arranjo chegou ao limite de elementos e deixou de fora as últimas terças ou longarinas).
+
+```text
+{"command": "steel_building_create", "args": {"span": 24, "eave_height": 7, "bays": 8, "roof": "mono", "girts": null}}
+{"command": "element_set", "args": {"id": 42, "params": {"span": 30}}}
+```
+
+`truss_create` cria uma treliça paramétrica: um elemento hospedeiro cujos banzos, diagonais e montantes são vigas e pilares comuns, feitos num só passo de desfazer e devolvidos como `{id, members}`. `shape` é `flat`, `mono` ou `gable`; `pattern` é `pratt`, `howe`, `warren` ou, nas de duas águas, `kingpost`, `queenpost` e `fink`; `copies` treliças ficam a `spacing` de distância à esquerda da linha do vão; `material` (`steel` ou `timber`) escolhe as linhas do catálogo dos tipos padrão (concreto é recusado). Como no galpão metálico, os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros, e um elemento editado ou excluído diretamente fica desvinculado.
+
+```text
+{"command": "truss_create", "args": {"start": [0, 0], "end": [12, 0], "height": 2, "shape": "gable", "pattern": "fink", "panels": 6, "copies": 5, "spacing": 1.2, "material": "timber"}}
+{"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
+```
+
+`connections_create` coloca ligações de aço e madeira: `kind` é `base_plate` (em pilares), `end_plate`, `fin_plate`, `timber_bolts` ou `hanger` (em vigas); `members` os lista, senão `level` (por padrão o nível ativo) pega todos os seus pilares ou vigas. Só as extremidades que servem ao tipo ganham uma, as que já têm uma são puladas, e o resultado é `{created, skipped}` num só passo de desfazer. `params` muda os tamanhos padrão do tipo (metros; `thickness`, `width` e `length`, com 0 valendo a partir da seção, `bolt_diameter`, `rows`, `columns`, `spacing`, `edge`, `anchor_length`). Depois, `element_set` edita os tamanhos, não o elemento, a extremidade nem o tipo. As tabelas têm os campos `ConnectionKind`, `PlateMass` (kg), `BoltCount` e `BoltDiameter`.
+
+```text
+{"command": "connections_create", "args": {"kind": "end_plate", "members": [12, 13], "params": {"rows": 3, "bolt_diameter": 0.02}}}
+{"command": "element_set", "args": {"id": 42, "params": {"params": {"thickness": 0.02}}}}
+```
+
+`wall_framing_create` estrutura paredes retas em light steel frame ou madeira: um elemento de ossatura por parede, dono de pilares comuns (montantes, montantes duplos, montantes curtos) e vigas (guias ou soleiras, vergas, contravergas, bloqueadores), feitos num só passo de desfazer e devolvidos como `{framings: [{id, wall, members}]}`. `system` é `light_steel` (padrão) ou `wood`; `spacing` é o espaçamento dos montantes em metros (0,2 a 1,2; 0,4 e 0,6 por padrão); `stud_type`, `track_type` e `header_type` aceitam id ou nome (padrão: os tipos do catálogo do sistema); `double_top` (madeira) e `blocking` são booleanos. Paredes curvas e já estruturadas são recusadas antes de qualquer alteração. Os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros da ossatura ou quando a parede, suas portas ou janelas mudam; um elemento editado ou excluído diretamente fica desvinculado. As guias e soleiras padrão são as linhas do catálogo giradas 90 graus, deitadas (a largura da seção é a sua altura); um tipo dado é usado como desenha. A ossatura e seus elementos acompanham as fases, a opção de projeto e o nível da parede. Montantes não são unidos onde uma abertura chega à ponta da parede, onde duas aberturas ficam a menos de uns quatro montantes uma da outra, nem no canto entre duas paredes estruturadas; dividir uma parede estruturada reestrutura só a parte que fica com a ossatura.
+
+```text
+{"command": "wall_framing_create", "args": {"walls": [12, 13], "system": "wood", "blocking": true}}
+{"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
+```
+
+`beam_create` desenha uma viga em arco com `mid` (um ponto do arco), `bulge` ou `radius` (positivo no sentido anti-horário; `major_arc` escolhe o arco maior), como `wall_create` desenha paredes em arco; `element_get` devolve então `center`, `radius`, `sweep` e o `true_length` ao longo do arco. `rebar_create` arma uma viga ou pilar: `top`, `bottom` (vigas) ou `perimeter` (pilares) com um `count`, `sides` (barras de pele nas duas faces laterais de uma viga: um `count` por face, ou um `spacing` ao longo da altura) e `stirrups` a cada `spacing`. Em uma viga em arco as barras seguem o arco, cada uma com o comprimento do arco no seu raio, e os estribos são radiais. As barras que não cabem lado a lado vão para uma segunda camada, e as barras ao longo de uma viga mais compridas que `max_length` (padrão 12 m; 0 para barras inteiras) são emendadas com traspasse `lap` (padrão 40 diâmetros), com as emendas vizinhas defasadas.
+
+```text
+{"command": "beam_create", "args": {"start": [2.5, 0], "end": [0, 2.5], "radius": 2.5}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "bottom", "count": 6}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "sides", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.12}}
+```
+
+Um pilar que continua uma parede cilíndrica tem um perfil `annular_sector`; `rebar_create` recebe então as barras face a face (as faces são listadas, em ordem, no `derived.faces` do pilar), estribos que seguem o contorno, grampos e lances:
+
+```text
+{"command": "profile_create", "args": {"name": "P1", "material": "concrete", "shape": "annular_sector", "params": {"r_in": 2.0, "r_out": 2.2, "sweep": 30}}}
+{"command": "profile_type_create", "args": {"profile": "P1", "category": "column"}}
+{"command": "column_create", "args": {"type": "P1", "position": [0, 2.1]}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "perimeter", "faces": [7, 3, 7, 3], "same_type": true}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "ties", "spacing": 0.30}}
+```
+
+`wall_rebar_create` arma paredes, retas ou em arco: barras horizontais (de anel) com um espaçamento ou `zones` por altura, barras verticais com pontas dobradas e conjuntos adicionais, e grampos, junto às duas faces com um cobrimento para cada. Uma parede cilíndrica recebe as suas quatro famílias de barras em um comando:
+
+```text
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "cover_exterior": 0.03, "cover_interior": 0.04, "horizontal": {"type": "Barra Ø 10,0 mm", "zones": [{"up_to": 2, "spacing": 0.10}, {"up_to": 4, "spacing": 0.12}, {"up_to": 6, "spacing": 0.15}]}, "vertical": {"spacing": 0.20, "bottom": {"across": 0.12, "along": 0.60}}, "max_length": 5}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "vertical": {"spacing": 0.20, "offset": 0.10, "to": 1.5}}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "ties": {"every_horizontal": 1, "every_vertical": 2}}}
+```
+
+`slab_rebar_create` arma pisos e radiers de qualquer contorno: uma malha, ou barras de anel e radiais, recortadas pelo contorno verdadeiro e em volta das aberturas, com reforço de aberturas. Uma laje circular com tampa de inspeção, armada em cima e embaixo:
+
+```text
+{"command": "floor_create", "args": {"structural": true, "curves": [{"kind": "circle", "center": [0, 0], "radius": 2.0}, {"kind": "rectangle", "corner": [-0.3, -0.3], "opposite": [0.3, 0.3]}]}}
+{"command": "slab_rebar_create", "args": {"slabs": [42], "type": "Barra Ø 8,0 mm", "spacing": 0.15, "cover": 0.03}}
+{"command": "slab_rebar_create", "args": {"slabs": [42], "layout": "radial", "layers": "bottom", "spacing": 0.20, "radial_count": 24, "intermediate": 1.0}}
+{"command": "element_get", "args": {"id": 43}}
+```
+
+Uma sapata em anel sob uma parede cilíndrica: um tipo de sapata corrida em T invertido, uma sapata em arco, a sua armadura, e um radier circular que guarda a curva verdadeira:
+
+```text
+{"command": "type_set", "args": {"type": "Viga baldrame 20 x 40 cm", "params": {"width": 1.6, "thickness": 0.4, "haunch": {"edge_thickness": 0.2, "beam_width": 0.4, "beam_height": 0.5}}}}
+{"command": "strip_footing_create", "args": {"start": [3, 0], "end": [-3, 0], "bulge": 1}}
+{"command": "strip_rebar_create", "args": {"strips": [42], "transverse_spacing": 0.20, "longitudinal_spacing": 0.20, "beam": {"top": 3, "sides": 1, "stirrups": 0.15}}}
+{"command": "foundation_slab_create", "args": {"curves": [{"kind": "circle", "center": [0, 0], "radius": 2.5}]}}
+```
+
+`bracing_create` contraventa um vão de pórtico: um elemento hospedeiro cujas barras são vigas comuns, criado em um passo de desfazer e devolvido como `{id, members}`. O vão vai de `start` a `end` (os eixos dos dois pilares) ou fica entre os dois `columns`, de quem toma a base e a altura; `pattern` é `x`, `diagonal` (com `flip` e `alternate`), `v`, `chevron` ou `k`; `stories` pavimentos de altura `height` ficam um sobre o outro a partir de `base_offset`; `material` (`steel` ou `timber`) escolhe a linha de catálogo do tipo padrão das barras. `element_set` muda seus parâmetros e regenera as barras mantendo seus ids.
+
+```text
+{"command": "bracing_create", "args": {"start": [0, 0], "end": [6, 0], "pattern": "chevron", "height": 3, "stories": 4}}
+{"command": "bracing_create", "args": {"columns": [12, 13], "pattern": "k", "stories": 2}}
+{"command": "element_set", "args": {"id": 42, "params": {"pattern": "X"}}}
+```
+
 ### Folhas e carimbos
 
-`sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).
+`sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).
 
 Um carimbo é um componente cujas peças 2D desenham a folha inteira, em milímetros a partir do canto inferior esquerdo do papel. `title_block_create` copia o padrão (ou começa vazio com `empty`); `component_sheet_piece_add`, `component_sheet_piece_set` (um merge patch sobre a peça como `component_get` a mostra em `def.sheet`) e `component_sheet_piece_delete` editam seus traços, textos e imagens; várias peças são adicionadas (`pieces`), excluídas (`indices`) ou alteradas e adicionadas (`add`) em um só passo. Uma imagem não é alterada por patch: `component_sheet_piece_set` a substitui com `image_path` (um arquivo) ou `image` (base64), e `component_get` e `type_get` a mostram apenas como resumo (`format`, `width`, `height`, `bytes`), nunca em base64. `title_block_create` recusa um nome já usado por um tipo ou por um componente. A categoria é `titleblock` (`types_list`, `categories_list`). `type_delete` pode excluir o último tipo de carimbo: suas folhas ficam então sem carimbo, e uma folha sem carimbo é desenhada como papel em branco. As expressões leem os parâmetros e `SheetWidth`/`SheetHeight`, então um carimbo serve para qualquer papel; os textos têm `{campos}` (`sheet_number`, `sheet_name`, `sheet_count`, `sheet_index`, `sheet_scale`, `paper`, `project_name`, `project_number`, `client`, `address`, `author`, `date`, `issue_date`, `project:<Nome>`, `param:<Nome>`). Um campo por folha é um parâmetro de texto com `instance`.
 

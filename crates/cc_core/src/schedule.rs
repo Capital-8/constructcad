@@ -92,6 +92,14 @@ pub enum ScheduleField {
     FillVolume,
     /// Estimated length of the horizontal cables from a data outlet to its rack.
     CableLength,
+    /// Kind of a connection (base plate, end plate…).
+    ConnectionKind,
+    /// Steel mass of a connection's plates, kilograms.
+    PlateMass,
+    /// Number of bolts of a connection.
+    BoltCount,
+    /// Bolt diameter of a connection.
+    BoltDiameter,
 }
 
 impl ScheduleField {
@@ -154,6 +162,28 @@ impl ScheduleField {
             ScheduleField::CutVolume => "col-cut-volume",
             ScheduleField::FillVolume => "col-fill-volume",
             ScheduleField::CableLength => "col-cable-length",
+            ScheduleField::ConnectionKind => "col-connection-kind",
+            ScheduleField::PlateMass => "col-plate-mass",
+            ScheduleField::BoltCount => "col-bolt-count",
+            ScheduleField::BoltDiameter => "col-bolt-diameter",
+        }
+    }
+
+    /// Translation key of the column header in a project of `system`. The
+    /// metric headers of lengths, areas and volumes name their unit
+    /// (`Length (m)`); imperial values carry their own marks and symbols
+    /// (`12'-6"`, `100.00 ft²`), so those headers name none.
+    pub fn key_in(self, system: crate::MeasurementSystem) -> &'static str {
+        if system == crate::MeasurementSystem::Metric {
+            return self.key();
+        }
+        match self {
+            ScheduleField::Length => "col-imp-length",
+            ScheduleField::Thickness => "col-imp-thickness",
+            ScheduleField::Area => "col-imp-area",
+            ScheduleField::Perimeter => "col-imp-perimeter",
+            ScheduleField::Volume => "col-imp-volume",
+            _ => self.key(),
         }
     }
 
@@ -201,6 +231,13 @@ impl ScheduleField {
             Category::Railing => &[F::Length, F::Height],
             Category::Sweep => &[F::Length, F::Volume],
             Category::Shaft => &[F::Area, F::Height],
+            Category::SteelBuilding => &[],
+            Category::Truss => &[],
+            Category::Bracing => &[],
+            Category::WallFraming => &[],
+            Category::Connection => {
+                &[F::ConnectionKind, F::Host, F::PlateMass, F::BoltCount, F::BoltDiameter, F::Volume]
+            }
             Category::Topography => &[F::Area, F::Volume, F::Material, F::CutVolume, F::FillVolume],
             Category::Pad => &[F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Pipe => &[F::Diameter, F::Length, F::System, F::Slope, F::Material],
@@ -289,6 +326,13 @@ impl ScheduleField {
             Category::Room => vec![F::Number, F::Name, F::Level, F::Area, F::Perimeter],
             Category::Mass => vec![F::Mark, F::Type, F::Level, F::Height, F::FloorCount, F::FloorArea, F::Volume],
             Category::Shaft => vec![F::Mark, F::Type, F::Level, F::Area, F::Height],
+            Category::SteelBuilding => Vec::new(),
+            Category::Truss => Vec::new(),
+            Category::Bracing => Vec::new(),
+            Category::WallFraming => Vec::new(),
+            Category::Connection => {
+                vec![F::Mark, F::ConnectionKind, F::PlateMass, F::BoltCount, F::BoltDiameter, F::Comments]
+            }
             Category::Topography => vec![F::Mark, F::Type, F::Level, F::Area, F::Volume],
             Category::Pad => vec![F::Mark, F::Type, F::Level, F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Grid

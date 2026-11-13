@@ -114,8 +114,8 @@ impl Element {
                 let plan = t.apply(q.truncate());
                 (q.x, q.y) = (plan.x, plan.y);
             }),
-            // Bars follow their host.
-            ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
+            // Bars, valves and connections follow their host.
+            ElementKind::Rebar(_) | ElementKind::Valve(_) | ElementKind::Connection(_) => {}
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
                 p(&mut s.start);
                 p(&mut s.end);
@@ -191,6 +191,7 @@ impl Element {
                 // The line keeps its direction, so a face justification changes sides.
                 if t.mirror {
                     b.lateral = b.lateral.mirrored();
+                    b.bulge = -b.bulge;
                 }
             }
             ElementKind::Stair(s) => {
@@ -209,6 +210,11 @@ impl Element {
                 }
             }
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(p),
+            ElementKind::SteelBuilding(b) => b.transform(t),
+            ElementKind::Truss(tr) => tr.transform(t),
+            ElementKind::Bracing(b) => b.transform(t),
+            // Placed by its wall.
+            ElementKind::WallFraming(_) => {}
             ElementKind::Pad(pad) => pad.outline.iter_mut().for_each(p),
             ElementKind::Topography(topo) => {
                 topo.boundary.iter_mut().for_each(p);
@@ -357,7 +363,8 @@ impl crate::Project {
     /// The elements a copy of `ids` takes: the non-hosted ones, plus the
     /// doors and windows of copied walls, the railings of copied stairs, the
     /// pads of copied terrains, the valves of copied pipes and any selected
-    /// hosted element.
+    /// hosted element. Connections are never copied: they belong to their
+    /// member's end.
     /// The snapshot stays valid after the originals are deleted (cut).
     pub fn copy_set(&self, ids: &[ElementId]) -> Vec<Element> {
         let set: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
@@ -392,6 +399,18 @@ impl crate::Project {
                 .filter(|e| matches!(&e.kind, ElementKind::Valve(v) if set.contains(&v.host)))
                 .cloned(),
         );
+        // A copied wall takes its framing along.
+        out.extend(
+            self.elements
+                .values()
+                .filter(|e| !set.contains(&e.id))
+                .filter(|e| matches!(&e.kind, ElementKind::WallFraming(f) if set.contains(&f.wall)))
+                .cloned(),
+        );
+        // A copied member host makes its own members: its originals are not copied.
+        let managed: std::collections::BTreeSet<ElementId> =
+            out.iter().flat_map(|e| self.host_members_of(e.id)).collect();
+        out.retain(|e| !managed.contains(&e.id) && !matches!(e.kind, ElementKind::Connection(_)));
         out
     }
 
@@ -443,6 +462,8 @@ impl crate::Project {
                 .find(|t| t.id == v.host)
                 .or_else(|| self.element(v.host))
                 .is_some_and(|t| matches!(t.kind, ElementKind::Pipe(_))),
+            // Only with its wall: the wall it came from has a framing already.
+            ElementKind::WallFraming(f) => set.iter().any(|w| w.id == f.wall && w.as_wall().is_some()),
             _ => true,
         };
         type_ok && other_ok && self.level(e.level).is_some()
@@ -506,6 +527,13 @@ impl crate::EditCtx<'_> {
                 let Some(ElementKind::Valve(v)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
                 if let Some(n) = remap.get(&v.host) {
                     v.host = *n;
+                }
+            }
+            // Copied framings frame the copies of their walls.
+            for id in &created[first..] {
+                let Some(ElementKind::WallFraming(f)) = self.element_mut(*id).map(|e| &mut e.kind) else { continue };
+                if let Some(n) = remap.get(&f.wall) {
+                    f.wall = *n;
                 }
             }
             // Copied railings follow the copies of their stairs, or become free.

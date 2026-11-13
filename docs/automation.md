@@ -77,6 +77,10 @@ ccad -p house.ccad --save run elements_option_set 'ids=[31]' option="Entrance: C
 ccad -p house.ccad --save run view_options_set view=Térreo set=Entrance option=Canopy
 ```
 
+**Scales.** A view's `scale` is the denominator `N` of 1:`N`. `view_create`, `view_set`, `template_set` and `callout_create` also take it as text: `"1:50"`, or in imperial projects a label such as `"1/4\" = 1'-0\""` (48) or `"1\" = 20'"` (240). `view_get` adds `scale_text`, the scale as the project writes it (`1:50`, or `1/4" = 1'-0"` in imperial projects), and an imperial callout's default detail scale is an imperial one.
+
+**Measurement systems.** Command parameters and results are SI whatever the project's units (meters, square and cubic meters, degrees, kilograms; slopes in percent where a command says so), and so are files, IFC and DXF; `project_info` reports the `system`. What a command writes as text follows the project: in an imperial project the types it makes on demand are named and sized in round inches (`Ramp 4'-0"`, `Baseboard 4"`, `Cable tray 8"×4"`, `Conductor Ø3/8"`, door types `2'-8" x 6'-8"`, profiles `I 8"x8"x1/4"x3/8"`; defaults such as wall and story heights, pipe and device elevations, drain falls, rebar cover and terrain contours are imperial too, as each parameter's description says), check messages (`stair_check`, `ramp_check`) write inches and slopes per 12, and schedules (`schedule_table`, `schedule_export_csv`) write `lb` and `lb/ft` for weights, inches for thicknesses, diameters and risers, and headers without metric units. Conductor cross-sections stay in mm².
+
 **Drafting views.** `view_create` with `kind: "drafting"` makes a 2D view independent of the model (category `drafting`, 1:10 unless `scale` says otherwise): it draws no model geometry, only the elements placed in it — `text_create`, `dimension_create` (and the chain and ordinate forms), `cad_import` and `image_import` take it as their `view`. `view_get` shows its `scale` and `detail`, `view_set` changes them (it has no phase or visual style), and `view_graphics_set` hides or overrides its categories. It goes on sheets with `sheet_place_view` and exports with `view_export` (PNG, SVG, PDF, DXF) like other views; `view_delete` deletes what was drawn in it.
 
 **Callouts and detail views.** `callout_create` draws a callout in a floor plan, ceiling plan, section or elevation (`parent`): `rect` is two opposite corners in the parent's drawing coordinates (meters; `y` is the height in sections and elevations). It makes a detail view of that region (named `Detail N` unless `name` says otherwise, at `scale`, by default a standard scale about five times larger than the parent's: 1:10 under 1:50) of the parent's kind, so it stays live with the model: it follows the parent's level, section line or direction, shows the model as the parent does (phase, detail level, visual style, graphics) and is cropped to the rectangle, and its own detail lines, regions, detail components, texts and dimensions are drawn whole. With `drafting`, the callout points to that existing drafting view instead (no crop; one callout per drafting view). The parent draws the callout as a rectangle with rounded corners and a tag: the detail's number on its sheet over the sheet's number once it is placed, else the last word of its name over a dash. `view_get` shows `crop` (`[[min x, min y], [max x, max y]]`) and `callout` (`parent`, `parent_name`, `rect`, `drafting`); `view_set` `crop` moves or resizes a detail view's callout (they are one rectangle), crops any plan, section or elevation, or with `null` shows everything again (a callout needs its rectangle); for a drafting view a callout points to, it moves that callout. `callouts_list` lists the callouts drawn in a view, `callout_remove` removes a callout and keeps its view, `view_delete` of a detail view removes its callout, and deleting the parent leaves its details as ordinary cropped views. Plans do not draw a section's or elevation's detail view as another section or elevation mark. Files whose callouts point to missing views, or whose crops are not valid rectangles, are repaired on load.
@@ -266,9 +270,99 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "profiles_list", "args": {"material": "steel"}}
 ```
 
+### Structure by material and grid frames
+
+`structural_type_for` (`category` column or beam, `material` concrete, steel or timber) returns the first type of that material, or creates a default one from the catalog. `grid_frame_create` places columns on every storey of a range of levels and beams on the upper levels over the grids (`grids` default all, `base_level`/`top_level` default the lowest two levels, `column_type`/`beam_type` or a `material`), with optional secondary beams in each bay, in one undo step (at most 2000 members); it returns the ids and the number skipped.
+
+```text
+{"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
+```
+
+`steel_building_create` makes a parametric steel building: portal frames of columns and rafters over `bays` bays, with purlins and girts (`null` turns one off), as ordinary columns and beams in one undo step; types default to the catalog's `W310x38,7`. Its members are regenerated, with their ids kept, when `element_set` changes the building's parameters; a member edited or deleted directly is detached and left alone. Members follow the building's phases and design option, and a copy or paste makes its own. `element_get` lists `derived.members`, `detached` and `at_limit` (the layout reached the member limit and left the last purlins or girts out).
+
+```text
+{"command": "steel_building_create", "args": {"span": 24, "eave_height": 7, "bays": 8, "roof": "mono", "girts": null}}
+{"command": "element_set", "args": {"id": 42, "params": {"span": 30}}}
+```
+
+`truss_create` makes a parametric truss: a host element whose chords, diagonals and posts are ordinary beams and columns, made in one undo step and returned as `{id, members}`. `shape` is `flat`, `mono` or `gable`; `pattern` is `pratt`, `howe`, `warren`, or for gables `kingpost`, `queenpost` and `fink`; `copies` trusses stand `spacing` apart to the left of the span line; `material` (`steel` or `timber`) picks the catalog rows of the default types (concrete is refused). Like a steel building, its members are regenerated with their ids kept when `element_set` changes its parameters, and a member edited or deleted directly is detached.
+
+```text
+{"command": "truss_create", "args": {"start": [0, 0], "end": [12, 0], "height": 2, "shape": "gable", "pattern": "fink", "panels": 6, "copies": 5, "spacing": 1.2, "material": "timber"}}
+{"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
+```
+
+`connections_create` places steel and timber connections: `kind` is `base_plate` (on columns), `end_plate`, `fin_plate`, `timber_bolts` or `hanger` (on beams); `members` lists them, else `level` (default the active level) takes all of its columns or beams. Only the ends that suit the kind get one, ends that already have one are skipped, and the result is `{created, skipped}` in one undo step. `params` changes the kind's default sizes (meters; `thickness`, `width` and `length`, 0 meaning from the section, `bolt_diameter`, `rows`, `columns`, `spacing`, `edge`, `anchor_length`). Later `element_set` edits the sizes, not the member, end or kind. Schedules have the fields `ConnectionKind`, `PlateMass` (kg), `BoltCount` and `BoltDiameter`.
+
+```text
+{"command": "connections_create", "args": {"kind": "end_plate", "members": [12, 13], "params": {"rows": 3, "bolt_diameter": 0.02}}}
+{"command": "element_set", "args": {"id": 42, "params": {"params": {"thickness": 0.02}}}}
+```
+
+`wall_framing_create` frames straight walls in light steel or wood: one framing element per wall, owning ordinary columns (studs, king and jack studs, cripples) and beams (tracks or plates, headers, sills, blocking), made in one undo step and returned as `{framings: [{id, wall, members}]}`. `system` is `light_steel` (default) or `wood`; `spacing` is the stud spacing in meters (0.2 to 1.2; 0.4 and 0.6 by default); `stud_type`, `track_type` and `header_type` take an id or a name (default: the system's catalog types); `double_top` (wood) and `blocking` are booleans. Curved walls and walls already framed are refused before anything is made. The members are regenerated, with their ids kept, when `element_set` changes the framing's parameters or when the wall or its doors and windows change; a member edited or deleted directly is detached. The default tracks and plates are the catalog rows turned 90 degrees, lying flat (the section's width is their height); a given type is used as it draws. The framing and its members follow the wall's phases, design option and level. Studs are not merged where an opening reaches a wall end, where two openings are closer than about four stud widths, or at the corner of two framed walls; splitting a framed wall reframes only the part that keeps the framing.
+
+```text
+{"command": "wall_framing_create", "args": {"walls": [12, 13], "system": "wood", "blocking": true}}
+{"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
+```
+
+`beam_create` draws an arc beam with `mid` (a point on the arc), `bulge` or `radius` (positive counter-clockwise; `major_arc` takes the longer arc), as `wall_create` draws arc walls; `element_get` then gives its `center`, `radius`, `sweep` and `true_length` along the arc. `rebar_create` lays bars in a beam or column: `top`, `bottom` (beams) or `perimeter` (columns) with a `count`, `sides` (side bars on both side faces of a beam: a `count` per face, or a `spacing` over the height) and `stirrups` every `spacing`. In an arc beam the bars follow the arc, each as long as the arc at its own radius, and the stirrups are radial. Bars that do not fit side by side go in a second layer, and bars along a beam longer than `max_length` (default 12 m; 0 for whole bars) are lap spliced by `lap` (default 40 diameters), neighbouring splices staggered.
+
+```text
+{"command": "beam_create", "args": {"start": [2.5, 0], "end": [0, 2.5], "radius": 2.5}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "bottom", "count": 6}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "sides", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.12}}
+```
+
+A column that continues a cylindrical wall has an `annular_sector` profile; `rebar_create` then takes its bars face by face (the faces are listed, in order, in the column's `derived.faces`), ties that follow the outline, cross-ties and lifts:
+
+```text
+{"command": "profile_create", "args": {"name": "P1", "material": "concrete", "shape": "annular_sector", "params": {"r_in": 2.0, "r_out": 2.2, "sweep": 30}}}
+{"command": "profile_type_create", "args": {"profile": "P1", "category": "column"}}
+{"command": "column_create", "args": {"type": "P1", "position": [0, 2.1]}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "perimeter", "faces": [7, 3, 7, 3], "same_type": true}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "ties", "spacing": 0.30}}
+```
+
+`wall_rebar_create` reinforces walls, straight or arc: horizontal (ring) bars with a spacing or `zones` by height, vertical bars with bent ends and additional sets, and ties, near both faces with a cover each. A cylindrical wall gets its four bar families in one command:
+
+```text
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "cover_exterior": 0.03, "cover_interior": 0.04, "horizontal": {"type": "Barra Ø 10,0 mm", "zones": [{"up_to": 2, "spacing": 0.10}, {"up_to": 4, "spacing": 0.12}, {"up_to": 6, "spacing": 0.15}]}, "vertical": {"spacing": 0.20, "bottom": {"across": 0.12, "along": 0.60}}, "max_length": 5}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "vertical": {"spacing": 0.20, "offset": 0.10, "to": 1.5}}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "ties": {"every_horizontal": 1, "every_vertical": 2}}}
+```
+
+`slab_rebar_create` reinforces floors and foundation slabs of any boundary: a mesh, or ring and radial bars, clipped to the true boundary and around openings, with trimming bars. A circular slab with a manhole, reinforced top and bottom:
+
+```text
+{"command": "floor_create", "args": {"structural": true, "curves": [{"kind": "circle", "center": [0, 0], "radius": 2.0}, {"kind": "rectangle", "corner": [-0.3, -0.3], "opposite": [0.3, 0.3]}]}}
+{"command": "slab_rebar_create", "args": {"slabs": [42], "type": "Barra Ø 8,0 mm", "spacing": 0.15, "cover": 0.03}}
+{"command": "slab_rebar_create", "args": {"slabs": [42], "layout": "radial", "layers": "bottom", "spacing": 0.20, "radial_count": 24, "intermediate": 1.0}}
+{"command": "element_get", "args": {"id": 43}}
+```
+
+A ring footing under a cylindrical wall: an inverted-T strip type, an arc strip, its reinforcement, and a circular raft that keeps its true curve:
+
+```text
+{"command": "type_set", "args": {"type": "Viga baldrame 20 x 40 cm", "params": {"width": 1.6, "thickness": 0.4, "haunch": {"edge_thickness": 0.2, "beam_width": 0.4, "beam_height": 0.5}}}}
+{"command": "strip_footing_create", "args": {"start": [3, 0], "end": [-3, 0], "bulge": 1}}
+{"command": "strip_rebar_create", "args": {"strips": [42], "transverse_spacing": 0.20, "longitudinal_spacing": 0.20, "beam": {"top": 3, "sides": 1, "stirrups": 0.15}}}
+{"command": "foundation_slab_create", "args": {"curves": [{"kind": "circle", "center": [0, 0], "radius": 2.5}]}}
+```
+
+`bracing_create` braces one bay of a frame: a host element whose braces are ordinary beams, made in one undo step and returned as `{id, members}`. The bay is `start` to `end` (the two column axes) or the two `columns`, whose base and height it then takes; `pattern` is `x`, `diagonal` (with `flip` and `alternate`), `v`, `chevron` or `k`; `stories` storeys of `height` stand one above the other from `base_offset`; `material` (`steel` or `timber`) picks the catalog row of the default brace type. `element_set` changes its parameters and regenerates the braces with their ids kept.
+
+```text
+{"command": "bracing_create", "args": {"start": [0, 0], "end": [6, 0], "pattern": "chevron", "height": 3, "stories": 4}}
+{"command": "bracing_create", "args": {"columns": [12, 13], "pattern": "k", "stories": 2}}
+{"command": "element_set", "args": {"id": 42, "params": {"pattern": "X"}}}
+```
+
 ### Sheets and title blocks
 
-`sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).
+`sheet_set` changes a sheet: `number`, `size` (`"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`, or `{"width": …, "height": …}` in millimeters), `portrait`, `title_block` (a title block type, or `null` for none), `fields` (the sheet's values of the title block's per-sheet fields; `null` clears one) and `issue_date` (`YYYY-MM-DD`, or `""`). `sheet_fields` shows what a sheet's title block will read: every field with its value, the per-sheet fields with this sheet's value and the default, and the pieces that do not resolve. `project_info_set` takes `fields` (project fields by name, read as `{project:Name}`).
 
 A title block is a component whose 2D pieces draw the whole sheet, in millimeters from the paper's bottom-left corner. `title_block_create` copies the standard one (or starts `empty`); `component_sheet_piece_add`, `component_sheet_piece_set` (a merge patch over the piece as `component_get` shows it under `def.sheet`) and `component_sheet_piece_delete` edit its strokes, texts and pictures; several pieces are added (`pieces`), deleted (`indices`) or patched and added (`add`) in one step. A picture is not patched: `component_sheet_piece_set` replaces it with `image_path` (a file) or `image` (base64), and `component_get` and `type_get` show it only as a summary (`format`, `width`, `height`, `bytes`), never as base64. `title_block_create` refuses a name already used by a type or a component. The category is `titleblock` (`types_list`, `categories_list`). `type_delete` may delete the last title block type: its sheets then have no title block, and a sheet without one is drawn as blank paper. Expressions read the parameters and `SheetWidth`/`SheetHeight`, so one title block serves every paper; texts hold `{fields}` (`sheet_number`, `sheet_name`, `sheet_count`, `sheet_index`, `sheet_scale`, `paper`, `project_name`, `project_number`, `client`, `address`, `author`, `date`, `issue_date`, `project:<Name>`, `param:<Name>`). A per-sheet field is a text parameter with `instance`.
 

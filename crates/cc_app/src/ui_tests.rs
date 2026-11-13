@@ -286,9 +286,11 @@ fn ribbon_buttons_are_accessible() {
         RibbonTab::Manage,
     ];
     let mut found = std::collections::HashSet::new();
-    for tab in tabs {
+    // The Structure tab shows other groups per material.
+    for (tab, material) in tabs.into_iter().flat_map(|t| cc_core::StructuralMaterial::ALL.map(|m| (t, m))) {
         let mut state = sample_state();
         state.ribbon_tab = tab;
+        state.prefs.structure_material = material;
         let harness = ribbon_harness(state, 1600.0);
         for node in harness.query_all_by_role(Role::Button) {
             let label = node.accesskit_node().label().unwrap_or_default();
@@ -364,6 +366,79 @@ fn wall_tool_has_an_arc_mode() {
     harness.get_by_label(&t!("wall-mode-line")).click();
     harness.run();
     assert!(!harness.state().wall_arc);
+}
+
+/// A structural wall's palette offers its reinforcement: the typical button
+/// makes horizontal and vertical bars near both faces, listed with their
+/// spacing (#281).
+#[test]
+fn structural_walls_show_their_reinforcement() {
+    let mut state = sample_state();
+    let level = state.project().levels[0].id.0;
+    let args = serde_json::json!({"level": level, "start": [100, 100], "end": [106, 100], "height": 3.0});
+    let wall = cc_core::ElementId(state.session.execute("wall_create", args).unwrap()["id"].as_u64().unwrap());
+    // Not on a wall that carries nothing.
+    state.selection = [wall].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none());
+    let params = serde_json::json!({"id": wall.0, "params": {"structural": true}});
+    harness.state_mut().session.execute("element_set", params).unwrap();
+    harness.run();
+    harness.get_by_label(&t!("action-rebar-typical")).click();
+    harness.run();
+    let sets: Vec<cc_core::RebarLayout> =
+        harness.state().project().rebar_of(wall).map(|(_, r)| r.layout.clone()).collect();
+    assert_eq!(sets.len(), 4);
+    assert_eq!(sets.iter().filter(|l| matches!(l, cc_core::RebarLayout::WallHorizontal { .. })).count(), 2);
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none(), "reinforced now");
+}
+
+/// A structural floor's palette offers its reinforcement: the typical button
+/// makes a mesh in its top and bottom layers (#282).
+#[test]
+fn floors_show_their_reinforcement() {
+    let mut state = sample_state();
+    let level = state.project().levels[0].id.0;
+    let args = serde_json::json!({"level": level, "boundary": [[100, 100], [104, 100], [104, 103], [100, 103]]});
+    let floor = cc_core::ElementId(state.session.execute("floor_create", args).unwrap()["id"].as_u64().unwrap());
+    state.selection = [floor].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    // Not on a floor that carries nothing.
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none());
+    let params = serde_json::json!({"id": floor.0, "params": {"structural": true}});
+    harness.state_mut().session.execute("element_set", params).unwrap();
+    harness.run();
+    harness.get_by_label(&t!("action-rebar-typical")).click();
+    harness.run();
+    let sets: Vec<cc_core::RebarLayout> =
+        harness.state().project().rebar_of(floor).map(|(_, r)| r.layout.clone()).collect();
+    assert_eq!(sets.len(), 4);
+    assert!(sets.iter().all(|l| matches!(l, cc_core::RebarLayout::SlabStraight { .. })));
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none(), "reinforced now");
+}
+
+/// The beam tool draws beams in line or arc mode (#279).
+#[test]
+fn beam_tool_has_an_arc_mode() {
+    let mut state = sample_state();
+    let beam = state.project().default_type(cc_core::Category::Beam).unwrap();
+    state.tool = crate::tools::Tool::Beam { type_id: beam, material: None };
+    let mut harness = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::options_bar(ui, state)
+    });
+    assert!(!harness.state().beam_arc);
+    harness.get_by_label(&t!("wall-mode-arc")).click();
+    harness.run();
+    assert!(harness.state().beam_arc && !harness.state().wall_arc && !harness.state().strip_arc);
+    harness.get_by_label(&t!("wall-mode-line")).click();
+    harness.run();
+    assert!(!harness.state().beam_arc);
 }
 
 /// With a strip type, the footing tool draws strips in line or arc mode (#22).
@@ -967,36 +1042,6 @@ fn macro_menu_lists_the_macros_folder() {
     harness.run();
     assert!(harness.query_by_label(&t!("macro-no-folder")).is_some());
     assert!(harness.query_by_label(&t!("pref-browse")).is_some());
-}
-
-/// The component editor on the sample house's window (a door or window: the
-/// opening row shows) and on a new component.
-#[test]
-fn component_editor_snapshots() {
-    if !snapshots_requested() {
-        return;
-    }
-    let mut results = egui_kittest::SnapshotResults::new();
-    let mut state = sample_state();
-    let window = state.project().component_types().find(|t| t.category() == cc_core::Category::Window).unwrap().id;
-    state.dialogs.component_editor = crate::component_editor::Editor::open(&state, window);
-    let mut harness = themed_harness(state, egui::vec2(1280.0, 900.0), egui::Theme::Light, |ui, state| {
-        crate::component_editor::show(ui.ctx(), state)
-    });
-    for _ in 0..4 {
-        harness.run();
-    }
-    results.add(harness.try_snapshot("component_editor"));
-    let mut state = sample_state();
-    state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
-    let mut harness = themed_harness(state, egui::vec2(1280.0, 900.0), egui::Theme::Light, |ui, state| {
-        crate::component_editor::show(ui.ctx(), state)
-    });
-    for _ in 0..4 {
-        harness.run();
-    }
-    results.add(harness.try_snapshot("component_editor_new"));
-    results.unwrap();
 }
 
 /// The structure tab's automation, the way its buttons run it, with the
@@ -2961,6 +3006,7 @@ fn a_table_row_never_widens_its_dialog() {
 fn every_dialog_keeps_its_body_inside() {
     use crate::preferences::Section;
     type Open = Box<dyn Fn(&mut AppState)>;
+    type Make = fn() -> AppState;
     let mut opens: Vec<(String, Open)> = vec![
         ("project info".into(), Box::new(|s| s.dialogs.project_info = true)),
         ("units".into(), Box::new(|s| s.dialogs.units = true)),
@@ -2979,6 +3025,8 @@ fn every_dialog_keeps_its_body_inside() {
         ("phases".into(), Box::new(crate::phases_dialog::open)),
         ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
         ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+        ("new project".into(), Box::new(crate::new_project_dialog::open)),
+        ("new component".into(), Box::new(crate::new_component_dialog::open)),
     ];
     for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
@@ -2994,8 +3042,24 @@ fn every_dialog_keeps_its_body_inside() {
             }),
         ));
     }
-    for (name, open) in opens {
-        let mut state = sample_state();
+    let mut runs: Vec<(String, Open, Make)> =
+        opens.into_iter().map(|(name, open)| (name, open, sample_state as Make)).collect();
+    // Paper sizes read in inches in imperial projects: the dialogs showing them, again.
+    let imperial: Vec<(String, Open)> = vec![
+        ("line styles".into(), Box::new(crate::line_styles_dialog::open)),
+        ("fill patterns".into(), Box::new(crate::fill_patterns_dialog::open)),
+        ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
+        ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+    ];
+    runs.extend(imperial.into_iter().map(|(name, open)| (format!("{name} (imperial)"), open, imperial_state as _)));
+    let annotations = [cc_core::Category::Dimension, cc_core::Category::Text, cc_core::Category::Grid];
+    for t in imperial_state().project().types.values().filter(|t| annotations.contains(&t.category())) {
+        let id = t.id;
+        let open: Open = Box::new(move |s| s.dialogs.type_editor = Some(id));
+        runs.push((format!("type {} (imperial)", t.name), open, imperial_state));
+    }
+    for (name, open, make) in runs {
+        let mut state = make();
         open(&mut state);
         let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| crate::dialogs::show(ui.ctx(), state);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -3006,6 +3070,156 @@ fn every_dialog_keeps_its_body_inside() {
         }));
         assert!(result.is_ok(), "the dialog \"{name}\" overflows");
     }
+}
+
+/// A new imperial project, its units in force (as `AppState::sync` does each frame).
+fn imperial_state() -> AppState {
+    let project = cc_engine::new_project_with(cc_core::MeasurementSystem::Imperial);
+    let mut state = AppState::new(cc_core::Document::new(project));
+    state.project_open = true;
+    state.show_home = false;
+    state.sync();
+    state
+}
+
+/// In an imperial project a dimension type's text size reads in inches,
+/// and a bare number typed there is inches.
+#[test]
+fn paper_sizes_read_in_inches_in_imperial_projects() {
+    let mut state = imperial_state();
+    let dimension = state.project().default_type(cc_core::Category::Dimension).unwrap();
+    state.dialogs.type_editor = Some(dimension);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let size = |h: &Harness<'static, AppState>| match h.state().project().element_type(dimension).map(|t| &t.data) {
+        Some(cc_core::TypeData::Dimension { text_size, .. }) => *text_size,
+        other => panic!("not a dimension type: {other:?}"),
+    };
+    assert!((size(&harness) - 3.0 / 32.0 * 25.4).abs() < 1e-9);
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    assert!(values.iter().all(|v| !v.contains("mm")), "{values:?}");
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some("3/32\"")).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text("1/8");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!((size(&harness) - 3.175).abs() < 1e-9, "{}", size(&harness));
+    assert!(harness.query_all_by_role(Role::SpinButton).any(|n| n.value().as_deref() == Some("1/8\"")));
+}
+
+/// In an imperial project a pipe type's diameter reads in inches without
+/// feet and a bare number typed is inches; a stair type's riser too; the
+/// schedule field labels name no metric unit; and the tools' sizes follow
+/// the project's system.
+#[test]
+fn small_sizes_read_in_inches_in_imperial_projects() {
+    let mut state = imperial_state();
+    let inch = cc_core::units::INCH;
+    let pipe = state.project().types.values().find(|t| matches!(t.data, cc_core::TypeData::Pipe { .. })).unwrap().id;
+    state.dialogs.type_editor = Some(pipe);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let diameter = |h: &Harness<'static, AppState>| h.state().project().element_type(pipe).and_then(|t| t.diameter());
+    assert_eq!(diameter(&harness), Some(0.5 * inch));
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    assert!(values.iter().any(|v| v == "1/2\""), "{values:?}");
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some("1/2\"")).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text("3/4");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(diameter(&harness).is_some_and(|d| (d - 0.75 * inch).abs() < 1e-12), "{:?}", diameter(&harness));
+
+    let mut state = imperial_state();
+    let stair = state.project().default_type(cc_core::Category::Stair).unwrap();
+    state.dialogs.type_editor = Some(stair);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let values: Vec<String> = harness.query_all_by_role(Role::SpinButton).filter_map(|n| n.value()).collect();
+    // The riser and the tread, in inches; the width, in feet and inches.
+    for want in ["7 3/4\"", "10\"", "3'-0\""] {
+        assert!(values.iter().any(|v| v == want), "{want}: {values:?}");
+    }
+    assert!(values.iter().all(|v| !v.contains("mm") && !v.contains(" m")), "{values:?}");
+
+    let state = imperial_state();
+    use cc_core::ScheduleField as F;
+    for field in [F::Length, F::Thickness, F::Area, F::Perimeter, F::Volume, F::Height] {
+        let label = crate::properties::field_label(field);
+        assert!(!label.contains("(m") && !label.contains("m²") && !label.contains("m³"), "{label}");
+    }
+    // New walls are 10'-0" tall, the offset 3'-0"; a metric project brings 3 m back.
+    let foot = cc_core::units::FOOT;
+    assert!((state.wall_height - 10.0 * foot).abs() < 1e-9 && (state.modify.offset - 3.0 * foot).abs() < 1e-9);
+    let mut state = state;
+    state.replace_document(cc_core::Document::new(cc_engine::new_project_with(cc_core::MeasurementSystem::Metric)));
+    state.sync();
+    assert_eq!((state.wall_height, state.modify.offset), (3.0, 1.0));
+}
+
+/// New asks for the template first: Cancel keeps the open project, the
+/// Imperial card and Create make an imperial project and remember the
+/// choice, and with unsaved changes the question about them comes after
+/// Create, the project still in place.
+#[test]
+fn new_asks_for_the_template() {
+    use cc_core::MeasurementSystem;
+    let state = sample_state();
+    let uid = state.project().info.uid;
+    let mut harness = themed_harness(state, egui::vec2(1000.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state);
+    });
+    let new = |h: &mut Harness<'static, AppState>| {
+        crate::commands::run(h.state_mut(), &egui::Context::default(), crate::commands::UiCommand::New);
+        h.run();
+    };
+
+    new(&mut harness);
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Metric));
+    assert_eq!(harness.state().project().info.uid, uid, "nothing replaced yet");
+    let label = t!("new-project-metric");
+    assert_eq!(harness.get_by_label(&label).accesskit_node().role(), Role::RadioButton);
+    harness.get_by_role_and_label(Role::Button, &t!("action-cancel")).click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.new_project, None);
+    assert_eq!(harness.state().project().info.uid, uid, "Cancel keeps the project");
+
+    new(&mut harness);
+    harness.get_by_label(&t!("new-project-imperial")).click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Imperial));
+    harness.get_by_role_and_label(Role::Button, &t!("new-project-create")).click();
+    harness.run();
+    let state = harness.state();
+    assert_eq!(state.dialogs.new_project, None);
+    assert_ne!(state.project().info.uid, uid, "a new project");
+    assert_eq!(state.project().measurement_system(), MeasurementSystem::Imperial);
+    assert_eq!(state.prefs.new_project_system, MeasurementSystem::Imperial, "remembered");
+    let imperial = state.project().info.uid;
+
+    // Unsaved changes: the template first, then the question about them.
+    let set = cc_engine::commands::project::ProjectInfoSet {
+        name: Some("Changed".into()),
+        number: None,
+        client: None,
+        address: None,
+        author: None,
+        fields: None,
+    };
+    crate::actions::run_command(harness.state_mut(), set);
+    assert!(harness.state().session.doc.is_dirty());
+    new(&mut harness);
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Imperial), "the last choice first");
+    harness.get_by_label(&t!("new-project-metric")).click();
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    let state = harness.state();
+    assert_eq!(state.dialogs.new_project, None);
+    assert_eq!(state.dialogs.confirm, Some(crate::state::PendingAction::New(MeasurementSystem::Metric)));
+    assert_eq!(state.project().info.uid, imperial, "kept until the changes are answered");
 }
 
 /// Issue #159: the Detail Line tool takes typed values after the first
@@ -3590,4 +3804,628 @@ fn the_levels_dialog_adds_a_level_above_or_below_the_picked_one() {
     assert_eq!(levels[2].id, added, "the level under it went in between");
     assert_eq!(levels[0].id, lowest);
     assert!(levels[0].elevation < base, "and pushed the lowest level down");
+}
+
+/// Column in Steel starts on a steel type, and the options bar lists only
+/// steel column types; Timber makes its default type, undone in one step.
+#[test]
+fn structure_column_tool_keeps_to_its_material() {
+    use crate::commands::UiCommand;
+    use cc_core::{Category, StructuralMaterial as M};
+    let mut state = sample_state();
+    let ctx = egui::Context::default();
+    crate::commands::run(&mut state, &ctx, UiCommand::StructurePlace(Category::Column, M::Steel));
+    let crate::tools::Tool::Column { type_id, material } = state.tool.clone() else { panic!("{:?}", state.tool) };
+    assert_eq!(material, Some(M::Steel));
+    let project = state.project();
+    assert_eq!(project.structural_material(&project.element_type(type_id).unwrap().data), Some(M::Steel));
+    let listed = crate::tools::tool_types(project, Category::Column, type_id, Some(M::Steel));
+    assert!(!listed.is_empty());
+    assert!(
+        listed
+            .iter()
+            .all(|(id, _)| project.structural_material(&project.element_type(*id).unwrap().data) == Some(M::Steel))
+    );
+    assert!(listed.len() < project.types_of(Category::Column).count(), "concrete types are left out");
+    // Timber: the project has none, so one is made.
+    let depth = state.session.doc.undo_depth();
+    crate::commands::run(&mut state, &ctx, UiCommand::StructurePlace(Category::Beam, M::Timber));
+    let crate::tools::Tool::Beam { type_id, .. } = state.tool.clone() else { panic!() };
+    assert_eq!(state.project().type_name(type_id), "MLC 9x32");
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}
+
+/// The Structure tab's material selector swaps the material's groups:
+/// reinforcement in Concrete, bracing and the grid tools in Steel.
+#[test]
+fn structure_material_selector_swaps_groups() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Concrete;
+    let mut harness = ribbon_harness(state, 1600.0);
+    let rebar = crate::commands::UiCommand::TypicalRebar.label(harness.state());
+    let braces = crate::commands::UiCommand::Bracing.label(harness.state());
+    assert!(harness.query_by_label(&rebar).is_some(), "concrete shows reinforcement");
+    assert!(harness.query_by_label(&braces).is_none());
+    harness.get_by_label(&crate::i18n::tr("profile-material-steel")).click();
+    harness.run();
+    assert_eq!(harness.state().prefs.structure_material, cc_core::StructuralMaterial::Steel);
+    assert!(harness.query_by_label(&rebar).is_none(), "steel hides reinforcement");
+    assert!(harness.query_by_label(&braces).is_some());
+    assert!(harness.query_by_label(&crate::commands::UiCommand::ColumnsAtGrids.label(harness.state())).is_some());
+}
+
+/// *Grid Frame* creates columns and beams on the grids for the chosen
+/// levels in one undo step; Cancel leaves the model as it was.
+#[test]
+fn grid_frame_dialog_creates_and_cancels() {
+    let mut state = sample_state();
+    let grids =
+        [([0.0, -1.0], [0.0, 7.0]), ([6.0, -1.0], [6.0, 7.0]), ([-1.0, 0.0], [7.0, 0.0]), ([-1.0, 6.0], [7.0, 6.0])];
+    // Selecting the new grids keeps the example's own out of the frame.
+    let mut created = Vec::new();
+    for (start, end) in grids {
+        let command = cc_engine::commands::create::GridCreate { start, end, ..Default::default() };
+        let out = crate::actions::run_command(&mut state, command).expect("grid");
+        created.push(cc_core::ElementId(out["id"].as_u64().expect("grid id")));
+    }
+    state.selection = created.into_iter().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let columns = |h: &Harness<'static, AppState>| h.state().project().elements_of(cc_core::Category::Column).count();
+    let mut harness = app_harness(state);
+    let before = columns(&harness);
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_some());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_none());
+    assert_eq!(harness.state().session.doc.undo_depth(), depth, "Cancel changes nothing");
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_none());
+    assert_eq!(columns(&harness), before + 4, "four intersections on the first storey");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+}
+
+/// With grids selected, the secondary beams' *Parallel to* offers (and
+/// starts on) the selected grids, so OK is never refused for another one.
+#[test]
+fn grid_frame_secondary_beams_use_the_selected_grids() {
+    let mut state = sample_state();
+    let grids =
+        [([0.0, -1.0], [0.0, 7.0]), ([6.0, -1.0], [6.0, 7.0]), ([-1.0, 0.0], [7.0, 0.0]), ([-1.0, 6.0], [7.0, 6.0])];
+    let mut created = Vec::new();
+    for (start, end) in grids {
+        let command = cc_engine::commands::create::GridCreate { start, end, ..Default::default() };
+        let out = crate::actions::run_command(&mut state, command).expect("grid");
+        created.push(cc_core::ElementId(out["id"].as_u64().expect("grid id")));
+    }
+    state.selection = created.iter().copied().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let beams = |h: &Harness<'static, AppState>| h.state().project().elements_of(cc_core::Category::Beam).count();
+    let mut harness = app_harness(state);
+    let before = beams(&harness);
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    let parallel = harness.state().dialogs.grid_frame.as_ref().and_then(|d| d.parallel_to).expect("a default grid");
+    assert!(created.contains(&parallel), "the default is one of the selected grids");
+    harness.get_by_label(&t!("label-secondary-beams")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.grid_frame.is_none(), "OK was accepted: {:?}", state.message);
+    assert!(beams(&harness) > before + 4, "main beams and the secondary ones");
+}
+
+/// *Structure → Steel Building* (steel) opens its dialog; Cancel changes
+/// nothing, OK creates the building and its members in one undo step.
+#[test]
+fn steel_building_dialog_creates_a_building() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let count = |h: &Harness<'static, AppState>, c| h.state().project().elements_of(c).count();
+    let mut harness = app_harness(state);
+    let columns = count(&harness, cc_core::Category::Column);
+    harness.get_by_role_and_label(Role::Button, &t!("action-steel-building")).click();
+    harness.run();
+    assert!(harness.state().dialogs.steel_building.is_some());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.steel_building.is_none());
+    assert_eq!(harness.state().session.doc.undo_depth(), depth, "Cancel changes nothing");
+    harness.get_by_role_and_label(Role::Button, &t!("action-steel-building")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.steel_building.is_none());
+    assert_eq!(count(&harness, cc_core::Category::SteelBuilding), 1);
+    assert_eq!(count(&harness, cc_core::Category::Column), columns + 12, "two columns on each of six frames");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+}
+
+/// A steel building's rows edit it through `element_set`: a new span moves
+/// its columns (same ids), and *Reset Members* brings back a deleted one.
+#[test]
+fn steel_building_properties_regenerate_it() {
+    let mut state = sample_state();
+    let args = serde_json::json!({"origin": [100, 100], "purlins": null, "girts": null});
+    let out = state.session.execute("steel_building_create", args).unwrap();
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let members = |s: &AppState| match &s.project().element(host).unwrap().kind {
+        cc_core::ElementKind::SteelBuilding(b) => (b.members.clone(), b.detached.len()),
+        _ => panic!("not a steel building"),
+    };
+    let (first, _) = members(&state);
+    // The path the palette's rows take.
+    crate::steel_building_ui::edit(&mut state, host, "span", |b| b.span = 24.0);
+    let (after, _) = members(&state);
+    let ids = |m: &[cc_core::steel_building::FrameMember]| m.iter().map(|m| m.id).collect::<Vec<_>>();
+    assert_eq!(ids(&after), ids(&first), "same members");
+    let right = after[1].id;
+    let cc_core::ElementKind::Column(c) = &state.project().element(right).unwrap().kind else { panic!("a column") };
+    assert!((c.position.x - 124.0).abs() < 1e-9);
+    state.session.execute("elements_delete", serde_json::json!({"ids": [right.0]})).unwrap();
+    assert_eq!(members(&state).1, 1, "the deleted column is detached");
+    state.selection = [host].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.query_by_label(&t!("action-reset-members")).is_some());
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let (members_now, detached) = members(harness.state());
+    assert_eq!((members_now.len(), detached), (first.len(), 0));
+}
+
+/// The Truss tool shows for steel and timber (not concrete) and starts with
+/// the tab's material.
+#[test]
+fn truss_tool_follows_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    for (material, shown) in [(M::Concrete, false), (M::Steel, true), (M::Timber, true)] {
+        let mut state = sample_state();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let mut harness = ribbon_harness(state, 1600.0);
+        let label = crate::commands::UiCommand::Truss.label(harness.state());
+        assert_eq!(harness.query_by_label(&label).is_some(), shown, "{material:?}");
+        if shown {
+            harness.get_by_role_and_label(Role::Button, &label).click();
+            harness.run();
+            assert_eq!(harness.state().tool, crate::tools::Tool::Truss { material });
+        }
+    }
+}
+
+/// The options the tool runs with make a parametric truss of the tab's material.
+#[test]
+fn truss_tool_options_make_a_parametric_truss() {
+    use cc_core::truss::{TrussPattern, TrussShape};
+    let mut state = sample_state();
+    state.truss = crate::tools::TrussOptions {
+        shape: TrussShape::Gable,
+        pattern: TrussPattern::KingPost,
+        height: 1.5,
+        panels: 4,
+        copies: 3,
+        spacing: 1.2,
+    };
+    let level = state.project().levels[0].id;
+    let (a, b) = (glam::DVec2::new(100.0, 100.0), glam::DVec2::new(106.0, 100.0));
+    let command = crate::tools::truss_command(&state.truss, cc_core::StructuralMaterial::Timber, level, a, b);
+    let out = state.session.run(command).expect("truss");
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let cc_core::ElementKind::Truss(t) = &state.project().element(host).unwrap().kind else { panic!("a truss") };
+    assert_eq!((t.shape, t.pattern, t.panels, t.copies), (TrussShape::Gable, TrussPattern::KingPost, 4, 3));
+    assert_eq!(t.members.len(), 33);
+    assert!(state.project().types.values().any(|x| x.name == "Peça 6x16"), "timber chords");
+}
+
+/// The Bracing command shows for steel and timber (not concrete) and, with
+/// no two columns selected, starts the tool with the tab's material.
+#[test]
+fn bracing_tool_follows_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    for (material, shown) in [(M::Concrete, false), (M::Steel, true), (M::Timber, true)] {
+        let mut state = sample_state();
+        state.selection.clear();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let mut harness = ribbon_harness(state, 1600.0);
+        let label = crate::commands::UiCommand::Bracing.label(harness.state());
+        assert_eq!(harness.query_by_label(&label).is_some(), shown, "{material:?}");
+        if shown {
+            harness.get_by_role_and_label(Role::Button, &label).click();
+            harness.run();
+            assert_eq!(harness.state().tool, crate::tools::Tool::Bracing { material });
+        }
+    }
+}
+
+/// The tool's options make a parametric bracing, two selected columns give
+/// the command their bay, and the palette's rows regenerate the braces.
+#[test]
+fn bracing_options_columns_and_properties() {
+    use cc_core::bracing::BracingPattern;
+    let mut state = sample_state();
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    state.bracing =
+        crate::tools::BracingOptions { pattern: BracingPattern::K, height: 3.0, stories: 2, ..Default::default() };
+    let level = state.project().levels[0].id;
+    let (a, b) = (glam::DVec2::new(100.0, 100.0), glam::DVec2::new(105.0, 100.0));
+    let command = crate::tools::bracing_command(&state.bracing, cc_core::StructuralMaterial::Steel, level, a, b);
+    let out = state.session.run(command).expect("bracing");
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let get = |s: &AppState, id: cc_core::ElementId| match &s.project().element(id).unwrap().kind {
+        cc_core::ElementKind::Bracing(b) => (**b).clone(),
+        _ => panic!("not a bracing"),
+    };
+    assert_eq!(get(&state, host).members.len(), 8, "four braces per storey");
+    // The path the palette's rows take.
+    crate::bracing_ui::edit(&mut state, host, "pattern", |b| b.pattern = BracingPattern::Chevron);
+    assert_eq!(get(&state, host).members.len(), 4);
+    // Two selected columns: the command braces their bay and selects the bracing.
+    let column = |s: &mut AppState, x: f64| {
+        let args = serde_json::json!({"position": [x, 120.0], "height": 6.0});
+        let id = s.session.execute("column_create", args).unwrap()["id"].as_u64().unwrap();
+        let free = serde_json::json!({"id": id, "params": {"top": "Unconnected"}});
+        s.session.execute("element_set", free).unwrap();
+        cc_core::ElementId(id)
+    };
+    state.selection = [column(&mut state, 100.0), column(&mut state, 104.0)].into_iter().collect();
+    crate::bracing_ui::start(&mut state);
+    let made = *state.selection.iter().next().expect("the new bracing is selected");
+    let bay = get(&state, made);
+    assert_eq!((bay.pattern, bay.stories), (BracingPattern::K, 2));
+    assert!(
+        (bay.height - 3.0).abs() < 1e-9 && (bay.length() - 4.0).abs() < 1e-9,
+        "the columns' height over two storeys"
+    );
+    // A deleted brace is detached; the palette's Reset Members brings it back.
+    let brace = bay.members[0].id;
+    state.session.execute("elements_delete", serde_json::json!({"ids": [brace.0]})).unwrap();
+    assert_eq!(get(&state, made).detached.len(), 1);
+    state.selection = [made].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let bay = get(harness.state(), made);
+    assert_eq!((bay.members.len(), bay.detached.len()), (8, 0));
+}
+
+/// A truss's rows edit it through `element_set`: new panels regenerate it,
+/// and *Reset Members* brings back a deleted post.
+#[test]
+fn truss_properties_regenerate_it() {
+    let mut state = sample_state();
+    let args = serde_json::json!({"start": [100, 100], "end": [106, 100], "height": 1.0, "panels": 4});
+    let out = state.session.execute("truss_create", args).unwrap();
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let get = |s: &AppState| match &s.project().element(host).unwrap().kind {
+        cc_core::ElementKind::Truss(t) => (**t).clone(),
+        _ => panic!("not a truss"),
+    };
+    // The path the palette's rows take.
+    crate::truss_ui::edit(&mut state, host, "panels", |t| t.panels = 6);
+    assert_eq!(get(&state).members.len(), 12 + 7 + 6);
+    let post = get(&state).members.iter().find(|m| m.role.kind == cc_core::truss::TrussRoleKind::Vertical).unwrap().id;
+    state.session.execute("elements_delete", serde_json::json!({"ids": [post.0]})).unwrap();
+    assert_eq!(get(&state).detached.len(), 1);
+    state.selection = [host].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(
+        harness.query_by_label(&t!("action-reset-members")).is_some(),
+        "row labels are painted, the button is a widget"
+    );
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let t = get(harness.state());
+    assert_eq!((t.members.len(), t.detached.len()), (25, 0));
+}
+
+/// Light Steel Frame shows in the Steel framing group, Wood Frame in the
+/// Timber one, neither for concrete.
+#[test]
+fn wall_framing_buttons_follow_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    for (material, steel, wood) in [(M::Concrete, false, false), (M::Steel, true, false), (M::Timber, false, true)] {
+        let mut state = sample_state();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let harness = ribbon_harness(state, 1800.0);
+        assert_eq!(harness.query_by_label(&t!("action-light-steel-frame")).is_some(), steel, "{material:?}");
+        assert_eq!(harness.query_by_label(&t!("action-wood-frame")).is_some(), wood, "{material:?}");
+    }
+}
+
+/// *Structure → Light Steel Frame* opens the dialog; OK frames the selected
+/// wall only, in one undo step, and selects the framing.
+#[test]
+fn wall_framing_dialog_frames_the_selected_wall() {
+    use cc_core::wall_framing::FramingSystem;
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let args = serde_json::json!({"start": [100, 100], "end": [103.6, 100], "height": 3.0});
+    let wall = cc_core::ElementId(state.session.execute("wall_create", args).unwrap()["id"].as_u64().unwrap());
+    state.selection = [wall].into_iter().collect();
+    let depth = state.session.doc.undo_depth();
+    let mut harness = app_harness(state);
+    harness.get_by_role_and_label(Role::Button, &t!("action-light-steel-frame")).click();
+    harness.run();
+    let system = harness.state().dialogs.wall_framing.as_ref().map(|d| d.system);
+    assert_eq!(system, Some(FramingSystem::LightSteel));
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.wall_framing.is_none(), "OK was accepted: {:?}", state.message);
+    let framings: Vec<(cc_core::ElementId, cc_core::ElementId, usize)> = state
+        .project()
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            cc_core::ElementKind::WallFraming(f) => Some((e.id, f.wall, f.members.len())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(framings.len(), 1, "only the selected wall");
+    assert_eq!((framings[0].1, framings[0].2), (wall, 12), "10 studs and two tracks");
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    assert!(state.selection.contains(&framings[0].0));
+}
+
+/// A framing's rows edit it through `element_set`, *Reset Members* brings
+/// back a deleted stud, and a member's *Framing* row selects the framing.
+#[test]
+fn wall_framing_properties_and_the_member_row() {
+    use cc_core::wall_framing::{FramingRoleKind, WallFraming};
+    let mut state = sample_state();
+    let args = serde_json::json!({"start": [100, 100], "end": [103.6, 100], "height": 3.0});
+    let wall = state.session.execute("wall_create", args).unwrap()["id"].as_u64().unwrap();
+    let out = state.session.execute("wall_framing_create", serde_json::json!({"walls": [wall]})).unwrap();
+    let host = cc_core::ElementId(out["framings"][0]["id"].as_u64().unwrap());
+    let get = |s: &AppState| match &s.project().element(host).unwrap().kind {
+        cc_core::ElementKind::WallFraming(f) => (**f).clone(),
+        _ => panic!("not a wall framing"),
+    };
+    let studs = |f: &WallFraming| f.members.iter().filter(|m| m.role.kind == FramingRoleKind::Stud).count();
+    // The path the palette's rows take.
+    crate::wall_framing_ui::edit(&mut state, host, "spacing", |f| f.spacing = 0.6);
+    assert_eq!(studs(&get(&state)), 7);
+    let stud = get(&state).members.iter().find(|m| m.role.kind == FramingRoleKind::Stud).unwrap().id;
+    state.session.execute("elements_delete", serde_json::json!({"ids": [stud.0]})).unwrap();
+    assert_eq!(get(&state).detached.len(), 1);
+    state.selection = [host].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(
+        harness.query_by_label(&t!("action-reset-members")).is_some(),
+        "row labels are painted, the button is a widget"
+    );
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let f = get(harness.state());
+    assert_eq!((studs(&f), f.detached.len()), (7, 0));
+    let member = f.members[0].id;
+    harness.state_mut().selection = [member].into_iter().collect();
+    harness.run();
+    harness.get_by_label(&t!("action-select-framing")).click();
+    harness.run();
+    let selection = &harness.state().selection;
+    assert!(selection.len() == 1 && selection.contains(&host));
+}
+
+/// *Structure → Connections → Base Plate* (steel) places a base plate
+/// under each selected column, in one undo step, and says so.
+#[test]
+fn base_plate_button_places_connections_on_the_selected_columns() {
+    use cc_core::connection::ConnectionKind;
+    let mut state = sample_state();
+    let columns: Vec<cc_core::ElementId> =
+        state.project().elements_of(cc_core::Category::Column).map(|e| e.id).collect();
+    assert!(!columns.is_empty(), "the sample house has columns");
+    state.selection = columns.iter().copied().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let mut harness = ribbon_harness_sized(state, egui::vec2(2400.0, 150.0));
+    let label = crate::commands::UiCommand::Connection(ConnectionKind::BasePlate).label(harness.state());
+    harness.get_by_role_and_label(Role::Button, &label).click();
+    harness.run();
+    let state = harness.state();
+    let placed: Vec<cc_core::ElementId> = state
+        .project()
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            cc_core::ElementKind::Connection(c) => Some(c.member),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(placed.len(), columns.len());
+    assert!(columns.iter().all(|c| placed.contains(c)));
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    assert!(state.message.contains(&columns.len().to_string()), "{}", state.message);
+}
+
+/// Steel shows base, end and fin plates; timber bolted joints and hangers.
+#[test]
+fn connection_buttons_follow_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    use cc_core::connection::ConnectionKind;
+    for material in [M::Steel, M::Timber] {
+        let mut state = sample_state();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let harness = ribbon_harness_sized(state, egui::vec2(2400.0, 150.0));
+        for kind in ConnectionKind::ALL {
+            let label = crate::commands::UiCommand::Connection(kind).label(harness.state());
+            assert_eq!(
+                harness.query_by_label(&label).is_some(),
+                kind.material() == material,
+                "{kind:?} in {material:?}"
+            );
+        }
+    }
+}
+
+/// A connection's rows edit it through `element_set`.
+#[test]
+fn connection_properties_change_its_bolts() {
+    let mut state = sample_state();
+    let column = state.project().elements_of(cc_core::Category::Column).map(|e| e.id).next().unwrap();
+    let args = serde_json::json!({"kind": "base_plate", "members": [column.0]});
+    let out = state.session.execute("connections_create", args).unwrap();
+    let id = cc_core::ElementId(out["created"][0].as_u64().unwrap());
+    crate::connection_ui::edit(&mut state, id, "rows", |c| c.params.rows = 3);
+    let cc_core::ElementKind::Connection(c) = &state.project().element(id).unwrap().kind else {
+        panic!("a connection")
+    };
+    assert_eq!(c.params.rows, 3);
+    state.selection = [id].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    // Row labels are painted; the plate, bolt and anchor values are widgets.
+    let values = harness.query_all_by_role(Role::SpinButton).count();
+    assert!(values >= 9, "{values} value widgets");
+}
+
+/// Beams selected and *Base Plate* clicked: nothing is placed (not even on the
+/// level's columns) and the status bar says why; with no selection the active
+/// level's columns get theirs.
+#[test]
+fn a_selection_without_the_kinds_members_places_nothing() {
+    use cc_core::connection::ConnectionKind;
+    let mut state = sample_state();
+    let _ = state.session.execute("beam_create", serde_json::json!({"start": [0, 0], "end": [3, 0]}));
+    let beams: Vec<cc_core::ElementId> = state.project().elements_of(cc_core::Category::Beam).map(|e| e.id).collect();
+    assert!(!beams.is_empty());
+    state.selection = beams.into_iter().collect();
+    let depth = state.session.doc.undo_depth();
+    crate::connection_ui::place(&mut state, ConnectionKind::BasePlate);
+    assert_eq!(state.session.doc.undo_depth(), depth);
+    assert_eq!(state.message, crate::t!("msg-connections-none"));
+    state.selection.clear();
+    crate::connection_ui::place(&mut state, ConnectionKind::BasePlate);
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}
+
+/// New Component lists the kinds with the parameters each starts with;
+/// picking Door and Create makes a door component, open in the component
+/// environment.
+#[test]
+fn new_component_picks_a_kind_and_opens_the_environment() {
+    let mut state = sample_state();
+    crate::new_component_dialog::open(&mut state);
+    let mut harness = themed_harness(state, egui::vec2(900.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state)
+    });
+    harness.run();
+    // A generic component starts with no parameters.
+    assert!(harness.query_by_label(&t!("new-component-generic")).is_some());
+    harness.get_by_label(&crate::i18n::tr(cc_core::ComponentKind::Door.key())).click();
+    harness.run();
+    assert!(harness.query_by_label(&t!("new-component-generic")).is_none());
+    assert!(harness.query_by_label(&t!("tpl-param-width")).is_some(), "a door starts with its width");
+    if snapshots_requested() {
+        harness.snapshot("new_component");
+    }
+    harness.get_by_label(&t!("new-project-create")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.new_component.is_none());
+    let made = state.component_env.as_ref().expect("the environment opens").type_id;
+    let ty = state.project().element_type(made).unwrap();
+    assert_eq!(ty.category(), cc_core::Category::Door);
+    assert_eq!(ty.name, t!("comp-new-name"));
+}
+
+/// A length as a number field shows it, without the unit.
+fn length_text(meters: f64) -> String {
+    let (units, comma) = cc_views::format::current();
+    cc_views::format::length_number_with(&units, comma, meters)
+}
+
+/// The text of the number field being typed in.
+fn typed_text(harness: &Harness<'static, AppState>) -> String {
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).and_then(|n| n.value()).unwrap_or_default()
+}
+
+/// Type `text` over the number field showing `shown`, a key at a time as a
+/// person does, and return what the field read after each key.
+fn type_over(harness: &mut Harness<'static, AppState>, shown: &str, text: &str) -> Vec<String> {
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some(shown)).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    let mut read = Vec::new();
+    for ch in text.chars() {
+        harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text(&ch.to_string());
+        harness.run();
+        read.push(typed_text(harness));
+    }
+    read
+}
+
+/// Typing a number in Type Properties keeps what was typed until the field
+/// is left: a half-typed value the type would clamp (a riser of `1`) or
+/// refuse (a door `0` wide) must not rewrite the text under the caret
+/// (issue 319: typing `1` showed `5`, and `0.9` over `0.80` gave `0.9.80`).
+#[test]
+fn typed_numbers_are_kept_until_the_field_is_left() {
+    let mut state = sample_state();
+    let stair = state.project().default_type(cc_core::Category::Stair).unwrap();
+    let riser = |s: &AppState| match s.project().element_type(stair).map(|t| &t.data) {
+        Some(cc_core::TypeData::Stair { max_riser, .. }) => *max_riser,
+        other => panic!("not a stair type: {other:?}"),
+    };
+    let before = riser(&state);
+    let shown = format!("{} {}", length_text(before), state.project().units.length.unit.symbol());
+    state.dialogs.type_editor = Some(stair);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let typed = length_text(0.16);
+    let read = type_over(&mut harness, &shown, &typed);
+    let want: Vec<String> = (1..=typed.chars().count()).map(|n| typed.chars().take(n).collect()).collect();
+    assert_eq!(read, want);
+    assert_eq!(riser(harness.state()), before, "nothing changes while typing");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!((riser(harness.state()) - 0.16).abs() < 1e-9, "{}", riser(harness.state()));
+
+    // A door's width, which starts with a zero.
+    let mut state = sample_state();
+    let door = state.project().default_type(cc_core::Category::Door).unwrap();
+    let width = |s: &AppState| s.project().element_type(door).and_then(|t| t.opening_size()).map(|(w, _)| w);
+    let before = width(&state).unwrap();
+    let shown = format!("{} {}", length_text(before), state.project().units.length.unit.symbol());
+    state.dialogs.type_editor = Some(door);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let typed = length_text(0.95);
+    let read = type_over(&mut harness, &shown, &typed);
+    let want: Vec<String> = (1..=typed.chars().count()).map(|n| typed.chars().take(n).collect()).collect();
+    assert_eq!(read, want);
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(width(harness.state()).is_some_and(|w| (w - 0.95).abs() < 1e-9), "{:?}", width(harness.state()));
 }

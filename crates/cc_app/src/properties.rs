@@ -15,8 +15,6 @@ use cc_views::format;
 use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
 use std::hash::{Hash, Hasher};
 
-const SCALES: [u32; 12] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 500, 1000];
-
 pub(crate) fn key(parts: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     parts.hash(&mut h);
@@ -539,6 +537,11 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
     }
 
     match &el.kind {
+        ElementKind::SteelBuilding(b) => crate::steel_building_ui::props(ui, state, id, b),
+        ElementKind::Truss(t) => crate::truss_ui::props(ui, state, id, t),
+        ElementKind::Bracing(b) => crate::bracing_ui::props(ui, state, id, b),
+        ElementKind::WallFraming(f) => crate::wall_framing_ui::props(ui, state, id, f),
+        ElementKind::Connection(c) => crate::connection_ui::props(ui, state, id, c),
         ElementKind::Mass(m) => mass_props(ui, state, &el, m),
         ElementKind::Topography(t) => topography_props(ui, state, &el, t),
         ElementKind::Pad(p) => pad_props(ui, state, &el, p),
@@ -594,9 +597,14 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 let height = state.project().wall_height(&el, w);
                 readonly_row(ui, &t!("prop-height"), format::length(height));
                 let thickness = state.project().thickness_of(&el);
-                readonly_row(ui, &t!("prop-thickness"), format::length(thickness));
+                readonly_row(ui, &t!("prop-thickness"), format::size(thickness, format::MetricSize::Length));
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
+            // A structural wall's reinforcement (and any sets another wall has).
+            let layered = state.project().element_type(el.type_id).is_some_and(|t| !t.layers().is_empty());
+            if layered && (w.structural || state.project().rebar_of(id).next().is_some()) {
+                reinforcement(ui, state, id);
+            }
             crate::curtain_ui::palette_rows(ui, state, &el, w);
         }
         ElementKind::Door(h) | ElementKind::Window(h) => {
@@ -713,13 +721,30 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                         b.top_offset = v;
                     }
                 });
-                let end = b.end_offset.unwrap_or(b.top_offset);
-                length_row(ui, state, &t!("prop-end-elevation-offset"), id, "beam-end", end, |e, v| {
-                    if let ElementKind::Beam(b) = &mut e.kind {
-                        // Level again when the end returns to the start's elevation.
-                        b.end_offset = ((v - b.top_offset).abs() > 1e-9).then_some(v);
+                // An arc beam is level.
+                if b.arc().is_none() {
+                    let end = b.end_offset.unwrap_or(b.top_offset);
+                    length_row(ui, state, &t!("prop-end-elevation-offset"), id, "beam-end", end, |e, v| {
+                        if let ElementKind::Beam(b) = &mut e.kind {
+                            // Level again when the end returns to the start's elevation.
+                            b.end_offset = ((v - b.top_offset).abs() > 1e-9).then_some(v);
+                        }
+                    });
+                }
+                // Arc beams: the angle the arc turns (0 for a straight beam; level beams only).
+                if b.end_offset.is_none() {
+                    let mut sweep = (4.0 * b.bulge.atan()).to_degrees();
+                    let drag = DragValue::new(&mut sweep).speed(1.0).range(-337.0..=337.0).suffix("°");
+                    let r = row(ui, &t!("prop-arc-angle"), |ui| ui.add(drag));
+                    if r.changed() {
+                        modify(state, id, "sweep", |el| {
+                            if let ElementKind::Beam(b) = &mut el.kind {
+                                b.bulge = if sweep.abs() < 0.01 { 0.0 } else { (sweep.to_radians() / 4.0).tan() };
+                            }
+                        });
                     }
-                });
+                    finish(state, &r);
+                }
                 beam_justification(ui, state, id, b);
                 for (label, at_start, value) in
                     [(t!("prop-join-start"), true, b.join_start), (t!("prop-join-end"), false, b.join_end)]
@@ -735,9 +760,17 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format::length(b.length()));
-                if b.end_offset.is_some() {
-                    readonly_row(ui, &t!("prop-true-length"), format::length(b.true_length()));
+                match b.arc() {
+                    Some(arc) => {
+                        readonly_row(ui, &t!("prop-length"), format::length(arc.length()));
+                        readonly_row(ui, &t!("prop-radius"), format::length(arc.radius));
+                    }
+                    None => {
+                        readonly_row(ui, &t!("prop-length"), format::length(b.length()));
+                        if b.end_offset.is_some() {
+                            readonly_row(ui, &t!("prop-true-length"), format::length(b.true_length()));
+                        }
+                    }
                 }
                 if let Some(g) = state.session.geom().beams.get(&id) {
                     readonly_row(ui, &t!("prop-cut-length"), format::length(g.cut_length()));
@@ -783,10 +816,14 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     readonly_row(ui, &t!("prop-radius"), format::length(arc.radius));
                 }
                 if let Some(g) = state.session.geom().foundations.get(&id).cloned() {
-                    readonly_row(ui, &t!("col-area"), format::area(g.area()));
+                    readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area()));
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
+            // A foundation slab takes a mesh, like a floor; a strip its own bars.
+            if !matches!(f.shape, cc_core::FoundationShape::Pad { .. }) {
+                reinforcement(ui, state, id);
+            }
         }
         ElementKind::Stair(st) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -900,7 +937,11 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let (bottom, top) = state.project().shaft_span(&el, sh);
                 readonly_row(ui, &t!("col-height"), format::length(top - bottom));
-                readonly_row(ui, &t!("col-area"), format::area(cc_geom::polygon::area(&sh.outline)));
+                readonly_row(
+                    ui,
+                    &field_label(cc_core::ScheduleField::Area),
+                    format::area(cc_geom::polygon::area(&sh.outline)),
+                );
             });
         }
         ElementKind::Sweep(sw) => {
@@ -1030,7 +1071,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 });
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("col-area"), format::area(f.area()));
+                readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(f.area()));
                 // Openings (shafts, stairwells): sketch one more.
                 row(ui, &t!("prop-roof-openings"), |ui| {
                     ui.label(f.openings.len().to_string());
@@ -1045,6 +1086,20 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     opening_rows(ui, state, id, &f.openings, true)
                 });
             }
+            section(ui, "structural", t!("section-structural"), |ui| {
+                let mut on = f.structural;
+                if row(ui, &t!("prop-structural"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
+                    modify(state, id, "structural", |e| {
+                        if let ElementKind::Floor(f) = &mut e.kind {
+                            f.structural = on;
+                        }
+                    });
+                }
+            });
+            // A structural slab's reinforcement (and any sets another floor has).
+            if f.structural || state.project().rebar_of(id).next().is_some() {
+                reinforcement(ui, state, id);
+            }
         }
         ElementKind::Ceiling(c) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -1057,7 +1112,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let area = cc_geom::polygon::area(&c.boundary);
-                readonly_row(ui, &t!("col-area"), format::area(area));
+                readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(area));
             });
         }
         ElementKind::Roof(r) => {
@@ -1081,6 +1136,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
             roofing_rows(ui, state, &el);
         }
     }
+    crate::wall_framing_ui::member_row(ui, state, id);
 
     // Rooms, grids and dimensions have their own identity rows; only model elements carry a mark.
     let mut identity = vec![(t!("col-comments"), "comments", el.comments.clone())];
@@ -1296,12 +1352,84 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
     let (units, comma) = format::current();
     let unit = units.length.unit;
     let parse_units = units.clone();
-    let drag = DragValue::new(value)
+    let drag = number_drag(value)
         .speed(0.005)
         .custom_formatter(move |v, _| format::length_number_with(&units, comma, v))
         .custom_parser(move |s| format::parse_length_with(&parse_units, s));
     // Feet and inches carry their own marks.
     if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", unit.symbol())) }
+}
+
+/// Drag value for a small size stored in meters (a layer, a section's side,
+/// a diameter, a riser): a length in metric projects (see [`length_drag`]),
+/// inches with a fraction in imperial ones (`3/4"`; a bare number typed is
+/// inches, see [`format::parse_size`]).
+pub fn size_drag(value: &mut f64) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    if units.system() == cc_core::MeasurementSystem::Metric {
+        return length_drag(value);
+    }
+    let parse_units = units.clone();
+    number_drag(value)
+        .speed(0.001)
+        .custom_formatter(move |v, _| format::inch_size_with(&units, comma, v))
+        .custom_parser(move |s| format::parse_size_with(&parse_units, s))
+}
+
+/// The header of a schedule field as a label in the current units: `Area
+/// (m²)` in metric projects, `Area` in imperial ones, whose values carry
+/// their own symbols (see [`cc_core::ScheduleField::key_in`]).
+pub fn field_label(field: cc_core::ScheduleField) -> String {
+    crate::i18n::tr(field.key_in(format::system()))
+}
+
+/// Drag value for a slope stored as rise over run, shown and typed in the
+/// project's slope unit (`8,3 %`, `4,76°`, `6:12`; a typed unit or ratio
+/// overrides it, see [`format::parse_slope`]).
+pub fn slope_drag(value: &mut f64) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    let parse_units = units.clone();
+    let speed = match units.slope.unit {
+        cc_core::SlopeUnit::Percent => 0.005,
+        cc_core::SlopeUnit::Degrees => 0.01,
+        cc_core::SlopeUnit::RisePer12 => 1.0 / 48.0,
+    };
+    number_drag(value)
+        .speed(speed)
+        .custom_formatter(move |v, _| format::slope_with(&units, comma, v))
+        .custom_parser(move |s| format::parse_slope_with(&parse_units, s))
+}
+
+/// Drag value for a size on paper stored in millimeters (text heights,
+/// bubbles, gaps, sheet sides): ` mm` after the number in metric
+/// projects; in imperial ones inches with a fraction (`3/32"`), typed in
+/// inches unless a unit says otherwise (see [`format::parse_paper`]).
+pub fn paper_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_with)
+}
+
+/// Drag value for a pen weight stored in millimeters: ` mm` after the
+/// number in metric projects, decimal inches in imperial ones (`0.010"`).
+pub fn weight_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_weight_with)
+}
+
+/// Drag value for a paper length shown as decimal inches in imperial
+/// projects (`0.125"`, drafting fill patterns), ` mm` after the number in
+/// metric ones.
+pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
+    paper_drag_with(value, format::paper_weight_with)
+}
+
+fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
+    let (units, comma) = format::current();
+    if units.system() == cc_core::MeasurementSystem::Metric {
+        return number_drag(value).suffix(" mm");
+    }
+    let parse_units = units.clone();
+    number_drag(value)
+        .custom_formatter(move |v, _| show(&units, comma, v))
+        .custom_parser(move |s| format::parse_paper_with(&parse_units, s))
 }
 
 /// A new value typed in a [`param_editor`].
@@ -1374,16 +1502,26 @@ pub fn param_editor(
     }
 }
 
+/// A number field whose typed text is taken when the field is left (Enter,
+/// Tab or a click elsewhere), not at every key. A value written at every key
+/// goes through the model, which clamps or refuses half-typed numbers, and
+/// the field then shows the model's value in place of the text being typed
+/// (issue 319: `1` read `5`, `0.9` over `0.80` gave `0.9.80`). Dragging
+/// still changes the value as it moves.
+pub fn number_drag(value: &mut f64) -> DragValue<'_> {
+    DragValue::new(value).update_while_editing(false)
+}
+
 /// Drag value for a component parameter, with the unit of its kind.
 pub fn param_value(value: &mut f64, kind: cc_core::ParamKind) -> DragValue<'_> {
     match kind {
         cc_core::ParamKind::Length => crate::properties::length_drag(value).speed(0.01),
-        cc_core::ParamKind::Angle => DragValue::new(value).speed(1.0).suffix("°"),
-        cc_core::ParamKind::Boolean => DragValue::new(value).range(0.0..=1.0).speed(1.0),
+        cc_core::ParamKind::Angle => number_drag(value).speed(1.0).suffix("°"),
+        cc_core::ParamKind::Boolean => number_drag(value).range(0.0..=1.0).speed(1.0),
         cc_core::ParamKind::Number
         | cc_core::ParamKind::Text
         | cc_core::ParamKind::Choice
-        | cc_core::ParamKind::Material => DragValue::new(value).speed(0.1),
+        | cc_core::ParamKind::Material => number_drag(value).speed(0.1),
     }
 }
 
@@ -1448,11 +1586,11 @@ fn segment_props(ui: &mut Ui, state: &mut AppState, el: &Element, s: &cc_core::M
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
         let ty = state.project().element_type(el.type_id);
         if let Some(d) = ty.and_then(|t| t.diameter()) {
-            readonly_row(ui, &t!("col-diameter"), format::length(d));
+            readonly_row(ui, &t!("col-diameter"), format::size(d, format::MetricSize::Length));
         }
         if let Some((width, height, style)) = ty.and_then(|t| t.tray_section()) {
-            readonly_row(ui, &t!("col-width"), format::length(width));
-            readonly_row(ui, &t!("col-height"), format::length(height));
+            readonly_row(ui, &t!("col-width"), format::size(width, format::MetricSize::Length));
+            readonly_row(ui, &t!("col-height"), format::size(height, format::MetricSize::Length));
             readonly_row(ui, &t!("prop-tray-style"), tr(style.key()));
         }
         readonly_row(ui, &t!("prop-length"), format::length(s.length()));
@@ -1490,7 +1628,7 @@ fn valve_props(ui: &mut Ui, state: &mut AppState, el: &Element, v: &cc_core::Val
         if let Some((_, _, system, diameter)) = &host {
             readonly_row(ui, &t!("col-system"), system.clone().unwrap_or_else(|| t!("value-none")));
             if let Some(d) = diameter {
-                readonly_row(ui, &t!("col-diameter"), format::length(*d));
+                readonly_row(ui, &t!("col-diameter"), format::size(*d, format::MetricSize::Length));
             }
         }
     });
@@ -1579,8 +1717,8 @@ fn topography_props(ui: &mut Ui, state: &mut AppState, el: &Element, t: &cc_core
         let Some(g) = geom else { return };
         readonly_row(ui, &t!("prop-lowest"), format::length(g.min_z));
         readonly_row(ui, &t!("prop-highest"), format::length(g.max_z));
-        readonly_row(ui, &t!("col-area"), format::area(g.area));
-        readonly_row(ui, &t!("col-volume"), format::volume(g.volume));
+        readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area));
+        readonly_row(ui, &field_label(cc_core::ScheduleField::Volume), format::volume(g.volume));
         for w in &g.warnings {
             readonly_row(ui, &t!("prop-warning"), crate::i18n::tr(&format!("topo-warning-{}", w.code())));
         }
@@ -1663,7 +1801,7 @@ fn pad_props(ui: &mut Ui, state: &mut AppState, el: &Element, p: &cc_core::pad::
     let geom = state.session.geom().pads.get(&id).cloned();
     section(ui, "dimensions", t!("section-dimensions"), |ui| {
         let Some(g) = geom else { return };
-        readonly_row(ui, &t!("col-area"), format::area(g.area));
+        readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(g.area));
         readonly_row(ui, &t!("col-cut-volume"), format::volume(g.cut));
         readonly_row(ui, &t!("col-fill-volume"), format::volume(g.fill));
         readonly_row(ui, &t!("prop-net-volume"), format::volume(g.fill - g.cut));
@@ -1940,9 +2078,7 @@ fn text_props(ui: &mut Ui, state: &mut AppState, id: ElementId, note: &cc_core::
         }
         if let Some(width) = note.width {
             let mut w = width;
-            let r = row(ui, &t!("prop-text-width"), |ui| {
-                ui.add(DragValue::new(&mut w).speed(1.0).range(5.0..=1000.0).suffix(" mm"))
-            });
+            let r = row(ui, &t!("prop-text-width"), |ui| ui.add(paper_drag(&mut w).speed(1.0).range(5.0..=1000.0)));
             if r.changed() {
                 set(state, "width", &|n| n.width = Some(w));
             }
@@ -2073,18 +2209,70 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
     section(ui, "dimensions", t!("section-dimensions"), |ui| match state.session.geom().rooms.get(&id).cloned() {
         Some(boundary) => {
             let area = cc_geom::polygon::area(&boundary);
-            readonly_row(ui, &t!("col-area"), format::area(area));
-            readonly_row(ui, &t!("col-perimeter"), format::length(cc_geom::polygon::perimeter(&boundary)));
+            readonly_row(ui, &field_label(cc_core::ScheduleField::Area), format::area(area));
+            readonly_row(
+                ui,
+                &field_label(cc_core::ScheduleField::Perimeter),
+                format::length(cc_geom::polygon::perimeter(&boundary)),
+            );
             readonly_row(ui, &t!("prop-volume"), format::volume(area * r.height));
         }
-        None => readonly_row(ui, &t!("col-area"), t!("room-not-enclosed")),
+        None => readonly_row(ui, &field_label(cc_core::ScheduleField::Area), t!("room-not-enclosed")),
     });
 }
 
 /// The bar count or the stirrup spacing of a reinforcement set, editable.
-fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &str, layout: cc_core::RebarLayout) {
+fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &str, layout: &cc_core::RebarLayout) {
     use cc_core::RebarLayout as L;
-    match layout {
+    match *layout {
+        // A wall's horizontal bars by the spacing of their first zone (the others in `element_get`)...
+        L::WallHorizontal { ref zones, .. } => {
+            let spacing = zones.first().map_or(0.0, |z| z.spacing);
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::WallHorizontal { zones, .. } = &mut x.layout
+                    && let Some(zone) = zones.first_mut()
+                {
+                    zone.spacing = v.max(cc_core::wall_bars::MIN_SPACING);
+                }
+            });
+            if zones.len() > 1 {
+                readonly_row(ui, "", t!("bars-wall-zones", "count" => zones.len()));
+            }
+        }
+        // ...its vertical bars by their spacing along it...
+        L::WallVertical { spacing, .. } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::WallVertical { spacing, .. } = &mut x.layout
+                {
+                    *spacing = v.max(cc_core::wall_bars::MIN_SPACING);
+                }
+            });
+        }
+        // ...and its ties by the bars they skip.
+        L::WallTies { every_horizontal, every_vertical } => {
+            readonly_row(ui, label, format!("1/{every_horizontal} × 1/{every_vertical}"));
+        }
+        // A slab's bars by their spacing, its radial and trimming bars by their count.
+        L::SlabStraight { spacing, .. }
+        | L::SlabRing { spacing, .. }
+        | L::StripTransverse { spacing, .. }
+        | L::StripLongitudinal { spacing, .. } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::SlabStraight { spacing, .. }
+                    | L::SlabRing { spacing, .. }
+                    | L::StripTransverse { spacing, .. }
+                    | L::StripLongitudinal { spacing, .. } = &mut x.layout
+                {
+                    *spacing = v.max(cc_core::wall_bars::MIN_SPACING);
+                }
+            });
+        }
+        L::SlabRadial { count, .. } | L::SlabTrim { count, .. } => {
+            readonly_row(ui, label, format!("{count} ×"));
+        }
         L::Longitudinal { count, .. } => {
             let mut n = count;
             let r = row(ui, label, |ui| ui.add(DragValue::new(&mut n).range(1..=200).suffix(" ×")));
@@ -2099,10 +2287,35 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
             }
             finish(state, &r);
         }
-        L::Stirrups { spacing } => {
+        L::Stirrups { spacing } | L::Ties { spacing } => {
             length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
                 if let ElementKind::Rebar(x) = &mut e.kind
-                    && let L::Stirrups { spacing } = &mut x.layout
+                    && let L::Stirrups { spacing } | L::Ties { spacing } = &mut x.layout
+                {
+                    *spacing = v.max(0.02);
+                }
+            });
+        }
+        // Side bars by their count on each face...
+        L::Sides { count, .. } if count > 0 => {
+            let mut n = count;
+            let r = row(ui, label, |ui| ui.add(DragValue::new(&mut n).range(1..=200).suffix(" ×")));
+            if r.changed() {
+                modify(state, id, "rebar-count", |e| {
+                    if let ElementKind::Rebar(x) = &mut e.kind
+                        && let L::Sides { count, .. } = &mut x.layout
+                    {
+                        *count = n;
+                    }
+                });
+            }
+            finish(state, &r);
+        }
+        // ...or by their spacing over the height.
+        L::Sides { spacing, .. } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::Sides { spacing, .. } = &mut x.layout
                 {
                     *spacing = v.max(0.02);
                 }
@@ -2112,11 +2325,34 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
 }
 
 /// What a set is, in a word: its face, or stirrups.
-fn rebar_role(layout: cc_core::RebarLayout) -> String {
+fn rebar_role(layout: &cc_core::RebarLayout) -> String {
     match layout {
         cc_core::RebarLayout::Longitudinal { face, .. } => tr(face.key()),
         cc_core::RebarLayout::Stirrups { .. } => t!("bars-stirrups"),
+        cc_core::RebarLayout::Sides { .. } => t!("bars-sides"),
+        cc_core::RebarLayout::Ties { .. } | cc_core::RebarLayout::WallTies { .. } => t!("bars-ties"),
+        cc_core::RebarLayout::SlabStraight { top, angle_deg, .. } => {
+            format!("{} {angle_deg:.0}° · {}", t!("bars-slab-straight"), slab_layer(*top))
+        }
+        cc_core::RebarLayout::StripTransverse { top, .. } => {
+            format!("{} · {}", t!("bars-strip-transverse"), slab_layer(*top))
+        }
+        cc_core::RebarLayout::StripLongitudinal { top, .. } => {
+            format!("{} · {}", t!("bars-strip-longitudinal"), slab_layer(*top))
+        }
+        cc_core::RebarLayout::SlabRing { top, .. } => format!("{} · {}", t!("bars-slab-ring"), slab_layer(*top)),
+        cc_core::RebarLayout::SlabRadial { top, .. } => format!("{} · {}", t!("bars-slab-radial"), slab_layer(*top)),
+        cc_core::RebarLayout::SlabTrim { top, .. } => format!("{} · {}", t!("bars-slab-trim"), slab_layer(*top)),
+        cc_core::RebarLayout::WallHorizontal { side, .. } => {
+            format!("{} · {}", t!("bars-wall-horizontal"), tr(side.key()))
+        }
+        cc_core::RebarLayout::WallVertical { side, .. } => format!("{} · {}", t!("bars-wall-vertical"), tr(side.key())),
     }
+}
+
+/// A slab layer's name.
+fn slab_layer(top: bool) -> String {
+    if top { t!("bars-top") } else { t!("bars-bottom") }
 }
 
 /// The reinforcement sets of a beam or column: each editable or removable,
@@ -2125,13 +2361,13 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
     let sets: Vec<(ElementId, cc_core::RebarLayout, String)> = state
         .project()
         .rebar_of(host)
-        .map(|(e, r)| (e.id, r.layout, state.project().type_name(e.type_id).to_string()))
+        .map(|(e, r)| (e.id, r.layout.clone(), state.project().type_name(e.type_id).to_string()))
         .collect();
     section(ui, "reinforcement", t!("section-reinforcement"), |ui| {
         let mut remove = None;
         for (id, layout, name) in &sets {
-            let label = format!("{} · {name}", rebar_role(*layout));
-            rebar_layout_row(ui, state, *id, &label, *layout);
+            let label = format!("{} · {name}", rebar_role(layout));
+            rebar_layout_row(ui, state, *id, &label, layout);
             if row(ui, "", |ui| ui.small_button(t!("action-remove-rebar")).clicked()) {
                 remove = Some(*id);
             }
@@ -2139,14 +2375,43 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         if let Some(id) = remove {
             crate::actions::run_command(state, cc_engine::commands::modify::ElementsDelete { ids: vec![id.0] });
         }
+        let wall = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Wall(_)));
         if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
-            let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };
+            let kind = state.project().element(host).map(|e| e.kind.clone());
+            let strip = matches!(
+                &kind,
+                Some(ElementKind::Foundation(f)) if matches!(f.shape, cc_core::FoundationShape::Strip { .. })
+            );
+            let slab = !strip && matches!(&kind, Some(ElementKind::Floor(_) | ElementKind::Foundation(_)));
+            if strip {
+                let command =
+                    cc_engine::commands::strip_rebar::StripRebarCreate { strips: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else if wall {
+                let command =
+                    cc_engine::commands::wall_rebar::WallRebarCreate { walls: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else if slab {
+                let command =
+                    cc_engine::commands::slab_rebar::SlabRebarCreate { slabs: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else {
+                let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };
+                crate::actions::run_command(state, command);
+            }
+        }
+        // A reinforced beam without side bars can get them.
+        let beam = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Beam(_)));
+        let sides = sets.iter().any(|(_, layout, _)| matches!(layout, cc_core::RebarLayout::Sides { .. }));
+        if beam && !sets.is_empty() && !sides && row(ui, "", |ui| ui.small_button(t!("action-rebar-sides")).clicked()) {
+            let command =
+                cc_engine::commands::rebar::RebarCreate { host: host.0, layout: "sides".into(), ..Default::default() };
             crate::actions::run_command(state, command);
         }
         if !sets.is_empty() {
             let geom = state.session.geom();
             let weight: f64 = sets.iter().filter_map(|(id, ..)| geom.rebar.get(id)).map(|r| r.weight()).sum();
-            readonly_row(ui, &t!("col-weight"), format!("{} kg", format::number(weight, 2)));
+            readonly_row(ui, &t!("col-weight"), format::quantity(format::Quantity::Mass, weight, 2));
         }
     });
 }
@@ -2160,7 +2425,7 @@ fn rebar_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Reb
             .element(r.host)
             .map_or(String::new(), |h| if h.mark.is_empty() { tr(h.category().key()) } else { h.mark.clone() });
         readonly_row(ui, &t!("col-host"), host);
-        rebar_layout_row(ui, state, id, &rebar_role(r.layout), r.layout);
+        rebar_layout_row(ui, state, id, &rebar_role(&r.layout), &r.layout);
         length_row(ui, state, &t!("prop-cover"), id, "rebar-cover", r.cover, |e, v| {
             if let ElementKind::Rebar(x) = &mut e.kind {
                 x.cover = v.max(0.0);
@@ -2177,7 +2442,7 @@ fn rebar_dimensions(ui: &mut Ui, state: &mut AppState, id: cc_core::ElementId) {
             readonly_row(ui, &t!("col-bar-count"), set.count().to_string());
             readonly_row(ui, &t!("col-bar-length"), format::length(set.bar_length()));
             readonly_row(ui, &t!("prop-length"), format::length(set.total_length()));
-            readonly_row(ui, &t!("col-weight"), format!("{} kg", format::number(set.weight(), 2)));
+            readonly_row(ui, &t!("col-weight"), format::quantity(format::Quantity::Mass, set.weight(), 2));
         });
     }
 }
@@ -2246,7 +2511,11 @@ fn roofing_rows(ui: &mut Ui, state: &mut AppState, el: &Element) {
             if let Some(n) = spec.tiles(g.sloped_area) {
                 readonly_row(ui, &t!("col-tile-count"), format!("{n:.0}"));
             }
-            readonly_row(ui, &t!("col-weight"), format!("{:.0} kg", spec.weight_on(g.sloped_area)));
+            readonly_row(
+                ui,
+                &t!("col-weight"),
+                format::quantity(format::Quantity::Mass, spec.weight_on(g.sloped_area), 0),
+            );
         }
         if !g.members.is_empty() {
             if g.trusses > 0 {
@@ -2456,17 +2725,16 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
     }
     if let RoofShape::Gable { slope, ridge_deg } | RoofShape::Shed { slope, direction_deg: ridge_deg } = r.shape {
         let is_gable = matches!(r.shape, RoofShape::Gable { .. });
-        let mut pct = slope * 100.0;
-        let rs = row(ui, &t!("prop-slope"), |ui| {
-            ui.add(DragValue::new(&mut pct).speed(0.5).range(0.0..=200.0).suffix(" %"))
-        });
+        // Rise over run, shown in the project's slope unit.
+        let mut ratio = slope;
+        let rs = row(ui, &t!("prop-slope"), |ui| ui.add(slope_drag(&mut ratio).range(0.0..=2.0)));
         let mut dir = ridge_deg;
         let label = if is_gable { t!("prop-ridge-direction") } else { t!("prop-direction") };
         let rd = row(ui, &label, |ui| ui.add(DragValue::new(&mut dir).speed(1.0).suffix("°")));
         if rs.changed() || rd.changed() {
             modify(state, id, "shape", |e| {
                 if let ElementKind::Roof(r) = &mut e.kind {
-                    let (slope, angle) = (pct / 100.0, dir.rem_euclid(360.0));
+                    let (slope, angle) = (ratio, dir.rem_euclid(360.0));
                     r.shape = if is_gable {
                         RoofShape::Gable { slope, ridge_deg: angle }
                     } else {
@@ -2479,14 +2747,12 @@ fn roof_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core::Roof
         finish(state, &rd);
     }
     if let RoofShape::Hip { slope } = r.shape {
-        let mut pct = slope * 100.0;
-        let rs = row(ui, &t!("prop-slope"), |ui| {
-            ui.add(DragValue::new(&mut pct).speed(0.5).range(0.0..=200.0).suffix(" %"))
-        });
+        let mut ratio = slope;
+        let rs = row(ui, &t!("prop-slope"), |ui| ui.add(slope_drag(&mut ratio).range(0.0..=2.0)));
         if rs.changed() {
             modify(state, id, "shape", |e| {
                 if let ElementKind::Roof(r) = &mut e.kind {
-                    r.shape = RoofShape::Hip { slope: pct / 100.0 };
+                    r.shape = RoofShape::Hip { slope: ratio };
                 }
             });
         }
@@ -2538,7 +2804,7 @@ fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core:
             Some(_) => 2,
         };
         let mut choice = current;
-        let mut pct = effective.get(i).copied().unwrap_or(slope) * 100.0;
+        let mut ratio = effective.get(i).copied().unwrap_or(slope);
         let label = t!("prop-roof-edge", "n" => i + 1, "length" => format::length(a.distance(b)));
         let mut drag = None;
         row(ui, &label, |ui| {
@@ -2551,7 +2817,7 @@ fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core:
                 },
             );
             if current == 2 {
-                drag = Some(ui.add(DragValue::new(&mut pct).speed(0.5).range(0.1..=200.0).suffix(" %")));
+                drag = Some(ui.add(slope_drag(&mut ratio).range(0.001..=2.0)));
             }
         });
         if choice != current {
@@ -2569,7 +2835,7 @@ fn roof_edge_rows(ui: &mut Ui, state: &mut AppState, id: ElementId, r: &cc_core:
                             r.edge_slopes.resize(i + 1, None);
                         }
                         if let Some(s) = r.edge_slopes.get_mut(i) {
-                            *s = Some((pct / 100.0).max(0.001));
+                            *s = Some(ratio.max(0.001));
                         }
                     }
                 });
@@ -2614,18 +2880,18 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         section(ui, "graphics", t!("section-graphics"), |ui| {
             crate::graphics_dialog::view_rows(ui, state, id);
             let mut scale = view.scale;
+            let system = state.project().measurement_system();
             if crate::graphics_dialog::controlled(state, id, "scale") {
-                readonly_row(ui, &t!("prop-scale"), format!("1:{scale}"));
+                readonly_row(ui, &t!("prop-scale"), cc_core::scale::label(system, scale));
             } else {
                 row(ui, &t!("prop-scale"), |ui| {
-                    egui::ComboBox::from_id_salt(("scale", id.0)).selected_text(format!("1:{scale}")).show_ui(
-                        ui,
-                        |ui| {
-                            for s in SCALES {
-                                ui.selectable_value(&mut scale, s, format!("1:{s}"));
+                    egui::ComboBox::from_id_salt(("scale", id.0))
+                        .selected_text(cc_core::scale::label(system, scale))
+                        .show_ui(ui, |ui| {
+                            for &s in cc_core::scale::choices(system) {
+                                ui.selectable_value(&mut scale, s, cc_core::scale::label(system, s));
                             }
-                        },
-                    );
+                        });
                 });
             }
             if scale != view.scale {
@@ -2887,7 +3153,7 @@ fn viewport_props(ui: &mut Ui, state: &mut AppState, sheet: ViewId, index: usize
     section(ui, "position", t!("section-position"), |ui| {
         for (label, axis) in [(t!("prop-center-x"), 0), (t!("prop-center-y"), 1)] {
             let mut v = vp.center[axis];
-            let r = row(ui, &label, |ui| ui.add(DragValue::new(&mut v).speed(1.0).fixed_decimals(1).suffix(" mm")));
+            let r = row(ui, &label, |ui| ui.add(paper_drag(&mut v).speed(1.0).fixed_decimals(1)));
             if r.changed() {
                 crate::engine_edit::view(state, sheet, Some(key((sheet, index, axis))), |x| {
                     if let ViewKind::Sheet { viewports, .. } = &mut x.kind

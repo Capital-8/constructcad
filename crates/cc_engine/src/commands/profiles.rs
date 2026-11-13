@@ -283,8 +283,9 @@ pub struct ProfileCreate {
     pub material: String,
     /// Shape code: `i`, `i_asym`, `channel`, `t`, `angle`, `cold_u`,
     /// `cold_lipped_u`, `cold_z`, `cold_hat`, `rect_tube`, `round_tube`,
-    /// `rect`, `round`, `concrete_t`, `concrete_l` or `sketch` (the default
-    /// with `curves`; required without them).
+    /// `rect`, `round`, `concrete_t`, `concrete_l`, `annular_sector` (the piece of a ring between
+    /// `r_in` and `r_out` turning by `sweep` degrees) or `sketch` (the default with `curves`;
+    /// required without them).
     #[serde(default)]
     pub shape: Option<String>,
     /// Parameter values by name, meters (degrees for `angle`), over the
@@ -339,7 +340,11 @@ impl Command for ProfileCreate {
         check_shape(&shape)?;
         let name = match &self.name {
             Some(n) => profile_name(p, n, None)?,
-            None => p.free_profile_name(&cc_core::profiles_project::section_name(&shape, material)),
+            None => p.free_profile_name(&cc_core::profiles_project::section_name_in(
+                &shape,
+                material,
+                p.measurement_system(),
+            )),
         };
         let mut def = ProfileDef {
             id: ProfileId(0),

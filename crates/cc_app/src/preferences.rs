@@ -66,6 +66,11 @@ const PLUGINS_OFF_KEY: &str = "plugins_off";
 const PLUGINS_FILES_KEY: &str = "plugins_files";
 /// eframe storage key of where the side panels are docked (`side_panels::PanelLayout::to_text`).
 const PANELS_KEY: &str = "side_panels";
+/// eframe storage key of the Structure tab's material (`StructuralMaterial::code`).
+const STRUCTURE_MATERIAL_KEY: &str = "structure_material";
+
+/// eframe storage key of the template last picked for a new project (`MeasurementSystem::code`).
+const NEW_PROJECT_KEY: &str = "new_project_system";
 /// Most plugin ids kept in each of those lists.
 const MAX_PLUGIN_IDS: usize = 1000;
 
@@ -135,6 +140,11 @@ pub struct Preferences {
     pub plugins_files: BTreeSet<String>,
     /// Where the Project Browser and Properties are docked.
     pub panels: crate::side_panels::PanelLayout,
+    /// The material the Structure tab's column and beam tools place.
+    pub structure_material: cc_core::StructuralMaterial,
+
+    /// The template last picked in the New Project dialog, picked first next time.
+    pub new_project_system: cc_core::MeasurementSystem,
 }
 
 impl Default for Preferences {
@@ -159,6 +169,9 @@ impl Default for Preferences {
             plugins_off: BTreeSet::new(),
             plugins_files: BTreeSet::new(),
             panels: Default::default(),
+            structure_material: Default::default(),
+
+            new_project_system: cc_core::MeasurementSystem::Metric,
         }
     }
 }
@@ -258,6 +271,13 @@ impl Preferences {
             plugins_off: get(PLUGINS_OFF_KEY).map(|v| id_lines(&v)).unwrap_or_default(),
             plugins_files: get(PLUGINS_FILES_KEY).map(|v| id_lines(&v)).unwrap_or_default(),
             panels: get(PANELS_KEY).and_then(|v| crate::side_panels::PanelLayout::from_text(&v)).unwrap_or_default(),
+            structure_material: get(STRUCTURE_MATERIAL_KEY)
+                .and_then(|v| cc_core::StructuralMaterial::from_code(&v))
+                .unwrap_or(d.structure_material),
+
+            new_project_system: get(NEW_PROJECT_KEY)
+                .and_then(|v| cc_core::MeasurementSystem::from_code(&v))
+                .unwrap_or(d.new_project_system),
         }
     }
 
@@ -285,6 +305,9 @@ impl Preferences {
         set(PLUGINS_OFF_KEY, ids(&self.plugins_off));
         set(PLUGINS_FILES_KEY, ids(&self.plugins_files));
         set(PANELS_KEY, self.panels.to_text());
+        set(STRUCTURE_MATERIAL_KEY, self.structure_material.code().to_string());
+
+        set(NEW_PROJECT_KEY, self.new_project_system.code().to_string());
     }
 
     /// Time between autosave copies, or `None` when autosave is off.
@@ -1095,6 +1118,9 @@ mod tests {
                 left: vec![],
                 right: vec![vec![crate::side_panels::Pane::Properties], vec![crate::side_panels::Pane::Browser]],
             },
+            structure_material: cc_core::StructuralMaterial::Timber,
+
+            new_project_system: cc_core::MeasurementSystem::Imperial,
         };
         let map = stored(&prefs);
         let back = Preferences::read(|k| map.get(k).cloned(), 1.0);
@@ -1119,6 +1145,7 @@ mod tests {
             (MACRO_FOLDER_KEY, "  ".to_string()),
             (UPDATE_AUTO_KEY, "maybe".to_string()),
             (PLUGINS_OFF_KEY, "good_id\nBad Id\n../x\n".to_string()),
+            (NEW_PROJECT_KEY, "nautical".to_string()),
         ]
         .into();
         let prefs = Preferences::read(|k| map.get(k).cloned(), f32::NAN);
@@ -1127,6 +1154,7 @@ mod tests {
         assert_eq!(prefs.autosave_minutes, 1, "unparsable: the default");
         assert_eq!(prefs.recent_count, 1);
         assert_eq!(prefs.theme, ThemeChoice::System);
+        assert_eq!(prefs.new_project_system, cc_core::MeasurementSystem::Metric, "unknown template: metric");
         assert_eq!(prefs.plugins_off, BTreeSet::from(["good_id".to_string()]), "invalid plugin ids dropped");
         assert_eq!(prefs.library_folders.len(), MAX_LIBRARY_FOLDERS, "bounded and deduplicated");
         assert_eq!(prefs.library_folders[0], PathBuf::from("/f0"));
