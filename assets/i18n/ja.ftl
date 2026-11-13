@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } 枚の壁に { $count } 本の部材で下地を�
 cmd-desc-light-steel-frame = 選択した壁（または現在のレベルの壁）に軽量鉄骨下地を作成します。ランナー間に 0.4 m ごとの冷間成形間柱、開口部には二重の柱、まぐさ、窓台、短い間柱を配置し、壁と開口部に合わせて更新します。
 cmd-desc-wood-frame = 選択した壁（または現在のレベルの壁）に木造枠組下地を作成します。土台とダブル頭つなぎの間に 0.6 m ごとの間柱、開口部には二重の柱、まぐさ、窓台、短い間柱を配置し、壁と開口部に合わせて更新します。
 
+# Connections
+category-connection = 接合部
+tpl-type-connection = 接合部
+col-connection-kind = 接合部の種類
+col-plate-mass = プレート質量
+col-bolt-count = ボルト本数
+col-bolt-diameter = ボルト径
+tx-create-connections = 接合部を作成
+connection-base-plate = ベースプレート
+connection-end-plate = エンドプレート
+connection-fin-plate = フィンプレート
+connection-timber-bolts = ボルト接合
+connection-hanger = 梁受け金物
+member-end-base = 柱脚
+group-connections = 接合部
+section-connection = 接合部
+prop-connection-kind = 種類
+prop-member-end = 部材端
+prop-plate-thickness = 板厚
+prop-plate-width = 板幅
+prop-plate-length = 板長
+prop-bolt-rows = ボルト行数
+prop-bolt-columns = ボルト列数
+prop-bolt-spacing = ボルトピッチ
+prop-edge-distance = 縁端距離
+prop-anchor-length = アンカー長さ
+connection-size-auto = 自動
+msg-connections-placed = { $count } 個の接合部を配置しました (すでに接合部のある { $skipped } 箇所の部材端はスキップ)。
+msg-connections-none = 選択に、この接合部を取り付けられる部材がありません。
+warn-connection-end = この部材端にはこの種類の接合部を設けられないため、何も描画されません。
+cmd-desc-base-plate = 選択した各柱（または作業中のレベルのすべての柱）の下に、アンカーボルト付きの鋼製ベースプレートを柱断面に合わせた寸法で配置します。
+cmd-desc-end-plate = 柱面で止まる各梁端にボルト留めのエンドプレートを配置します（選択した梁、または作業中のレベルの梁）。
+cmd-desc-fin-plate = 柱または他の梁に接する各梁端に、ウェブに沿ってボルト留めのフィンプレートを配置します（選択した梁、または作業中のレベルの梁）。
+cmd-desc-timber-bolts = 柱に接する各梁端に、座金付きのボルト群を配置します（選択した梁、または作業中のレベルの梁）。
+cmd-desc-hanger = 他の梁に接する各梁端の下に、鋼板を折り曲げた梁受け金物を配置します（選択した梁、または作業中のレベルの梁）。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 煉瓦造 6"
 tpl-imp-type-masonry-10 = 煉瓦造 10"

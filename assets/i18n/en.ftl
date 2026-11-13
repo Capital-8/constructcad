@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } walls framed with { $count } members.
 cmd-desc-light-steel-frame = Frame the selected walls (or those of the active level) in light steel: cold-formed studs every 0.4 m between tracks, king and jack studs, headers, sills and cripples at doors and windows, kept in step with the wall and its openings.
 cmd-desc-wood-frame = Frame the selected walls (or those of the active level) in timber: studs every 0.6 m between a sole plate and a double top plate, king and jack studs, headers, sills and cripples at doors and windows, kept in step with the wall and its openings.
 
+# Connections
+category-connection = Connections
+tpl-type-connection = Connection
+col-connection-kind = Connection Kind
+col-plate-mass = Plate Mass
+col-bolt-count = Bolts
+col-bolt-diameter = Bolt Diameter
+tx-create-connections = Create Connections
+connection-base-plate = Base Plate
+connection-end-plate = End Plate
+connection-fin-plate = Fin Plate
+connection-timber-bolts = Bolted Joint
+connection-hanger = Hanger
+member-end-base = Base
+group-connections = Connections
+section-connection = Connection
+prop-connection-kind = Kind
+prop-member-end = Member End
+prop-plate-thickness = Plate Thickness
+prop-plate-width = Plate Width
+prop-plate-length = Plate Length
+prop-bolt-rows = Bolt Rows
+prop-bolt-columns = Bolt Columns
+prop-bolt-spacing = Bolt Spacing
+prop-edge-distance = Edge Distance
+prop-anchor-length = Anchor Length
+connection-size-auto = auto
+msg-connections-placed = { $count } connections placed ({ $skipped } member ends already had one).
+msg-connections-none = Nothing in the selection takes this connection.
+warn-connection-end = This member end does not take this kind of connection; nothing is drawn.
+cmd-desc-base-plate = Place a steel base plate with anchor bolts under each selected column (or every column of the active level), sized from the column's section.
+cmd-desc-end-plate = Place a bolted end plate at each beam end that stops at a column face (the selected beams, or those of the active level).
+cmd-desc-fin-plate = Place a bolted fin plate along the web at each beam end that meets a column or another beam (the selected beams, or those of the active level).
+cmd-desc-timber-bolts = Place a bolt group with washers at each beam end that meets a column (the selected beams, or those of the active level).
+cmd-desc-hanger = Place a bent steel hanger under each beam end that meets another beam (the selected beams, or those of the active level).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Masonry 6"
 tpl-imp-type-masonry-10 = Masonry 10"

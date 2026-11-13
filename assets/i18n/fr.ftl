@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } murs ossaturés avec { $count } éléments.
 cmd-desc-light-steel-frame = Ossature les murs sélectionnés (ou ceux du niveau actif) en acier léger : montants formés à froid tous les 0,4 m entre rails, montants doubles, linteaux, appuis et montants courts aux portes et fenêtres, tenus à jour avec le mur et ses ouvertures.
 cmd-desc-wood-frame = Ossature les murs sélectionnés (ou ceux du niveau actif) en bois : montants tous les 0,6 m entre lisse basse et double sablière, montants doubles, linteaux, appuis et montants courts aux portes et fenêtres, tenus à jour avec le mur et ses ouvertures.
 
+# Connections
+category-connection = Assemblages
+tpl-type-connection = Assemblage
+col-connection-kind = Genre d'assemblage
+col-plate-mass = Masse des platines
+col-bolt-count = Boulons
+col-bolt-diameter = Diamètre des boulons
+tx-create-connections = Créer des assemblages
+connection-base-plate = Platine de pied
+connection-end-plate = Platine d'about
+connection-fin-plate = Gousset d'âme
+connection-timber-bolts = Assemblage boulonné
+connection-hanger = Sabot de solive
+member-end-base = Pied
+group-connections = Assemblages
+section-connection = Assemblage
+prop-connection-kind = Genre
+prop-member-end = Extrémité
+prop-plate-thickness = Épaisseur de platine
+prop-plate-width = Largeur de platine
+prop-plate-length = Longueur de platine
+prop-bolt-rows = Rangées de boulons
+prop-bolt-columns = Files de boulons
+prop-bolt-spacing = Entraxe des boulons
+prop-edge-distance = Pince
+prop-anchor-length = Longueur d'ancrage
+connection-size-auto = auto
+msg-connections-placed = { $count } assemblages placés ({ $skipped } extrémités en avaient déjà un).
+msg-connections-none = Rien dans la sélection n'accepte cet assemblage.
+warn-connection-end = Cette extrémité n'accepte pas ce genre d'assemblage ; rien n'est dessiné.
+cmd-desc-base-plate = Place une platine de pied en acier avec tiges d'ancrage sous chaque poteau sélectionné (ou tous ceux du niveau actif), dimensionnée d'après la section du poteau.
+cmd-desc-end-plate = Place une platine d'about boulonnée à chaque extrémité de poutre arrêtée contre la face d'un poteau (les poutres sélectionnées, ou celles du niveau actif).
+cmd-desc-fin-plate = Place un gousset d'âme boulonné à chaque extrémité de poutre qui rejoint un poteau ou une autre poutre (les poutres sélectionnées, ou celles du niveau actif).
+cmd-desc-timber-bolts = Place un groupe de boulons avec rondelles à chaque extrémité de poutre qui rejoint un poteau (les poutres sélectionnées, ou celles du niveau actif).
+cmd-desc-hanger = Place un sabot en tôle d'acier pliée sous chaque extrémité de poutre qui rejoint une autre poutre (les poutres sélectionnées, ou celles du niveau actif).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Maçonnerie 6"
 tpl-imp-type-masonry-10 = Maçonnerie 10"

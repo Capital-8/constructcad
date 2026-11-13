@@ -3290,6 +3290,42 @@ msg-walls-framed = ສ້າງໂຄງໃຫ້ { $walls } ຝາ ດ້ວຍ
 cmd-desc-light-steel-frame = ສ້າງໂຄງເຫຼັກເບົາໃຫ້ຝາທີ່ເລືອກ (ຫຼື ຝາຂອງຊັ້ນປັດຈຸບັນ): ເສົາຕັ້ງເຫຼັກຂຶ້ນຮູບເຢັນທຸກ 0,4 m ລະຫວ່າງລາງ, ເສົາຄູ່, ຄານຂອບເທິງ, ຄານຂອບລຸ່ມ ແລະ ເສົາສັ້ນທີ່ປະຕູ ແລະ ປ່ອງຢ້ຽມ, ປ່ຽນຕາມຝາ ແລະ ຊ່ອງເປີດ.
 cmd-desc-wood-frame = ສ້າງໂຄງໄມ້ໃຫ້ຝາທີ່ເລືອກ (ຫຼື ຝາຂອງຊັ້ນປັດຈຸບັນ): ເສົາຕັ້ງທຸກ 0,6 m ລະຫວ່າງແຜ່ນລຸ່ມ ແລະ ແຜ່ນເທິງຄູ່, ເສົາຄູ່, ຄານຂອບເທິງ, ຄານຂອບລຸ່ມ ແລະ ເສົາສັ້ນທີ່ປະຕູ ແລະ ປ່ອງຢ້ຽມ, ປ່ຽນຕາມຝາ ແລະ ຊ່ອງເປີດ.
 
+# Connections
+category-connection = ຂໍ້ຕໍ່
+tpl-type-connection = ຂໍ້ຕໍ່
+col-connection-kind = ປະເພດຂໍ້ຕໍ່
+col-plate-mass = ມວນແຜ່ນ
+col-bolt-count = ໂບລທ໌
+col-bolt-diameter = ເສັ້ນຜ່າໃຈກາງໂບລທ໌
+tx-create-connections = ສ້າງຂໍ້ຕໍ່
+connection-base-plate = ແຜ່ນຮອງຕີນເສົາ
+connection-end-plate = ແຜ່ນປາຍຄານ
+connection-fin-plate = ແຜ່ນຕໍ່ເອວຄານ
+connection-timber-bolts = ຂໍ້ຕໍ່ໂບລທ໌
+connection-hanger = ເຫຼັກແຂວນຄານ
+member-end-base = ຕີນ
+group-connections = ຂໍ້ຕໍ່
+section-connection = ຂໍ້ຕໍ່
+prop-connection-kind = ປະເພດ
+prop-member-end = ປາຍຊິ້ນສ່ວນ
+prop-plate-thickness = ຄວາມໜາແຜ່ນ
+prop-plate-width = ຄວາມກວ້າງແຜ່ນ
+prop-plate-length = ຄວາມຍາວແຜ່ນ
+prop-bolt-rows = ແຖວໂບລທ໌
+prop-bolt-columns = ຖັນໂບລທ໌
+prop-bolt-spacing = ໄລຍະຫ່າງໂບລທ໌
+prop-edge-distance = ໄລຍະຈາກຂອບ
+prop-anchor-length = ຄວາມຍາວສະມໍ
+connection-size-auto = ອັດຕະໂນມັດ
+msg-connections-placed = ວາງຂໍ້ຕໍ່ແລ້ວ { $count } ອັນ ({ $skipped } ປາຍມີຂໍ້ຕໍ່ຢູ່ແລ້ວ).
+msg-connections-none = ບໍ່ມີອົງປະກອບທີ່ເລືອກທີ່ຮັບຂໍ້ຕໍ່ນີ້.
+warn-connection-end = ປາຍນີ້ບໍ່ຮັບຂໍ້ຕໍ່ປະເພດນີ້; ບໍ່ມີຫຍັງຖືກແຕ້ມ.
+cmd-desc-base-plate = ວາງແຜ່ນຮອງຕີນເສົາເຫຼັກພ້ອມໂບລທ໌ສະມໍ ໃຕ້ເສົາທີ່ເລືອກແຕ່ລະຕົ້ນ (ຫຼື ທຸກຕົ້ນຂອງຊັ້ນທີ່ໃຊ້ຢູ່), ຂະໜາດຕາມໜ້າຕັດເສົາ.
+cmd-desc-end-plate = ວາງແຜ່ນປາຍຄານແບບໂບລທ໌ ທີ່ປາຍຄານທຸກປາຍທີ່ຈົບຢູ່ໜ້າເສົາ (ຄານທີ່ເລືອກ ຫຼື ຄານຂອງຊັ້ນທີ່ໃຊ້ຢູ່).
+cmd-desc-fin-plate = ວາງແຜ່ນຕໍ່ເອວຄານແບບໂບລທ໌ ທີ່ປາຍຄານທຸກປາຍທີ່ພົບເສົາ ຫຼື ຄານອື່ນ (ຄານທີ່ເລືອກ ຫຼື ຄານຂອງຊັ້ນທີ່ໃຊ້ຢູ່).
+cmd-desc-timber-bolts = ວາງກຸ່ມໂບລທ໌ພ້ອມແຫວນຮອງ ທີ່ປາຍຄານທຸກປາຍທີ່ພົບເສົາ (ຄານທີ່ເລືອກ ຫຼື ຄານຂອງຊັ້ນທີ່ໃຊ້ຢູ່).
+cmd-desc-hanger = ວາງເຫຼັກແຂວນຄານແບບແຜ່ນເຫຼັກພັບ ໃຕ້ປາຍຄານທຸກປາຍທີ່ພົບຄານອື່ນ (ຄານທີ່ເລືອກ ຫຼື ຄານຂອງຊັ້ນທີ່ໃຊ້ຢູ່).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = ຝາກໍ່ 6"
 tpl-imp-type-masonry-10 = ຝາກໍ່ 10"

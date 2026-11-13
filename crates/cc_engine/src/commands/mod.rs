@@ -13,6 +13,7 @@ pub mod component;
 pub mod component_connector;
 pub mod component_piece;
 pub mod component_script;
+pub mod connection;
 pub mod create;
 pub mod curtain;
 pub mod design_options;

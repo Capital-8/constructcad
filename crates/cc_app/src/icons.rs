@@ -93,6 +93,7 @@ pub enum Icon {
     Analytical,
     Truss,
     Brace,
+    Connection,
     Rebar,
     RebarView,
     StructuralPlan,
@@ -198,7 +199,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 183] = [
+    pub const ALL: [Icon; 184] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -281,6 +282,7 @@ impl Icon {
         Icon::Analytical,
         Icon::Truss,
         Icon::Brace,
+        Icon::Connection,
         Icon::Rebar,
         Icon::RebarView,
         Icon::StructuralPlan,
@@ -469,6 +471,7 @@ impl Icon {
             Icon::Analytical => include_str!("../../../assets/icons/ui/analytical.svg"),
             Icon::Truss => include_str!("../../../assets/icons/ui/truss.svg"),
             Icon::Brace => include_str!("../../../assets/icons/ui/brace.svg"),
+            Icon::Connection => include_str!("../../../assets/icons/ui/connection.svg"),
             Icon::Rebar => include_str!("../../../assets/icons/ui/rebar.svg"),
             Icon::RebarView => include_str!("../../../assets/icons/ui/rebar-view.svg"),
             Icon::StructuralPlan => include_str!("../../../assets/icons/ui/structural-plan.svg"),

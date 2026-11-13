@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } muros entramados con { $count } piezas.
 cmd-desc-light-steel-frame = Entrama los muros seleccionados (o los del nivel activo) en acero ligero: montantes conformados en frío cada 0,4 m entre canales, montantes dobles, dinteles, antepechos y montantes cortos en puertas y ventanas, que siguen al muro y sus aberturas.
 cmd-desc-wood-frame = Entrama los muros seleccionados (o los del nivel activo) en madera: montantes cada 0,6 m entre solera inferior y solera superior doble, montantes dobles, dinteles, antepechos y montantes cortos en puertas y ventanas, que siguen al muro y sus aberturas.
 
+# Connections
+category-connection = Uniones
+tpl-type-connection = Unión
+col-connection-kind = Clase de unión
+col-plate-mass = Masa de placas
+col-bolt-count = Pernos
+col-bolt-diameter = Diámetro del perno
+tx-create-connections = Crear uniones
+connection-base-plate = Placa base
+connection-end-plate = Placa de testa
+connection-fin-plate = Cartela de alma
+connection-timber-bolts = Unión atornillada
+connection-hanger = Colgador de viga
+member-end-base = Base
+group-connections = Uniones
+section-connection = Unión
+prop-connection-kind = Clase
+prop-member-end = Extremo
+prop-plate-thickness = Espesor de placa
+prop-plate-width = Ancho de placa
+prop-plate-length = Largo de placa
+prop-bolt-rows = Filas de pernos
+prop-bolt-columns = Columnas de pernos
+prop-bolt-spacing = Separación de pernos
+prop-edge-distance = Distancia al borde
+prop-anchor-length = Longitud de anclaje
+connection-size-auto = auto
+msg-connections-placed = { $count } uniones colocadas ({ $skipped } extremos ya tenían una).
+msg-connections-none = Nada en la selección admite esta unión.
+warn-connection-end = Este extremo no admite esta clase de unión; no se dibuja nada.
+cmd-desc-base-plate = Coloca una placa base de acero con pernos de anclaje bajo cada pilar seleccionado (o todos los del nivel activo), con tamaños tomados de la sección del pilar.
+cmd-desc-end-plate = Coloca una placa de testa atornillada en cada extremo de viga que termina en la cara de un pilar (las vigas seleccionadas, o las del nivel activo).
+cmd-desc-fin-plate = Coloca una cartela de alma atornillada en cada extremo de viga que llega a un pilar o a otra viga (las vigas seleccionadas, o las del nivel activo).
+cmd-desc-timber-bolts = Coloca un grupo de pernos con arandelas en cada extremo de viga que llega a un pilar (las vigas seleccionadas, o las del nivel activo).
+cmd-desc-hanger = Coloca un colgador de chapa de acero plegada bajo cada extremo de viga que llega a otra viga (las vigas seleccionadas, o las del nivel activo).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mampostería 6"
 tpl-imp-type-masonry-10 = Mampostería 10"

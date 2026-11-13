@@ -540,6 +540,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         ElementKind::SteelBuilding(b) => crate::steel_building_ui::props(ui, state, id, b),
         ElementKind::Truss(t) => crate::truss_ui::props(ui, state, id, t),
         ElementKind::WallFraming(f) => crate::wall_framing_ui::props(ui, state, id, f),
+        ElementKind::Connection(c) => crate::connection_ui::props(ui, state, id, c),
         ElementKind::Mass(m) => mass_props(ui, state, &el, m),
         ElementKind::Topography(t) => topography_props(ui, state, &el, t),
         ElementKind::Pad(p) => pad_props(ui, state, &el, p),

@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } paredes estruturadas com { $count } peças.
 cmd-desc-light-steel-frame = Estrutura as paredes selecionadas (ou as do nível ativo) em light steel frame: montantes formados a frio a cada 0,4 m entre guias, montantes duplos, vergas, contravergas e montantes curtos em portas e janelas, acompanhando a parede e suas aberturas.
 cmd-desc-wood-frame = Estrutura as paredes selecionadas (ou as do nível ativo) em wood frame: montantes a cada 0,6 m entre soleira e frechal duplo, montantes duplos, vergas, contravergas e montantes curtos em portas e janelas, acompanhando a parede e suas aberturas.
 
+# Connections
+category-connection = Ligações
+tpl-type-connection = Ligação
+col-connection-kind = Tipo de ligação
+col-plate-mass = Massa das placas
+col-bolt-count = Parafusos
+col-bolt-diameter = Diâmetro do parafuso
+tx-create-connections = Criar ligações
+connection-base-plate = Placa de base
+connection-end-plate = Placa de topo
+connection-fin-plate = Chapa de alma
+connection-timber-bolts = Ligação parafusada
+connection-hanger = Suporte de viga
+member-end-base = Base
+group-connections = Ligações
+section-connection = Ligação
+prop-connection-kind = Tipo de ligação
+prop-member-end = Extremidade
+prop-plate-thickness = Espessura da placa
+prop-plate-width = Largura da placa
+prop-plate-length = Comprimento da placa
+prop-bolt-rows = Linhas de parafusos
+prop-bolt-columns = Colunas de parafusos
+prop-bolt-spacing = Espaçamento dos parafusos
+prop-edge-distance = Distância à borda
+prop-anchor-length = Comprimento do chumbador
+connection-size-auto = auto
+msg-connections-placed = { $count } ligações colocadas ({ $skipped } extremidades já tinham uma).
+msg-connections-none = Nada na seleção aceita esta ligação.
+warn-connection-end = Esta extremidade não aceita este tipo de ligação; nada é desenhado.
+cmd-desc-base-plate = Coloca uma placa de base de aço com chumbadores sob cada pilar selecionado (ou todos os do nível ativo), com tamanhos tirados da seção do pilar.
+cmd-desc-end-plate = Coloca uma placa de topo parafusada em cada extremidade de viga que termina na face de um pilar (vigas selecionadas, ou as do nível ativo).
+cmd-desc-fin-plate = Coloca uma chapa de alma parafusada em cada extremidade de viga que chega a um pilar ou a outra viga (vigas selecionadas, ou as do nível ativo).
+cmd-desc-timber-bolts = Coloca um grupo de parafusos com arruelas em cada extremidade de viga que chega a um pilar (vigas selecionadas, ou as do nível ativo).
+cmd-desc-hanger = Coloca um suporte de viga em chapa de aço dobrada sob cada extremidade de viga que chega a outra viga (vigas selecionadas, ou as do nível ativo).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Alvenaria 6"
 tpl-imp-type-masonry-10 = Alvenaria 10"

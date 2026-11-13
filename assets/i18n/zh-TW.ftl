@@ -3288,6 +3288,42 @@ msg-walls-framed = 已為 { $walls } 面牆建立骨架，共 { $count } 個構�
 cmd-desc-light-steel-frame = 為所選的牆（或目前樓層的牆）建立輕鋼構架：天地軌道之間每 0.4 m 一支冷軋立柱，門窗處有雙立柱、過梁、窗台梁與短柱，隨牆與開口更新。
 cmd-desc-wood-frame = 為所選的牆（或目前樓層的牆）建立木構架：底板與雙頂板之間每 0.6 m 一支立柱，門窗處有雙立柱、過梁、窗台梁與短柱，隨牆與開口更新。
 
+# Connections
+category-connection = 接頭
+tpl-type-connection = 接頭
+col-connection-kind = 接頭類別
+col-plate-mass = 鋼板質量
+col-bolt-count = 螺栓數
+col-bolt-diameter = 螺栓直徑
+tx-create-connections = 建立接頭
+connection-base-plate = 柱底板
+connection-end-plate = 端板
+connection-fin-plate = 腹板連接板
+connection-timber-bolts = 螺栓接頭
+connection-hanger = 梁托架
+member-end-base = 底部
+group-connections = 接頭
+section-connection = 接頭
+prop-connection-kind = 類別
+prop-member-end = 構件端
+prop-plate-thickness = 板厚
+prop-plate-width = 板寬
+prop-plate-length = 板長
+prop-bolt-rows = 螺栓排數
+prop-bolt-columns = 螺栓列數
+prop-bolt-spacing = 螺栓間距
+prop-edge-distance = 邊距
+prop-anchor-length = 錨栓長度
+connection-size-auto = 自動
+msg-connections-placed = 已放置 { $count } 個接頭（另有 { $skipped } 個構件端已有接頭）。
+msg-connections-none = 所選內容中沒有可放置此接頭的構件。
+warn-connection-end = 此構件端不適用此類接頭，因此不繪製。
+cmd-desc-base-plate = 在每根選取的柱（或作用中樓層的所有柱）下方放置附錨栓的鋼柱底板，尺寸依柱斷面而定。
+cmd-desc-end-plate = 在每個止於柱面的梁端放置螺栓端板（選取的梁，或作用中樓層的梁）。
+cmd-desc-fin-plate = 在每個與柱或其他梁相接的梁端，沿腹板放置螺栓腹板連接板（選取的梁，或作用中樓層的梁）。
+cmd-desc-timber-bolts = 在每個與柱相接的梁端放置附墊圈的螺栓群（選取的梁，或作用中樓層的梁）。
+cmd-desc-hanger = 在每個與其他梁相接的梁端下方放置彎折鋼板梁托架（選取的梁，或作用中樓層的梁）。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌體牆 6"
 tpl-imp-type-masonry-10 = 砌體牆 10"

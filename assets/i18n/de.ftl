@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } Wände mit { $count } Bauteilen ausgefacht.
 cmd-desc-light-steel-frame = Versieht die ausgewählten Wände (oder die der aktiven Ebene) mit Stahlleichtbau-Ständerwerk: kaltgeformte Ständer alle 0,4 m zwischen Schienen, Doppelständer, Stürze, Brüstungsriegel und kurze Ständer an Türen und Fenstern, die der Wand und ihren Öffnungen folgen.
 cmd-desc-wood-frame = Versieht die ausgewählten Wände (oder die der aktiven Ebene) mit Holzrahmenbau-Ständerwerk: Ständer alle 0,6 m zwischen Schwelle und doppeltem Rähm, Doppelständer, Stürze, Brüstungsriegel und kurze Ständer an Türen und Fenstern, die der Wand und ihren Öffnungen folgen.
 
+# Connections
+category-connection = Anschlüsse
+tpl-type-connection = Anschluss
+col-connection-kind = Anschlussart
+col-plate-mass = Plattenmasse
+col-bolt-count = Schrauben
+col-bolt-diameter = Schraubendurchmesser
+tx-create-connections = Anschlüsse erstellen
+connection-base-plate = Fußplatte
+connection-end-plate = Stirnplatte
+connection-fin-plate = Fahnenblech
+connection-timber-bolts = Bolzenverbindung
+connection-hanger = Balkenschuh
+member-end-base = Fuß
+group-connections = Anschlüsse
+section-connection = Anschluss
+prop-connection-kind = Art
+prop-member-end = Stabende
+prop-plate-thickness = Plattendicke
+prop-plate-width = Plattenbreite
+prop-plate-length = Plattenlänge
+prop-bolt-rows = Schraubenreihen
+prop-bolt-columns = Schraubenspalten
+prop-bolt-spacing = Schraubenabstand
+prop-edge-distance = Randabstand
+prop-anchor-length = Ankerlänge
+connection-size-auto = auto
+msg-connections-placed = { $count } Anschlüsse gesetzt ({ $skipped } Stabenden hatten bereits einen).
+msg-connections-none = Die Auswahl enthält nichts, was diese Verbindung aufnimmt.
+warn-connection-end = Dieses Stabende nimmt diese Anschlussart nicht auf; es wird nichts gezeichnet.
+cmd-desc-base-plate = Setzt eine Stahlfußplatte mit Ankerbolzen unter jede ausgewählte Stütze (oder alle der aktiven Ebene), bemessen nach dem Stützenquerschnitt.
+cmd-desc-end-plate = Setzt eine verschraubte Stirnplatte an jedes Trägerende, das an einer Stützenfläche endet (die ausgewählten Träger oder die der aktiven Ebene).
+cmd-desc-fin-plate = Setzt ein verschraubtes Fahnenblech am Steg jedes Trägerendes, das auf eine Stütze oder einen anderen Träger trifft (die ausgewählten Träger oder die der aktiven Ebene).
+cmd-desc-timber-bolts = Setzt eine Schraubengruppe mit Unterlegscheiben an jedes Trägerende, das auf eine Stütze trifft (die ausgewählten Träger oder die der aktiven Ebene).
+cmd-desc-hanger = Setzt einen Balkenschuh aus gekantetem Stahlblech unter jedes Trägerende, das auf einen anderen Träger trifft (die ausgewählten Träger oder die der aktiven Ebene).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mauerwerk 6"
 tpl-imp-type-masonry-10 = Mauerwerk 10"

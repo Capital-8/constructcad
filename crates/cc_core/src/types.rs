@@ -62,10 +62,12 @@ pub enum Category {
     Valve,
     /// Conductors of lightning protection systems.
     LightningConductor,
+    /// Steel and timber connections: plates and bolts at member ends.
+    Connection,
 }
 
 impl Category {
-    pub const ALL: [Category; 37] = [
+    pub const ALL: [Category; 38] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -76,6 +78,7 @@ impl Category {
         Category::Beam,
         Category::Foundation,
         Category::Rebar,
+        Category::Connection,
         Category::Pipe,
         Category::Conduit,
         Category::CableTray,
@@ -118,7 +121,7 @@ impl Category {
     };
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 21] = [
+    pub const MODEL: [Category; 22] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -129,6 +132,7 @@ impl Category {
         Category::Beam,
         Category::Foundation,
         Category::Rebar,
+        Category::Connection,
         Category::Pipe,
         Category::Conduit,
         Category::CableTray,
@@ -143,7 +147,7 @@ impl Category {
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 24] = [
+    pub const SCHEDULABLE: [Category; 25] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -154,6 +158,7 @@ impl Category {
         Category::Beam,
         Category::Foundation,
         Category::Rebar,
+        Category::Connection,
         Category::Pipe,
         Category::Conduit,
         Category::CableTray,
@@ -198,6 +203,7 @@ impl Category {
             Category::Shaft => "category-shaft",
             Category::SteelBuilding => "category-steel-building",
             Category::Truss => "category-truss",
+            Category::Connection => "category-connection",
             Category::WallFraming => "category-wall-framing",
             Category::Topography => "category-topography",
             Category::Pad => "category-pad",
@@ -526,6 +532,8 @@ pub enum TypeData {
     SteelBuilding {},
     /// Trusses (no properties of their own; types name them).
     Truss {},
+    /// Connections (no properties of their own; types name them).
+    Connection {},
     /// Wall framings (no properties of their own; types name them).
     WallFraming {},
     /// Terrain surfaces: the earth `material` they are cut in, and the
@@ -616,6 +624,7 @@ impl TypeData {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => Vec::new(),
         }
@@ -692,6 +701,7 @@ impl TypeData {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => {}
         }
@@ -850,6 +860,7 @@ impl ElementType {
             TypeData::Shaft {} => Category::Shaft,
             TypeData::SteelBuilding {} => Category::SteelBuilding,
             TypeData::Truss {} => Category::Truss,
+            TypeData::Connection {} => Category::Connection,
             TypeData::WallFraming {} => Category::WallFraming,
             TypeData::Topography { .. } => Category::Topography,
             TypeData::Pad { .. } => Category::Pad,
@@ -1011,6 +1022,7 @@ impl ElementType {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => "",
             TypeData::Column { material, .. }

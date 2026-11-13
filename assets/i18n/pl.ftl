@@ -3288,6 +3288,42 @@ msg-walls-framed = Utworzono szkielety { $walls } ścian z { $count } elementów
 cmd-desc-light-steel-frame = Tworzy lekki szkielet stalowy zaznaczonych ścian (lub ścian aktywnego poziomu): słupki z kształtowników giętych co 0,4 m między prowadnicami, słupki podwójne, nadproża, podokienniki i krótkie słupki przy drzwiach i oknach, aktualizowane razem ze ścianą i jej otworami.
 cmd-desc-wood-frame = Tworzy szkielet drewniany zaznaczonych ścian (lub ścian aktywnego poziomu): słupki co 0,6 m między podwaliną a podwójnym oczepem, słupki podwójne, nadproża, podokienniki i krótkie słupki przy drzwiach i oknach, aktualizowane razem ze ścianą i jej otworami.
 
+# Connections
+category-connection = Połączenia
+tpl-type-connection = Połączenie
+col-connection-kind = Rodzaj połączenia
+col-plate-mass = Masa blach
+col-bolt-count = Śruby
+col-bolt-diameter = Średnica śrub
+tx-create-connections = Utwórz połączenia
+connection-base-plate = Blacha podstawy
+connection-end-plate = Blacha czołowa
+connection-fin-plate = Blacha żeberkowa
+connection-timber-bolts = Połączenie śrubowe
+connection-hanger = Wieszak belki
+member-end-base = Podstawa
+group-connections = Połączenia
+section-connection = Połączenie
+prop-connection-kind = Rodzaj
+prop-member-end = Koniec pręta
+prop-plate-thickness = Grubość blachy
+prop-plate-width = Szerokość blachy
+prop-plate-length = Długość blachy
+prop-bolt-rows = Rzędy śrub
+prop-bolt-columns = Kolumny śrub
+prop-bolt-spacing = Rozstaw śrub
+prop-edge-distance = Odległość od krawędzi
+prop-anchor-length = Długość kotew
+connection-size-auto = auto
+msg-connections-placed = Wstawione połączenia: { $count } (końce, które już je miały: { $skipped }).
+msg-connections-none = Nic w zaznaczeniu nie przyjmuje tego połączenia.
+warn-connection-end = Ten koniec nie przyjmuje tego rodzaju połączenia; nic nie jest rysowane.
+cmd-desc-base-plate = Wstawia stalową blachę podstawy z kotwami pod każdym zaznaczonym słupem (lub wszystkimi na aktywnym poziomie), o wymiarach z przekroju słupa.
+cmd-desc-end-plate = Wstawia skręcaną blachę czołową na każdym końcu belki, który kończy się na licu słupa (zaznaczone belki lub te z aktywnego poziomu).
+cmd-desc-fin-plate = Wstawia skręcaną blachę żeberkową przy środniku na każdym końcu belki, który styka się ze słupem lub inną belką (zaznaczone belki lub te z aktywnego poziomu).
+cmd-desc-timber-bolts = Wstawia grupę śrub z podkładkami na każdym końcu belki, który styka się ze słupem (zaznaczone belki lub te z aktywnego poziomu).
+cmd-desc-hanger = Wstawia wieszak z giętej blachy stalowej pod każdym końcem belki, który styka się z inną belką (zaznaczone belki lub te z aktywnego poziomu).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mur 6"
 tpl-imp-type-masonry-10 = Mur 10"

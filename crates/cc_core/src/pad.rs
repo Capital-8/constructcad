@@ -100,6 +100,7 @@ impl Project {
                 let host = match &e.kind {
                     ElementKind::Pad(p) => p.host,
                     ElementKind::Valve(v) => v.host,
+                    ElementKind::Connection(c) => c.member,
                     _ => return None,
                 };
                 let host = self.element(host)?;

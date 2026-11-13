@@ -3288,6 +3288,42 @@ msg-walls-framed = { $walls } muri intelaiati con { $count } elementi.
 cmd-desc-light-steel-frame = Intelaia i muri selezionati (o quelli del livello attivo) in acciaio leggero: montanti formati a freddo ogni 0,4 m tra le guide, montanti doppi, architravi, davanzali e montanti corti a porte e finestre, aggiornati con il muro e le sue aperture.
 cmd-desc-wood-frame = Intelaia i muri selezionati (o quelli del livello attivo) in legno: montanti ogni 0,6 m tra corrente inferiore e doppio corrente superiore, montanti doppi, architravi, davanzali e montanti corti a porte e finestre, aggiornati con il muro e le sue aperture.
 
+# Connections
+category-connection = Giunti
+tpl-type-connection = Giunto
+col-connection-kind = Tipologia di giunto
+col-plate-mass = Massa piastre
+col-bolt-count = Bulloni
+col-bolt-diameter = Diametro bulloni
+tx-create-connections = Crea giunti
+connection-base-plate = Piastra di base
+connection-end-plate = Piastra di testa
+connection-fin-plate = Piastra d'anima
+connection-timber-bolts = Giunto bullonato
+connection-hanger = Scarpa per travi
+member-end-base = Base
+group-connections = Giunti
+section-connection = Giunto
+prop-connection-kind = Tipologia
+prop-member-end = Estremità
+prop-plate-thickness = Spessore piastra
+prop-plate-width = Larghezza piastra
+prop-plate-length = Lunghezza piastra
+prop-bolt-rows = File di bulloni
+prop-bolt-columns = Colonne di bulloni
+prop-bolt-spacing = Interasse bulloni
+prop-edge-distance = Distanza dal bordo
+prop-anchor-length = Lunghezza tirafondi
+connection-size-auto = auto
+msg-connections-placed = { $count } giunti inseriti ({ $skipped } estremità ne avevano già uno).
+msg-connections-none = Nessun elemento selezionato accetta questo giunto.
+warn-connection-end = Questa estremità non accetta questa tipologia di giunto; non viene disegnato nulla.
+cmd-desc-base-plate = Inserisce una piastra di base in acciaio con tirafondi sotto ogni pilastro selezionato (o tutti quelli del livello attivo), dimensionata dalla sezione del pilastro.
+cmd-desc-end-plate = Inserisce una piastra di testa bullonata a ogni estremità di trave che termina sulla faccia di un pilastro (le travi selezionate, o quelle del livello attivo).
+cmd-desc-fin-plate = Inserisce una piastra d'anima bullonata a ogni estremità di trave che incontra un pilastro o un'altra trave (le travi selezionate, o quelle del livello attivo).
+cmd-desc-timber-bolts = Inserisce un gruppo di bulloni con rondelle a ogni estremità di trave che incontra un pilastro (le travi selezionate, o quelle del livello attivo).
+cmd-desc-hanger = Inserisce una scarpa in lamiera d'acciaio piegata sotto ogni estremità di trave che incontra un'altra trave (le travi selezionate, o quelle del livello attivo).
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Muratura 6"
 tpl-imp-type-masonry-10 = Muratura 10"

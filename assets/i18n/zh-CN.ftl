@@ -3288,6 +3288,42 @@ msg-walls-framed = 已为 { $walls } 面墙创建骨架，共 { $count } 个构�
 cmd-desc-light-steel-frame = 为所选的墙（或当前楼层的墙）创建轻钢龙骨：天地龙骨之间每 0.4 m 一根冷弯立柱，门窗处有双立柱、过梁、窗台梁和短柱，随墙及洞口更新。
 cmd-desc-wood-frame = 为所选的墙（或当前楼层的墙）创建木骨架：底梁与双顶梁之间每 0.6 m 一根立柱，门窗处有双立柱、过梁、窗台梁和短柱，随墙及洞口更新。
 
+# Connections
+category-connection = 节点
+tpl-type-connection = 节点
+col-connection-kind = 节点种类
+col-plate-mass = 钢板质量
+col-bolt-count = 螺栓数
+col-bolt-diameter = 螺栓直径
+tx-create-connections = 创建节点
+connection-base-plate = 柱脚底板
+connection-end-plate = 端板
+connection-fin-plate = 腹板连接板
+connection-timber-bolts = 螺栓节点
+connection-hanger = 梁托
+member-end-base = 底部
+group-connections = 节点
+section-connection = 节点
+prop-connection-kind = 种类
+prop-member-end = 构件端
+prop-plate-thickness = 板厚
+prop-plate-width = 板宽
+prop-plate-length = 板长
+prop-bolt-rows = 螺栓排数
+prop-bolt-columns = 螺栓列数
+prop-bolt-spacing = 螺栓间距
+prop-edge-distance = 边距
+prop-anchor-length = 锚栓长度
+connection-size-auto = 自动
+msg-connections-placed = 已放置 { $count } 个节点（{ $skipped } 个构件端已有节点）。
+msg-connections-none = 所选内容中没有可放置此节点的构件。
+warn-connection-end = 此构件端不适用此类节点，因此不绘制。
+cmd-desc-base-plate = 在每根选中的柱（或当前标高的所有柱）下放置带锚栓的钢柱脚底板，尺寸取自柱截面。
+cmd-desc-end-plate = 在每个止于柱面的梁端放置螺栓端板（选中的梁，或当前标高的梁）。
+cmd-desc-fin-plate = 在每个与柱或其他梁相接的梁端，沿腹板放置螺栓腹板连接板（选中的梁，或当前标高的梁）。
+cmd-desc-timber-bolts = 在每个与柱相接的梁端放置带垫圈的螺栓群（选中的梁，或当前标高的梁）。
+cmd-desc-hanger = 在每个与其他梁相接的梁端下放置折弯钢板梁托（选中的梁，或当前标高的梁）。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌体墙 6"
 tpl-imp-type-masonry-10 = 砌体墙 10"
