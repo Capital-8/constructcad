@@ -3230,3 +3230,9 @@ label-bottom-chord-type = 下弦材タイプ
 label-web-type = 斜材タイプ
 label-post-type = 束材タイプ
 msg-truss-material = トラスは鉄骨または木造です。「材料」でいずれかを選んでください。
+
+# Wall framing
+category-wall-framing = 壁下地フレーム
+tpl-type-wall-framing = 壁下地フレーム
+framing-light-steel = 軽量鉄骨下地
+framing-wood = 木造枠組

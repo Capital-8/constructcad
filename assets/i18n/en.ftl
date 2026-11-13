@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Bottom chord type
 label-web-type = Diagonal type
 label-post-type = Post type
 msg-truss-material = Trusses are steel or timber: pick one under Material.
+
+# Wall framing
+category-wall-framing = Wall framings
+tpl-type-wall-framing = Wall framing
+framing-light-steel = Light Steel Frame
+framing-wood = Wood Frame

@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Tipo do banzo inferior
 label-web-type = Tipo das diagonais
 label-post-type = Tipo dos montantes
 msg-truss-material = Treliças são de aço ou madeira: escolha um deles em Material.
+
+# Wall framing
+category-wall-framing = Ossaturas de parede
+tpl-type-wall-framing = Ossatura de parede
+framing-light-steel = Light Steel Frame
+framing-wood = Wood Frame

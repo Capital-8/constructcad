@@ -211,6 +211,8 @@ impl Element {
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(p),
             ElementKind::SteelBuilding(b) => b.transform(t),
             ElementKind::Truss(tr) => tr.transform(t),
+            // Placed by its wall.
+            ElementKind::WallFraming(_) => {}
             ElementKind::Pad(pad) => pad.outline.iter_mut().for_each(p),
             ElementKind::Topography(topo) => {
                 topo.boundary.iter_mut().for_each(p);

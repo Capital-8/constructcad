@@ -38,6 +38,8 @@ pub enum Category {
     SteelBuilding,
     /// Parametric trusses: hosts of chords, diagonals and posts.
     Truss,
+    /// Light steel and wood framing of walls: hosts of studs, tracks, headers and sills.
+    WallFraming,
     /// Terrain surfaces.
     Topography,
     /// Building pads graded into terrain.
@@ -63,7 +65,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 36] = [
+    pub const ALL: [Category; 37] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -98,6 +100,7 @@ impl Category {
         Category::Shaft,
         Category::SteelBuilding,
         Category::Truss,
+        Category::WallFraming,
         Category::Topography,
         Category::Pad,
     ];
@@ -195,6 +198,7 @@ impl Category {
             Category::Shaft => "category-shaft",
             Category::SteelBuilding => "category-steel-building",
             Category::Truss => "category-truss",
+            Category::WallFraming => "category-wall-framing",
             Category::Topography => "category-topography",
             Category::Pad => "category-pad",
             Category::Component => "category-component",
@@ -522,6 +526,8 @@ pub enum TypeData {
     SteelBuilding {},
     /// Trusses (no properties of their own; types name them).
     Truss {},
+    /// Wall framings (no properties of their own; types name them).
+    WallFraming {},
     /// Terrain surfaces: the earth `material` they are cut in, and the
     /// spacing of their contour lines, every `major_every`-th one a major.
     Topography {
@@ -610,6 +616,7 @@ impl TypeData {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::WallFraming {}
             | TypeData::Pad { .. } => Vec::new(),
         }
     }
@@ -685,6 +692,7 @@ impl TypeData {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::WallFraming {}
             | TypeData::Pad { .. } => {}
         }
     }
@@ -842,6 +850,7 @@ impl ElementType {
             TypeData::Shaft {} => Category::Shaft,
             TypeData::SteelBuilding {} => Category::SteelBuilding,
             TypeData::Truss {} => Category::Truss,
+            TypeData::WallFraming {} => Category::WallFraming,
             TypeData::Topography { .. } => Category::Topography,
             TypeData::Pad { .. } => Category::Pad,
         }
@@ -1002,6 +1011,7 @@ impl ElementType {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::WallFraming {}
             | TypeData::Pad { .. } => "",
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }

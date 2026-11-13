@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Type de membrure inférieure
 label-web-type = Type de diagonales
 label-post-type = Type de montants
 msg-truss-material = Les fermes sont en acier ou en bois : choisissez-en un dans Matériau.
+
+# Wall framing
+category-wall-framing = Ossatures de mur
+tpl-type-wall-framing = Ossature de mur
+framing-light-steel = Ossature acier légère
+framing-wood = Ossature bois

@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Typ pasa dolnego
 label-web-type = Typ krzyżulców
 label-post-type = Typ słupków
 msg-truss-material = Kratownice są stalowe lub drewniane: wybierz jedno w Materiale.
+
+# Wall framing
+category-wall-framing = Szkielety ścian
+tpl-type-wall-framing = Szkielet ściany
+framing-light-steel = Lekki szkielet stalowy
+framing-wood = Szkielet drewniany

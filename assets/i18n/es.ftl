@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Tipo de cordón inferior
 label-web-type = Tipo de diagonales
 label-post-type = Tipo de montantes
 msg-truss-material = Las cerchas son de acero o madera: elija uno en Material.
+
+# Wall framing
+category-wall-framing = Entramados de muro
+tpl-type-wall-framing = Entramado de muro
+framing-light-steel = Entramado de acero ligero
+framing-wood = Entramado de madera

@@ -53,6 +53,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::Shaft => Icon::Shaft,
         Category::SteelBuilding => Icon::SteelBuilding,
         Category::Truss => Icon::Truss,
+        Category::WallFraming => Icon::SteelBuilding,
         Category::Topography => Icon::Topography,
         Category::Pad => Icon::Pad,
         Category::Sweep => Icon::Sweep,

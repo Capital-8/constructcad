@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Untergurttyp
 label-web-type = Diagonalentyp
 label-post-type = Pfostentyp
 msg-truss-material = Fachwerkträger sind aus Stahl oder Holz: Wählen Sie eines unter Material.
+
+# Wall framing
+category-wall-framing = Wandständerwerke
+tpl-type-wall-framing = Wandständerwerk
+framing-light-steel = Stahlleichtbau
+framing-wood = Holzrahmenbau

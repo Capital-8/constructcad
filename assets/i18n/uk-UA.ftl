@@ -3231,3 +3231,9 @@ label-bottom-chord-type = Тип нижнього пояса
 label-web-type = Тип розкосів
 label-post-type = Тип стояків
 msg-truss-material = Ферми бувають сталеві або дерев'яні: виберіть одне в «Матеріал».
+
+# Wall framing
+category-wall-framing = Каркаси стін
+tpl-type-wall-framing = Каркас стіни
+framing-light-steel = ЛСТК-каркас
+framing-wood = Дерев'яний каркас

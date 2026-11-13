@@ -3230,3 +3230,9 @@ label-bottom-chord-type = 下弦桿類型
 label-web-type = 斜桿類型
 label-post-type = 直桿類型
 msg-truss-material = 桁架為鋼或木：請在「材料」中選擇其一。
+
+# Wall framing
+category-wall-framing = 牆骨架
+tpl-type-wall-framing = 牆骨架
+framing-light-steel = 輕鋼構架
+framing-wood = 木構架

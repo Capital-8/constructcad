@@ -3230,3 +3230,9 @@ label-bottom-chord-type = Tipo di corrente inferiore
 label-web-type = Tipo di diagonali
 label-post-type = Tipo di montanti
 msg-truss-material = Le travature sono in acciaio o legno: sceglierne uno in Materiale.
+
+# Wall framing
+category-wall-framing = Telai di parete
+tpl-type-wall-framing = Telaio di parete
+framing-light-steel = Telaio in acciaio leggero
+framing-wood = Telaio in legno

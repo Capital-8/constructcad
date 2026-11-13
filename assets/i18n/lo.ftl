@@ -3232,3 +3232,9 @@ label-bottom-chord-type = ປະເພດຄານລຸ່ມ
 label-web-type = ປະເພດທະແຍງ
 label-post-type = ປະເພດເສົາຕັ້ງ
 msg-truss-material = ໂຄງຖັກເປັນເຫຼັກ ຫຼື ໄມ້: ເລືອກໜຶ່ງຢ່າງໃນ ວັດສະດຸ.
+
+# Wall framing
+category-wall-framing = ໂຄງຝາ
+tpl-type-wall-framing = ໂຄງຝາ
+framing-light-steel = ໂຄງເຫຼັກເບົາ
+framing-wood = ໂຄງໄມ້
