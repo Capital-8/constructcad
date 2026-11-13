@@ -55,9 +55,14 @@ struct Recorded {
     depth: usize,
 }
 
-/// A new project from the template, named in the active language.
+/// A new project from the metric template, named in the active language.
 pub fn new_project() -> Project {
-    Project::from_template_localized(&crate::i18n::try_tr)
+    new_project_with(cc_core::MeasurementSystem::Metric)
+}
+
+/// A new project from the template of `system`, named in the active language.
+pub fn new_project_with(system: cc_core::MeasurementSystem) -> Project {
+    Project::from_template_system(system, &crate::i18n::try_tr)
 }
 
 impl Default for Session {

@@ -23,9 +23,11 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 
 ### `project_new`
 
-*file* — Start a new project from the template (unsaved changes are discarded).
+*file* — Start a new project from a template (unsaved changes are discarded).
 
-No parameters.
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `template` | string | optional | The template: `metric` (the default; meters, metric sizes) or `imperial` (feet and inches, round imperial sizes). |
 
 ### `project_open`
 

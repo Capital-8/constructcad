@@ -37,6 +37,7 @@ mod obj;
 mod pad;
 mod phases;
 mod profiles;
+mod project_templates;
 mod regions;
 mod section_marks;
 mod shaft;
