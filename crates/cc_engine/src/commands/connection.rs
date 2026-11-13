@@ -57,7 +57,7 @@ pub struct ConnectionsCreate {
     /// Column ids (base plates) or beam ids (the other kinds); default: every one of `level`.
     #[serde(default)]
     pub members: Vec<u64>,
-    /// Level id or name when no `members` are given (default: the active level, else every level).
+    /// Level id or name when no `members` are given (default: the active level, else every level); ignored with `members`.
     #[serde(default)]
     pub level: Option<Ref>,
     /// Sizes to change from the kind's defaults, meters: `thickness`, `width` and `length` (0: from the
@@ -106,7 +106,11 @@ impl Command for ConnectionsCreate {
             let ends: Vec<MemberEnd> = if kind.at_column() {
                 vec![MemberEnd::Base]
             } else {
-                let Some(g) = geom.beams.get(&id) else { continue };
+                // Not in the session geometry (a beam of an option not being shown): nothing to place on.
+                let Some(g) = geom.beams.get(&id) else {
+                    skipped += 1;
+                    continue;
+                };
                 [MemberEnd::Start, MemberEnd::End]
                     .into_iter()
                     .filter(|end| {

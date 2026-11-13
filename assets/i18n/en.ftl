@@ -3283,6 +3283,7 @@ prop-edge-distance = Edge Distance
 prop-anchor-length = Anchor Length
 connection-size-auto = auto
 msg-connections-placed = { $count } connections placed ({ $skipped } member ends already had one).
+msg-connections-none = Nothing in the selection takes this connection.
 warn-connection-end = This member end does not take this kind of connection; nothing is drawn.
 cmd-desc-base-plate = Place a steel base plate with anchor bolts under each selected column (or every column of the active level), sized from the column's section.
 cmd-desc-end-plate = Place a bolted end plate at each beam end that stops at a column face (the selected beams, or those of the active level).

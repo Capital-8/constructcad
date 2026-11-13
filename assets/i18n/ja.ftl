@@ -3283,6 +3283,7 @@ prop-edge-distance = 縁端距離
 prop-anchor-length = アンカー長さ
 connection-size-auto = 自動
 msg-connections-placed = { $count } 個の接合部を配置しました (すでに接合部のある { $skipped } 箇所の部材端はスキップ)。
+msg-connections-none = 選択に、この接合部を取り付けられる部材がありません。
 warn-connection-end = この部材端にはこの種類の接合部を設けられないため、何も描画されません。
 cmd-desc-base-plate = 選択した各柱（または作業中のレベルのすべての柱）の下に、アンカーボルト付きの鋼製ベースプレートを柱断面に合わせた寸法で配置します。
 cmd-desc-end-plate = 柱面で止まる各梁端にボルト留めのエンドプレートを配置します（選択した梁、または作業中のレベルの梁）。

@@ -25,6 +25,10 @@ pub fn place(state: &mut AppState, kind: ConnectionKind) {
         .filter(|id| project.element(**id).is_some_and(|e| e.category() == wanted))
         .map(|id| id.0)
         .collect();
+    if members.is_empty() && !state.selection.is_empty() {
+        state.message = t!("msg-connections-none");
+        return;
+    }
     let level = if members.is_empty() { state.active_level().map(|l| Ref::Id(l.0)) } else { None };
     let command = ConnectionsCreate { kind: kind.code().into(), members, level, params: None };
     if let Some(out) = crate::actions::run_command(state, command) {

@@ -4022,3 +4022,23 @@ fn connection_properties_change_its_bolts() {
     let values = harness.query_all_by_role(Role::SpinButton).count();
     assert!(values >= 9, "{values} value widgets");
 }
+
+/// Beams selected and *Base Plate* clicked: nothing is placed (not even on the
+/// level's columns) and the status bar says why; with no selection the active
+/// level's columns get theirs.
+#[test]
+fn a_selection_without_the_kinds_members_places_nothing() {
+    use cc_core::connection::ConnectionKind;
+    let mut state = sample_state();
+    let _ = state.session.execute("beam_create", serde_json::json!({"start": [0, 0], "end": [3, 0]}));
+    let beams: Vec<cc_core::ElementId> = state.project().elements_of(cc_core::Category::Beam).map(|e| e.id).collect();
+    assert!(!beams.is_empty());
+    state.selection = beams.into_iter().collect();
+    let depth = state.session.doc.undo_depth();
+    crate::connection_ui::place(&mut state, ConnectionKind::BasePlate);
+    assert_eq!(state.session.doc.undo_depth(), depth);
+    assert_eq!(state.message, crate::t!("msg-connections-none"));
+    state.selection.clear();
+    crate::connection_ui::place(&mut state, ConnectionKind::BasePlate);
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}

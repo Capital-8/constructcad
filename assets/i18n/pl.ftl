@@ -3283,6 +3283,7 @@ prop-edge-distance = Odległość od krawędzi
 prop-anchor-length = Długość kotew
 connection-size-auto = auto
 msg-connections-placed = Wstawione połączenia: { $count } (końce, które już je miały: { $skipped }).
+msg-connections-none = Nic w zaznaczeniu nie przyjmuje tego połączenia.
 warn-connection-end = Ten koniec nie przyjmuje tego rodzaju połączenia; nic nie jest rysowane.
 cmd-desc-base-plate = Wstawia stalową blachę podstawy z kotwami pod każdym zaznaczonym słupem (lub wszystkimi na aktywnym poziomie), o wymiarach z przekroju słupa.
 cmd-desc-end-plate = Wstawia skręcaną blachę czołową na każdym końcu belki, który kończy się na licu słupa (zaznaczone belki lub te z aktywnego poziomu).

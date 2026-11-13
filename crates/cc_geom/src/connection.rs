@@ -231,7 +231,24 @@ struct EndFrame {
     bottom: f64,
     top: f64,
     half: f64,
+    /// The section's thickness across the beam at mid-height (a web's, else the width).
+    web: f64,
     joined: BeamEnd,
+}
+
+/// The material width of `section` along the horizontal line at height `y`.
+fn width_at(section: &cc_core::structural_profile::SectionOutline, y: f64) -> f64 {
+    let mut xs: Vec<f64> = Vec::new();
+    for ring in std::iter::once(&section.outer).chain(&section.holes) {
+        for (i, a) in ring.iter().enumerate() {
+            let Some(b) = ring.get((i + 1) % ring.len()) else { continue };
+            if (a.y <= y) != (b.y <= y) {
+                xs.push(a.x + (y - a.y) / (b.y - a.y) * (b.x - a.x));
+            }
+        }
+    }
+    xs.sort_by(f64::total_cmp);
+    xs.as_chunks::<2>().0.iter().map(|[a, b]| b - a).sum()
 }
 
 impl EndFrame {
@@ -253,7 +270,10 @@ fn end_frame(g: &BeamGeom, end: MemberEnd) -> Option<EndFrame> {
     };
     let (bottom, top) = g.z_at(u);
     let joined = beam_end_join(g, end)?;
-    Some(EndFrame { face: g.world(u, 0.0), out, side: g.normal, bottom, top, half: g.half, joined })
+    let (lo, hi) = g.section.bbox();
+    let web = width_at(&g.section, (lo.y + hi.y) * 0.5 + 1e-7);
+    let web = if web.is_finite() && web > 0.0 { web } else { 2.0 * g.half };
+    Some(EndFrame { face: g.world(u, 0.0), out, side: g.normal, bottom, top, half: g.half, web, joined })
 }
 
 type Parts = (Vec<Plate>, Vec<Bolt>);
@@ -298,14 +318,15 @@ fn fin_plate(f: &EndFrame, p: &ConnectionParams) -> Parts {
     let len = if p.length > 0.0 { p.length } else { 2.0 * p.edge + f64::from(p.columns.saturating_sub(1)) * p.spacing };
     let h = if p.width > 0.0 { p.width } else { FIN_HEIGHT * f.height() };
     let t = p.thickness;
-    let plate =
-        Block { center: f.middle() + inward * (len / 2.0), x: inward, y: DVec3::Z, size: DVec3::new(len, h, t) };
+    // Beside the web, on the beam's left.
+    let mid = f.middle() + side * (f.web / 2.0 + t / 2.0);
+    let plate = Block { center: mid + inward * (len / 2.0), x: inward, y: DVec3::Z, size: DVec3::new(len, h, t) };
     let half_bolt = (t + BOLT_EXTRA) / 2.0;
     let mut bolts = Vec::new();
     for i in 0..p.columns {
         let u = p.edge + f64::from(i) * p.spacing;
         for z in centered(p.rows, p.spacing) {
-            let at = f.middle() + inward * u + DVec3::Z * z;
+            let at = mid + inward * u + DVec3::Z * z;
             let shank = Rod { a: at - side * half_bolt, b: at + side * half_bolt, diameter: p.bolt_diameter };
             bolts.push(Bolt { shank, washers: Vec::new() });
         }
@@ -648,10 +669,34 @@ mod tests {
         let plate = g.plates[0].blocks[0];
         // 2 x 0.04 + 2 x 0.07 along the beam, 0.8 x 0.40 high, from the column face at x = 0.15.
         assert!((plate.size.x - 0.22).abs() < 1e-12 && (plate.size.y - 0.32).abs() < 1e-12, "{:?}", plate.size);
-        assert!(close(plate.center, DVec3::new(0.15 + 0.11, 0.0, s.z0() + 2.8)), "{:?}", plate.center);
+        let beside = 0.1 + plate.size.z / 2.0;
+        assert!(close(plate.center, DVec3::new(0.15 + 0.11, beside, s.z0() + 2.8)), "{:?}", plate.center);
         assert_eq!(g.bolt_count(), 9, "three rows of three");
     }
 
+    #[test]
+    fn the_web_is_measured_at_mid_height() {
+        use cc_core::SectionOutline;
+        // An I: flanges 0.2 wide, a web 0.01 thick, 0.3 high.
+        let p = |x: f64, y: f64| DVec2::new(x, y);
+        let outer = vec![
+            p(-0.1, 0.0),
+            p(0.1, 0.0),
+            p(0.1, 0.02),
+            p(0.005, 0.02),
+            p(0.005, 0.28),
+            p(0.1, 0.28),
+            p(0.1, 0.3),
+            p(-0.1, 0.3),
+            p(-0.1, 0.28),
+            p(-0.005, 0.28),
+            p(-0.005, 0.02),
+            p(-0.1, 0.02),
+        ];
+        let i = SectionOutline { outer, holes: Vec::new() };
+        assert!((width_at(&i, 0.15) - 0.01).abs() < 1e-12);
+        assert!((width_at(&i, 0.01) - 0.2).abs() < 1e-12);
+    }
     #[test]
     fn timber_bolts_cross_the_beam_with_washers() {
         let mut s = site();

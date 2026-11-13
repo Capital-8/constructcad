@@ -3283,6 +3283,7 @@ prop-edge-distance = Randabstand
 prop-anchor-length = Ankerlänge
 connection-size-auto = auto
 msg-connections-placed = { $count } Anschlüsse gesetzt ({ $skipped } Stabenden hatten bereits einen).
+msg-connections-none = Die Auswahl enthält nichts, was diese Verbindung aufnimmt.
 warn-connection-end = Dieses Stabende nimmt diese Anschlussart nicht auf; es wird nichts gezeichnet.
 cmd-desc-base-plate = Setzt eine Stahlfußplatte mit Ankerbolzen unter jede ausgewählte Stütze (oder alle der aktiven Ebene), bemessen nach dem Stützenquerschnitt.
 cmd-desc-end-plate = Setzt eine verschraubte Stirnplatte an jedes Trägerende, das an einer Stützenfläche endet (die ausgewählten Träger oder die der aktiven Ebene).

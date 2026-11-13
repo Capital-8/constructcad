@@ -3283,6 +3283,7 @@ prop-edge-distance = Pince
 prop-anchor-length = Longueur d'ancrage
 connection-size-auto = auto
 msg-connections-placed = { $count } assemblages placés ({ $skipped } extrémités en avaient déjà un).
+msg-connections-none = Rien dans la sélection n'accepte cet assemblage.
 warn-connection-end = Cette extrémité n'accepte pas ce genre d'assemblage ; rien n'est dessiné.
 cmd-desc-base-plate = Place une platine de pied en acier avec tiges d'ancrage sous chaque poteau sélectionné (ou tous ceux du niveau actif), dimensionnée d'après la section du poteau.
 cmd-desc-end-plate = Place une platine d'about boulonnée à chaque extrémité de poutre arrêtée contre la face d'un poteau (les poutres sélectionnées, ou celles du niveau actif).

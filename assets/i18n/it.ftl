@@ -3283,6 +3283,7 @@ prop-edge-distance = Distanza dal bordo
 prop-anchor-length = Lunghezza tirafondi
 connection-size-auto = auto
 msg-connections-placed = { $count } giunti inseriti ({ $skipped } estremità ne avevano già uno).
+msg-connections-none = Nessun elemento selezionato accetta questo giunto.
 warn-connection-end = Questa estremità non accetta questa tipologia di giunto; non viene disegnato nulla.
 cmd-desc-base-plate = Inserisce una piastra di base in acciaio con tirafondi sotto ogni pilastro selezionato (o tutti quelli del livello attivo), dimensionata dalla sezione del pilastro.
 cmd-desc-end-plate = Inserisce una piastra di testa bullonata a ogni estremità di trave che termina sulla faccia di un pilastro (le travi selezionate, o quelle del livello attivo).

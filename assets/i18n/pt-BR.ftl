@@ -3283,6 +3283,7 @@ prop-edge-distance = Distância à borda
 prop-anchor-length = Comprimento do chumbador
 connection-size-auto = auto
 msg-connections-placed = { $count } ligações colocadas ({ $skipped } extremidades já tinham uma).
+msg-connections-none = Nada na seleção aceita esta ligação.
 warn-connection-end = Esta extremidade não aceita este tipo de ligação; nada é desenhado.
 cmd-desc-base-plate = Coloca uma placa de base de aço com chumbadores sob cada pilar selecionado (ou todos os do nível ativo), com tamanhos tirados da seção do pilar.
 cmd-desc-end-plate = Coloca uma placa de topo parafusada em cada extremidade de viga que termina na face de um pilar (vigas selecionadas, ou as do nível ativo).

@@ -3283,6 +3283,7 @@ prop-edge-distance = 边距
 prop-anchor-length = 锚栓长度
 connection-size-auto = 自动
 msg-connections-placed = 已放置 { $count } 个节点（{ $skipped } 个构件端已有节点）。
+msg-connections-none = 所选内容中没有可放置此节点的构件。
 warn-connection-end = 此构件端不适用此类节点，因此不绘制。
 cmd-desc-base-plate = 在每根选中的柱（或当前标高的所有柱）下放置带锚栓的钢柱脚底板，尺寸取自柱截面。
 cmd-desc-end-plate = 在每个止于柱面的梁端放置螺栓端板（选中的梁，或当前标高的梁）。

@@ -3283,6 +3283,7 @@ prop-edge-distance = 邊距
 prop-anchor-length = 錨栓長度
 connection-size-auto = 自動
 msg-connections-placed = 已放置 { $count } 個接頭（另有 { $skipped } 個構件端已有接頭）。
+msg-connections-none = 所選內容中沒有可放置此接頭的構件。
 warn-connection-end = 此構件端不適用此類接頭，因此不繪製。
 cmd-desc-base-plate = 在每根選取的柱（或作用中樓層的所有柱）下方放置附錨栓的鋼柱底板，尺寸依柱斷面而定。
 cmd-desc-end-plate = 在每個止於柱面的梁端放置螺栓端板（選取的梁，或作用中樓層的梁）。

@@ -3283,6 +3283,7 @@ prop-edge-distance = Distancia al borde
 prop-anchor-length = Longitud de anclaje
 connection-size-auto = auto
 msg-connections-placed = { $count } uniones colocadas ({ $skipped } extremos ya tenían una).
+msg-connections-none = Nada en la selección admite esta unión.
 warn-connection-end = Este extremo no admite esta clase de unión; no se dibuja nada.
 cmd-desc-base-plate = Coloca una placa base de acero con pernos de anclaje bajo cada pilar seleccionado (o todos los del nivel activo), con tamaños tomados de la sección del pilar.
 cmd-desc-end-plate = Coloca una placa de testa atornillada en cada extremo de viga que termina en la cara de un pilar (las vigas seleccionadas, o las del nivel activo).

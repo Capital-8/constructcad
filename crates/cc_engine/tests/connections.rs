@@ -184,3 +184,28 @@ fn schedules_weigh_the_plates() {
     let table = run(&mut s, "schedule_table", json!({"view": view["id"]}));
     assert_eq!(table["rows"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn a_beam_outside_the_shown_geometry_counts_as_skipped() {
+    let mut s = Session::default();
+    let (_, _, _, tee) = frame(&mut s);
+    run(&mut s, "option_set_create", json!({"name": "Layout", "options": ["Open", "Split"]}));
+    run(&mut s, "elements_option_set", json!({"ids": [tee], "option": "Layout: Split"}));
+    let r = run(&mut s, "connections_create", json!({"kind": "fin_plate", "members": [tee]}));
+    assert!(created(&r).is_empty());
+    assert_eq!(r["skipped"], json!(1), "{r}");
+}
+
+#[test]
+fn a_connection_follows_its_member_to_another_level() {
+    let mut s = Session::default();
+    let (cols, ..) = frame(&mut s);
+    let r = run(&mut s, "connections_create", json!({"kind": "base_plate", "members": [cols[0]]}));
+    let c = ElementId(created(&r)[0]);
+    let up = id(&run(&mut s, "level_create", json!({"name": "Upper", "elevation": 3.0})));
+    run(&mut s, "element_set", json!({"id": cols[0], "level": up}));
+    let level = |s: &Session, e: ElementId| s.project().element(e).unwrap().level;
+    let col_level = level(&s, ElementId(cols[0]));
+    assert_eq!(col_level.0, up);
+    assert_eq!(level(&s, c), col_level, "the connection follows its column");
+}

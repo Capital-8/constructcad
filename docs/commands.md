@@ -793,7 +793,7 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `kind` | string | required | `base_plate`, `end_plate`, `fin_plate`, `timber_bolts` or `hanger`. |
-| `level` | id or name | optional | Level id or name when no `members` are given (default: the active level, else every level). |
+| `level` | id or name | optional | Level id or name when no `members` are given (default: the active level, else every level); ignored with `members`. |
 | `members` | [id, …] | optional | Column ids (base plates) or beam ids (the other kinds); default: every one of `level`. |
 | `params` | JSON | optional | Sizes to change from the kind's defaults, meters: `thickness`, `width` and `length` (0: from the member's section plus `edge`), `bolt_diameter`, `rows` and `columns` (1 to 10), `spacing`, `edge`, `anchor_length`. Lengths are 0.001 to 2. |
 
