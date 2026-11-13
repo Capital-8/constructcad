@@ -535,7 +535,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
         F::BoltCount => geom.connections.get(&e.id).map_or(Value::Missing, |g| Value::Count(g.bolt_count())),
         F::BoltDiameter => geom.connections.get(&e.id).map_or(Value::Missing, |g| {
             if format::imperial() {
-                Value::Text(format!("Ø {}\"", format::inches(g.bolt_diameter)))
+                Value::Text(format!("Ø {}", format::inch_size(g.bolt_diameter)))
             } else {
                 Value::Text(format!("Ø {} mm", format::number(g.bolt_diameter * 1000.0, 0)))
             }
