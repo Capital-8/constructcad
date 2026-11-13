@@ -61,9 +61,9 @@ pub enum Tool {
     Footing {
         type_id: ElementTypeId,
     },
-    /// Click the two ends of a truss (options in `AppState::truss`); `type_id` is its chord type.
+    /// Click the two ends of a truss (options in `AppState::truss`) of the Structure tab's material.
     Truss {
-        type_id: ElementTypeId,
+        material: cc_core::StructuralMaterial,
     },
     Stair {
         type_id: ElementTypeId,
@@ -259,7 +259,6 @@ impl Tool {
             | Tool::Column { type_id, .. }
             | Tool::Beam { type_id, .. }
             | Tool::Footing { type_id }
-            | Tool::Truss { type_id }
             | Tool::Stair { type_id }
             | Tool::Ramp { type_id }
             | Tool::Railing { type_id }
@@ -295,7 +294,6 @@ impl Tool {
             Tool::Column { .. } => Some(Category::Column),
             Tool::Beam { .. } => Some(Category::Beam),
             Tool::Footing { .. } => Some(Category::Foundation),
-            Tool::Truss { .. } => Some(Category::Beam),
             Tool::Stair { .. } => Some(Category::Stair),
             Tool::Ramp { .. } => Some(Category::Ramp),
             Tool::Railing { .. } => Some(Category::Railing),
@@ -325,7 +323,7 @@ impl Tool {
             Tool::Column { material, .. } => Tool::Column { type_id: id, material },
             Tool::Beam { material, .. } => Tool::Beam { type_id: id, material },
             Tool::Footing { .. } => Tool::Footing { type_id: id },
-            Tool::Truss { .. } => Tool::Truss { type_id: id },
+            Tool::Truss { material } => Tool::Truss { material },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
             Tool::Ramp { .. } => Tool::Ramp { type_id: id },
             Tool::Railing { .. } => Tool::Railing { type_id: id },
@@ -387,7 +385,7 @@ impl Tool {
             Category::LevelMark => Tool::LevelMark { type_id },
             Category::DetailComponent => Tool::DetailComponent { type_id },
             // Imported, not drawn.
-            Category::CadImport | Category::TitleBlock | Category::SteelBuilding => return None,
+            Category::CadImport | Category::TitleBlock | Category::SteelBuilding | Category::Truss => return None,
         })
     }
 }
@@ -1594,7 +1592,7 @@ pub fn handle(
         (Tool::Column { type_id, .. }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Beam { type_id, .. }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Truss { type_id }, Some(level)) => truss_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Truss { material }, Some(level)) => truss_tool(ui, resp, painter, state, level, *material, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Ramp { type_id }, Some(level)) => ramp_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Railing { type_id }, _) if state.railing_host.on => {
@@ -1924,32 +1922,70 @@ fn segment_tool(
 /// Truss tool options, kept between uses.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrussOptions {
-    /// Distance between the chord axes, meters.
+    pub shape: cc_core::truss::TrussShape,
+    pub pattern: cc_core::truss::TrussPattern,
+    /// Chord to chord (flat), or the rise (mono, gable), meters.
     pub height: f64,
     /// Number of panels; 0 picks about one per 1.5 m.
     pub panels: u32,
-    /// `pratt`, `howe` or `warren`.
-    pub pattern: &'static str,
+    pub copies: u32,
+    /// Copy to copy, meters.
+    pub spacing: f64,
 }
 
 impl Default for TrussOptions {
     fn default() -> Self {
-        Self { height: 1.0, panels: 0, pattern: "pratt" }
+        Self {
+            shape: Default::default(),
+            pattern: Default::default(),
+            height: cc_core::truss::DEFAULT_HEIGHT,
+            panels: 0,
+            copies: 1,
+            spacing: cc_core::truss::DEFAULT_SPACING,
+        }
     }
 }
 
-/// The truss patterns, with their translation keys.
-pub const TRUSS_PATTERNS: [(&str, &str); 3] =
-    [("pratt", "truss-pratt"), ("howe", "truss-howe"), ("warren", "truss-warren")];
+/// The command the tool runs for a truss from `a` to `b`.
+pub fn truss_command(
+    o: &TrussOptions,
+    material: cc_core::StructuralMaterial,
+    level: LevelId,
+    a: DVec2,
+    b: DVec2,
+) -> cc_engine::commands::framing::TrussCreate {
+    // Auto panels on a gable: the engine's default is even already.
+    let panels = (o.panels > 0).then(|| {
+        if o.shape == cc_core::truss::TrussShape::Gable && !o.panels.is_multiple_of(2) {
+            o.panels + 1
+        } else {
+            o.panels
+        }
+    });
+    cc_engine::commands::framing::TrussCreate {
+        start: a.to_array(),
+        end: b.to_array(),
+        height: o.height,
+        panels,
+        pattern: Some(o.pattern.code().into()),
+        shape: Some(o.shape.code().into()),
+        copies: Some(o.copies),
+        spacing: Some(o.spacing),
+        material: Some(material.code().into()),
+        level: Some(Ref::Id(level.0)),
+        ..Default::default()
+    }
+}
 
-/// Two clicks: the ends of a truss, laid out with the options bar's height, panels and pattern.
+/// Two clicks: the ends of a truss, laid out with the options bar's values
+/// and the Structure tab's material; the new truss is selected.
 fn truss_tool(
     ui: &Ui,
     resp: &Response,
     painter: &Painter,
     state: &mut AppState,
     level: LevelId,
-    type_id: ElementTypeId,
+    material: cc_core::StructuralMaterial,
     xf: &Xf,
 ) {
     let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
@@ -1965,21 +2001,12 @@ fn truss_tool(
     if resp.clicked() {
         match anchor {
             None => state.interaction.anchor = Some(s.point),
-            Some(a) if a.distance(s.point) > 0.1 => {
-                let options = state.truss.clone();
-                let command = cc_engine::commands::framing::TrussCreate {
-                    start: a.to_array(),
-                    end: s.point.to_array(),
-                    height: options.height,
-                    panels: (options.panels > 0).then_some(options.panels),
-                    pattern: Some(options.pattern.to_string()),
-                    level: Some(Ref::Id(level.0)),
-                    chord_type: Some(Ref::Id(type_id.0)),
-                    ..Default::default()
-                };
-                if let Some(out) = crate::actions::run_command(state, command) {
-                    let ids = out["created"].as_array().into_iter().flatten().filter_map(|v| v.as_u64());
-                    state.selection = ids.map(ElementId).collect();
+            Some(a) if a.distance(s.point) >= *cc_core::truss::LENGTH.start() => {
+                let command = truss_command(&state.truss, material, level, a, s.point);
+                if let Some(out) = crate::actions::run_command(state, command)
+                    && let Some(id) = out["id"].as_u64()
+                {
+                    state.selection = [ElementId(id)].into_iter().collect();
                 }
                 state.interaction.anchor = None;
             }

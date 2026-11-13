@@ -3942,3 +3942,80 @@ fn steel_building_properties_regenerate_it() {
     let (members_now, detached) = members(harness.state());
     assert_eq!((members_now.len(), detached), (first.len(), 0));
 }
+
+/// The Truss tool shows for steel and timber (not concrete) and starts with
+/// the tab's material.
+#[test]
+fn truss_tool_follows_the_structure_material() {
+    use cc_core::StructuralMaterial as M;
+    for (material, shown) in [(M::Concrete, false), (M::Steel, true), (M::Timber, true)] {
+        let mut state = sample_state();
+        state.ribbon_tab = RibbonTab::Structure;
+        state.prefs.structure_material = material;
+        let mut harness = ribbon_harness(state, 1600.0);
+        let label = crate::commands::UiCommand::Truss.label(harness.state());
+        assert_eq!(harness.query_by_label(&label).is_some(), shown, "{material:?}");
+        if shown {
+            harness.get_by_role_and_label(Role::Button, &label).click();
+            harness.run();
+            assert_eq!(harness.state().tool, crate::tools::Tool::Truss { material });
+        }
+    }
+}
+
+/// The options the tool runs with make a parametric truss of the tab's material.
+#[test]
+fn truss_tool_options_make_a_parametric_truss() {
+    use cc_core::truss::{TrussPattern, TrussShape};
+    let mut state = sample_state();
+    state.truss = crate::tools::TrussOptions {
+        shape: TrussShape::Gable,
+        pattern: TrussPattern::KingPost,
+        height: 1.5,
+        panels: 4,
+        copies: 3,
+        spacing: 1.2,
+    };
+    let level = state.project().levels[0].id;
+    let (a, b) = (glam::DVec2::new(100.0, 100.0), glam::DVec2::new(106.0, 100.0));
+    let command = crate::tools::truss_command(&state.truss, cc_core::StructuralMaterial::Timber, level, a, b);
+    let out = state.session.run(command).expect("truss");
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let cc_core::ElementKind::Truss(t) = &state.project().element(host).unwrap().kind else { panic!("a truss") };
+    assert_eq!((t.shape, t.pattern, t.panels, t.copies), (TrussShape::Gable, TrussPattern::KingPost, 4, 3));
+    assert_eq!(t.members.len(), 33);
+    assert!(state.project().types.values().any(|x| x.name == "Peça 6x16"), "timber chords");
+}
+
+/// A truss's rows edit it through `element_set`: new panels regenerate it,
+/// and *Reset Members* brings back a deleted post.
+#[test]
+fn truss_properties_regenerate_it() {
+    let mut state = sample_state();
+    let args = serde_json::json!({"start": [100, 100], "end": [106, 100], "height": 1.0, "panels": 4});
+    let out = state.session.execute("truss_create", args).unwrap();
+    let host = cc_core::ElementId(out["id"].as_u64().unwrap());
+    let get = |s: &AppState| match &s.project().element(host).unwrap().kind {
+        cc_core::ElementKind::Truss(t) => (**t).clone(),
+        _ => panic!("not a truss"),
+    };
+    // The path the palette's rows take.
+    crate::truss_ui::edit(&mut state, host, "panels", |t| t.panels = 6);
+    assert_eq!(get(&state).members.len(), 12 + 7 + 6);
+    let post = get(&state).members.iter().find(|m| m.role.kind == cc_core::truss::TrussRoleKind::Vertical).unwrap().id;
+    state.session.execute("elements_delete", serde_json::json!({"ids": [post.0]})).unwrap();
+    assert_eq!(get(&state).detached.len(), 1);
+    state.selection = [host].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(
+        harness.query_by_label(&t!("action-reset-members")).is_some(),
+        "row labels are painted, the button is a widget"
+    );
+    harness.get_by_label(&t!("action-reset-members")).click();
+    harness.run();
+    let t = get(harness.state());
+    assert_eq!((t.members.len(), t.detached.len()), (25, 0));
+}

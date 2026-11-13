@@ -285,6 +285,13 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "element_set", "args": {"id": 42, "params": {"span": 30}}}
 ```
 
+`truss_create` cria uma treliça paramétrica: um elemento hospedeiro cujos banzos, diagonais e montantes são vigas e pilares comuns, feitos num só passo de desfazer e devolvidos como `{id, members}`. `shape` é `flat`, `mono` ou `gable`; `pattern` é `pratt`, `howe`, `warren` ou, nas de duas águas, `kingpost`, `queenpost` e `fink`; `copies` treliças ficam a `spacing` de distância à esquerda da linha do vão; `material` (`steel` ou `timber`) escolhe as linhas do catálogo dos tipos padrão (concreto é recusado). Como no galpão metálico, os elementos são regenerados, mantendo seus ids, quando `element_set` muda os parâmetros, e um elemento editado ou excluído diretamente fica desvinculado.
+
+```text
+{"command": "truss_create", "args": {"start": [0, 0], "end": [12, 0], "height": 2, "shape": "gable", "pattern": "fink", "panels": 6, "copies": 5, "spacing": 1.2, "material": "timber"}}
+{"command": "element_set", "args": {"id": 42, "params": {"panels": 8}}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).

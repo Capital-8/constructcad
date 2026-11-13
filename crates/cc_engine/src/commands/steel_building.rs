@@ -1,7 +1,7 @@
 //! Parametric steel buildings (see `cc_core::steel_building`): the host
 //! element and the catalog types its members get by default.
 
-use super::structure_material::catalog_type;
+use super::structure_material::type_or_row;
 use super::{add_element, edit};
 use crate::error::{EngineError, Result};
 use crate::refs::{self, Point, Ref, point};
@@ -103,19 +103,6 @@ fn type_arg(arg: &Option<Option<SecondaryMembers>>) -> Option<&Ref> {
     arg.as_ref().and_then(|o| o.as_ref()).and_then(|m| m.type_ref.as_ref())
 }
 
-/// The given type, else the catalog row's (made when missing).
-fn type_or_row(
-    s: &mut Session,
-    given: Option<ElementTypeId>,
-    category: Category,
-    (series, row): (&str, &str),
-) -> Result<ElementTypeId> {
-    match given {
-        Some(t) => Ok(t),
-        None => catalog_type(s, category, series, row),
-    }
-}
-
 impl Command for SteelBuildingCreate {
     const NAME: &'static str = "steel_building_create";
     const KIND: CommandKind = CommandKind::Edit;
@@ -175,7 +162,7 @@ impl Command for SteelBuildingCreate {
                 };
                 Ok(add_element(e, level, type_id, kind))
             })?;
-            let members: Vec<u64> = s.project().steel_members_of(id).iter().map(|m| m.0).collect();
+            let members: Vec<u64> = s.project().host_members_of(id).iter().map(|m| m.0).collect();
             Ok(json!({ "id": id.0, "members": members }))
         })();
         match result {

@@ -1451,7 +1451,6 @@ default-rebar-view-name = Armatures { $n }
 msg-member-vertical = Les extrémités d'un contreventement ne peuvent pas être l'une au-dessus de l'autre.
 tx-create-brace = Créer un contreventement
 msg-columns-two-exactly = Sélectionnez exactement deux poteaux.
-truss-default-name = Ferme { $n }
 tx-create-truss = Créer une ferme
 tool-truss = Ferme
 hint-truss = Cliquez les deux extrémités de la ferme · Échap termine
@@ -1469,7 +1468,7 @@ action-structural-plan = Plan de structure
 action-number-structure = Numéroter la structure
 action-structure-tags = Étiquettes de structure
 action-remove-rebar = Retirer
-cmd-desc-truss = Implanter une ferme plane : cliquez ses deux extrémités ; la barre d'options définit sa hauteur, ses panneaux et son schéma (Pratt, Howe, Warren). Les membrures et diagonales sont des poutres, les montants des poteaux, le tout dans un groupe.
+cmd-desc-truss = Trace une ferme paramétrique en acier ou en bois : cliquez ses deux extrémités ; la barre d'options règle sa forme (plate, monopente, deux pentes), son treillis (Pratt, Howe, Warren, poinçon, double poinçon, Fink), sa hauteur, ses panneaux, ses copies et leur entraxe. Membrures et diagonales sont des poutres, montants des poteaux, tenus à jour avec la ferme.
 cmd-desc-braces-x = Contreventer la travée entre les deux poteaux sélectionnés avec deux barres se croisant de la base de chacun au sommet de l'autre.
 cmd-desc-rebar-typical = Donner aux poutres et poteaux sélectionnés (ou à tous ceux du niveau actif) sans armatures un ferraillage type : barres longitudinales et cadres.
 cmd-desc-rebar-view = Ouvrir une vue 3D des barres d'armature sur la maquette dessinée en estompé.
@@ -3232,6 +3231,8 @@ msg-grid-frame-created = { $columns } poteaux, { $beams } poutres et { $secondar
 # Steel building
 category-steel-building = Bâtiments métalliques
 tpl-type-steel-building = Bâtiment métallique
+category-truss = Fermes
+tpl-type-truss = Ferme
 tx-steel-building = Créer un bâtiment métallique
 action-steel-building = Bâtiment métallique
 dlg-steel-building = Bâtiment métallique
@@ -3250,6 +3251,18 @@ action-reset-members = Rétablir les barres
 opt-catalog-default = Par défaut du catalogue
 cmd-desc-steel-building = Crée un bâtiment métallique paramétrique : portiques de poteaux et de traverses, avec pannes et lisses, qui suivent sa portée, sa hauteur, sa pente et ses travées.
 msg-steel-building-created = Bâtiment métallique créé avec { $count } barres.
+
+# Parametric trusses
+truss-king-post = Poinçon
+truss-queen-post = Double poinçon
+truss-fink = Fink (W)
+prop-truss-pattern = Treillis
+prop-truss-copies = Copies
+label-top-chord-type = Type de membrure supérieure
+label-bottom-chord-type = Type de membrure inférieure
+label-web-type = Type de diagonales
+label-post-type = Type de montants
+msg-truss-material = Les fermes sont en acier ou en bois : choisissez-en un dans Matériau.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Maçonnerie 6"

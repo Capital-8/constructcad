@@ -1354,15 +1354,15 @@ fn reinforcement_of_beams_and_columns() {
 #[test]
 fn trusses_braces_numbering_and_structural_plans() {
     let mut s = Session::default();
-    // A Pratt truss, 6 m in 4 panels, 1 m deep: 2 chords, 4 diagonals, 5 posts.
+    // A flat Pratt truss, 6 m in 4 panels, 1 m deep: 8 chords, 4 diagonals, 5 posts (two at the supports).
     let out = run(
         &mut s,
         "truss_create",
         json!({"start": [0, 0], "end": [6, 0], "height": 1.0, "panels": 4, "bottom_offset": 2.0}),
     );
-    assert_eq!(out["created"].as_array().unwrap().len(), 11, "{out}");
-    let group = run(&mut s, "groups_list", json!({}));
-    assert_eq!(group.as_array().unwrap().len(), 1);
+    assert_eq!(out["members"].as_array().unwrap().len(), 17, "{out}");
+    let host = run(&mut s, "element_get", json!({"id": out["id"]}));
+    assert_eq!(host["params"]["panels"], json!(4), "{host}");
     // Its analytical model: all members meet at the 10 panel points.
     let m = run(&mut s, "analytical_model", json!({}));
     assert_eq!(m["nodes"].as_array().unwrap().len(), 10, "{m}");

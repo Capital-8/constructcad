@@ -1451,7 +1451,6 @@ default-rebar-view-name = Bewehrung { $n }
 msg-member-vertical = Die Enden einer Strebe können nicht übereinander liegen.
 tx-create-brace = Strebe erstellen
 msg-columns-two-exactly = Wählen Sie genau zwei Stützen aus.
-truss-default-name = Fachwerk { $n }
 tx-create-truss = Fachwerk erstellen
 tool-truss = Fachwerk
 hint-truss = Die beiden Enden des Fachwerks klicken · Esc beendet
@@ -1469,7 +1468,7 @@ action-structural-plan = Tragwerksplan
 action-number-structure = Tragwerk nummerieren
 action-structure-tags = Tragwerksbeschriftung
 action-remove-rebar = Entfernen
-cmd-desc-truss = Ein ebenes Fachwerk anlegen: seine beiden Enden klicken; die Optionsleiste legt Höhe, Felder und Muster fest (Pratt, Howe, Warren). Gurte und Diagonalen sind Träger, Pfosten sind Stützen, alle in einer Gruppe.
+cmd-desc-truss = Legt einen parametrischen Fachwerkträger aus Stahl oder Holz an: Klicken Sie seine beiden Enden; die Optionsleiste legt Form (flach, Pult, Sattel), Ausfachung (Pratt, Howe, Warren, einfaches Hängewerk, doppeltes Hängewerk, Fink), Höhe, Felder, Kopien und Abstand fest. Gurte und Diagonalen sind Träger, Pfosten sind Stützen, die dem Fachwerkträger folgen.
 cmd-desc-braces-x = Das Feld zwischen den beiden ausgewählten Stützen mit zwei Streben aussteifen, die sich vom Fuß der einen zum Kopf der anderen kreuzen.
 cmd-desc-rebar-typical = Den ausgewählten Trägern und Stützen (oder allen der aktiven Ebene) ohne Bewehrung eine Regelbewehrung geben: Längsstäbe und Bügel.
 cmd-desc-rebar-view = Eine 3D-Ansicht der Bewehrungsstäbe über dem blass dargestellten Modell öffnen.
@@ -3232,6 +3231,8 @@ msg-grid-frame-created = { $columns } Stützen, { $beams } Träger und { $second
 # Steel building
 category-steel-building = Stahlhallen
 tpl-type-steel-building = Stahlhalle
+category-truss = Fachwerkbinder
+tpl-type-truss = Fachwerkbinder
 tx-steel-building = Stahlhalle erstellen
 action-steel-building = Stahlhalle
 dlg-steel-building = Stahlhalle
@@ -3250,6 +3251,18 @@ action-reset-members = Stäbe zurücksetzen
 opt-catalog-default = Katalogstandard
 cmd-desc-steel-building = Erstellt eine parametrische Stahlhalle: Rahmen aus Stützen und Riegeln mit Pfetten und Wandriegeln, die Spannweite, Höhe, Neigung und Feldern folgen.
 msg-steel-building-created = Stahlhalle mit { $count } Stäben erstellt.
+
+# Parametric trusses
+truss-king-post = Einfaches Hängewerk
+truss-queen-post = Doppeltes Hängewerk
+truss-fink = Fink (W)
+prop-truss-pattern = Ausfachung
+prop-truss-copies = Kopien
+label-top-chord-type = Obergurttyp
+label-bottom-chord-type = Untergurttyp
+label-web-type = Diagonalentyp
+label-post-type = Pfostentyp
+msg-truss-material = Fachwerkträger sind aus Stahl oder Holz: Wählen Sie eines unter Material.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mauerwerk 6"

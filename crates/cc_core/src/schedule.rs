@@ -220,6 +220,7 @@ impl ScheduleField {
             Category::Sweep => &[F::Length, F::Volume],
             Category::Shaft => &[F::Area, F::Height],
             Category::SteelBuilding => &[],
+            Category::Truss => &[],
             Category::Topography => &[F::Area, F::Volume, F::Material, F::CutVolume, F::FillVolume],
             Category::Pad => &[F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Pipe => &[F::Diameter, F::Length, F::System, F::Slope, F::Material],
@@ -309,6 +310,7 @@ impl ScheduleField {
             Category::Mass => vec![F::Mark, F::Type, F::Level, F::Height, F::FloorCount, F::FloorArea, F::Volume],
             Category::Shaft => vec![F::Mark, F::Type, F::Level, F::Area, F::Height],
             Category::SteelBuilding => Vec::new(),
+            Category::Truss => Vec::new(),
             Category::Topography => vec![F::Mark, F::Type, F::Level, F::Area, F::Volume],
             Category::Pad => vec![F::Mark, F::Type, F::Level, F::Elevation, F::Area, F::CutVolume, F::FillVolume],
             Category::Grid

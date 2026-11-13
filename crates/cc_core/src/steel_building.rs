@@ -10,13 +10,13 @@
 //! along the building (frame `k` at `k * bay_spacing`), mapped to plan
 //! through `origin` and `rotation_deg`.
 
+use crate::member_host::{MemberHost, RoleKey, fix_type, reset, within};
 use crate::{
-    Beam, Category, Column, Element, ElementId, ElementKind, ElementType, ElementTypeId, PlanTransform, Project,
-    TypeData, WallTop,
+    Beam, Category, Column, ElementId, ElementKind, ElementType, ElementTypeId, PlanTransform, Project, TypeData,
+    WallTop,
 };
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
 use std::ops::RangeInclusive;
 
 /// Most members one building makes; the layout stops there.
@@ -74,6 +74,10 @@ pub enum RoleKind {
     Girt,
 }
 
+impl RoleKind {
+    pub const ALL: [RoleKind; 4] = [RoleKind::Column, RoleKind::Rafter, RoleKind::Purlin, RoleKind::Girt];
+}
+
 /// A member's place: its kind, its frame (columns, rafters) or bay
 /// (purlins, girts), and its index there (girts: `side * 1000 + row`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -91,6 +95,16 @@ impl MemberRole {
             RoleKind::Column => matches!(kind, ElementKind::Column(_)),
             RoleKind::Rafter | RoleKind::Purlin | RoleKind::Girt => matches!(kind, ElementKind::Beam(_)),
         }
+    }
+
+    /// Its key for the shared member-host code (same order as the role).
+    pub fn key(self) -> RoleKey {
+        RoleKey::new(self.kind as u8, self.frame, self.index)
+    }
+
+    pub fn from_key(key: RoleKey) -> Option<Self> {
+        let (kind, frame, index) = key.parts();
+        Some(Self { kind: *RoleKind::ALL.get(usize::from(kind))?, frame, index })
     }
 }
 
@@ -140,24 +154,6 @@ pub struct SteelBuilding {
     /// Roles the user took over (edited or deleted members): not made again.
     #[serde(default)]
     pub detached: Vec<MemberRole>,
-}
-
-fn within(name: &str, v: f64, range: &RangeInclusive<f64>) -> Result<(), String> {
-    if v.is_finite() && range.contains(&v) {
-        Ok(())
-    } else {
-        Err(format!("{name} must be between {} and {}", range.start(), range.end()))
-    }
-}
-
-/// Reset `v` to `default` when it is out of `range`; returns 1 when it did.
-fn reset(v: &mut f64, range: &RangeInclusive<f64>, default: f64) -> usize {
-    if v.is_finite() && range.contains(v) {
-        0
-    } else {
-        *v = default;
-        1
-    }
 }
 
 /// The width (across) and depth (up) of a column or beam type's section
@@ -430,249 +426,56 @@ impl SteelBuilding {
     }
 }
 
-impl Project {
-    /// The members a steel building manages (none for other elements).
-    pub fn steel_members_of(&self, host: ElementId) -> Vec<ElementId> {
-        match self.element(host).map(|e| &e.kind) {
-            Some(ElementKind::SteelBuilding(b)) => b.members.iter().map(|m| m.id).collect(),
-            _ => Vec::new(),
-        }
-    }
-}
-
-impl crate::EditCtx<'_> {
-    /// Keep steel buildings and their members in step, from what this edit
-    /// itself changed (it runs before the syncs that touch elements):
-    /// 1. a member the edit deleted, or whose kind, type or level it changed
-    ///    while leaving its building alone, is detached (its role leaves
-    ///    `members` for `detached`; the element stays as the user left it);
-    /// 2. a building the edit added or changed, or whose member types it
-    ///    changed, gets the members of its layout (except detached roles):
-    ///    existing ones rewritten in place (same ids), missing ones added,
-    ///    those whose role is gone deleted. A building the edit added (a
-    ///    copy, a paste) keeps none of the members it lists and gets its
-    ///    own: the listed elements may be another building's or, after a
-    ///    paste, unrelated elements the user owns;
-    /// 3. a building whose phases or design option the edit changed passes
-    ///    them on to the members it manages (a member's own phase or option
-    ///    edit is not a detach, and stays until the host's next change).
-    pub(crate) fn sync_steel_buildings(&mut self) {
-        let p = self.project();
-        if !p.elements.values().any(|e| matches!(e.kind, ElementKind::SteelBuilding(_))) {
-            return;
-        }
-        let types = self.changed_types();
-        let mut added: BTreeSet<ElementId> = BTreeSet::new();
-        let mut changed: BTreeSet<ElementId> = BTreeSet::new();
-        let mut removed: BTreeSet<ElementId> = BTreeSet::new();
-        let mut reshaped: BTreeSet<ElementId> = BTreeSet::new();
-        let mut moved_phase: BTreeSet<ElementId> = BTreeSet::new();
-        for (id, before) in self.element_changes() {
-            match (before, p.element(id)) {
-                (None, Some(_)) => {
-                    added.insert(id);
-                    changed.insert(id);
-                }
-                (Some(_), None) => {
-                    removed.insert(id);
-                }
-                (Some(b), Some(n)) => {
-                    changed.insert(id);
-                    if b.kind != n.kind || b.type_id != n.type_id || b.level != n.level {
-                        reshaped.insert(id);
-                    }
-                    if (b.phase_created, b.phase_demolished, b.design_option)
-                        != (n.phase_created, n.phase_demolished, n.design_option)
-                    {
-                        moved_phase.insert(id);
-                    }
-                }
-                (None, None) => {}
-            }
-        }
-        let mut detach: Vec<(ElementId, Vec<MemberRole>)> = Vec::new();
-        let mut regenerate: Vec<ElementId> = Vec::new();
-        for e in p.elements.values() {
-            let ElementKind::SteelBuilding(b) = &e.kind else { continue };
-            let host_changed = changed.contains(&e.id) || b.type_ids().any(|t| types.contains(&t));
-            let taken: Vec<MemberRole> = b
-                .members
-                .iter()
-                .filter(|m| removed.contains(&m.id) || (reshaped.contains(&m.id) && !host_changed))
-                .map(|m| m.role)
-                .collect();
-            if !taken.is_empty() {
-                detach.push((e.id, taken));
-            }
-            if host_changed {
-                regenerate.push(e.id);
-            }
-        }
-        for (host, roles) in detach {
-            if let Some(ElementKind::SteelBuilding(b)) = self.element_mut(host).map(|e| &mut e.kind) {
-                b.members.retain(|m| !roles.contains(&m.role));
-                for r in roles {
-                    if !b.detached.contains(&r) {
-                        b.detached.push(r);
-                    }
-                }
-            }
-        }
-        for host in regenerate {
-            self.regenerate_steel_building(host, added.contains(&host), moved_phase.contains(&host));
-        }
+impl MemberHost for SteelBuilding {
+    fn member_types(&self) -> Vec<ElementTypeId> {
+        self.type_ids().collect()
     }
 
-    /// Give building `host` the members of its layout (see
-    /// [`Self::sync_steel_buildings`]); `added` when this edit added it,
-    /// `follow` when its phases or design option changed.
-    fn regenerate_steel_building(&mut self, host: ElementId, added: bool, follow: bool) {
-        let p = self.project();
-        let Some(e) = p.element(host) else { return };
-        let ElementKind::SteelBuilding(b) = &e.kind else { return };
-        let mut b = (**b).clone();
-        let (level, phase_created, phase_demolished, design_option) =
-            (e.level, e.phase_created, e.phase_demolished, e.design_option);
-        let phases = (phase_created, phase_demolished, design_option);
-        // A copy or a paste keeps none of the members it lists: they are the
-        // original's or, pasted elsewhere or after a detach, the user's.
-        if added {
-            b.members.clear();
-        }
-        let mut wanted: BTreeMap<MemberRole, (ElementTypeId, ElementKind)> =
-            b.layout(p).into_iter().filter(|(r, _, _)| !b.detached.contains(r)).map(|(r, t, k)| (r, (t, k))).collect();
-        let (mut kept, mut gone, mut rewrite, mut phased) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        // Each element serves one role only (a crafted list may repeat one).
-        let mut used = BTreeSet::new();
-        for m in &b.members {
-            // A role made detached by hand: the element is the user's now.
-            if b.detached.contains(&m.role) {
-                continue;
-            }
-            let Some(x) = p.element(m.id).filter(|x| x.id != host && m.role.fits(&x.kind) && used.insert(m.id)) else {
-                // Gone, or no longer a column or beam: dropped from the list.
-                continue;
-            };
-            match wanted.remove(&m.role) {
-                Some((t, kind)) => {
-                    if x.kind != kind || x.type_id != t || x.level != level {
-                        rewrite.push((m.id, t, kind));
-                    }
-                    if follow && (x.phase_created, x.phase_demolished, x.design_option) != phases {
-                        phased.push(m.id);
-                    }
-                    kept.push(*m);
-                }
-                None => gone.push(m.id),
-            }
-        }
-        for (id, t, kind) in rewrite {
-            if let Some(x) = self.element_mut(id) {
-                (x.kind, x.type_id, x.level) = (kind, t, level);
-            }
-        }
-        for id in phased {
-            if let Some(x) = self.element_mut(id) {
-                (x.phase_created, x.phase_demolished, x.design_option) = phases;
-            }
-        }
-        for id in gone {
-            self.remove_element(id);
-        }
-        for (role, (type_id, kind)) in wanted {
-            let id = ElementId(self.alloc_id());
-            self.add_element(Element {
-                id,
-                level,
-                type_id,
-                mark: String::new(),
-                comments: String::new(),
-                kind,
-                uid: Default::default(),
-                phase_created,
-                phase_demolished,
-                design_option,
-                paints: Vec::new(),
-            });
-            kept.push(FrameMember { role, id });
-        }
-        kept.sort_by_key(|m| m.role);
-        if kept != b.members
-            && let Some(ElementKind::SteelBuilding(x)) = self.element_mut(host).map(|e| &mut e.kind)
-        {
-            x.members = kept;
-        }
+    fn member_layout(&self, project: &Project) -> Vec<(RoleKey, ElementTypeId, ElementKind)> {
+        self.layout(project).into_iter().map(|(r, t, k)| (r.key(), t, k)).collect()
     }
-}
 
-/// `slot` if it is a type of `category`, else the category's default type
-/// (`Some(1)`: one repair); `None` when there is none.
-fn fix_type(p: &Project, slot: &mut ElementTypeId, category: Category) -> Option<usize> {
-    if p.element_type(*slot).is_some_and(|t| t.category() == category) {
-        return Some(0);
+    fn member_list(&self) -> Vec<(RoleKey, ElementId)> {
+        self.members.iter().map(|m| (m.role.key(), m.id)).collect()
     }
-    *slot = p.default_type(category)?;
-    Some(1)
-}
 
-impl Project {
-    /// Steel buildings from a file: out-of-range numbers back to their
-    /// defaults, missing or wrong types to the category's default (the
-    /// building goes when there is none), members that are gone, not a
-    /// column or beam of their role, repeated or another building's
-    /// dropped, and repeated detached roles dropped. Returns the repairs.
-    pub(crate) fn repair_steel_buildings(&mut self) -> usize {
-        let ids: Vec<ElementId> =
-            self.elements.values().filter(|e| matches!(e.kind, ElementKind::SteelBuilding(_))).map(|e| e.id).collect();
-        let mut repairs = 0;
-        let mut claimed = BTreeSet::new();
-        let mut dropped = Vec::new();
-        for id in ids {
-            let Some(ElementKind::SteelBuilding(b)) = self.elements.get(&id).map(|e| &e.kind) else { continue };
-            let mut b = (**b).clone();
-            let mut n = b.reset_out_of_range();
-            let types = (|| {
-                let mut k = fix_type(self, &mut b.column_type, Category::Column)?;
-                k += fix_type(self, &mut b.rafter_type, Category::Beam)?;
-                for s in [&mut b.purlins, &mut b.girts].into_iter().flatten() {
-                    k += fix_type(self, &mut s.type_id, Category::Beam)?;
-                }
-                Some(k)
-            })();
-            let Some(k) = types else {
-                dropped.push(id);
-                continue;
-            };
-            n += k;
-            let mut roles = BTreeSet::new();
-            let before = b.members.len();
-            b.members.retain(|m| {
-                self.element(m.id).is_some_and(|e| m.role.fits(&e.kind)) && roles.insert(m.role) && claimed.insert(m.id)
-            });
-            n += before - b.members.len();
-            let mut seen = BTreeSet::new();
-            let before = b.detached.len();
-            b.detached.retain(|r| seen.insert(*r));
-            n += before - b.detached.len();
-            if n > 0 {
-                if let Some(ElementKind::SteelBuilding(x)) = self.elements.get_mut(&id).map(|e| &mut e.kind) {
-                    **x = b;
-                }
-                repairs += n;
-            }
+    fn set_member_list(&mut self, members: &[(RoleKey, ElementId)]) {
+        self.members =
+            members.iter().filter_map(|&(k, id)| Some(FrameMember { role: MemberRole::from_key(k)?, id })).collect();
+    }
+
+    fn detached_roles(&self) -> Vec<RoleKey> {
+        self.detached.iter().map(|r| r.key()).collect()
+    }
+
+    fn set_detached_roles(&mut self, roles: &[RoleKey]) {
+        self.detached = roles.iter().filter_map(|k| MemberRole::from_key(*k)).collect();
+    }
+
+    fn role_fits(&self, role: RoleKey, kind: &ElementKind) -> bool {
+        MemberRole::from_key(role).is_some_and(|r| r.fits(kind))
+    }
+
+    fn check_parameters(&self, project: &Project) -> Result<(), String> {
+        self.check().and_then(|()| self.check_types(project))
+    }
+
+    fn repair_parameters(&mut self, project: &Project) -> Option<usize> {
+        let mut n = self.reset_out_of_range();
+        n += fix_type(project, &mut self.column_type, Category::Column)?;
+        n += fix_type(project, &mut self.rafter_type, Category::Beam)?;
+        for s in [&mut self.purlins, &mut self.girts].into_iter().flatten() {
+            n += fix_type(project, &mut s.type_id, Category::Beam)?;
         }
-        for id in dropped {
-            self.elements.remove(&id);
-            repairs += 1;
-        }
-        repairs
+        Some(n)
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::{ColumnSection, Document, Element, LevelId};
+    use std::collections::BTreeSet;
 
     fn close(a: DVec2, b: DVec2) -> bool {
         a.distance(b) < 1e-9
@@ -707,7 +510,7 @@ mod tests {
 
     /// A document with a default gable building on the first level: columns
     /// of a 0.2 x 0.3 type, rafters, purlins and girts of a 0.1 x 0.2 beam type.
-    pub(super) fn site() -> (Document, ElementId) {
+    pub(crate) fn site() -> (Document, ElementId) {
         let mut doc = Document::new(Project::from_template());
         let host = doc.edit("building", |e| {
             let level = e.project().levels[0].id;
@@ -742,7 +545,7 @@ mod tests {
         (doc, host)
     }
 
-    pub(super) fn building(doc: &Document, host: ElementId) -> SteelBuilding {
+    pub(crate) fn building(doc: &Document, host: ElementId) -> SteelBuilding {
         match doc.project.element(host).map(|e| &e.kind) {
             Some(ElementKind::SteelBuilding(b)) => (**b).clone(),
             _ => panic!("not a steel building"),

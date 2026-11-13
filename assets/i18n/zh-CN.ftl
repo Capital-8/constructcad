@@ -1470,7 +1470,6 @@ default-rebar-view-name = 钢筋 { $n }
 msg-member-vertical = 支撑的两端不能上下重叠。
 tx-create-brace = 创建支撑
 msg-columns-two-exactly = 请恰好选择两根柱。
-truss-default-name = 桁架 { $n }
 tx-create-truss = 创建桁架
 tool-truss = 桁架
 hint-truss = 单击桁架的两个端点 · Esc 结束
@@ -1488,7 +1487,7 @@ action-structural-plan = 结构平面图
 action-number-structure = 结构编号
 action-structure-tags = 结构标记
 action-remove-rebar = 删除
-cmd-desc-truss = 布置平面桁架：单击其两个端点；选项栏设置其高度、节间数和形式（普拉特式、豪式、华伦式）。弦杆和斜杆为梁，竖杆为柱，全部位于一个组中。
+cmd-desc-truss = 布置参数化钢或木桁架：点击两端；选项栏设置形状（平行、单坡、双坡）、腹杆形式（Pratt、Howe、Warren、单柱式、双柱式、芬克式）、高度、节间、副本数和间距。弦杆和斜杆为梁，竖杆为柱，随桁架更新。
 cmd-desc-braces-x = 在两根所选柱之间的开间内布置两根交叉支撑，各自从一根柱的底部连到另一根柱的顶部。
 cmd-desc-rebar-typical = 为所选的无钢筋梁和柱（或当前标高的全部梁柱）配置典型钢筋：纵向钢筋和箍筋。
 cmd-desc-rebar-view = 打开钢筋的三维视图，叠加在淡显的模型上。
@@ -3232,6 +3231,8 @@ msg-grid-frame-created = 已放置 { $columns } 根柱、{ $beams } 根梁和 { 
 # Steel building
 category-steel-building = 钢结构建筑
 tpl-type-steel-building = 钢结构建筑
+category-truss = 桁架
+tpl-type-truss = 桁架
 tx-steel-building = 创建钢结构建筑
 action-steel-building = 钢结构建筑
 dlg-steel-building = 钢结构建筑
@@ -3250,6 +3251,18 @@ action-reset-members = 重置构件
 opt-catalog-default = 目录默认
 cmd-desc-steel-building = 创建参数化钢结构建筑：由柱和屋面梁组成的刚架，附檩条和墙檩，随跨度、高度、坡度和开间更新。
 msg-steel-building-created = 已创建钢结构建筑，共 { $count } 个构件。
+
+# Parametric trusses
+truss-king-post = 单柱式
+truss-queen-post = 双柱式
+truss-fink = 芬克式 (W)
+prop-truss-pattern = 腹杆形式
+prop-truss-copies = 副本数
+label-top-chord-type = 上弦杆类型
+label-bottom-chord-type = 下弦杆类型
+label-web-type = 斜杆类型
+label-post-type = 竖杆类型
+msg-truss-material = 桁架为钢或木：请在"材料"中选择其一。
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌体墙 6"

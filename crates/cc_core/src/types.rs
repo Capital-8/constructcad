@@ -36,6 +36,8 @@ pub enum Category {
     Shaft,
     /// Parametric steel buildings: hosts of portal frames, purlins and girts.
     SteelBuilding,
+    /// Parametric trusses: hosts of chords, diagonals and posts.
+    Truss,
     /// Terrain surfaces.
     Topography,
     /// Building pads graded into terrain.
@@ -61,7 +63,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 35] = [
+    pub const ALL: [Category; 36] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -95,6 +97,7 @@ impl Category {
         Category::Mass,
         Category::Shaft,
         Category::SteelBuilding,
+        Category::Truss,
         Category::Topography,
         Category::Pad,
     ];
@@ -191,6 +194,7 @@ impl Category {
             Category::Sweep => "category-sweep",
             Category::Shaft => "category-shaft",
             Category::SteelBuilding => "category-steel-building",
+            Category::Truss => "category-truss",
             Category::Topography => "category-topography",
             Category::Pad => "category-pad",
             Category::Component => "category-component",
@@ -516,6 +520,8 @@ pub enum TypeData {
     Shaft {},
     /// Steel buildings (no properties of their own; types name them).
     SteelBuilding {},
+    /// Trusses (no properties of their own; types name them).
+    Truss {},
     /// Terrain surfaces: the earth `material` they are cut in, and the
     /// spacing of their contour lines, every `major_every`-th one a major.
     Topography {
@@ -603,6 +609,7 @@ impl TypeData {
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
+            | TypeData::Truss {}
             | TypeData::Pad { .. } => Vec::new(),
         }
     }
@@ -677,6 +684,7 @@ impl TypeData {
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
+            | TypeData::Truss {}
             | TypeData::Pad { .. } => {}
         }
     }
@@ -833,6 +841,7 @@ impl ElementType {
             TypeData::Sweep { .. } => Category::Sweep,
             TypeData::Shaft {} => Category::Shaft,
             TypeData::SteelBuilding {} => Category::SteelBuilding,
+            TypeData::Truss {} => Category::Truss,
             TypeData::Topography { .. } => Category::Topography,
             TypeData::Pad { .. } => Category::Pad,
         }
@@ -992,6 +1001,7 @@ impl ElementType {
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
+            | TypeData::Truss {}
             | TypeData::Pad { .. } => "",
             TypeData::Column { material, .. }
             | TypeData::Beam { material, .. }

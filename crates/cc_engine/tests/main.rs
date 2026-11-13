@@ -50,6 +50,7 @@ mod textures_paint;
 mod title_block_migration;
 mod title_blocks;
 mod topography;
+mod truss;
 mod underlay;
 mod view_detailing;
 mod visual_style;

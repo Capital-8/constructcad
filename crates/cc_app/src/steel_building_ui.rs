@@ -5,16 +5,16 @@
 
 use crate::dialog::Dialog;
 use crate::grid_frame_ui::combo;
+use crate::member_host_ui::{finished, length, member_rows};
 use crate::state::AppState;
 use crate::t;
-use crate::table::{readonly_row, row, section};
+use crate::table::{row, section};
 use crate::theme::PALETTE;
 use cc_core::steel_building::{self as sb, FrameRoof, Secondary, SteelBuilding};
 use cc_core::{Category, ElementId, ElementKind, ElementTypeId, ProfileMaterial, StructuralMaterial};
 use cc_engine::Ref;
 use cc_engine::commands::steel_building::{SecondaryMembers, SteelBuildingCreate};
 use egui::{Context, DragValue, RichText, Ui};
-use std::ops::RangeInclusive;
 
 #[derive(Debug, Clone)]
 pub struct SteelBuildingDialog {
@@ -77,10 +77,6 @@ fn steel_choices(state: &AppState, category: Category) -> Vec<(Option<ElementTyp
     let mut out = vec![(None, t!("opt-catalog-default"))];
     out.extend(p.types_of_material(category, StructuralMaterial::Steel).map(|t| (Some(t.id), t.name.clone())));
     out
-}
-
-fn finished(r: &egui::Response) -> bool {
-    r.drag_stopped() || r.lost_focus()
 }
 
 pub fn show(ctx: &Context, state: &mut AppState) {
@@ -218,11 +214,6 @@ fn secondary_default(state: &AppState, rafter: ElementTypeId) -> ElementTypeId {
         .map_or(rafter, |t| t.id)
 }
 
-/// A length row; true when the edit ended.
-fn length(ui: &mut Ui, label: &str, v: &mut f64, range: RangeInclusive<f64>) -> bool {
-    finished(&row(ui, label, |ui| ui.add(crate::properties::length_drag(v).range(range))))
-}
-
 /// The rows of a selected steel building.
 pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, building: &SteelBuilding) {
     let mut b = building.clone();
@@ -249,10 +240,7 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, building: &SteelB
         done |= finished(&row(ui, &t!("prop-rotation"), |ui| {
             ui.add(DragValue::new(&mut b.rotation_deg).speed(1.0).suffix("°"))
         }));
-        readonly_row(ui, &t!("prop-members"), building.members.len().to_string());
-        readonly_row(ui, &t!("prop-detached-members"), building.detached.len().to_string());
-        let reset = ui.add_enabled(!building.detached.is_empty(), egui::Button::new(t!("action-reset-members")));
-        if reset.clicked() {
+        if member_rows(ui, building) {
             b.detached.clear();
             done = true;
         }

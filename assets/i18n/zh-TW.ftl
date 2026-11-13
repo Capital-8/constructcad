@@ -1451,7 +1451,6 @@ default-rebar-view-name = 鋼筋 { $n }
 msg-member-vertical = 支撐構件的兩端不能位於同一位置。
 tx-create-brace = 建立支撐
 msg-columns-two-exactly = 請選取剛好兩根柱子。
-truss-default-name = 桁架 { $n }
 tx-create-truss = 建立桁架
 tool-truss = 桁架
 hint-truss = 點選桁架的兩個端點 · 按 Esc 結束
@@ -1469,7 +1468,7 @@ action-structural-plan = 結構平面圖
 action-number-structure = 結構編號
 action-structure-tags = 結構標籤
 action-remove-rebar = 移除
-cmd-desc-truss = 繪製平面桁架：點選兩個端點；選項列可設定高度、分格和形式（Pratt、Howe、Warren）。上弦桿、下弦桿和斜桿為梁，腹桿為柱，全部歸於同一群組。
+cmd-desc-truss = 配置參數化鋼或木桁架：點選兩端；選項列設定形狀（平行、單坡、雙坡）、腹桿形式（Pratt、Howe、Warren、單柱式、雙柱式、芬克式）、高度、節間、副本數與間距。弦桿與斜桿為梁，直桿為柱，隨桁架更新。
 cmd-desc-braces-x = 在選取的兩根柱之間以兩根交叉斜撐加固跨距，斜撐從各柱底部延伸至另一根柱的頂部。
 cmd-desc-rebar-typical = 為選取的梁和柱（或目前樓層的所有梁柱）配置典型鋼筋：縱向鋼筋和箍筋。
 cmd-desc-rebar-view = 開啟鋼筋的 3D 檢視，並以淡化方式顯示繪製的模型。
@@ -3232,6 +3231,8 @@ msg-grid-frame-created = 已放置 { $columns } 根柱、{ $beams } 根梁及 { 
 # Steel building
 category-steel-building = 鋼構建築
 tpl-type-steel-building = 鋼構建築
+category-truss = 桁架
+tpl-type-truss = 桁架
 tx-steel-building = 建立鋼構建築
 action-steel-building = 鋼構建築
 dlg-steel-building = 鋼構建築
@@ -3250,6 +3251,18 @@ action-reset-members = 重設構件
 opt-catalog-default = 型錄預設
 cmd-desc-steel-building = 建立參數化鋼構建築：由柱與屋頂大梁組成的剛架，附檁條與牆檁，隨跨距、高度、坡度與開間更新。
 msg-steel-building-created = 已建立鋼構建築，共 { $count } 個構件。
+
+# Parametric trusses
+truss-king-post = 單柱式
+truss-queen-post = 雙柱式
+truss-fink = 芬克式 (W)
+prop-truss-pattern = 腹桿形式
+prop-truss-copies = 副本數
+label-top-chord-type = 上弦桿類型
+label-bottom-chord-type = 下弦桿類型
+label-web-type = 斜桿類型
+label-post-type = 直桿類型
+msg-truss-material = 桁架為鋼或木：請在「材料」中選擇其一。
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌體牆 6"

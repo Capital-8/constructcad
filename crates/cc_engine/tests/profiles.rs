@@ -656,31 +656,32 @@ fn a_type_without_a_profile_reads_its_legacy_section() {
 }
 
 #[test]
-fn truss_posts_prefer_a_steel_profile_column_type() {
+fn truss_posts_default_to_the_material_catalog_column_type() {
     let mut s = Session::default();
-    // Only plain rectangular column types, no profiles.
-    let mut p = s.project().clone();
-    for t in p.types.values_mut() {
-        if let TypeData::Column { section, profile, .. } = &mut t.data {
-            *section = ColumnSection::Rectangular { width: 0.2, depth: 0.2 };
-            *profile = None;
-        }
-    }
-    s = Session::new(Document::new(p));
-    let name = import_first(&mut s, "NBR6355-Ue");
-    let t = run(&mut s, "profile_type_create", json!({"profile": name, "category": "column"}))["id"].as_u64().unwrap();
     let out = run(&mut s, "truss_create", json!({"start": [0, 0], "end": [6, 0], "height": 1.0, "panels": 4}));
-    let posts: Vec<u64> = out["created"]
+    let posts: Vec<u64> = out["members"]
         .as_array()
         .unwrap()
         .iter()
         .map(|i| i.as_u64().unwrap())
         .filter(|i| matches!(s.project().element(ElementId(*i)).unwrap().kind, ElementKind::Column(_)))
         .collect();
-    assert!(!posts.is_empty());
+    assert_eq!(posts.len(), 5);
     for post in posts {
-        assert_eq!(s.project().element(ElementId(post)).unwrap().type_id.0, t);
+        let e = s.project().element(ElementId(post)).unwrap();
+        let t = s.project().element_type(e.type_id).unwrap();
+        assert_eq!((t.name.as_str(), t.category()), ("Ue 100x50x17x2,00", cc_core::Category::Column));
     }
+    // A given post type wins.
+    let column = run(&mut s, "profile_type_create", json!({"profile": "Ue 150x60x20x2,00", "category": "column"}));
+    let out = run(
+        &mut s,
+        "truss_create",
+        json!({"start": [0, 5], "end": [6, 5], "height": 1.0, "panels": 4, "post_type": column["id"]}),
+    );
+    let host = s.project().element(ElementId(out["id"].as_u64().unwrap())).unwrap();
+    let ElementKind::Truss(t) = &host.kind else { panic!("a truss") };
+    assert_eq!(t.post_type.0, column["id"].as_u64().unwrap());
 }
 
 #[test]

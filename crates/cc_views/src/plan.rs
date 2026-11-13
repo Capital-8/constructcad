@@ -54,7 +54,8 @@ pub fn is_structural(e: &cc_core::Element) -> bool {
         | ElementKind::Beam(_)
         | ElementKind::Foundation(_)
         | ElementKind::Grid(_)
-        | ElementKind::SteelBuilding(_) => true,
+        | ElementKind::SteelBuilding(_)
+        | ElementKind::Truss(_) => true,
         _ => false,
     }
 }
@@ -131,6 +132,7 @@ pub fn plan_of(
     draw_shafts(&mut d, project, level, cut_z);
     if !ceiling {
         draw_steel_buildings(&mut d, project, level, &shown);
+        draw_trusses(&mut d, project, level, &shown);
     }
 
     for (e, _) in project.walls().filter(|(e, _)| e.level == level && shown(e)) {
@@ -941,6 +943,17 @@ fn draw_steel_buildings(
     }
 }
 
+/// Trusses of a plan's level: each copy's span line, thin and dashed, as
+/// the truss's own line so it can be picked (its members draw themselves).
+fn draw_trusses(d: &mut Drawing2D, project: &Project, level: LevelId, shown: &dyn Fn(&cc_core::Element) -> bool) {
+    for e in project.elements.values().filter(|e| e.level == level && shown(e)) {
+        let ElementKind::Truss(t) = &e.kind else { continue };
+        for [a, b] in t.span_lines() {
+            d.line(a, b, LineStyle::Hidden, Some(e.id));
+        }
+    }
+}
+
 /// Shafts in a plan: those on its level and those its cut plane passes
 /// through, as their outline crossed by its two diagonals (the usual
 /// symbol of an opening through the floors).
@@ -1059,6 +1072,43 @@ mod tests {
         assert_eq!(lines, 4);
         // Mid-bay on a long side: nothing else is there.
         assert_eq!(d.hit_test(DVec2::new(0.0, 3.0), 0.01), Some(host));
+    }
+    /// A truss draws each copy's span line dashed as its own line, so it can
+    /// be picked; its members draw themselves.
+    #[test]
+    fn trusses_draw_their_span_lines() {
+        let mut doc = Document::new(Project::from_template());
+        let level = doc.project.levels[0].id;
+        let host = doc.edit("t", |e| {
+            let column = e.project().default_type(Category::Column).unwrap();
+            let beam = e.project().default_type(Category::Beam).unwrap();
+            let ty = cc_core::ElementTypeId(e.alloc_id());
+            e.add_type(cc_core::truss::host_type(ty, "Truss".into()));
+            let mut t = cc_core::truss::Truss::new(beam, beam, column);
+            (t.copies, t.spacing, t.base_offset) = (2, 3.0, 2.0);
+            let id = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id: ty,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind: ElementKind::Truss(Box::new(t)),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            })
+        });
+        let geom = ModelGeometry::build(&doc.project);
+        let d = plan(&doc.project, &geom, level, 1.2, false, 100);
+        let lines = d
+            .prims
+            .iter()
+            .filter(|p| matches!(p, Prim::Line { style: LineStyle::Hidden, element: Some(e), .. } if *e == host))
+            .count();
+        assert_eq!(lines, 2);
     }
     /// A wall with a column standing in it, cut by the plan; the column is
     /// joined with the wall when `joined` (the wall cutting an architectural one).

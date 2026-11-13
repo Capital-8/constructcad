@@ -40,6 +40,7 @@ mod line_styles_dialog;
 mod lps_cabling_ui;
 mod material_browser;
 mod mcp_bridge;
+mod member_host_ui;
 mod modify;
 mod modify3d;
 mod new_project_dialog;
@@ -76,6 +77,7 @@ mod theme;
 mod thumbnails;
 mod title_block_env;
 mod tools;
+mod truss_ui;
 mod type_dialog;
 #[cfg(test)]
 mod ui_tests;

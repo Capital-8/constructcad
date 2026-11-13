@@ -168,3 +168,16 @@ impl Command for StructuralTypeFor {
         Ok(json!({ "id": id.0, "name": name, "created": created }))
     }
 }
+
+/// The given type, else the catalog row's (made when missing).
+pub(crate) fn type_or_row(
+    s: &mut Session,
+    given: Option<ElementTypeId>,
+    category: Category,
+    (series, row): (&str, &str),
+) -> Result<ElementTypeId> {
+    match given {
+        Some(t) => Ok(t),
+        None => catalog_type(s, category, series, row),
+    }
+}

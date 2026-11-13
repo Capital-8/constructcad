@@ -1470,7 +1470,6 @@ default-rebar-view-name = Armaduras { $n }
 msg-member-vertical = As pontas de um contraventamento não podem ficar uma sobre a outra.
 tx-create-brace = Criar contraventamento
 msg-columns-two-exactly = Selecione exatamente dois pilares.
-truss-default-name = Treliça { $n }
 tx-create-truss = Criar treliça
 tool-truss = Treliça
 hint-truss = Clique as duas pontas da treliça · Esc encerra
@@ -1488,7 +1487,7 @@ action-structural-plan = Planta de forma
 action-number-structure = Numerar estrutura
 action-structure-tags = Etiquetas estruturais
 action-remove-rebar = Remover
-cmd-desc-truss = Monta uma treliça plana: clique as duas pontas; a barra de opções define altura, painéis e padrão (Pratt, Howe, Warren). Banzos e diagonais são vigas, montantes são pilares, todos num grupo.
+cmd-desc-truss = Monta uma treliça paramétrica de aço ou madeira: clique as duas pontas; a barra de opções define forma (plana, uma água, duas águas), padrão (Pratt, Howe, Warren, pendural, dois pendurais, Fink), altura, painéis, cópias e espaçamento. Banzos e diagonais são vigas e montantes são pilares, mantidos em dia com a treliça.
 cmd-desc-braces-x = Contraventa o vão entre os dois pilares selecionados com duas barras cruzadas, da base de cada um ao topo do outro.
 cmd-desc-rebar-typical = Dá às vigas e pilares selecionados (ou a todos do nível ativo) sem armadura uma armadura típica: barras longitudinais e estribos.
 cmd-desc-rebar-view = Abre uma vista 3D das armaduras sobre o modelo esmaecido.
@@ -3232,6 +3231,8 @@ msg-grid-frame-created = { $columns } pilares, { $beams } vigas e { $secondary }
 # Steel building
 category-steel-building = Galpões metálicos
 tpl-type-steel-building = Galpão metálico
+category-truss = Treliças
+tpl-type-truss = Treliça
 tx-steel-building = Criar galpão metálico
 action-steel-building = Galpão metálico
 dlg-steel-building = Galpão metálico
@@ -3250,6 +3251,18 @@ action-reset-members = Restaurar elementos
 opt-catalog-default = Padrão do catálogo
 cmd-desc-steel-building = Cria um galpão metálico paramétrico: pórticos de pilares e vigas de cobertura, com terças e longarinas, que acompanham seu vão, altura, inclinação e módulos.
 msg-steel-building-created = Galpão metálico criado com { $count } elementos.
+
+# Parametric trusses
+truss-king-post = Pendural
+truss-queen-post = Dois pendurais
+truss-fink = Fink (W)
+prop-truss-pattern = Padrão
+prop-truss-copies = Cópias
+label-top-chord-type = Tipo do banzo superior
+label-bottom-chord-type = Tipo do banzo inferior
+label-web-type = Tipo das diagonais
+label-post-type = Tipo dos montantes
+msg-truss-material = Treliças são de aço ou madeira: escolha um deles em Material.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Alvenaria 6"

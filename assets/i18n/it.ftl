@@ -1451,7 +1451,6 @@ default-rebar-view-name = Armatura { $n }
 msg-member-vertical = Le estremità di un controvento non possono essere una sopra l'altra.
 tx-create-brace = Crea controvento
 msg-columns-two-exactly = Seleziona esattamente due pilastri.
-truss-default-name = Travatura reticolare { $n }
 tx-create-truss = Crea travatura reticolare
 tool-truss = Travatura reticolare
 hint-truss = Fai clic sulle due estremità della travatura reticolare · Esc termina
@@ -1469,7 +1468,7 @@ action-structural-plan = Pianta strutturale
 action-number-structure = Numera la struttura
 action-structure-tags = Etichette strutturali
 action-remove-rebar = Rimuovi
-cmd-desc-truss = Imposta una travatura reticolare piana: fai clic sulle sue due estremità; la barra delle opzioni ne imposta l'altezza, i campi e lo schema (Pratt, Howe, Warren). Correnti e diagonali sono travi, i montanti sono pilastri, tutti in un unico gruppo.
+cmd-desc-truss = Disegna una travatura reticolare parametrica in acciaio o legno: fai clic sui due estremi; la barra delle opzioni ne imposta forma (piana, a una falda, a due falde), schema (Pratt, Howe, Warren, monaco, due monaci, Fink), altezza, pannelli, copie e interasse. Correnti e diagonali sono travi, montanti sono pilastri, aggiornati con la travatura.
 cmd-desc-braces-x = Controventa la campata tra i due pilastri selezionati con due aste che si incrociano dalla base di ciascuno alla sommità dell'altro.
 cmd-desc-rebar-typical = Assegna alle travi e ai pilastri selezionati (o a tutti quelli del livello attivo) privi di armatura un'armatura tipo: barre longitudinali e staffe.
 cmd-desc-rebar-view = Apri una vista 3D delle barre d'armatura sopra il modello disegnato in tenue.
@@ -3232,6 +3231,8 @@ msg-grid-frame-created = { $columns } pilastri, { $beams } travi e { $secondary 
 # Steel building
 category-steel-building = Capannoni in acciaio
 tpl-type-steel-building = Capannone in acciaio
+category-truss = Capriate
+tpl-type-truss = Capriata
 tx-steel-building = Crea capannone in acciaio
 action-steel-building = Capannone in acciaio
 dlg-steel-building = Capannone in acciaio
@@ -3250,6 +3251,18 @@ action-reset-members = Ripristina aste
 opt-catalog-default = Predefinito del catalogo
 cmd-desc-steel-building = Crea un capannone in acciaio parametrico: portali di pilastri e traversi, con arcarecci e correnti di parete, che seguono luce, altezza, pendenza e campate.
 msg-steel-building-created = Capannone in acciaio creato con { $count } aste.
+
+# Parametric trusses
+truss-king-post = Monaco
+truss-queen-post = Due monaci
+truss-fink = Fink (W)
+prop-truss-pattern = Schema
+prop-truss-copies = Copie
+label-top-chord-type = Tipo di corrente superiore
+label-bottom-chord-type = Tipo di corrente inferiore
+label-web-type = Tipo di diagonali
+label-post-type = Tipo di montanti
+msg-truss-material = Le travature sono in acciaio o legno: sceglierne uno in Materiale.
 
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Muratura 6"

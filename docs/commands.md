@@ -745,20 +745,26 @@ No parameters.
 
 ### `truss_create`
 
-*edit* — Lay out a plane truss from `start` to `end`: a bottom and a top chord `height` apart, `panels` panels and the web of `pattern` (`pratt`, the default, `howe` or `warren`). Pratt and Howe trusses get a post at every panel point, Warren trusses only at the ends; posts are columns. The members form a group, so the truss moves as one.
+*edit* — Lay out a parametric plane truss from `start` to `end`: a `flat` (default), `mono` or `gable` outline `height` deep (the rise at the apex or high end for mono and gable), `panels` bottom-chord panels and the web of `pattern` (`pratt`, the default, `howe`, `warren`, or for gables `kingpost`, `queenpost` and `fink`; a gable-only pattern on another shape is laid out as Pratt). Chords and diagonals are beams, verticals are columns, all ordinary elements the truss keeps in step with its parameters (`element_set` regenerates them, keeping their ids); a member edited or deleted by hand is detached and left alone. `copies` trusses are made `spacing` apart to the left of start → end. Default types come from the profile catalog for the `material` (steel: `Ue 150x60x20x2,00` chords, `Ue 100x50x17x2,00` web and posts; timber: `Peça 6x16` chords, `Peça 6x12` web and posts), made when missing; concrete is refused. Out-of-range values are refused. One undo step; returns the truss's `id` and its `members`.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
-| `end` | [x, y] | required | End of the truss in plan. |
-| `height` | number | required | Distance between the chord axes, meters. |
-| `start` | [x, y] | required | Start of the truss in plan. |
+| `end` | [x, y] | required | End of the span line in plan (the other support), 0.5 to 200 m from the start. |
+| `height` | number | required | Chord axis to chord axis (flat), or the rise at the apex or high end (mono, gable), meters, 0.1 to 20. |
+| `start` | [x, y] | required | Start of the span line in plan (a support). |
+| `bottom_chord_type` | id or name | optional | Beam type of the bottom chord (default: `chord_type`, else the catalog chord). |
 | `bottom_offset` | number | optional | Elevation of the bottom chord's axis above the level (default: the level height minus `height`). |
-| `chord_type` | id or name | optional | Beam type of the chords (default: the category's default type). |
+| `chord_type` | id or name | optional | Beam type of both chords (default: the material's catalog chord). |
+| `copies` | integer | optional | How many trusses, 1 to 200 (default 1). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
-| `panels` | integer | optional | Number of panels (default: about one per 1.5 m). |
-| `pattern` | string | optional | `pratt`, `howe` or `warren`. |
-| `post_type` | id or name | optional | Column type of the posts (default: the first column type of a steel or cold-formed profile, else of a steel section). |
-| `web_type` | id or name | optional | Beam type of the diagonals (default: the chord type). |
+| `material` | string | optional | `steel` (default) or `timber`: the catalog rows of the types not given (a given `chord_type` does not change it, so give `material` with a timber chord). |
+| `panels` | integer | optional | Bottom-chord panels, 2 to 64, even on a gable (default: about one per 1.5 m). |
+| `pattern` | string | optional | `pratt` (default), `howe`, `warren`, `kingpost`, `queenpost` or `fink`. |
+| `post_type` | id or name | optional | Column type of the verticals (default: a column type of the material's catalog web row). |
+| `shape` | string | optional | `flat` (default), `mono` (rising toward `end`) or `gable` (rising toward mid-span). |
+| `spacing` | number | optional | Distance between copies, to the left of start → end, meters, 0.3 to 20 (default 1.5). |
+| `top_chord_type` | id or name | optional | Beam type of the top chord (default: `chord_type`, else the catalog chord). |
+| `web_type` | id or name | optional | Beam type of the diagonals (default: the material's catalog web row). |
 
 ### `rebar_create`
 
