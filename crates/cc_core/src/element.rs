@@ -1589,6 +1589,67 @@ pub struct Rebar {
     /// whole one at the joint, instead of meeting end to end.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub lap_at_joins: bool,
+    /// A column's stirrups as several closed rectangles that overlap, one
+    /// around each of the rectangles a section with only square corners is
+    /// made of (two in an L or a T, three in a U), instead of one stirrup
+    /// following the whole outline.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub overlapping: bool,
+    /// Heights above a column's base where its vertical bars are cut, rising:
+    /// the bars of each lift start at one and run a lap past the next (empty:
+    /// whole bars, or the equal lifts of `splice`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lifts: Vec<f64>,
+}
+
+impl Rebar {
+    /// Most heights a set's bars are cut at.
+    pub const MAX_LIFTS: usize = 64;
+
+    /// A set in `host` with nothing but its layout and cover.
+    pub fn new(host: ElementId, layout: RebarLayout, cover: f64) -> Rebar {
+        Rebar {
+            host,
+            layout,
+            cover,
+            splice: None,
+            faces: Vec::new(),
+            lap_at_joins: false,
+            overlapping: false,
+            lifts: Vec::new(),
+        }
+    }
+
+    /// Whether the heights of `lifts` are usable: positive, finite and rising.
+    pub fn lifts_are_valid(lifts: &[f64]) -> bool {
+        lifts.len() <= Self::MAX_LIFTS
+            && lifts.iter().all(|h| h.is_finite() && *h > 0.0)
+            && lifts.windows(2).all(|w| w[0] < w[1])
+    }
+
+    /// Whether the values are usable (finite and within their limits).
+    pub fn is_valid(&self) -> bool {
+        self.layout.is_valid() && self.cover.is_finite() && self.cover >= 0.0 && Self::lifts_are_valid(&self.lifts)
+    }
+
+    /// The pieces `(from, to)` of a vertical bar of a column `height` high
+    /// cut at `lifts`: each runs from a cut (or the base) to `lap` past the
+    /// next one (or to the top). Cuts at or above the top are ignored.
+    pub fn lift_pieces(lifts: &[f64], height: f64, lap: f64) -> Vec<(f64, f64)> {
+        let lap = if lap.is_finite() { lap.max(0.0) } else { 0.0 };
+        let cuts: Vec<f64> = lifts.iter().copied().filter(|h| *h > 1e-6 && *h < height - 1e-6).collect();
+        let mut out = Vec::with_capacity(cuts.len() + 1);
+        let mut from = 0.0;
+        for cut in cuts.into_iter().take(Self::MAX_LIFTS) {
+            if cut <= from {
+                continue;
+            }
+            out.push((from, (cut + lap).min(height)));
+            from = cut;
+        }
+        out.push((from, height));
+        out
+    }
 }
 
 /// Reinforcing bars of any shape (bars bent to a schedule's shape codes,

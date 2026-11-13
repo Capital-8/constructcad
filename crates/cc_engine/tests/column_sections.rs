@@ -269,3 +269,92 @@ fn column_bars_are_cut_in_lifts_and_given_to_a_type() {
     let whole = id(&run(&mut s, "rebar_create", json!({"host": a.0, "layout": "perimeter", "faces": [2, 2, 2, 2]})));
     assert!(s.geom().rebar[&whole].bars.iter().all(|x| close(x.length(), 6.0)));
 }
+
+/// A column whose section is the closed outline `pts`.
+fn outline_column(s: &mut Session, name: &str, pts: &[[f64; 2]], at: [f64; 2]) -> ElementId {
+    let n = pts.len();
+    let curves: Vec<Value> =
+        (0..n).map(|i| json!({"kind": "line", "start": pts[i], "end": pts[(i + 1) % n]})).collect();
+    run(s, "profile_create", json!({"name": name, "material": "concrete", "curves": curves}));
+    let ty = run(s, "profile_type_create", json!({"profile": name, "category": "column"}))["id"].as_u64().unwrap();
+    id(&run(s, "column_create", json!({"position": at, "type": ty})))
+}
+
+/// The issue's option: several closed stirrups that overlap, two in an L and three in a U.
+#[test]
+fn overlapping_stirrups_go_around_the_rectangles_of_the_section() {
+    let mut s = Session::default();
+    // An L of 60 x 60 cm with legs 20 cm thick.
+    let l = [[0.0, 0.0], [0.6, 0.0], [0.6, 0.2], [0.2, 0.2], [0.2, 0.6], [0.0, 0.6]];
+    let column = outline_column(&mut s, "L 60", &l, [0.0, 0.0]);
+    let one = id(&run(&mut s, "rebar_create", json!({"host": column.0, "layout": "stirrups", "cover": 0.03})));
+    let args = json!({"host": column.0, "layout": "stirrups", "cover": 0.03, "overlapping": true});
+    let two = id(&run(&mut s, "rebar_create", args));
+    let geom = s.geom().clone();
+    let (one, two) = (&geom.rebar[&one], &geom.rebar[&two]);
+    assert_eq!(two.count(), 2 * one.count());
+    let c = 0.03 + two.diameter / 2.0;
+    for bar in &two.bars {
+        // Each leg of the L: 60 x 20 cm less the cover all around, closed, with four square corners.
+        assert!(bar.closed && bar.points.len() == 4, "{bar:?}");
+        assert!(close(bar.length(), 2.0 * (0.6 + 0.2) - 8.0 * c), "{}", bar.length());
+    }
+    // The two of a level cross: one lies along X, the other along Y.
+    let wide = |b: &cc_geom::rebar::Bar| (b.points[1] - b.points[0]).length() > (b.points[2] - b.points[1]).length();
+    let level: Vec<_> = two.bars.iter().filter(|b| close(b.points[0].z, two.bars[0].points[0].z)).collect();
+    assert_eq!(level.len(), 2);
+    assert!(wide(level[0]) != wide(level[1]));
+
+    // A U of 80 x 60 cm with 20 cm legs and base: three.
+    let u = [[0.0, 0.0], [0.8, 0.0], [0.8, 0.6], [0.6, 0.6], [0.6, 0.2], [0.2, 0.2], [0.2, 0.6], [0.0, 0.6]];
+    let column = outline_column(&mut s, "U 80", &u, [5.0, 0.0]);
+    let plain = id(&run(&mut s, "rebar_create", json!({"host": column.0, "layout": "stirrups"})));
+    let three = id(&run(&mut s, "rebar_create", json!({"host": column.0, "layout": "stirrups", "overlapping": true})));
+    assert_eq!(s.geom().rebar[&three].count(), 3 * s.geom().rebar[&plain].count());
+
+    // Sections that are one rectangle, or not made of rectangles, and other layouts are refused.
+    let plain = id(&run(&mut s, "column_create", json!({"position": [10, 0]})));
+    let sector = sector_column(&mut s, [15.0, 0.0]);
+    let beam = id(&run(&mut s, "beam_create", json!({"start": [0, 8], "end": [4, 8]})));
+    for (host, layout) in [(plain, "stirrups"), (sector, "stirrups"), (beam, "stirrups"), (column, "ties")] {
+        let bad = json!({"host": host.0, "layout": layout, "overlapping": true});
+        assert_eq!(fails(&mut s, "rebar_create", bad), ErrorCode::InvalidArguments, "{layout}");
+    }
+}
+
+/// Vertical bars cut at given heights (the construction joints), each lift lapping the next.
+#[test]
+fn column_bars_are_cut_at_given_heights() {
+    let mut s = Session::default();
+    let column = id(&run(&mut s, "column_create", json!({"position": [0, 0]})));
+    run(&mut s, "element_set", json!({"id": column.0, "params": {"top": "Unconnected", "height": 6.0}}));
+    // A height above the top is no cut.
+    let args = json!({"host": column.0, "layout": "perimeter", "count": 4, "lifts": [2.0, 4.0, 9.0], "lap": 0.5});
+    let set = id(&run(&mut s, "rebar_create", args));
+    let geom = s.geom().clone();
+    let r = &geom.rebar[&set];
+    let base = r.bars.iter().map(|b| b.points[0].z).fold(f64::INFINITY, f64::min);
+    assert_eq!(r.count(), 4 * 3);
+    let mut pieces: Vec<(f64, f64)> = r.bars.iter().map(|b| (b.points[0].z - base, b.length())).collect();
+    pieces.sort_by(|a, b| a.0.total_cmp(&b.0));
+    pieces.dedup_by(|a, b| close(a.0, b.0) && close(a.1, b.1));
+    // From the base to a lap above 2 m, from 2 m to a lap above 4 m, and from 4 m to the top.
+    assert_eq!(pieces.len(), 3, "{pieces:?}");
+    for (got, want) in pieces.iter().zip([(0.0, 2.5), (2.0, 2.5), (4.0, 2.0)]) {
+        assert!(close(got.0, want.0) && close(got.1, want.1), "{pieces:?}");
+    }
+    assert!(close(r.total_length(), 4.0 * (6.0 + 2.0 * 0.5)));
+    // Without a lap of its own: 40 diameters.
+    let args = json!({"host": column.0, "layout": "perimeter", "count": 4, "lifts": [3.0]});
+    let set = id(&run(&mut s, "rebar_create", args));
+    let r = &s.geom().rebar[&set];
+    assert!(close(r.total_length(), 4.0 * (6.0 + 40.0 * r.diameter)));
+    // Heights that do not rise, and lifts of other bars, are refused; so is an edit to bad ones.
+    for bad in [json!([3.0, 2.0]), json!([0.0, 2.0]), json!([-1.0])] {
+        let args = json!({"host": column.0, "layout": "perimeter", "lifts": bad});
+        assert_eq!(fails(&mut s, "rebar_create", args), ErrorCode::InvalidArguments);
+    }
+    let args = json!({"host": column.0, "layout": "stirrups", "lifts": [2.0]});
+    assert_eq!(fails(&mut s, "rebar_create", args), ErrorCode::InvalidArguments);
+    assert!(s.execute("element_set", json!({"id": set.0, "params": {"lifts": [4.0, 1.0]}})).is_err());
+}

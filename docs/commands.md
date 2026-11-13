@@ -804,7 +804,9 @@ No parameters.
 | `faces` | [id, …] | optional | Columns, `perimeter`: the number of bars on each face of the section, in the order of the column's `derived.faces`, the two corner bars of a face included (at least 2). |
 | `lap` | number | optional | Lap length of the splices, meters (default: 40 bar diameters). |
 | `lap_at_joins` | boolean | optional | Beams, bars along the beam: run them half a lap past each end joined to another beam that carries on in the same line (the beams of a ring), so the bars of the two lap there (default false: they stop the cover short of the end). The lap is `lap`, or 40 bar diameters where bars are kept whole (`max_length` 0). |
+| `lifts` | [number, …] | optional | Columns, `perimeter`: heights above the column's base where its vertical bars are cut, rising (the construction joints): the bars of each lift run `lap` past the next height. Instead of the equal lifts of `max_length`. |
 | `max_length` | number | optional | Longest bar along a beam, meters (default: the stock length, 12 m, or 40' in imperial projects): longer bars are lap spliced. 0 keeps whole bars. |
+| `overlapping` | boolean | optional | Columns, `stirrups`: several closed stirrups that overlap, one around each of the rectangles the section is made of (two in an L or a T, three in a U), instead of one following the whole outline. The section must have only square corners. |
 | `same_type` | boolean | optional | Also give the set to every other column (or beam) of the host's type (default false). |
 | `spacing` | number | optional | Stirrup spacing, meters (default 0.15; 6" in imperial projects), or the largest distance between side bars over the height when no `count` is given. |
 | `type` | id or name | optional | Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups; 1/2" and 3/8" in imperial projects). |

@@ -236,7 +236,7 @@ impl Command for StripRebarCreate {
                 .into_iter()
                 .map(|(host, level, ty, layout, splice)| {
                     let lap_at_joins = lap_at_joins && layout.runs_along();
-                    let rebar = Rebar { host, layout, cover, splice, faces: Vec::new(), lap_at_joins };
+                    let rebar = Rebar { splice, lap_at_joins, ..Rebar::new(host, layout, cover) };
                     add_element(e, level, ty, ElementKind::Rebar(rebar))
                 })
                 .collect::<Vec<_>>())

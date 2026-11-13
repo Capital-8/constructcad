@@ -36,7 +36,7 @@ fn host(p: &Project, id: u64) -> Result<(ElementId, bool)> {
 }
 
 fn rebar_kind(host: ElementId, layout: RebarLayout, cover: f64, splice: Option<Splice>) -> ElementKind {
-    ElementKind::Rebar(Rebar { host, layout, cover, splice, faces: Vec::new(), lap_at_joins: false })
+    ElementKind::Rebar(Rebar { splice, ..Rebar::new(host, layout, cover) })
 }
 
 /// The bars of a column face by face: `counts` (one per face of its
@@ -165,6 +165,16 @@ pub struct RebarCreate {
     /// or 40 bar diameters where bars are kept whole (`max_length` 0).
     #[serde(default)]
     pub lap_at_joins: Option<bool>,
+    /// Columns, `stirrups`: several closed stirrups that overlap, one around each of the
+    /// rectangles the section is made of (two in an L or a T, three in a U), instead of one
+    /// following the whole outline. The section must have only square corners.
+    #[serde(default)]
+    pub overlapping: Option<bool>,
+    /// Columns, `perimeter`: heights above the column's base where its vertical bars are
+    /// cut, rising (the construction joints): the bars of each lift run `lap` past the next
+    /// height. Instead of the equal lifts of `max_length`.
+    #[serde(default)]
+    pub lifts: Option<Vec<f64>>,
     /// Columns, `perimeter`: the number of bars on each face of the section, in the order of
     /// the column's `derived.faces`, the two corner bars of a face included (at least 2).
     #[serde(default)]
@@ -245,9 +255,45 @@ impl Command for RebarCreate {
             _ => None,
         };
         let lap_at_joins = beam && layout.runs_along() && self.lap_at_joins.unwrap_or(false);
+        // Overlapping stirrups: in a column whose section is made of rectangles.
+        let overlapping = self.overlapping.unwrap_or(false);
+        if overlapping {
+            let outline = p
+                .element(host_id)
+                .and_then(|e| p.element_type(e.type_id))
+                .and_then(|t| p.type_section(&t.data))
+                .map(|s| s.outline.outer)
+                .unwrap_or_default();
+            if beam || !matches!(layout, RebarLayout::Stirrups { .. }) {
+                return Err(EngineError::invalid("`overlapping` goes with the `stirrups` of a column"));
+            }
+            if cc_geom::faces::rectangles(&outline).len() < 2 {
+                return Err(EngineError::invalid(
+                    "overlapping stirrups need a section made of rectangles (an L, T or U with square corners, its sides along its own axes)",
+                ));
+            }
+        }
+        // Lifts at given heights: a column's vertical bars.
+        let lifts = self.lifts.clone().unwrap_or_default();
+        if !lifts.is_empty() {
+            if beam || !matches!(layout, RebarLayout::Longitudinal { face: BarFace::Perimeter, .. }) {
+                return Err(EngineError::invalid("`lifts` go with the `perimeter` bars of a column"));
+            }
+            if !Rebar::lifts_are_valid(&lifts) {
+                return Err(EngineError::invalid(format!(
+                    "lifts are heights above the base, positive and rising, at most {}",
+                    Rebar::MAX_LIFTS
+                )));
+            }
+        }
+        // The lap of the lifts is the splice's: kept even when no stock length was asked for.
+        let splice = match (lifts.is_empty(), splice) {
+            (false, None) => super::rebar::splice(p, type_id, None, self.lap)?,
+            (_, splice) => splice,
+        };
         let set = |host| {
-            let (layout, faces) = (layout.clone(), faces.clone());
-            ElementKind::Rebar(Rebar { host, layout, cover, splice, faces, lap_at_joins })
+            let (layout, faces, lifts) = (layout.clone(), faces.clone(), lifts.clone());
+            ElementKind::Rebar(Rebar { host, layout, cover, splice, faces, lap_at_joins, overlapping, lifts })
         };
         // The other members of the host's type, each on its own level.
         let host_type = p.element(host_id).map(|e| e.type_id);

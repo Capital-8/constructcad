@@ -323,12 +323,9 @@ impl Command for WallRebarCreate {
             for (host, level) in &walls {
                 for (type_id, layout, cover, splice) in &sets {
                     let rebar = Rebar {
-                        host: *host,
-                        layout: layout.clone(),
-                        cover: *cover,
                         splice: *splice,
-                        faces: Vec::new(),
                         lap_at_joins: lap_at_joins && matches!(layout, RebarLayout::WallHorizontal { .. }),
+                        ..Rebar::new(*host, layout.clone(), *cover)
                     };
                     ids.push(add_element(e, *level, *type_id, ElementKind::Rebar(rebar)));
                 }
