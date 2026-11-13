@@ -65,7 +65,9 @@ fn an_annular_sector_column_is_a_piece_of_a_ring() {
     assert!(close(faces[1]["length"].as_f64().unwrap(), 0.2) && close(faces[3]["length"].as_f64().unwrap(), 0.2));
     // The column's volume is the ring's, not that of the chords it is drawn with.
     let area = half * (2.2f64.powi(2) - 2.0f64.powi(2));
-    assert!((d["section"]["area"].as_f64().unwrap() - area).abs() < area * 5e-3, "{d}");
+    assert!((d["section"]["area"].as_f64().unwrap() - area).abs() < 1e-9, "{d}");
+    // The mass per meter is the exact area's (the template's concrete: 2400 kg/m³).
+    assert!((d["section"]["linear_mass"].as_f64().unwrap() - area * 2400.0).abs() < 1e-6, "{d}");
     let geom = s.geom().clone();
     let solid = geom.solids.iter().find(|x| x.element == column).expect("a body");
     let (lo, hi) = solid.bounds().unwrap();

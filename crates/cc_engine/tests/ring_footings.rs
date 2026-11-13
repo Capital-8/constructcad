@@ -232,6 +232,11 @@ fn a_circular_raft_keeps_its_true_curve() {
     assert!((g.area() - PI * 2.5 * 2.5).abs() < 1e-9, "{}", g.area());
     assert!((g.volume() - PI * 2.5 * 2.5 * thickness).abs() < 1e-9);
     assert!(cc_geom::polygon::area(&g.footprint) < g.area());
+    // Queries, schedules and IFC quantities read the same values.
+    assert!((geom.volume(raft) - PI * 2.5 * 2.5 * thickness).abs() < 1e-9, "{}", geom.volume(raft));
+    let derived = run(&mut s, "element_get", json!({"id": raft.0}))["derived"].clone();
+    assert!((derived["area"].as_f64().unwrap() - PI * 2.5 * 2.5).abs() < 1e-9, "{derived}");
+    assert!((derived["volume"].as_f64().unwrap() - PI * 2.5 * 2.5 * thickness).abs() < 1e-9, "{derived}");
     // Its sketch can be read back and redrawn.
     let drawn = run(&mut s, "sketch_get", json!({"id": raft.0}));
     assert_eq!(drawn["curves"][0]["kind"], "circle", "{drawn}");

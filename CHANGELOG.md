@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A circular foundation slab's volume in `element_get`, schedules and IFC quantities is the circle's, not that of the chords it is drawn with, and `element_get` gives a foundation's `area`. A column's or beam's `section` `area` and mass per meter (and the *Linear mass* schedule field) count the arcs of its profile whole: a round, tubular or annular sector section was reported up to 0.6% short.
 - Surface patterns and material textures on curved surfaces (#314). A pattern could jump inside the facets of a curved wall or roof; patterns and textures now run on from one smooth facet to the next, and patterns on sloped or diagonal flat faces are drawn at true scale.
 - Dialogs whose contents lay outside them or whose footer buttons lay over each other (#312): Type Properties (the component definition buttons), Visibility/Graphics, Filters, View Templates, Materials and the Component Library. Checkboxes in table cells keep a visible box.
 - `skp_import` and `skp_component_load` no longer hang on a file whose definitions place each other many times over, or themselves (#303): such a file is refused as too large.

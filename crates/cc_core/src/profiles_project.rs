@@ -328,6 +328,21 @@ impl Project {
         shape.area().ok()
     }
 
+    /// The properties of a column or beam type's section for a material of
+    /// `density` kg/m³. The area and the mass per meter are exact for arcs
+    /// ([`Self::exact_section_area`]); the inertias are those of the outline,
+    /// which follows arcs with chords.
+    pub fn type_section_properties(&self, data: &TypeData, density: f64) -> Option<crate::SectionProperties> {
+        let mut props = self.type_section(data)?.outline.properties(density);
+        if let Some(exact) = self.exact_section_area(data).filter(|a| a.is_finite() && *a > 0.0)
+            && props.area > 0.0
+        {
+            props.linear_mass *= exact / props.area;
+            props.area = exact;
+        }
+        Some(props)
+    }
+
     /// The column and beam types that use a profile.
     pub fn profile_users(&self, id: ProfileId) -> Vec<ElementTypeId> {
         self.types

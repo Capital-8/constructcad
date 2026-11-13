@@ -1347,8 +1347,9 @@ impl ModelGeometry {
         if let Some(t) = self.topographies.get(&id) {
             return t.volume;
         }
-        // Exact for arc strips and curved floors (their solids mesh the arcs with chords).
-        if let Some(f) = self.foundations.get(&id).filter(|f| f.arc.is_some()) {
+        // Exact for arc strips, slabs drawn with curves and curved floors
+        // (their solids mesh the arcs with chords).
+        if let Some(f) = self.foundations.get(&id).filter(|f| f.arc.is_some() || f.drawn_area.is_some()) {
             return f.volume();
         }
         if let Some(v) = self.curved_volumes.get(&id) {

@@ -388,6 +388,10 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     if geom.solids_of(id).next().is_some() {
         derived.insert("volume".into(), json!(geom.volume(id)));
     }
+    // A foundation's plan area, exact for arc strips and slabs drawn with curves.
+    if let Some(f) = geom.foundations.get(&id) {
+        derived.entry("area").or_insert_with(|| json!(f.area()));
+    }
     if let Some(g) = geom.topographies.get(&id) {
         super::topography::derived(g, &mut derived);
         // The earthworks of its pads.
