@@ -55,6 +55,7 @@ pub mod sketch;
 pub mod slab_rebar;
 pub mod stair;
 pub mod steel_building;
+pub mod strip_rebar;
 pub mod structure;
 pub mod structure_material;
 pub mod sweep;

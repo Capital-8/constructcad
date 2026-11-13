@@ -330,9 +330,8 @@ mod tests {
         let mut p = Project::from_template();
         let level = p.levels[0].id;
         let type_id = p.default_type(crate::Category::Foundation).unwrap();
-        let strip = |bulge: f64| Foundation {
-            shape: FoundationShape::Strip { start: DVec2::ZERO, end: DVec2::new(4.0, 0.0), bulge },
-            top_offset: 0.0,
+        let strip = |bulge: f64| {
+            Foundation::new(FoundationShape::Strip { start: DVec2::ZERO, end: DVec2::new(4.0, 0.0), bulge }, 0.0)
         };
         let id = ElementId(p.alloc_id());
         let e = Element {

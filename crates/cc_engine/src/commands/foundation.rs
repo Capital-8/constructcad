@@ -1,7 +1,7 @@
 //! Foundations: pads under columns, strips (ground beams) under walls and
 //! slabs, placed one by one or under existing columns and walls.
 
-use super::create::{SketchArgs, arc_bulge, sketch};
+use super::create::{SketchArgs, arc_bulge};
 use super::{add_element, created, edit, ids_json};
 use crate::error::{EngineError, Result};
 use crate::refs::{self, Point, Ref, finite, point};
@@ -41,7 +41,7 @@ fn foundation_type(p: &Project, kind: FoundationKind, r: Option<&Ref>) -> Result
 }
 
 fn foundation(shape: FoundationShape, top_offset: Option<f64>) -> Result<ElementKind> {
-    Ok(ElementKind::Foundation(Foundation { shape, top_offset: finite(top_offset.unwrap_or(0.0), "top_offset")? }))
+    Ok(ElementKind::Foundation(Foundation::new(shape, finite(top_offset.unwrap_or(0.0), "top_offset")?)))
 }
 
 /// Foundations of `level` with their shapes.
@@ -183,8 +183,10 @@ impl Command for StripFootingCreate {
     }
 }
 
-/// Create a foundation slab (a raft) from an outline or under the loop of
-/// walls of the level; `offset` is its top above the level (default 0).
+/// Create a foundation slab (a raft) from an outline, from `curves` (lines,
+/// arcs, circles: a circular raft keeps its true curve, area and volume) or
+/// under the loop of walls of the level; `offset` is its top above the level
+/// (default 0).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 pub struct FoundationSlabCreate {
     #[serde(flatten)]
@@ -195,9 +197,15 @@ impl Command for FoundationSlabCreate {
     const NAME: &'static str = "foundation_slab_create";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
-        let (level, boundary) = sketch(s, &self.sketch, Category::Floor)?;
+        let (level, profile, drawn) = super::create::sketched(s, &self.sketch, Category::Floor)?;
+        if !profile.openings.is_empty() {
+            return Err(EngineError::invalid("a foundation slab takes one outline, with no openings"));
+        }
         let type_id = foundation_type(s.project(), FoundationKind::Slab, self.sketch.type_ref.as_ref())?;
-        let kind = foundation(FoundationShape::Slab { boundary }, self.sketch.offset)?;
+        let mut kind = foundation(FoundationShape::Slab { boundary: profile.outline }, self.sketch.offset)?;
+        if let ElementKind::Foundation(f) = &mut kind {
+            f.sketch = drawn;
+        }
         let id = edit(s, t!("tx-create-foundation"), |e| Ok(add_element(e, level, type_id, kind)))?;
         Ok(created(s, id))
     }

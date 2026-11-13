@@ -279,10 +279,15 @@ impl Project {
                 TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
                     repairs += usize::from(fix_positive(diameter, 0.025));
                 }
-                TypeData::Foundation { width, length, thickness, .. } => {
+                TypeData::Foundation { width, length, thickness, haunch, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(length, 1.0))
                         + usize::from(fix_positive(thickness, 0.4));
+                    // A haunch that makes no section: a plain strip.
+                    if haunch.is_some_and(|h| !h.fits(*width, *thickness)) {
+                        *haunch = None;
+                        repairs += 1;
+                    }
                 }
                 TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
@@ -406,10 +411,14 @@ impl Project {
                         ElementKind::Rebar(r) => self.element(r.host).is_some_and(|h| match &h.kind {
                             ElementKind::Wall(_) => r.layout.in_wall(),
                             ElementKind::Floor(_) => r.layout.in_slab(),
-                            ElementKind::Foundation(f) => {
-                                matches!(f.shape, crate::FoundationShape::Slab { .. }) && r.layout.in_slab()
+                            ElementKind::Foundation(f) => match f.shape {
+                                crate::FoundationShape::Slab { .. } => r.layout.in_slab(),
+                                crate::FoundationShape::Strip { .. } => r.layout.fits_strip(),
+                                crate::FoundationShape::Pad { .. } => false,
+                            },
+                            ElementKind::Beam(_) | ElementKind::Column(_) => {
+                                !r.layout.in_wall() && !r.layout.in_slab() && !r.layout.in_strip()
                             }
-                            ElementKind::Beam(_) | ElementKind::Column(_) => !r.layout.in_wall() && !r.layout.in_slab(),
                             _ => false,
                         }),
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
@@ -1340,7 +1349,7 @@ mod tests {
                 type_id,
                 mark: String::new(),
                 comments: String::new(),
-                kind: ElementKind::Foundation(crate::Foundation { shape, top_offset: 0.0 }),
+                kind: ElementKind::Foundation(crate::Foundation::new(shape, 0.0)),
                 uid: Default::default(),
                 phase_created: Default::default(),
                 phase_demolished: None,

@@ -130,8 +130,8 @@ pub use structural_material::StructuralMaterial;
 pub use structural_profile::{ProfileDef, ProfileMaterial, ProfileShape, SectionOutline};
 pub use transform::PlanTransform;
 pub use types::{
-    Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, TypeData, TypeInfo,
-    WallFunction, stair_layout,
+    Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, StripHaunch, TypeData,
+    TypeInfo, WallFunction, stair_layout,
 };
 pub use units::{AreaUnit, LengthUnit, MeasurementSystem, NumberStyle, SlopeUnit, Units, VolumeUnit};
 pub use view::{

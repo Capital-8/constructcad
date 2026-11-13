@@ -236,6 +236,7 @@ registry![
         rebar::RebarTypical,
         wall_rebar::WallRebarCreate,
         slab_rebar::SlabRebarCreate,
+        strip_rebar::StripRebarCreate,
         connection::ConnectionsCreate,
         analytical::AnalyticalModelGet,
         analytical::AnalyticalExport,
