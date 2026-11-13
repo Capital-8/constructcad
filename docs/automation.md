@@ -306,6 +306,15 @@ Column and beam types are drawn and built with a structural profile: a standard 
 {"command": "element_set", "args": {"id": 42, "params": {"spacing": 0.4}}}
 ```
 
+`beam_create` draws an arc beam with `mid` (a point on the arc), `bulge` or `radius` (positive counter-clockwise; `major_arc` takes the longer arc), as `wall_create` draws arc walls; `element_get` then gives its `center`, `radius`, `sweep` and `true_length` along the arc. `rebar_create` lays bars in a beam or column: `top`, `bottom` (beams) or `perimeter` (columns) with a `count`, `sides` (side bars on both side faces of a beam: a `count` per face, or a `spacing` over the height) and `stirrups` every `spacing`. In an arc beam the bars follow the arc, each as long as the arc at its own radius, and the stirrups are radial. Bars that do not fit side by side go in a second layer, and bars along a beam longer than `max_length` (default 12 m; 0 for whole bars) are lap spliced by `lap` (default 40 diameters), neighbouring splices staggered.
+
+```text
+{"command": "beam_create", "args": {"start": [2.5, 0], "end": [0, 2.5], "radius": 2.5}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "bottom", "count": 6}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "sides", "spacing": 0.15}}
+{"command": "rebar_create", "args": {"host": 42, "layout": "stirrups", "spacing": 0.12}}
+```
+
 `bracing_create` braces one bay of a frame: a host element whose braces are ordinary beams, made in one undo step and returned as `{id, members}`. The bay is `start` to `end` (the two column axes) or the two `columns`, whose base and height it then takes; `pattern` is `x`, `diagonal` (with `flip` and `alternate`), `v`, `chevron` or `k`; `stories` storeys of `height` stand one above the other from `base_offset`; `material` (`steel` or `timber`) picks the catalog row of the default brace type. `element_set` changes its parameters and regenerates the braces with their ids kept.
 
 ```text

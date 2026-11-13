@@ -64,6 +64,9 @@ fn element_is_valid(e: &Element) -> bool {
             let layout = match r.layout {
                 crate::RebarLayout::Longitudinal { count, .. } => (1..=200).contains(&count),
                 crate::RebarLayout::Stirrups { spacing } => spacing.is_finite() && spacing >= 0.02,
+                crate::RebarLayout::Sides { count, spacing } => {
+                    count <= 200 && spacing.is_finite() && (count > 0 || spacing >= 0.02)
+                }
             };
             layout && r.cover.is_finite() && r.cover >= 0.0
         }
@@ -577,12 +580,13 @@ impl Project {
                 r.edge_slopes.pop();
             }
         }
-        // Arc walls and arc strip footings: a bulge that is not a number makes
+        // Arc walls, arc beams and arc strip footings: a bulge that is not a number makes
         // them straight, one past a nearly full circle is clamped, a negligible
         // one is dropped.
         for e in self.elements.values_mut() {
             let bulge = match &mut e.kind {
                 ElementKind::Wall(w) => &mut w.bulge,
+                ElementKind::Beam(b) => &mut b.bulge,
                 ElementKind::Foundation(crate::Foundation {
                     shape: crate::FoundationShape::Strip { bulge, .. },
                     ..
@@ -596,6 +600,24 @@ impl Project {
             };
             if fixed.to_bits() != bulge.to_bits() {
                 *bulge = fixed;
+                repairs += 1;
+            }
+        }
+        // Lap splices out of range: whole bars.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Rebar(r) = &mut e.kind
+                && r.splice.is_some_and(|s| !s.is_valid())
+            {
+                r.splice = None;
+                repairs += 1;
+            }
+        }
+        // An arc beam is level.
+        for e in self.elements.values_mut() {
+            if let ElementKind::Beam(b) = &mut e.kind
+                && b.bulge != 0.0
+                && b.end_offset.take().is_some()
+            {
                 repairs += 1;
             }
         }
@@ -1227,6 +1249,71 @@ mod tests {
         assert_eq!(p.repair(), 0);
         // Collinear three points give no arc.
         assert!(crate::arc::Arc::bulge_through(DVec2::ZERO, DVec2::X, DVec2::new(2.0, 0.0)).is_none());
+    }
+
+    /// Crafted arc beams: their bulges are repaired like walls', an arc
+    /// beam is level, and lap splices out of range are dropped.
+    #[test]
+    fn arc_beams_and_splices_are_repaired() {
+        use crate::{Beam, Rebar, RebarLayout, Splice};
+        let mut p = Project::from_template();
+        let level = p.levels[0].id;
+        let beam_t = p.default_type(Category::Beam).unwrap();
+        let bar_t = p.default_type(Category::Rebar).unwrap();
+        let add = |p: &mut Project, type_id, kind| {
+            let id = ElementId(p.alloc_id());
+            let e = Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                kind,
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            };
+            p.elements.insert(id, e);
+            id
+        };
+        let mut ids = Vec::new();
+        for bulge in [f64::NAN, 1e6, 1e-9, 0.5] {
+            let mut beam = Beam::new(DVec2::ZERO, DVec2::new(4.0, 0.0), 3.0);
+            beam.bulge = bulge;
+            beam.end_offset = Some(3.5);
+            ids.push(add(&mut p, beam_t, ElementKind::Beam(beam)));
+        }
+        let mut bars = Vec::new();
+        for splice in [
+            Splice { max_length: 12.0, lap: 0.5 },
+            Splice { max_length: f64::NAN, lap: 0.5 },
+            Splice { max_length: 2.0, lap: 1.5 },
+        ] {
+            let layout = RebarLayout::Sides { count: 1, spacing: 0.0 };
+            let rebar = Rebar { host: ids[0], layout, cover: 0.025, splice: Some(splice) };
+            bars.push(add(&mut p, bar_t, ElementKind::Rebar(rebar)));
+        }
+        assert!(p.repair() >= 5);
+        let beams: Vec<(f64, Option<f64>)> = ids
+            .iter()
+            .map(|id| match &p.element(*id).unwrap().kind {
+                ElementKind::Beam(b) => (b.bulge, b.end_offset),
+                _ => panic!("a beam"),
+            })
+            .collect();
+        // Straight beams keep their slope; arc beams lose it.
+        assert_eq!(beams, vec![(0.0, Some(3.5)), (crate::arc::MAX_BULGE, None), (0.0, Some(3.5)), (0.5, None)]);
+        let splices: Vec<bool> = bars
+            .iter()
+            .map(|id| match &p.element(*id).unwrap().kind {
+                ElementKind::Rebar(r) => r.splice.is_some(),
+                _ => panic!("rebar"),
+            })
+            .collect();
+        assert_eq!(splices, vec![true, false, false]);
+        assert_eq!(p.repair(), 0);
     }
 
     /// Crafted arc strip footings: their bulges are repaired like walls'.

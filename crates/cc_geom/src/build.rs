@@ -637,12 +637,13 @@ impl ModelGeometry {
                         end,
                         half,
                         z_range: project.beam_z(e, b),
-                        slope: b.rise() / b.length(),
+                        // An arc beam is level.
+                        slope: if b.arc().is_some() { 0.0 } else { b.rise() / b.length() },
                         section,
                         curved,
                         join_start: b.join_start,
                         join_end: b.join_end,
-                        bulge: 0.0,
+                        bulge: b.bulge,
                     });
                 }
                 (ElementKind::Column(c), Some(data @ TypeData::Column { .. })) if c.structural => {
@@ -659,14 +660,19 @@ impl ModelGeometry {
         self.beams = resolve_beams(&beams, &columns).into_iter().map(|g| (g.element, g)).collect();
         // Exact for sections with arcs: the swept volume scaled from the
         // chorded outline's area to the section's.
-        for g in self.beams.values().filter(|g| g.curved) {
+        for g in self.beams.values().filter(|g| g.curved || g.arc.is_some()) {
             let Some(e) = project.element(g.element) else { continue };
-            let Some(exact) = project.element_type(e.type_id).and_then(|t| project.exact_section_area(&t.data)) else {
-                continue;
-            };
+            let exact = project.element_type(e.type_id).and_then(|t| project.exact_section_area(&t.data));
             let chorded = g.section.properties(0.0).area;
-            if chorded > 0.0 {
-                self.curved_volumes.insert(g.element, g.volume() * exact / chorded);
+            match exact {
+                Some(exact) if g.curved && chorded > 0.0 => {
+                    self.curved_volumes.insert(g.element, g.volume() * exact / chorded);
+                }
+                // An arc beam of a plain section: its solid meshes the arc with chords.
+                _ if g.arc.is_some() => {
+                    self.curved_volumes.insert(g.element, g.volume());
+                }
+                _ => {}
             }
         }
     }

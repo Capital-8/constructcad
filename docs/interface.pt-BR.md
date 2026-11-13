@@ -236,6 +236,24 @@ Cortinas de vidro são paredes de um tipo cortina (um projeto sem tipo cortina g
 - **Alça de curvatura**: uma sapata em arco selecionada mostra uma alça redonda no meio do arco, como as paredes em arco; arrastá-la curva a sapata pelo ponteiro, mantendo as pontas (o raio e o comprimento aparecem durante o arrasto). Com um tipo de sapata corrida escolhido, a barra de opções chama a ferramenta de *Sapata corrida*.
 - **Vistas**: as plantas tracejam as sapatas abaixo do plano de corte e hachuram as que ele corta, com os arcos em cordas curtas; os cortes cortam o corpo curvo; as tabelas listam o comprimento ao longo do arco e o volume exato. A exportação IFC grava uma sapata em arco como `IfcFooting` (`STRIP_FOOTING`) cujo corpo é o seu contorno de arcos verdadeiros extrudado. A importação IFC traz as sapatas corridas, retas ou em arco, como componentes com a sua malha, como antes.
 
+## Vigas em arco
+
+A ferramenta *Viga* tem dois modos na barra de opções, como a de parede: *Linha* desenha vigas retas, *Arco* pede o início, o fim e depois um ponto do arco, ou um raio digitado + Enter. Uma viga em arco é nivelada (não tem deslocamento de elevação no fim).
+
+- **Encontros**: a viga em arco encaixa nos pilares estruturais das suas extremidades, cada lado parando onde sai do pilar, e encontra outras vigas em cantos e tês como uma viga reta. Um arco apertado demais para a largura da viga é recusado.
+- **Propriedades**: *Ângulo do arco* curva a viga (0 a torna reta); são mostrados o comprimento ao longo do arco, o raio, o comprimento de corte e o volume. O volume é exato, não o das cordas com que o corpo é desenhado.
+- **Edição**: uma viga em arco selecionada mostra a alça redonda de curvatura no meio do arco; as ferramentas de Modificar aparam, estendem, dividem e deslocam a viga sobre o seu círculo, e um espelhamento inverte o sentido da curva. As ferramentas encaixam nas extremidades, no meio e no próprio arco.
+- **Armadura**: as barras superiores, inferiores e de pele seguem o arco, cada uma com o comprimento do arco no seu próprio raio (os comprimentos e pesos da tabela conferem com o cálculo manual), e os estribos são radiais, espaçados ao longo do eixo da viga.
+- **Vistas e IFC**: as plantas desenham as duas faces do arco; cortes, elevações e vistas 3D mostram o corpo curvo. A exportação IFC grava a viga em arco retangular como o seu contorno de arcos verdadeiros extrudado, com o eixo sobre o arco, e a importação a traz de volta como viga em arco; a de outro perfil é gravada como corpo facetado.
+
+## Armadura de vigas
+
+*Armadura típica*, nas propriedades de uma viga ou pilar, cria barras inferiores, superiores e estribos. Outros conjuntos são criados com `rebar_create` (paleta de comandos), e a quantidade ou o espaçamento de cada conjunto é editado na seção *Armadura*.
+
+- **Camadas**: as barras superiores e inferiores que não cabem lado a lado, mantendo uma distância livre igual ao diâmetro da barra e de no mínimo 2 cm, vão para uma segunda camada acima das inferiores ou abaixo das superiores (até quatro camadas).
+- **Barras de pele**: *Adicionar barras de pele* põe uma barra em cada face lateral, à meia altura; `rebar_create` com o layout `sides` aceita um `count` por face, ou um `spacing` que põe quantas barras forem necessárias para mantê-las a essa distância ao longo da altura.
+- **Emendas por traspasse**: uma barra ao longo de uma viga mais comprida que a barra comercial (12 m, ou 40' em projetos imperiais) é feita do menor número de peças iguais, com traspasse de 40 diâmetros, e as emendas de barras vizinhas ficam defasadas de meia peça. `rebar_create` aceita `max_length` (0 mantém barras inteiras) e `lap`. As tabelas contam e medem as peças.
+
 ## Estrutura por material
 
 A aba *Estrutura* começa com o grupo *Material*: botões *Concreto*, *Aço* e *Madeira* (um fica sempre ligado; a escolha é guardada entre sessões). O material troca os grupos feitos para ele: concreto mostra *Estrutura* (Pilar, Viga, Laje) e *Armadura*; aço mostra *Estrutura* (Pilar, Viga, Contraventamento), o grupo de grade *Estruturação* (Pilares nas grades, Vigas nas grades, Vigas entre pilares, Pórtico por grade, Treliça, Galpão metálico, Light Steel Frame) e *Ligações* (Placa de base, Placa de topo, Chapa de alma); madeira mostra *Estrutura* (Pilar, Viga, Contraventamento), o mesmo grupo de grade com Wood Frame no lugar de Galpão metálico e Estrutura de aço leve, e *Ligações* (Ligação parafusada, Suporte de viga). Perfis, Fundação, Analítico, Documentação, Referência e Seleção aparecem para todos os materiais.

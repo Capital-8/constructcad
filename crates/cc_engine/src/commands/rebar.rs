@@ -6,7 +6,9 @@ use crate::refs::{self, Ref, finite};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
-use cc_core::{BarFace, Category, ElementId, ElementKind, ElementTypeId, Project, Rebar, RebarLayout, TypeData};
+use cc_core::{
+    BarFace, Category, ElementId, ElementKind, ElementTypeId, Project, Rebar, RebarLayout, Splice, TypeData,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -33,25 +35,63 @@ fn host(p: &Project, id: u64) -> Result<(ElementId, bool)> {
     }
 }
 
-fn rebar_kind(host: ElementId, layout: RebarLayout, cover: f64) -> ElementKind {
-    ElementKind::Rebar(Rebar { host, layout, cover })
+fn rebar_kind(host: ElementId, layout: RebarLayout, cover: f64, splice: Option<Splice>) -> ElementKind {
+    ElementKind::Rebar(Rebar { host, layout, cover, splice })
+}
+
+/// Stock length of bars, meters: 12 m, or 40' in imperial projects.
+fn stock_length(p: &Project) -> f64 {
+    match p.measurement_system() {
+        cc_core::MeasurementSystem::Imperial => 12.192,
+        cc_core::MeasurementSystem::Metric => 12.0,
+    }
+}
+
+/// The lap splices of bars of `type_id` running along a beam: `max_length`
+/// (default: the stock length; 0 for whole bars) and `lap` (default: 40 bar
+/// diameters).
+fn splice(p: &Project, type_id: ElementTypeId, max_length: Option<f64>, lap: Option<f64>) -> Result<Option<Splice>> {
+    let max_length = finite(max_length.unwrap_or_else(|| stock_length(p)), "max_length")?;
+    if max_length == 0.0 {
+        return Ok(None);
+    }
+    let diameter = match p.element_type(type_id).map(|t| &t.data) {
+        Some(TypeData::Rebar { diameter, .. }) => *diameter,
+        _ => 0.01,
+    };
+    let lap = finite(lap.unwrap_or(40.0 * diameter), "lap")?.max(Splice::MIN_LAP);
+    let splice = Splice { max_length, lap };
+    if !splice.is_valid() {
+        return Err(EngineError::invalid(
+            "max_length must be at least 1 (or 0 for whole bars) and lap at most half of it",
+        ));
+    }
+    Ok(Some(splice))
 }
 
 /// Add a set of bars to a beam or column: `layout` is `top` or `bottom`
-/// (beams), `perimeter` (columns) with `count` bars, or `stirrups` every
-/// `spacing`. The bars are `cover` inside the faces (default 2.5 cm) and
-/// follow the host.
+/// (beams), `perimeter` (columns) with `count` bars, `sides` (beams: `count`
+/// side bars on each side face, or as many as keep them `spacing` apart over
+/// the height), or `stirrups` every `spacing`. The bars are `cover` inside
+/// the faces (default 2.5 cm) and follow the host: along an arc beam they
+/// follow the arc, each at its own radius, and the stirrups are radial. Top
+/// and bottom bars that do not fit side by side (a clear distance of the bar
+/// diameter, at least 2 cm) go in a second layer. Bars along a beam longer
+/// than `max_length` are made of pieces overlapping by `lap`, the splices of
+/// neighbouring bars staggered.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct RebarCreate {
     /// Beam or column id.
     pub host: u64,
-    /// `top`, `bottom`, `perimeter` or `stirrups`.
+    /// `top`, `bottom`, `perimeter`, `sides` or `stirrups`.
     pub layout: String,
-    /// Number of longitudinal bars (default: 2 in beams, 4 in columns).
+    /// Number of longitudinal bars (default: 2 in beams, 4 in columns), or of side bars on each
+    /// side face (default 1, unless `spacing` is given).
     #[serde(default)]
     pub count: Option<u32>,
-    /// Stirrup spacing, meters (default 0.15; 6" in imperial projects).
+    /// Stirrup spacing, meters (default 0.15; 6" in imperial projects), or the largest distance
+    /// between side bars over the height when no `count` is given.
     #[serde(default)]
     pub spacing: Option<f64>,
     /// Bar type id or name (default: the type nearest 10 mm, or 5 mm for stirrups; 1/2" and 3/8" in imperial
@@ -61,6 +101,13 @@ pub struct RebarCreate {
     /// Concrete cover, meters (default 0.025; 1 1/2" in imperial projects).
     #[serde(default)]
     pub cover: Option<f64>,
+    /// Longest bar along a beam, meters (default: the stock length, 12 m, or 40' in imperial
+    /// projects): longer bars are lap spliced. 0 keeps whole bars.
+    #[serde(default)]
+    pub max_length: Option<f64>,
+    /// Lap length of the splices, meters (default: 40 bar diameters).
+    #[serde(default)]
+    pub lap: Option<f64>,
 }
 
 impl Command for RebarCreate {
@@ -80,6 +127,22 @@ impl Command for RebarCreate {
             "top" => longitudinal(BarFace::Top),
             "bottom" => longitudinal(BarFace::Bottom),
             "perimeter" => longitudinal(BarFace::Perimeter),
+            "sides" => {
+                if !beam {
+                    return Err(EngineError::invalid("side bars go in beams"));
+                }
+                match (self.count, self.spacing) {
+                    (Some(count), _) => RebarLayout::Sides { count, spacing: 0.0 },
+                    (None, Some(spacing)) => {
+                        let spacing = finite(spacing, "spacing")?;
+                        if spacing < 0.02 {
+                            return Err(EngineError::invalid("spacing must be at least 0.02"));
+                        }
+                        RebarLayout::Sides { count: 0, spacing }
+                    }
+                    (None, None) => RebarLayout::Sides { count: 1, spacing: 0.0 },
+                }
+            }
             "stirrups" => {
                 let spacing = finite(self.spacing.unwrap_or(default_spacing), "spacing")?;
                 if spacing < 0.02 {
@@ -89,7 +152,7 @@ impl Command for RebarCreate {
             }
             other => {
                 return Err(EngineError::invalid(format!(
-                    "layout must be top, bottom, perimeter or stirrups, not '{other}'"
+                    "layout must be top, bottom, perimeter, sides or stirrups, not '{other}'"
                 )));
             }
         };
@@ -99,7 +162,11 @@ impl Command for RebarCreate {
             None => bar_type(p, if stirrups { stirrup_bar } else { main_bar })?,
         };
         let cover = finite(self.cover.unwrap_or(default_cover), "cover")?.max(0.0);
-        let kind = rebar_kind(host_id, layout, cover);
+        let splice = match beam && layout.runs_along() {
+            true => splice(p, type_id, self.max_length, self.lap)?,
+            false => None,
+        };
+        let kind = rebar_kind(host_id, layout, cover, splice);
         let id = edit(s, t!("tx-create-rebar"), |e| Ok(add_element(e, level, type_id, kind)))?;
         Ok(created(s, id))
     }
@@ -107,7 +174,7 @@ impl Command for RebarCreate {
 
 /// Give beams and columns without reinforcement a typical one: beams two
 /// (three when 20 cm wide or more) 10 mm bars at the bottom, two 8 mm at the
-/// top and 5 mm stirrups every 15 cm; columns four 10 mm bars (six in round
+/// top (both lap spliced past the stock length) and 5 mm stirrups every 15 cm; columns four 10 mm bars (six in round
 /// ones) and 5 mm ties every 15 cm. Default: every beam and column of
 /// `level` (or of the project).
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
@@ -154,18 +221,15 @@ impl Command for RebarTypical {
             if beam {
                 let wide = matches!(p.element_type(e.type_id).map(|t| &t.data), Some(TypeData::Beam { width, .. }) if *width >= 0.2 - 1e-9);
                 let bottom = RebarLayout::Longitudinal { face: BarFace::Bottom, count: if wide { 3 } else { 2 } };
-                todo.push((e.level, main, rebar_kind(id, bottom, cover)));
-                todo.push((
-                    e.level,
-                    top,
-                    rebar_kind(id, RebarLayout::Longitudinal { face: BarFace::Top, count: 2 }, cover),
-                ));
+                todo.push((e.level, main, rebar_kind(id, bottom, cover, splice(p, main, None, None)?)));
+                let upper = RebarLayout::Longitudinal { face: BarFace::Top, count: 2 };
+                todo.push((e.level, top, rebar_kind(id, upper, cover, splice(p, top, None, None)?)));
             } else {
                 let round = p.element_type(e.type_id).is_some_and(|t| p.section_is_round(&t.data));
                 let bars = RebarLayout::Longitudinal { face: BarFace::Perimeter, count: if round { 6 } else { 4 } };
-                todo.push((e.level, main, rebar_kind(id, bars, cover)));
+                todo.push((e.level, main, rebar_kind(id, bars, cover, None)));
             }
-            todo.push((e.level, ties, rebar_kind(id, stirrups, cover)));
+            todo.push((e.level, ties, rebar_kind(id, stirrups, cover, None)));
         }
         if todo.is_empty() {
             return Ok(json!({"created": [], "skipped": skipped}));

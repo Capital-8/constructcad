@@ -49,11 +49,10 @@ pub struct BeamGeom {
     pub end_ext: (f64, f64),
     pub start: BeamEnd,
     pub end: BeamEnd,
-    /// The centerline arc of an arc strip footing (`dir` and `normal` are
-    /// then its frame at the start, `u` runs along the arc and `v` to its
-    /// left); beams are straight and have none. The straight-frame methods
-    /// ([`Self::footprint`], [`Self::add_to`], [`Self::volume`]) are for
-    /// straight bodies only.
+    /// The centerline arc of an arc beam or arc strip footing (`dir` and
+    /// `normal` are then its frame at the start, `u` runs along the arc and
+    /// `v` to its left). [`Self::footprint`] gives only the four corners:
+    /// [`Self::outline`] follows the arc.
     pub arc: Option<Arc>,
 }
 
@@ -63,6 +62,27 @@ impl BeamGeom {
         match &self.arc {
             Some(a) => a.at(u, v),
             None => self.origin + self.dir * u + self.normal * v,
+        }
+    }
+
+    /// Unit direction of the axis at `u` (the tangent of an arc beam).
+    pub fn dir_at(&self, u: f64) -> DVec2 {
+        self.arc.as_ref().map_or(self.dir, |a| a.tangent(u))
+    }
+
+    /// Position of the plan point `p` along the axis.
+    pub fn locate(&self, p: DVec2) -> f64 {
+        match &self.arc {
+            Some(a) => a.locate(p).0,
+            None => (p - self.origin).dot(self.dir),
+        }
+    }
+
+    /// The axis between the location points: its two ends, or the chords of an arc.
+    pub fn axis(&self) -> Vec<DVec2> {
+        match &self.arc {
+            Some(a) => a.points(0.0, self.length, 0.0, cc_core::arc::ARC_STEP),
+            None => vec![self.origin, self.world(self.length, 0.0)],
         }
     }
 
@@ -80,6 +100,37 @@ impl BeamGeom {
     /// Plan footprint of the body, counter-clockwise.
     pub fn footprint(&self) -> [DVec2; 4] {
         self.local_footprint().map(|p| self.world(p.x, p.y))
+    }
+
+    /// Plan outline of the body, counter-clockwise: the footprint, with the
+    /// faces of an arc beam as short chords.
+    pub fn outline(&self) -> Vec<DVec2> {
+        let n = self.stations();
+        if n <= 1 {
+            return self.footprint().to_vec();
+        }
+        let side = |v: f64| (0..=n).map(move |i| self.world(self.station_u(i as f64 / n as f64, v), v));
+        let mut pts: Vec<DVec2> = side(-self.half).collect();
+        pts.extend(side(self.half).collect::<Vec<_>>().into_iter().rev());
+        pts
+    }
+
+    /// Number of pieces the body is swept in: 1 for a straight beam, the
+    /// chords of an arc.
+    fn stations(&self) -> usize {
+        match &self.arc {
+            Some(a) => {
+                let du = (self.end_ext.0 - self.start_ext.0).abs().max((self.end_ext.1 - self.start_ext.1).abs());
+                cc_core::arc::segments(du / a.radius.max(1e-9), cc_core::arc::ARC_STEP)
+            }
+            None => 1,
+        }
+    }
+
+    /// Where the fraction `t` of the way from the start face to the end face lies on the line `v`.
+    fn station_u(&self, t: f64, v: f64) -> f64 {
+        let (a, b) = (self.face_u(false, v), self.face_u(true, v));
+        a + (b - a) * t
     }
 
     /// Length of the body along its (sloped) axis, the mean of its two sides.
@@ -140,14 +191,21 @@ impl BeamGeom {
     /// World point of section point `p` on the start (`at_end` false) or
     /// end face, following the slope.
     fn point(&self, at_end: bool, p: DVec2) -> DVec3 {
-        let u = self.face_u(at_end, p.x);
+        self.point_at(if at_end { 1.0 } else { 0.0 }, p)
+    }
+
+    /// World point of section point `p` the fraction `t` of the way from the
+    /// start face to the end face.
+    fn point_at(&self, t: f64, p: DVec2) -> DVec3 {
+        let u = self.station_u(t, p.x);
         self.world(u, p.x).extend(self.z_range.0 + self.slope * u + p.y * self.stretch())
     }
 
     /// Add the body to `s`: the section swept between the start and end
     /// faces, following the slope. Faces are the cap triangles (start, then
-    /// end, for each triangle), then one side per edge of each ring; sides
-    /// on the arcs of a curved section are smooth. Nothing when the
+    /// end, for each triangle), then one side per edge of each ring (per
+    /// chord along an arc beam); sides on the arcs of a curved section, and
+    /// the curved sides of an arc beam, are smooth. Nothing when the
     /// section makes no cap triangles.
     pub fn add_to(&self, s: &mut crate::Solid) {
         let rings = self.rings();
@@ -161,20 +219,30 @@ impl BeamGeom {
             s.add_polygons([t.iter().rev().map(|p| self.point(false, *p)).collect::<Vec<_>>()]);
             s.add_polygons([t.iter().map(|p| self.point(true, *p)).collect::<Vec<_>>()]);
         }
+        let stations = self.stations();
+        let square = self.is_square();
         for ring in &rings {
             let smooth = if self.curved { crate::section::smooth_sides(ring) } else { vec![false; ring.len()] };
             let n = ring.len();
             for (i, flag) in smooth.into_iter().enumerate() {
                 let (a, b) = (ring[i], ring[(i + 1) % n]);
-                let before = s.faces.len();
-                s.add_polygons([vec![
-                    self.point(false, a),
-                    self.point(false, b),
-                    self.point(true, b),
-                    self.point(true, a),
-                ]]);
-                if let Some(face) = s.faces.get_mut(before) {
-                    face.smooth = flag;
+                // Along an arc only the horizontal sides stay flat.
+                let level = (a.y - b.y).abs() < 1e-9;
+                let flag = flag || (self.arc.is_some() && !level);
+                for k in 0..stations {
+                    let (t0, t1) = (k as f64 / stations as f64, (k + 1) as f64 / stations as f64);
+                    let quad = [self.point_at(t0, a), self.point_at(t0, b), self.point_at(t1, b), self.point_at(t1, a)];
+                    let before = s.faces.len();
+                    // Between radial sections a side is a flat trapezoid;
+                    // between mitered ends a sloped one is not, and is split.
+                    if self.arc.is_none() || square || level || (a.x - b.x).abs() < 1e-9 {
+                        s.add_polygons([quad.to_vec()]);
+                    } else {
+                        s.add_polygons([vec![quad[0], quad[1], quad[2]], vec![quad[0], quad[2], quad[3]]]);
+                    }
+                    for face in s.faces.iter_mut().skip(before) {
+                        face.smooth = flag;
+                    }
                 }
             }
         }
@@ -192,14 +260,25 @@ impl BeamGeom {
     }
 
     /// Volume of the body: each cap triangle swept between the end faces,
-    /// exact since the faces' offsets are linear across the beam.
+    /// exact since the faces' offsets are linear across the beam (and, along
+    /// an arc, the path of each point grows linearly with its radius: the
+    /// arcs as arcs, not as the chords of the solid).
     pub fn volume(&self) -> f64 {
         let k = self.stretch();
+        // Length swept by the point `v` across the beam.
+        let run = |v: f64| {
+            let du = self.face_u(true, v) - self.face_u(false, v);
+            match &self.arc {
+                Some(a) => du * a.radius_at(v) / a.radius.max(1e-9),
+                None => du,
+            }
+        };
         self.cap_triangles(&self.rings())
             .iter()
             .map(|t| {
-                let vc = (t[0].x + t[1].x + t[2].x) / 3.0;
-                polygon::area(t) * (self.face_u(true, vc) - self.face_u(false, vc)) * k
+                // Exact for a quadratic: the mean over the edge midpoints.
+                let mean = (0..3).map(|i| run((t[i].x + t[(i + 1) % 3].x) * 0.5)).sum::<f64>() / 3.0;
+                polygon::area(t) * mean * k
             })
             .sum()
     }
@@ -237,7 +316,7 @@ pub(crate) struct BeamInput {
     pub curved: bool,
     pub join_start: bool,
     pub join_end: bool,
-    /// Bulge of the centerline: 0 for beams, which are straight; arc strip
+    /// Bulge of the centerline: 0 when straight; arc beams and arc strip
     /// footings bend (see [`cc_core::arc`]).
     pub bulge: f64,
 }
@@ -278,20 +357,71 @@ fn exit(outline: &[DVec2], q: DVec2, d: DVec2) -> Option<f64> {
     polygon::clip_line(outline, q, d).into_iter().map(|(_, t1)| t1).reduce(f64::max)
 }
 
+/// How far along `arc` from its start (or back from its end) the circle
+/// `v` to its left leaves `outline` for the last time, searched over a
+/// stretch as long as the outline is wide; `None` when it never enters it.
+fn arc_exit(outline: &[DVec2], arc: &Arc, v: f64, from_start: bool) -> Option<f64> {
+    const STEPS: usize = 64;
+    let lo = outline.iter().fold(DVec2::INFINITY, |m, p| m.min(*p));
+    let hi = outline.iter().fold(DVec2::NEG_INFINITY, |m, p| m.max(*p));
+    let reach = (hi - lo).length().min(arc.length());
+    if !reach.is_finite() || reach <= 0.0 {
+        return None;
+    }
+    let inside = |d: f64| {
+        let u = if from_start { d } else { arc.length() - d };
+        polygon::contains(outline, arc.at(u, v))
+    };
+    let step = reach / STEPS as f64;
+    let last = (0..=STEPS).rev().find(|&i| inside(step * i as f64))?;
+    if last == STEPS {
+        return Some(reach);
+    }
+    let (mut a, mut b) = (step * last as f64, step * (last + 1) as f64);
+    for _ in 0..40 {
+        let m = (a + b) * 0.5;
+        if inside(m) {
+            a = m;
+        } else {
+            b = m;
+        }
+    }
+    Some((a + b) * 0.5)
+}
+
 /// The end of `beam` at `p` (ray `da` into the beam) framed into a structural
 /// column whose outline holds it: each side of the beam stops where it leaves
 /// the column.
-fn column_join(beam: &BeamInput, columns: &[ColumnInput], p: DVec2, da: DVec2) -> Option<(ElementId, EndJoin)> {
-    let length = beam.start.distance(beam.end);
+fn column_join(
+    beam: &BeamInput,
+    columns: &[ColumnInput],
+    p: DVec2,
+    da: DVec2,
+    at_start: bool,
+) -> Option<(ElementId, EndJoin)> {
+    let arc = Arc::from_bulge(beam.start, beam.end, beam.bulge).filter(|a| a.radius > beam.half + 1e-6);
+    let length = arc.map_or_else(|| beam.start.distance(beam.end), |a| a.length());
     let na = da.perp();
     columns
         .iter()
         .filter(|c| c.outline.len() >= 3 && overlap(c.z_range, beam.envelope()))
         .filter(|c| polygon::contains(&c.outline, p) || distance_to_outline(&c.outline, p) < COLUMN_TOL)
         .find_map(|c| {
-            let center = exit(&c.outline, p, da)?;
-            let side = |off: f64| exit(&c.outline, p + na * off, da).unwrap_or(center);
-            let (left, right) = (side(beam.half), side(-beam.half));
+            let (left, right) = match &arc {
+                // Along an arc each side leaves the column on its own circle.
+                Some(a) => {
+                    // Ray-left is the beam's left at the start, its right at the end.
+                    let turn = if at_start { 1.0 } else { -1.0 };
+                    let side = |off: f64| arc_exit(&c.outline, a, off * turn, at_start);
+                    let center = side(0.0)?;
+                    (side(beam.half).unwrap_or(center), side(-beam.half).unwrap_or(center))
+                }
+                None => {
+                    let center = exit(&c.outline, p, da)?;
+                    let side = |off: f64| exit(&c.outline, p + na * off, da).unwrap_or(center);
+                    (side(beam.half), side(-beam.half))
+                }
+            };
             // A beam that never leaves the column keeps its whole length.
             (left.max(right) < length - 1e-3)
                 .then_some((c.element, EndJoin { ray_left: left.max(0.0), ray_right: right.max(0.0), host: None }))
@@ -303,12 +433,19 @@ fn column_join(beam: &BeamInput, columns: &[ColumnInput], p: DVec2, da: DVec2) -
 pub(crate) fn resolve_beams(beams: &[BeamInput], columns: &[ColumnInput]) -> Vec<BeamGeom> {
     let ends = |b: &BeamInput| {
         let dir = (b.end - b.start).try_normalize().unwrap_or(DVec2::X);
-        [(true, b.join_start, b.start, dir), (false, b.join_end, b.end, -dir)]
+        let (d0, d1) = match Arc::from_bulge(b.start, b.end, b.bulge) {
+            Some(a) => (a.tangent(0.0), a.tangent(a.length())),
+            None => (dir, dir),
+        };
+        [(true, b.join_start, b.start, d0), (false, b.join_end, b.end, -d1)]
     };
     // Ends framed into columns; they take no part in beam joins.
     let framed: Vec<[Option<(ElementId, EndJoin)>; 2]> = beams
         .iter()
-        .map(|b| ends(b).map(|(_, allowed, p, da)| allowed.then(|| column_join(b, columns, p, da)).flatten()))
+        .map(|b| {
+            ends(b)
+                .map(|(at_start, allowed, p, da)| allowed.then(|| column_join(b, columns, p, da, at_start)).flatten())
+        })
         .collect();
     let lines: Vec<WallLine> = beams
         .iter()
@@ -651,6 +788,68 @@ mod tests {
         // A symmetric I mitered on its axis keeps exactly area x axis length.
         let total: f64 = g.iter().map(|b| b.volume()).sum();
         assert!((total - area * 7.0).abs() < 1e-9, "{total}");
+    }
+
+    /// A half circle of radius 3 around the origin, from +X to -X.
+    fn half_ring(section: SectionOutline) -> BeamInput {
+        BeamInput { bulge: 1.0, ..section_input(section, DVec2::new(3.0, 0.0), DVec2::new(-3.0, 0.0)) }
+    }
+
+    #[test]
+    fn an_arc_beam_of_a_profile_is_a_closed_body_of_the_exact_volume() {
+        let i = w_section();
+        let area = i.properties(0.0).area;
+        let g = resolve_beams(&[half_ring(i)], &[]).remove(0);
+        let arc = g.arc.expect("an arc");
+        assert!((arc.radius - 3.0).abs() < 1e-9 && (g.length - 3.0 * std::f64::consts::PI).abs() < 1e-9);
+        // A symmetric section turned about the center: its area times the axis (Pappus).
+        let exact = area * 3.0 * std::f64::consts::PI;
+        assert!((g.volume() - exact).abs() < 1e-9, "{} vs {exact}", g.volume());
+        let mut s = solid();
+        g.add_to(&mut s);
+        assert!(is_closed(&s));
+        assert!(s.volume() < exact && exact - s.volume() < exact * 1e-3, "{}", s.volume());
+        // The web's and the flange edges' faces are curved; the flanges' flat ones are not.
+        assert!(s.faces.iter().any(|f| f.smooth) && s.faces.iter().any(|f| !f.smooth));
+        let (lo, hi) = s.bounds().unwrap();
+        assert!((lo.z - 1.0).abs() < 1e-12 && (hi.z - 1.3).abs() < 1e-12, "{lo} {hi}");
+        // The plan outline follows both faces of the half ring.
+        let outline = g.outline();
+        assert!(outline.len() > 100);
+        assert!(outline.iter().all(|p| ((p.length() - 3.0).abs() - 0.075).abs() < 1e-9), "on the two faces");
+        assert!(polygon::area(&outline) > 0.0, "counter-clockwise");
+        // The tangent turns with the arc.
+        assert!(g.dir_at(0.0).distance(DVec2::Y) < 1e-9 && g.dir_at(g.length).distance(-DVec2::Y) < 1e-9);
+        assert!((g.locate(DVec2::new(0.0, 3.0)) - g.length / 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_arc_beam_stops_at_the_faces_of_the_columns_at_its_ends() {
+        // A quarter circle of radius 4 between columns on the axes.
+        let mut b = beam(1, (4.0, 0.0), (0.0, 4.0));
+        b.bulge = (std::f64::consts::FRAC_PI_2 / 4.0).tan();
+        let g = &resolve_beams(&[b], &[column(10, (4.0, 0.0)), column(11, (0.0, 4.0))])[0];
+        assert_eq!((g.start, g.end), (BeamEnd::Column(ElementId(10)), BeamEnd::Column(ElementId(11))));
+        // Each side leaves the first column through its face y = 0.2, on its own circle.
+        for (v, u) in [(0.1, g.start_ext.0), (-0.1, g.start_ext.1)] {
+            let p = g.world(u, v);
+            assert!((p.y - 0.2).abs() < 1e-9 && (p.length() - (4.0 - v)).abs() < 1e-9, "{p}");
+        }
+        // And the second through x = 0.2.
+        for (v, u) in [(0.1, g.end_ext.0), (-0.1, g.end_ext.1)] {
+            let p = g.world(u, v);
+            assert!((p.x - 0.2).abs() < 1e-9 && (p.length() - (4.0 - v)).abs() < 1e-9, "{p}");
+        }
+        // The body between them: exact, and its mitered solid closed.
+        let ring = |r: f64| r * ((0.2f64 / r).asin());
+        let swept = |r: f64| r * std::f64::consts::FRAC_PI_2 - 2.0 * ring(r);
+        let mut s = solid();
+        g.add_to(&mut s);
+        assert!(is_closed(&s));
+        assert!(
+            g.volume() > 0.4 * 0.2 * swept(4.1).min(swept(3.9)) && g.volume() < 0.4 * 0.2 * swept(4.1).max(swept(3.9))
+        );
+        assert!((s.volume() - g.volume()).abs() < g.volume() * 1e-3);
     }
 
     #[test]

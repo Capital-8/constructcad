@@ -716,13 +716,30 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                         b.top_offset = v;
                     }
                 });
-                let end = b.end_offset.unwrap_or(b.top_offset);
-                length_row(ui, state, &t!("prop-end-elevation-offset"), id, "beam-end", end, |e, v| {
-                    if let ElementKind::Beam(b) = &mut e.kind {
-                        // Level again when the end returns to the start's elevation.
-                        b.end_offset = ((v - b.top_offset).abs() > 1e-9).then_some(v);
+                // An arc beam is level.
+                if b.arc().is_none() {
+                    let end = b.end_offset.unwrap_or(b.top_offset);
+                    length_row(ui, state, &t!("prop-end-elevation-offset"), id, "beam-end", end, |e, v| {
+                        if let ElementKind::Beam(b) = &mut e.kind {
+                            // Level again when the end returns to the start's elevation.
+                            b.end_offset = ((v - b.top_offset).abs() > 1e-9).then_some(v);
+                        }
+                    });
+                }
+                // Arc beams: the angle the arc turns (0 for a straight beam; level beams only).
+                if b.end_offset.is_none() {
+                    let mut sweep = (4.0 * b.bulge.atan()).to_degrees();
+                    let drag = DragValue::new(&mut sweep).speed(1.0).range(-337.0..=337.0).suffix("°");
+                    let r = row(ui, &t!("prop-arc-angle"), |ui| ui.add(drag));
+                    if r.changed() {
+                        modify(state, id, "sweep", |el| {
+                            if let ElementKind::Beam(b) = &mut el.kind {
+                                b.bulge = if sweep.abs() < 0.01 { 0.0 } else { (sweep.to_radians() / 4.0).tan() };
+                            }
+                        });
                     }
-                });
+                    finish(state, &r);
+                }
                 beam_justification(ui, state, id, b);
                 for (label, at_start, value) in
                     [(t!("prop-join-start"), true, b.join_start), (t!("prop-join-end"), false, b.join_end)]
@@ -738,9 +755,17 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
-                readonly_row(ui, &t!("prop-length"), format::length(b.length()));
-                if b.end_offset.is_some() {
-                    readonly_row(ui, &t!("prop-true-length"), format::length(b.true_length()));
+                match b.arc() {
+                    Some(arc) => {
+                        readonly_row(ui, &t!("prop-length"), format::length(arc.length()));
+                        readonly_row(ui, &t!("prop-radius"), format::length(arc.radius));
+                    }
+                    None => {
+                        readonly_row(ui, &t!("prop-length"), format::length(b.length()));
+                        if b.end_offset.is_some() {
+                            readonly_row(ui, &t!("prop-true-length"), format::length(b.true_length()));
+                        }
+                    }
                 }
                 if let Some(g) = state.session.geom().beams.get(&id) {
                     readonly_row(ui, &t!("prop-cut-length"), format::length(g.cut_length()));
@@ -2190,6 +2215,31 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
                 }
             });
         }
+        // Side bars by their count on each face...
+        L::Sides { count, .. } if count > 0 => {
+            let mut n = count;
+            let r = row(ui, label, |ui| ui.add(DragValue::new(&mut n).range(1..=200).suffix(" ×")));
+            if r.changed() {
+                modify(state, id, "rebar-count", |e| {
+                    if let ElementKind::Rebar(x) = &mut e.kind
+                        && let L::Sides { count, .. } = &mut x.layout
+                    {
+                        *count = n;
+                    }
+                });
+            }
+            finish(state, &r);
+        }
+        // ...or by their spacing over the height.
+        L::Sides { spacing, .. } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::Sides { spacing, .. } = &mut x.layout
+                {
+                    *spacing = v.max(0.02);
+                }
+            });
+        }
     }
 }
 
@@ -2198,6 +2248,7 @@ fn rebar_role(layout: cc_core::RebarLayout) -> String {
     match layout {
         cc_core::RebarLayout::Longitudinal { face, .. } => tr(face.key()),
         cc_core::RebarLayout::Stirrups { .. } => t!("bars-stirrups"),
+        cc_core::RebarLayout::Sides { .. } => t!("bars-sides"),
     }
 }
 
@@ -2223,6 +2274,14 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         }
         if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
             let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };
+            crate::actions::run_command(state, command);
+        }
+        // A reinforced beam without side bars can get them.
+        let beam = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Beam(_)));
+        let sides = sets.iter().any(|(_, layout, _)| matches!(layout, cc_core::RebarLayout::Sides { .. }));
+        if beam && !sets.is_empty() && !sides && row(ui, "", |ui| ui.small_button(t!("action-rebar-sides")).clicked()) {
+            let command =
+                cc_engine::commands::rebar::RebarCreate { host: host.0, layout: "sides".into(), ..Default::default() };
             crate::actions::run_command(state, command);
         }
         if !sets.is_empty() {
