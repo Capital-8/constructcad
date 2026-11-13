@@ -286,9 +286,11 @@ fn ribbon_buttons_are_accessible() {
         RibbonTab::Manage,
     ];
     let mut found = std::collections::HashSet::new();
-    for tab in tabs {
+    // The Structure tab shows other groups per material.
+    for (tab, material) in tabs.into_iter().flat_map(|t| cc_core::StructuralMaterial::ALL.map(|m| (t, m))) {
         let mut state = sample_state();
         state.ribbon_tab = tab;
+        state.prefs.structure_material = material;
         let harness = ribbon_harness(state, 1600.0);
         for node in harness.query_all_by_role(Role::Button) {
             let label = node.accesskit_node().label().unwrap_or_default();
@@ -3758,4 +3760,122 @@ fn the_levels_dialog_adds_a_level_above_or_below_the_picked_one() {
     assert_eq!(levels[2].id, added, "the level under it went in between");
     assert_eq!(levels[0].id, lowest);
     assert!(levels[0].elevation < base, "and pushed the lowest level down");
+}
+
+/// Column in Steel starts on a steel type, and the options bar lists only
+/// steel column types; Timber makes its default type, undone in one step.
+#[test]
+fn structure_column_tool_keeps_to_its_material() {
+    use crate::commands::UiCommand;
+    use cc_core::{Category, StructuralMaterial as M};
+    let mut state = sample_state();
+    let ctx = egui::Context::default();
+    crate::commands::run(&mut state, &ctx, UiCommand::StructurePlace(Category::Column, M::Steel));
+    let crate::tools::Tool::Column { type_id, material } = state.tool.clone() else { panic!("{:?}", state.tool) };
+    assert_eq!(material, Some(M::Steel));
+    let project = state.project();
+    assert_eq!(project.structural_material(&project.element_type(type_id).unwrap().data), Some(M::Steel));
+    let listed = crate::tools::tool_types(project, Category::Column, type_id, Some(M::Steel));
+    assert!(!listed.is_empty());
+    assert!(
+        listed
+            .iter()
+            .all(|(id, _)| project.structural_material(&project.element_type(*id).unwrap().data) == Some(M::Steel))
+    );
+    assert!(listed.len() < project.types_of(Category::Column).count(), "concrete types are left out");
+    // Timber: the project has none, so one is made.
+    let depth = state.session.doc.undo_depth();
+    crate::commands::run(&mut state, &ctx, UiCommand::StructurePlace(Category::Beam, M::Timber));
+    let crate::tools::Tool::Beam { type_id, .. } = state.tool.clone() else { panic!() };
+    assert_eq!(state.project().type_name(type_id), "MLC 9x32");
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}
+
+/// The Structure tab's material selector swaps the material's groups:
+/// reinforcement in Concrete, bracing and the grid tools in Steel.
+#[test]
+fn structure_material_selector_swaps_groups() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Concrete;
+    let mut harness = ribbon_harness(state, 1600.0);
+    let rebar = crate::commands::UiCommand::TypicalRebar.label(harness.state());
+    let braces = crate::commands::UiCommand::BracesX.label(harness.state());
+    assert!(harness.query_by_label(&rebar).is_some(), "concrete shows reinforcement");
+    assert!(harness.query_by_label(&braces).is_none());
+    harness.get_by_label(&crate::i18n::tr("profile-material-steel")).click();
+    harness.run();
+    assert_eq!(harness.state().prefs.structure_material, cc_core::StructuralMaterial::Steel);
+    assert!(harness.query_by_label(&rebar).is_none(), "steel hides reinforcement");
+    assert!(harness.query_by_label(&braces).is_some());
+    assert!(harness.query_by_label(&crate::commands::UiCommand::ColumnsAtGrids.label(harness.state())).is_some());
+}
+
+/// *Grid Frame* creates columns and beams on the grids for the chosen
+/// levels in one undo step; Cancel leaves the model as it was.
+#[test]
+fn grid_frame_dialog_creates_and_cancels() {
+    let mut state = sample_state();
+    let grids =
+        [([0.0, -1.0], [0.0, 7.0]), ([6.0, -1.0], [6.0, 7.0]), ([-1.0, 0.0], [7.0, 0.0]), ([-1.0, 6.0], [7.0, 6.0])];
+    // Selecting the new grids keeps the example's own out of the frame.
+    let mut created = Vec::new();
+    for (start, end) in grids {
+        let command = cc_engine::commands::create::GridCreate { start, end, ..Default::default() };
+        let out = crate::actions::run_command(&mut state, command).expect("grid");
+        created.push(cc_core::ElementId(out["id"].as_u64().expect("grid id")));
+    }
+    state.selection = created.into_iter().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let depth = state.session.doc.undo_depth();
+    let columns = |h: &Harness<'static, AppState>| h.state().project().elements_of(cc_core::Category::Column).count();
+    let mut harness = app_harness(state);
+    let before = columns(&harness);
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_some());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_none());
+    assert_eq!(harness.state().session.doc.undo_depth(), depth, "Cancel changes nothing");
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    assert!(harness.state().dialogs.grid_frame.is_none());
+    assert_eq!(columns(&harness), before + 4, "four intersections on the first storey");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+}
+
+/// With grids selected, the secondary beams' *Parallel to* offers (and
+/// starts on) the selected grids, so OK is never refused for another one.
+#[test]
+fn grid_frame_secondary_beams_use_the_selected_grids() {
+    let mut state = sample_state();
+    let grids =
+        [([0.0, -1.0], [0.0, 7.0]), ([6.0, -1.0], [6.0, 7.0]), ([-1.0, 0.0], [7.0, 0.0]), ([-1.0, 6.0], [7.0, 6.0])];
+    let mut created = Vec::new();
+    for (start, end) in grids {
+        let command = cc_engine::commands::create::GridCreate { start, end, ..Default::default() };
+        let out = crate::actions::run_command(&mut state, command).expect("grid");
+        created.push(cc_core::ElementId(out["id"].as_u64().expect("grid id")));
+    }
+    state.selection = created.iter().copied().collect();
+    state.ribbon_tab = RibbonTab::Structure;
+    state.prefs.structure_material = cc_core::StructuralMaterial::Steel;
+    let beams = |h: &Harness<'static, AppState>| h.state().project().elements_of(cc_core::Category::Beam).count();
+    let mut harness = app_harness(state);
+    let before = beams(&harness);
+    harness.get_by_role_and_label(Role::Button, &t!("action-grid-frame")).click();
+    harness.run();
+    let parallel = harness.state().dialogs.grid_frame.as_ref().and_then(|d| d.parallel_to).expect("a default grid");
+    assert!(created.contains(&parallel), "the default is one of the selected grids");
+    harness.get_by_label(&t!("label-secondary-beams")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.grid_frame.is_none(), "OK was accepted: {:?}", state.message);
+    assert!(beams(&harness) > before + 4, "main beams and the secondary ones");
 }

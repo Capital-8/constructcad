@@ -3209,6 +3209,26 @@ browser-org-group-by = Agrupar por
 browser-org-then-by = Depois por
 browser-org-none = Nenhum
 
+# Structure by material
+tx-structural-type = Criar tipo estrutural
+tx-grid-frame = Criar estrutura em grelha
+
+# Structure tab material and grid frame
+group-structure-material = Material
+
+# Structure tab material and grid frame
+action-grid-frame = Estrutura em grelha
+cmd-desc-grid-frame = Coloca pilares nas interseções dos eixos e vigas ao longo dos eixos em cada pavimento de um intervalo de níveis, com vigas secundárias opcionais, em uma única etapa.
+dlg-grid-frame = Estrutura em grelha
+label-base-level = Nível base
+label-top-level = Nível de topo
+label-column-type = Tipo de pilar
+label-beam-type = Tipo de viga
+label-secondary-beams = Vigas secundárias
+label-parallel-to = Paralelas a
+label-spacing = Espaçamento
+msg-grid-frame-created = { $columns } pilares, { $beams } vigas e { $secondary } vigas secundárias colocados; { $skipped } ignorados.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Alvenaria 6"
 tpl-imp-type-masonry-10 = Alvenaria 10"

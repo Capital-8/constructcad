@@ -29,6 +29,7 @@ mod gestures;
 mod gpu;
 mod graph_ui;
 mod graphics_dialog;
+mod grid_frame_ui;
 mod home;
 mod i18n;
 mod icons;

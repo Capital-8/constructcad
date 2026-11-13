@@ -3209,6 +3209,26 @@ browser-org-group-by = Raggruppa per
 browser-org-then-by = Poi per
 browser-org-none = Nessuno
 
+# Structure by material
+tx-structural-type = Crea tipo strutturale
+tx-grid-frame = Crea telaio sulla griglia
+
+# Structure tab material and grid frame
+group-structure-material = Materiale
+
+# Structure tab material and grid frame
+action-grid-frame = Telaio su griglia
+cmd-desc-grid-frame = Posiziona pilastri alle intersezioni della griglia e travi lungo gli assi su ogni piano di un intervallo di livelli, con travi secondarie facoltative, in un solo passaggio.
+dlg-grid-frame = Telaio su griglia
+label-base-level = Livello di base
+label-top-level = Livello superiore
+label-column-type = Tipo di pilastro
+label-beam-type = Tipo di trave
+label-secondary-beams = Travi secondarie
+label-parallel-to = Parallele a
+label-spacing = Interasse
+msg-grid-frame-created = { $columns } pilastri, { $beams } travi e { $secondary } travi secondarie posizionati; { $skipped } saltati.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Muratura 6"
 tpl-imp-type-masonry-10 = Muratura 10"

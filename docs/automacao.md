@@ -270,6 +270,14 @@ Tipos de pilar e de viga são desenhados e construídos com um perfil estrutural
 {"command": "profiles_list", "args": {"material": "steel"}}
 ```
 
+### Estrutura por material e pórticos por grade
+
+`structural_type_for` (`category` pilar ou viga, `material` concrete, steel ou timber) devolve o primeiro tipo desse material, ou cria um padrão do catálogo. `grid_frame_create` coloca pilares em cada pavimento de uma faixa de níveis e vigas nos níveis superiores sobre as grades (`grids` padrão todas, `base_level`/`top_level` padrão os dois primeiros níveis, `column_type`/`beam_type` ou um `material`), com vigas secundárias opcionais em cada vão, num só passo de desfazer (no máximo 2000 elementos); devolve os ids e o número de pulados.
+
+```text
+{"command": "grid_frame_create", "args": {"base_level": "Térreo", "top_level": "Cobertura", "material": "steel", "secondary": {"parallel_to": 12, "spacing": 2.5}}}
+```
+
 ### Folhas e carimbos
 
 `sheet_set` altera uma folha: `number`, `size` (`"A0"`…`"A4"`, `"ANSI A"`…`"ANSI E"`, `"ARCH A"`…`"ARCH E1"`, `"ARCH E"`, ou `{"width": …, "height": …}` em milímetros), `portrait`, `title_block` (um tipo de carimbo, ou `null` para nenhum), `fields` (os valores da folha para os campos por folha do carimbo; `null` limpa um) e `issue_date` (`AAAA-MM-DD`, ou `""`). `sheet_fields` mostra o que o carimbo da folha vai ler: cada campo com seu valor, os campos por folha com o valor desta folha e o padrão, e as peças que não se resolvem. `project_info_set` aceita `fields` (campos do projeto por nome, lidos como `{project:Nome}`).

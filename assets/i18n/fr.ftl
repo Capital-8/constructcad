@@ -3209,6 +3209,26 @@ browser-org-group-by = Regrouper par
 browser-org-then-by = Puis par
 browser-org-none = Aucun
 
+# Structure by material
+tx-structural-type = Créer un type structurel
+tx-grid-frame = Créer une ossature sur la trame
+
+# Structure tab material and grid frame
+group-structure-material = Matériau
+
+# Structure tab material and grid frame
+action-grid-frame = Ossature sur trame
+cmd-desc-grid-frame = Place des poteaux aux intersections de la trame et des poutres le long des axes à chaque étage d'une plage de niveaux, avec des poutres secondaires facultatives, en une seule étape.
+dlg-grid-frame = Ossature sur trame
+label-base-level = Niveau de base
+label-top-level = Niveau supérieur
+label-column-type = Type de poteau
+label-beam-type = Type de poutre
+label-secondary-beams = Poutres secondaires
+label-parallel-to = Parallèles à
+label-spacing = Espacement
+msg-grid-frame-created = { $columns } poteaux, { $beams } poutres et { $secondary } poutres secondaires placés ; { $skipped } ignorés.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Maçonnerie 6"
 tpl-imp-type-masonry-10 = Maçonnerie 10"

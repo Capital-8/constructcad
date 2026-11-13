@@ -3209,6 +3209,26 @@ browser-org-group-by = Grupuj według
 browser-org-then-by = Następnie według
 browser-org-none = Brak
 
+# Structure by material
+tx-structural-type = Utwórz typ konstrukcyjny
+tx-grid-frame = Utwórz szkielet na siatce osi
+
+# Structure tab material and grid frame
+group-structure-material = Materiał
+
+# Structure tab material and grid frame
+action-grid-frame = Szkielet na siatce
+cmd-desc-grid-frame = Umieszcza słupy na przecięciach osi i belki wzdłuż osi na każdej kondygnacji zakresu poziomów, opcjonalnie z belkami drugorzędnymi, w jednym kroku.
+dlg-grid-frame = Szkielet na siatce
+label-base-level = Poziom bazowy
+label-top-level = Poziom górny
+label-column-type = Typ słupa
+label-beam-type = Typ belki
+label-secondary-beams = Belki drugorzędne
+label-parallel-to = Równoległe do
+label-spacing = Rozstaw
+msg-grid-frame-created = Umieszczono słupy: { $columns }, belki: { $beams }, belki drugorzędne: { $secondary }; pominięto: { $skipped }.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mur 6"
 tpl-imp-type-masonry-10 = Mur 10"

@@ -49,9 +49,12 @@ pub enum Tool {
     },
     Column {
         type_id: ElementTypeId,
+        /// Started from the Structure tab: its type list keeps to this material.
+        material: Option<cc_core::StructuralMaterial>,
     },
     Beam {
         type_id: ElementTypeId,
+        material: Option<cc_core::StructuralMaterial>,
     },
     /// Click to place a pad footing; Space turns it by 90°. With a strip
     /// type, draw strip footings as walls are drawn (lines or arcs).
@@ -253,8 +256,8 @@ impl Tool {
             | Tool::Room { type_id }
             | Tool::Grid { type_id }
             | Tool::Dimension { type_id, .. }
-            | Tool::Column { type_id }
-            | Tool::Beam { type_id }
+            | Tool::Column { type_id, .. }
+            | Tool::Beam { type_id, .. }
             | Tool::Footing { type_id }
             | Tool::Truss { type_id }
             | Tool::Stair { type_id }
@@ -270,6 +273,14 @@ impl Tool {
             | Tool::Text { type_id }
             | Tool::LevelMark { type_id }
             | Tool::DetailComponent { type_id } => Some(*type_id),
+            _ => None,
+        }
+    }
+
+    /// The structural material a column or beam tool's types keep to.
+    pub fn material(&self) -> Option<cc_core::StructuralMaterial> {
+        match self {
+            Tool::Column { material, .. } | Tool::Beam { material, .. } => *material,
             _ => None,
         }
     }
@@ -311,8 +322,8 @@ impl Tool {
             Tool::Room { .. } => Tool::Room { type_id: id },
             Tool::Grid { .. } => Tool::Grid { type_id: id },
             Tool::Dimension { mode, .. } => Tool::Dimension { type_id: id, mode },
-            Tool::Column { .. } => Tool::Column { type_id: id },
-            Tool::Beam { .. } => Tool::Beam { type_id: id },
+            Tool::Column { material, .. } => Tool::Column { type_id: id, material },
+            Tool::Beam { material, .. } => Tool::Beam { type_id: id, material },
             Tool::Footing { .. } => Tool::Footing { type_id: id },
             Tool::Truss { .. } => Tool::Truss { type_id: id },
             Tool::Stair { .. } => Tool::Stair { type_id: id },
@@ -358,8 +369,8 @@ impl Tool {
             Category::Room => Tool::Room { type_id },
             Category::Grid => Tool::Grid { type_id },
             Category::Dimension => Tool::Dimension { type_id, mode: DimensionMode::Aligned },
-            Category::Column => Tool::Column { type_id },
-            Category::Beam => Tool::Beam { type_id },
+            Category::Column => Tool::Column { type_id, material: None },
+            Category::Beam => Tool::Beam { type_id, material: None },
             Category::Foundation | Category::Rebar => Tool::Footing { type_id },
             Category::Stair => Tool::Stair { type_id },
             Category::Ramp => Tool::Ramp { type_id },
@@ -1580,8 +1591,8 @@ pub fn handle(
         }
         (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
         (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Column { type_id }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
-        (Tool::Beam { type_id }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Column { type_id, .. }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
+        (Tool::Beam { type_id, .. }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Footing { type_id }, Some(level)) => footing_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Truss { type_id }, Some(level)) => truss_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Stair { type_id }, Some(level)) => stair_tool(ui, resp, painter, state, level, *type_id, xf),
@@ -1734,11 +1745,17 @@ pub fn component_group(project: &Project, type_id: ElementTypeId) -> ComponentGr
 /// The types the options bar offers to a tool of `category` placing `type_id`:
 /// all of the category, but for components only those placed by the same
 /// tool (fixtures, electrical devices, a device with its own tool, the rest).
-pub fn tool_types(project: &Project, category: Category, type_id: ElementTypeId) -> Vec<(ElementTypeId, String)> {
+pub fn tool_types(
+    project: &Project,
+    category: Category,
+    type_id: ElementTypeId,
+    material: Option<cc_core::StructuralMaterial>,
+) -> Vec<(ElementTypeId, String)> {
     let group = (category == Category::Component).then(|| component_group(project, type_id));
     project
         .types_of(category)
         .filter(|t| group.is_none_or(|g| component_group(project, t.id) == g))
+        .filter(|t| material.is_none_or(|m| project.structural_material(&t.data) == Some(m)))
         .map(|t| (t.id, t.name.clone()))
         .collect()
 }
@@ -4074,7 +4091,7 @@ mod tests {
         let group = |id| component_group(&project, id);
         for (device, wanted) in [(false, ComponentGroup::Fixture), (true, ComponentGroup::Device)] {
             let first = mep_component_type(&project, device).expect("the template has one");
-            let listed = tool_types(&project, Category::Component, first);
+            let listed = tool_types(&project, Category::Component, first, None);
             assert!(listed.iter().any(|(id, _)| *id == first));
             assert!(listed.iter().all(|(id, _)| group(*id) == wanted), "{wanted:?}: {listed:?}");
             let key = Tool::Component { type_id: first }.name_key(&project);
@@ -4085,13 +4102,13 @@ mod tests {
             .find(|t| group(t.id) == ComponentGroup::Generic)
             .map(|t| t.id)
             .expect("the template has furniture");
-        let listed = tool_types(&project, Category::Component, furniture);
+        let listed = tool_types(&project, Category::Component, furniture, None);
         assert!(!listed.is_empty() && listed.iter().all(|(id, _)| group(*id) == ComponentGroup::Generic));
         assert!(listed.len() < project.types_of(Category::Component).count());
         assert_eq!(Tool::Component { type_id: furniture }.name_key(&project), "tool-component");
         // Other categories keep every type.
         let wall = project.types_of(Category::Wall).next().map(|t| t.id).unwrap();
-        assert_eq!(tool_types(&project, Category::Wall, wall).len(), project.types_of(Category::Wall).count());
+        assert_eq!(tool_types(&project, Category::Wall, wall, None).len(), project.types_of(Category::Wall).count());
     }
 
     /// The curvature handle bends arc strip footings as it bends arc walls

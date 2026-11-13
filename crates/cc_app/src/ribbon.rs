@@ -692,20 +692,52 @@ fn massing_site_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-site"), |ui| command_buttons(ui, state, &[place(Category::Topography), place(Category::Pad)]));
 }
 
+/// The Structure tab's material: three stacked toggles.
+fn material_selector(ui: &mut Ui, state: &mut AppState) {
+    ui.vertical(|ui| {
+        for m in cc_core::StructuralMaterial::ALL {
+            let on = state.prefs.structure_material == m;
+            let label = crate::i18n::tr(m.key());
+            let response = ui.selectable_label(on, label.clone());
+            response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, on, label.clone()));
+            if response.clicked() {
+                state.prefs.structure_material = m;
+            }
+        }
+    });
+}
+
 fn structure_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
+    use cc_core::StructuralMaterial as M;
+    let m = state.prefs.structure_material;
+    group(ui, t!("group-structure-material"), |ui| material_selector(ui, state));
+    let (column, beam) = (StructurePlace(Category::Column, m), StructurePlace(Category::Beam, m));
+    match m {
+        M::Concrete => {
+            group(ui, t!("group-structure"), |ui| {
+                command_buttons(ui, state, &[column, beam, place(Category::Floor)]);
+            });
+            group(ui, t!("group-reinforcement"), |ui| stacks(ui, state, &[&[TypicalRebar, RebarView, SteelSchedule]]));
+        }
+        M::Steel => {
+            group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam, BracesX]));
+            group(ui, t!("group-framing"), |ui| {
+                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame, Truss]]);
+            });
+        }
+        M::Timber => {
+            group(ui, t!("group-structure"), |ui| command_buttons(ui, state, &[column, beam]));
+            group(ui, t!("group-framing"), |ui| {
+                stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[GridFrame]]);
+            });
+        }
+    }
     group(ui, t!("group-profiles"), |ui| command_button(ui, state, Profiles));
-    group(ui, t!("group-structure"), |ui| {
-        command_buttons(ui, state, &[place(Category::Column), place(Category::Beam), place(Category::Foundation)]);
-    });
-    // Layout from grids and foundations under what exists, as small stacked buttons.
-    group(ui, t!("group-framing"), |ui| {
-        stacks(ui, state, &[&[ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns], &[BracesX, Truss]]);
-    });
     group(ui, t!("group-foundation"), |ui| {
+        command_button(ui, state, place(Category::Foundation));
         stacks(ui, state, &[&[FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab]]);
     });
-    group(ui, t!("group-reinforcement"), |ui| stacks(ui, state, &[&[TypicalRebar, RebarView, SteelSchedule]]));
     group(ui, t!("group-analytical"), |ui| {
         stacks(ui, state, &[&[SlabJoinSupports, AnalyticalView, AnalyticalExport]]);
     });
@@ -1103,7 +1135,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
             });
         ui.separator();
         if let (Some(category), Some(type_id)) = (state.tool.category(), state.tool.type_id()) {
-            let types = crate::tools::tool_types(state.project(), category, type_id);
+            let types = crate::tools::tool_types(state.project(), category, type_id, state.tool.material());
             let mut selected = type_id;
             // Walls: a project without a curtain type gets one from the list.
             let offer_curtain = category == Category::Wall && !crate::curtain_ui::has_curtain_type(state);

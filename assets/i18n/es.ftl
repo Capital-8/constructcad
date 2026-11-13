@@ -3209,6 +3209,26 @@ browser-org-group-by = Agrupar por
 browser-org-then-by = Después por
 browser-org-none = Ninguno
 
+# Structure by material
+tx-structural-type = Crear tipo estructural
+tx-grid-frame = Crear estructura en retícula
+
+# Structure tab material and grid frame
+group-structure-material = Material
+
+# Structure tab material and grid frame
+action-grid-frame = Estructura en retícula
+cmd-desc-grid-frame = Coloca pilares en las intersecciones de los ejes y vigas a lo largo de los ejes en cada planta de un rango de niveles, con vigas secundarias opcionales, en un solo paso.
+dlg-grid-frame = Estructura en retícula
+label-base-level = Nivel base
+label-top-level = Nivel superior
+label-column-type = Tipo de pilar
+label-beam-type = Tipo de viga
+label-secondary-beams = Vigas secundarias
+label-parallel-to = Paralelas a
+label-spacing = Separación
+msg-grid-frame-created = { $columns } pilares, { $beams } vigas y { $secondary } vigas secundarias colocados; { $skipped } omitidos.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Mampostería 6"
 tpl-imp-type-masonry-10 = Mampostería 10"

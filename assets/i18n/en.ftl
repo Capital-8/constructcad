@@ -3209,6 +3209,26 @@ browser-org-group-by = Group by
 browser-org-then-by = Then by
 browser-org-none = None
 
+# Structure by material
+tx-structural-type = Create structural type
+tx-grid-frame = Create grid frame
+
+# Structure tab material and grid frame
+group-structure-material = Material
+
+# Structure tab material and grid frame
+action-grid-frame = Grid Frame
+cmd-desc-grid-frame = Place columns at the grid intersections and beams along the grids on every storey of a range of levels, with optional secondary beams, in one step.
+dlg-grid-frame = Grid Frame
+label-base-level = Base level
+label-top-level = Top level
+label-column-type = Column type
+label-beam-type = Beam type
+label-secondary-beams = Secondary beams
+label-parallel-to = Parallel to
+label-spacing = Spacing
+msg-grid-frame-created = { $columns } columns, { $beams } beams and { $secondary } secondary beams placed; { $skipped } skipped.
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = Masonry 6"
 tpl-imp-type-masonry-10 = Masonry 10"

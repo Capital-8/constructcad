@@ -63,6 +63,8 @@ pub enum UiCommand {
     Default3D,
     /// The placement tool of a model category.
     Place(Category),
+    /// Start the column or beam tool on a type of the given structural material.
+    StructurePlace(Category, cc_core::StructuralMaterial),
     NewComponent,
     LoadComponent,
     ComponentLibrary,
@@ -112,6 +114,8 @@ pub enum UiCommand {
     Select,
     SelectInstances,
     ColumnsAtGrids,
+    /// Opens the Grid Frame dialog.
+    GridFrame,
     AlignGridEnds,
     BeamsOnGrids,
     BeamsBetweenColumns,
@@ -344,7 +348,7 @@ impl UiCommand {
             TbText,
             TbImage,
         ]);
-        all.extend([AlignGridEnds, ColumnsAtGrids, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
+        all.extend([AlignGridEnds, ColumnsAtGrids, GridFrame, BeamsOnGrids, BeamsBetweenColumns, StructuralSchedules]);
         all.extend([FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab, SlabJoinSupports]);
         all.extend([AnalyticalView, AnalyticalExport, Truss, BracesX, TypicalRebar, RebarView, SteelSchedule]);
         all.extend([StructuralPlan, NumberStructure, StructureTags]);
@@ -475,7 +479,7 @@ impl UiCommand {
             Undo => Icon::Undo,
             Redo => Icon::Redo,
             Default3D | New3D => Icon::View3D,
-            Place(category) => category_icon(category),
+            Place(category) | StructurePlace(category, _) => category_icon(category),
             NewComponent | LoadComponent | EditComponent => Icon::Component,
             CompExtrusion => Icon::Extrusion,
             CompRevolution => Icon::Revolution,
@@ -511,6 +515,7 @@ impl UiCommand {
             Select => Icon::Select,
             SelectInstances => Icon::SelectInstances,
             ColumnsAtGrids => Icon::ColumnsAtGrids,
+            GridFrame => Icon::GridFrame,
             AlignGridEnds => Icon::AlignGridEnds,
             BeamsOnGrids => Icon::BeamsOnGrids,
             BeamsBetweenColumns => Icon::BeamsBetweenColumns,
@@ -684,7 +689,7 @@ impl UiCommand {
             Undo => t!("action-undo"),
             Redo => t!("action-redo"),
             Default3D => t!("action-default-3d"),
-            Place(category) => place_label(category),
+            Place(category) | StructurePlace(category, _) => place_label(category),
             NewComponent => t!("action-new-component"),
             EditComponent => t!("action-edit-component"),
             CompExtrusion => t!("comp-env-extrusion"),
@@ -723,6 +728,7 @@ impl UiCommand {
             Select => t!("tool-select"),
             SelectInstances => t!("action-select-instances"),
             ColumnsAtGrids => t!("action-columns-at-grids"),
+            GridFrame => t!("action-grid-frame"),
             AlignGridEnds => t!("action-align-grid-ends"),
             BeamsOnGrids => t!("action-beams-on-grids"),
             BeamsBetweenColumns => t!("action-beams-between-columns"),
@@ -889,7 +895,7 @@ impl UiCommand {
             Undo => t!("cmd-desc-undo"),
             Redo => t!("cmd-desc-redo"),
             Default3D => t!("cmd-desc-default-3d"),
-            Place(category) => place_description(category),
+            Place(category) | StructurePlace(category, _) => place_description(category),
             NewComponent => t!("cmd-desc-new-component"),
             EditComponent => t!("cmd-desc-edit-component"),
             CompExtrusion => t!("cmd-desc-comp-extrusion"),
@@ -928,6 +934,7 @@ impl UiCommand {
             Select => t!("cmd-desc-select"),
             SelectInstances => t!("cmd-desc-select-instances"),
             ColumnsAtGrids => t!("cmd-desc-columns-at-grids"),
+            GridFrame => t!("cmd-desc-grid-frame"),
             AlignGridEnds => t!("cmd-desc-align-grid-ends"),
             BeamsOnGrids => t!("cmd-desc-beams-on-grids"),
             BeamsBetweenColumns => t!("cmd-desc-beams-between-columns"),
@@ -1193,6 +1200,7 @@ impl UiCommand {
             Undo => "undo",
             SelectInstances => "elements_list",
             ColumnsAtGrids => "columns_at_grids",
+            GridFrame => "grid_frame_create",
             AlignGridEnds => "grids_align_ends",
             BeamsOnGrids => "beams_on_grids",
             BeamsBetweenColumns => "beams_between_columns",
@@ -1330,6 +1338,9 @@ impl UiCommand {
     /// Why the command cannot run now, or `None` when it can.
     pub fn unavailable(self, state: &AppState) -> Option<String> {
         use UiCommand::*;
+        if let StructurePlace(category, _) = self {
+            return Place(category).unavailable(state);
+        }
         let project_open = state.project_open && !state.show_home;
         match self {
             Home | New | Open | ImportIfc | About | CheckUpdates | Preferences | ToggleRibbon | CommandPalette => {
@@ -1438,7 +1449,7 @@ impl UiCommand {
             Pin | Unpin | Delete | Cut | ClipboardCopy | SelectInstances if !has_sel => Some(t!("msg-select-first")),
             SelectInstances if state.active_view.is_none() => Some(t!("why-no-view")),
             Group if state.selection.len() < 2 => Some(t!("msg-group-two")),
-            ColumnsAtGrids if crate::actions::grids_for(state).len() < 2 => Some(t!("msg-grids-two")),
+            ColumnsAtGrids | GridFrame if crate::actions::grids_for(state).len() < 2 => Some(t!("msg-grids-two")),
             AlignGridEnds if crate::actions::reference_grid(state).is_none() => Some(t!("why-select-one-grid")),
             BeamsOnGrids if crate::actions::grids_for(state).is_empty() => Some(t!("why-no-grids")),
             BeamsBetweenColumns if crate::actions::selected_columns(state).len() < 2 => Some(t!("msg-columns-two")),
@@ -1816,6 +1827,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         },
         Default3D => actions::open_default_3d(state),
         Place(category) => actions::activate_category_tool(state, category),
+        StructurePlace(category, material) => actions::structure_place(state, category, material),
         NewComponent => {
             state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
         }
@@ -1879,6 +1891,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         SelectInstances => crate::actions::select_instances(state),
         Group => crate::actions::group_selection(state),
         ColumnsAtGrids => crate::actions::columns_at_grids(state),
+        GridFrame => crate::grid_frame_ui::open(state),
         AlignGridEnds => crate::actions::align_grid_ends(state),
         BeamsOnGrids => crate::actions::beams_on_grids(state),
         BeamsBetweenColumns => crate::actions::beams_between_columns(state),

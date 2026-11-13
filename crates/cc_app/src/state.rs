@@ -101,6 +101,8 @@ pub struct Dialogs {
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
     /// The Profile Manager.
     pub profiles: Option<crate::profiles_dialog::ProfilesDialog>,
+    /// *Structure → Grid Frame*.
+    pub grid_frame: Option<crate::grid_frame_ui::GridFrameDialog>,
     /// The Profile Manager's edits while one of its profiles is in a
     /// sketch (*Edit sketch*): Finish and Cancel open it again with them, so
     /// its Cancel still undoes everything.

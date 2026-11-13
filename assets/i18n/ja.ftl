@@ -3209,6 +3209,26 @@ browser-org-group-by = グループ化
 browser-org-then-by = 次の基準
 browser-org-none = なし
 
+# Structure by material
+tx-structural-type = 構造タイプを作成
+tx-grid-frame = 通り芯フレームを作成
+
+# Structure tab material and grid frame
+group-structure-material = 材料
+
+# Structure tab material and grid frame
+action-grid-frame = 通り芯フレーム
+cmd-desc-grid-frame = レベル範囲の各階で、通り芯の交点に柱、通り芯に沿って梁を配置し、必要に応じて小梁も一度に配置します。
+dlg-grid-frame = 通り芯フレーム
+label-base-level = 基準レベル
+label-top-level = 上端レベル
+label-column-type = 柱タイプ
+label-beam-type = 梁タイプ
+label-secondary-beams = 小梁
+label-parallel-to = 平行
+label-spacing = 間隔
+msg-grid-frame-created = 柱 { $columns } 本、梁 { $beams } 本、小梁 { $secondary } 本を配置しました。{ $skipped } 件をスキップしました。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 煉瓦造 6"
 tpl-imp-type-masonry-10 = 煉瓦造 10"

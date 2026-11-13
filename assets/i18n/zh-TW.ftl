@@ -3209,6 +3209,26 @@ browser-org-group-by = 分組依據
 browser-org-then-by = 接著依據
 browser-org-none = 無
 
+# Structure by material
+tx-structural-type = 建立結構類型
+tx-grid-frame = 建立軸網框架
+
+# Structure tab material and grid frame
+group-structure-material = 材料
+
+# Structure tab material and grid frame
+action-grid-frame = 軸網框架
+cmd-desc-grid-frame = 在一段樓層範圍的每一層，於軸網交點放置柱、沿軸線放置梁，可選擇加入次梁，一次完成。
+dlg-grid-frame = 軸網框架
+label-base-level = 基準樓層
+label-top-level = 頂部樓層
+label-column-type = 柱類型
+label-beam-type = 梁類型
+label-secondary-beams = 次梁
+label-parallel-to = 平行於
+label-spacing = 間距
+msg-grid-frame-created = 已放置 { $columns } 根柱、{ $beams } 根梁及 { $secondary } 根次梁；略過 { $skipped } 個。
+
 # Imperial template: type names in feet and inches
 tpl-imp-type-masonry-6 = 砌體牆 6"
 tpl-imp-type-masonry-10 = 砌體牆 10"
