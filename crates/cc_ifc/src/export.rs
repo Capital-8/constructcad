@@ -1066,9 +1066,17 @@ impl<'a> Exporter<'a> {
                     let frame = Frame::at(DVec3::new(0.0, 0.0, g.z_range.0 - level_z));
                     let position = self.placement3(frame);
                     let depth = g.z_range.1 - g.z_range.0;
-                    let item = match &g.arc {
+                    // A haunched strip: its section swept along it, as a closed shell.
+                    let shell = g.body().map(|body| {
+                        let mut s = cc_geom::Solid::new(e.id, e.category(), [0; 3]);
+                        body.add_to(&mut s);
+                        self.faceted_brep(&s.faces, level_z)
+                    });
+                    let brep = shell.is_some();
+                    let item = match (shell, &g.arc) {
+                        (Some(shell), _) => shell,
                         // An arc strip: its outline of arcs and lines extruded.
-                        Some(a) => {
+                        (None, Some(a)) => {
                             let (h, l, r) = (a.half, a.left, a.right);
                             let profile = self.arc_band_profile([
                                 a.world(r.0, -h),
@@ -1080,7 +1088,7 @@ impl<'a> Exporter<'a> {
                             ]);
                             self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth])
                         }
-                        None => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
+                        (None, None) => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
                     };
                     let area = g.area();
                     let q = vec![
@@ -1091,8 +1099,9 @@ impl<'a> Exporter<'a> {
                         cc_core::FoundationKind::Pad => StructureProduct::new("IFCFOOTING", "PAD_FOOTING", vec![item])
                             .quantities("Qto_FootingBaseQuantities", q),
                         cc_core::FoundationKind::Strip => {
-                            StructureProduct::new("IFCFOOTING", "STRIP_FOOTING", vec![item])
-                                .quantities("Qto_FootingBaseQuantities", q)
+                            let product = StructureProduct::new("IFCFOOTING", "STRIP_FOOTING", vec![item])
+                                .quantities("Qto_FootingBaseQuantities", q);
+                            if brep { product.brep() } else { product }
                         }
                         cc_core::FoundationKind::Slab => {
                             let q = vec![
@@ -1279,7 +1288,9 @@ impl<'a> Exporter<'a> {
                     | cc_core::RebarLayout::WallVertical { .. }
                     | cc_core::RebarLayout::SlabStraight { .. }
                     | cc_core::RebarLayout::SlabRing { .. }
-                    | cc_core::RebarLayout::SlabRadial { .. } => ("MAIN", &[][..]),
+                    | cc_core::RebarLayout::SlabRadial { .. }
+                    | cc_core::RebarLayout::StripTransverse { .. }
+                    | cc_core::RebarLayout::StripLongitudinal { .. } => ("MAIN", &[][..]),
                     cc_core::RebarLayout::Sides { .. } | cc_core::RebarLayout::SlabTrim { .. } => ("EDGE", &[][..]),
                     cc_core::RebarLayout::Stirrups { .. }
                     | cc_core::RebarLayout::Ties { .. }

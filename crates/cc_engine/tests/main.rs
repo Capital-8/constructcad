@@ -44,6 +44,7 @@ mod phases;
 mod profiles;
 mod project_templates;
 mod regions;
+mod ring_footings;
 mod section_marks;
 mod shaft;
 mod skp;

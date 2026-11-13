@@ -820,8 +820,8 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
-            // A foundation slab takes a mesh, like a floor.
-            if matches!(f.shape, cc_core::FoundationShape::Slab { .. }) {
+            // A foundation slab takes a mesh, like a floor; a strip its own bars.
+            if !matches!(f.shape, cc_core::FoundationShape::Pad { .. }) {
                 reinforcement(ui, state, id);
             }
         }
@@ -2255,10 +2255,16 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
             readonly_row(ui, label, format!("1/{every_horizontal} × 1/{every_vertical}"));
         }
         // A slab's bars by their spacing, its radial and trimming bars by their count.
-        L::SlabStraight { spacing, .. } | L::SlabRing { spacing, .. } => {
+        L::SlabStraight { spacing, .. }
+        | L::SlabRing { spacing, .. }
+        | L::StripTransverse { spacing, .. }
+        | L::StripLongitudinal { spacing, .. } => {
             length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
                 if let ElementKind::Rebar(x) = &mut e.kind
-                    && let L::SlabStraight { spacing, .. } | L::SlabRing { spacing, .. } = &mut x.layout
+                    && let L::SlabStraight { spacing, .. }
+                    | L::SlabRing { spacing, .. }
+                    | L::StripTransverse { spacing, .. }
+                    | L::StripLongitudinal { spacing, .. } = &mut x.layout
                 {
                     *spacing = v.max(cc_core::wall_bars::MIN_SPACING);
                 }
@@ -2328,6 +2334,12 @@ fn rebar_role(layout: &cc_core::RebarLayout) -> String {
         cc_core::RebarLayout::SlabStraight { top, angle_deg, .. } => {
             format!("{} {angle_deg:.0}° · {}", t!("bars-slab-straight"), slab_layer(*top))
         }
+        cc_core::RebarLayout::StripTransverse { top, .. } => {
+            format!("{} · {}", t!("bars-strip-transverse"), slab_layer(*top))
+        }
+        cc_core::RebarLayout::StripLongitudinal { top, .. } => {
+            format!("{} · {}", t!("bars-strip-longitudinal"), slab_layer(*top))
+        }
         cc_core::RebarLayout::SlabRing { top, .. } => format!("{} · {}", t!("bars-slab-ring"), slab_layer(*top)),
         cc_core::RebarLayout::SlabRadial { top, .. } => format!("{} · {}", t!("bars-slab-radial"), slab_layer(*top)),
         cc_core::RebarLayout::SlabTrim { top, .. } => format!("{} · {}", t!("bars-slab-trim"), slab_layer(*top)),
@@ -2365,11 +2377,17 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         }
         let wall = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Wall(_)));
         if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
-            let slab = matches!(
-                state.project().element(host).map(|e| &e.kind),
-                Some(ElementKind::Floor(_) | ElementKind::Foundation(_))
+            let kind = state.project().element(host).map(|e| e.kind.clone());
+            let strip = matches!(
+                &kind,
+                Some(ElementKind::Foundation(f)) if matches!(f.shape, cc_core::FoundationShape::Strip { .. })
             );
-            if wall {
+            let slab = !strip && matches!(&kind, Some(ElementKind::Floor(_) | ElementKind::Foundation(_)));
+            if strip {
+                let command =
+                    cc_engine::commands::strip_rebar::StripRebarCreate { strips: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else if wall {
                 let command =
                     cc_engine::commands::wall_rebar::WallRebarCreate { walls: vec![host.0], ..Default::default() };
                 crate::actions::run_command(state, command);

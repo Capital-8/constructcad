@@ -1909,9 +1909,16 @@ impl<'a> Importer<'a> {
                 matches!(d, TypeData::Foundation { kind: FoundationKind::Slab, thickness: t, .. }
                     if (t - thickness).abs() < TYPE_TOL)
             },
-            || TypeData::Foundation { kind: FoundationKind::Slab, width: 1.0, length: 1.0, thickness, material },
+            || TypeData::Foundation {
+                kind: FoundationKind::Slab,
+                width: 1.0,
+                length: 1.0,
+                thickness,
+                material,
+                haunch: None,
+            },
         );
-        let foundation = Foundation { shape: FoundationShape::Slab { boundary }, top_offset: z1 - elevation };
+        let foundation = Foundation::new(FoundationShape::Slab { boundary }, z1 - elevation);
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Foundation(foundation));
         true
     }

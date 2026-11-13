@@ -241,17 +241,36 @@ pub struct FoundationGeom {
     pub z_range: (f64, f64),
     /// An arc strip footing's exact plan (`None` for straight strips, pads and slabs).
     pub arc: Option<crate::StripArc>,
+    /// The plan area of a slab drawn with arcs or circles, which its
+    /// footprint follows with chords.
+    pub drawn_area: Option<f64>,
+    /// A strip's frame, section and ends after joins (`None` for pads and slabs).
+    pub strip: Option<BeamGeom>,
 }
 
 impl FoundationGeom {
-    /// Plan area, exact for arc strips.
+    /// Plan area, exact for arc strips and slabs drawn with curves.
     pub fn area(&self) -> f64 {
-        self.arc.map_or_else(|| polygon::area(&self.footprint), |a| a.area())
+        match (self.drawn_area, &self.arc) {
+            (Some(area), _) => area,
+            (None, Some(a)) => a.area(),
+            (None, None) => polygon::area(&self.footprint),
+        }
     }
 
-    /// Volume, exact for arc strips.
+    /// The body of a haunched strip (an inverted T): its section swept
+    /// along the strip, straight or arc. `None` for plain bodies, which are
+    /// their footprint extruded.
+    pub fn body(&self) -> Option<&BeamGeom> {
+        self.strip.as_ref().filter(|g| g.section.outer.len() != 4)
+    }
+
+    /// Volume, exact for arc strips, haunched strips and slabs drawn with curves.
     pub fn volume(&self) -> f64 {
-        self.area() * (self.z_range.1 - self.z_range.0)
+        match self.body() {
+            Some(body) => body.volume(),
+            None => self.area() * (self.z_range.1 - self.z_range.0),
+        }
     }
 }
 
@@ -397,7 +416,7 @@ impl ModelGeometry {
         geom.build_beams(project);
         geom.build_foundations(project);
         geom.build_structure(project);
-        geom.rebar = crate::rebar::build_rebar(project, &geom.beams, &geom.walls);
+        geom.rebar = crate::rebar::build_rebar(project, &geom.beams, &geom.walls, &geom.foundations);
         geom.build_connections(project);
         geom.build_components(project);
         geom.build_masses(project);
@@ -682,13 +701,14 @@ impl ModelGeometry {
         let mut strips = Vec::new();
         for e in project.elements.values() {
             let ElementKind::Foundation(f) = &e.kind else { continue };
-            let Some(TypeData::Foundation { width, length, thickness, .. }) =
+            let Some(data @ TypeData::Foundation { width, length, thickness, .. }) =
                 project.element_type(e.type_id).map(|t| &t.data)
             else {
                 continue;
             };
             let top = project.level_elevation(e.level) + f.top_offset;
-            let z_range = (top - thickness, top);
+            let z_range = (top - data.foundation_depth(), top);
+            let haunch = data.strip_haunch();
             let footprint = match &f.shape {
                 cc_core::FoundationShape::Pad { position, rotation_deg } => {
                     rect_outline(*width, *length, *position, *rotation_deg)
@@ -703,7 +723,12 @@ impl ModelGeometry {
                             half: width / 2.0,
                             z_range,
                             slope: 0.0,
-                            section: crate::beam::box_section(*width, *thickness),
+                            section: match haunch {
+                                Some(h) => {
+                                    cc_core::SectionOutline { outer: h.outline(*width, *thickness), holes: Vec::new() }
+                                }
+                                None => crate::beam::box_section(*width, *thickness),
+                            },
                             curved: false,
                             join_start: true,
                             join_end: true,
@@ -713,7 +738,9 @@ impl ModelGeometry {
                     continue;
                 }
             };
-            self.foundations.insert(e.id, FoundationGeom { element: e.id, footprint, z_range, arc: None });
+            let drawn_area = f.sketch.as_ref().filter(|s| s.is_curved()).and_then(|_| f.slab_area());
+            self.foundations
+                .insert(e.id, FoundationGeom { element: e.id, footprint, z_range, arc: None, drawn_area, strip: None });
         }
         // Strips meet at the true crossings of their faces, arcs included.
         for g in resolve_beams(&strips, &[]) {
@@ -724,17 +751,25 @@ impl ModelGeometry {
                 right: (g.start_ext.1, g.end_ext.1),
             });
             let footprint = arc.map_or_else(|| g.footprint().to_vec(), |a| a.outline());
-            self.foundations
-                .insert(g.element, FoundationGeom { element: g.element, footprint, z_range: g.z_range, arc });
+            let geom = FoundationGeom {
+                element: g.element,
+                footprint,
+                z_range: g.z_range,
+                arc,
+                drawn_area: None,
+                strip: Some(g),
+            };
+            self.foundations.insert(geom.element, geom);
         }
         for (id, g) in &self.foundations {
             let Some(e) = project.element(*id) else { continue };
             let material = project.element_type(e.type_id).map_or("", |t| t.main_material());
             let mut s = Solid::of_material(*id, Category::Foundation, project, material);
             let (z0, z1) = g.z_range;
-            match &g.arc {
-                Some(arc) => arc.add_to(&mut s, z0, z1),
-                None => s.add_prism(&g.footprint, |_| z0, |_| z1),
+            match (g.body(), &g.arc) {
+                (Some(body), _) => body.add_to(&mut s),
+                (None, Some(arc)) => arc.add_to(&mut s, z0, z1),
+                (None, None) => s.add_prism(&g.footprint, |_| z0, |_| z1),
             }
             if !s.faces.is_empty() {
                 self.solids.push(s);

@@ -227,6 +227,7 @@ impl Element {
     pub fn drawn_sketch_mut(&mut self) -> Option<&mut Option<crate::sketch::Sketch>> {
         match &mut self.kind {
             ElementKind::Floor(f) => Some(&mut f.sketch),
+            ElementKind::Foundation(f) if matches!(f.shape, FoundationShape::Slab { .. }) => Some(&mut f.sketch),
             ElementKind::Ceiling(c) => Some(&mut c.sketch),
             ElementKind::Roof(r) => Some(&mut r.sketch),
             ElementKind::Mass(m) => Some(&mut m.sketch),
@@ -242,6 +243,7 @@ impl Element {
     pub fn drawn_sketch(&self) -> Option<&crate::sketch::Sketch> {
         match &self.kind {
             ElementKind::Floor(f) => f.sketch.as_ref(),
+            ElementKind::Foundation(f) => f.sketch.as_ref(),
             ElementKind::Ceiling(c) => c.sketch.as_ref(),
             ElementKind::Roof(r) => r.sketch.as_ref(),
             ElementKind::Mass(m) => m.sketch.as_ref(),
@@ -258,6 +260,10 @@ impl Element {
     pub fn sketched_profile(&self) -> Option<(&[DVec2], &[Vec<DVec2>])> {
         match &self.kind {
             ElementKind::Floor(f) => Some((&f.boundary, &f.openings)),
+            ElementKind::Foundation(f) => match &f.shape {
+                FoundationShape::Slab { boundary } => Some((boundary, &[])),
+                _ => None,
+            },
             ElementKind::Ceiling(c) => Some((&c.boundary, &[])),
             ElementKind::Roof(r) => Some((&r.footprint, &r.holes)),
             ElementKind::Mass(m) => Some((&m.outline, &[])),
@@ -1107,6 +1113,25 @@ impl FoundationShape {
 pub struct Foundation {
     pub shape: FoundationShape,
     pub top_offset: f64,
+    /// The curves a slab's boundary was drawn with (see [`crate::sketch`]);
+    /// dropped when the boundary is edited without them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sketch: Option<crate::sketch::Sketch>,
+}
+
+impl Foundation {
+    /// A foundation of `shape`, its top `top_offset` above its level.
+    pub fn new(shape: FoundationShape, top_offset: f64) -> Self {
+        Self { shape, top_offset, sketch: None }
+    }
+
+    /// Plan area of a slab, exact along the arcs and circles of its sketch
+    /// (the boundary's points are chords); `None` for pads and strips.
+    pub fn slab_area(&self) -> Option<f64> {
+        let FoundationShape::Slab { boundary } = &self.shape else { return None };
+        let drawn = self.sketch.as_ref().filter(|s| s.is_curved()).and_then(|s| s.area().ok());
+        Some(drawn.unwrap_or_else(|| polygon_area(boundary)))
+    }
 }
 
 /// Where a set of longitudinal bars lies in its host's section.
@@ -1299,6 +1324,15 @@ pub enum RebarLayout {
         #[serde(default)]
         inner: bool,
     },
+    /// Bars across a strip footing (radial in an arc strip) every `spacing`
+    /// along it. Bottom bars are straight; a top bar follows the top of the
+    /// footing (up its slopes and flat between the faces of its beam) and
+    /// its ends turn down to the bottom layer, closing the edges.
+    StripTransverse { top: bool, spacing: f64 },
+    /// Bars along a strip footing (ring bars in an arc strip) `spacing`
+    /// apart across it, in its bottom layer or under its top, following its
+    /// slopes; top bars leave the width of the beam to the beam's own.
+    StripLongitudinal { top: bool, spacing: f64 },
     /// Trimming bars around each opening of a slab, in one layer: `count`
     /// bars `spacing` apart along each side of the opening, reaching
     /// `anchorage` past it, and with `diagonals` one bar across each corner.
@@ -1364,6 +1398,7 @@ impl RebarLayout {
                 | RebarLayout::Ties { .. }
                 | RebarLayout::WallTies { .. }
                 | RebarLayout::SlabTrim { .. }
+                | RebarLayout::StripTransverse { .. }
         )
     }
 
@@ -1384,6 +1419,23 @@ impl RebarLayout {
                 | RebarLayout::SlabRadial { .. }
                 | RebarLayout::SlabTrim { .. }
         )
+    }
+
+    /// Whether the set is one of a strip footing's own (across or along its footing slab).
+    pub fn in_strip(&self) -> bool {
+        matches!(self, RebarLayout::StripTransverse { .. } | RebarLayout::StripLongitudinal { .. })
+    }
+
+    /// Whether a strip footing may host the set: its own layouts, and those
+    /// of a beam (for the beam on top of it, or its whole section).
+    pub fn fits_strip(&self) -> bool {
+        self.in_strip()
+            || matches!(
+                self,
+                RebarLayout::Stirrups { .. }
+                    | RebarLayout::Sides { .. }
+                    | RebarLayout::Longitudinal { face: BarFace::Top | BarFace::Bottom, .. }
+            )
     }
 
     /// Whether a slab's set lies in its top layer.
@@ -1428,6 +1480,9 @@ impl RebarLayout {
                     && (*to == 0.0 || *to > *from)
                     && bottom.is_valid()
                     && top.is_valid()
+            }
+            RebarLayout::StripTransverse { spacing, .. } | RebarLayout::StripLongitudinal { spacing, .. } => {
+                spaced(*spacing)
             }
             RebarLayout::SlabStraight { angle_deg, spacing, hook, .. } => {
                 spaced(*spacing) && angle_deg.is_finite() && hook.is_finite() && hook.abs() <= slab_bars::MAX_LENGTH

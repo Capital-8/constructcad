@@ -36,6 +36,7 @@ mod slab_rebar;
 mod solid;
 pub mod stair;
 pub mod strip;
+mod strip_rebar;
 pub mod topography;
 mod wall;
 mod wall_rebar;

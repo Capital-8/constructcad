@@ -661,6 +661,49 @@ fn layers_editor(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
 }
 
 /// Section and layout parameters of columns, beams, stairs, ramps and railings.
+/// A strip footing type's beam on top (an inverted T): a checkbox, and with
+/// it the edge thickness of the footing and the beam's width and height.
+fn strip_haunch_rows(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
+    let tid = ty.id;
+    let TypeData::Foundation { width, thickness, haunch, .. } = ty.data else { return };
+    crate::table::section(ui, "type-haunch", t!("section-strip-beam"), |ui| {
+        let mut on = haunch.is_some();
+        if row(ui, &t!("prop-strip-beam"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
+            update(state, tid, "fh", |t| {
+                if let TypeData::Foundation { haunch, .. } = &mut t.data {
+                    // A beam a third of the strip wide and as high as the footing is thick.
+                    let beam = cc_core::StripHaunch {
+                        edge_thickness: thickness,
+                        beam_width: width / 3.0,
+                        beam_height: thickness,
+                    };
+                    *haunch = on.then_some(beam);
+                }
+            });
+            state.session.doc.break_merge();
+        }
+        let Some(h) = haunch else { return };
+        type Set = fn(&mut cc_core::StripHaunch, f64);
+        let rows: [(String, &str, f64, Set); 3] = [
+            (t!("prop-strip-edge"), "fhe", h.edge_thickness, |h, v| h.edge_thickness = v),
+            (t!("prop-strip-beam-width"), "fhw", h.beam_width, |h, v| h.beam_width = v),
+            (t!("prop-strip-beam-height"), "fhh", h.beam_height, |h, v| h.beam_height = v),
+        ];
+        for (label, key, value, set) in rows {
+            size_row(ui, state, &label, tid, key, value, move |d, v| {
+                if let TypeData::Foundation { width, thickness, haunch: Some(h), .. } = d {
+                    // Kept within what makes a section.
+                    let mut next = *h;
+                    set(&mut next, v.max(0.0));
+                    if next.fits(*width, *thickness) {
+                        *h = next;
+                    }
+                }
+            });
+        }
+    });
+}
+
 fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
     let tid = ty.id;
     match ty.data {
@@ -714,6 +757,9 @@ fn structure_parameters(ui: &mut Ui, state: &mut AppState, ty: &ElementType) {
                     },
                 );
             });
+            if kind == cc_core::FoundationKind::Strip {
+                strip_haunch_rows(ui, state, ty);
+            }
         }
         TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
             crate::table::section(ui, "type-dimensions", t!("section-dimensions"), |ui| {

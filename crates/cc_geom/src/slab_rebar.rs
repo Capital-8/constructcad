@@ -52,12 +52,8 @@ impl Slab {
                 let cc_core::FoundationShape::Slab { boundary } = &f.shape else { return None };
                 let TypeData::Foundation { thickness, .. } = &ty.data else { return None };
                 let top = level + f.top_offset;
-                Some(Slab {
-                    outline: polygon::ccw(boundary),
-                    holes: Vec::new(),
-                    circles: Vec::new(),
-                    z: (top - thickness, top),
-                })
+                let circles = f.sketch.iter().flat_map(|s| &s.curves).filter_map(circle_of).collect();
+                Some(Slab { outline: polygon::ccw(boundary), holes: Vec::new(), circles, z: (top - thickness, top) })
             }
             _ => None,
         }

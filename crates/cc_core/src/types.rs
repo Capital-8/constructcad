@@ -465,13 +465,16 @@ pub enum TypeData {
         material: String,
     },
     /// Foundation: a pad `width` x `length`, a strip `width` wide or a slab,
-    /// each `thickness` deep.
+    /// each `thickness` deep. A strip with a `haunch` is an inverted T: a
+    /// footing slab `thickness` deep at the faces of a beam on top of it.
     Foundation {
         kind: FoundationKind,
         width: f64,
         length: f64,
         thickness: f64,
         material: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        haunch: Option<StripHaunch>,
     },
     /// Stair: risers at most `max_riser` high, treads `tread` deep (or from
     /// Blondel's formula, see `rules`), built as `build` says.
@@ -806,6 +809,83 @@ pub enum FoundationKind {
     Pad,
     Strip,
     Slab,
+}
+
+/// The section of a strip footing with a beam on top (an inverted T): the
+/// footing slab is the type's `thickness` deep at the faces of the beam and
+/// `edge_thickness` at its edges, its top sloping between them (a haunch;
+/// flat when the two are equal), and the beam `beam_width` wide rises
+/// `beam_height` above the slab (0: a sloped footing with a flat middle).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct StripHaunch {
+    pub edge_thickness: f64,
+    pub beam_width: f64,
+    pub beam_height: f64,
+}
+
+impl StripHaunch {
+    /// Highest beam, meters.
+    pub const MAX_HEIGHT: f64 = 10.0;
+
+    /// Whether the values make a section in a strip `width` wide and
+    /// `thickness` deep at the beam: an edge no thicker than that, a beam
+    /// narrower than the strip.
+    pub fn fits(&self, width: f64, thickness: f64) -> bool {
+        let positive = |v: f64| v.is_finite() && v > 1e-4;
+        positive(self.edge_thickness)
+            && self.edge_thickness <= thickness + 1e-9
+            && positive(self.beam_width)
+            && self.beam_width < width - 1e-4
+            && self.beam_height.is_finite()
+            && (0.0..=Self::MAX_HEIGHT).contains(&self.beam_height)
+    }
+
+    /// The section of a strip `width` wide and `thickness` deep at the beam:
+    /// `x` across (centered), `y` up from the bottom, counter-clockwise.
+    pub fn outline(&self, width: f64, thickness: f64) -> Vec<glam::DVec2> {
+        let (w, b) = (width / 2.0, self.beam_width / 2.0);
+        let (edge, top) = (self.edge_thickness, thickness + self.beam_height);
+        let mut pts = vec![
+            glam::DVec2::new(-w, 0.0),
+            glam::DVec2::new(w, 0.0),
+            glam::DVec2::new(w, edge),
+            glam::DVec2::new(b, thickness),
+        ];
+        if self.beam_height > 0.0 {
+            pts.extend([glam::DVec2::new(b, top), glam::DVec2::new(-b, top)]);
+        }
+        pts.extend([glam::DVec2::new(-b, thickness), glam::DVec2::new(-w, edge)]);
+        pts
+    }
+
+    /// Area of that section.
+    pub fn area(&self, width: f64, thickness: f64) -> f64 {
+        let slope = (width - self.beam_width) * (self.edge_thickness + thickness) / 2.0;
+        slope + self.beam_width * (thickness + self.beam_height)
+    }
+}
+
+impl TypeData {
+    /// Depth of a foundation from its top to its bottom: its thickness,
+    /// plus the beam on top of a haunched strip. 0 for other types.
+    pub fn foundation_depth(&self) -> f64 {
+        match self {
+            TypeData::Foundation { thickness, haunch, kind, .. } => {
+                thickness + haunch.filter(|_| *kind == FoundationKind::Strip).map_or(0.0, |h| h.beam_height)
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// The haunch of a strip footing type (`None` for a plain strip and other types).
+    pub fn strip_haunch(&self) -> Option<StripHaunch> {
+        match self {
+            TypeData::Foundation { kind: FoundationKind::Strip, width, thickness, haunch, .. } => {
+                haunch.filter(|h| h.fits(*width, *thickness))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl FoundationKind {
