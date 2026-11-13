@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Steel building
 category-truss = Trusses
 tpl-type-truss = Truss
 tx-steel-building = Create steel building
+tx-wall-framing = Frame walls
 action-steel-building = Steel Building
 dlg-steel-building = Steel Building
 section-steel-building = Steel Building

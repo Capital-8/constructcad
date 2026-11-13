@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Capannone in acciaio
 category-truss = Capriate
 tpl-type-truss = Capriata
 tx-steel-building = Crea capannone in acciaio
+tx-wall-framing = Intelaiare pareti
 action-steel-building = Capannone in acciaio
 dlg-steel-building = Capannone in acciaio
 section-steel-building = Capannone in acciaio

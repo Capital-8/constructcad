@@ -3202,6 +3202,7 @@ tpl-type-steel-building = Сталева будівля
 category-truss = Ферми
 tpl-type-truss = Ферма
 tx-steel-building = Створити сталеву будівлю
+tx-wall-framing = Каркас стін
 action-steel-building = Сталева будівля
 dlg-steel-building = Сталева будівля
 section-steel-building = Сталева будівля

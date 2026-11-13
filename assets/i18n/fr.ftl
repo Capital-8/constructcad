@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Bâtiment métallique
 category-truss = Fermes
 tpl-type-truss = Ferme
 tx-steel-building = Créer un bâtiment métallique
+tx-wall-framing = Ossaturer des murs
 action-steel-building = Bâtiment métallique
 dlg-steel-building = Bâtiment métallique
 section-steel-building = Bâtiment métallique

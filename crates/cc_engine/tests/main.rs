@@ -53,6 +53,7 @@ mod underlay;
 mod view_detailing;
 mod visual_style;
 mod wall_attach;
+mod wall_framing;
 mod wall_location_joins;
 mod window_operation;
 

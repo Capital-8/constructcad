@@ -3201,6 +3201,7 @@ tpl-type-steel-building = 鋼構建築
 category-truss = 桁架
 tpl-type-truss = 桁架
 tx-steel-building = 建立鋼構建築
+tx-wall-framing = 建立牆體骨架
 action-steel-building = 鋼構建築
 dlg-steel-building = 鋼構建築
 section-steel-building = 鋼構建築

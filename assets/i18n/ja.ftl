@@ -3201,6 +3201,7 @@ tpl-type-steel-building = 鉄骨建屋
 category-truss = トラス
 tpl-type-truss = トラス
 tx-steel-building = 鉄骨建屋を作成
+tx-wall-framing = 壁の下地を作成
 action-steel-building = 鉄骨建屋
 dlg-steel-building = 鉄骨建屋
 section-steel-building = 鉄骨建屋

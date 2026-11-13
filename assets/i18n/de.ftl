@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Stahlhalle
 category-truss = Fachwerkbinder
 tpl-type-truss = Fachwerkbinder
 tx-steel-building = Stahlhalle erstellen
+tx-wall-framing = Wände rahmen
 action-steel-building = Stahlhalle
 dlg-steel-building = Stahlhalle
 section-steel-building = Stahlhalle

@@ -3203,6 +3203,7 @@ tpl-type-steel-building = ອາຄານໂຄງເຫຼັກ
 category-truss = ໂຄງຫຼັງຄາ
 tpl-type-truss = ໂຄງຫຼັງຄາ
 tx-steel-building = ສ້າງອາຄານໂຄງເຫຼັກ
+tx-wall-framing = Frame walls
 action-steel-building = ອາຄານໂຄງເຫຼັກ
 dlg-steel-building = ອາຄານໂຄງເຫຼັກ
 section-steel-building = ອາຄານໂຄງເຫຼັກ

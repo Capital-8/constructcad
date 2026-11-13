@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Nave metálica
 category-truss = Cerchas
 tpl-type-truss = Cercha
 tx-steel-building = Crear nave metálica
+tx-wall-framing = Enmarcar muros
 action-steel-building = Nave metálica
 dlg-steel-building = Nave metálica
 section-steel-building = Nave metálica

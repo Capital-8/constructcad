@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Hala stalowa
 category-truss = Kratownice
 tpl-type-truss = Kratownica
 tx-steel-building = Utwórz halę stalową
+tx-wall-framing = Szkieletowanie ścian
 action-steel-building = Hala stalowa
 dlg-steel-building = Hala stalowa
 section-steel-building = Hala stalowa

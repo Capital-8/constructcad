@@ -3201,6 +3201,7 @@ tpl-type-steel-building = Galpão metálico
 category-truss = Treliças
 tpl-type-truss = Treliça
 tx-steel-building = Criar galpão metálico
+tx-wall-framing = Criar enquadramento de parede
 action-steel-building = Galpão metálico
 dlg-steel-building = Galpão metálico
 section-steel-building = Galpão metálico
