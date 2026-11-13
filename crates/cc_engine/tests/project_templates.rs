@@ -66,6 +66,42 @@ fn every_view_of_the_imperial_template_draws() {
 }
 
 #[test]
+fn imperial_scales_read_the_customary_way() {
+    let mut s = imperial();
+    let plan = s.project().views.values().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).expect("plan").id;
+    let out = run(&mut s, "view_get", json!({ "view": plan.0 }));
+    assert_eq!(out["scale"], json!(48));
+    assert_eq!(out["scale_text"], json!("1/4\" = 1'-0\""));
+
+    // A label, a ratio text or a number set the scale.
+    let out = run(&mut s, "view_set", json!({ "view": plan.0, "scale": "1/8\" = 1'-0\"" }));
+    assert_eq!(out["scale"], json!(96));
+    assert_eq!(out["scale_text"], json!("1/8\" = 1'-0\""));
+    let out = run(&mut s, "view_set", json!({ "view": plan.0, "scale": "1:50" }));
+    assert_eq!((out["scale"].clone(), out["scale_text"].clone()), (json!(50), json!("1:50")));
+    let out = run(&mut s, "view_set", json!({ "view": plan.0, "scale": 48 }));
+    assert_eq!(out["scale"], json!(48));
+    let err = s.execute("view_set", json!({ "view": plan.0, "scale": "1/5\" = 1'" })).expect_err("unreadable");
+    assert_eq!(s.project().views[&plan].scale, 48, "{}", err.message);
+    let out = run(&mut s, "view_create", json!({ "kind": "drafting", "scale": "3\" = 1'-0\"" }));
+    assert_eq!(out["scale"], json!(4));
+
+    // A callout's default detail scale is one of the imperial scales.
+    let out = run(&mut s, "callout_create", json!({ "parent": plan.0, "rect": [[0, 0], [2, 2]] }));
+    let scale = out["scale"].as_u64().expect("scale") as u32;
+    assert!(cc_core::scale::choices(MeasurementSystem::Imperial).contains(&scale), "{scale}");
+    assert_eq!(scale, 8, "1/4\" = 1'-0\" gives 1 1/2\" = 1'-0\"");
+
+    // Metric projects are unchanged.
+    run(&mut s, "project_new", json!({}));
+    let plan = s.project().views.values().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).expect("plan").id;
+    let out = run(&mut s, "view_get", json!({ "view": plan.0 }));
+    assert_eq!((out["scale"].clone(), out["scale_text"].clone()), (json!(50), json!("1:50")));
+    let out = run(&mut s, "callout_create", json!({ "parent": plan.0, "rect": [[0, 0], [2, 2]] }));
+    assert_eq!(out["scale"], json!(10));
+}
+
+#[test]
 fn walls_take_the_imperial_default_type() {
     let mut s = imperial();
     let foot = cc_core::units::FOOT;

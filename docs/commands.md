@@ -386,7 +386,7 @@ No parameters.
 
 ### `view_get`
 
-*query* — A view with all its parameters (`params`, editable with `view_set`).
+*query* — A view with all its parameters (`params`, editable with `view_set`), its `scale` denominator and `scale_text`, the scale as the project writes it (`1:50`, or `1/4" = 1'-0"` in imperial projects).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2655,7 +2655,7 @@ No parameters.
 | `level` | id or name | optional | Plans: level id or name (default: the lowest). |
 | `name` | string | optional | View name (default: by kind). |
 | `panel` | integer | optional | Distribution board element id, for a panel diagram. |
-| `scale` | integer | optional | Scale denominator (e.g. 50 for 1:50). |
+| `scale` | integer or string | optional | Scale: the denominator (e.g. 50 for 1:50), or text such as `"1:50"` or an imperial label like `"1/4\" = 1'-0\""` (48). |
 | `start` | [x, y] | optional | Sections: start of the cut line. |
 
 ### `view_set`
@@ -2671,7 +2671,7 @@ No parameters.
 | `params` | JSON | optional | Fields of the view's parameters to change, shaped like `params` in `view_get`. |
 | `phase` | id or name | optional | Phase the view shows (id or name; plans, elevations, sections, 3D views, schedules). |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none (every status by category). |
-| `scale` | integer | optional | Scale denominator (e.g. 100 for 1:100). |
+| `scale` | integer or string | optional | Scale: the denominator (e.g. 100 for 1:100), or text such as `"1:100"` or an imperial label like `"1/8\" = 1'-0\""` (96). |
 | `visual_style` | string | optional | Visual style: `wireframe` (every edge, no faces), `hidden_line` (white faces), `shaded`, `consistent_colors` (material colors, unlit), `textures` (appearance colors and surface patterns), or `default` (plans hidden line, other views shaded). |
 
 ### `view_duplicate`
@@ -2701,7 +2701,7 @@ No parameters.
 | `rect` | [[x, y], [x, y]] | required | Two opposite corners of the rectangle, in the parent's drawing coordinates (meters; in sections and elevations `y` is the height). |
 | `drafting` | id or name | optional | An existing drafting view (id or name) the callout points to instead of a new detail view. |
 | `name` | string | optional | Name of the detail view (default "Detail N"). |
-| `scale` | integer | optional | Scale denominator of the detail view (default: a standard scale about five times larger than the parent's, 1:10 under 1:50). |
+| `scale` | integer or string | optional | Scale of the detail view: the denominator, or text such as `"1:10"` or an imperial label like `"1 1/2\" = 1'-0\""` (default: a standard scale of the project's units about five times larger than the parent's, 1:10 under 1:50). |
 
 ### `callout_remove`
 
@@ -2972,7 +2972,7 @@ No parameters.
 | `include` | JSON | optional | Which properties the template controls: `scale`, `categories`, `filters`, `cut_height`, `discipline`, `structural`, `phase_filter`, `detail`, `visual_style`, `underlay`, `design_options` (true/false). `design_options` is off unless set. |
 | `name` | string | optional | New name. |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none. |
-| `scale` | integer | optional | Scale denominator. |
+| `scale` | integer or string | optional | Scale: the denominator (e.g. 50 for 1:50), or text such as `"1:50"` or an imperial label like `"1/4\" = 1'-0\""` (48). |
 | `structural` | boolean | optional | Floor plans: structural (formwork) display. |
 | `structure_tags` | boolean | optional | Floor plans: tag beams and columns. |
 | `underlay` | JSON | optional | Plans: other levels' plans drawn under them, merged like `view_set`'s `underlay` (e.g. `{"below": {"level": "Next", "looking": "Down"}}`). |

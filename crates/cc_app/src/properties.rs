@@ -15,8 +15,6 @@ use cc_views::format;
 use egui::{DragValue, Response, RichText, Sense, Ui, vec2};
 use std::hash::{Hash, Hasher};
 
-const SCALES: [u32; 12] = [1, 2, 5, 10, 20, 25, 50, 75, 100, 200, 500, 1000];
-
 pub(crate) fn key(parts: impl Hash) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     parts.hash(&mut h);
@@ -2614,18 +2612,18 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         section(ui, "graphics", t!("section-graphics"), |ui| {
             crate::graphics_dialog::view_rows(ui, state, id);
             let mut scale = view.scale;
+            let system = state.project().measurement_system();
             if crate::graphics_dialog::controlled(state, id, "scale") {
-                readonly_row(ui, &t!("prop-scale"), format!("1:{scale}"));
+                readonly_row(ui, &t!("prop-scale"), cc_core::scale::label(system, scale));
             } else {
                 row(ui, &t!("prop-scale"), |ui| {
-                    egui::ComboBox::from_id_salt(("scale", id.0)).selected_text(format!("1:{scale}")).show_ui(
-                        ui,
-                        |ui| {
-                            for s in SCALES {
-                                ui.selectable_value(&mut scale, s, format!("1:{s}"));
+                    egui::ComboBox::from_id_salt(("scale", id.0))
+                        .selected_text(cc_core::scale::label(system, scale))
+                        .show_ui(ui, |ui| {
+                            for &s in cc_core::scale::choices(system) {
+                                ui.selectable_value(&mut scale, s, cc_core::scale::label(system, s));
                             }
-                        },
-                    );
+                        });
                 });
             }
             if scale != view.scale {

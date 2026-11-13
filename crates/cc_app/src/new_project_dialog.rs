@@ -51,10 +51,9 @@ fn details(system: MeasurementSystem) -> [String; 3] {
         MeasurementSystem::Imperial => {
             let units = Units::imperial();
             let length = |meters| cc_views::format::length_with(&units, false, meters);
-            let quarter = cc_views::format::inches_with(&units, false, INCH / 4.0);
             [
                 t!("new-project-imperial-units", "sample" => length(12.0 * FOOT + 6.5 * INCH)),
-                t!("new-project-scales", "scales" => format!("{quarter}\" = {}", length(FOOT))),
+                t!("new-project-scales", "scales" => cc_core::scale::label(MeasurementSystem::Imperial, 48)),
                 t!("new-project-imperial-sheets", "size" => "11 × 17"),
             ]
         }

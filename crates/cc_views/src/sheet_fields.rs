@@ -108,7 +108,7 @@ fn sheet_scale(p: &Project, viewports: &[cc_core::Viewport], as_indicated: &str)
         .map(|v| v.scale);
     match scales.next() {
         None => String::new(),
-        Some(first) if scales.all(|s| s == first) => format!("1:{first}"),
+        Some(first) if scales.all(|s| s == first) => crate::format::scale_with(&p.units, first),
         Some(_) => as_indicated.to_string(),
     }
 }

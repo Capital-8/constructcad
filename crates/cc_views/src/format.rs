@@ -185,6 +185,12 @@ pub fn money_with(units: &Units, comma: bool, amount: f64) -> String {
     if units.currency.is_empty() { text } else { format!("{} {text}", units.currency) }
 }
 
+/// The scale 1:`n` as a project with `units` writes it (`1/4" = 1'-0"` in
+/// imperial projects, else `1:n`; see `cc_core::scale::label`).
+pub fn scale_with(units: &Units, n: u32) -> String {
+    cc_core::scale::label(units.system(), n)
+}
+
 /// Parse a number typed with either decimal symbol and optional grouping.
 pub fn parse_number(text: &str) -> Option<f64> {
     let t: String = text.trim().chars().filter(|c| !c.is_whitespace() && *c != '\u{202f}').collect();
@@ -300,6 +306,11 @@ pub fn length(value: f64) -> String {
 /// Whether lengths are shown in US customary units.
 pub fn imperial() -> bool {
     current().0.length.unit.is_imperial()
+}
+
+/// The scale 1:`n` in the current units (see [`scale_with`]).
+pub fn scale(n: u32) -> String {
+    scale_with(&current().0, n)
 }
 
 /// A small size in inches with a fraction (see [`inches_with`]).
