@@ -7,7 +7,7 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::roofing::FramingSystem;
-use cc_core::{ComponentDef, ElementType, ElementTypeId, TypeData, expr};
+use cc_core::{ComponentDef, ComponentKind, ElementType, ElementTypeId, TypeData, expr};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -357,13 +357,103 @@ impl Command for TypeDelete {
 /// `Rainwater`, `Power` or `Lighting`, x, y, z, direction: `Down`, `Up`,
 /// `Front` (-y), `Back` (+y), `Left` (-x) or `Right` (+x), diameter}] are
 /// where `mep_connect` joins pipes and conduits (a toilet's inlet and outlet).
+/// With a `kind` in place of `def` the component starts from that kind's
+/// own parameters and pieces, to be shaped in the component environment or
+/// with the `component_*` commands.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentCreate {
     /// Name of the component and of its first type.
     pub name: String,
-    /// The definition: `params` (name, value, kind, instance) and `items` (pieces), shaped like a component type's `params.def` in `type_get`.
+    /// The definition: `params` (name, value, kind, instance) and `items` (pieces), shaped like a component type's `params.def` in `type_get`. Left out, the component starts from its `kind`.
+    #[serde(default)]
     pub def: Value,
+    /// The kind a component made without a `def` starts from: `Furniture`, `Casework`, `Plumbing` and `Electrical` (a box sized by width, depth and height parameters), `Lighting` (a cylinder sized by diameter and height), `Door` (width and height) and `Window` (width, height and sill), which cut their opening in a wall, or `Generic` (the default: a fixed box and no parameters, which are yours to add). Not given together with `def`, whose own `kind` says it.
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+/// A component kind by its name in the model (`Furniture`), in any case.
+fn component_kind(text: &str) -> Result<ComponentKind> {
+    ComponentKind::ALL
+        .into_iter()
+        .find(|k| format!("{k:?}").eq_ignore_ascii_case(text.trim()))
+        .ok_or_else(|| EngineError::invalid(format!("unknown component kind '{text}'")))
+}
+
+/// The definition a new component of `kind` starts from: the kind's own
+/// parameters, named in the current language, and pieces sized by them. A
+/// generic component has no parameters (they are the user's to add) and one
+/// fixed box, since a component needs a piece. `None` for the 2D kinds,
+/// which are made by `title_block_create` and `detail_component_create`.
+pub fn starter_def(kind: ComponentKind) -> Option<ComponentDef> {
+    use cc_core::{ComponentItem, ComponentParam, ComponentShape, ParamKind};
+    let tr = |key: &str| crate::i18n::tr(key);
+    let param = |name: &str, value: f64| ComponentParam {
+        name: name.to_string(),
+        value,
+        kind: ParamKind::Length,
+        instance: false,
+        ..Default::default()
+    };
+    let item = |shape| ComponentItem {
+        name: tr("tpl-part-body"),
+        shape,
+        material: String::new(),
+        in_plan: true,
+        void: false,
+        plan_only: false,
+        detail: Default::default(),
+    };
+    // A box standing on the origin, centered in plan.
+    let boxed = |[w, d, h]: [&str; 3]| ComponentShape::Box {
+        x: format!("-{w} / 2"),
+        y: format!("-{d} / 2"),
+        z: "0".into(),
+        width: w.to_string(),
+        depth: d.to_string(),
+        height: h.to_string(),
+    };
+    let sized = |[width, depth, height]: [f64; 3]| {
+        let (w, d, h) = (tr("tpl-param-width"), tr("tpl-param-depth"), tr("tpl-param-height"));
+        ComponentDef {
+            kind,
+            params: vec![param(&w, width), param(&d, depth), param(&h, height)],
+            items: vec![item(boxed([&w, &d, &h]))],
+            ..Default::default()
+        }
+    };
+    let names = || cc_core::openings::OpeningNames::new(&tr);
+    Some(match kind {
+        ComponentKind::Furniture => sized([1.2, 0.6, 0.75]),
+        ComponentKind::Casework => sized([0.6, 0.6, 0.9]),
+        ComponentKind::Plumbing => sized([0.4, 0.5, 0.4]),
+        ComponentKind::Electrical => sized([0.08, 0.04, 0.12]),
+        ComponentKind::Lighting => {
+            // The property label, where it can name a parameter.
+            let d = Some(tr("prop-diameter")).filter(|n| expr::is_valid_name(n)).unwrap_or_else(|| "Diameter".into());
+            let h = tr("tpl-param-height");
+            let shape = ComponentShape::Cylinder {
+                x: "0".into(),
+                y: "0".into(),
+                z: "0".into(),
+                radius: format!("{d} / 2"),
+                height: h.clone(),
+            };
+            ComponentDef {
+                kind,
+                params: vec![param(&d, 0.3), param(&h, 0.1)],
+                items: vec![item(shape)],
+                ..Default::default()
+            }
+        }
+        ComponentKind::Generic => {
+            ComponentDef { kind, items: vec![item(boxed(["1", "1", "1"]))], ..Default::default() }
+        }
+        ComponentKind::Door => cc_core::openings::door_def(&names(), 0.8, 2.1, ""),
+        ComponentKind::Window => cc_core::openings::window_def(&names(), 1.2, 1.2, 1.0, ""),
+        ComponentKind::TitleBlock | ComponentKind::Detail => return None,
+    })
 }
 
 impl Command for ComponentCreate {
@@ -374,8 +464,17 @@ impl Command for ComponentCreate {
         if name.is_empty() {
             return Err(EngineError::invalid("the component needs a name"));
         }
-        let mut def: ComponentDef =
-            serde_json::from_value(self.def).map_err(|e| EngineError::invalid(format!("invalid def: {e}")))?;
+        let mut def: ComponentDef = match (self.def, self.kind) {
+            (Value::Null, kind) => {
+                let kind = kind.as_deref().map_or(Ok(ComponentKind::Generic), component_kind)?;
+                starter_def(kind)
+                    .ok_or_else(|| EngineError::invalid("title blocks and detail components have their own commands"))?
+            }
+            (_, Some(_)) => return Err(EngineError::invalid("give either `def` or `kind`, not both")),
+            (def, None) => {
+                serde_json::from_value(def).map_err(|e| EngineError::invalid(format!("invalid def: {e}")))?
+            }
+        };
         // A script piece's declarations become the parameters and hotspots.
         let sources: Vec<String> = def
             .items

@@ -1882,9 +1882,7 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         Default3D => actions::open_default_3d(state),
         Place(category) => actions::activate_category_tool(state, category),
         StructurePlace(category, material) => actions::structure_place(state, category, material),
-        NewComponent => {
-            state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
-        }
+        NewComponent => crate::new_component_dialog::open(state),
         LoadComponent => actions::load_component(state),
         EditComponent => {
             if let Some(t) = crate::component_env::target_type(state) {

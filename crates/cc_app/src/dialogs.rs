@@ -29,7 +29,6 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     levels(ctx, state);
     crate::material_browser::show(ctx, state);
     crate::type_dialog::show(ctx, state);
-    crate::component_editor::show(ctx, state);
     crate::schedule_ui::dialog(ctx, state);
     crate::systems_dialog::show(ctx, state);
     crate::systems_dialog::sizing(ctx, state);
@@ -52,6 +51,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     // After the library window, which opens it over itself.
     crate::preferences::show(ctx, state);
     // Before the unsaved changes question its Create may ask.
+    crate::new_component_dialog::show(ctx, state);
     crate::new_project_dialog::show(ctx, state);
     confirm(ctx, state);
     error(ctx, state);
