@@ -326,6 +326,14 @@ A column that continues a cylindrical wall has an `annular_sector` profile; `reb
 {"command": "rebar_create", "args": {"host": 42, "layout": "ties", "spacing": 0.30}}
 ```
 
+`wall_rebar_create` reinforces walls, straight or arc: horizontal (ring) bars with a spacing or `zones` by height, vertical bars with bent ends and additional sets, and ties, near both faces with a cover each. A cylindrical wall gets its four bar families in one command:
+
+```text
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "cover_exterior": 0.03, "cover_interior": 0.04, "horizontal": {"type": "Barra Ø 10,0 mm", "zones": [{"up_to": 2, "spacing": 0.10}, {"up_to": 4, "spacing": 0.12}, {"up_to": 6, "spacing": 0.15}]}, "vertical": {"spacing": 0.20, "bottom": {"across": 0.12, "along": 0.60}}, "max_length": 5}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "vertical": {"spacing": 0.20, "offset": 0.10, "to": 1.5}}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "ties": {"every_horizontal": 1, "every_vertical": 2}}}
+```
+
 `bracing_create` braces one bay of a frame: a host element whose braces are ordinary beams, made in one undo step and returned as `{id, members}`. The bay is `start` to `end` (the two column axes) or the two `columns`, whose base and height it then takes; `pattern` is `x`, `diagonal` (with `flip` and `alternate`), `v`, `chevron` or `k`; `stories` storeys of `height` stand one above the other from `base_offset`; `material` (`steel` or `timber`) picks the catalog row of the default brace type. `element_set` changes its parameters and regenerates the braces with their ids kept.
 
 ```text

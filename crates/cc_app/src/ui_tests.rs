@@ -368,6 +368,34 @@ fn wall_tool_has_an_arc_mode() {
     assert!(!harness.state().wall_arc);
 }
 
+/// A structural wall's palette offers its reinforcement: the typical button
+/// makes horizontal and vertical bars near both faces, listed with their
+/// spacing (#281).
+#[test]
+fn structural_walls_show_their_reinforcement() {
+    let mut state = sample_state();
+    let level = state.project().levels[0].id.0;
+    let args = serde_json::json!({"level": level, "start": [100, 100], "end": [106, 100], "height": 3.0});
+    let wall = cc_core::ElementId(state.session.execute("wall_create", args).unwrap()["id"].as_u64().unwrap());
+    // Not on a wall that carries nothing.
+    state.selection = [wall].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none());
+    let params = serde_json::json!({"id": wall.0, "params": {"structural": true}});
+    harness.state_mut().session.execute("element_set", params).unwrap();
+    harness.run();
+    harness.get_by_label(&t!("action-rebar-typical")).click();
+    harness.run();
+    let sets: Vec<cc_core::RebarLayout> =
+        harness.state().project().rebar_of(wall).map(|(_, r)| r.layout.clone()).collect();
+    assert_eq!(sets.len(), 4);
+    assert_eq!(sets.iter().filter(|l| matches!(l, cc_core::RebarLayout::WallHorizontal { .. })).count(), 2);
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none(), "reinforced now");
+}
+
 /// The beam tool draws beams in line or arc mode (#279).
 #[test]
 fn beam_tool_has_an_arc_mode() {

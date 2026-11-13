@@ -92,9 +92,10 @@ pub use detail_component::DetailComponent;
 pub use dim_refs::{DimRef, Projection, RefAnchor, RefHeight, RefTarget};
 pub use document::{Document, EditCtx, Transaction};
 pub use element::{
-    BarFace, Beam, BeamLateral, BeamVertical, Ceiling, Column, Component, Dimension, DimensionKind, Element,
+    BarEnd, BarFace, Beam, BeamLateral, BeamVertical, Ceiling, Column, Component, Dimension, DimensionKind, Element,
     ElementKind, FaceBars, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine,
-    Railing, Ramp, Rebar, RebarLayout, Roof, RoofShape, Room, ShapedRebar, Splice, Stair, TextNote, Wall, WallTop,
+    Railing, Ramp, Rebar, RebarLayout, Roof, RoofShape, Room, ShapedRebar, SpacingZone, Splice, Stair, TextNote, Wall,
+    WallSide, WallTop, wall_bars,
 };
 pub use fill_pattern::{FillPattern, FillPatternKind, PatternLine};
 pub use graphics::{

@@ -266,6 +266,17 @@ A seção de um tipo de pilar é um perfil estrutural. Além das formas padrão,
 - **Lances**: com `max_length` as barras verticais são cortadas em lances iguais de no máximo esse comprimento, cada um traspassando o seguinte por `lap` (padrão 40 diâmetros), todos nas mesmas alturas.
 - **Todos os pilares do tipo**: `same_type` dá o conjunto aos outros pilares do tipo do hospedeiro no mesmo passo.
 
+## Armadura de paredes
+
+Uma parede estrutural (a caixa *Estrutural* nas propriedades) mostra a seção *Armadura*. *Armadura típica* cria barras horizontais e verticais a cada 15 cm junto às duas faces; cada conjunto aparece então com o seu espaçamento, que pode ser editado, e um botão *Remover*. `wall_rebar_create` (paleta de comandos) define todo o resto, para as paredes indicadas ou todas as paredes estruturais de um nível:
+
+- **Faces e cobrimentos**: `faces` é `both`, `exterior` ou `interior`; `cover_exterior` e `cover_interior` dão a cada face o seu cobrimento (a face molhada e a seca de um reservatório). As barras ficam dentro das faces do núcleo estrutural da parede, sem contar os revestimentos.
+- **Barras horizontais**: um `spacing`, ou `zones` de espaçamento por altura a partir da base, mais fechado embaixo. Em uma parede em arco são barras de anel: cada uma segue o arco no seu próprio raio e tem exatamente esse comprimento nas tabelas.
+- **Barras verticais**: um `spacing` ao longo do eixo da parede (ângulo constante em uma parede em arco), de `from` até `to` acima da base, começando `offset` depois do início da parede: uma segunda chamada com metade do espaçamento em `offset` e `to` 1.5 acrescenta as barras adicionais dos 1,5 m inferiores entre as principais. `bottom` e `top` dobram as pontas: `across` atravessa a parede (para fora da face da barra quando positivo), depois `along` segue a barra (voltando ao lado dela quando positivo), de modo que `{"across": 0.12, "along": 0.60}` embaixo vira a barra 12 cm para dentro da laje e 60 cm para cima.
+- **Camadas**: `outer` diz qual família fica mais perto das faces (`horizontal` por padrão); a outra fica por dentro.
+- **Grampos**: `ties` põe uma barra com ganchos atravessando a parede a cada n barras horizontais e a cada m barras verticais da face externa.
+- **Aberturas, encontros e emendas**: as barras param a um cobrimento de portas, janelas e extremidades livres; as horizontais vão até a extremidade unida a outra parede, onde começam as barras dessa parede; barras mais longas que `max_length` (padrão 12 m) são emendadas por traspasse `lap`, com as emendas vizinhas defasadas.
+
 ## Estrutura por material
 
 A aba *Estrutura* começa com o grupo *Material*: botões *Concreto*, *Aço* e *Madeira* (um fica sempre ligado; a escolha é guardada entre sessões). O material troca os grupos feitos para ele: concreto mostra *Estrutura* (Pilar, Viga, Laje) e *Armadura*; aço mostra *Estrutura* (Pilar, Viga, Contraventamento), o grupo de grade *Estruturação* (Pilares nas grades, Vigas nas grades, Vigas entre pilares, Pórtico por grade, Treliça, Galpão metálico, Light Steel Frame) e *Ligações* (Placa de base, Placa de topo, Chapa de alma); madeira mostra *Estrutura* (Pilar, Viga, Contraventamento), o mesmo grupo de grade com Wood Frame no lugar de Galpão metálico e Estrutura de aço leve, e *Ligações* (Ligação parafusada, Suporte de viga). Perfis, Fundação, Analítico, Documentação, Referência e Seleção aparecem para todos os materiais.

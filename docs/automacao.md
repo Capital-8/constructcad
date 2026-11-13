@@ -326,6 +326,14 @@ Um pilar que continua uma parede cilíndrica tem um perfil `annular_sector`; `re
 {"command": "rebar_create", "args": {"host": 42, "layout": "ties", "spacing": 0.30}}
 ```
 
+`wall_rebar_create` arma paredes, retas ou em arco: barras horizontais (de anel) com um espaçamento ou `zones` por altura, barras verticais com pontas dobradas e conjuntos adicionais, e grampos, junto às duas faces com um cobrimento para cada. Uma parede cilíndrica recebe as suas quatro famílias de barras em um comando:
+
+```text
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "cover_exterior": 0.03, "cover_interior": 0.04, "horizontal": {"type": "Barra Ø 10,0 mm", "zones": [{"up_to": 2, "spacing": 0.10}, {"up_to": 4, "spacing": 0.12}, {"up_to": 6, "spacing": 0.15}]}, "vertical": {"spacing": 0.20, "bottom": {"across": 0.12, "along": 0.60}}, "max_length": 5}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "vertical": {"spacing": 0.20, "offset": 0.10, "to": 1.5}}}
+{"command": "wall_rebar_create", "args": {"walls": [12, 13], "ties": {"every_horizontal": 1, "every_vertical": 2}}}
+```
+
 `bracing_create` contraventa um vão de pórtico: um elemento hospedeiro cujas barras são vigas comuns, criado em um passo de desfazer e devolvido como `{id, members}`. O vão vai de `start` a `end` (os eixos dos dois pilares) ou fica entre os dois `columns`, de quem toma a base e a altura; `pattern` é `x`, `diagonal` (com `flip` e `alternate`), `v`, `chevron` ou `k`; `stories` pavimentos de altura `height` ficam um sobre o outro a partir de `base_offset`; `material` (`steel` ou `timber`) escolhe a linha de catálogo do tipo padrão das barras. `element_set` muda seus parâmetros e regenera as barras mantendo seus ids.
 
 ```text

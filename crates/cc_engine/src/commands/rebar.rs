@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// The bar type nearest `diameter`.
-fn bar_type(p: &Project, diameter: f64) -> Result<ElementTypeId> {
+pub(crate) fn bar_type(p: &Project, diameter: f64) -> Result<ElementTypeId> {
     p.types_of(Category::Rebar)
         .filter_map(|t| match t.data {
             TypeData::Rebar { diameter: d, .. } => Some((t.id, (d - diameter).abs())),
@@ -25,7 +25,7 @@ fn bar_type(p: &Project, diameter: f64) -> Result<ElementTypeId> {
         .ok_or_else(|| EngineError::rejected(t!("msg-no-rebar-type")))
 }
 
-/// The host of a set: a beam or a column.
+/// The host of a set: a beam or a column (walls are reinforced by `wall_rebar_create`).
 fn host(p: &Project, id: u64) -> Result<(ElementId, bool)> {
     let id = refs::element(p, id)?;
     match p.element(id).map(|e| &e.kind) {
@@ -85,7 +85,12 @@ fn stock_length(p: &Project) -> f64 {
 /// The lap splices of bars of `type_id` running along a beam: `max_length`
 /// (default: the stock length; 0 for whole bars) and `lap` (default: 40 bar
 /// diameters).
-fn splice(p: &Project, type_id: ElementTypeId, max_length: Option<f64>, lap: Option<f64>) -> Result<Option<Splice>> {
+pub(crate) fn splice(
+    p: &Project,
+    type_id: ElementTypeId,
+    max_length: Option<f64>,
+    lap: Option<f64>,
+) -> Result<Option<Splice>> {
     let max_length = finite(max_length.unwrap_or_else(|| stock_length(p)), "max_length")?;
     if max_length == 0.0 {
         return Ok(None);
@@ -233,7 +238,8 @@ impl Command for RebarCreate {
             (true, true, _) | (true, false, Some(_)) => splice(p, type_id, self.max_length, self.lap)?,
             _ => None,
         };
-        let set = |host| ElementKind::Rebar(Rebar { host, layout, cover, splice, faces: faces.clone() });
+        let set =
+            |host| ElementKind::Rebar(Rebar { host, layout: layout.clone(), cover, splice, faces: faces.clone() });
         // The other members of the host's type, each on its own level.
         let host_type = p.element(host_id).map(|e| e.type_id);
         let others: Vec<(ElementId, cc_core::LevelId)> = match self.same_type.unwrap_or(false) {

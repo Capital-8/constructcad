@@ -600,6 +600,11 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 readonly_row(ui, &t!("prop-thickness"), format::size(thickness, format::MetricSize::Length));
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
+            // A structural wall's reinforcement (and any sets another wall has).
+            let layered = state.project().element_type(el.type_id).is_some_and(|t| !t.layers().is_empty());
+            if layered && (w.structural || state.project().rebar_of(id).next().is_some()) {
+                reinforcement(ui, state, id);
+            }
             crate::curtain_ui::palette_rows(ui, state, &el, w);
         }
         ElementKind::Door(h) | ElementKind::Window(h) => {
@@ -2189,9 +2194,38 @@ fn room_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Room
 }
 
 /// The bar count or the stirrup spacing of a reinforcement set, editable.
-fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &str, layout: cc_core::RebarLayout) {
+fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &str, layout: &cc_core::RebarLayout) {
     use cc_core::RebarLayout as L;
-    match layout {
+    match *layout {
+        // A wall's horizontal bars by the spacing of their first zone (the others in `element_get`)...
+        L::WallHorizontal { ref zones, .. } => {
+            let spacing = zones.first().map_or(0.0, |z| z.spacing);
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::WallHorizontal { zones, .. } = &mut x.layout
+                    && let Some(zone) = zones.first_mut()
+                {
+                    zone.spacing = v.max(cc_core::wall_bars::MIN_SPACING);
+                }
+            });
+            if zones.len() > 1 {
+                readonly_row(ui, "", t!("bars-wall-zones", "count" => zones.len()));
+            }
+        }
+        // ...its vertical bars by their spacing along it...
+        L::WallVertical { spacing, .. } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::WallVertical { spacing, .. } = &mut x.layout
+                {
+                    *spacing = v.max(cc_core::wall_bars::MIN_SPACING);
+                }
+            });
+        }
+        // ...and its ties by the bars they skip.
+        L::WallTies { every_horizontal, every_vertical } => {
+            readonly_row(ui, label, format!("1/{every_horizontal} × 1/{every_vertical}"));
+        }
         L::Longitudinal { count, .. } => {
             let mut n = count;
             let r = row(ui, label, |ui| ui.add(DragValue::new(&mut n).range(1..=200).suffix(" ×")));
@@ -2244,12 +2278,16 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
 }
 
 /// What a set is, in a word: its face, or stirrups.
-fn rebar_role(layout: cc_core::RebarLayout) -> String {
+fn rebar_role(layout: &cc_core::RebarLayout) -> String {
     match layout {
         cc_core::RebarLayout::Longitudinal { face, .. } => tr(face.key()),
         cc_core::RebarLayout::Stirrups { .. } => t!("bars-stirrups"),
         cc_core::RebarLayout::Sides { .. } => t!("bars-sides"),
-        cc_core::RebarLayout::Ties { .. } => t!("bars-ties"),
+        cc_core::RebarLayout::Ties { .. } | cc_core::RebarLayout::WallTies { .. } => t!("bars-ties"),
+        cc_core::RebarLayout::WallHorizontal { side, .. } => {
+            format!("{} · {}", t!("bars-wall-horizontal"), tr(side.key()))
+        }
+        cc_core::RebarLayout::WallVertical { side, .. } => format!("{} · {}", t!("bars-wall-vertical"), tr(side.key())),
     }
 }
 
@@ -2259,13 +2297,13 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
     let sets: Vec<(ElementId, cc_core::RebarLayout, String)> = state
         .project()
         .rebar_of(host)
-        .map(|(e, r)| (e.id, r.layout, state.project().type_name(e.type_id).to_string()))
+        .map(|(e, r)| (e.id, r.layout.clone(), state.project().type_name(e.type_id).to_string()))
         .collect();
     section(ui, "reinforcement", t!("section-reinforcement"), |ui| {
         let mut remove = None;
         for (id, layout, name) in &sets {
-            let label = format!("{} · {name}", rebar_role(*layout));
-            rebar_layout_row(ui, state, *id, &label, *layout);
+            let label = format!("{} · {name}", rebar_role(layout));
+            rebar_layout_row(ui, state, *id, &label, layout);
             if row(ui, "", |ui| ui.small_button(t!("action-remove-rebar")).clicked()) {
                 remove = Some(*id);
             }
@@ -2273,9 +2311,16 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         if let Some(id) = remove {
             crate::actions::run_command(state, cc_engine::commands::modify::ElementsDelete { ids: vec![id.0] });
         }
+        let wall = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Wall(_)));
         if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
-            let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };
-            crate::actions::run_command(state, command);
+            if wall {
+                let command =
+                    cc_engine::commands::wall_rebar::WallRebarCreate { walls: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else {
+                let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };
+                crate::actions::run_command(state, command);
+            }
         }
         // A reinforced beam without side bars can get them.
         let beam = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Beam(_)));
@@ -2302,7 +2347,7 @@ fn rebar_props(ui: &mut Ui, state: &mut AppState, el: &Element, r: &cc_core::Reb
             .element(r.host)
             .map_or(String::new(), |h| if h.mark.is_empty() { tr(h.category().key()) } else { h.mark.clone() });
         readonly_row(ui, &t!("col-host"), host);
-        rebar_layout_row(ui, state, id, &rebar_role(r.layout), r.layout);
+        rebar_layout_row(ui, state, id, &rebar_role(&r.layout), &r.layout);
         length_row(ui, state, &t!("prop-cover"), id, "rebar-cover", r.cover, |e, v| {
             if let ElementKind::Rebar(x) = &mut e.kind {
                 x.cover = v.max(0.0);

@@ -1128,8 +1128,87 @@ impl BarFace {
     }
 }
 
-/// How a set of bars is laid out in its host.
+/// The face of a wall a layer of bars lies near: its exterior (left) face
+/// or its interior (right) one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum WallSide {
+    #[default]
+    Exterior,
+    Interior,
+}
+
+impl WallSide {
+    pub const ALL: [WallSide; 2] = [WallSide::Exterior, WallSide::Interior];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            WallSide::Exterior => "wall-side-exterior",
+            WallSide::Interior => "wall-side-interior",
+        }
+    }
+
+    /// 1 towards the wall's left (exterior) face, -1 towards its right.
+    pub fn sign(self) -> f64 {
+        match self {
+            WallSide::Exterior => 1.0,
+            WallSide::Interior => -1.0,
+        }
+    }
+}
+
+/// The spacing of a wall's horizontal bars up to a height above its base;
+/// the last zone of a set runs to the top of the wall.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SpacingZone {
+    pub up_to: f64,
+    pub spacing: f64,
+}
+
+/// How an end of a wall's vertical bar is bent: `across` the wall (towards
+/// the outside of its own face when positive, towards the other face when
+/// negative; 0 for a straight end), then `along` (back beside the bar when
+/// positive, on past its end when negative; 0 for none). An L hook has only
+/// `across`; a bar turned into the slab and up again has both.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct BarEnd {
+    #[serde(default)]
+    pub across: f64,
+    #[serde(default)]
+    pub along: f64,
+}
+
+impl BarEnd {
+    /// Longest leg of a bent end, meters.
+    pub const MAX_LEG: f64 = 5.0;
+
+    pub fn is_straight(&self) -> bool {
+        self.across == 0.0 && self.along == 0.0
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let leg = |v: f64| v.is_finite() && v.abs() <= Self::MAX_LEG;
+        // A leg along the bar needs one across it first.
+        leg(self.across) && leg(self.along) && (self.along == 0.0 || self.across != 0.0)
+    }
+
+    /// Length of the legs.
+    pub fn length(&self) -> f64 {
+        self.across.abs() + self.along.abs()
+    }
+}
+
+/// Limits of wall reinforcement.
+pub mod wall_bars {
+    /// Least spacing of bars, meters.
+    pub const MIN_SPACING: f64 = 0.02;
+    /// Most spacing zones of one set of horizontal bars.
+    pub const MAX_ZONES: usize = 32;
+    /// Ties are placed at most every this many bars.
+    pub const MAX_EVERY: u32 = 100;
+}
+
+/// How a set of bars is laid out in its host.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RebarLayout {
     /// `count` bars running along the host, on `face`.
     Longitudinal { face: BarFace, count: u32 },
@@ -1143,6 +1222,39 @@ pub enum RebarLayout {
     /// hook at each end from every bar of its longitudinal set that is not
     /// at a corner, across the section to the bar opposite.
     Ties { spacing: f64 },
+    /// Horizontal bars near one face of a wall (ring bars in an arc wall),
+    /// spaced up the wall by `zones` from its base. `inner` puts them inside
+    /// the vertical bars of that face instead of outside them.
+    WallHorizontal {
+        side: WallSide,
+        zones: Vec<SpacingZone>,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// Vertical bars near one face of a wall every `spacing` along it (from
+    /// `offset` after its start: half a spacing interleaves a second set),
+    /// from `from` to `to` above its base (`to` 0: the top), their ends bent
+    /// as `bottom` and `top` say. `inner` as for horizontal bars.
+    WallVertical {
+        side: WallSide,
+        spacing: f64,
+        #[serde(default)]
+        offset: f64,
+        #[serde(default)]
+        from: f64,
+        #[serde(default)]
+        to: f64,
+        #[serde(default)]
+        bottom: BarEnd,
+        #[serde(default)]
+        top: BarEnd,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// Ties between the two faces of a wall: a hooked bar across it at
+    /// every `every_horizontal`-th horizontal bar and `every_vertical`-th
+    /// vertical bar of its exterior face.
+    WallTies { every_horizontal: u32, every_vertical: u32 },
 }
 
 /// The longitudinal bars on one face of a column's section: `count` of them
@@ -1180,8 +1292,55 @@ impl FaceBars {
 
 impl RebarLayout {
     /// Whether the bars run along the host (and so may be spliced).
-    pub fn runs_along(self) -> bool {
-        !matches!(self, RebarLayout::Stirrups { .. } | RebarLayout::Ties { .. })
+    pub fn runs_along(&self) -> bool {
+        !matches!(self, RebarLayout::Stirrups { .. } | RebarLayout::Ties { .. } | RebarLayout::WallTies { .. })
+    }
+
+    /// Whether the set reinforces a wall.
+    pub fn in_wall(&self) -> bool {
+        matches!(
+            self,
+            RebarLayout::WallHorizontal { .. } | RebarLayout::WallVertical { .. } | RebarLayout::WallTies { .. }
+        )
+    }
+
+    /// The face of a wall the set lies near.
+    pub fn wall_side(&self) -> Option<WallSide> {
+        match self {
+            RebarLayout::WallHorizontal { side, .. } | RebarLayout::WallVertical { side, .. } => Some(*side),
+            _ => None,
+        }
+    }
+
+    /// Whether the values are usable (finite and within their limits).
+    pub fn is_valid(&self) -> bool {
+        let spaced = |s: f64| s.is_finite() && s >= wall_bars::MIN_SPACING;
+        match self {
+            RebarLayout::Longitudinal { count, .. } => (1..=200).contains(count),
+            RebarLayout::Stirrups { spacing } | RebarLayout::Ties { spacing } => spaced(*spacing),
+            RebarLayout::Sides { count, spacing } => {
+                *count <= 200 && spacing.is_finite() && (*count > 0 || spaced(*spacing))
+            }
+            RebarLayout::WallHorizontal { zones, .. } => {
+                (1..=wall_bars::MAX_ZONES).contains(&zones.len())
+                    && zones.iter().all(|z| spaced(z.spacing) && z.up_to.is_finite() && z.up_to >= 0.0)
+                    && zones.windows(2).all(|w| w[0].up_to < w[1].up_to)
+            }
+            RebarLayout::WallVertical { spacing, offset, from, to, bottom, top, .. } => {
+                spaced(*spacing)
+                    && offset.is_finite()
+                    && from.is_finite()
+                    && to.is_finite()
+                    && *from >= 0.0
+                    && (*to == 0.0 || *to > *from)
+                    && bottom.is_valid()
+                    && top.is_valid()
+            }
+            RebarLayout::WallTies { every_horizontal, every_vertical } => {
+                (1..=wall_bars::MAX_EVERY).contains(every_horizontal)
+                    && (1..=wall_bars::MAX_EVERY).contains(every_vertical)
+            }
+        }
     }
 }
 
@@ -1229,8 +1388,8 @@ impl Splice {
     }
 }
 
-/// A set of reinforcing bars in a beam or column (`host`), `cover` from its
-/// faces; the type gives the bar diameter. The bars follow their host.
+/// A set of reinforcing bars in a beam, column or wall (`host`), `cover`
+/// from its faces; the type gives the bar diameter. The bars follow their host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rebar {
     pub host: ElementId,
