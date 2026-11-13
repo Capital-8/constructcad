@@ -10,9 +10,11 @@
 //! ([`Project::wall_axis`]) from its start to its length `L`, heights above
 //! the wall's level.
 
-use crate::member_host::{reset, within};
+use crate::member_host::{MemberHost, RoleKey, fix_type, reset, within};
 use crate::steel_building::section_box;
-use crate::{Beam, Category, Column, ElementId, ElementKind, ElementType, ElementTypeId, Project, TypeData, WallTop};
+use crate::{
+    Beam, Category, Column, ElementId, ElementKind, ElementType, ElementTypeId, LevelId, Project, TypeData, WallTop,
+};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
@@ -124,6 +126,16 @@ pub struct FramingRole {
 impl FramingRole {
     pub fn fits(self, kind: &ElementKind) -> bool {
         if self.kind.is_stud() { matches!(kind, ElementKind::Column(_)) } else { matches!(kind, ElementKind::Beam(_)) }
+    }
+
+    /// Its key for the shared member-host code (same order as the role).
+    pub fn key(self) -> RoleKey {
+        RoleKey::new(self.kind as u8, self.opening, self.index)
+    }
+
+    pub fn from_key(key: RoleKey) -> Option<Self> {
+        let (kind, opening, index) = key.parts();
+        Some(Self { kind: *FramingRoleKind::ALL.get(usize::from(kind))?, opening, index })
     }
 }
 
@@ -457,10 +469,99 @@ impl WallFraming {
     }
 }
 
+impl MemberHost for WallFraming {
+    fn member_types(&self) -> Vec<ElementTypeId> {
+        self.type_ids().collect()
+    }
+
+    fn member_layout(&self, project: &Project) -> Vec<(RoleKey, ElementTypeId, ElementKind)> {
+        self.layout(project).into_iter().map(|(r, t, k)| (r.key(), t, k)).collect()
+    }
+
+    fn member_list(&self) -> Vec<(RoleKey, ElementId)> {
+        self.members.iter().map(|m| (m.role.key(), m.id)).collect()
+    }
+
+    fn set_member_list(&mut self, members: &[(RoleKey, ElementId)]) {
+        self.members =
+            members.iter().filter_map(|&(k, id)| Some(FramingMember { role: FramingRole::from_key(k)?, id })).collect();
+    }
+
+    fn detached_roles(&self) -> Vec<RoleKey> {
+        self.detached.iter().map(|r| r.key()).collect()
+    }
+
+    fn set_detached_roles(&mut self, roles: &[RoleKey]) {
+        self.detached = roles.iter().filter_map(|k| FramingRole::from_key(*k)).collect();
+    }
+
+    fn role_fits(&self, role: RoleKey, kind: &ElementKind) -> bool {
+        FramingRole::from_key(role).is_some_and(|r| r.fits(kind))
+    }
+
+    fn check_parameters(&self, project: &Project) -> Result<(), String> {
+        self.check()?;
+        self.check_types(project)?;
+        self.check_wall(project)
+    }
+
+    fn repair_parameters(&mut self, project: &Project) -> Option<usize> {
+        self.check_wall(project).ok()?;
+        let mut n = self.reset_out_of_range();
+        n += fix_type(project, &mut self.stud_type, Category::Column)?;
+        n += fix_type(project, &mut self.track_type, Category::Beam)?;
+        n += fix_type(project, &mut self.header_type, Category::Beam)?;
+        Some(n)
+    }
+
+    fn inputs(&self, project: &Project) -> Vec<ElementId> {
+        let mut ids = vec![self.wall];
+        ids.extend(project.hosted_by(self.wall).map(|e| e.id));
+        ids
+    }
+
+    fn member_level(&self, project: &Project) -> Option<LevelId> {
+        project.element(self.wall).map(|e| e.level)
+    }
+}
+
+impl Project {
+    /// The framings of `wall` (one in a consistent model).
+    pub fn framings_of(&self, wall: ElementId) -> impl Iterator<Item = ElementId> + '_ {
+        self.elements
+            .values()
+            .filter(move |e| matches!(&e.kind, ElementKind::WallFraming(f) if f.wall == wall))
+            .map(|e| e.id)
+    }
+
+    /// The framing of `wall`, if it has one.
+    pub fn wall_framing_of(&self, wall: ElementId) -> Option<ElementId> {
+        self.framings_of(wall).next()
+    }
+
+    /// One framing per wall: the later ones (higher ids) go, their members
+    /// staying as plain elements. Returns how many went.
+    pub(crate) fn repair_wall_framings(&mut self) -> usize {
+        let mut seen = std::collections::BTreeSet::new();
+        let extra: Vec<ElementId> = self
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                ElementKind::WallFraming(f) => (!seen.insert(f.wall)).then_some(e.id),
+                _ => None,
+            })
+            .collect();
+        for id in &extra {
+            self.elements.remove(id);
+        }
+        extra.len()
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{ColumnSection, Document, Element, Hosted, LevelId, Wall};
+    use crate::{ColumnSection, Document, Element, Hosted, PlanTransform, Wall};
 
     fn add_type(e: &mut crate::EditCtx, data: TypeData) -> ElementTypeId {
         let id = ElementTypeId(e.alloc_id());
@@ -741,5 +842,230 @@ pub(crate) mod tests {
         assert!(stud.fits(&ElementKind::Column(column(find(&site_with(3.6, |_| {}), FramingRoleKind::Stud, 0, 1)))));
         let header = FramingRole { kind: FramingRoleKind::Header, opening: 0, index: 0 };
         assert!(!header.fits(&ElementKind::Column(column(find(&site_with(3.6, |_| {}), FramingRoleKind::Stud, 0, 1)))));
+    }
+
+    fn member(f: &WallFraming, kind: FramingRoleKind, opening: u16, index: u16) -> ElementId {
+        let role = FramingRole { kind, opening, index };
+        f.members.iter().find(|m| m.role == role).map(|m| m.id).unwrap_or_else(|| panic!("no {role:?}"))
+    }
+
+    fn set(doc: &mut Document, host: ElementId, f: impl FnOnce(&mut WallFraming)) {
+        doc.edit("set", |e| {
+            if let Some(ElementKind::WallFraming(x)) = e.element_mut(host).map(|x| &mut x.kind) {
+                f(x);
+            }
+        });
+    }
+
+    fn of_kind(f: &WallFraming, kind: FramingRoleKind) -> usize {
+        f.members.iter().filter(|m| m.role.kind == kind).count()
+    }
+
+    fn position(doc: &Document, id: ElementId) -> DVec2 {
+        match doc.project.element(id).map(|e| &e.kind) {
+            Some(ElementKind::Column(c)) => c.position,
+            _ => panic!("not a column"),
+        }
+    }
+
+    #[test]
+    fn role_keys_round_trip_in_order() {
+        let roles = [
+            FramingRole { kind: FramingRoleKind::BottomTrack, opening: 0, index: 0 },
+            FramingRole { kind: FramingRoleKind::Stud, opening: 0, index: END_STUD },
+            FramingRole { kind: FramingRoleKind::KingStud, opening: 2, index: 1 },
+            FramingRole { kind: FramingRoleKind::Blocking, opening: 3, index: 0 },
+        ];
+        for w in roles.windows(2) {
+            assert!(w[0] < w[1] && w[0].key() < w[1].key());
+        }
+        for r in roles {
+            assert_eq!(FramingRole::from_key(r.key()), Some(r));
+        }
+        assert_eq!(FramingRole::from_key(RoleKey::new(9, 0, 0)), None);
+    }
+
+    #[test]
+    fn a_new_framing_gets_its_members() {
+        let site = site_with(3.6, |_| {});
+        let f = framing(&site.doc, site.host);
+        assert_eq!(f.members.len(), 12);
+        let level = site.doc.project.element(site.wall).map(|e| e.level);
+        for m in &f.members {
+            let e = site.doc.project.element(m.id).expect("the member exists");
+            assert!(m.role.fits(&e.kind));
+            assert_eq!(Some(e.level), level);
+        }
+        assert_eq!(site.doc.project.member_host_of(f.members[0].id), Some(site.host));
+        assert_eq!(site.doc.project.wall_framing_of(site.wall), Some(site.host));
+        assert_eq!(site.doc.project.clone().repair(), 0, "a consistent model");
+    }
+
+    #[test]
+    fn moving_the_wall_moves_the_studs_and_keeps_their_ids() {
+        let mut site = site_with(3.6, |_| {});
+        let before = framing(&site.doc, site.host);
+        let stud = member(&before, FramingRoleKind::Stud, 0, 1);
+        let wall = site.wall;
+        site.doc.edit("move", |e| e.transform_elements(&[wall], &PlanTransform::translate(DVec2::new(0.0, 2.0))));
+        let after = framing(&site.doc, site.host);
+        assert_eq!(member(&after, FramingRoleKind::Stud, 0, 1), stud, "same id");
+        assert!(position(&site.doc, stud).distance(DVec2::new(0.4, 2.0)) < 1e-9);
+        assert!(after.detached.is_empty(), "moved by its wall, not detached");
+        assert!(site.doc.undo());
+        assert_eq!(framing(&site.doc, site.host), before);
+    }
+
+    #[test]
+    fn a_window_regenerates_the_framing_and_undo_restores_it() {
+        let mut site = site_with(3.6, |_| {});
+        let before = framing(&site.doc, site.host);
+        let start = site.doc.project.elements.clone();
+        let kept = member(&before, FramingRoleKind::Stud, 0, 1);
+        let dropped = member(&before, FramingRoleKind::Stud, 0, 4);
+        let window = site.window;
+        add_opening(&mut site, window, 1.8);
+        let f = framing(&site.doc, site.host);
+        assert_eq!(
+            [FramingRoleKind::Stud, FramingRoleKind::KingStud, FramingRoleKind::JackStud].map(|k| of_kind(&f, k)),
+            [6, 2, 2]
+        );
+        assert_eq!(
+            [FramingRoleKind::Header, FramingRoleKind::Sill, FramingRoleKind::Cripple].map(|k| of_kind(&f, k)),
+            [1, 1, 4]
+        );
+        assert_eq!(member(&f, FramingRoleKind::Stud, 0, 1), kept);
+        assert!(site.doc.project.element(dropped).is_none(), "the stud inside the opening is gone");
+        assert!(site.doc.undo());
+        assert_eq!(site.doc.project.elements, start);
+    }
+
+    #[test]
+    fn moving_one_opening_keeps_the_keys_of_the_other() {
+        let mut site = site_with(6.0, |_| {});
+        let window = site.window;
+        add_opening(&mut site, window, 1.2);
+        let second = add_opening(&mut site, window, 4.0);
+        let f = framing(&site.doc, site.host);
+        let (first_header, second_header) =
+            (member(&f, FramingRoleKind::Header, 0, 0), member(&f, FramingRoleKind::Header, 1, 0));
+        site.doc.edit("slide", |e| {
+            if let Some(h) = e.element_mut(second).and_then(|x| x.as_hosted_mut()) {
+                h.offset = 4.4;
+            }
+        });
+        let f = framing(&site.doc, site.host);
+        assert_eq!(member(&f, FramingRoleKind::Header, 0, 0), first_header);
+        assert_eq!(member(&f, FramingRoleKind::Header, 1, 0), second_header);
+        let Some(ElementKind::Beam(b)) = site.doc.project.element(second_header).map(|e| &e.kind) else {
+            panic!("a beam")
+        };
+        assert!((b.start.x - 3.76).abs() < 1e-9, "moved with its window");
+    }
+
+    #[test]
+    fn deleting_the_window_brings_the_studs_back() {
+        let mut site = site_with(3.6, |_| {});
+        let window = site.window;
+        let w = add_opening(&mut site, window, 1.8);
+        site.doc.edit("delete", |e| e.remove_element(w));
+        let f = framing(&site.doc, site.host);
+        assert_eq!((of_kind(&f, FramingRoleKind::Stud), of_kind(&f, FramingRoleKind::KingStud)), (10, 0));
+    }
+
+    #[test]
+    fn a_window_type_edit_regenerates_the_header() {
+        let mut site = site_with(3.6, |_| {});
+        let window = site.window;
+        add_opening(&mut site, window, 1.8);
+        let header = member(&framing(&site.doc, site.host), FramingRoleKind::Header, 0, 0);
+        site.doc.edit("wider", |e| {
+            if let Some(TypeData::Window { width, .. }) = e.type_mut(window).map(|t| &mut t.data) {
+                *width = 1.6;
+            }
+        });
+        let Some(ElementKind::Beam(b)) = site.doc.project.element(header).map(|e| &e.kind) else { panic!("a beam") };
+        assert!((b.start.x - 0.96).abs() < 1e-9, "1.0 - 0.04");
+    }
+
+    #[test]
+    fn deleting_the_wall_deletes_the_framing_and_its_members() {
+        let mut site = site_with(3.6, |_| {});
+        let ids = site.doc.project.host_members_of(site.host);
+        assert_eq!(ids.len(), 12);
+        let wall = site.wall;
+        site.doc.edit("delete", |e| e.remove_element(wall));
+        assert!(site.doc.project.element(site.host).is_none());
+        assert!(ids.iter().all(|id| site.doc.project.element(*id).is_none()));
+        assert!(site.doc.undo());
+        assert!(ids.iter().all(|id| site.doc.project.element(*id).is_some()));
+        assert!(site.doc.project.element(site.host).is_some());
+    }
+
+    #[test]
+    fn a_detached_stud_is_left_alone() {
+        let mut site = site_with(3.6, |_| {});
+        let stud = member(&framing(&site.doc, site.host), FramingRoleKind::Stud, 0, 2);
+        site.doc.edit("move", |e| e.transform_elements(&[stud], &PlanTransform::translate(DVec2::new(0.0, 1.0))));
+        let role = FramingRole { kind: FramingRoleKind::Stud, opening: 0, index: 2 };
+        assert!(framing(&site.doc, site.host).detached.contains(&role));
+        set(&mut site.doc, site.host, |f| f.spacing = 0.4 + 1e-6);
+        assert!(position(&site.doc, stud).distance(DVec2::new(0.8, 1.0)) < 1e-9, "where the user left it");
+        assert_eq!(framing(&site.doc, site.host).members.len(), 11, "and not made again");
+    }
+
+    #[test]
+    fn the_members_follow_the_wall_to_another_level() {
+        let mut site = site_with(3.6, |_| {});
+        let upper = site.doc.project.levels[1].id;
+        let wall = site.wall;
+        site.doc.edit("level", |e| {
+            if let Some(w) = e.element_mut(wall) {
+                w.level = upper;
+            }
+        });
+        let ids = site.doc.project.host_members_of(site.host);
+        assert!(ids.iter().all(|id| site.doc.project.element(*id).is_some_and(|e| e.level == upper)));
+    }
+
+    #[test]
+    fn a_copied_wall_takes_its_framing_along_and_a_framing_alone_is_not_copied() {
+        let mut site = site_with(3.6, |_| {});
+        let (wall, host) = (site.wall, site.host);
+        let originals = site.doc.project.host_members_of(host);
+        let copies =
+            site.doc.edit("copy", |e| e.copy_elements(&[wall], &[PlanTransform::translate(DVec2::new(0.0, 5.0))]));
+        let new_wall =
+            copies.iter().copied().find(|id| site.doc.project.element(*id).is_some_and(|e| e.as_wall().is_some()));
+        let new_wall = new_wall.expect("the wall's copy");
+        let copy = site.doc.project.wall_framing_of(new_wall).expect("its framing's copy");
+        assert_ne!(copy, host);
+        let f = framing(&site.doc, copy);
+        assert_eq!(f.members.len(), 12);
+        assert!(f.members.iter().all(|m| !originals.contains(&m.id)));
+        assert_eq!(framing(&site.doc, host).members.len(), 12, "the original keeps its own");
+        let alone =
+            site.doc.edit("copy", |e| e.copy_elements(&[host], &[PlanTransform::translate(DVec2::new(0.0, 9.0))]));
+        assert!(alone.is_empty(), "its wall has one already");
+    }
+
+    #[test]
+    fn repair_keeps_one_framing_per_wall_and_drops_those_without_a_wall() {
+        let site = site_with(3.6, |_| {});
+        let mut p = site.doc.project.clone();
+        let mut twin = p.element(site.host).cloned().expect("the framing");
+        twin.id = ElementId(p.alloc_id());
+        if let ElementKind::WallFraming(f) = &mut twin.kind {
+            (f.members, f.detached) = (Vec::new(), Vec::new());
+        }
+        p.elements.insert(twin.id, twin.clone());
+        assert_eq!(p.repair(), 1, "the later twin goes");
+        assert!(p.element(twin.id).is_none() && p.element(site.host).is_some());
+        assert_eq!(p.repair(), 0);
+        let mut p = site.doc.project.clone();
+        p.elements.remove(&site.wall);
+        assert_eq!(p.repair(), 1, "the framing of a missing wall goes (its members stay as plain elements)");
+        assert!(p.element(site.host).is_none());
+        assert_eq!(p.repair(), 0);
     }
 }

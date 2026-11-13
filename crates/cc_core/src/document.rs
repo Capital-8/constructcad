@@ -255,6 +255,8 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.pads_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.host_members_of(id));
+            // A wall's framing goes with it (and the framing's members with the framing).
+            pending.extend(self.project.framings_of(id));
             pending.extend(self.project.valves_of(id).map(|(e, _)| e.id));
             self.touch_element(id);
             self.project.elements.remove(&id);

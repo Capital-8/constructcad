@@ -418,6 +418,7 @@ impl Project {
                         ElementKind::Valve(v) => {
                             self.element(v.host).is_some_and(|h| matches!(h.kind, ElementKind::Pipe(_)))
                         }
+                        ElementKind::WallFraming(f) => self.element(f.wall).is_some_and(|w| w.as_wall().is_some()),
                         _ => true,
                     };
                     !(type_ok && level_ok && host_ok && element_is_valid(e))
@@ -432,6 +433,8 @@ impl Project {
                 self.elements.remove(&id);
             }
         }
+        // One framing per wall.
+        repairs += self.repair_wall_framings();
         // Member hosts: numbers, types and members (after invalid elements went).
         repairs += self.repair_member_hosts();
         // Dimension ends referencing missing elements or bad numbers become free.
