@@ -1044,36 +1044,6 @@ fn macro_menu_lists_the_macros_folder() {
     assert!(harness.query_by_label(&t!("pref-browse")).is_some());
 }
 
-/// The component editor on the sample house's window (a door or window: the
-/// opening row shows) and on a new component.
-#[test]
-fn component_editor_snapshots() {
-    if !snapshots_requested() {
-        return;
-    }
-    let mut results = egui_kittest::SnapshotResults::new();
-    let mut state = sample_state();
-    let window = state.project().component_types().find(|t| t.category() == cc_core::Category::Window).unwrap().id;
-    state.dialogs.component_editor = crate::component_editor::Editor::open(&state, window);
-    let mut harness = themed_harness(state, egui::vec2(1280.0, 900.0), egui::Theme::Light, |ui, state| {
-        crate::component_editor::show(ui.ctx(), state)
-    });
-    for _ in 0..4 {
-        harness.run();
-    }
-    results.add(harness.try_snapshot("component_editor"));
-    let mut state = sample_state();
-    state.dialogs.component_editor = Some(crate::component_editor::Editor::new_component());
-    let mut harness = themed_harness(state, egui::vec2(1280.0, 900.0), egui::Theme::Light, |ui, state| {
-        crate::component_editor::show(ui.ctx(), state)
-    });
-    for _ in 0..4 {
-        harness.run();
-    }
-    results.add(harness.try_snapshot("component_editor_new"));
-    results.unwrap();
-}
-
 /// The structure tab's automation, the way its buttons run it, with the
 /// panels and every 2D view drawn after each step and the 3D mesh rebuilt
 /// (issue #51: a crash while placing columns, beams, footings and slabs).
@@ -3056,6 +3026,7 @@ fn every_dialog_keeps_its_body_inside() {
         ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
         ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
         ("new project".into(), Box::new(crate::new_project_dialog::open)),
+        ("new component".into(), Box::new(crate::new_component_dialog::open)),
     ];
     for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
@@ -4357,6 +4328,36 @@ fn a_selection_without_the_kinds_members_places_nothing() {
     state.selection.clear();
     crate::connection_ui::place(&mut state, ConnectionKind::BasePlate);
     assert_eq!(state.session.doc.undo_depth(), depth + 1);
+}
+
+/// New Component lists the kinds with the parameters each starts with;
+/// picking Door and Create makes a door component, open in the component
+/// environment.
+#[test]
+fn new_component_picks_a_kind_and_opens_the_environment() {
+    let mut state = sample_state();
+    crate::new_component_dialog::open(&mut state);
+    let mut harness = themed_harness(state, egui::vec2(900.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state)
+    });
+    harness.run();
+    // A generic component starts with no parameters.
+    assert!(harness.query_by_label(&t!("new-component-generic")).is_some());
+    harness.get_by_label(&crate::i18n::tr(cc_core::ComponentKind::Door.key())).click();
+    harness.run();
+    assert!(harness.query_by_label(&t!("new-component-generic")).is_none());
+    assert!(harness.query_by_label(&t!("tpl-param-width")).is_some(), "a door starts with its width");
+    if snapshots_requested() {
+        harness.snapshot("new_component");
+    }
+    harness.get_by_label(&t!("new-project-create")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.new_component.is_none());
+    let made = state.component_env.as_ref().expect("the environment opens").type_id;
+    let ty = state.project().element_type(made).unwrap();
+    assert_eq!(ty.category(), cc_core::Category::Door);
+    assert_eq!(ty.name, t!("comp-new-name"));
 }
 
 /// A length as a number field shows it, without the unit.

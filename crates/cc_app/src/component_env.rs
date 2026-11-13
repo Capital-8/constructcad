@@ -78,6 +78,9 @@ pub struct Env {
     pub tool: EnvTool,
     /// Undo depth when the environment opened (Cancel goes back to it).
     pub start_depth: usize,
+    /// The component was made as the environment opened (*New Component*):
+    /// *Finish* picks the tool that places it.
+    pub created: bool,
     cameras: BTreeMap<u8, Camera>,
     /// Text being typed in the panel's fields, until committed.
     drafts: BTreeMap<String, String>,
@@ -98,6 +101,7 @@ impl Env {
             pick: None,
             tool: EnvTool::Select,
             start_depth,
+            created: false,
             cameras: BTreeMap::new(),
             drafts: BTreeMap::new(),
             sheet: None,
@@ -139,6 +143,16 @@ pub fn open_on(state: &mut AppState, type_id: ElementTypeId, sheet: Option<cc_co
     state.component_env = Some(env);
 }
 
+/// Open the environment on the component type `type_id` just made, at
+/// undo depth `start_depth` before it was: *Cancel Editing* removes it.
+pub fn open_new(state: &mut AppState, type_id: ElementTypeId, start_depth: usize) {
+    open_on(state, type_id, None);
+    if let Some(env) = state.component_env.as_mut() {
+        env.start_depth = start_depth;
+        env.created = true;
+    }
+}
+
 /// The type of the selected component element, or the one the component tool places.
 pub fn target_type(state: &AppState) -> Option<ElementTypeId> {
     let p = state.project();
@@ -165,8 +179,12 @@ pub fn save_file(state: &mut AppState) {
 
 /// Leave the environment keeping the changes.
 pub fn finish(state: &mut AppState) {
-    state.component_env = None;
     state.sketch = None;
+    if let Some(env) = state.component_env.take()
+        && env.created
+    {
+        crate::new_component_dialog::place(state, env.type_id);
+    }
 }
 
 /// Leave the environment undoing every change made in it.

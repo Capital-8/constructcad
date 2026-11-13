@@ -48,8 +48,8 @@ pub struct Dialogs {
     pub levels: bool,
     pub materials: bool,
     pub type_editor: Option<ElementTypeId>,
-    /// Open component editor (above the type dialog when opened from it).
-    pub component_editor: Option<crate::component_editor::Editor>,
+    /// The New Component dialog: the name typed and the kind picked.
+    pub new_component: Option<crate::new_component_dialog::NewComponent>,
     /// Type name being edited by "Rename" in the type dialog.
     pub type_rename: Option<String>,
     /// The rename field takes the focus on its next frame.

@@ -3400,3 +3400,46 @@ fn site_context_comes_in_as_a_drawing_and_masses() {
     );
     assert_eq!(fails(&mut s, "site_context_import", json!({"data": "nonsense"})), ErrorCode::InvalidArguments);
 }
+
+/// `component_create` with a `kind` and no `def` starts the component from
+/// the kind's own parameters: sizes for furniture, a diameter for lighting,
+/// the opening's for doors and windows, none for a generic one.
+#[test]
+fn component_create_starts_from_a_kind() {
+    let mut s = Session::default();
+    let params = |v: &Value| -> Vec<String> {
+        v["params"]["def"]["params"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let counts = [
+        ("Furniture", 3),
+        ("Casework", 3),
+        ("Plumbing", 3),
+        ("Electrical", 3),
+        ("Lighting", 2),
+        ("Generic", 0),
+        ("Door", 2),
+        ("window", 3),
+    ];
+    for (kind, count) in counts {
+        let ty = run(&mut s, "component_create", json!({"name": format!("New {kind}"), "kind": kind}));
+        assert_eq!(params(&ty).len(), count, "{kind}: {:?}", params(&ty));
+        assert!(ty["params"]["def"]["kind"].as_str().unwrap().eq_ignore_ascii_case(kind), "{kind}");
+        assert!(!ty["params"]["def"]["items"].as_array().unwrap().is_empty(), "{kind}");
+    }
+    // Doors and windows cut their opening: they are types of those categories.
+    let door = run(&mut s, "component_create", json!({"name": "Door 2", "kind": "Door"}));
+    assert_eq!(door["category"], "door");
+    // No kind and no definition: a generic component.
+    let plain = run(&mut s, "component_create", json!({"name": "Plain"}));
+    assert_eq!(plain["params"]["def"]["kind"], "Generic");
+    for bad in [json!({"name": "X", "kind": "Chair"}), json!({"name": "X", "kind": "TitleBlock"})] {
+        assert_eq!(fails(&mut s, "component_create", bad), ErrorCode::InvalidArguments);
+    }
+    let both = json!({"name": "X", "kind": "Door", "def": plain["params"]["def"]});
+    assert_eq!(fails(&mut s, "component_create", both), ErrorCode::InvalidArguments);
+}

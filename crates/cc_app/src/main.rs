@@ -13,7 +13,6 @@ mod callout_ui;
 mod canvas;
 mod clipboard;
 mod commands;
-mod component_editor;
 mod component_env;
 mod component_sketch;
 mod connection_ui;
@@ -45,6 +44,7 @@ mod mcp_bridge;
 mod member_host_ui;
 mod modify;
 mod modify3d;
+mod new_component_dialog;
 mod new_project_dialog;
 mod obj_ui;
 mod opening_place;
@@ -95,7 +95,9 @@ fn main() -> eframe::Result<()> {
     if let Some(args) = mcp_bridge::mcp_args(&raw) {
         std::process::exit(mcp_bridge::run(args));
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    // OpenGL drivers report performance hints as warnings on every frame; keep only its errors
+    // (`RUST_LOG` still overrides this).
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,wgpu_hal::gles=error")).init();
     // Panics are logged to the crash log (release builds on Windows have no console).
     recovery::install_panic_hook();
     let args = parse_args(raw.into_iter());
