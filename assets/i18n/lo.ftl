@@ -641,6 +641,17 @@ dlg-materials = ວັດສະດຸ
 dlg-type = ຄຸນລັກສະນະປະເພດ
 dlg-unsaved = ການປ່ຽນແປງຍັງບໍ່ໄດ້ບັນທຶກ
 dlg-unsaved-text = ໂຄງການມີຂໍ້ມູນປ່ຽນແປງທີ່ຍັງບໍ່ໄດ້ບັນທຶກ. ທ່ານຕ້ອງການບັນທຶກໄວ້ບໍ່?
+# New Project dialog
+new-project-title = ໂຄງການໃໝ່
+new-project-intro = ເລືອກແມ່ແບບຂອງໂຄງການ.
+new-project-metric = ລະບົບແມັດ
+new-project-imperial = ລະບົບອິມພີເລຍ
+new-project-metric-units = ແມັດ, { $area }, { $volume }
+new-project-imperial-units = ຟຸດ ແລະ ນິ້ວ ({ $sample })
+new-project-scales = ມາດຕາສ່ວນ { $scales }
+new-project-metric-sheets = ແຜ່ນ A ({ $size })
+new-project-imperial-sheets = ແຜ່ນ ANSI ({ $size })
+new-project-create = ສ້າງ
 dlg-error = ຂໍ້ຜິດພາດ
 dlg-delete-level = ລຶບລະດັບຊັ້ນ
 dlg-delete-level-text = ທ່ານຕ້ອງການລຶບລະດັບຊັ້ນ “{ $level }” ແທ້ບໍ່? ມຸມມອງຈຳນວນ { $views } ມຸມມອງກໍ່ຈະຖືກລຶບອອກເຊັ່ນກັນ.

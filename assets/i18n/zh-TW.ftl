@@ -649,6 +649,17 @@ dlg-materials = 材質
 dlg-type = 類型屬性
 dlg-unsaved = 未儲存的變更
 dlg-unsaved-text = 專案有未儲存的變更。要儲存嗎？
+# New Project dialog
+new-project-title = 新增專案
+new-project-intro = 選擇專案範本。
+new-project-metric = 公制
+new-project-imperial = 英制
+new-project-metric-units = 公尺、{ $area }、{ $volume }
+new-project-imperial-units = 英尺與英寸（{ $sample }）
+new-project-scales = 比例 { $scales }
+new-project-metric-sheets = A 系列圖紙（{ $size }）
+new-project-imperial-sheets = ANSI 圖紙（{ $size }）
+new-project-create = 建立
 dlg-error = 錯誤
 dlg-delete-level = 刪除樓層
 dlg-delete-level-text = 要刪除樓層「{ $level }」嗎？其 { $views } 個視圖也會一併刪除。

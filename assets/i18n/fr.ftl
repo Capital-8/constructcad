@@ -649,6 +649,17 @@ dlg-materials = Matériaux
 dlg-type = Propriétés du type
 dlg-unsaved = Modifications non enregistrées
 dlg-unsaved-text = Le projet contient des modifications non enregistrées. Voulez-vous les enregistrer ?
+# New Project dialog
+new-project-title = Nouveau projet
+new-project-intro = Choisissez le gabarit du projet.
+new-project-metric = Système métrique
+new-project-imperial = Système impérial
+new-project-metric-units = Mètres, { $area }, { $volume }
+new-project-imperial-units = Pieds et pouces ({ $sample })
+new-project-scales = Échelles { $scales }
+new-project-metric-sheets = Feuilles A ({ $size })
+new-project-imperial-sheets = Feuilles ANSI ({ $size })
+new-project-create = Créer
 dlg-error = Erreur
 dlg-delete-level = Supprimer le niveau
 dlg-delete-level-text = Supprimer le niveau « { $level } » ? Ses { $views } vue(s) seront également supprimées.

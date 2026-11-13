@@ -6,6 +6,8 @@ ConstructCraft's window follows the layout desktop CAD and BIM users expect. The
 
 Opening a project and importing a file (IFC, DWG/DXF, SketchUp, OBJ, glTF, pictures and SVG, component files) read it in the background: a dialog shows the operation, the file's name, folder and size and the time elapsed, with a spinner, and keeps the rest of the window from being used. The open project stays as it was until the file has been read; *Cancel* (or Esc) stops waiting and changes nothing.
 
+A new project (*New* in the quick access toolbar and on the home screen, Ctrl+N) starts from a template: the *New Project* dialog offers the **Metric System** (meters, 1:50 and 1:100 scales, A sheets) and the **Imperial System** (feet and inches, 1/4" = 1'-0" scales, ANSI sheets) as two cards. Click one and *Create*, or double-click it; the template picked last is picked first next time. With unsaved changes, the question about them comes after *Create*, and *Cancel* in either leaves the open project as it is.
+
 Dialogs open in the middle of the window and can be moved by dragging their title; a dialog opens centered again the next time. A dialog is as wide as its buttons and its contents need.
 
 ## Commands and their tooltips

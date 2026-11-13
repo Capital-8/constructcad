@@ -6,6 +6,8 @@ A janela do ConstructCraft segue a disposição que usuários de CAD e BIM de de
 
 Abrir um projeto e importar um arquivo (IFC, DWG/DXF, SketchUp, OBJ, glTF, imagens e SVG, arquivos de componente) faz a leitura em segundo plano: um diálogo mostra a operação, o nome, a pasta e o tamanho do arquivo e o tempo decorrido, com um indicador animado, e impede o uso do resto da janela. O projeto aberto continua como estava até o arquivo ser lido; *Cancelar* (ou Esc) deixa de esperar e não altera nada.
 
+Um projeto novo (*Novo* na barra de acesso rápido e na tela inicial, Ctrl+N) parte de um template: o diálogo *Novo projeto* oferece o **Sistema Métrico** (metros, escalas 1:50 e 1:100, folhas A) e o **Sistema Imperial** (pés e polegadas, escalas 1/4" = 1'-0", folhas ANSI) em dois cartões. Clique num deles e em *Criar*, ou dê um clique duplo; o template escolhido por último vem marcado na próxima vez. Com alterações não salvas, a pergunta sobre elas vem depois de *Criar*, e *Cancelar* em qualquer um deixa o projeto aberto como está.
+
 Os diálogos abrem no meio da janela e podem ser movidos arrastando o título; na próxima vez, o diálogo abre centralizado de novo. Um diálogo tem a largura que seus botões e seu conteúdo precisam.
 
 ## Comandos e suas dicas

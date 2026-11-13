@@ -649,6 +649,17 @@ dlg-materials = Materiały
 dlg-type = Właściwości typu
 dlg-unsaved = Niezapisane zmiany
 dlg-unsaved-text = Projekt zawiera niezapisane zmiany. Czy chcesz je zapisać?
+# New Project dialog
+new-project-title = Nowy projekt
+new-project-intro = Wybierz szablon projektu.
+new-project-metric = System metryczny
+new-project-imperial = System imperialny
+new-project-metric-units = Metry, { $area }, { $volume }
+new-project-imperial-units = Stopy i cale ({ $sample })
+new-project-scales = Skale { $scales }
+new-project-metric-sheets = Arkusze A ({ $size })
+new-project-imperial-sheets = Arkusze ANSI ({ $size })
+new-project-create = Utwórz
 dlg-error = Błąd
 dlg-delete-level = Usuń poziom
 dlg-delete-level-text = Usunąć poziom „{ $level }”? Jego widoki również zostaną usunięte (liczba: { $views }).

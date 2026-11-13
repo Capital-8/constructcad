@@ -649,6 +649,17 @@ dlg-materials = 材質
 dlg-type = タイププロパティ
 dlg-unsaved = 未保存の変更
 dlg-unsaved-text = プロジェクトに未保存の変更があります。保存しますか？
+# New Project dialog
+new-project-title = 新規プロジェクト
+new-project-intro = プロジェクトのテンプレートを選択してください。
+new-project-metric = メートル法
+new-project-imperial = ヤード・ポンド法
+new-project-metric-units = メートル、{ $area }、{ $volume }
+new-project-imperial-units = フィートとインチ（{ $sample }）
+new-project-scales = 縮尺 { $scales }
+new-project-metric-sheets = A 判用紙（{ $size }）
+new-project-imperial-sheets = ANSI 用紙（{ $size }）
+new-project-create = 作成
 dlg-error = エラー
 dlg-delete-level = レベルを削除
 dlg-delete-level-text = レベル「{ $level }」を削除しますか？関連する { $views } 個のビューも削除されます。

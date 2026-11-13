@@ -2979,6 +2979,7 @@ fn every_dialog_keeps_its_body_inside() {
         ("phases".into(), Box::new(crate::phases_dialog::open)),
         ("filters".into(), Box::new(crate::graphics_dialog::open_filters)),
         ("view templates".into(), Box::new(crate::graphics_dialog::open_templates)),
+        ("new project".into(), Box::new(crate::new_project_dialog::open)),
     ];
     for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
@@ -3006,6 +3007,69 @@ fn every_dialog_keeps_its_body_inside() {
         }));
         assert!(result.is_ok(), "the dialog \"{name}\" overflows");
     }
+}
+
+/// New asks for the template first: Cancel keeps the open project, the
+/// Imperial card and Create make an imperial project and remember the
+/// choice, and with unsaved changes the question about them comes after
+/// Create, the project still in place.
+#[test]
+fn new_asks_for_the_template() {
+    use cc_core::MeasurementSystem;
+    let state = sample_state();
+    let uid = state.project().info.uid;
+    let mut harness = themed_harness(state, egui::vec2(1000.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state);
+    });
+    let new = |h: &mut Harness<'static, AppState>| {
+        crate::commands::run(h.state_mut(), &egui::Context::default(), crate::commands::UiCommand::New);
+        h.run();
+    };
+
+    new(&mut harness);
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Metric));
+    assert_eq!(harness.state().project().info.uid, uid, "nothing replaced yet");
+    let label = t!("new-project-metric");
+    assert_eq!(harness.get_by_label(&label).accesskit_node().role(), Role::RadioButton);
+    harness.get_by_role_and_label(Role::Button, &t!("action-cancel")).click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.new_project, None);
+    assert_eq!(harness.state().project().info.uid, uid, "Cancel keeps the project");
+
+    new(&mut harness);
+    harness.get_by_label(&t!("new-project-imperial")).click();
+    harness.run();
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Imperial));
+    harness.get_by_role_and_label(Role::Button, &t!("new-project-create")).click();
+    harness.run();
+    let state = harness.state();
+    assert_eq!(state.dialogs.new_project, None);
+    assert_ne!(state.project().info.uid, uid, "a new project");
+    assert_eq!(state.project().measurement_system(), MeasurementSystem::Imperial);
+    assert_eq!(state.prefs.new_project_system, MeasurementSystem::Imperial, "remembered");
+    let imperial = state.project().info.uid;
+
+    // Unsaved changes: the template first, then the question about them.
+    let set = cc_engine::commands::project::ProjectInfoSet {
+        name: Some("Changed".into()),
+        number: None,
+        client: None,
+        address: None,
+        author: None,
+        fields: None,
+    };
+    crate::actions::run_command(harness.state_mut(), set);
+    assert!(harness.state().session.doc.is_dirty());
+    new(&mut harness);
+    assert_eq!(harness.state().dialogs.new_project, Some(MeasurementSystem::Imperial), "the last choice first");
+    harness.get_by_label(&t!("new-project-metric")).click();
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    let state = harness.state();
+    assert_eq!(state.dialogs.new_project, None);
+    assert_eq!(state.dialogs.confirm, Some(crate::state::PendingAction::New(MeasurementSystem::Metric)));
+    assert_eq!(state.project().info.uid, imperial, "kept until the changes are answered");
 }
 
 /// Issue #159: the Detail Line tool takes typed values after the first

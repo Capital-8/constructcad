@@ -649,6 +649,17 @@ dlg-materials = Матеріали
 dlg-type = Властивості типу
 dlg-unsaved = Незбережені зміни
 dlg-unsaved-text = У проєкті є незбережені зміни. Зберегти їх?
+# New Project dialog
+new-project-title = Новий проєкт
+new-project-intro = Виберіть шаблон проєкту.
+new-project-metric = Метрична система
+new-project-imperial = Імперська система
+new-project-metric-units = Метри, { $area }, { $volume }
+new-project-imperial-units = Фути й дюйми ({ $sample })
+new-project-scales = Масштаби { $scales }
+new-project-metric-sheets = Аркуші A ({ $size })
+new-project-imperial-sheets = Аркуші ANSI ({ $size })
+new-project-create = Створити
 dlg-error = Помилка
 dlg-delete-level = Видалити рівень
 dlg-delete-level-text = Видалити рівень «{ $level }»? Усі пов’язані з ним види ({ $views }) також буде видалено.

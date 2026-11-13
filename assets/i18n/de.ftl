@@ -649,6 +649,17 @@ dlg-materials = Materialien
 dlg-type = Typeigenschaften
 dlg-unsaved = Nicht gespeicherte Änderungen
 dlg-unsaved-text = Das Projekt enthält nicht gespeicherte Änderungen. Möchten Sie sie speichern?
+# New Project dialog
+new-project-title = Neues Projekt
+new-project-intro = Wählen Sie die Projektvorlage.
+new-project-metric = Metrisches System
+new-project-imperial = Imperiales System
+new-project-metric-units = Meter, { $area }, { $volume }
+new-project-imperial-units = Fuß und Zoll ({ $sample })
+new-project-scales = Maßstäbe { $scales }
+new-project-metric-sheets = A-Blätter ({ $size })
+new-project-imperial-sheets = ANSI-Blätter ({ $size })
+new-project-create = Erstellen
 dlg-error = Fehler
 dlg-delete-level = Ebene löschen
 dlg-delete-level-text = Die Ebene „{ $level }“ löschen? Ihre { $views } Ansicht(en) werden ebenfalls gelöscht.

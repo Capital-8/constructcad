@@ -649,6 +649,17 @@ dlg-materials = Materials
 dlg-type = Type Properties
 dlg-unsaved = Unsaved Changes
 dlg-unsaved-text = The project has unsaved changes. Do you want to save them?
+# New Project dialog
+new-project-title = New Project
+new-project-intro = Choose the project template.
+new-project-metric = Metric System
+new-project-imperial = Imperial System
+new-project-metric-units = Meters, { $area }, { $volume }
+new-project-imperial-units = Feet and inches ({ $sample })
+new-project-scales = Scales { $scales }
+new-project-metric-sheets = A sheets ({ $size })
+new-project-imperial-sheets = ANSI sheets ({ $size })
+new-project-create = Create
 dlg-error = Error
 dlg-delete-level = Delete Level
 dlg-delete-level-text = Delete the level “{ $level }”? Its { $views } view(s) will be deleted too.

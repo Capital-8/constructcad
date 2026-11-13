@@ -649,6 +649,17 @@ dlg-materials = 材质
 dlg-type = 类型属性
 dlg-unsaved = 未保存的更改
 dlg-unsaved-text = 项目有未保存的更改。是否保存？
+# New Project dialog
+new-project-title = 新建项目
+new-project-intro = 选择项目模板。
+new-project-metric = 公制
+new-project-imperial = 英制
+new-project-metric-units = 米、{ $area }、{ $volume }
+new-project-imperial-units = 英尺和英寸（{ $sample }）
+new-project-scales = 比例 { $scales }
+new-project-metric-sheets = A 系列图纸（{ $size }）
+new-project-imperial-sheets = ANSI 图纸（{ $size }）
+new-project-create = 创建
 dlg-error = 错误
 dlg-delete-level = 删除标高
 dlg-delete-level-text = 删除标高“{ $level }”？它的 { $views } 个视图也将被删除。

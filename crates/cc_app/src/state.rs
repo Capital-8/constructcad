@@ -30,7 +30,8 @@ pub enum RibbonTab {
 /// An action that discards unsaved changes, waiting for confirmation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PendingAction {
-    New,
+    /// A new project from the template of this measurement system.
+    New(cc_core::MeasurementSystem),
     Open,
     OpenPath(std::path::PathBuf),
     OpenSample(&'static str),
@@ -64,6 +65,8 @@ pub struct Dialogs {
     /// Schedule whose definition dialog is open.
     pub schedule_def: Option<ViewId>,
     pub confirm: Option<PendingAction>,
+    /// The New Project dialog, with the template picked in it.
+    pub new_project: Option<cc_core::MeasurementSystem>,
     pub error: Option<String>,
     pub about: bool,
     /// Plumbing systems and electrical circuits.
