@@ -1276,8 +1276,11 @@ impl<'a> Exporter<'a> {
                 ElementKind::Rebar(r) => match r.layout {
                     cc_core::RebarLayout::Longitudinal { .. }
                     | cc_core::RebarLayout::WallHorizontal { .. }
-                    | cc_core::RebarLayout::WallVertical { .. } => ("MAIN", &[][..]),
-                    cc_core::RebarLayout::Sides { .. } => ("EDGE", &[][..]),
+                    | cc_core::RebarLayout::WallVertical { .. }
+                    | cc_core::RebarLayout::SlabStraight { .. }
+                    | cc_core::RebarLayout::SlabRing { .. }
+                    | cc_core::RebarLayout::SlabRadial { .. } => ("MAIN", &[][..]),
+                    cc_core::RebarLayout::Sides { .. } | cc_core::RebarLayout::SlabTrim { .. } => ("EDGE", &[][..]),
                     cc_core::RebarLayout::Stirrups { .. }
                     | cc_core::RebarLayout::Ties { .. }
                     | cc_core::RebarLayout::WallTies { .. } => ("LIGATURE", &[][..]),

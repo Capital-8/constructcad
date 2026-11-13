@@ -396,6 +396,28 @@ fn structural_walls_show_their_reinforcement() {
     assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none(), "reinforced now");
 }
 
+/// A floor's palette offers its reinforcement: the typical button makes a
+/// mesh in its top and bottom layers (#282).
+#[test]
+fn floors_show_their_reinforcement() {
+    let mut state = sample_state();
+    let level = state.project().levels[0].id.0;
+    let args = serde_json::json!({"level": level, "boundary": [[100, 100], [104, 100], [104, 103], [100, 103]]});
+    let floor = cc_core::ElementId(state.session.execute("floor_create", args).unwrap()["id"].as_u64().unwrap());
+    state.selection = [floor].into_iter().collect();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    harness.get_by_label(&t!("action-rebar-typical")).click();
+    harness.run();
+    let sets: Vec<cc_core::RebarLayout> =
+        harness.state().project().rebar_of(floor).map(|(_, r)| r.layout.clone()).collect();
+    assert_eq!(sets.len(), 4);
+    assert!(sets.iter().all(|l| matches!(l, cc_core::RebarLayout::SlabStraight { .. })));
+    assert!(harness.query_by_label(&t!("action-rebar-typical")).is_none(), "reinforced now");
+}
+
 /// The beam tool draws beams in line or arc mode (#279).
 #[test]
 fn beam_tool_has_an_arc_mode() {

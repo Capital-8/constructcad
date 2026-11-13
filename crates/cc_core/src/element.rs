@@ -1255,6 +1255,68 @@ pub enum RebarLayout {
     /// every `every_horizontal`-th horizontal bar and `every_vertical`-th
     /// vertical bar of its exterior face.
     WallTies { every_horizontal: u32, every_vertical: u32 },
+    /// Straight bars of a slab's top or bottom layer, `spacing` apart, in
+    /// the direction `angle_deg` from the plan's X axis, each clipped to the
+    /// slab's boundary and openings. `inner` puts them inside the bars of
+    /// the other direction of that layer. `hook` bends the ends at the
+    /// slab's edge by that length: towards the middle of the slab when
+    /// positive (down for top bars), out of it when negative (into the wall
+    /// above a top bar or below a bottom one); 0 for straight ends.
+    SlabStraight {
+        top: bool,
+        angle_deg: f64,
+        spacing: f64,
+        #[serde(default)]
+        inner: bool,
+        #[serde(default)]
+        hook: f64,
+    },
+    /// Ring bars of a slab's layer around `center` (default: the middle of
+    /// the slab), `spacing` apart, clipped to the slab.
+    SlabRing {
+        top: bool,
+        spacing: f64,
+        #[serde(default)]
+        center: Option<DVec2>,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// `count` radial bars of a slab's layer around `center`, from the
+    /// radius `start` to the slab's edge; with an `intermediate` radius, a
+    /// shorter bar from there to the edge between each two.
+    SlabRadial {
+        top: bool,
+        count: u32,
+        #[serde(default)]
+        center: Option<DVec2>,
+        #[serde(default)]
+        start: f64,
+        #[serde(default)]
+        intermediate: f64,
+        #[serde(default)]
+        inner: bool,
+    },
+    /// Trimming bars around each opening of a slab, in one layer: `count`
+    /// bars `spacing` apart along each side of the opening, reaching
+    /// `anchorage` past it, and with `diagonals` one bar across each corner.
+    SlabTrim {
+        top: bool,
+        count: u32,
+        spacing: f64,
+        anchorage: f64,
+        #[serde(default)]
+        diagonals: bool,
+    },
+}
+
+/// Limits of slab reinforcement.
+pub mod slab_bars {
+    /// Most radial bars of one set.
+    pub const MAX_RADIAL: u32 = 2000;
+    /// Most trimming bars along one side of an opening.
+    pub const MAX_TRIM: u32 = 10;
+    /// Longest anchorage, hook or start radius, meters.
+    pub const MAX_LENGTH: f64 = 50.0;
 }
 
 /// The longitudinal bars on one face of a column's section: `count` of them
@@ -1293,7 +1355,13 @@ impl FaceBars {
 impl RebarLayout {
     /// Whether the bars run along the host (and so may be spliced).
     pub fn runs_along(&self) -> bool {
-        !matches!(self, RebarLayout::Stirrups { .. } | RebarLayout::Ties { .. } | RebarLayout::WallTies { .. })
+        !matches!(
+            self,
+            RebarLayout::Stirrups { .. }
+                | RebarLayout::Ties { .. }
+                | RebarLayout::WallTies { .. }
+                | RebarLayout::SlabTrim { .. }
+        )
     }
 
     /// Whether the set reinforces a wall.
@@ -1302,6 +1370,28 @@ impl RebarLayout {
             self,
             RebarLayout::WallHorizontal { .. } | RebarLayout::WallVertical { .. } | RebarLayout::WallTies { .. }
         )
+    }
+
+    /// Whether the set reinforces a slab (a floor or a foundation slab).
+    pub fn in_slab(&self) -> bool {
+        matches!(
+            self,
+            RebarLayout::SlabStraight { .. }
+                | RebarLayout::SlabRing { .. }
+                | RebarLayout::SlabRadial { .. }
+                | RebarLayout::SlabTrim { .. }
+        )
+    }
+
+    /// Whether a slab's set lies in its top layer.
+    pub fn slab_top(&self) -> Option<bool> {
+        match self {
+            RebarLayout::SlabStraight { top, .. }
+            | RebarLayout::SlabRing { top, .. }
+            | RebarLayout::SlabRadial { top, .. }
+            | RebarLayout::SlabTrim { top, .. } => Some(*top),
+            _ => None,
+        }
     }
 
     /// The face of a wall the set lies near.
@@ -1335,6 +1425,23 @@ impl RebarLayout {
                     && (*to == 0.0 || *to > *from)
                     && bottom.is_valid()
                     && top.is_valid()
+            }
+            RebarLayout::SlabStraight { angle_deg, spacing, hook, .. } => {
+                spaced(*spacing) && angle_deg.is_finite() && hook.is_finite() && hook.abs() <= slab_bars::MAX_LENGTH
+            }
+            RebarLayout::SlabRing { spacing, center, .. } => spaced(*spacing) && center.is_none_or(|c| c.is_finite()),
+            RebarLayout::SlabRadial { count, center, start, intermediate, .. } => {
+                let radius = |r: f64| r.is_finite() && (0.0..=slab_bars::MAX_LENGTH).contains(&r);
+                (1..=slab_bars::MAX_RADIAL).contains(count)
+                    && center.is_none_or(|c| c.is_finite())
+                    && radius(*start)
+                    && radius(*intermediate)
+            }
+            RebarLayout::SlabTrim { count, spacing, anchorage, .. } => {
+                (1..=slab_bars::MAX_TRIM).contains(count)
+                    && spaced(*spacing)
+                    && anchorage.is_finite()
+                    && (0.0..=slab_bars::MAX_LENGTH).contains(anchorage)
             }
             RebarLayout::WallTies { every_horizontal, every_vertical } => {
                 (1..=wall_bars::MAX_EVERY).contains(every_horizontal)
@@ -1388,7 +1495,7 @@ impl Splice {
     }
 }
 
-/// A set of reinforcing bars in a beam, column or wall (`host`), `cover`
+/// A set of reinforcing bars in a beam, column, wall or slab (`host`), `cover`
 /// from its faces; the type gives the bar diameter. The bars follow their host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rebar {

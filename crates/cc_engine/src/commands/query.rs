@@ -430,6 +430,14 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("bar_length".into(), json!(set.bar_length()));
         derived.insert("total_length".into(), json!(set.total_length()));
         derived.insert("weight".into(), json!(set.weight()));
+        // The bars by length (to the millimeter), longest first: a slab's bars each have their own.
+        let mut lengths: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
+        for bar in &set.bars {
+            *lengths.entry((bar.length() * 1000.0).round() as i64).or_default() += 1;
+        }
+        let bars: Vec<Value> =
+            lengths.iter().rev().map(|(mm, count)| json!({"length": *mm as f64 / 1000.0, "count": count})).collect();
+        derived.insert("bars".into(), json!(bars));
     }
     if let Some(lines) = geom.roof_ridges.get(&id) {
         // Ridges, hips and valleys in plan.

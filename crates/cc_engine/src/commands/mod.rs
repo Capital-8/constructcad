@@ -52,6 +52,7 @@ pub mod shaft;
 pub mod sheets;
 pub mod site;
 pub mod sketch;
+pub mod slab_rebar;
 pub mod stair;
 pub mod steel_building;
 pub mod structure;

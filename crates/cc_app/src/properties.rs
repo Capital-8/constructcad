@@ -820,6 +820,10 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                 }
                 readonly_row(ui, &t!("prop-volume"), format::volume(state.session.geom().volume(id)));
             });
+            // A foundation slab takes a mesh, like a floor.
+            if matches!(f.shape, cc_core::FoundationShape::Slab { .. }) {
+                reinforcement(ui, state, id);
+            }
         }
         ElementKind::Stair(st) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -1082,6 +1086,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                     opening_rows(ui, state, id, &f.openings, true)
                 });
             }
+            reinforcement(ui, state, id);
         }
         ElementKind::Ceiling(c) => {
             section(ui, "constraints", t!("section-constraints"), |ui| {
@@ -2226,6 +2231,19 @@ fn rebar_layout_row(ui: &mut Ui, state: &mut AppState, id: ElementId, label: &st
         L::WallTies { every_horizontal, every_vertical } => {
             readonly_row(ui, label, format!("1/{every_horizontal} × 1/{every_vertical}"));
         }
+        // A slab's bars by their spacing, its radial and trimming bars by their count.
+        L::SlabStraight { spacing, .. } | L::SlabRing { spacing, .. } => {
+            length_row(ui, state, label, id, "rebar-spacing", spacing, |e, v| {
+                if let ElementKind::Rebar(x) = &mut e.kind
+                    && let L::SlabStraight { spacing, .. } | L::SlabRing { spacing, .. } = &mut x.layout
+                {
+                    *spacing = v.max(cc_core::wall_bars::MIN_SPACING);
+                }
+            });
+        }
+        L::SlabRadial { count, .. } | L::SlabTrim { count, .. } => {
+            readonly_row(ui, label, format!("{count} ×"));
+        }
         L::Longitudinal { count, .. } => {
             let mut n = count;
             let r = row(ui, label, |ui| ui.add(DragValue::new(&mut n).range(1..=200).suffix(" ×")));
@@ -2284,11 +2302,22 @@ fn rebar_role(layout: &cc_core::RebarLayout) -> String {
         cc_core::RebarLayout::Stirrups { .. } => t!("bars-stirrups"),
         cc_core::RebarLayout::Sides { .. } => t!("bars-sides"),
         cc_core::RebarLayout::Ties { .. } | cc_core::RebarLayout::WallTies { .. } => t!("bars-ties"),
+        cc_core::RebarLayout::SlabStraight { top, angle_deg, .. } => {
+            format!("{} {angle_deg:.0}° · {}", t!("bars-slab-straight"), slab_layer(*top))
+        }
+        cc_core::RebarLayout::SlabRing { top, .. } => format!("{} · {}", t!("bars-slab-ring"), slab_layer(*top)),
+        cc_core::RebarLayout::SlabRadial { top, .. } => format!("{} · {}", t!("bars-slab-radial"), slab_layer(*top)),
+        cc_core::RebarLayout::SlabTrim { top, .. } => format!("{} · {}", t!("bars-slab-trim"), slab_layer(*top)),
         cc_core::RebarLayout::WallHorizontal { side, .. } => {
             format!("{} · {}", t!("bars-wall-horizontal"), tr(side.key()))
         }
         cc_core::RebarLayout::WallVertical { side, .. } => format!("{} · {}", t!("bars-wall-vertical"), tr(side.key())),
     }
+}
+
+/// A slab layer's name.
+fn slab_layer(top: bool) -> String {
+    if top { t!("bars-top") } else { t!("bars-bottom") }
 }
 
 /// The reinforcement sets of a beam or column: each editable or removable,
@@ -2313,9 +2342,17 @@ fn reinforcement(ui: &mut Ui, state: &mut AppState, host: ElementId) {
         }
         let wall = matches!(state.project().element(host).map(|e| &e.kind), Some(ElementKind::Wall(_)));
         if sets.is_empty() && row(ui, "", |ui| ui.button(t!("action-rebar-typical")).clicked()) {
+            let slab = matches!(
+                state.project().element(host).map(|e| &e.kind),
+                Some(ElementKind::Floor(_) | ElementKind::Foundation(_))
+            );
             if wall {
                 let command =
                     cc_engine::commands::wall_rebar::WallRebarCreate { walls: vec![host.0], ..Default::default() };
+                crate::actions::run_command(state, command);
+            } else if slab {
+                let command =
+                    cc_engine::commands::slab_rebar::SlabRebarCreate { slabs: vec![host.0], ..Default::default() };
                 crate::actions::run_command(state, command);
             } else {
                 let command = cc_engine::commands::rebar::RebarTypical { elements: vec![host.0], level: None };

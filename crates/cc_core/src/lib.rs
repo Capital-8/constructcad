@@ -95,7 +95,7 @@ pub use element::{
     BarEnd, BarFace, Beam, BeamLateral, BeamVertical, Ceiling, Column, Component, Dimension, DimensionKind, Element,
     ElementKind, FaceBars, Floor, Foundation, FoundationShape, Grid, Hosted, Leader, LeaderSymbol, LocationLine,
     Railing, Ramp, Rebar, RebarLayout, Roof, RoofShape, Room, ShapedRebar, SpacingZone, Splice, Stair, TextNote, Wall,
-    WallSide, WallTop, wall_bars,
+    WallSide, WallTop, slab_bars, wall_bars,
 };
 pub use fill_pattern::{FillPattern, FillPatternKind, PatternLine};
 pub use graphics::{
