@@ -4353,3 +4353,73 @@ fn a_selection_without_the_kinds_members_places_nothing() {
     crate::connection_ui::place(&mut state, ConnectionKind::BasePlate);
     assert_eq!(state.session.doc.undo_depth(), depth + 1);
 }
+
+/// A length as a number field shows it, without the unit.
+fn length_text(meters: f64) -> String {
+    let (units, comma) = cc_views::format::current();
+    cc_views::format::length_number_with(&units, comma, meters)
+}
+
+/// The text of the number field being typed in.
+fn typed_text(harness: &Harness<'static, AppState>) -> String {
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).and_then(|n| n.value()).unwrap_or_default()
+}
+
+/// Type `text` over the number field showing `shown`, a key at a time as a
+/// person does, and return what the field read after each key.
+fn type_over(harness: &mut Harness<'static, AppState>, shown: &str, text: &str) -> Vec<String> {
+    harness.query_all_by_role(Role::SpinButton).find(|n| n.value().as_deref() == Some(shown)).unwrap().focus();
+    harness.run();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    let mut read = Vec::new();
+    for ch in text.chars() {
+        harness.query_all_by_role(Role::SpinButton).find(|n| n.is_focused()).unwrap().type_text(&ch.to_string());
+        harness.run();
+        read.push(typed_text(harness));
+    }
+    read
+}
+
+/// Typing a number in Type Properties keeps what was typed until the field
+/// is left: a half-typed value the type would clamp (a riser of `1`) or
+/// refuse (a door `0` wide) must not rewrite the text under the caret
+/// (issue 319: typing `1` showed `5`, and `0.9` over `0.80` gave `0.9.80`).
+#[test]
+fn typed_numbers_are_kept_until_the_field_is_left() {
+    let mut state = sample_state();
+    let stair = state.project().default_type(cc_core::Category::Stair).unwrap();
+    let riser = |s: &AppState| match s.project().element_type(stair).map(|t| &t.data) {
+        Some(cc_core::TypeData::Stair { max_riser, .. }) => *max_riser,
+        other => panic!("not a stair type: {other:?}"),
+    };
+    let before = riser(&state);
+    let shown = format!("{} {}", length_text(before), state.project().units.length.unit.symbol());
+    state.dialogs.type_editor = Some(stair);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let typed = length_text(0.16);
+    let read = type_over(&mut harness, &shown, &typed);
+    let want: Vec<String> = (1..=typed.chars().count()).map(|n| typed.chars().take(n).collect()).collect();
+    assert_eq!(read, want);
+    assert_eq!(riser(harness.state()), before, "nothing changes while typing");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!((riser(harness.state()) - 0.16).abs() < 1e-9, "{}", riser(harness.state()));
+
+    // A door's width, which starts with a zero.
+    let mut state = sample_state();
+    let door = state.project().default_type(cc_core::Category::Door).unwrap();
+    let width = |s: &AppState| s.project().element_type(door).and_then(|t| t.opening_size()).map(|(w, _)| w);
+    let before = width(&state).unwrap();
+    let shown = format!("{} {}", length_text(before), state.project().units.length.unit.symbol());
+    state.dialogs.type_editor = Some(door);
+    let mut harness = type_dialog_harness(state);
+    harness.run();
+    let typed = length_text(0.95);
+    let read = type_over(&mut harness, &shown, &typed);
+    let want: Vec<String> = (1..=typed.chars().count()).map(|n| typed.chars().take(n).collect()).collect();
+    assert_eq!(read, want);
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert!(width(harness.state()).is_some_and(|w| (w - 0.95).abs() < 1e-9), "{:?}", width(harness.state()));
+}
