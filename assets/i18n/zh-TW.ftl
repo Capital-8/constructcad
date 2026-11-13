@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = 沒有尚未加骨架的直牆：請選取牆，或開�
 msg-walls-framed = 已為 { $walls } 面牆建立骨架，共 { $count } 個構件。
 cmd-desc-light-steel-frame = 為所選的牆（或目前樓層的牆）建立輕鋼構架：天地軌道之間每 0.4 m 一支冷軋立柱，門窗處有雙立柱、過梁、窗台梁與短柱，隨牆與開口更新。
 cmd-desc-wood-frame = 為所選的牆（或目前樓層的牆）建立木構架：底板與雙頂板之間每 0.6 m 一支立柱，門窗處有雙立柱、過梁、窗台梁與短柱，隨牆與開口更新。
+
+# Connections
+category-connection = 接頭
+tpl-type-connection = 接頭
+connection-base-plate = 柱底板
+connection-end-plate = 端板
+connection-fin-plate = 腹板連接板
+connection-timber-bolts = 螺栓接頭
+connection-hanger = 梁托架
+member-end-base = 底部

@@ -114,8 +114,8 @@ impl Element {
                 let plan = t.apply(q.truncate());
                 (q.x, q.y) = (plan.x, plan.y);
             }),
-            // Bars follow their host.
-            ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
+            // Bars, valves and connections follow their host.
+            ElementKind::Rebar(_) | ElementKind::Valve(_) | ElementKind::Connection(_) => {}
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => {
                 p(&mut s.start);
                 p(&mut s.end);
@@ -361,7 +361,8 @@ impl crate::Project {
     /// The elements a copy of `ids` takes: the non-hosted ones, plus the
     /// doors and windows of copied walls, the railings of copied stairs, the
     /// pads of copied terrains, the valves of copied pipes and any selected
-    /// hosted element.
+    /// hosted element. Connections are never copied: they belong to their
+    /// member's end.
     /// The snapshot stays valid after the originals are deleted (cut).
     pub fn copy_set(&self, ids: &[ElementId]) -> Vec<Element> {
         let set: std::collections::BTreeSet<ElementId> = ids.iter().copied().collect();
@@ -407,7 +408,7 @@ impl crate::Project {
         // A copied member host makes its own members: its originals are not copied.
         let managed: std::collections::BTreeSet<ElementId> =
             out.iter().flat_map(|e| self.host_members_of(e.id)).collect();
-        out.retain(|e| !managed.contains(&e.id));
+        out.retain(|e| !managed.contains(&e.id) && !matches!(e.kind, ElementKind::Connection(_)));
         out
     }
 

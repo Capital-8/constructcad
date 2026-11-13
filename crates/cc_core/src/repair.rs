@@ -110,6 +110,8 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Truss(t) => t.start.is_finite() && t.end.is_finite(),
         // Its numbers are reset by repair_member_hosts; its wall is checked with the hosts.
         ElementKind::WallFraming(_) => true,
+        // Out-of-range values are reset by `repair_connections`.
+        ElementKind::Connection(_) => true,
         ElementKind::Topography(t) => t.is_valid(),
         ElementKind::Pad(p) => p.is_valid(),
     }
@@ -213,6 +215,7 @@ impl Project {
                 | TypeData::Shaft {}
                 | TypeData::SteelBuilding {}
                 | TypeData::Truss {}
+                | TypeData::Connection {}
                 | TypeData::WallFraming {} => {}
                 TypeData::Pad { cut_slope, fill_slope } => {
                     for (r, d) in
@@ -419,6 +422,7 @@ impl Project {
                             self.element(v.host).is_some_and(|h| matches!(h.kind, ElementKind::Pipe(_)))
                         }
                         ElementKind::WallFraming(f) => self.element(f.wall).is_some_and(|w| w.as_wall().is_some()),
+                        ElementKind::Connection(c) => self.element(c.member).is_some_and(|m| c.fits(&m.kind)),
                         _ => true,
                     };
                     !(type_ok && level_ok && host_ok && element_is_valid(e))
@@ -437,6 +441,8 @@ impl Project {
         repairs += self.repair_wall_framings();
         // Member hosts: numbers, types and members (after invalid elements went).
         repairs += self.repair_member_hosts();
+        // Connections: one per member end, numbers in range.
+        repairs += self.repair_connections();
         // Dimension ends referencing missing elements or bad numbers become free.
         let ids: std::collections::BTreeSet<_> = self.elements.keys().copied().collect();
         let level_ids: Vec<_> = self.levels.iter().map(|l| l.id).collect();

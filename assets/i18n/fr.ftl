@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = Aucun mur droit sans ossature : sélectionnez des murs o
 msg-walls-framed = { $walls } murs ossaturés avec { $count } éléments.
 cmd-desc-light-steel-frame = Ossature les murs sélectionnés (ou ceux du niveau actif) en acier léger : montants formés à froid tous les 0,4 m entre rails, montants doubles, linteaux, appuis et montants courts aux portes et fenêtres, tenus à jour avec le mur et ses ouvertures.
 cmd-desc-wood-frame = Ossature les murs sélectionnés (ou ceux du niveau actif) en bois : montants tous les 0,6 m entre lisse basse et double sablière, montants doubles, linteaux, appuis et montants courts aux portes et fenêtres, tenus à jour avec le mur et ses ouvertures.
+
+# Connections
+category-connection = Assemblages
+tpl-type-connection = Assemblage
+connection-base-plate = Platine de pied
+connection-end-plate = Platine d'about
+connection-fin-plate = Gousset d'âme
+connection-timber-bolts = Assemblage boulonné
+connection-hanger = Sabot de solive
+member-end-base = Pied

@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = Nenhuma parede reta sem ossatura: selecione paredes ou a
 msg-walls-framed = { $walls } paredes estruturadas com { $count } peças.
 cmd-desc-light-steel-frame = Estrutura as paredes selecionadas (ou as do nível ativo) em light steel frame: montantes formados a frio a cada 0,4 m entre guias, montantes duplos, vergas, contravergas e montantes curtos em portas e janelas, acompanhando a parede e suas aberturas.
 cmd-desc-wood-frame = Estrutura as paredes selecionadas (ou as do nível ativo) em wood frame: montantes a cada 0,6 m entre soleira e frechal duplo, montantes duplos, vergas, contravergas e montantes curtos em portas e janelas, acompanhando a parede e suas aberturas.
+
+# Connections
+category-connection = Ligações
+tpl-type-connection = Ligação
+connection-base-plate = Placa de base
+connection-end-plate = Placa de topo
+connection-fin-plate = Chapa de alma
+connection-timber-bolts = Ligação parafusada
+connection-hanger = Suporte de viga
+member-end-base = Base

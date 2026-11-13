@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = 下地のない直線の壁がありません。壁を�
 msg-walls-framed = { $walls } 枚の壁に { $count } 本の部材で下地を作成しました。
 cmd-desc-light-steel-frame = 選択した壁（または現在のレベルの壁）に軽量鉄骨下地を作成します。ランナー間に 0.4 m ごとの冷間成形間柱、開口部には二重の柱、まぐさ、窓台、短い間柱を配置し、壁と開口部に合わせて更新します。
 cmd-desc-wood-frame = 選択した壁（または現在のレベルの壁）に木造枠組下地を作成します。土台とダブル頭つなぎの間に 0.6 m ごとの間柱、開口部には二重の柱、まぐさ、窓台、短い間柱を配置し、壁と開口部に合わせて更新します。
+
+# Connections
+category-connection = 接合部
+tpl-type-connection = 接合部
+connection-base-plate = ベースプレート
+connection-end-plate = エンドプレート
+connection-fin-plate = フィンプレート
+connection-timber-bolts = ボルト接合
+connection-hanger = 梁受け金物
+member-end-base = 柱脚

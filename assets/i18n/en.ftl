@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = No straight unframed walls: select walls, or open a plan
 msg-walls-framed = { $walls } walls framed with { $count } members.
 cmd-desc-light-steel-frame = Frame the selected walls (or those of the active level) in light steel: cold-formed studs every 0.4 m between tracks, king and jack studs, headers, sills and cripples at doors and windows, kept in step with the wall and its openings.
 cmd-desc-wood-frame = Frame the selected walls (or those of the active level) in timber: studs every 0.6 m between a sole plate and a double top plate, king and jack studs, headers, sills and cripples at doors and windows, kept in step with the wall and its openings.
+
+# Connections
+category-connection = Connections
+tpl-type-connection = Connection
+connection-base-plate = Base Plate
+connection-end-plate = End Plate
+connection-fin-plate = Fin Plate
+connection-timber-bolts = Bolted Joint
+connection-hanger = Hanger
+member-end-base = Base

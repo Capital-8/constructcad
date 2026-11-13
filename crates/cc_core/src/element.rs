@@ -77,6 +77,8 @@ pub enum ElementKind {
     Truss(Box<crate::truss::Truss>),
     /// Light steel or wood framing of a wall: it owns the studs and the beams of its tracks, headers and sills.
     WallFraming(Box<crate::wall_framing::WallFraming>),
+    /// A steel or timber joint at one end of a column or beam (placed by its member).
+    Connection(crate::connection::Connection),
     /// A terrain surface from measured points inside a boundary.
     Topography(crate::topography::Topography),
     /// A building pad graded into its terrain.
@@ -126,6 +128,7 @@ impl Element {
             ElementKind::SteelBuilding(_) => Category::SteelBuilding,
             ElementKind::Truss(_) => Category::Truss,
             ElementKind::WallFraming(_) => Category::WallFraming,
+            ElementKind::Connection(_) => Category::Connection,
             ElementKind::Topography(_) => Category::Topography,
             ElementKind::Pad(_) => Category::Pad,
             ElementKind::DetailLine(_) => Category::DetailLine,
@@ -366,7 +369,11 @@ impl Element {
             ElementKind::Mass(m) => m.outline.iter_mut().chain(m.top.iter_mut().flatten()).for_each(|p| *p += delta),
             ElementKind::ShapedRebar(r) => r.points_mut().for_each(|p| *p += delta.extend(0.0)),
             // Placed by their hosts.
-            ElementKind::Door(_) | ElementKind::Window(_) | ElementKind::Rebar(_) | ElementKind::Valve(_) => {}
+            ElementKind::Door(_)
+            | ElementKind::Window(_)
+            | ElementKind::Rebar(_)
+            | ElementKind::Valve(_)
+            | ElementKind::Connection(_) => {}
         }
     }
 }

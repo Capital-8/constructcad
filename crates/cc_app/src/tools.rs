@@ -389,6 +389,7 @@ impl Tool {
             | Category::TitleBlock
             | Category::SteelBuilding
             | Category::Truss
+            | Category::Connection
             | Category::WallFraming => return None,
         })
     }

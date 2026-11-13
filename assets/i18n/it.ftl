@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = Nessun muro diritto senza telaio: selezionare dei muri o
 msg-walls-framed = { $walls } muri intelaiati con { $count } elementi.
 cmd-desc-light-steel-frame = Intelaia i muri selezionati (o quelli del livello attivo) in acciaio leggero: montanti formati a freddo ogni 0,4 m tra le guide, montanti doppi, architravi, davanzali e montanti corti a porte e finestre, aggiornati con il muro e le sue aperture.
 cmd-desc-wood-frame = Intelaia i muri selezionati (o quelli del livello attivo) in legno: montanti ogni 0,6 m tra corrente inferiore e doppio corrente superiore, montanti doppi, architravi, davanzali e montanti corti a porte e finestre, aggiornati con il muro e le sue aperture.
+
+# Connections
+category-connection = Giunti
+tpl-type-connection = Giunto
+connection-base-plate = Piastra di base
+connection-end-plate = Piastra di testa
+connection-fin-plate = Piastra d'anima
+connection-timber-bolts = Giunto bullonato
+connection-hanger = Scarpa per travi
+member-end-base = Base

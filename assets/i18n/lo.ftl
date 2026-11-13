@@ -3256,3 +3256,13 @@ msg-no-walls-to-frame = ບໍ່ມີຝາຊື່ທີ່ຍັງບໍ�
 msg-walls-framed = ສ້າງໂຄງໃຫ້ { $walls } ຝາ ດ້ວຍ { $count } ຊິ້ນ.
 cmd-desc-light-steel-frame = ສ້າງໂຄງເຫຼັກເບົາໃຫ້ຝາທີ່ເລືອກ (ຫຼື ຝາຂອງຊັ້ນປັດຈຸບັນ): ເສົາຕັ້ງເຫຼັກຂຶ້ນຮູບເຢັນທຸກ 0,4 m ລະຫວ່າງລາງ, ເສົາຄູ່, ຄານຂອບເທິງ, ຄານຂອບລຸ່ມ ແລະ ເສົາສັ້ນທີ່ປະຕູ ແລະ ປ່ອງຢ້ຽມ, ປ່ຽນຕາມຝາ ແລະ ຊ່ອງເປີດ.
 cmd-desc-wood-frame = ສ້າງໂຄງໄມ້ໃຫ້ຝາທີ່ເລືອກ (ຫຼື ຝາຂອງຊັ້ນປັດຈຸບັນ): ເສົາຕັ້ງທຸກ 0,6 m ລະຫວ່າງແຜ່ນລຸ່ມ ແລະ ແຜ່ນເທິງຄູ່, ເສົາຄູ່, ຄານຂອບເທິງ, ຄານຂອບລຸ່ມ ແລະ ເສົາສັ້ນທີ່ປະຕູ ແລະ ປ່ອງຢ້ຽມ, ປ່ຽນຕາມຝາ ແລະ ຊ່ອງເປີດ.
+
+# Connections
+category-connection = ຂໍ້ຕໍ່
+tpl-type-connection = ຂໍ້ຕໍ່
+connection-base-plate = ແຜ່ນຮອງຕີນເສົາ
+connection-end-plate = ແຜ່ນປາຍຄານ
+connection-fin-plate = ແຜ່ນຕໍ່ເອວຄານ
+connection-timber-bolts = ຂໍ້ຕໍ່ໂບລທ໌
+connection-hanger = ເຫຼັກແຂວນຄານ
+member-end-base = ຕີນ

@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = Brak prostych ścian bez szkieletu: zaznacz ściany lub 
 msg-walls-framed = Utworzono szkielety { $walls } ścian z { $count } elementów.
 cmd-desc-light-steel-frame = Tworzy lekki szkielet stalowy zaznaczonych ścian (lub ścian aktywnego poziomu): słupki z kształtowników giętych co 0,4 m między prowadnicami, słupki podwójne, nadproża, podokienniki i krótkie słupki przy drzwiach i oknach, aktualizowane razem ze ścianą i jej otworami.
 cmd-desc-wood-frame = Tworzy szkielet drewniany zaznaczonych ścian (lub ścian aktywnego poziomu): słupki co 0,6 m między podwaliną a podwójnym oczepem, słupki podwójne, nadproża, podokienniki i krótkie słupki przy drzwiach i oknach, aktualizowane razem ze ścianą i jej otworami.
+
+# Connections
+category-connection = Połączenia
+tpl-type-connection = Połączenie
+connection-base-plate = Blacha podstawy
+connection-end-plate = Blacha czołowa
+connection-fin-plate = Blacha żeberkowa
+connection-timber-bolts = Połączenie śrubowe
+connection-hanger = Wieszak belki
+member-end-base = Podstawa

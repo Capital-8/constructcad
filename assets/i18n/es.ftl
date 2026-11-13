@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = Ningún muro recto sin entramado: seleccione muros o abr
 msg-walls-framed = { $walls } muros entramados con { $count } piezas.
 cmd-desc-light-steel-frame = Entrama los muros seleccionados (o los del nivel activo) en acero ligero: montantes conformados en frío cada 0,4 m entre canales, montantes dobles, dinteles, antepechos y montantes cortos en puertas y ventanas, que siguen al muro y sus aberturas.
 cmd-desc-wood-frame = Entrama los muros seleccionados (o los del nivel activo) en madera: montantes cada 0,6 m entre solera inferior y solera superior doble, montantes dobles, dinteles, antepechos y montantes cortos en puertas y ventanas, que siguen al muro y sus aberturas.
+
+# Connections
+category-connection = Uniones
+tpl-type-connection = Unión
+connection-base-plate = Placa base
+connection-end-plate = Placa de testa
+connection-fin-plate = Cartela de alma
+connection-timber-bolts = Unión atornillada
+connection-hanger = Colgador de viga
+member-end-base = Base

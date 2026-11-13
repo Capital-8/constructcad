@@ -1722,6 +1722,7 @@ impl<'a> Exporter<'a> {
             | TypeData::Shaft {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
+            | TypeData::Connection {}
             | TypeData::WallFraming {}
             | TypeData::Pad { .. } => {
                 return None;

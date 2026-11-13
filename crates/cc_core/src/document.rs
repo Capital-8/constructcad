@@ -253,6 +253,7 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.hosted_by(id).map(|e| e.id));
             pending.extend(self.project.railings_of(id).map(|e| e.id));
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
+            pending.extend(self.project.connections_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.pads_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.host_members_of(id));
             // A wall's framing goes with it (and the framing's members with the framing).

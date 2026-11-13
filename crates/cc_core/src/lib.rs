@@ -12,6 +12,7 @@ pub mod component;
 pub mod component_file;
 pub mod component_ref;
 pub mod component_script;
+pub mod connection;
 pub mod curtain;
 pub mod design_option;
 pub mod detail;
@@ -80,6 +81,7 @@ pub use component::{
 };
 pub use component_ref::{PlaneAxis, RefDimension, RefEqual, RefLine, RefPlane};
 pub use component_script::{Hotspot, HotspotShape, ParamChoice, ScriptEval, ScriptInput, ScriptOwner, ScriptResult};
+pub use connection::{Connection, ConnectionKind, ConnectionParams, MemberEnd};
 pub use design_option::{DesignOption, OptionSet};
 pub use detail::{DetailLine, DetailStyle, LineStyleDef, LineStyleRef};
 pub use detail_component::DetailComponent;

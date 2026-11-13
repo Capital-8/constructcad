@@ -3254,3 +3254,13 @@ msg-no-walls-to-frame = Keine geraden Wände ohne Ständerwerk: Wählen Sie Wän
 msg-walls-framed = { $walls } Wände mit { $count } Bauteilen ausgefacht.
 cmd-desc-light-steel-frame = Versieht die ausgewählten Wände (oder die der aktiven Ebene) mit Stahlleichtbau-Ständerwerk: kaltgeformte Ständer alle 0,4 m zwischen Schienen, Doppelständer, Stürze, Brüstungsriegel und kurze Ständer an Türen und Fenstern, die der Wand und ihren Öffnungen folgen.
 cmd-desc-wood-frame = Versieht die ausgewählten Wände (oder die der aktiven Ebene) mit Holzrahmenbau-Ständerwerk: Ständer alle 0,6 m zwischen Schwelle und doppeltem Rähm, Doppelständer, Stürze, Brüstungsriegel und kurze Ständer an Türen und Fenstern, die der Wand und ihren Öffnungen folgen.
+
+# Connections
+category-connection = Anschlüsse
+tpl-type-connection = Anschluss
+connection-base-plate = Fußplatte
+connection-end-plate = Stirnplatte
+connection-fin-plate = Fahnenblech
+connection-timber-bolts = Bolzenverbindung
+connection-hanger = Balkenschuh
+member-end-base = Fuß
