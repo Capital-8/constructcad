@@ -666,7 +666,7 @@ fn truss_posts_default_to_the_material_catalog_column_type() {
         .map(|i| i.as_u64().unwrap())
         .filter(|i| matches!(s.project().element(ElementId(*i)).unwrap().kind, ElementKind::Column(_)))
         .collect();
-    assert_eq!(posts.len(), 3);
+    assert_eq!(posts.len(), 5);
     for post in posts {
         let e = s.project().element(ElementId(post)).unwrap();
         let t = s.project().element_type(e.type_id).unwrap();

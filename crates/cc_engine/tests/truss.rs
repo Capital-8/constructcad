@@ -33,7 +33,7 @@ fn steel_defaults_make_the_catalog_types_once() {
     let depth = s.doc.undo_depth();
     let out = run(&mut s, "truss_create", json!({"start": SPAN[0], "end": SPAN[1], "height": 1.0, "panels": 4}));
     assert_eq!(s.doc.undo_depth(), depth + 1, "one undo step");
-    assert_eq!(out["members"].as_array().unwrap().len(), 15);
+    assert_eq!(out["members"].as_array().unwrap().len(), 17, "posts at both supports");
     assert_eq!(types_named(&s, "Ue 150x60x20x2,00"), 1, "the chords' beam type");
     assert_eq!(types_named(&s, "Ue 100x50x17x2,00"), 2, "the web's beam type and the posts' column type");
     run(&mut s, "truss_create", json!({"start": [0, 5], "end": [6, 5], "height": 1.0, "material": "steel"}));
@@ -115,7 +115,7 @@ fn deleting_a_member_detaches_it() {
     assert_eq!(derived(&mut s, host)["detached"], json!(1));
     run(&mut s, "element_set", json!({"id": host, "params": {"height": 1.5}}));
     assert!(s.project().element(ElementId(post)).is_none(), "not made again");
-    assert_eq!(derived(&mut s, host)["members"]["verticals"].as_array().unwrap().len(), 2);
+    assert_eq!(derived(&mut s, host)["members"]["verticals"].as_array().unwrap().len(), 4);
 }
 
 #[test]
@@ -129,4 +129,37 @@ fn ifc_export_writes_the_members_and_not_the_truss() {
     assert_eq!(text.matches("IFCBEAM(").count(), count(|k| matches!(k, ElementKind::Beam(_))));
     let uid = cc_ifc::guid::encode(p.element(ElementId(host)).unwrap().uid.0);
     assert!(!text.contains(&uid), "the truss itself is not exported");
+}
+
+#[test]
+fn a_default_flat_truss_is_braced_at_its_supports() {
+    let mut s = Session::default();
+    run(&mut s, "truss_create", json!({"start": SPAN[0], "end": SPAN[1], "height": 1.0, "bottom_offset": 2.0}));
+    let geom = s.geometry().clone();
+    let model = cc_geom::analytical::analytical_model(s.project(), &geom);
+    for x in [0.0, 6.0] {
+        let at = cc_core::DVec3::new(x, 0.0, 2.0);
+        let node = model.nodes.iter().position(|n| n.position.distance(at) < 1e-6);
+        let node = node.unwrap_or_else(|| panic!("a node at the support {x}"));
+        let bars = model.members.iter().filter(|m| m.start == node || m.end == node).count();
+        assert!(bars >= 2, "{bars} bar(s) at the support {x}");
+    }
+}
+
+#[test]
+fn a_truss_over_the_member_limit_is_refused() {
+    let mut s = Session::default();
+    let depth = s.doc.undo_depth();
+    let args = json!({"start": [0, 0], "end": [100, 0], "height": 2.0, "panels": 64, "copies": 200});
+    let err = s.execute("truss_create", args).unwrap_err();
+    assert!(err.message.contains("members"), "{err:?}");
+    assert_eq!(s.doc.undo_depth(), depth, "no undo step");
+    assert_eq!(trusses(&s), 0);
+    assert_eq!(types_named(&s, "Ue 150x60x20x2,00"), 0);
+    let host = id(&run(&mut s, "truss_create", json!({"start": SPAN[0], "end": SPAN[1], "height": 1.0})));
+    let depth = s.doc.undo_depth();
+    let set = json!({"id": host, "params": {"end": [100, 0], "panels": 64, "copies": 200}});
+    assert!(s.execute("element_set", set).is_err());
+    assert_eq!(s.doc.undo_depth(), depth);
+    assert!(s.execute("element_set", json!({"id": host, "params": {"base_offset": 1e300}})).is_err());
 }

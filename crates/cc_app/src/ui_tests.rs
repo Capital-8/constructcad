@@ -3833,7 +3833,7 @@ fn truss_properties_regenerate_it() {
     };
     // The path the palette's rows take.
     crate::truss_ui::edit(&mut state, host, "panels", |t| t.panels = 6);
-    assert_eq!(get(&state).members.len(), 12 + 5 + 6);
+    assert_eq!(get(&state).members.len(), 12 + 7 + 6);
     let post = get(&state).members.iter().find(|m| m.role.kind == cc_core::truss::TrussRoleKind::Vertical).unwrap().id;
     state.session.execute("elements_delete", serde_json::json!({"ids": [post.0]})).unwrap();
     assert_eq!(get(&state).detached.len(), 1);
@@ -3849,5 +3849,5 @@ fn truss_properties_regenerate_it() {
     harness.get_by_label(&t!("action-reset-members")).click();
     harness.run();
     let t = get(harness.state());
-    assert_eq!((t.members.len(), t.detached.len()), (23, 0));
+    assert_eq!((t.members.len(), t.detached.len()), (25, 0));
 }

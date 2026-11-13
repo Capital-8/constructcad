@@ -17,7 +17,8 @@ use glam::DVec2;
 use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
 
-/// Most members one truss (all copies) makes; the layout stops there.
+/// Most members one truss (all copies) may make; [`Truss::check`] refuses
+/// a truss whose layout would make more.
 pub const MAX_MEMBERS: usize = 4000;
 /// A vertical shorter than this is skipped, and so is a diagonal whose ends
 /// differ less in height (it would lie on the bottom chord), meters.
@@ -28,6 +29,8 @@ pub const HEIGHT: RangeInclusive<f64> = 0.1..=20.0;
 pub const PANELS: RangeInclusive<u32> = 2..=64;
 pub const COPIES: RangeInclusive<u32> = 1..=200;
 pub const SPACING: RangeInclusive<f64> = 0.3..=20.0;
+/// The bottom chord's axis above the level, meters.
+pub const BASE_OFFSET: RangeInclusive<f64> = -1e4..=1e4;
 
 pub const DEFAULT_LENGTH: f64 = 6.0;
 pub const DEFAULT_HEIGHT: f64 = 1.0;
@@ -234,6 +237,8 @@ pub fn host_type(id: ElementTypeId, name: String) -> ElementType {
 
 /// A panel point: its index along the span and whether it is on the top chord.
 type Node = (usize, bool);
+/// A diagonal between two panel points.
+type Diagonal = (Node, Node);
 
 /// The panel point nearest `n / part`, kept off the supports and mid-span;
 /// `None` when the half span has no inner point.
@@ -302,19 +307,13 @@ fn member(a: DVec2, za: f64, b: DVec2, zb: f64) -> Beam {
     beam
 }
 
-/// Members collected by a layout, stopping at [`MAX_MEMBERS`].
+/// Members collected by a layout.
 struct Members(Vec<(TrussRole, ElementTypeId, ElementKind)>);
 
 impl Members {
-    fn full(&self) -> bool {
-        self.0.len() >= MAX_MEMBERS
-    }
-
     fn push(&mut self, kind: TrussRoleKind, copy: u32, index: usize, type_id: ElementTypeId, element: ElementKind) {
         let (Ok(copy), Ok(index)) = (u16::try_from(copy), u16::try_from(index)) else { return };
-        if !self.full() {
-            self.0.push((TrussRole { kind, copy, index }, type_id, element));
-        }
+        self.0.push((TrussRole { kind, copy, index }, type_id, element));
     }
 }
 
@@ -395,6 +394,7 @@ impl Truss {
         if !(self.start.is_finite() && self.end.is_finite() && self.base_offset.is_finite()) {
             return Err("start, end and base_offset must be finite numbers".into());
         }
+        within("base_offset", self.base_offset, &BASE_OFFSET)?;
         within("the span length", self.length(), &LENGTH)?;
         within("height", self.height, &HEIGHT)?;
         within("spacing", self.spacing, &SPACING)?;
@@ -407,7 +407,44 @@ impl Truss {
         if self.shape == TrussShape::Gable && self.panels % 2 == 1 {
             return Err("a gable truss needs an even number of panels".into());
         }
+        let total = self.members_per_copy() * self.copies as usize;
+        if total > MAX_MEMBERS {
+            return Err(format!(
+                "the trusses would have {total} members, more than {MAX_MEMBERS}: use fewer copies or panels"
+            ));
+        }
         Ok(())
+    }
+
+    /// The panel points with a vertical and the diagonals (with their index
+    /// in the pattern) of one copy, leaving out what is too short to make: a
+    /// vertical lower than [`MIN_VERTICAL`], a diagonal lying on the bottom
+    /// chord. A flat truss gets posts at both supports, a mono truss at its
+    /// high end.
+    fn web_kept(&self) -> (Vec<usize>, Vec<(usize, Diagonal)>) {
+        let n = self.panels as usize;
+        let (mut posts, diagonals) = web(self.pattern_used(), n);
+        match self.shape {
+            TrussShape::Flat => {
+                posts.retain(|&i| i != 0 && i != n);
+                posts.insert(0, 0);
+                posts.push(n);
+            }
+            TrussShape::Mono if !posts.contains(&n) => posts.push(n),
+            _ => {}
+        }
+        let x = |i: usize| self.length() * i as f64 / n.max(1) as f64;
+        let z = |(i, top): Node| if top { self.rise(x(i)) } else { 0.0 };
+        posts.retain(|&i| self.rise(x(i)) >= MIN_VERTICAL);
+        let diagonals =
+            diagonals.into_iter().enumerate().filter(|&(_, (a, b))| (z(a) - z(b)).abs() >= MIN_VERTICAL).collect();
+        (posts, diagonals)
+    }
+
+    /// How many members one copy makes.
+    pub fn members_per_copy(&self) -> usize {
+        let (posts, diagonals) = self.web_kept();
+        2 * self.panels as usize + posts.len() + diagonals.len()
     }
 
     /// Whether the chord and web types are beam types and the post type a column type.
@@ -434,7 +471,7 @@ impl Truss {
             n += 1;
         }
         n += reset(&mut self.height, &HEIGHT, DEFAULT_HEIGHT) + reset(&mut self.spacing, &SPACING, DEFAULT_SPACING);
-        if !self.base_offset.is_finite() {
+        if !(self.base_offset.is_finite() && BASE_OFFSET.contains(&self.base_offset)) {
             self.base_offset = 0.0;
             n += 1;
         }
@@ -448,6 +485,11 @@ impl Truss {
         }
         if !COPIES.contains(&self.copies) {
             self.copies = 1;
+            n += 1;
+        }
+        let per_copy = self.members_per_copy().max(1);
+        if per_copy * self.copies as usize > MAX_MEMBERS {
+            self.copies = u32::try_from(MAX_MEMBERS / per_copy).unwrap_or(1).max(1);
             n += 1;
         }
         n
@@ -472,7 +514,8 @@ impl Truss {
     }
 
     /// Its members: role, type and element, copy by copy (chords, verticals,
-    /// diagonals), at most [`MAX_MEMBERS`]. Empty when a number is out of range.
+    /// diagonals). Empty when a number is out of range or the members would
+    /// be more than [`MAX_MEMBERS`] (see [`Truss::check`]).
     pub fn layout(&self) -> Vec<(TrussRole, ElementTypeId, ElementKind)> {
         let mut out = Members(Vec::new());
         if self.check().is_err() {
@@ -480,18 +523,11 @@ impl Truss {
         }
         let n = self.panels as usize;
         let (l, dir, left) = (self.length(), self.direction(), self.left());
-        let (mut posts, diagonals) = web(self.pattern_used(), n);
-        // A mono truss closes at its high end.
-        if self.shape == TrussShape::Mono && !posts.contains(&n) {
-            posts.push(n);
-        }
+        let (posts, diagonals) = self.web_kept();
         let x = |i: usize| l * i as f64 / n as f64;
         let z = |(i, top): Node| self.base_offset + if top { self.rise(x(i)) } else { 0.0 };
         let angle = dir.to_angle().to_degrees();
         for k in 0..self.copies {
-            if out.full() {
-                break;
-            }
             let origin = self.start + left * (f64::from(k) * self.spacing);
             let at = |i: usize| origin + dir * x(i);
             for i in 0..n {
@@ -501,24 +537,17 @@ impl Truss {
                 out.push(TrussRoleKind::BottomChord, k, i, self.bottom_chord_type, ElementKind::Beam(bottom));
             }
             for &i in &posts {
-                let height = self.rise(x(i));
-                if height < MIN_VERTICAL {
-                    continue;
-                }
                 let column = Column {
                     position: at(i),
                     rotation_deg: angle,
                     base_offset: self.base_offset,
-                    height,
+                    height: self.rise(x(i)),
                     top: WallTop::Unconnected,
                     structural: true,
                 };
                 out.push(TrussRoleKind::Vertical, k, i, self.post_type, ElementKind::Column(column));
             }
-            for (j, &(a, b)) in diagonals.iter().enumerate() {
-                if (z(a) - z(b)).abs() < MIN_VERTICAL {
-                    continue;
-                }
+            for &(j, (a, b)) in &diagonals {
                 let beam = member(at(a.0), z(a), at(b.0), z(b));
                 out.push(TrussRoleKind::Diagonal, k, j, self.web_type, ElementKind::Beam(beam));
             }
@@ -664,9 +693,9 @@ pub(crate) mod tests {
         let mut t = truss(&doc, host);
         // [top chords, bottom chords, diagonals, verticals], 4 panels.
         let cases = [
-            (TrussShape::Flat, TrussPattern::Pratt, [4, 4, 4, 3]),
-            (TrussShape::Flat, TrussPattern::Howe, [4, 4, 4, 3]),
-            (TrussShape::Flat, TrussPattern::Warren, [4, 4, 4, 0]),
+            (TrussShape::Flat, TrussPattern::Pratt, [4, 4, 4, 5]),
+            (TrussShape::Flat, TrussPattern::Howe, [4, 4, 4, 5]),
+            (TrussShape::Flat, TrussPattern::Warren, [4, 4, 4, 2]),
             // On a gable the end panels' Pratt diagonals would lie on the bottom chord.
             (TrussShape::Gable, TrussPattern::Pratt, [4, 4, 2, 3]),
             (TrussShape::Gable, TrussPattern::Howe, [4, 4, 4, 3]),
@@ -674,7 +703,7 @@ pub(crate) mod tests {
             // A mono truss gets its high end post; its first Pratt diagonal is skipped.
             (TrussShape::Mono, TrussPattern::Pratt, [4, 4, 3, 4]),
             // Not a gable: king post falls back to Pratt.
-            (TrussShape::Flat, TrussPattern::KingPost, [4, 4, 4, 3]),
+            (TrussShape::Flat, TrussPattern::KingPost, [4, 4, 4, 5]),
             // Fink needs 6 panels: Pratt on a 4-panel gable.
             (TrussShape::Gable, TrussPattern::Fink, [4, 4, 2, 3]),
         ];
@@ -688,9 +717,9 @@ pub(crate) mod tests {
             t.pattern = pattern;
             assert_eq!(counts(&t), want, "{pattern:?}");
         }
-        // A flat Pratt truss of n panels: 2n chords, n − 1 verticals, n diagonals.
+        // A flat Pratt truss of n panels: 2n chords, n + 1 verticals (posts at the supports), n diagonals.
         (t.shape, t.pattern, t.panels) = (TrussShape::Flat, TrussPattern::Pratt, 10);
-        assert_eq!(counts(&t), [10, 10, 10, 9]);
+        assert_eq!(counts(&t), [10, 10, 10, 11]);
     }
 
     #[test]
@@ -746,7 +775,7 @@ pub(crate) mod tests {
         let (doc, host) = site_with(|t| (t.copies, t.spacing) = (3, 2.0));
         let t = truss(&doc, host);
         let l = t.layout();
-        assert_eq!(l.len(), 3 * 15);
+        assert_eq!(l.len(), 3 * 17);
         let start = |copy| {
             l.iter()
                 .find(|(r, _, _)| *r == TrussRole { kind: TrussRoleKind::BottomChord, copy, index: 0 })
@@ -787,11 +816,58 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn layouts_stop_at_the_limit() {
-        let (doc, host) = site_with(|t| {
-            (t.end, t.panels, t.copies) = (DVec2::new(100.0, 0.0), 64, 200);
-        });
-        assert_eq!(truss(&doc, host).layout().len(), MAX_MEMBERS);
+    fn a_truss_over_the_member_limit_is_refused_whole() {
+        let (doc, host) = site_with(|_| {});
+        let mut t = truss(&doc, host);
+        (t.end, t.panels, t.copies) = (DVec2::new(100.0, 0.0), 64, 200);
+        let per_copy = t.members_per_copy();
+        assert!(per_copy * 200 > MAX_MEMBERS);
+        assert!(t.check().is_err_and(|e| e.contains("members")));
+        assert!(t.layout().is_empty(), "never cut short mid-copy");
+        // The count is exact: as many copies as fit lay out whole.
+        t.copies = u32::try_from(MAX_MEMBERS / per_copy).expect("fits");
+        assert!(t.check().is_ok());
+        assert_eq!(t.layout().len(), per_copy * t.copies as usize);
+        // Repair keeps the copies that fit.
+        t.copies = 200;
+        assert_eq!(t.reset_out_of_range(), 1);
+        assert_eq!(t.copies as usize, MAX_MEMBERS / per_copy);
+        // Exact for every shape and pattern too.
+        for shape in TrussShape::ALL {
+            for pattern in TrussPattern::ALL {
+                (t.shape, t.pattern, t.copies, t.panels) = (shape, pattern, 2, 6);
+                assert_eq!(t.layout().len(), 2 * t.members_per_copy(), "{shape:?} {pattern:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_far_base_offset_is_refused_and_repaired() {
+        let (doc, host) = site_with(|_| {});
+        let mut t = truss(&doc, host);
+        t.base_offset = 1e300;
+        assert!(t.check().is_err());
+        assert_eq!(t.reset_out_of_range(), 1);
+        assert_eq!(t.base_offset, 0.0);
+    }
+
+    #[test]
+    fn a_flat_truss_has_posts_at_both_supports() {
+        let (doc, host) = site_with(|_| {});
+        let mut t = truss(&doc, host);
+        for pattern in [TrussPattern::Pratt, TrussPattern::Howe, TrussPattern::Warren] {
+            for panels in [3, 4, 5] {
+                (t.pattern, t.panels) = (pattern, panels);
+                let posts: Vec<u16> = t
+                    .layout()
+                    .iter()
+                    .filter(|(r, _, _)| r.kind == TrussRoleKind::Vertical)
+                    .map(|(r, _, _)| r.index)
+                    .collect();
+                let n = u16::try_from(panels).expect("small");
+                assert!(posts.contains(&0) && posts.contains(&n), "{pattern:?} {panels}: {posts:?}");
+            }
+        }
     }
 
     fn member(t: &Truss, kind: TrussRoleKind, copy: u16, index: u16) -> ElementId {
@@ -811,7 +887,7 @@ pub(crate) mod tests {
     fn a_new_truss_gets_its_members() {
         let (doc, host) = site_with(|_| {});
         let t = truss(&doc, host);
-        assert_eq!(t.members.len(), 15);
+        assert_eq!(t.members.len(), 17);
         let level = doc.project.element(host).map(|e| e.level);
         for m in &t.members {
             let e = doc.project.element(m.id).expect("the member exists");
@@ -829,7 +905,7 @@ pub(crate) mod tests {
         let first = member(&before, TrussRoleKind::BottomChord, 0, 0);
         set(&mut doc, host, |t| t.panels = 6);
         let after = truss(&doc, host);
-        assert_eq!(after.members.len(), 12 + 5 + 6);
+        assert_eq!(after.members.len(), 12 + 7 + 6);
         assert_eq!(member(&after, TrussRoleKind::BottomChord, 0, 0), first, "same id");
         let Some(ElementKind::Beam(b)) = doc.project.element(first).map(|e| &e.kind) else { panic!("a beam") };
         assert!(close(b.end, DVec2::new(1.0, 0.0)), "now a 1 m panel");
@@ -848,14 +924,14 @@ pub(crate) mod tests {
         set(&mut doc, host, |t| t.height = 2.0);
         let Some(ElementKind::Column(c)) = doc.project.element(post).map(|e| &e.kind) else { panic!("a column") };
         assert!(close(c.position, DVec2::new(3.0, 1.0)) && (c.height - 1.0).abs() < 1e-9, "where the user left it");
-        assert_eq!(truss(&doc, host).members.len(), 14, "and not made again");
+        assert_eq!(truss(&doc, host).members.len(), 16, "and not made again");
     }
 
     #[test]
     fn deleting_the_truss_deletes_its_members() {
         let (mut doc, host) = site_with(|t| t.copies = 2);
         let ids = doc.project.host_members_of(host);
-        assert_eq!(ids.len(), 30);
+        assert_eq!(ids.len(), 34);
         doc.edit("delete", |e| e.remove_element(host));
         assert!(ids.iter().all(|id| doc.project.element(*id).is_none()));
         assert!(doc.undo());
@@ -874,9 +950,9 @@ pub(crate) mod tests {
             doc.edit("copy", |e| e.copy_elements(&selection, &[PlanTransform::translate(DVec2::new(0.0, 10.0))]));
         assert_eq!(copies.len(), 1, "only the truss is copied");
         let copy = truss(&doc, copies[0]);
-        assert_eq!(copy.members.len(), 15);
+        assert_eq!(copy.members.len(), 17);
         assert!(copy.members.iter().all(|m| !ids.contains(&m.id)));
-        assert_eq!(doc.project.elements.len(), before + 16);
+        assert_eq!(doc.project.elements.len(), before + 18);
         assert_eq!(truss(&doc, host), original);
         assert!(doc.undo());
         assert_eq!(doc.project.elements.len(), before);

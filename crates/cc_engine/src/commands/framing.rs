@@ -204,7 +204,7 @@ pub struct TrussCreate {
     /// Distance between copies, to the left of start → end, meters, 0.3 to 20 (default 1.5).
     #[serde(default)]
     pub spacing: Option<f64>,
-    /// `steel` (default) or `timber`: the catalog rows of the default types.
+    /// `steel` (default) or `timber`: the catalog rows of the types not given (a given `chord_type` does not change it, so give `material` with a timber chord).
     #[serde(default)]
     pub material: Option<String>,
 }

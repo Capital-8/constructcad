@@ -755,7 +755,7 @@ No parameters.
 | `chord_type` | id or name | optional | Beam type of both chords (default: the material's catalog chord). |
 | `copies` | integer | optional | How many trusses, 1 to 200 (default 1). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
-| `material` | string | optional | `steel` (default) or `timber`: the catalog rows of the default types. |
+| `material` | string | optional | `steel` (default) or `timber`: the catalog rows of the types not given (a given `chord_type` does not change it, so give `material` with a timber chord). |
 | `panels` | integer | optional | Bottom-chord panels, 2 to 64, even on a gable (default: about one per 1.5 m). |
 | `pattern` | string | optional | `pratt` (default), `howe`, `warren`, `kingpost`, `queenpost` or `fink`. |
 | `post_type` | id or name | optional | Column type of the verticals (default: a column type of the material's catalog web row). |

@@ -52,7 +52,7 @@ me to make the design decisions alone.
   - Verticals are columns of `post_type`, from the bottom chord axis to
     the top chord axis. A vertical shorter than 0.05 m is skipped.
   - Each copy is offset along the left normal by `k * spacing`.
-  - At most `MAX_MEMBERS = 4000`.
+  - At most `MAX_MEMBERS = 4000`; a truss over it is refused (see the amendment below).
 - **Material defaults** (the material comes from the Structure tab's
   selector, or the command's `material`):
 
@@ -138,7 +138,7 @@ each copy. That is enough to pick and select it.
   the host, copy, undo.
 - **Truss layout**, per pattern and shape:
   - member counts (for example, a Pratt flat truss with n panels has
-    2n chords, n−1 verticals and n diagonals);
+    2n chords, n+1 verticals (see the amendment below) and n diagonals);
   - the gable apex height;
   - the King-post member set with 4 panels;
   - an odd panel count on a gable is refused;
@@ -163,6 +163,15 @@ each copy. That is enough to pick and select it.
 - **Verticals.**
   - Pratt and Howe get verticals at the inner panel points.
   - A mono truss also gets a post at its high end.
+- **End verticals on flat trusses (amended after the final review).** A
+  flat truss gets posts at both supports (panel points 0 and n) for every
+  pattern, Warren with an odd panel count included, so each support node
+  is triangulated; without them the default flat Pratt's supports were
+  reached by the bottom chord alone. A flat Pratt of n panels has n + 1
+  verticals. Mono and gable trusses need none where the chords meet.
+  `Truss::check` refuses a truss whose full layout (all copies) would
+  exceed `MAX_MEMBERS`, so a layout is never cut short, and bounds
+  `base_offset` to ±10 km.
 - **Skipped diagonals.** A diagonal whose two ends differ in height by
   less than 0.05 m is skipped.
 - **Gable-only patterns.** King post, queen post and Fink need a gable

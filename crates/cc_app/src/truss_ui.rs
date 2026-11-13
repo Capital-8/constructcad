@@ -83,6 +83,9 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, truss: &Truss) {
         row(ui, &t!("prop-shape"), |ui| combo(ui, &format!("truss-shape-{}", id.0), &mut t.shape, &shapes()));
         if t.shape != shape {
             t.panels = even_on_gable(t.shape, t.panels, t.panels);
+            if !patterns_for(t.shape).contains(&t.pattern) {
+                t.pattern = TrussPattern::Pratt;
+            }
             done = true;
         }
         let pattern = t.pattern;
@@ -96,7 +99,7 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, truss: &Truss) {
         done |=
             finished(&row(ui, &t!("prop-truss-panels"), |ui| ui.add(DragValue::new(&mut t.panels).range(tr::PANELS))));
         t.panels = even_on_gable(t.shape, t.panels, panels);
-        done |= length(ui, &t!("prop-base-offset"), &mut t.base_offset, -1e4..=1e4);
+        done |= length(ui, &t!("prop-base-offset"), &mut t.base_offset, tr::BASE_OFFSET);
         readonly_row(ui, &t!("prop-length"), cc_views::format::length(truss.length()));
         done |=
             finished(&row(ui, &t!("prop-truss-copies"), |ui| ui.add(DragValue::new(&mut t.copies).range(tr::COPIES))));

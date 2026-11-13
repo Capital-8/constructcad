@@ -287,7 +287,9 @@ impl Command for TypeDelete {
         }
         let host_use = p.elements.values().filter_map(|e| e.member_host()).any(|h| h.member_types().contains(&id));
         if host_use {
-            return Err(EngineError::rejected("member hosts (steel buildings) use this type for their members"));
+            return Err(EngineError::rejected(
+                "member hosts (steel buildings, trusses) use this type for their members",
+            ));
         }
         // Sheets may go without a title block, so the last one may go too.
         let title_block = category == cc_core::Category::TitleBlock;
