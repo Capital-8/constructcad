@@ -178,6 +178,7 @@ fn summable(field: ScheduleField) -> bool {
             | ScheduleField::CutVolume
             | ScheduleField::FillVolume
             | ScheduleField::Cost
+            | ScheduleField::PileCount
     )
 }
 
@@ -245,6 +246,14 @@ fn profile_text(def: &cc_core::structural_profile::ProfileDef) -> String {
         P::Angle { h, b, t, .. } => format!("L {} × {} × {}", l(b), l(h), l(t)),
         P::RectTube { h, b, t, .. } => format!("□ {} × {} × {}", l(b), l(h), l(t)),
         _ => def.name.clone(),
+    }
+}
+
+/// A pile's section as text: Ø and the diameter, or the square's sides.
+fn pile_section_text(section: &cc_core::pile::PileSection) -> String {
+    match *section {
+        cc_core::pile::PileSection::Round { diameter } => format!("Ø {}", format::length(diameter)),
+        cc_core::pile::PileSection::Square { side } => format!("{} × {}", format::length(side), format::length(side)),
     }
 }
 
@@ -335,6 +344,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             ElementKind::Pipe(s) | ElementKind::Conduit(s) | ElementKind::CableTray(s) => Value::Length(s.length()),
             ElementKind::LightningConductor(c) => Value::Length(c.run.length()),
             ElementKind::Sweep(sw) => Value::Length(sw.length()),
+            ElementKind::Pile(p) => Value::Length(p.length()),
             _ => Value::Missing,
         },
         F::Height => match (&e.kind, ty.map(|t| &t.data)) {
@@ -413,6 +423,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
                 ElementKind::Rebar(r) => Some(r.host),
                 ElementKind::Valve(v) => Some(v.host),
                 ElementKind::Connection(c) => Some(c.member),
+                ElementKind::Pile(p) => p.cap.map(|c| c.cap),
                 _ => None,
             })
             .and_then(|h| project.element(h))
@@ -443,6 +454,22 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             Some(TypeData::Foundation { kind: cc_core::FoundationKind::Strip, width, .. }) => {
                 Value::Text(format::length(*width))
             }
+            Some(data @ TypeData::Foundation { kind: cc_core::FoundationKind::PileCap, .. }) => {
+                match cc_core::pile::cap_of_type(data).map(|(cap, _)| cap.outline()) {
+                    Some(cc_core::pile::CapOutline::Disk { radius }) => {
+                        Value::Text(format!("Ø {}", format::length(2.0 * radius)))
+                    }
+                    Some(cc_core::pile::CapOutline::Ring { inner, outer }) => {
+                        Value::Text(format!("Ø {} / {}", format::length(2.0 * outer), format::length(2.0 * inner)))
+                    }
+                    Some(outline) => {
+                        let (lo, hi) = outline.bounds();
+                        Value::Text(format!("{} × {}", format::length(hi.x - lo.x), format::length(hi.y - lo.y)))
+                    }
+                    None => Value::Missing,
+                }
+            }
+            Some(TypeData::Pile { section, .. }) => Value::Text(pile_section_text(section)),
             _ => Value::Missing,
         },
         F::Profile => ty
@@ -463,9 +490,26 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
                 Some(TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. }) => {
                     Value::Text(format!("Ø {}", format::size(*diameter, format::MetricSize::Mm(0))))
                 }
+                // A pile's diameter, or a square pile's side.
+                Some(TypeData::Pile { section, .. }) => Value::Length(section.size()),
                 _ => Value::Missing,
             }
         }
+        F::CutOff | F::Toe => match &e.kind {
+            ElementKind::Pile(p) => {
+                let offset = if field == F::CutOff { p.cut_off } else { p.toe };
+                Value::Length(project.level_elevation(e.level) + offset)
+            }
+            _ => Value::Missing,
+        },
+        F::PileKind => match ty.map(|t| &t.data) {
+            Some(TypeData::Pile { kind, .. }) => Value::Key(kind.key()),
+            _ => Value::Missing,
+        },
+        F::PileCount => match &e.kind {
+            ElementKind::Foundation(_) if project.pile_cap(e).is_some() => Value::Count(project.piles_of(e.id).count()),
+            _ => Value::Missing,
+        },
         F::System => {
             // Valves are in their pipe's system.
             let systems = valve_pipe(project, e).unwrap_or(e).systems();

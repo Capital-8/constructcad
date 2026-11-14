@@ -402,6 +402,12 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         derived.insert("cables".into(), json!(cables));
         derived.insert("cable_length".into(), json!(length));
     }
+    super::piles::derived(p, &e, &mut derived);
+    // The pile caps a beam may be framed into.
+    let caps: std::collections::BTreeSet<ElementId> = match &e.kind {
+        ElementKind::Beam(_) => p.elements.values().filter(|x| p.pile_cap(x).is_some()).map(|x| x.id).collect(),
+        _ => Default::default(),
+    };
     let geom = s.element_geometry(id);
     if geom.solids_of(id).next().is_some() {
         derived.insert("volume".into(), json!(geom.volume(id)));
@@ -427,6 +433,8 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         let framing = |end: cc_geom::BeamEnd| match end {
             cc_geom::BeamEnd::Free => json!("free"),
             cc_geom::BeamEnd::Beam => json!("beam"),
+            // A tie beam framed into a pile cap's face.
+            cc_geom::BeamEnd::Column(c) if caps.contains(&c) => json!({"pile_cap": c.0}),
             cc_geom::BeamEnd::Column(c) => json!({"column": c.0}),
         };
         derived.insert("cut_length".into(), json!(beam.cut_length()));

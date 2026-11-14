@@ -399,6 +399,8 @@ impl Tool {
             | Category::Bracing
             | Category::Connection
             | Category::WallFraming => return None,
+            // Made with their caps or by commands.
+            Category::Pile => return None,
         })
     }
 }

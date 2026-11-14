@@ -149,6 +149,22 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
                     }
                 }
             }
+            TypeData::Pile { section, .. } => {
+                // The pile's section in plan.
+                let size = section.size();
+                let c = o + DVec2::new(size * 0.5, 0.0);
+                let outline: Vec<DVec2> = match section {
+                    cc_core::pile::PileSection::Round { .. } => (0..48)
+                        .map(|i| c + DVec2::from_angle(i as f64 / 48.0 * std::f64::consts::TAU) * (size * 0.5))
+                        .collect(),
+                    cc_core::pile::PileSection::Square { .. } => [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
+                        .iter()
+                        .map(|&(x, y)| c + DVec2::new(x, y) * size)
+                        .collect(),
+                };
+                d.fill(outline.clone(), POCHE, None);
+                d.polyline(&outline, true, LineStyle::Cut, None);
+            }
             TypeData::Rebar { .. } => {
                 // A bar, drawn as a heavy line.
                 d.line(o, o + DVec2::new(sample, 0.0), LineStyle::Cut, None);

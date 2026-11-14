@@ -348,6 +348,11 @@ struct Importer<'a> {
     /// Roofs imported with their framing restored (from [`crate::export::ROOFING_PSET`]):
     /// the members aggregated in them are derived again, not imported.
     framed_roofs: std::collections::HashSet<u32>,
+    /// Piles this program wrote under a cap: the pile, the cap's GlobalId and
+    /// the pile's place in its layout (linked when the import ends).
+    cap_piles: Vec<(ElementId, String, u32)>,
+    /// Pile cap types and the name of their piles' type (resolved when the import ends).
+    cap_types: Vec<(ElementTypeId, String)>,
     /// Curtain walls imported as such: their plates and members come in with them.
     curtain_walls: std::collections::HashSet<u32>,
     /// Imported elements and their IFC instances (their phases are read at the end).
@@ -474,6 +479,8 @@ impl<'a> Importer<'a> {
             walls: HashMap::new(),
             has_parts: HashMap::new(),
             framed_roofs: Default::default(),
+            cap_piles: Vec::new(),
+            cap_types: Vec::new(),
             curtain_walls: Default::default(),
             products: Vec::new(),
             added_types: HashMap::new(),
@@ -519,6 +526,8 @@ impl<'a> Importer<'a> {
                 "IFCCOLUMN" | "IFCCOLUMNSTANDARDCASE" => self.import_column(id, e),
                 "IFCBEAM" | "IFCBEAMSTANDARDCASE" => self.import_beam(id, e),
                 "IFCREINFORCINGBAR" => self.import_bar(id, e),
+                "IFCFOOTING" => self.import_pile_cap(id, e),
+                "IFCPILE" => self.import_pile(id, e),
                 // The framing of a roof whose type now draws it again.
                 "IFCMEMBER" if self.parent.get(&id).is_some_and(|r| self.framed_roofs.contains(r)) => continue,
                 "IFCSPACE" => {
@@ -545,6 +554,182 @@ impl<'a> Importer<'a> {
             self.or_generic(id, e, ok);
         }
         self.finish();
+    }
+
+    /// A pile cap this program wrote, with its placement and layout in
+    /// [`crate::export::PILE_CAP_PSET`], when its body still stands there:
+    /// the native cap, its top at the body's top and its type (found or made)
+    /// of that thickness and layout. Its piles come in on their own and are
+    /// linked to it when the import ends. Caps of other programs come in as
+    /// components.
+    fn import_pile_cap(&mut self, id: u32, e: &Entity) -> bool {
+        if e.arg(8).as_enum() != Some("PILE_CAP") || self.has_openings(id) {
+            return false;
+        }
+        let set = |n: &str| n == crate::export::PILE_CAP_PSET;
+        let first = |name: &str| self.pset_texts(id, &set, name).first().map(|s| s.to_string());
+        let (Some(placement), Some(cap)) = (first("Placement"), first("Cap")) else { return false };
+        let pile_type = first("PileType").unwrap_or_default();
+        let Some(([x, y], rotation_deg)) = cc_core::curtain::from_text::<([f64; 2], f64)>(&placement) else {
+            return false;
+        };
+        let Some((thickness, mut layout)) = cc_core::curtain::from_text::<(f64, cc_core::pile::PileCap)>(&cap) else {
+            return false;
+        };
+        let position = DVec2::new(x, y);
+        layout.pile_type = None;
+        let valid = position.is_finite()
+            && rotation_deg.is_finite()
+            && thickness.is_finite()
+            && thickness > 0.0
+            && thickness <= cc_core::StripHaunch::MAX_HEIGHT
+            && layout.clone().repair() == 0;
+        if !valid {
+            return false;
+        }
+        // The body must still stand where the cap was placed.
+        let (_, body) = self.product(e);
+        let Some((_, z1)) = body.z_range() else { return false };
+        let (lo, hi) = body
+            .points()
+            .fold((DVec2::INFINITY, DVec2::NEG_INFINITY), |(lo, hi), p| (lo.min(p.truncate()), hi.max(p.truncate())));
+        let tol = 0.01;
+        if !(z1.is_finite() && position.cmpge(lo - tol).all() && position.cmple(hi + tol).all()) {
+            return false;
+        }
+        let (level, elevation) = self.level_for(id, z1);
+        let name = self.type_name(id, e);
+        let material = self.main_material(id, e);
+        let uid = self.type_uid(id);
+        let (low, high) = layout.outline().bounds();
+        let size = high - low;
+        let wanted = layout.clone();
+        let same = move |d: &TypeData| {
+            matches!(d, TypeData::Foundation { kind: FoundationKind::PileCap, thickness: t, pile_cap: Some(c), .. }
+                if (t - thickness).abs() < TYPE_TOL
+                    && cc_core::pile::PileCap { pile_type: None, ..c.clone() } == wanted)
+        };
+        let fallback = format!("{} x {:.0} cm", layout.layout.count(), thickness * 100.0);
+        let type_id = self.find_or_add_type(Category::Foundation, name, fallback, uid, same, || TypeData::Foundation {
+            kind: FoundationKind::PileCap,
+            width: size.x,
+            length: size.y,
+            thickness,
+            material,
+            haunch: None,
+            pile_cap: Some(layout),
+        });
+        if !pile_type.trim().is_empty() {
+            self.cap_types.push((type_id, pile_type));
+        }
+        let foundation = Foundation::new(FoundationShape::Pad { position, rotation_deg }, z1 - elevation);
+        self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Foundation(foundation));
+        true
+    }
+
+    /// A pile whose body is a vertical extrusion of a circle or a square: a
+    /// native pile, its head and toe at the body's top and bottom, of a pile
+    /// type (found or made) of that section and kind. One this program wrote
+    /// keeps its kind and embedment from [`crate::export::PILE_PSET`] and is
+    /// linked to its cap when the import ends; another program's takes its
+    /// kind from its predefined and construction types. Other piles come in
+    /// as components.
+    fn import_pile(&mut self, id: u32, e: &Entity) -> bool {
+        use cc_core::pile::{Pile, PileKind, PileSection};
+        if self.has_openings(id) {
+            return false;
+        }
+        let (_, body) = self.product(e);
+        let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical()).cloned() else { return false };
+        let Some((z0, z1)) = body.z_range() else { return false };
+        // The profile plane seen from above, unscaled, so the section is the profile's.
+        let (xw, yw) = (ex.plane_vector(DVec2::X).truncate(), ex.plane_vector(DVec2::Y).truncate());
+        let rigid = (xw.length() - 1.0).abs() < 1e-6 && (yw.length() - 1.0).abs() < 1e-6 && xw.dot(yw).abs() < 1e-6;
+        if !(rigid && xw.perp_dot(yw) > 0.0) {
+            return false;
+        }
+        let Some(read) = self.read_section(id, &ex) else { return false };
+        let center = ex.plane_point(read.center).truncate();
+        let turn = xw.y.atan2(xw.x).to_degrees() + read.rotation_deg;
+        let (section, rotation_deg) = match read.shape {
+            ProfileShape::Round { d } => (PileSection::Round { diameter: d }, 0.0),
+            ProfileShape::Rect { b, h, chamfer } if chamfer == 0.0 && (b - h).abs() <= 1e-6 * b.max(1.0) => {
+                (PileSection::Square { side: b }, turn)
+            }
+            _ => return false,
+        };
+        if !(section.is_valid() && cc_core::pile::length_ok(z1 - z0) && center.is_finite() && rotation_deg.is_finite())
+        {
+            return false;
+        }
+        let own = |n: &str| n == crate::export::PILE_PSET;
+        let first = |name: &str| self.pset_texts(id, &own, name).first().map(|s| s.to_string());
+        let kind = first("Kind").and_then(|k| PileKind::from_code(&k)).unwrap_or_else(|| {
+            let object_type = e.arg(4).as_str().unwrap_or_default().to_ascii_uppercase();
+            match (e.arg(8).as_enum(), e.arg(9).as_enum()) {
+                (Some("BORED"), _) => PileKind::Bored,
+                (Some("DRIVEN"), Some("PREFAB_STEEL")) => PileKind::Steel,
+                (Some("DRIVEN"), _) => PileKind::PrecastDriven,
+                (Some("USERDEFINED"), _) if object_type.contains("AUGER") => PileKind::ContinuousFlightAuger,
+                (Some("USERDEFINED"), _) if object_type.contains("MICRO") => PileKind::Micro,
+                _ => PileKind::Other,
+            }
+        });
+        let embedment = first("Embedment")
+            .and_then(|t| cc_core::curtain::from_text::<f64>(&t))
+            .filter(|v| v.is_finite() && (0.0..=cc_core::pile::MAX_EMBEDMENT).contains(v))
+            .unwrap_or(0.0);
+        let cap = first("Cap").zip(first("CapIndex").and_then(|i| i.trim().parse::<u32>().ok()));
+        let (level, elevation) = self.level_for(id, z1);
+        let name = self.type_name(id, e);
+        let material = self.main_material(id, e);
+        let uid = self.type_uid(id);
+        let fallback = format!("{:.0} cm", section.size() * 100.0);
+        let same = move |d: &TypeData| {
+            matches!(d, TypeData::Pile { section: s, kind: k, .. }
+                if *k == kind && std::mem::discriminant(s) == std::mem::discriminant(&section)
+                    && (s.size() - section.size()).abs() < TYPE_TOL)
+        };
+        let type_id = self.find_or_add_type(Category::Pile, name, fallback, uid, same, || TypeData::Pile {
+            section,
+            kind,
+            material,
+        });
+        let pile =
+            Pile { position: center, rotation_deg, cut_off: z1 - elevation, toe: z0 - elevation, embedment, cap: None };
+        let element = self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Pile(pile));
+        if let Some((guid, index)) = cap {
+            self.cap_piles.push((element, guid, index));
+        }
+        true
+    }
+
+    /// Pile caps take their piles' type by name, and piles this program
+    /// wrote under a cap belong to it again (standing where it wants them).
+    fn link_piles(&mut self) {
+        for (type_id, name) in std::mem::take(&mut self.cap_types) {
+            let pile_type = self.p.types_of(Category::Pile).find(|t| t.name == name).map(|t| t.id);
+            if let Some(TypeData::Foundation { pile_cap: Some(cap), .. }) =
+                self.p.types.get_mut(&type_id).map(|t| &mut t.data)
+            {
+                cap.pile_type = pile_type;
+            }
+        }
+        for (pile, guid, index) in std::mem::take(&mut self.cap_piles) {
+            let Some(uid) = guid::decode(guid.trim()).map(Uid) else { continue };
+            let Some(cap) = self.p.elements.values().find(|c| c.uid == uid && self.p.pile_cap(c).is_some()) else {
+                continue;
+            };
+            let level = cap.level;
+            let Some((_, type_id, want)) = self.p.cap_piles(cap).into_iter().find(|(i, _, _)| *i == index) else {
+                continue;
+            };
+            if let Some(e) = self.p.elements.get_mut(&pile) {
+                e.level = level;
+                e.type_id = type_id;
+                e.kind = ElementKind::Pile(want);
+            }
+        }
     }
 
     /// After a native import attempt: anything not imported natively comes in
@@ -974,6 +1159,7 @@ impl<'a> Importer<'a> {
     }
 
     fn finish(&mut self) {
+        self.link_piles();
         self.import_design_options();
         self.import_phases();
         let levels: Vec<(LevelId, String)> = self.p.levels.iter().map(|l| (l.id, l.name.clone())).collect();
@@ -1290,7 +1476,7 @@ impl<'a> Importer<'a> {
         type_id: ElementTypeId,
         mark: String,
         kind: ElementKind,
-    ) {
+    ) -> ElementId {
         let id = ElementId(self.p.alloc_id());
         self.products.push((id, ifc));
         let uid = e.arg(0).as_str().and_then(guid::decode).map(Uid).unwrap_or_default();
@@ -1310,6 +1496,7 @@ impl<'a> Importer<'a> {
         };
         *self.report.imported.entry(element.category()).or_default() += 1;
         self.p.elements.insert(id, element);
+        id
     }
 
     fn tag(e: &Entity) -> String {
@@ -1916,6 +2103,7 @@ impl<'a> Importer<'a> {
                 thickness,
                 material,
                 haunch: None,
+                pile_cap: None,
             },
         );
         let foundation = Foundation::new(FoundationShape::Slab { boundary }, z1 - elevation);

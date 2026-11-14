@@ -50,6 +50,7 @@ fn element_is_valid(e: &Element) -> bool {
         }
         ElementKind::LevelMark(m) => m.position.is_finite(),
         ElementKind::BarTag(t) => t.is_valid(),
+        ElementKind::Pile(p) => p.is_valid(),
         ElementKind::Text(t) => {
             let leaders = t.leaders.iter().all(|l| l.end.is_finite() && l.elbow.is_none_or(|e| e.is_finite()));
             let width = t.width.is_none_or(|w| w.is_finite() && w > 0.0);
@@ -159,6 +160,9 @@ impl Project {
         }
 
         // Curtain panels may only be component types.
+        // What a pile cap's piles may be.
+        let pile_types: std::collections::BTreeSet<crate::ElementTypeId> =
+            self.types.values().filter(|t| matches!(t.data, TypeData::Pile { .. })).map(|t| t.id).collect();
         let components: std::collections::BTreeSet<crate::ElementTypeId> =
             self.types.values().filter(|t| matches!(t.data, TypeData::Component { .. })).map(|t| t.id).collect();
         let is_component = |id: crate::ElementTypeId| components.contains(&id);
@@ -203,6 +207,7 @@ impl Project {
                     repairs += crate::level_mark::repair_type(text_size, datum)
                 }
                 TypeData::BarTag { text_size } => repairs += crate::bar_tag::repair_type(text_size),
+                TypeData::Pile { section, .. } => repairs += usize::from(section.repair()),
                 TypeData::Room {}
                 | TypeData::CadImport {}
                 | TypeData::DetailLine {}
@@ -292,7 +297,7 @@ impl Project {
                 TypeData::Pipe { diameter, .. } | TypeData::Conduit { diameter, .. } => {
                     repairs += usize::from(fix_positive(diameter, 0.025));
                 }
-                TypeData::Foundation { width, length, thickness, haunch, .. } => {
+                TypeData::Foundation { kind, width, length, thickness, haunch, pile_cap, .. } => {
                     repairs += usize::from(fix_positive(width, 1.0))
                         + usize::from(fix_positive(length, 1.0))
                         + usize::from(fix_positive(thickness, 0.4));
@@ -300,6 +305,25 @@ impl Project {
                     if haunch.is_some_and(|h| !h.fits(*width, *thickness)) {
                         *haunch = None;
                         repairs += 1;
+                    }
+                    // Pile caps have their piles' layout, other kinds none.
+                    match (*kind == crate::FoundationKind::PileCap, pile_cap.as_mut()) {
+                        (true, Some(cap)) => {
+                            repairs += cap.repair();
+                            if cap.pile_type.is_some_and(|t| !pile_types.contains(&t)) {
+                                cap.pile_type = None;
+                                repairs += 1;
+                            }
+                        }
+                        (true, None) => {
+                            *pile_cap = Some(Default::default());
+                            repairs += 1;
+                        }
+                        (false, Some(_)) => {
+                            *pile_cap = None;
+                            repairs += 1;
+                        }
+                        (false, None) => {}
                     }
                 }
                 TypeData::Stair { width, max_riser, tread, build, rules, .. } => {
@@ -440,6 +464,12 @@ impl Project {
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),
+                        // A cap's pile needs its cap, and a place in its layout.
+                        ElementKind::Pile(p) => p.cap.is_none_or(|c| {
+                            self.element(c.cap)
+                                .and_then(|cap| self.pile_cap(cap))
+                                .is_some_and(|cap| c.index < cap.cap.layout.count())
+                        }),
                         // A bar tag needs its view and its set.
                         ElementKind::BarTag(t) => {
                             self.view(t.view).is_some()
@@ -464,6 +494,17 @@ impl Project {
                     !(type_ok && level_ok && host_ok && element_is_valid(e))
                 })
                 .map(|e| e.id)
+                .collect();
+            // Two piles at one place of a cap: the later goes.
+            let mut places = std::collections::BTreeSet::new();
+            let invalid: Vec<_> = invalid
+                .into_iter()
+                .chain(self.elements.values().filter_map(|e| match &e.kind {
+                    ElementKind::Pile(crate::pile::Pile { cap: Some(c), .. }) if !places.insert(*c) => Some(e.id),
+                    _ => None,
+                }))
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
                 .collect();
             if invalid.is_empty() {
                 break;
@@ -530,6 +571,7 @@ impl Project {
                 ElementKind::Stair(s) => repairs += s.layout.repair(),
                 ElementKind::LevelMark(m) => repairs += m.repair(),
                 ElementKind::BarTag(t) => repairs += t.repair(),
+                ElementKind::Pile(p) => repairs += p.repair(),
                 ElementKind::Ramp(r) => repairs += r.layout.repair(),
                 ElementKind::Railing(r) => {
                     if r.stair.is_some_and(|h| !stairs.contains(&h.host)) {

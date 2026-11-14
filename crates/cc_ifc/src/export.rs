@@ -1088,7 +1088,11 @@ impl<'a> Exporter<'a> {
                             ]);
                             self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth])
                         }
-                        (None, None) => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
+                        (None, None) => match g.cap.as_ref().and_then(|c| self.cap_item(c, position, depth)) {
+                            // A round or ring pile cap: its true circles extruded.
+                            Some(item) => item,
+                            None => self.extrude_polygon(&g.footprint, position, self.dir_z, depth),
+                        },
                     };
                     let area = g.area();
                     let q = vec![
@@ -1112,7 +1116,84 @@ impl<'a> Exporter<'a> {
                             StructureProduct::new("IFCSLAB", "BASESLAB", vec![item])
                                 .quantities("Qto_SlabBaseQuantities", q)
                         }
+                        cc_core::FoundationKind::PileCap => {
+                            let product = StructureProduct::new("IFCFOOTING", "PILE_CAP", vec![item])
+                                .quantities("Qto_FootingBaseQuantities", q);
+                            // The placement and the layout, for importers to restore the cap and its piles.
+                            let own = project.pile_cap(e).map(|c| {
+                                let text = |s: String| Value::Typed("IFCTEXT", Box::new(s.into()));
+                                let label = |s: &str| Value::Typed("IFCLABEL", Box::new(s.into()));
+                                let pile_type =
+                                    project.cap_pile_type(c.cap).map_or("", |t| project.type_name(t)).to_string();
+                                let layout = cc_core::pile::PileCap { pile_type: None, ..c.cap.clone() };
+                                let placement = cc_core::curtain::to_text(&(c.position.to_array(), c.rotation_deg));
+                                let cap = cc_core::curtain::to_text(&(c.thickness, layout));
+                                let props = vec![
+                                    ("Placement", text(placement)),
+                                    ("Cap", text(cap)),
+                                    ("PileType", label(&pile_type)),
+                                ];
+                                (PILE_CAP_PSET, props)
+                            });
+                            StructureProduct { own, ..product }
+                        }
                     }
+                }
+                (ElementKind::Pile(p), TypeData::Pile { section, kind, .. }) => {
+                    let Some(g) = self.geom.piles.get(&e.id) else { continue };
+                    let (z0, z1) = g.z_range;
+                    let item = match *section {
+                        cc_core::pile::PileSection::Round { diameter } => {
+                            let center = self.point2(g.position);
+                            let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
+                            let profile = self.w.add(
+                                "IFCCIRCLEPROFILEDEF",
+                                args![Value::Enum("AREA"), Value::Null, position2, diameter / 2.0],
+                            );
+                            let position = self.placement3(Frame::at(DVec3::new(0.0, 0.0, z0 - level_z)));
+                            self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, z1 - z0])
+                        }
+                        cc_core::pile::PileSection::Square { side } => {
+                            let u = DVec2::from_angle(g.rotation_deg.to_radians());
+                            let part = cc_geom::BoxPart {
+                                origin: g.position,
+                                u,
+                                v: u.perp(),
+                                u_range: (-side / 2.0, side / 2.0),
+                                v_range: (-side / 2.0, side / 2.0),
+                                z_range: (z0, z1),
+                            };
+                            self.oriented_box(&part, level_z)
+                        }
+                    };
+                    let q = vec![
+                        ("Length", Quantity::Length(g.length())),
+                        ("CrossSectionArea", Quantity::Area(section.area())),
+                        ("NetVolume", Quantity::Volume(g.volume())),
+                    ];
+                    let (predefined, construction, object_type) = pile_ifc(*kind);
+                    let text = |s: String| Value::Typed("IFCTEXT", Box::new(s.into()));
+                    let label = |s: &str| Value::Typed("IFCLABEL", Box::new(s.into()));
+                    // The kind, section and embedment, and the cap it belongs to, for importers.
+                    let mut own = vec![
+                        ("Kind", label(kind.code())),
+                        ("Section", text(cc_core::curtain::to_text(section))),
+                        ("Embedment", text(cc_core::curtain::to_text(&p.embedment))),
+                    ];
+                    if let Some(r) = p.cap
+                        && let Some(cap) = project.element(r.cap)
+                        && let Value::Str(guid) = self.guid_of(cap.uid, &format!("element-{}", cap.id))
+                    {
+                        own.push(("Cap", label(&guid)));
+                        own.push(("CapIndex", text(r.index.to_string())));
+                    }
+                    StructureProduct {
+                        extra: vec![Value::Enum(construction)],
+                        object_type: object_type.map(str::to_string),
+                        own: Some((PILE_PSET, own)),
+                        ..StructureProduct::new("IFCPILE", predefined, vec![item])
+                    }
+                    .quantities("Qto_PileBaseQuantities", q)
                 }
                 (ElementKind::Stair(s), TypeData::Stair { build, .. }) => {
                     let Some(g) = cc_geom::stair_geom(project, e, s) else { continue };
@@ -1218,9 +1299,17 @@ impl<'a> Exporter<'a> {
             let shape = self.shape_of_type(product.items, axis, product.representation);
             let mut attrs = self.element_args(e, placement, shape);
             attrs.push(Value::Enum(product.kind));
+            attrs.extend(product.extra);
+            // A user-defined type names itself in the object type.
+            if let (Some(object_type), Some(slot)) = (product.object_type, attrs.get_mut(4)) {
+                *slot = Value::Str(object_type);
+            }
             let id = self.w.add(product.entity, attrs);
             self.products.insert(e.id, id);
             self.register(e, id);
+            if let Some((name, props)) = product.own {
+                self.property_set(&format!("own-{}-{name}", e.id), name, vec![id], props);
+            }
             if matches!(ty.data, TypeData::Column { .. } | TypeData::Beam { .. }) {
                 self.profile_usage(e.type_id, id);
             }
@@ -1236,6 +1325,27 @@ impl<'a> Exporter<'a> {
                 self.pads_set(e.id, id);
             }
         }
+    }
+
+    /// The body of a round or ring pile cap: its circle (or its ring) as a
+    /// parametric profile extruded `depth` up from `position`; `None` for
+    /// caps of straight sides (their outline is extruded as it is).
+    fn cap_item(&mut self, cap: &cc_geom::pile::CapGeom, position: Id, depth: f64) -> Option<Id> {
+        let profile = match cap.outline {
+            cc_core::pile::CapOutline::Polygon(_) => return None,
+            cc_core::pile::CapOutline::Disk { radius } => {
+                let center = self.point2(cap.position);
+                let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
+                self.w.add("IFCCIRCLEPROFILEDEF", args![Value::Enum("AREA"), Value::Null, position2, radius])
+            }
+            cc_core::pile::CapOutline::Ring { inner, outer } => {
+                let center = self.point2(cap.position);
+                let position2 = self.w.add("IFCAXIS2PLACEMENT2D", args![center, Value::Null]);
+                let args = args![Value::Enum("AREA"), Value::Null, position2, outer, outer - inner];
+                self.w.add("IFCCIRCLEHOLLOWPROFILEDEF", args)
+            }
+        };
+        Some(self.w.add("IFCEXTRUDEDAREASOLID", args![profile, position, self.dir_z, depth]))
     }
 
     /// A terrain's building pads, which IFC4 has no class for, in
@@ -2061,6 +2171,16 @@ impl<'a> Exporter<'a> {
             TypeData::Foundation { kind: cc_core::FoundationKind::Pad, .. } => {
                 ("IFCFOOTINGTYPE", args![Value::Enum("PAD_FOOTING")])
             }
+            TypeData::Foundation { kind: cc_core::FoundationKind::PileCap, .. } => {
+                ("IFCFOOTINGTYPE", args![Value::Enum("PILE_CAP")])
+            }
+            TypeData::Pile { kind, .. } => {
+                let (predefined, _, object_type) = pile_ifc(kind);
+                if let (Some(object_type), Some(slot)) = (object_type, base.get_mut(8)) {
+                    *slot = Value::Str(object_type.to_string());
+                }
+                ("IFCPILETYPE", args![Value::Enum(predefined)])
+            }
             TypeData::Foundation { kind: cc_core::FoundationKind::Strip, .. } => {
                 ("IFCFOOTINGTYPE", args![Value::Enum("STRIP_FOOTING")])
             }
@@ -2102,6 +2222,7 @@ impl<'a> Exporter<'a> {
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pile { material, .. }
             | TypeData::Topography { material, .. } => Some(self.material(material)),
             TypeData::CableTray { material, .. }
             | TypeData::Valve { material, .. }
@@ -2927,11 +3048,27 @@ struct StructureProduct {
     representation: &'static str,
     quantities: Option<(&'static str, Vec<(&'static str, Quantity)>)>,
     props: Option<(&'static str, Vec<(&'static str, Value)>)>,
+    /// A property set of this program's own, for importers to restore the element.
+    own: Option<(&'static str, Vec<(&'static str, Value)>)>,
+    /// Attributes after the predefined type (a pile's construction type).
+    extra: Vec<Value>,
+    /// The object type of a user-defined predefined type.
+    object_type: Option<String>,
 }
 
 impl StructureProduct {
     fn new(entity: &'static str, kind: &'static str, items: Vec<Id>) -> Self {
-        Self { entity, kind, items, representation: "SweptSolid", quantities: None, props: None }
+        Self {
+            entity,
+            kind,
+            items,
+            representation: "SweptSolid",
+            quantities: None,
+            props: None,
+            own: None,
+            extra: Vec::new(),
+            object_type: None,
+        }
     }
 
     fn quantities(mut self, set: &'static str, quantities: Vec<(&'static str, Quantity)>) -> Self {
@@ -3061,6 +3198,31 @@ pub const COLD_FORMED_CATEGORY: &str = "ColdFormed";
 pub const TOPOGRAPHY_PSET: &str = "ConstructCAD_Topography";
 /// The building pads of a terrain (see `Exporter::pads_set`).
 pub const PADS_PSET: &str = "ConstructCAD_Pads";
+/// Property set of a pile cap: its `Placement` (position in plan and
+/// rotation in degrees), its `Cap` (thickness and `cc_core::pile::PileCap`
+/// without the pile type) as text (see `cc_core::curtain::to_text`), and the
+/// name of its piles' type (`PileType`).
+pub const PILE_CAP_PSET: &str = "ConstructCAD_PileCap";
+/// Property set of a pile: its `Kind` (`cc_core::pile::PileKind::code`), its
+/// `Section` and `Embedment` as text, and for a pile of a cap the cap's
+/// GlobalId (`Cap`) and the pile's place in its layout (`CapIndex`).
+pub const PILE_PSET: &str = "ConstructCAD_Pile";
+
+/// The `IfcPileTypeEnum`, `IfcPileConstructionEnum` and, for a user-defined
+/// type, the object type of a pile kind: bored piles are bored and cast in
+/// place, precast and steel piles driven; augered and micro piles, cast in
+/// place, have no predefined type of their own.
+pub fn pile_ifc(kind: cc_core::pile::PileKind) -> (&'static str, &'static str, Option<&'static str>) {
+    use cc_core::pile::PileKind as K;
+    match kind {
+        K::Bored => ("BORED", "CAST_IN_PLACE", None),
+        K::ContinuousFlightAuger => ("USERDEFINED", "CAST_IN_PLACE", Some("CONTINUOUS_FLIGHT_AUGER")),
+        K::Micro => ("USERDEFINED", "CAST_IN_PLACE", Some("MICROPILE")),
+        K::PrecastDriven => ("DRIVEN", "PRECAST_CONCRETE", None),
+        K::Steel => ("DRIVEN", "PREFAB_STEEL", None),
+        K::Other => ("NOTDEFINED", "NOTDEFINED", None),
+    }
+}
 /// What a reinforcement set says of its bars: `Partition`, `BarMark` (a mark
 /// given by hand), `Mark` (the mark its bars have, when they all have one)
 /// and `Grade` (see `Exporter::write_rebar`).
@@ -3103,6 +3265,7 @@ fn common_pset(project: &Project, e: &Element) -> Option<&'static str> {
         ElementKind::Beam(_) => "Pset_BeamCommon",
         ElementKind::Stair(_) => "Pset_StairCommon",
         ElementKind::Ramp(_) => "Pset_RampCommon",
+        ElementKind::Pile(_) => "Pset_PileCommon",
         ElementKind::Railing(_) => "Pset_RailingCommon",
         ElementKind::Sweep(_) => "Pset_CoveringCommon",
         ElementKind::Foundation(_) => match project.element_type(e.type_id).map(|t| &t.data) {

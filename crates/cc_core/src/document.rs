@@ -257,6 +257,7 @@ impl<'a> EditCtx<'a> {
             pending.extend(self.project.railings_of(id).map(|e| e.id));
             pending.extend(self.project.rebar_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.bar_tags_of(id).map(|(e, _)| e.id));
+            pending.extend(self.project.piles_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.connections_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.pads_of(id).map(|(e, _)| e.id));
             pending.extend(self.project.host_members_of(id));
@@ -688,6 +689,47 @@ impl<'a> EditCtx<'a> {
         }
     }
 
+    /// Piles of pile caps stand where their caps want them, and caps have
+    /// as many as their layouts hold (see [`crate::pile`]): missing ones are
+    /// added, extra ones and those of no cap removed, the others moved.
+    fn sync_piles(&mut self) {
+        let plan = self.project.pile_sync();
+        for (id, width, length) in plan.types {
+            if let Some(crate::TypeData::Foundation { width: w, length: l, .. }) =
+                self.type_mut(id).map(|t| &mut t.data)
+            {
+                (*w, *l) = (width, length);
+            }
+        }
+        for id in plan.remove {
+            self.remove_element(id);
+        }
+        for (id, level, type_id, pile) in plan.update {
+            if let Some(e) = self.element_mut(id) {
+                e.level = level;
+                e.type_id = type_id;
+                e.kind = crate::ElementKind::Pile(pile);
+            }
+        }
+        for (level, type_id, pile) in plan.add {
+            let id = ElementId(self.alloc_id());
+            let mark = self.project.next_mark(crate::Category::Pile);
+            self.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark,
+                comments: String::new(),
+                kind: crate::ElementKind::Pile(pile),
+                uid: Default::default(),
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+            });
+        }
+    }
+
     /// Pads stand on their terrain's level (see [`crate::pad`]).
     fn sync_pads(&mut self) {
         for (id, level) in self.project.pad_levels() {
@@ -912,6 +954,7 @@ impl<'a> EditCtx<'a> {
         // Associative dimensions follow what this edit changed (elements or levels).
         self.sync_shafts();
         self.sync_pads();
+        self.sync_piles();
         self.sync_attachments();
         self.sync_dimensions();
         self.sync_phases();

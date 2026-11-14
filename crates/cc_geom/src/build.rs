@@ -198,6 +198,8 @@ pub struct ModelGeometry {
     /// Exact volumes of floors sketched with arcs, circles or ellipses, whose
     /// solids mesh the curves with chords (see [`Self::volume`]).
     pub curved_volumes: BTreeMap<ElementId, f64>,
+    /// Piles: axis, section and elevations (see [`crate::pile`]).
+    pub piles: BTreeMap<ElementId, crate::pile::PileGeom>,
     /// Where each element's solids are in `solids`, made at the end of a
     /// build (see [`SolidIndex`]).
     pub solid_index: SolidIndex,
@@ -246,6 +248,10 @@ pub struct FoundationGeom {
     pub drawn_area: Option<f64>,
     /// A strip's frame, section and ends after joins (`None` for pads and slabs).
     pub strip: Option<BeamGeom>,
+    /// Holes through the footprint (a ring pile cap's), counter-clockwise.
+    pub holes: Vec<Vec<DVec2>>,
+    /// A pile cap's frame, plan and piles (`None` for other foundations).
+    pub cap: Option<crate::pile::CapGeom>,
 }
 
 impl FoundationGeom {
@@ -415,6 +421,7 @@ impl ModelGeometry {
         geom.attach_wall_tops(project);
         geom.build_beams(project);
         geom.build_foundations(project);
+        geom.build_piles(project);
         geom.build_structure(project);
         geom.rebar = crate::rebar::build_rebar(project, &geom.beams, &geom.walls, &geom.foundations);
         geom.build_connections(project);
@@ -673,6 +680,16 @@ impl ModelGeometry {
                         z_range: project.column_span(e, c),
                     });
                 }
+                // Tie beams stop at the faces of the pile caps they frame into (not a ring's).
+                (ElementKind::Foundation(_), Some(TypeData::Foundation { thickness, .. })) => {
+                    let Some(cap) = crate::pile::cap_geom(project, e) else { continue };
+                    if matches!(cap.outline, cc_core::pile::CapOutline::Ring { .. }) {
+                        continue;
+                    }
+                    let Some(outline) = cap.loops().into_iter().next() else { continue };
+                    let top = project.level_elevation(e.level) + project.pile_cap(e).map_or(0.0, |c| c.top_offset);
+                    columns.push(ColumnInput { element: e.id, outline, z_range: (top - thickness, top) });
+                }
                 _ => {}
             }
         }
@@ -709,6 +726,23 @@ impl ModelGeometry {
             let top = project.level_elevation(e.level) + f.top_offset;
             let z_range = (top - data.foundation_depth(), top);
             let haunch = data.strip_haunch();
+            // A pile cap: its outline from the layout, exact in area.
+            if let Some(cap) = crate::pile::cap_geom(project, e) {
+                let mut loops = cap.loops().into_iter();
+                let footprint = loops.next().unwrap_or_default();
+                let g = FoundationGeom {
+                    element: e.id,
+                    footprint,
+                    z_range,
+                    arc: None,
+                    drawn_area: Some(cap.outline.area()),
+                    strip: None,
+                    holes: loops.collect(),
+                    cap: Some(cap),
+                };
+                self.foundations.insert(e.id, g);
+                continue;
+            }
             let footprint = match &f.shape {
                 cc_core::FoundationShape::Pad { position, rotation_deg } => {
                     rect_outline(*width, *length, *position, *rotation_deg)
@@ -739,8 +773,17 @@ impl ModelGeometry {
                 }
             };
             let drawn_area = f.sketch.as_ref().filter(|s| s.is_curved()).and_then(|_| f.slab_area());
-            self.foundations
-                .insert(e.id, FoundationGeom { element: e.id, footprint, z_range, arc: None, drawn_area, strip: None });
+            let g = FoundationGeom {
+                element: e.id,
+                footprint,
+                z_range,
+                arc: None,
+                drawn_area,
+                strip: None,
+                holes: Vec::new(),
+                cap: None,
+            };
+            self.foundations.insert(e.id, g);
         }
         // Strips meet at the true crossings of their faces, arcs included.
         for g in resolve_beams(&strips, &[]) {
@@ -758,6 +801,8 @@ impl ModelGeometry {
                 arc,
                 drawn_area: None,
                 strip: Some(g),
+                holes: Vec::new(),
+                cap: None,
             };
             self.foundations.insert(geom.element, geom);
         }
@@ -766,14 +811,31 @@ impl ModelGeometry {
             let material = project.element_type(e.type_id).map_or("", |t| t.main_material());
             let mut s = Solid::of_material(*id, Category::Foundation, project, material);
             let (z0, z1) = g.z_range;
-            match (g.body(), &g.arc) {
-                (Some(body), _) => body.add_to(&mut s),
-                (None, Some(arc)) => arc.add_to(&mut s, z0, z1),
-                (None, None) => s.add_prism(&g.footprint, |_| z0, |_| z1),
+            match (g.body(), &g.arc, &g.cap) {
+                (Some(body), _, _) => body.add_to(&mut s),
+                (None, Some(arc), _) => arc.add_to(&mut s, z0, z1),
+                (None, None, Some(cap)) => cap.add_to(&mut s, z0, z1),
+                (None, None, None) => s.add_prism(&g.footprint, |_| z0, |_| z1),
             }
             if !s.faces.is_empty() {
                 self.solids.push(s);
             }
+        }
+    }
+
+    /// Piles: round ones as cylinders of smooth facets (their volume exact), square ones as prisms.
+    fn build_piles(&mut self, project: &Project) {
+        for e in project.elements.values() {
+            let ElementKind::Pile(p) = &e.kind else { continue };
+            let Some(g) = crate::pile::pile_geom(project, e, p) else { continue };
+            let material = project.element_type(e.type_id).map_or("", |t| t.main_material());
+            let mut s = Solid::of_material(e.id, e.category(), project, material);
+            g.add_to(&mut s);
+            if !s.faces.is_empty() {
+                self.solids.push(s);
+                self.curved_volumes.insert(e.id, g.volume());
+            }
+            self.piles.insert(e.id, g);
         }
     }
 

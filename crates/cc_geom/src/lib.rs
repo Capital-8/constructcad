@@ -24,6 +24,7 @@ pub mod mep_net;
 mod mesh;
 pub mod pad;
 pub mod paint;
+pub mod pile;
 pub mod polygon;
 pub mod profile_sweep;
 pub mod ramp;

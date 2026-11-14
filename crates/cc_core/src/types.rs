@@ -58,6 +58,8 @@ pub enum Category {
     LevelMark,
     /// Bar tags: the bars of a reinforcement set written in a view.
     BarTag,
+    /// Piles (deep foundations), free or under pile caps.
+    Pile,
     /// Detail components: reusable 2D components placed in one view.
     DetailComponent,
     /// Cable trays: open runs carrying electrical circuits.
@@ -71,7 +73,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 40] = [
+    pub const ALL: [Category; 41] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -81,6 +83,7 @@ impl Category {
         Category::Column,
         Category::Beam,
         Category::Foundation,
+        Category::Pile,
         Category::Rebar,
         Category::Connection,
         Category::Pipe,
@@ -127,7 +130,7 @@ impl Category {
     };
 
     /// Categories with physical elements (shown in legends and 3D).
-    pub const MODEL: [Category; 22] = [
+    pub const MODEL: [Category; 23] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -137,6 +140,7 @@ impl Category {
         Category::Column,
         Category::Beam,
         Category::Foundation,
+        Category::Pile,
         Category::Rebar,
         Category::Connection,
         Category::Pipe,
@@ -153,7 +157,7 @@ impl Category {
     ];
 
     /// Categories that can be listed in a schedule.
-    pub const SCHEDULABLE: [Category; 25] = [
+    pub const SCHEDULABLE: [Category; 26] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -163,6 +167,7 @@ impl Category {
         Category::Column,
         Category::Beam,
         Category::Foundation,
+        Category::Pile,
         Category::Rebar,
         Category::Connection,
         Category::Pipe,
@@ -200,6 +205,7 @@ impl Category {
             Category::Text => "category-text",
             Category::LevelMark => "category-level-mark",
             Category::BarTag => "category-bar-tag",
+            Category::Pile => "category-pile",
             Category::TitleBlock => "category-title-block",
             Category::Column => "category-column",
             Category::Beam => "category-beam",
@@ -492,6 +498,17 @@ pub enum TypeData {
         material: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         haunch: Option<StripHaunch>,
+        /// Pile caps only: the piles and their layout (the type's `width`
+        /// and `length` are kept as its outline's size, see [`crate::pile`]).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pile_cap: Option<crate::pile::PileCap>,
+    },
+    /// Piles of `section` made as `kind` says, in `material`.
+    Pile {
+        section: crate::pile::PileSection,
+        #[serde(default)]
+        kind: crate::pile::PileKind,
+        material: String,
     },
     /// Stair: risers at most `max_riser` high, treads `tread` deep (or from
     /// Blondel's formula, see `rules`), built as `build` says.
@@ -622,6 +639,7 @@ impl TypeData {
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pile { material, .. }
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::CableTray { material, .. }
@@ -708,6 +726,7 @@ impl TypeData {
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pile { material, .. }
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::CableTray { material, .. }
@@ -827,13 +846,15 @@ impl SectionShape {
     }
 }
 
-/// What a foundation type is: a pad under a column, a strip under a wall or a slab.
+/// What a foundation type is: a pad under a column, a strip under a wall, a
+/// slab, or a cap on piles (see [`crate::pile`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum FoundationKind {
     #[default]
     Pad,
     Strip,
     Slab,
+    PileCap,
 }
 
 /// The section of a strip footing with a beam on top (an inverted T): the
@@ -914,13 +935,15 @@ impl TypeData {
 }
 
 impl FoundationKind {
-    pub const ALL: [FoundationKind; 3] = [FoundationKind::Pad, FoundationKind::Strip, FoundationKind::Slab];
+    pub const ALL: [FoundationKind; 4] =
+        [FoundationKind::Pad, FoundationKind::Strip, FoundationKind::Slab, FoundationKind::PileCap];
 
     pub fn key(self) -> &'static str {
         match self {
             FoundationKind::Pad => "foundation-pad",
             FoundationKind::Strip => "foundation-strip",
             FoundationKind::Slab => "foundation-slab",
+            FoundationKind::PileCap => "foundation-pile-cap",
         }
     }
 }
@@ -952,6 +975,7 @@ impl ElementType {
             TypeData::Text { .. } => Category::Text,
             TypeData::LevelMark { .. } => Category::LevelMark,
             TypeData::BarTag { .. } => Category::BarTag,
+            TypeData::Pile { .. } => Category::Pile,
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Foundation { .. } => Category::Foundation,
@@ -1146,6 +1170,7 @@ impl ElementType {
             | TypeData::Beam { material, .. }
             | TypeData::Foundation { material, .. }
             | TypeData::Rebar { material, .. }
+            | TypeData::Pile { material, .. }
             | TypeData::Pipe { material, .. }
             | TypeData::Conduit { material, .. }
             | TypeData::CableTray { material, .. }

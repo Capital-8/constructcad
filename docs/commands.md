@@ -8,7 +8,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 
 - **Project and files**: [`project_new`](#project_new), [`project_open`](#project_open), [`project_save`](#project_save), [`project_info`](#project_info), [`project_info_set`](#project_info_set), [`site_get`](#site_get), [`site_set`](#site_set), [`site_context_import`](#site_context_import), [`undo`](#undo), [`redo`](#redo), [`units_get`](#units_get), [`units_set`](#units_set), [`language_set`](#language_set), [`ifc_import`](#ifc_import), [`skp_import`](#skp_import), [`skp_component_load`](#skp_component_load), [`obj_import`](#obj_import), [`gltf_import`](#gltf_import), [`ifc_export`](#ifc_export), [`sheet_export`](#sheet_export), [`view_export`](#view_export), [`schedule_export_csv`](#schedule_export_csv), [`component_load`](#component_load), [`component_library_list`](#component_library_list), [`component_save`](#component_save), [`cad_import`](#cad_import), [`image_import`](#image_import), [`cad_layers`](#cad_layers), [`cad_layers_set`](#cad_layers_set), [`cad_explode`](#cad_explode)
 - **Queries**: [`categories_list`](#categories_list), [`levels_list`](#levels_list), [`types_list`](#types_list), [`type_get`](#type_get), [`elements_list`](#elements_list), [`element_get`](#element_get), [`groups_list`](#groups_list), [`measure`](#measure), [`views_list`](#views_list), [`view_get`](#view_get), [`materials_list`](#materials_list), [`material_get`](#material_get), [`schedule_table`](#schedule_table)
-- **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`door_type_create`](#door_type_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`grid_frame_create`](#grid_frame_create), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`bracing_create`](#bracing_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`wall_rebar_create`](#wall_rebar_create), [`slab_rebar_create`](#slab_rebar_create), [`strip_rebar_create`](#strip_rebar_create), [`bar_marks_list`](#bar_marks_list), [`bar_marks_update`](#bar_marks_update), [`bar_marks_renumber`](#bar_marks_renumber), [`bar_marking_set`](#bar_marking_set), [`bar_length_check`](#bar_length_check), [`bending_schedule_create`](#bending_schedule_create), [`bar_tag_create`](#bar_tag_create), [`connections_create`](#connections_create), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
+- **Creating elements**: [`wall_create`](#wall_create), [`curtain_type_create`](#curtain_type_create), [`curtain_get`](#curtain_get), [`curtain_grid_set`](#curtain_grid_set), [`curtain_panel_set`](#curtain_panel_set), [`door_create`](#door_create), [`door_type_create`](#door_type_create), [`window_create`](#window_create), [`floor_create`](#floor_create), [`floor_opening_add`](#floor_opening_add), [`floor_opening_remove`](#floor_opening_remove), [`ceiling_create`](#ceiling_create), [`roof_create`](#roof_create), [`roof_edge_set`](#roof_edge_set), [`roof_opening_remove`](#roof_opening_remove), [`room_create`](#room_create), [`grid_create`](#grid_create), [`column_create`](#column_create), [`beam_create`](#beam_create), [`columns_at_grids`](#columns_at_grids), [`beams_on_grids`](#beams_on_grids), [`beams_between_columns`](#beams_between_columns), [`grid_frame_create`](#grid_frame_create), [`slab_join_supports`](#slab_join_supports), [`structure_number`](#structure_number), [`brace_create`](#brace_create), [`braces_between_columns`](#braces_between_columns), [`truss_create`](#truss_create), [`bracing_create`](#bracing_create), [`rebar_create`](#rebar_create), [`rebar_typical`](#rebar_typical), [`wall_rebar_create`](#wall_rebar_create), [`slab_rebar_create`](#slab_rebar_create), [`strip_rebar_create`](#strip_rebar_create), [`bar_marks_list`](#bar_marks_list), [`bar_marks_update`](#bar_marks_update), [`bar_marks_renumber`](#bar_marks_renumber), [`bar_marking_set`](#bar_marking_set), [`bar_length_check`](#bar_length_check), [`bending_schedule_create`](#bending_schedule_create), [`bar_tag_create`](#bar_tag_create), [`connections_create`](#connections_create), [`analytical_model`](#analytical_model), [`analytical_export`](#analytical_export), [`footing_create`](#footing_create), [`strip_footing_create`](#strip_footing_create), [`foundation_slab_create`](#foundation_slab_create), [`footings_under_columns`](#footings_under_columns), [`strip_footings_under_walls`](#strip_footings_under_walls), [`pile_type_create`](#pile_type_create), [`pile_create`](#pile_create), [`pile_cap_type_create`](#pile_cap_type_create), [`pile_cap_create`](#pile_cap_create), [`pile_caps_under_columns`](#pile_caps_under_columns), [`tie_beams_create`](#tie_beams_create), [`stair_create`](#stair_create), [`stair_check`](#stair_check), [`stair_railings_add`](#stair_railings_add), [`railing_host_set`](#railing_host_set), [`ramp_create`](#ramp_create), [`ramp_check`](#ramp_check), [`roof_check`](#roof_check), [`mass_create`](#mass_create), [`sketch_get`](#sketch_get), [`sketch_set`](#sketch_set), [`mass_floors_set`](#mass_floors_set), [`mass_floors`](#mass_floors), [`mass_type_create`](#mass_type_create), [`sweep_create`](#sweep_create), [`sweep_type_create`](#sweep_type_create), [`sweep_profile_set`](#sweep_profile_set), [`shaft_create`](#shaft_create), [`shaft_type_create`](#shaft_type_create), [`topography_create`](#topography_create), [`topography_points_set`](#topography_points_set), [`topography_type_create`](#topography_type_create), [`pad_create`](#pad_create), [`pad_type_create`](#pad_type_create), [`mass_face_move`](#mass_face_move), [`mass_walls_create`](#mass_walls_create), [`mass_slabs_create`](#mass_slabs_create), [`mass_roof_create`](#mass_roof_create), [`ramp_type_create`](#ramp_type_create), [`railing_create`](#railing_create), [`component_place`](#component_place)
 - **Building services**: [`pipe_create`](#pipe_create), [`conduit_create`](#conduit_create), [`cable_tray_create`](#cable_tray_create), [`cable_tray_type_create`](#cable_tray_type_create), [`valve_place`](#valve_place), [`valve_type_create`](#valve_type_create), [`device_type_create`](#device_type_create), [`lps_conductor_create`](#lps_conductor_create), [`lps_conductor_type_create`](#lps_conductor_type_create), [`earth_ring_create`](#earth_ring_create), [`air_terminal_place`](#air_terminal_place), [`earth_electrode_place`](#earth_electrode_place), [`lps_check`](#lps_check), [`rack_place`](#rack_place), [`data_outlet_place`](#data_outlet_place), [`cabling_list`](#cabling_list), [`systems_list`](#systems_list), [`system_create`](#system_create), [`system_set`](#system_set), [`system_delete`](#system_delete), [`system_assign`](#system_assign), [`circuit_loads`](#circuit_loads), [`mep_fittings`](#mep_fittings), [`mep_connect`](#mep_connect), [`mep_sizing`](#mep_sizing), [`mep_size_apply`](#mep_size_apply)
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`browser_schemes_list`](#browser_schemes_list), [`browser_scheme_create`](#browser_scheme_create), [`browser_scheme_set`](#browser_scheme_set), [`browser_scheme_delete`](#browser_scheme_delete), [`browser_scheme_use`](#browser_scheme_use), [`browser_tree`](#browser_tree), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
@@ -1044,6 +1044,90 @@ No parameters.
 | `type` | id or name | optional | Strip footing type id or name (default: the first strip type). |
 | `walls` | [id, …] | optional | Wall ids (default: every wall of `level`). |
 
+### `pile_type_create`
+
+*edit* — Create a pile type: round (`diameter`) or square (`side`), made as `kind` says.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `diameter` | number | optional | Diameter of a round pile, meters (default 0.4). |
+| `kind` | string | optional | How the piles are made: `bored` (default), `cfa` (continuous flight auger), `micro` (micropiles and root piles), `precast` (precast concrete, driven), `steel` (driven), `other`. |
+| `material` | string | optional | Material name (default: the first foundation type's, the template's concrete). |
+| `name` | string | optional | Type name (default: from the size, e.g. `Estaca Ø40`). |
+| `side` | number | optional | Side of a square pile, meters (instead of `diameter`). |
+
+### `pile_create`
+
+*edit* — Create a free pile at `position`: its head (`cut_off`) above the level and its toe given by `toe` or by a `length` below the head. A project without a pile type gets one (round, 40 cm, in concrete).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Axis of the pile in plan. |
+| `cut_off` | number | optional | Head of the pile (its cut-off) above the level, meters (default 0). |
+| `embedment` | number | optional | How far the head enters a cap or slab above it, meters (default 0). |
+| `length` | number | optional | Length of the pile below its head, meters (default 12); or `toe`. |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `rotation` | number | optional | Rotation of a square pile in plan, degrees (default 0). |
+| `toe` | number | optional | Toe of the pile above the level, meters (negative: below it); or `length`. |
+| `type` | id or name | optional | Pile type id or name (default: the first pile type). |
+
+### `pile_cap_type_create`
+
+*edit* — Create a pile cap type: the layout of its piles (`single`, `pair`, `triangle`, `square`, `line` of `count`, `circle` of `count` on a `radius`, a ring cap with `ring_width`), their spacing and edge distance, the cap's thickness, and the type, length and embedment of its piles. The cap's outline follows: a rectangle around one, two, four and a line of piles; for three, a triangle with its corners cut square; on a circle, a round cap or a ring. A project without a pile type gets one.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `count` | integer | optional | Number of piles of a `line` (2 to 64) or a `circle` (3 to 64). |
+| `edge_distance` | number | optional | Distance from a pile's axis to the cap's edge, meters (default: one pile size). |
+| `embedment` | number | optional | How far each pile's head enters the cap, meters (default 0.1). |
+| `layout` | string | optional | `single`, `pair` (default), `triangle`, `square`, `line` or `circle`. |
+| `material` | string | optional | Material name (default: the first foundation type's, the template's concrete). |
+| `name` | string | optional | Type name (default: from the number of piles, e.g. `Bloco 3 estacas`). |
+| `pile_length` | number | optional | Length of each pile below its head, meters (default 12). |
+| `pile_type` | id or name | optional | The piles' type id or name (default: the first pile type). |
+| `radius` | number | optional | Radius of a `circle` of piles (their axes), meters. |
+| `ring_width` | number | optional | Width of a ring cap centered on the `circle` of piles, meters (default: a round cap). |
+| `spacing` | number | optional | Distance between neighboring piles' axes, meters (default: three pile sizes). |
+| `thickness` | number | optional | Thickness of the cap, meters (default 0.8). |
+
+### `pile_cap_create`
+
+*edit* — Place a pile cap centered at `position`, turned by `rotation` (its layout's `u` axis along it), its top `top_offset` above the level. Its piles are made with it, in the same undo step, and follow it: they move, turn and are copied and deleted with it, and change with its type. A project without a pile cap type gets one (two piles).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `position` | [x, y] | required | Center of the cap (the origin of its layout) in plan. |
+| `level` | id or name | optional | Level id or name (default: the lowest level). |
+| `rotation` | number | optional | Rotation in plan, degrees (default 0). |
+| `top_offset` | number | optional | Top of the cap above the level, meters (default 0). |
+| `type` | id or name | optional | Pile cap type id or name (default: the first pile cap type). |
+
+### `pile_caps_under_columns`
+
+*edit* — Place a pile cap under each column (default: every column of the level), centered on it, its top at the column's base; its piles are made with it, all in one undo step. `rotation` turns each cap: `column` (default) as its column, an angle in degrees, or `radial`: its layout's `u` axis pointing away from `center`, so caps under columns on a circle point outward (a three-pile cap's first pile outside). Columns that already stand on a pad footing or a pile cap are skipped.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `center` | [x, y] | optional | The center radial caps point away from (default: the middle of the columns). |
+| `columns` | [id, …] | optional | Column ids (default: every column of `level`). |
+| `level` | id or name | optional | Level id or name, when no columns are given (default: the lowest level). |
+| `rotation` | number or string | optional | `column` (default), `radial`, or an angle in degrees. |
+| `type` | id or name | optional | Pile cap type id or name (default: the first pile cap type). |
+
+### `tie_beams_create`
+
+*edit* — Create tie beams between consecutive pile caps of `caps` (and from the last back to the first when `closed`): straight, or arcs around `center` (each between two caps at the same distance from it, the shorter way), or of a signed `radius` (positive: counter-clockwise). Each beam runs between the caps' centers and stops at their outlines where it frames into their depth; its top is flush with the lower of its two caps' tops unless `top_offset` is given. Tie beams are ordinary beams.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `caps` | [id, …] | required | Pile cap ids, in order (at least two). |
+| `center` | [x, y] | optional | Arc beams: the center of the circle the caps stand on. |
+| `closed` | boolean | optional | Also join the last cap to the first. |
+| `level` | id or name | optional | Level id or name of the beams (default: the first cap's level). |
+| `radius` | number | optional | Arc beams: the radius in meters, positive when the arcs turn counter-clockwise from cap to cap, negative clockwise (ignored with `center`). |
+| `top_offset` | number | optional | Top of the beams above their level, meters (default: flush with the caps' tops). |
+| `type` | id or name | optional | Beam type id or name (default: the first beam type). |
+
 ### `stair_create`
 
 *edit* — Create a stair starting at `start` (the middle of its first riser) and rising along `direction` up to the level above (or `height`). Risers and treads follow the type (the fewest risers within its maximum, and a fixed tread or one from Blondel's formula `2 × riser + tread`) unless `risers` or `tread` set them: the riser height is then the height over the risers. `shape` lays it out straight, with a landing, L- or U-shaped, in three flights round two landings, or around a center. The top floor is the last step: a stair ends with a riser, not a tread.
@@ -1679,7 +1763,7 @@ No parameters.
 
 ### `elements_delete`
 
-*edit* — Delete elements (doors and windows of deleted walls go too; pinned elements stay).
+*edit* — Delete elements (doors and windows of deleted walls go too, piles with their caps; pinned elements stay, and so do the piles of a cap that is not deleted).
 
 | Parameter | Type | | Description |
 |---|---|---|---|

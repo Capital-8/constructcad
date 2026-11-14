@@ -53,6 +53,7 @@ pub fn is_structural(e: &cc_core::Element) -> bool {
         ElementKind::Floor(_)
         | ElementKind::Beam(_)
         | ElementKind::Foundation(_)
+        | ElementKind::Pile(_)
         | ElementKind::Grid(_)
         | ElementKind::SteelBuilding(_)
         | ElementKind::Truss(_)
@@ -313,10 +314,19 @@ fn draw_structure(
                 let (bottom, top) = g.z_range;
                 if bottom <= cut_z && cut_z <= top {
                     let material = project.element_type(e.type_id).map_or("", |t| t.data.cut_material());
-                    crate::cut::cut_fill(d, project, material, g.footprint.clone(), spacing, id);
+                    // A ring pile cap fills around its hole.
+                    let region = match g.holes.is_empty() {
+                        true => Some(g.footprint.clone()),
+                        false => cc_geom::polygon::keyhole(&g.footprint, &g.holes),
+                    };
+                    if let Some(region) = region {
+                        crate::cut::cut_fill(d, project, material, region, spacing, id);
+                    }
                     d.polyline(&g.footprint, true, LineStyle::Cut, id);
+                    g.holes.iter().for_each(|h| d.polyline(h, true, LineStyle::Cut, id));
                 } else {
                     d.polyline(&g.footprint, true, LineStyle::Hidden, id);
+                    g.holes.iter().for_each(|h| d.polyline(h, true, LineStyle::Hidden, id));
                 }
                 // The beam on top of a haunched strip: its two faces.
                 if let (Some(body), Some(h)) = (g.body(), data.and_then(|t| t.strip_haunch())) {
@@ -324,6 +334,18 @@ fn draw_structure(
                     for v in [-h.beam_width / 2.0, h.beam_width / 2.0] {
                         d.polyline(&body.line(v), false, style, id);
                     }
+                }
+            }
+            (ElementKind::Pile(_), Some(TypeData::Pile { .. })) => {
+                // Piles lie under the floor: dashed, unless the cut plane passes
+                // through them; a center mark on their axis.
+                let Some(g) = geom.piles.get(&e.id) else { continue };
+                let (bottom, top) = g.z_range;
+                let style = if bottom <= cut_z && cut_z <= top { LineStyle::Cut } else { LineStyle::Hidden };
+                d.polyline(&g.outline(), true, style, id);
+                let (u, arm) = (DVec2::from_angle(g.rotation_deg.to_radians()), g.section.size() * 0.75);
+                for axis in [u, u.perp()] {
+                    d.line(g.position - axis * arm, g.position + axis * arm, LineStyle::Center, id);
                 }
             }
             (ElementKind::Beam(_), Some(TypeData::Beam { .. })) => {

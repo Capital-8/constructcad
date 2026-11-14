@@ -102,6 +102,8 @@ fn patched(
         kind @ (cc_core::ElementKind::FilledRegion(_) | cc_core::ElementKind::MaskingRegion(_)) => {
             patch_variant(kind, &super::region::normalize_patch(p, patch)?)?
         }
+        // A pile's length stands for its toe; a pile cap's piles follow their cap.
+        kind @ cc_core::ElementKind::Pile(_) => patch_variant(kind, &super::piles::normalize_patch(element, patch)?)?,
         kind => patch_variant(kind, patch)?,
     };
     if std::mem::discriminant(&kind) != std::mem::discriminant(&element.kind) {
@@ -163,6 +165,7 @@ fn patched(
                 super::connection::check(old, c)?;
             }
         }
+        cc_core::ElementKind::Pile(pile) => super::piles::check(pile)?,
         _ => {}
     }
     Ok(kind)

@@ -58,6 +58,14 @@ pub enum ScheduleField {
     Weight,
     /// The part of the structure a reinforcement set belongs to.
     Partition,
+    /// Elevation of a pile's head (its cut-off).
+    CutOff,
+    /// Elevation of a pile's toe.
+    Toe,
+    /// How a pile is made.
+    PileKind,
+    /// Number of piles under a pile cap.
+    PileCount,
     /// Plumbing system or electrical circuits.
     System,
     /// Fall of a pipe per unit of length.
@@ -147,6 +155,10 @@ impl ScheduleField {
             ScheduleField::BarLength => "col-bar-length",
             ScheduleField::Weight => "col-weight",
             ScheduleField::Partition => "col-partition",
+            ScheduleField::CutOff => "col-cut-off",
+            ScheduleField::Toe => "col-toe",
+            ScheduleField::PileKind => "col-pile-kind",
+            ScheduleField::PileCount => "col-pile-count",
             ScheduleField::System => "col-system",
             ScheduleField::Slope => "col-slope",
             ScheduleField::Power => "col-power",
@@ -227,7 +239,12 @@ impl ScheduleField {
                 &[F::Section, F::Profile, F::LinearMass, F::Height, F::Volume, F::Material, F::Structural]
             }
             Category::Beam => &[F::Section, F::Profile, F::LinearMass, F::Length, F::CutLength, F::Volume, F::Material],
-            Category::Foundation => &[F::Section, F::Length, F::Area, F::Thickness, F::Volume, F::Material],
+            Category::Foundation => {
+                &[F::Section, F::Length, F::Area, F::Thickness, F::Volume, F::Material, F::PileCount]
+            }
+            Category::Pile => {
+                &[F::PileKind, F::Diameter, F::Section, F::CutOff, F::Toe, F::Length, F::Volume, F::Host, F::Material]
+            }
             Category::Rebar => {
                 &[F::Host, F::Partition, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material]
             }
@@ -318,6 +335,9 @@ impl ScheduleField {
                 vec![F::Mark, F::Type, F::Level, F::Section, F::Length, F::CutLength, F::Volume, F::Material]
             }
             Category::Foundation => vec![F::Mark, F::Type, F::Level, F::Section, F::Thickness, F::Volume, F::Material],
+            Category::Pile => {
+                vec![F::Mark, F::Type, F::Diameter, F::CutOff, F::Toe, F::Length, F::Volume, F::Host]
+            }
             Category::Rebar => vec![F::Host, F::Type, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight],
             Category::Stair => vec![F::Mark, F::Type, F::Level, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Ramp => vec![F::Mark, F::Type, F::Level, F::Slope, F::Run, F::Volume],
