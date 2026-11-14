@@ -201,6 +201,11 @@ fn linear_mass(project: &Project, data: &TypeData) -> Value {
     if mass.is_finite() && mass > 0.0 { Value::LinearMass(mass) } else { Value::Missing }
 }
 
+/// Whether a schedule adds the column of `field` up unless its format says otherwise.
+pub fn totaled_by_default(field: ScheduleField) -> bool {
+    summable(field)
+}
+
 /// Whether a field's values add up in the totals row.
 fn summable(field: ScheduleField) -> bool {
     matches!(

@@ -3108,6 +3108,7 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             section(ui, "graphics", t!("section-graphics"), |ui| {
                 readonly_row(ui, &t!("prop-category"), actions::t_category(*category));
             });
+            section(ui, "schedule", t!("schedule-section"), |ui| crate::schedule_ui::props(ui, state, id));
         }
         ViewKind::Sheet { .. } => {
             section(ui, "sheet", t!("section-graphics"), |ui| crate::sheet_props::rows(ui, state, id));

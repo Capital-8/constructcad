@@ -62,8 +62,9 @@ pub struct Dialogs {
     pub level_selected: Option<LevelId>,
     /// Level waiting for delete confirmation.
     pub delete_level: Option<LevelId>,
-    /// Schedule whose definition dialog is open.
+    /// Schedule whose definition dialog is open, and the page it shows.
     pub schedule_def: Option<ViewId>,
+    pub schedule_tab: crate::schedule_ui::Tab,
     pub confirm: Option<PendingAction>,
     /// The New Project dialog, with the template picked in it.
     pub new_project: Option<cc_core::MeasurementSystem>,

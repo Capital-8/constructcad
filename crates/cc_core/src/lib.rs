@@ -57,7 +57,7 @@ pub mod region;
 mod repair;
 pub mod roofing;
 pub mod scale;
-mod schedule;
+pub mod schedule;
 pub mod section_props;
 pub mod shaft;
 pub mod site;
