@@ -306,6 +306,12 @@ impl Command for ViewSet {
         {
             return Err(EngineError::invalid("the name is empty"));
         }
+        // A schedule's definition within its limits.
+        if let Some(ViewKind::Schedule { def, .. }) = &kind
+            && let Some(message) = def.check()
+        {
+            return Err(EngineError::invalid(message));
+        }
         let scale = self.scale.as_ref().map(ScaleArg::ratio).transpose()?;
         let phase = self.phase.as_ref().map(|r| refs::phase(p, r)).transpose()?;
         let detail = self.detail.as_deref().map(refs::detail_level).transpose()?;

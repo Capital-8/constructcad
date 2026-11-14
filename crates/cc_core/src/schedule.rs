@@ -1,8 +1,9 @@
-//! Schedule definitions: which fields a schedule shows, how rows are sorted
-//! and filtered, and whether totals are shown. The values are computed by
-//! `cc_views::schedule`.
+//! Schedule definitions: which fields a schedule shows, how rows are
+//! filtered, sorted and grouped, how each column is formatted and how the
+//! table looks on paper. The values are computed by `cc_views::schedule`.
 
 use crate::Category;
+use crate::graphics::FilterOp;
 use serde::{Deserialize, Serialize};
 
 /// A column a schedule can show.
@@ -110,6 +111,8 @@ pub enum ScheduleField {
     BoltCount,
     /// Bolt diameter of a connection.
     BoltDiameter,
+    /// How many elements the row stands for (1, or the group's when rows are not itemized).
+    Count,
 }
 
 impl ScheduleField {
@@ -117,6 +120,7 @@ impl ScheduleField {
     pub fn key(self) -> &'static str {
         match self {
             ScheduleField::Mark => "col-mark",
+            ScheduleField::Count => "col-element-count",
             ScheduleField::Type => "col-type",
             ScheduleField::Level => "col-level",
             ScheduleField::Comments => "col-comments",
@@ -205,7 +209,7 @@ impl ScheduleField {
     /// Fields that make sense for `category`, in a sensible order.
     pub fn available(category: Category) -> Vec<ScheduleField> {
         use ScheduleField as F;
-        let common = [F::Mark, F::Type, F::Level, F::Comments];
+        let common = [F::Mark, F::Type, F::Level, F::Comments, F::Count];
         let type_info = [F::TypeMark, F::Description, F::Manufacturer, F::Model, F::FireRating, F::Cost];
         let phases = [F::PhaseCreated, F::PhaseDemolished];
         let specific: &[F] = match category {
@@ -284,6 +288,7 @@ impl ScheduleField {
                 return vec![
                     F::Number,
                     F::Name,
+                    F::Count,
                     F::Level,
                     F::Area,
                     F::Perimeter,
@@ -313,11 +318,12 @@ impl ScheduleField {
 
     /// Whether elements of `category` can have a value for this field: the
     /// fields [`available`](Self::available) to its schedules, plus the type,
-    /// level, main material and volume, which most elements have. A filter
+    /// level, main material, volume and count, which most elements have. A filter
     /// rule on a field that applies to none of its categories never matches.
     pub fn applies_to(self, category: Category) -> bool {
         use ScheduleField as F;
-        matches!(self, F::Type | F::Level | F::Material | F::Volume) || Self::available(category).contains(&self)
+        matches!(self, F::Type | F::Level | F::Material | F::Volume | F::Count)
+            || Self::available(category).contains(&self)
     }
 
     /// Fields shown by a new schedule of `category`.
@@ -383,12 +389,32 @@ impl ScheduleField {
 pub struct ScheduleDef {
     pub fields: Vec<ScheduleField>,
     /// Sort rows by this field (the default order is by mark or number).
+    /// The first level of sorting of files written before [`Self::sorting`].
     pub sort_by: Option<ScheduleField>,
     pub descending: bool,
-    /// Keep only rows whose value of the field contains the text (case-insensitive).
+    /// Keep only rows whose value of the field contains the text
+    /// (case-insensitive). The filter of files written before [`Self::filters`].
     pub filter: Option<(ScheduleField, String)>,
     /// Hide the totals row.
     pub hide_totals: bool,
+    /// Keep only the rows that pass every one of these.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub filters: Vec<ScheduleFilter>,
+    /// Sort the rows by these, the first outermost; a level may head and
+    /// foot the rows it groups.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sorting: Vec<SortLevel>,
+    /// One row for the elements alike in every sorting level, instead of
+    /// one per element: values that differ among them read as varying, and
+    /// totaled columns add up.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub collapse: bool,
+    /// How columns are written, for the fields that differ from the usual.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<ColumnFormat>,
+    /// How the table looks on paper.
+    #[serde(skip_serializing_if = "ScheduleAppearance::is_default")]
+    pub appearance: ScheduleAppearance,
     /// A reinforcement schedule as a bending schedule: one row per bar mark
     /// instead of one per set (the fields, sort and filter do not apply).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -456,10 +482,268 @@ impl BendingOptions {
     }
 }
 
+/// Most filters of one schedule.
+pub const MAX_FILTERS: usize = 8;
+/// Most levels of sorting of one schedule.
+pub const MAX_SORT_LEVELS: usize = 4;
+/// Longest filter value or column heading, in characters.
+pub const MAX_SCHEDULE_TEXT: usize = 120;
+/// Smallest and largest text of a schedule on paper, millimeters.
+pub const MIN_SCHEDULE_TEXT_SIZE: f64 = 1.0;
+pub const MAX_SCHEDULE_TEXT_SIZE: f64 = 20.0;
+
+/// One filter: rows whose `field` compares as `op` says with `value` stay.
+/// A number is compared as a number when the row's value is one (lengths in
+/// meters, areas in square meters, and so on), else as text without case.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleFilter {
+    pub field: ScheduleField,
+    /// The comparison, as view filters have them ([`FilterOp::test`]).
+    pub op: FilterOp,
+    #[serde(default)]
+    pub value: String,
+}
+
+/// One level of sorting: rows in the order of `field`; a level may write a
+/// heading before each group of rows alike in it, a footer after it (the
+/// group's count and totals) and leave a blank line between groups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SortLevel {
+    pub field: ScheduleField,
+    #[serde(default)]
+    pub descending: bool,
+    #[serde(default)]
+    pub header: bool,
+    #[serde(default)]
+    pub footer: bool,
+    #[serde(default)]
+    pub blank_line: bool,
+}
+
+impl SortLevel {
+    pub fn new(field: ScheduleField) -> Self {
+        Self { field, descending: false, header: false, footer: false, blank_line: false }
+    }
+
+    /// Whether the level groups its rows (a heading, a footer or a blank line).
+    pub fn groups(&self) -> bool {
+        self.header || self.footer || self.blank_line
+    }
+}
+
+/// Where a column's texts stand in their cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum ColumnAlign {
+    /// Numbers to the right, texts to the left.
+    #[default]
+    Auto,
+    Left,
+    Center,
+    Right,
+}
+
+impl ColumnAlign {
+    pub const ALL: [ColumnAlign; 4] = [ColumnAlign::Auto, ColumnAlign::Left, ColumnAlign::Center, ColumnAlign::Right];
+
+    /// Translation key of the alignment's name.
+    pub fn key(self) -> &'static str {
+        match self {
+            ColumnAlign::Auto => "align-auto",
+            ColumnAlign::Left => "align-left",
+            ColumnAlign::Center => "align-center",
+            ColumnAlign::Right => "align-right",
+        }
+    }
+}
+
+/// How the column of `field` is written: its own heading, its alignment,
+/// whether it is left out of the table (a hidden field still sorts and
+/// filters) and whether it is totaled (`None`: as the field usually is).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ColumnFormat {
+    pub field: ScheduleField,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heading: Option<String>,
+    #[serde(default)]
+    pub align: ColumnAlign,
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<bool>,
+}
+
+impl ColumnFormat {
+    pub fn new(field: ScheduleField) -> Self {
+        Self { field, heading: None, align: ColumnAlign::Auto, hidden: false, total: None }
+    }
+
+    /// Whether nothing differs from the usual (the entry may be dropped).
+    pub fn is_plain(&self) -> bool {
+        self.heading.as_deref().is_none_or(|h| h.trim().is_empty())
+            && self.align == ColumnAlign::Auto
+            && !self.hidden
+            && self.total.is_none()
+    }
+}
+
+/// How a schedule looks on paper (sheets and exports): its rules, its title
+/// and headers, and the sizes of its texts in millimeters.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScheduleAppearance {
+    /// Rules between rows and columns.
+    pub grid_lines: bool,
+    /// The heavier rule around the table.
+    pub outline: bool,
+    /// The row with the schedule's name.
+    pub show_title: bool,
+    /// The row with the columns' headings.
+    pub show_headers: bool,
+    pub title_size: f64,
+    pub header_size: f64,
+    pub text_size: f64,
+}
+
+impl Default for ScheduleAppearance {
+    fn default() -> Self {
+        Self {
+            grid_lines: true,
+            outline: true,
+            show_title: true,
+            show_headers: true,
+            title_size: 3.0,
+            header_size: 2.2,
+            text_size: 2.2,
+        }
+    }
+}
+
+impl ScheduleAppearance {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    fn sizes(&mut self) -> [(&mut f64, f64); 3] {
+        let d = Self::default();
+        [
+            (&mut self.title_size, d.title_size),
+            (&mut self.header_size, d.header_size),
+            (&mut self.text_size, d.text_size),
+        ]
+    }
+
+    /// Bring the text sizes within their limits; returns how many changed.
+    pub fn repair(&mut self) -> usize {
+        let mut n = 0;
+        for (size, default) in self.sizes() {
+            if !(size.is_finite() && (MIN_SCHEDULE_TEXT_SIZE..=MAX_SCHEDULE_TEXT_SIZE).contains(size)) {
+                *size =
+                    if size.is_finite() { size.clamp(MIN_SCHEDULE_TEXT_SIZE, MAX_SCHEDULE_TEXT_SIZE) } else { default };
+                n += 1;
+            }
+        }
+        n
+    }
+}
+
 impl ScheduleDef {
     /// The fields to show for `category`.
     pub fn fields_for(&self, category: Category) -> Vec<ScheduleField> {
         if self.fields.is_empty() { ScheduleField::defaults(category) } else { self.fields.clone() }
+    }
+
+    /// Every filter: the older single one (a text the value contains), then [`Self::filters`].
+    pub fn all_filters(&self) -> Vec<ScheduleFilter> {
+        let old = self.filter.iter().filter(|(_, text)| !text.trim().is_empty()).map(|(field, text)| ScheduleFilter {
+            field: *field,
+            op: FilterOp::Contains,
+            value: text.clone(),
+        });
+        old.chain(self.filters.iter().cloned()).take(MAX_FILTERS).collect()
+    }
+
+    /// Every level of sorting: [`Self::sorting`], or the older single field.
+    pub fn all_sorting(&self) -> Vec<SortLevel> {
+        if !self.sorting.is_empty() {
+            return self.sorting.iter().copied().take(MAX_SORT_LEVELS).collect();
+        }
+        self.sort_by
+            .map(|field| SortLevel { descending: self.descending, ..SortLevel::new(field) })
+            .into_iter()
+            .collect()
+    }
+
+    /// How the column of `field` is written.
+    pub fn format_of(&self, field: ScheduleField) -> ColumnFormat {
+        self.columns.iter().find(|c| c.field == field).cloned().unwrap_or_else(|| ColumnFormat::new(field))
+    }
+
+    /// The older single filter and sort field moved into [`Self::filters`]
+    /// and [`Self::sorting`], which the dialogs edit.
+    pub fn normalize(&mut self) {
+        if self.filter.is_some() {
+            self.filters = self.all_filters();
+            self.filter = None;
+        }
+        if self.sort_by.is_some() {
+            self.sorting = self.all_sorting();
+            self.sort_by = None;
+            self.descending = false;
+        }
+    }
+
+    /// Why the definition cannot be kept (`None`: it can), as a message.
+    pub fn check(&self) -> Option<String> {
+        let long = |t: &str| t.chars().count() > MAX_SCHEDULE_TEXT;
+        if self.filters.len() > MAX_FILTERS {
+            return Some(format!("a schedule takes at most {MAX_FILTERS} filters"));
+        }
+        if self.sorting.len() > MAX_SORT_LEVELS {
+            return Some(format!("a schedule takes at most {MAX_SORT_LEVELS} levels of sorting"));
+        }
+        if self.filters.iter().any(|f| long(&f.value))
+            || self.columns.iter().any(|c| c.heading.as_deref().is_some_and(long))
+        {
+            return Some(format!("filter values and headings have at most {MAX_SCHEDULE_TEXT} characters"));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        if !self.columns.iter().all(|c| seen.insert(c.field)) {
+            return Some("a field has one column format".into());
+        }
+        if self.appearance.clone().repair() > 0 {
+            return Some(format!(
+                "text sizes must be between {MIN_SCHEDULE_TEXT_SIZE} and {MAX_SCHEDULE_TEXT_SIZE} mm"
+            ));
+        }
+        self.bending.as_ref().and_then(BendingOptions::check)
+    }
+
+    /// Bring the definition within its limits; returns how many values changed.
+    pub fn repair(&mut self) -> usize {
+        let mut n = 0;
+        let cut = |t: &mut String| match t.char_indices().nth(MAX_SCHEDULE_TEXT) {
+            Some((end, _)) => {
+                t.truncate(end);
+                1
+            }
+            None => 0,
+        };
+        if self.filters.len() > MAX_FILTERS {
+            self.filters.truncate(MAX_FILTERS);
+            n += 1;
+        }
+        if self.sorting.len() > MAX_SORT_LEVELS {
+            self.sorting.truncate(MAX_SORT_LEVELS);
+            n += 1;
+        }
+        n += self.filters.iter_mut().map(|f| cut(&mut f.value)).sum::<usize>();
+        n += self.columns.iter_mut().filter_map(|c| c.heading.as_mut()).map(cut).sum::<usize>();
+        let mut seen = std::collections::BTreeSet::new();
+        let before = self.columns.len();
+        self.columns.retain(|c| seen.insert(c.field));
+        n += before - self.columns.len();
+        n += self.appearance.repair();
+        n + self.bending.as_mut().map_or(0, BendingOptions::repair)
     }
 }
 

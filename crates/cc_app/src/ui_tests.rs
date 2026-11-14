@@ -3031,6 +3031,33 @@ fn every_dialog_keeps_its_body_inside() {
     for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
     }
+    // The schedule definition, a page at a time, with a filter, sorting levels and a column format to lay out.
+    for tab in crate::schedule_ui::Tab::ALL {
+        opens.push((
+            format!("schedule {tab:?}"),
+            Box::new(move |s| {
+                let schedule = |v: &&cc_core::View| matches!(v.kind, cc_core::ViewKind::Schedule { .. });
+                let Some(view) = s.project().views.values().find(schedule).map(|v| v.id) else { return };
+                let Some(cc_core::ViewKind::Schedule { category, def }) = s.project().view(view).map(|v| v.kind.clone())
+                else {
+                    return;
+                };
+                let fields: Vec<serde_json::Value> =
+                    def.fields_for(category).iter().map(|f| serde_json::to_value(f).unwrap()).collect();
+                let args = serde_json::json!({
+                    "view": view.0,
+                    "filters": [{"field": fields[0], "op": "not_begins_with", "value": "A rather long value to filter by"}],
+                    "sorting": [
+                        {"field": fields[0], "descending": true, "header": true, "footer": true, "blank_line": true},
+                        {"field": fields[1], "header": true},
+                    ],
+                    "columns": [{"field": fields[0], "heading": "A heading of some length", "align": "Center"}],
+                });
+                s.session.execute("schedule_set", args).unwrap();
+                crate::schedule_ui::open(s, view, tab);
+            }),
+        ));
+    }
     let types: Vec<(cc_core::ElementTypeId, String)> =
         sample_state().project().types.values().map(|t| (t.id, t.name.clone())).collect();
     for (id, name) in types {
@@ -3725,6 +3752,54 @@ fn schedule_shows_visible_rows_and_selects() {
     harness.query_all_by_label(&first).next().unwrap().click();
     harness.run();
     assert!(harness.state().selection.contains(&row.element));
+}
+
+/// A schedule's properties list the pages of its definition, each with an *Edit* button that opens
+/// the dialog on that page; the pages change the schedule through its command.
+#[test]
+fn schedule_properties_open_the_definition_on_each_page() {
+    use crate::schedule_ui::Tab;
+    fn first_schedule(state: &AppState) -> Option<cc_core::ViewId> {
+        let project = state.project();
+        project.views.values().find(|v| matches!(v.kind, cc_core::ViewKind::Schedule { .. })).map(|v| v.id)
+    }
+    let state = sample_state();
+    let view = first_schedule(&state).unwrap();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 300.0), egui::Theme::Light, |ui, state| {
+        if let Some(view) = first_schedule(state) {
+            crate::schedule_ui::props(ui, state, view);
+        }
+    });
+    harness.run();
+    for tab in Tab::ALL {
+        let label = format!("{}: {}", tab.label(), t!("schedule-edit"));
+        harness.get_by_label(&label).click();
+        harness.run();
+        assert_eq!(harness.state().dialogs.schedule_def, Some(view), "{tab:?}");
+        assert_eq!(harness.state().dialogs.schedule_tab, tab);
+    }
+    // The sorting page: a level is added, and the rows gathered, through the schedule's definition.
+    let mut state = sample_state();
+    crate::schedule_ui::open(&mut state, view, Tab::Sorting);
+    let mut harness = themed_harness(state, egui::vec2(900.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::schedule_ui::dialog(ui.ctx(), state);
+    });
+    harness.run();
+    harness.get_by_label(&t!("schedule-sort-add")).click();
+    harness.run();
+    harness.get_by_label(&t!("schedule-itemize")).click();
+    harness.run();
+    let def = |state: &AppState| match state.project().view(view).map(|v| v.kind.clone()) {
+        Some(cc_core::ViewKind::Schedule { def, .. }) => def,
+        _ => panic!("a schedule"),
+    };
+    let changed = def(harness.state());
+    assert_eq!((changed.sorting.len(), changed.collapse), (1, true));
+    // Cancel undoes what the pages changed.
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    let back = def(harness.state());
+    assert!(back.sorting.is_empty() && !back.collapse && harness.state().dialogs.schedule_def.is_none());
 }
 
 /// The project browser follows the organization scheme in use (issue #278):

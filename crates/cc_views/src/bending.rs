@@ -368,7 +368,7 @@ pub fn table(
                     Cell::Text(row.partition.clone())
                 };
             }
-            out_rows.push(Row { element: row.first, cells, heading: true, sketch: None });
+            out_rows.push(Row { heading: true, ..Row::new(row.first, cells) });
         }
         let sketch = Some((3, sketch_of(&mark.shape)));
         let unit = if row.count == 0 { 0.0 } else { row.length / row.count as f64 };
@@ -389,7 +389,7 @@ pub fn table(
                 Cell::Text(String::new())
             });
         }
-        out_rows.push(Row { element: row.first, cells, heading: false, sketch });
+        out_rows.push(Row { sketch, ..Row::new(row.first, cells) });
         (count, length, weight) = (count + row.count, length + row.length, weight + row.weight);
     }
     let totals = if def.hide_totals {
@@ -415,6 +415,7 @@ pub fn table(
         totals,
         summary: Some(Box::new(summary_table(&b.totals, options.waste_percent))),
         caption: None,
+        ..Default::default()
     }
 }
 
@@ -439,7 +440,7 @@ fn summary_table(rows: &[DiameterTotal], waste: Option<f64>) -> Table {
             cells.push(Cell::Text(format::trimmed(p, 1)));
             cells.push(Cell::Text(weight_text(ww)));
         }
-        out.push(Row { element: ElementId(0), cells, heading: false, sketch: None });
+        out.push(Row::new(ElementId(0), cells));
         (length, weight) = (length + t.length, weight + t.weight);
     }
     let mut totals = vec![out.len().to_string(), String::new(), format::meters(length), weight_text(weight)];
@@ -447,7 +448,7 @@ fn summary_table(rows: &[DiameterTotal], waste: Option<f64>) -> Table {
         totals.push(format::trimmed(p, 1));
         totals.push(weight_text(ww));
     }
-    Table { headers, rows: out, totals, summary: None, caption: Some("bending-summary") }
+    Table { headers, rows: out, totals, caption: Some("bending-summary"), ..Default::default() }
 }
 
 #[cfg(test)]

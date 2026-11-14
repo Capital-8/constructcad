@@ -656,11 +656,14 @@ fn table_json(table: &cc_views::Table, cell: &dyn Fn(&cc_views::Cell) -> String)
             if r.heading {
                 row["heading"] = json!(true);
             }
+            if r.footer {
+                row["footer"] = json!(true);
+            }
             row
         })
         .collect();
     let mut out = json!({
-        "headers": table.headers.iter().map(|h| crate::i18n::tr(h)).collect::<Vec<_>>(),
+        "headers": table.header_texts(&|key| crate::i18n::tr(key)),
         "rows": rows,
         "totals": table.totals,
     });

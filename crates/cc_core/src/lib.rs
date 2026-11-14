@@ -57,7 +57,7 @@ pub mod region;
 mod repair;
 pub mod roofing;
 pub mod scale;
-mod schedule;
+pub mod schedule;
 pub mod section_props;
 pub mod shaft;
 pub mod site;
@@ -123,7 +123,10 @@ pub use project::{
 };
 pub use ramp::{RampCheck, RampIssue, RampLayout, RampRules, RampShape, ramp_flights};
 pub use region::Region;
-pub use schedule::{BendingOptions, ScheduleDef, ScheduleField};
+pub use schedule::{
+    BendingOptions, ColumnAlign, ColumnFormat, ScheduleAppearance, ScheduleDef, ScheduleField, ScheduleFilter,
+    SortLevel,
+};
 pub use section_props::SectionProperties;
 pub use stair::{
     LandingBeams, LandingPosts, PostAt, StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout,

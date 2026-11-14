@@ -44,7 +44,7 @@ pub use drawing_index::DrawingIndex;
 pub use legend::legend;
 pub use plan::{is_structural, plan, plan_of, section_pieces};
 pub use projected::{Frame, Look, axonometric, elevation, section};
-pub use schedule::{Cell, Row, Table, field_value, schedule, schedule_where, to_csv};
+pub use schedule::{Cell, Row, Table, field_value, schedule, schedule_where, to_csv, totaled_by_default};
 pub use sheet::{MARGIN, PlacedViewport, Sheet, SheetEnv, compose as compose_sheet, title_block_drawing};
 
 use cc_core::{Project, View, ViewKind};

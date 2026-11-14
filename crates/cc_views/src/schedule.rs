@@ -35,6 +35,27 @@ pub struct Table {
     pub summary: Option<Box<Table>>,
     /// The title of a table drawn under another (a translation key).
     pub caption: Option<&'static str>,
+    /// A column's own heading, where the schedule gives one instead of the
+    /// header's translation (aligned with `headers`; shorter: none).
+    pub titles: Vec<Option<String>>,
+    /// Where each column's texts stand (aligned with `headers`; shorter: automatic).
+    pub align: Vec<cc_core::ColumnAlign>,
+    /// How the table looks on paper.
+    pub appearance: cc_core::ScheduleAppearance,
+}
+
+impl Table {
+    /// The headings of the columns: each its own title, else `label` of its header key.
+    pub fn header_texts(&self, label: &dyn Fn(&str) -> String) -> Vec<String> {
+        self.headers
+            .iter()
+            .enumerate()
+            .map(|(i, key)| match self.titles.get(i).and_then(|t| t.as_deref()) {
+                Some(title) => title.to_string(),
+                None => label(key),
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,6 +67,25 @@ pub struct Row {
     pub heading: bool,
     /// A bar's shape drawn in cell `.0` instead of its text (bending schedules).
     pub sketch: Option<(usize, crate::bending::BarSketch)>,
+    /// A group's footer: how many elements it holds in its first cell, and
+    /// its totals in the totaled columns.
+    pub footer: bool,
+}
+
+impl Row {
+    /// A row of values of `element`.
+    pub fn new(element: cc_core::ElementId, cells: Vec<Cell>) -> Self {
+        Self { element, cells, heading: false, sketch: None, footer: false }
+    }
+
+    /// A group's heading (or, with no text, a blank line) across `columns` cells.
+    pub fn heading(element: cc_core::ElementId, text: Cell, columns: usize) -> Self {
+        let mut cells = vec![Cell::Text(String::new()); columns.max(1)];
+        if let Some(first) = cells.first_mut() {
+            *first = text;
+        }
+        Self { element, cells, heading: true, sketch: None, footer: false }
+    }
 }
 
 /// A field value before formatting, used for sorting and totals.
@@ -161,6 +201,11 @@ fn linear_mass(project: &Project, data: &TypeData) -> Value {
     if mass.is_finite() && mass > 0.0 { Value::LinearMass(mass) } else { Value::Missing }
 }
 
+/// Whether a schedule adds the column of `field` up unless its format says otherwise.
+pub fn totaled_by_default(field: ScheduleField) -> bool {
+    summable(field)
+}
+
 /// Whether a field's values add up in the totals row.
 fn summable(field: ScheduleField) -> bool {
     matches!(
@@ -179,6 +224,7 @@ fn summable(field: ScheduleField) -> bool {
             | ScheduleField::FillVolume
             | ScheduleField::Cost
             | ScheduleField::PileCount
+            | ScheduleField::Count
     )
 }
 
@@ -314,6 +360,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
     let room_boundary = geom.rooms.get(&e.id);
     match field {
         F::Mark => text(&e.mark),
+        F::Count => Value::Count(1),
         F::Type => text(project.type_name(e.type_id)),
         F::Level => text(project.level_name(e.level)),
         F::Comments => text(&e.comments),
@@ -702,65 +749,243 @@ pub fn schedule_where(
         None => value_cached(project, geom, e, field, &mut cache),
     };
 
-    if let Some((field, needle)) = &def.filter {
-        let needle = needle.trim().to_lowercase();
-        if !needle.is_empty() {
-            rows.retain(|(e, values)| text_of(&field_of(e, values, *field)).to_lowercase().contains(&needle));
+    // Filters: a row stays when it passes every one.
+    for filter in def.all_filters() {
+        rows.retain(|(e, values)| {
+            let value = field_of(e, values, filter.field);
+            let text = text_of(&value);
+            let actual = (!matches!(value, Value::Missing)).then(|| (text.as_str(), value.number()));
+            filter.op.test(actual, &filter.value)
+        });
+    }
+
+    // Sorting: each row's keys once; stable, so ties keep the default order.
+    let levels = def.all_sorting();
+    let mut keyed: Vec<Keyed> = rows
+        .into_iter()
+        .map(|(e, values)| {
+            let at: Vec<Value> = levels.iter().map(|l| field_of(e, &values, l.field)).collect();
+            Keyed {
+                keys: at.iter().map(SortKey::of).collect(),
+                labels: at.iter().map(Value::cell).collect(),
+                e,
+                values,
+            }
+        })
+        .collect();
+    let order = |a: &[SortKey], b: &[SortKey]| {
+        for (level, (x, y)) in levels.iter().zip(a.iter().zip(b)) {
+            let o = x.compare(y);
+            if o != Ordering::Equal {
+                return if level.descending { o.reverse() } else { o };
+            }
+        }
+        Ordering::Equal
+    };
+    if !levels.is_empty() {
+        keyed.sort_by(|a, b| order(&a.keys, &b.keys));
+    }
+
+    // The columns: the fields shown, less the hidden ones (all of them when every one is hidden).
+    let formats: Vec<cc_core::ColumnFormat> = fields.iter().map(|f| def.format_of(*f)).collect();
+    let mut shown: Vec<usize> = (0..fields.len()).filter(|i| formats.get(*i).is_none_or(|f| !f.hidden)).collect();
+    if shown.is_empty() {
+        shown = (0..fields.len()).collect();
+    }
+    let totaled = |i: usize| match (fields.get(i), formats.get(i)) {
+        (Some(field), Some(format)) => format.total.unwrap_or_else(|| summable(*field)),
+        _ => false,
+    };
+    let total_text = |i: usize, sum: f64| fields.get(i).map_or_else(String::new, |f| format_total(*f, sum));
+
+    // The rows: one per element, or one per run of elements alike in every sorting level.
+    let mut items: Vec<Item> = Vec::new();
+    for k in keyed {
+        let sums: Vec<f64> = k.values.iter().map(|v| v.number().unwrap_or(0.0)).collect();
+        match items.last_mut().filter(|last| def.collapse && order(&last.keys, &k.keys) == Ordering::Equal) {
+            Some(last) => {
+                last.count += 1;
+                for (i, value) in k.values.iter().enumerate() {
+                    if let Some(sum) = last.sums.get_mut(i) {
+                        *sum += value.number().unwrap_or(0.0);
+                    }
+                    // Values that differ among the row's elements read as varying.
+                    if let Some(cell) = last.cells.get_mut(i)
+                        && *cell != value.cell()
+                    {
+                        *cell = Cell::Key("schedule-varies");
+                    }
+                }
+            }
+            None => items.push(Item {
+                element: k.e.id,
+                keys: k.keys,
+                labels: k.labels,
+                count: 1,
+                sums,
+                cells: k.values.iter().map(Value::cell).collect(),
+            }),
         }
     }
-    if let Some(field) = def.sort_by {
-        // Each row's key once; stable: ties keep the default order.
-        let mut keyed: Vec<(SortKey, (&Element, Vec<Value>))> =
-            rows.into_iter().map(|(e, values)| (SortKey::of(&field_of(e, &values, field)), (e, values))).collect();
-        keyed.sort_by(|(a, _), (b, _)| {
-            let order = a.compare(b);
-            if def.descending { order.reverse() } else { order }
-        });
-        rows = keyed.into_iter().map(|(_, row)| row).collect();
+    let columns = shown.len();
+    let cells_of = |item: &Item| -> Vec<Cell> {
+        shown
+            .iter()
+            .map(|&i| {
+                let cell = item.cells.get(i).cloned().unwrap_or_else(|| Cell::Text(String::new()));
+                let sum = item.sums.get(i).copied().unwrap_or(0.0);
+                match fields.get(i) {
+                    // A row of several elements counts them, and adds what is totaled.
+                    Some(ScheduleField::Count) => Cell::Text(item.count.to_string()),
+                    Some(_) if item.count > 1 && totaled(i) => Cell::Text(total_text(i, sum)),
+                    _ => cell,
+                }
+            })
+            .collect()
+    };
+    // A footer: the count of its elements first, then the totals of the totaled columns.
+    let footer_of = |element: cc_core::ElementId, count: usize, sums: &[f64]| {
+        let mut cells: Vec<Cell> = shown
+            .iter()
+            .map(|&i| {
+                Cell::Text(if totaled(i) { total_text(i, sums.get(i).copied().unwrap_or(0.0)) } else { String::new() })
+            })
+            .collect();
+        if let Some(first) = cells.first_mut() {
+            *first = Cell::Text(count.to_string());
+        }
+        Row { footer: true, ..Row::new(element, cells) }
+    };
+
+    // Rows in order, with the headings, footers and blank lines of the levels that group.
+    let mut out: Vec<Row> = Vec::new();
+    let mut open: Vec<Group> = levels.iter().map(|_| Group::default()).collect();
+    let close = |out: &mut Vec<Row>, open: &mut [Group], from: usize| {
+        let mut blank = false;
+        for (level, group) in levels.iter().zip(open.iter_mut()).enumerate().skip(from).map(|(_, x)| x).rev() {
+            if level.footer && group.count > 0 {
+                out.push(footer_of(group.element, group.count, &group.sums));
+            }
+            blank |= level.blank_line && group.count > 0;
+            *group = Group::default();
+        }
+        blank
+    };
+    let mut previous: Option<&Item> = None;
+    for item in &items {
+        // The outermost level this row starts a new group of.
+        let from = match previous {
+            None => 0,
+            Some(p) => (0..levels.len())
+                .find(|l| match (p.keys.get(*l), item.keys.get(*l)) {
+                    (Some(a), Some(b)) => a.compare(b) != Ordering::Equal,
+                    _ => true,
+                })
+                .unwrap_or(levels.len()),
+        };
+        if previous.is_some() && close(&mut out, &mut open, from) {
+            out.push(Row::heading(item.element, Cell::Text(String::new()), columns));
+        }
+        for (l, level) in levels.iter().enumerate().skip(from) {
+            if level.header {
+                let label = item.labels.get(l).cloned().unwrap_or_else(|| Cell::Text(String::new()));
+                out.push(Row::heading(item.element, label, columns));
+            }
+        }
+        for group in open.iter_mut() {
+            if group.count == 0 {
+                group.element = item.element;
+                group.sums = vec![0.0; fields.len()];
+            }
+            group.count += item.count;
+            for (sum, value) in group.sums.iter_mut().zip(&item.sums) {
+                *sum += value;
+            }
+        }
+        out.push(Row::new(item.element, cells_of(item)));
+        previous = Some(item);
     }
+    close(&mut out, &mut open, 0);
 
     let totals = if def.hide_totals {
         Vec::new()
     } else {
-        let mut totals: Vec<String> = fields
+        let mut totals: Vec<String> = shown
             .iter()
-            .enumerate()
-            .map(|(i, &f)| {
-                if !summable(f) {
+            .map(|&i| {
+                if !totaled(i) {
                     return String::new();
                 }
-                let sum: f64 = rows.iter().filter_map(|(_, values)| values.get(i)?.number()).sum();
-                match f {
-                    ScheduleField::Length | ScheduleField::CutLength => format::meters(sum),
-                    ScheduleField::BarCount => format::number(sum, 0),
-                    ScheduleField::Weight => format::quantity(format::Quantity::Mass, sum, 2),
-                    ScheduleField::Volume | ScheduleField::CutVolume | ScheduleField::FillVolume => format::volume(sum),
-                    ScheduleField::Area => format::area(sum),
-                    ScheduleField::Cost => format::money(sum),
-                    _ => format::number(sum, 2),
-                }
+                total_text(i, items.iter().filter_map(|item| item.sums.get(i)).sum())
             })
             .collect();
         if let Some(first) = totals.first_mut() {
-            *first = rows.len().to_string();
+            *first = items.iter().map(|item| item.count).sum::<usize>().to_string();
         }
         totals
     };
 
+    let system = project.measurement_system();
     Table {
-        headers: fields.iter().map(|f| f.key_in(project.measurement_system())).collect(),
-        rows: rows
-            .into_iter()
-            .map(|(e, values)| Row {
-                element: e.id,
-                cells: values.iter().map(Value::cell).collect(),
-                heading: false,
-                sketch: None,
-            })
-            .collect(),
+        headers: shown.iter().filter_map(|&i| fields.get(i)).map(|f| f.key_in(system)).collect(),
+        rows: out,
         totals,
         summary: None,
         caption: None,
+        titles: shown
+            .iter()
+            .map(|&i| formats.get(i).and_then(|f| f.heading.clone()).filter(|h| !h.trim().is_empty()))
+            .collect(),
+        align: shown.iter().map(|&i| formats.get(i).map(|f| f.align).unwrap_or_default()).collect(),
+        appearance: def.appearance,
+    }
+}
+
+/// A row before it is laid out: its element, its values and what it is sorted by.
+struct Keyed<'a> {
+    e: &'a Element,
+    values: Vec<Value>,
+    keys: Vec<SortKey>,
+    /// The value of each sorting level, as a heading writes it.
+    labels: Vec<Cell>,
+}
+
+/// A row of the table: one element, or the elements alike in every sorting level.
+struct Item {
+    element: cc_core::ElementId,
+    keys: Vec<SortKey>,
+    labels: Vec<Cell>,
+    count: usize,
+    /// Per field, its elements' numbers added up.
+    sums: Vec<f64>,
+    /// Per field, the value all its elements share (else the varying mark).
+    cells: Vec<Cell>,
+}
+
+/// An open group of a sorting level: its first element, how many it holds
+/// and their numbers added up per field.
+struct Group {
+    element: cc_core::ElementId,
+    count: usize,
+    sums: Vec<f64>,
+}
+
+impl Default for Group {
+    fn default() -> Self {
+        Self { element: cc_core::ElementId(0), count: 0, sums: Vec::new() }
+    }
+}
+
+/// A total of `field` as the totals row writes it.
+fn format_total(field: ScheduleField, sum: f64) -> String {
+    match field {
+        ScheduleField::Length | ScheduleField::CutLength => format::meters(sum),
+        ScheduleField::BarCount | ScheduleField::Count => format::number(sum, 0),
+        ScheduleField::Weight => format::quantity(format::Quantity::Mass, sum, 2),
+        ScheduleField::Volume | ScheduleField::CutVolume | ScheduleField::FillVolume => format::volume(sum),
+        ScheduleField::Area => format::area(sum),
+        ScheduleField::Cost => format::money(sum),
+        _ => format::number(sum, 2),
     }
 }
 
@@ -768,6 +993,7 @@ pub fn schedule_where(
 /// spreadsheets in those locales open it directly. `header` and `cell`
 /// translate keys.
 pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cell) -> String) -> String {
+    let header = |key: &str| header(key);
     let sep = if format::number(0.5, 1).contains(',') { ';' } else { ',' };
     let quote = |s: &str| {
         if formula_like(s) {
@@ -794,7 +1020,7 @@ pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cel
                 line(vec![header(caption)]);
             }
         }
-        line(t.headers.iter().map(|h| header(h)).collect());
+        line(t.header_texts(&header));
         for row in &t.rows {
             line(row.cells.iter().map(&cell).collect());
         }
@@ -838,10 +1064,8 @@ fn roof_covering<'a>(
     Some((kind.spec(), geom.roof_framing.get(&e.id)?))
 }
 
-/// Text height of a schedule's cells on paper, millimeters.
+/// Usual text height of a schedule's cells on paper, millimeters (column widths scale from it).
 const TEXT: f64 = 2.2;
-/// Text height of its title, millimeters.
-const TITLE_TEXT: f64 = 3.0;
 /// Row height, millimeters.
 const ROW: f64 = 6.0;
 /// Narrowest and widest column, millimeters.
@@ -877,7 +1101,7 @@ pub fn drawing(table: &Table, title: &str, scale: u32, label: &dyn Fn(&str) -> S
 type DrawnRow<'a> = (Vec<String>, bool, Option<&'a (usize, crate::bending::BarSketch)>);
 
 /// Draw `table` with its title row from height `top` (paper millimeters)
-/// down; returns where it ends.
+/// down, as its appearance says; returns where it ends.
 fn draw_table(
     d: &mut crate::Drawing2D,
     table: &Table,
@@ -887,8 +1111,17 @@ fn draw_table(
     label: &dyn Fn(&str) -> String,
 ) -> f64 {
     use crate::{Anchor, LineStyle};
+    use cc_core::ColumnAlign;
+    let look = {
+        let mut a = table.appearance;
+        a.repair();
+        a
+    };
+    let (text_size, header_size, title_size) = (look.text_size, look.header_size, look.title_size);
+    // Rows grow with their text.
+    let row_for = |size: f64| ROW.max(size * 2.0);
     let at = |x: f64, y: f64| glam::DVec2::new(x, y) * k;
-    let headers: Vec<String> = table.headers.iter().map(|h| label(h)).collect();
+    let headers: Vec<String> = table.header_texts(label);
     let cell_text = |c: &Cell| match c {
         Cell::Text(t) => t.clone(),
         Cell::Key(key) => label(key),
@@ -912,23 +1145,35 @@ fn draw_table(
     let widths: Vec<f64> = (0..columns)
         .map(|c| {
             let texts = rows.iter().filter(|(_, heading, sketch)| !heading && sketch.is_none_or(|s| s.0 != c));
-            let longest = std::iter::once(headers.get(c))
-                .chain(texts.map(|(r, ..)| r.get(c)))
+            let longest = texts
+                .map(|(r, ..)| r.get(c))
                 .chain(totals.iter().map(|t| t.get(c)))
                 .flatten()
                 .map(|t| t.chars().count())
                 .max()
                 .unwrap_or(0);
-            let width = (longest as f64 * TEXT * 0.6 + 2.0 * PAD).clamp(MIN_COLUMN, MAX_COLUMN);
+            let header = if look.show_headers { headers.get(c).map_or(0, |h| h.chars().count()) } else { 0 };
+            let needed = (longest as f64 * text_size).max(header as f64 * header_size) * 0.6 + 2.0 * PAD;
+            let width = needed.clamp(MIN_COLUMN, MAX_COLUMN.max(MIN_COLUMN * text_size / TEXT));
             if sketched.contains(&c) { width.max(crate::bending::SKETCH_WIDTH) } else { width }
         })
         .collect();
     let width: f64 = widths.iter().sum();
     // Row heights: the title, the headers, the rows, the totals.
-    let mut heights = vec![ROW, ROW];
-    heights.extend(rows.iter().map(|(_, _, s)| if s.is_some() { crate::bending::SKETCH_ROW } else { ROW }));
+    let lead = usize::from(look.show_title) + usize::from(look.show_headers);
+    let mut heights = Vec::new();
+    if look.show_title {
+        heights.push(row_for(title_size));
+    }
+    if look.show_headers {
+        heights.push(row_for(header_size));
+    }
+    let body_row = row_for(text_size);
+    heights.extend(
+        rows.iter().map(|(_, _, s)| if s.is_some() { crate::bending::SKETCH_ROW.max(body_row) } else { body_row }),
+    );
     if totals.is_some() {
-        heights.push(ROW);
+        heights.push(body_row);
     }
     let mut ys = vec![top];
     for h in &heights {
@@ -938,39 +1183,55 @@ fn draw_table(
     let lines = heights.len();
 
     // The title, centered in its row.
-    d.text_at(at(width / 2.0, top - ROW + (ROW - TITLE_TEXT) / 2.0), title, TITLE_TEXT, Anchor::CenterBottom, 0.0);
-    // Rules: the frame and the lines under the title, the headers and above
+    if look.show_title
+        && let (Some(&y0), Some(&y1)) = (ys.first(), ys.get(1))
+    {
+        d.text_at(at(width / 2.0, (y0 + y1) / 2.0 - title_size / 2.0), title, title_size, Anchor::CenterBottom, 0.0);
+    }
+    // Rules: the frame, and the lines under the title, the headers and above
     // the totals stronger than those between rows.
     for (r, y) in ys.iter().enumerate() {
-        let strong = r <= 2 || r == lines || (totals.is_some() && r == lines - 1);
-        let style = if strong { LineStyle::Projection } else { LineStyle::Thin };
-        d.line(at(0.0, *y), at(width, *y), style, None);
-    }
-    d.line(at(0.0, top), at(0.0, bottom), LineStyle::Projection, None);
-    d.line(at(width, top), at(width, bottom), LineStyle::Projection, None);
-    // Column rules, row by row (headings run across).
-    let heading_at = |r: usize| r >= 2 && rows.get(r - 2).is_some_and(|(_, heading, _)| *heading);
-    for r in 1..lines {
-        if heading_at(r) {
-            continue;
+        let edge = r == 0 || r == lines;
+        let strong = edge || r <= lead || (totals.is_some() && r == lines - 1);
+        let drawn = if edge { look.outline } else { look.grid_lines || strong };
+        if drawn {
+            let style = if strong { LineStyle::Projection } else { LineStyle::Thin };
+            d.line(at(0.0, *y), at(width, *y), style, None);
         }
-        let (Some(&y0), Some(&y1)) = (ys.get(r), ys.get(r + 1)) else { continue };
-        let mut x = 0.0;
-        for w in widths.iter().take(columns - 1) {
-            x += w;
-            d.line(at(x, y0), at(x, y1), LineStyle::Thin, None);
+    }
+    if look.outline {
+        d.line(at(0.0, top), at(0.0, bottom), LineStyle::Projection, None);
+        d.line(at(width, top), at(width, bottom), LineStyle::Projection, None);
+    }
+    // Column rules, row by row (the title and headings run across).
+    let heading_at = |r: usize| r >= lead && rows.get(r - lead).is_some_and(|(_, heading, _)| *heading);
+    if look.grid_lines {
+        for r in usize::from(look.show_title)..lines {
+            if heading_at(r) {
+                continue;
+            }
+            let (Some(&y0), Some(&y1)) = (ys.get(r), ys.get(r + 1)) else { continue };
+            let mut x = 0.0;
+            for w in widths.iter().take(columns - 1) {
+                x += w;
+                d.line(at(x, y0), at(x, y1), LineStyle::Thin, None);
+            }
         }
     }
     // The texts, a row at a time from the headers down.
-    let body = std::iter::once((&headers, false, None))
-        .chain(rows.iter().map(|(r, heading, sketch)| (r, *heading, *sketch)))
-        .chain(totals.iter().map(|t| (t, false, None)));
-    for (r, (row, heading, sketch)) in body.enumerate() {
-        let (Some(&y0), Some(&y1)) = (ys.get(r + 1), ys.get(r + 2)) else { continue };
-        let baseline = (y0 + y1) / 2.0 - TEXT / 2.0;
+    let head = look.show_headers.then_some((&headers, false, None, true));
+    let body = head
+        .into_iter()
+        .chain(rows.iter().map(|(r, heading, sketch)| (r, *heading, *sketch, false)))
+        .chain(totals.iter().map(|t| (t, false, None, false)));
+    let first = usize::from(look.show_title);
+    for (r, (row, heading, sketch, is_header)) in body.enumerate() {
+        let (Some(&y0), Some(&y1)) = (ys.get(r + first), ys.get(r + first + 1)) else { continue };
+        let size = if is_header { header_size } else { text_size };
+        let baseline = (y0 + y1) / 2.0 - size / 2.0;
         if heading {
             if let Some(text) = row.first().filter(|t| !t.is_empty()) {
-                d.text_at(at(PAD, baseline), text.clone(), TEXT, Anchor::LeftBottom, 0.0);
+                d.text_at(at(PAD, baseline), text.clone(), size, Anchor::LeftBottom, 0.0);
             }
             continue;
         }
@@ -980,13 +1241,20 @@ fn draw_table(
             if let Some((_, s)) = sketch.filter(|s| s.0 == c) {
                 let (lo, hi) = (glam::DVec2::new(x, y1), glam::DVec2::new(x + w, y0));
                 crate::bending::draw_sketch(d, s, (lo, hi), k);
-            } else {
-                let numeric = r > 0 && text.trim_start().starts_with(|ch: char| ch.is_ascii_digit() || ch == '-');
-                if numeric {
-                    d.text_at(at(x + w - PAD, baseline), text.clone(), TEXT, Anchor::RightBottom, 0.0);
-                } else if !text.is_empty() {
-                    d.text_at(at(x + PAD, baseline), text.clone(), TEXT, Anchor::LeftBottom, 0.0);
-                }
+            } else if !text.is_empty() {
+                // Numbers to the right and texts to the left, unless the column says otherwise.
+                let numeric = !is_header && text.trim_start().starts_with(|ch: char| ch.is_ascii_digit() || ch == '-');
+                let align = match table.align.get(c).copied().unwrap_or_default() {
+                    ColumnAlign::Auto if numeric => ColumnAlign::Right,
+                    ColumnAlign::Auto => ColumnAlign::Left,
+                    other => other,
+                };
+                let (px, anchor) = match align {
+                    ColumnAlign::Right => (x + w - PAD, Anchor::RightBottom),
+                    ColumnAlign::Center => (x + w / 2.0, Anchor::CenterBottom),
+                    _ => (x + PAD, Anchor::LeftBottom),
+                };
+                d.text_at(at(px, baseline), text.clone(), size, anchor, 0.0);
             }
             x += w;
         }
@@ -1120,6 +1388,7 @@ mod tests {
                 cells: vec![Cell::Text("x;y".into()), Cell::Key("k")],
                 heading: false,
                 sketch: None,
+                footer: false,
             }],
             totals: vec!["1".into(), String::new()],
             ..Default::default()
@@ -1150,6 +1419,7 @@ mod tests {
                 ],
                 heading: false,
                 sketch: None,
+                footer: false,
             }],
             totals: vec!["-12".into()],
             ..Default::default()
