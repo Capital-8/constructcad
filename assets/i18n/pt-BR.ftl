@@ -3353,3 +3353,24 @@ tpl-imp-type-bed = Cama casal 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Armário 5'-0"
 tpl-imp-type-kitchen-sink = Pia inox 4'-0"
 tpl-imp-type-floor-drain = Ralo sifonado 6"
+
+# Posições de barras, tabelas de armação e etiquetas de armadura
+category-bar-tag = Etiquetas de armadura
+tpl-type-bar-tag = Etiqueta de armadura 2,5 mm
+col-grade = Aço
+col-shape = Forma
+col-unit-length-cm = Compr. unitário (cm)
+col-note = Observação
+col-waste-percent = Perda (%)
+col-weight-with-waste = Peso com perda
+bending-over-stock = Mais longa que a barra comercial: emendar
+bending-no-partition = (sem partição)
+bending-summary = Resumo por diâmetro
+default-bending-schedule-name = Tabela de armação
+tx-bar-marks-update = Fixar posições das barras
+tx-bar-marks-renumber = Renumerar posições das barras
+tx-bar-marking-set = Alterar numeração das barras
+tx-create-bar-tag = Criar etiqueta de armadura
+msg-bar-tag-view = Etiquetas de armadura vão em plantas, elevações e cortes.
+msg-bar-tag-set = Uma etiqueta de armadura identifica um conjunto de armadura.
+col-partition = Partição

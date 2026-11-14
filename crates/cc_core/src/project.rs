@@ -110,6 +110,9 @@ pub struct Project {
     /// How the project browser groups the views (see [`crate::browser`]).
     #[serde(default, skip_serializing_if = "crate::browser::BrowserOrganization::is_default")]
     pub browser: crate::browser::BrowserOrganization,
+    /// How reinforcing bars are marked (see [`crate::bar_marks`]).
+    #[serde(default, skip_serializing_if = "crate::bar_marks::BarMarking::is_default")]
+    pub bar_marking: crate::bar_marks::BarMarking,
     /// The design option new elements go into and views without a choice of
     /// their own show for its set: session state, not saved nor undone (set
     /// through [`crate::Document::set_active_option`]).
@@ -152,6 +155,7 @@ impl Project {
             profiles: BTreeMap::new(),
             option_sets: Vec::new(),
             browser: Default::default(),
+            bar_marking: Default::default(),
             active_option: None,
             next_id: 1,
         }
@@ -346,7 +350,7 @@ impl Project {
             beam(beam_i, (i_width, i_height), SectionShape::I { web: i_web, flange: i_flange }, "tpl-mat-steel"),
         ]);
         for (key, diameter) in s.rebars {
-            types.push((n(key), TypeData::Rebar { diameter, material: n("tpl-mat-steel") }));
+            types.push((n(key), TypeData::rebar(diameter, n("tpl-mat-steel"))));
         }
         let kinds = [FoundationKind::Pad, FoundationKind::Strip, FoundationKind::Slab];
         for ((key, width, length, thickness), kind) in s.footings.into_iter().zip(kinds) {
@@ -625,7 +629,7 @@ impl Project {
             }
             for (key, diameter) in s.rebars {
                 let id = ElementTypeId(self.alloc_id());
-                let data = TypeData::Rebar { diameter, material: steel.clone() };
+                let data = TypeData::rebar(diameter, steel.clone());
                 self.types.insert(
                     id,
                     ElementType { id, name: n(key), data, info: Default::default(), uid: crate::Uid::generate() },
@@ -972,6 +976,7 @@ impl Project {
             fill_patterns,
             option_sets,
             browser,
+            bar_marking,
             profiles,
             active_option,
             next_id,
@@ -998,6 +1003,7 @@ impl Project {
             fill_patterns: fill_patterns.clone(),
             option_sets: option_sets.clone(),
             browser: browser.clone(),
+            bar_marking: bar_marking.clone(),
             profiles: profiles.clone(),
             active_option: *active_option,
             next_id: *next_id,
@@ -1188,6 +1194,14 @@ impl Project {
     pub fn rebar_of(&self, host: ElementId) -> impl Iterator<Item = (&Element, &crate::Rebar)> {
         self.elements.values().filter_map(move |e| match &e.kind {
             ElementKind::Rebar(r) if r.host == host => Some((e, r)),
+            _ => None,
+        })
+    }
+
+    /// The bar tags of reinforcement set `set`.
+    pub fn bar_tags_of(&self, set: ElementId) -> impl Iterator<Item = (&Element, &crate::bar_tag::BarTag)> {
+        self.elements.values().filter_map(move |e| match &e.kind {
+            ElementKind::BarTag(t) if t.set == set => Some((e, t.as_ref())),
             _ => None,
         })
     }

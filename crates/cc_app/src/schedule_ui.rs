@@ -40,6 +40,31 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
         });
         ui.label(RichText::new(t!("schedule-hint")).color(PALETTE.text_faint));
         ui.add_space(6.0);
+        // A table that goes under it on paper (a bending schedule's summary per diameter): shown first here.
+        if let Some(summary) = &table.summary {
+            if let Some(caption) = summary.caption {
+                ui.label(RichText::new(tr(caption)).family(theme::semibold()));
+            }
+            let id = ("schedule-summary", view_id.0);
+            egui::Grid::new(id).striped(true).min_col_width(MIN_COLUMN).spacing([COLUMN_GAP, ROW_GAP]).show(ui, |ui| {
+                for h in &summary.headers {
+                    ui.label(RichText::new(tr(h)).family(theme::semibold()));
+                }
+                ui.end_row();
+                for row in &summary.rows {
+                    for cell in &row.cells {
+                        ui.label(cell_text(cell));
+                    }
+                    ui.end_row();
+                }
+                for (i, cell) in summary.totals.iter().enumerate() {
+                    let text = if i == 0 { t!("schedule-total", "count" => cell) } else { cell.clone() };
+                    ui.label(RichText::new(text).family(theme::semibold()));
+                }
+                ui.end_row();
+            });
+            ui.add_space(12.0);
+        }
         let widths = column_widths(ui, state.session.doc.revision(), view_id, &table);
         let row_height = ui.spacing().interact_size.y.max(ui.text_style_height(&egui::TextStyle::Body));
         // The header stays on top; only the rows in sight are laid out, so long schedules stay cheap.
@@ -62,6 +87,15 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
                         });
                         continue;
                     };
+                    // A group's heading names the group in its first cell.
+                    if row.heading {
+                        row_cells(ui, &widths, row_height, stripe, |ui, i| {
+                            if let (0, Some(cell)) = (i, row.cells.first()) {
+                                ui.label(RichText::new(cell_text(cell)).family(theme::semibold()));
+                            }
+                        });
+                        continue;
+                    }
                     let selected = state.selection.contains(&row.element);
                     let mut clicked = false;
                     row_cells(ui, &widths, row_height, stripe, |ui, i| {

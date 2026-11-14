@@ -154,6 +154,16 @@ impl Element {
                     d.offset = -d.offset;
                 }
             }
+            ElementKind::BarTag(tag) => {
+                p(&mut tag.position);
+                if let Some(l) = &mut tag.leader {
+                    p(l);
+                }
+                // The text stays readable: it turns with a rotation but is not mirrored.
+                if !t.mirror {
+                    tag.rotation_deg = t.apply_angle_deg(tag.rotation_deg);
+                }
+            }
             ElementKind::LevelMark(m) => {
                 p(&mut m.position);
                 // The values stay readable: a mirror moves them to the other side.
@@ -448,6 +458,12 @@ impl crate::Project {
             ElementKind::Dimension(d) => self.view(d.view).is_some(),
             ElementKind::Text(t) => self.view(t.view).is_some(),
             ElementKind::LevelMark(m) => self.view(m.view).is_some(),
+            ElementKind::BarTag(tag) => {
+                self.view(tag.view).is_some()
+                    && self
+                        .element(tag.set)
+                        .is_some_and(|r| matches!(r.kind, ElementKind::Rebar(_) | ElementKind::ShapedRebar(_)))
+            }
             ElementKind::DetailComponent(c) => self.view(c.view).is_some(),
             ElementKind::CadImport(c) => self.view(c.view).is_some(),
             ElementKind::DetailLine(l) => self.view(l.view).is_some(),

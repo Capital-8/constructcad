@@ -166,6 +166,10 @@ pub struct WallRebarCreate {
     /// or 40 bar diameters where bars are kept whole (`max_length` 0).
     #[serde(default)]
     pub lap_at_joins: Option<bool>,
+    /// The part of the structure the sets belong to (e.g. "FOUNDATION", "WALL"), which
+    /// schedules filter and group by (default: none).
+    #[serde(default)]
+    pub partition: Option<String>,
 }
 
 fn spacing(value: f64, what: &str) -> Result<f64> {
@@ -318,6 +322,7 @@ impl Command for WallRebarCreate {
         }
         let count = walls.len();
         let lap_at_joins = self.lap_at_joins.unwrap_or(false);
+        let partition = super::rebar::partition_arg(self.partition.as_deref())?;
         let created = edit(s, t!("tx-create-rebar"), |e| {
             let mut ids = Vec::new();
             for (host, level) in &walls {
@@ -325,6 +330,7 @@ impl Command for WallRebarCreate {
                     let rebar = Rebar {
                         splice: *splice,
                         lap_at_joins: lap_at_joins && matches!(layout, RebarLayout::WallHorizontal { .. }),
+                        partition: partition.clone(),
                         ..Rebar::new(*host, layout.clone(), *cover)
                     };
                     ids.push(add_element(e, *level, *type_id, ElementKind::Rebar(rebar)));

@@ -118,6 +118,7 @@ fn patched(
         new.check_parameters(p).map_err(EngineError::invalid)?;
     }
     match &kind {
+        cc_core::ElementKind::BarTag(t) => super::bar_marks::check_tag(p, t)?,
         cc_core::ElementKind::Wall(w) => {
             super::create::check_bulge(w.bulge)?;
             super::create::check_arc(p, type_id.unwrap_or(element.type_id), w)?;

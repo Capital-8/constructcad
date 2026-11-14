@@ -31,12 +31,21 @@ pub struct Table {
     /// Totals row aligned with `headers` (the first cell holds the row count);
     /// empty when totals are hidden.
     pub totals: Vec<String>,
+    /// A table under this one (a bending schedule's summary per diameter).
+    pub summary: Option<Box<Table>>,
+    /// The title of a table drawn under another (a translation key).
+    pub caption: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub element: cc_core::ElementId,
     pub cells: Vec<Cell>,
+    /// A group's heading (its first cell names the group, across the row)
+    /// rather than a row of values.
+    pub heading: bool,
+    /// A bar's shape drawn in cell `.0` instead of its text (bending schedules).
+    pub sketch: Option<(usize, crate::bending::BarSketch)>,
 }
 
 /// A field value before formatting, used for sorting and totals.
@@ -396,6 +405,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
             _ => Value::Volume(geom.volume(e.id)),
         },
         F::Sill => e.as_hosted().map_or(Value::Missing, |h| Value::Length(h.sill_height)),
+        F::Partition => e.rebar_partition().map_or(Value::Missing, text),
         F::Host => e
             .as_hosted()
             .map(|h| h.host)
@@ -626,6 +636,9 @@ pub fn schedule_where(
     def: &ScheduleDef,
     keep: &mut dyn FnMut(&Element) -> bool,
 ) -> Table {
+    if let (Category::Rebar, Some(options)) = (category, &def.bending) {
+        return crate::bending::table(project, geom, def, options, keep);
+    }
     let fields = def.fields_for(category);
     let mut elements: Vec<&Element> = project.elements_of(category).filter(|e| keep(e)).collect();
     elements.sort_by(|a, b| default_order(a, b));
@@ -694,9 +707,16 @@ pub fn schedule_where(
         headers: fields.iter().map(|f| f.key_in(project.measurement_system())).collect(),
         rows: rows
             .into_iter()
-            .map(|(e, values)| Row { element: e.id, cells: values.iter().map(Value::cell).collect() })
+            .map(|(e, values)| Row {
+                element: e.id,
+                cells: values.iter().map(Value::cell).collect(),
+                heading: false,
+                sketch: None,
+            })
             .collect(),
         totals,
+        summary: None,
+        caption: None,
     }
 }
 
@@ -720,12 +740,23 @@ pub fn to_csv(table: &Table, header: impl Fn(&str) -> String, cell: impl Fn(&Cel
         out.push_str(&cells.iter().map(|c| quote(c)).collect::<Vec<_>>().join(&sep.to_string()));
         out.push_str("\r\n");
     };
-    line(table.headers.iter().map(|h| header(h)).collect());
-    for row in &table.rows {
-        line(row.cells.iter().map(&cell).collect());
-    }
-    if !table.totals.is_empty() {
-        line(table.totals.clone());
+    let mut tables = vec![table];
+    tables.extend(table.summary.as_deref());
+    for (i, t) in tables.into_iter().enumerate() {
+        if i > 0 {
+            // A table under another: a blank line and its caption first.
+            line(Vec::new());
+            if let Some(caption) = t.caption {
+                line(vec![header(caption)]);
+            }
+        }
+        line(t.headers.iter().map(|h| header(h)).collect());
+        for row in &t.rows {
+            line(row.cells.iter().map(&cell).collect());
+        }
+        if !t.totals.is_empty() {
+            line(t.totals.clone());
+        }
     }
     out
 }
@@ -777,81 +808,146 @@ const PAD: f64 = 1.5;
 /// Most element rows drawn; the rest are counted in a last row.
 pub const MAX_DRAWN_ROWS: usize = 2000;
 
+/// Space between a table and the one under it, millimeters.
+const TABLE_GAP: f64 = 6.0;
+
 /// A schedule as a drawing, for sheets: a title row, the headers, one row
-/// per element and the totals, ruled like a table. Sizes are paper
+/// per element and the totals, ruled like a table, then any table under it
+/// (a bending schedule's summary) with its caption. Sizes are paper
 /// millimeters at the view's `scale` (as the panel diagrams), so a sheet
 /// places it at its printed size; numbers are right-aligned, and `label`
-/// translates the headers and the key cells.
+/// translates the headers and the key cells. Group headings run across
+/// their row; rows with a bar's sketch are as tall as it needs.
 pub fn drawing(table: &Table, title: &str, scale: u32, label: &dyn Fn(&str) -> String) -> crate::Drawing2D {
-    use crate::{Anchor, LineStyle};
     let mut d = crate::Drawing2D::default();
     let k = scale.max(1) as f64 / 1000.0;
+    let bottom = draw_table(&mut d, table, title, 0.0, k, label);
+    if let Some(under) = &table.summary {
+        let caption = under.caption.map(label).unwrap_or_default();
+        draw_table(&mut d, under, &caption, bottom - TABLE_GAP, k, label);
+    }
+    d
+}
+
+/// A drawn row: its texts, whether it is a heading, its sketch.
+type DrawnRow<'a> = (Vec<String>, bool, Option<&'a (usize, crate::bending::BarSketch)>);
+
+/// Draw `table` with its title row from height `top` (paper millimeters)
+/// down; returns where it ends.
+fn draw_table(
+    d: &mut crate::Drawing2D,
+    table: &Table,
+    title: &str,
+    top: f64,
+    k: f64,
+    label: &dyn Fn(&str) -> String,
+) -> f64 {
+    use crate::{Anchor, LineStyle};
     let at = |x: f64, y: f64| glam::DVec2::new(x, y) * k;
     let headers: Vec<String> = table.headers.iter().map(|h| label(h)).collect();
     let cell_text = |c: &Cell| match c {
         Cell::Text(t) => t.clone(),
         Cell::Key(key) => label(key),
     };
-    let mut rows: Vec<Vec<String>> =
-        table.rows.iter().take(MAX_DRAWN_ROWS).map(|r| r.cells.iter().map(&cell_text).collect()).collect();
+    let mut rows: Vec<DrawnRow> = table
+        .rows
+        .iter()
+        .take(MAX_DRAWN_ROWS)
+        .map(|r| (r.cells.iter().map(&cell_text).collect(), r.heading, r.sketch.as_ref()))
+        .collect();
     if table.rows.len() > MAX_DRAWN_ROWS {
         let more = (table.rows.len() - MAX_DRAWN_ROWS).to_string();
-        rows.push(vec![format!("… +{more}")]);
+        rows.push((vec![format!("… +{more}")], false, None));
     }
     let totals = (!table.totals.is_empty()).then(|| table.totals.clone());
     let columns = headers.len().max(1);
+    let sketched: Vec<usize> = rows.iter().filter_map(|(_, _, s)| s.map(|s| s.0)).collect();
     // Each column as wide as its longest text (an estimate from the
-    // character count; texts are proportional), within the limits.
+    // character count; texts are proportional), within the limits; a
+    // column of sketches as wide as they need. Headings run across.
     let widths: Vec<f64> = (0..columns)
         .map(|c| {
+            let texts = rows.iter().filter(|(_, heading, sketch)| !heading && sketch.is_none_or(|s| s.0 != c));
             let longest = std::iter::once(headers.get(c))
-                .chain(rows.iter().map(|r| r.get(c)))
+                .chain(texts.map(|(r, ..)| r.get(c)))
                 .chain(totals.iter().map(|t| t.get(c)))
                 .flatten()
                 .map(|t| t.chars().count())
                 .max()
                 .unwrap_or(0);
-            (longest as f64 * TEXT * 0.6 + 2.0 * PAD).clamp(MIN_COLUMN, MAX_COLUMN)
+            let width = (longest as f64 * TEXT * 0.6 + 2.0 * PAD).clamp(MIN_COLUMN, MAX_COLUMN);
+            if sketched.contains(&c) { width.max(crate::bending::SKETCH_WIDTH) } else { width }
         })
         .collect();
     let width: f64 = widths.iter().sum();
-    let lines = 2 + rows.len() + usize::from(totals.is_some());
-    let height = ROW * lines as f64;
+    // Row heights: the title, the headers, the rows, the totals.
+    let mut heights = vec![ROW, ROW];
+    heights.extend(rows.iter().map(|(_, _, s)| if s.is_some() { crate::bending::SKETCH_ROW } else { ROW }));
+    if totals.is_some() {
+        heights.push(ROW);
+    }
+    let mut ys = vec![top];
+    for h in &heights {
+        ys.push(ys.last().copied().unwrap_or(top) - h);
+    }
+    let bottom = ys.last().copied().unwrap_or(top);
+    let lines = heights.len();
 
     // The title, centered in its row.
-    d.text_at(at(width / 2.0, -ROW + (ROW - TITLE_TEXT) / 2.0), title, TITLE_TEXT, Anchor::CenterBottom, 0.0);
+    d.text_at(at(width / 2.0, top - ROW + (ROW - TITLE_TEXT) / 2.0), title, TITLE_TEXT, Anchor::CenterBottom, 0.0);
     // Rules: the frame and the lines under the title, the headers and above
     // the totals stronger than those between rows.
-    for r in 0..=lines {
-        let y = -ROW * r as f64;
+    for (r, y) in ys.iter().enumerate() {
         let strong = r <= 2 || r == lines || (totals.is_some() && r == lines - 1);
         let style = if strong { LineStyle::Projection } else { LineStyle::Thin };
-        d.line(at(0.0, y), at(width, y), style, None);
+        d.line(at(0.0, *y), at(width, *y), style, None);
     }
-    d.line(at(0.0, 0.0), at(0.0, -height), LineStyle::Projection, None);
-    d.line(at(width, 0.0), at(width, -height), LineStyle::Projection, None);
-    let mut x = 0.0;
-    for w in widths.iter().take(columns - 1) {
-        x += w;
-        d.line(at(x, -ROW), at(x, -height), LineStyle::Thin, None);
+    d.line(at(0.0, top), at(0.0, bottom), LineStyle::Projection, None);
+    d.line(at(width, top), at(width, bottom), LineStyle::Projection, None);
+    // Column rules, row by row (headings run across).
+    let heading_at = |r: usize| r >= 2 && rows.get(r - 2).is_some_and(|(_, heading, _)| *heading);
+    for r in 1..lines {
+        if heading_at(r) {
+            continue;
+        }
+        let (Some(&y0), Some(&y1)) = (ys.get(r), ys.get(r + 1)) else { continue };
+        let mut x = 0.0;
+        for w in widths.iter().take(columns - 1) {
+            x += w;
+            d.line(at(x, y0), at(x, y1), LineStyle::Thin, None);
+        }
     }
     // The texts, a row at a time from the headers down.
-    let body = std::iter::once(&headers).chain(rows.iter()).chain(totals.iter());
-    for (r, row) in body.enumerate() {
-        let baseline = -ROW * (r as f64 + 2.0) + (ROW - TEXT) / 2.0;
+    let body = std::iter::once((&headers, false, None))
+        .chain(rows.iter().map(|(r, heading, sketch)| (r, *heading, *sketch)))
+        .chain(totals.iter().map(|t| (t, false, None)));
+    for (r, (row, heading, sketch)) in body.enumerate() {
+        let (Some(&y0), Some(&y1)) = (ys.get(r + 1), ys.get(r + 2)) else { continue };
+        let baseline = (y0 + y1) / 2.0 - TEXT / 2.0;
+        if heading {
+            if let Some(text) = row.first().filter(|t| !t.is_empty()) {
+                d.text_at(at(PAD, baseline), text.clone(), TEXT, Anchor::LeftBottom, 0.0);
+            }
+            continue;
+        }
         let mut x = 0.0;
         for (c, text) in row.iter().enumerate() {
             let w = widths.get(c).copied().unwrap_or(MIN_COLUMN);
-            let numeric = r > 0 && text.trim_start().starts_with(|ch: char| ch.is_ascii_digit() || ch == '-');
-            if numeric {
-                d.text_at(at(x + w - PAD, baseline), text.clone(), TEXT, Anchor::RightBottom, 0.0);
-            } else if !text.is_empty() {
-                d.text_at(at(x + PAD, baseline), text.clone(), TEXT, Anchor::LeftBottom, 0.0);
+            if let Some((_, s)) = sketch.filter(|s| s.0 == c) {
+                let (lo, hi) = (glam::DVec2::new(x, y1), glam::DVec2::new(x + w, y0));
+                crate::bending::draw_sketch(d, s, (lo, hi), k);
+            } else {
+                let numeric = r > 0 && text.trim_start().starts_with(|ch: char| ch.is_ascii_digit() || ch == '-');
+                if numeric {
+                    d.text_at(at(x + w - PAD, baseline), text.clone(), TEXT, Anchor::RightBottom, 0.0);
+                } else if !text.is_empty() {
+                    d.text_at(at(x + PAD, baseline), text.clone(), TEXT, Anchor::LeftBottom, 0.0);
+                }
             }
             x += w;
         }
     }
-    d
+    bottom
 }
 
 #[cfg(test)]
@@ -975,11 +1071,22 @@ mod tests {
     fn csv_quotes_and_separates() {
         let table = Table {
             headers: vec!["a", "b"],
-            rows: vec![Row { element: cc_core::ElementId(1), cells: vec![Cell::Text("x;y".into()), Cell::Key("k")] }],
+            rows: vec![Row {
+                element: cc_core::ElementId(1),
+                cells: vec![Cell::Text("x;y".into()), Cell::Key("k")],
+                heading: false,
+                sketch: None,
+            }],
             totals: vec!["1".into(), String::new()],
+            ..Default::default()
         };
         let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
         assert_eq!(csv, "A;B\r\n\"x;y\";k\r\n1;\r\n");
+        // A table under it follows a blank line and its caption.
+        let under = Table { headers: vec!["c"], totals: vec!["2".into()], caption: Some("cap"), ..Default::default() };
+        let both = Table { summary: Some(Box::new(under)), ..table };
+        let csv = to_csv(&both, |h| h.to_uppercase(), |c| c.raw().to_string());
+        assert!(csv.ends_with("1;\r\n\r\nCAP\r\nC\r\n2\r\n"), "{csv:?}");
     }
 
     #[test]
@@ -997,8 +1104,11 @@ mod tests {
                     text("-3.50 m"),
                     text("\t=1"),
                 ],
+                heading: false,
+                sketch: None,
             }],
             totals: vec!["-12".into()],
+            ..Default::default()
         };
         let csv = to_csv(&table, |h| h.to_uppercase(), |c| c.raw().to_string());
         let row = csv.lines().nth(1).unwrap();

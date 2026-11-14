@@ -3353,3 +3353,24 @@ tpl-imp-type-bed = Letto matrimoniale 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Armadio 5'-0"
 tpl-imp-type-kitchen-sink = Lavello in acciaio inox 4'-0"
 tpl-imp-type-floor-drain = Pozzetto sifonato 6"
+
+# Posizioni delle barre, distinte di piegatura ed etichette armatura
+category-bar-tag = Etichette armatura
+tpl-type-bar-tag = Etichetta armatura 2,5 mm
+col-grade = Acciaio
+col-shape = Forma
+col-unit-length-cm = Lungh. unitaria (cm)
+col-note = Nota
+col-waste-percent = Sfrido (%)
+col-weight-with-waste = Peso con sfrido
+bending-over-stock = Più lunga della barra commerciale: giuntare
+bending-no-partition = (senza partizione)
+bending-summary = Riepilogo per diametro
+default-bending-schedule-name = Distinta di piegatura
+tx-bar-marks-update = Fissa le posizioni delle barre
+tx-bar-marks-renumber = Rinumera le posizioni delle barre
+tx-bar-marking-set = Modifica la numerazione delle barre
+tx-create-bar-tag = Crea etichetta armatura
+msg-bar-tag-view = Le etichette armatura vanno in piante, prospetti e sezioni.
+msg-bar-tag-set = Un'etichetta armatura identifica un insieme di armature.
+col-partition = Partizione

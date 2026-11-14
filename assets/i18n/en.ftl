@@ -3353,3 +3353,24 @@ tpl-imp-type-bed = Double Bed 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Wardrobe 5'-0"
 tpl-imp-type-kitchen-sink = Stainless Sink 4'-0"
 tpl-imp-type-floor-drain = Floor Drain 6"
+
+# Bar marks, bending schedules and bar tags
+category-bar-tag = Bar tags
+tpl-type-bar-tag = Bar tag 2.5 mm
+col-grade = Grade
+col-shape = Shape
+col-unit-length-cm = Unit Length (cm)
+col-note = Note
+col-waste-percent = Waste (%)
+col-weight-with-waste = Weight with Waste
+bending-over-stock = Longer than the stock length: splice
+bending-no-partition = (no partition)
+bending-summary = Summary per diameter
+default-bending-schedule-name = Bending schedule
+tx-bar-marks-update = Freeze bar marks
+tx-bar-marks-renumber = Renumber bar marks
+tx-bar-marking-set = Change bar marking
+tx-create-bar-tag = Create bar tag
+msg-bar-tag-view = Bar tags go in plans, elevations and sections.
+msg-bar-tag-set = A bar tag tags a reinforcement set.
+col-partition = Partition

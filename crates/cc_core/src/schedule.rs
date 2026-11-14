@@ -56,6 +56,8 @@ pub enum ScheduleField {
     BarLength,
     /// Steel weight, kilograms.
     Weight,
+    /// The part of the structure a reinforcement set belongs to.
+    Partition,
     /// Plumbing system or electrical circuits.
     System,
     /// Fall of a pipe per unit of length.
@@ -144,6 +146,7 @@ impl ScheduleField {
             ScheduleField::BarCount => "col-bar-count",
             ScheduleField::BarLength => "col-bar-length",
             ScheduleField::Weight => "col-weight",
+            ScheduleField::Partition => "col-partition",
             ScheduleField::System => "col-system",
             ScheduleField::Slope => "col-slope",
             ScheduleField::Power => "col-power",
@@ -225,7 +228,9 @@ impl ScheduleField {
             }
             Category::Beam => &[F::Section, F::Profile, F::LinearMass, F::Length, F::CutLength, F::Volume, F::Material],
             Category::Foundation => &[F::Section, F::Length, F::Area, F::Thickness, F::Volume, F::Material],
-            Category::Rebar => &[F::Host, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material],
+            Category::Rebar => {
+                &[F::Host, F::Partition, F::Diameter, F::BarCount, F::BarLength, F::Length, F::Weight, F::Material]
+            }
             Category::Stair => &[F::Width, F::Risers, F::RiserHeight, F::Run, F::Volume],
             Category::Ramp => &[F::Width, F::Slope, F::Run, F::Volume],
             Category::Railing => &[F::Length, F::Height],
@@ -280,6 +285,7 @@ impl ScheduleField {
             | Category::MaskingRegion
             | Category::DetailComponent
             | Category::LevelMark
+            | Category::BarTag
             | Category::CadImport
             | Category::TitleBlock => {
                 return Vec::new();
@@ -343,6 +349,7 @@ impl ScheduleField {
             | Category::MaskingRegion
             | Category::DetailComponent
             | Category::LevelMark
+            | Category::BarTag
             | Category::CadImport
             | Category::TitleBlock => Vec::new(),
         }
@@ -362,6 +369,71 @@ pub struct ScheduleDef {
     pub filter: Option<(ScheduleField, String)>,
     /// Hide the totals row.
     pub hide_totals: bool,
+    /// A reinforcement schedule as a bending schedule: one row per bar mark
+    /// instead of one per set (the fields, sort and filter do not apply).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bending: Option<BendingOptions>,
+}
+
+/// Most partitions a bending schedule is limited to.
+pub const MAX_BENDING_PARTITIONS: usize = 100;
+/// Largest waste a bending schedule adds, percent.
+pub const MAX_WASTE_PERCENT: f64 = 100.0;
+
+/// What a bending schedule shows: one row per bar mark (mark, diameter,
+/// grade, shape sketch with its dimensions, length of one bar, count, total
+/// length, weight; rows of bars longer than the stock length noted), then a
+/// summary per diameter and grade (total length and weight, with the waste
+/// added when given).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BendingOptions {
+    /// Only the sets of these partitions (none: every set; an empty text
+    /// stands for the sets without one).
+    pub partitions: Vec<String>,
+    /// Rows under a heading per partition (each partition's marks counted
+    /// on their own).
+    pub group_by_partition: bool,
+    /// Waste added in the summary, percent (none: no waste columns).
+    pub waste_percent: Option<f64>,
+}
+
+impl BendingOptions {
+    /// Why the options cannot be kept (`None`: they can), as a message.
+    pub fn check(&self) -> Option<String> {
+        if self.partitions.len() > MAX_BENDING_PARTITIONS {
+            return Some(format!("at most {MAX_BENDING_PARTITIONS} partitions"));
+        }
+        if self.partitions.iter().any(|p| p.chars().count() > crate::bar_marks::MAX_MARK_TEXT) {
+            return Some(format!("partitions have at most {} characters", crate::bar_marks::MAX_MARK_TEXT));
+        }
+        if self.waste_percent.is_some_and(|w| !(w.is_finite() && (0.0..=MAX_WASTE_PERCENT).contains(&w))) {
+            return Some(format!("waste_percent must be between 0 and {MAX_WASTE_PERCENT}"));
+        }
+        None
+    }
+
+    /// Bring the options into range; returns how many changed.
+    pub fn repair(&mut self) -> usize {
+        let mut n = 0;
+        if self.partitions.len() > MAX_BENDING_PARTITIONS {
+            self.partitions.truncate(MAX_BENDING_PARTITIONS);
+            n += 1;
+        }
+        let before = self.partitions.len();
+        self.partitions.retain(|p| p.chars().count() <= crate::bar_marks::MAX_MARK_TEXT);
+        n += before - self.partitions.len();
+        if self.waste_percent.is_some_and(|w| !(w.is_finite() && (0.0..=MAX_WASTE_PERCENT).contains(&w))) {
+            self.waste_percent = None;
+            n += 1;
+        }
+        n
+    }
+
+    /// Whether a set of `partition` is shown.
+    pub fn shows(&self, partition: &str) -> bool {
+        self.partitions.is_empty() || self.partitions.iter().any(|p| p.trim().eq_ignore_ascii_case(partition.trim()))
+    }
 }
 
 impl ScheduleDef {

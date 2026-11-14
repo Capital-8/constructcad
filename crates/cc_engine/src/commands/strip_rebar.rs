@@ -102,6 +102,10 @@ pub struct StripRebarCreate {
     /// or 40 bar diameters where bars are kept whole (`max_length` 0).
     #[serde(default)]
     pub lap_at_joins: Option<bool>,
+    /// The part of the structure the sets belong to (e.g. "FOUNDATION", "WALL"), which
+    /// schedules filter and group by (default: none).
+    #[serde(default)]
+    pub partition: Option<String>,
 }
 
 /// The strips to reinforce, and whether each has a beam on top.
@@ -231,12 +235,14 @@ impl Command for StripRebarCreate {
             return Ok(json!({"created": [], "strips": 0}));
         }
         let lap_at_joins = self.lap_at_joins.unwrap_or(false);
+        let partition = super::rebar::partition_arg(self.partition.as_deref())?;
         let created = edit(s, t!("tx-create-rebar"), |e| {
             Ok(todo
                 .into_iter()
                 .map(|(host, level, ty, layout, splice)| {
                     let lap_at_joins = lap_at_joins && layout.runs_along();
-                    let rebar = Rebar { splice, lap_at_joins, ..Rebar::new(host, layout, cover) };
+                    let rebar =
+                        Rebar { splice, lap_at_joins, partition: partition.clone(), ..Rebar::new(host, layout, cover) };
                     add_element(e, level, ty, ElementKind::Rebar(rebar))
                 })
                 .collect::<Vec<_>>())

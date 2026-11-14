@@ -3353,3 +3353,24 @@ tpl-imp-type-bed = 雙人床 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = 衣櫃 5'-0"
 tpl-imp-type-kitchen-sink = 4'-0" 不鏽鋼水槽
 tpl-imp-type-floor-drain = 6" 存水彎地漏
+
+# 鋼筋編號、彎紮表與鋼筋標籤
+category-bar-tag = 鋼筋標籤
+tpl-type-bar-tag = 鋼筋標籤 2.5 mm
+col-grade = 鋼材等級
+col-shape = 形狀
+col-unit-length-cm = 單根長度 (cm)
+col-note = 備註
+col-waste-percent = 損耗 (%)
+col-weight-with-waste = 含損耗重量
+bending-over-stock = 長於定尺鋼筋：需搭接
+bending-no-partition = (無分區)
+bending-summary = 依直徑彙總
+default-bending-schedule-name = 鋼筋彎紮表
+tx-bar-marks-update = 固定鋼筋編號
+tx-bar-marks-renumber = 重新編排鋼筋編號
+tx-bar-marking-set = 變更鋼筋編號設定
+tx-create-bar-tag = 建立鋼筋標籤
+msg-bar-tag-view = 鋼筋標籤可放在平面、立面及剖面中。
+msg-bar-tag-set = 鋼筋標籤用於標示鋼筋組。
+col-partition = 分區

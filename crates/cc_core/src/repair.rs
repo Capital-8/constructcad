@@ -49,6 +49,7 @@ fn element_is_valid(e: &Element) -> bool {
             kind && d.offset.is_finite() && finite_points(&[d.a, d.b])
         }
         ElementKind::LevelMark(m) => m.position.is_finite(),
+        ElementKind::BarTag(t) => t.is_valid(),
         ElementKind::Text(t) => {
             let leaders = t.leaders.iter().all(|l| l.end.is_finite() && l.elbow.is_none_or(|e| e.is_finite()));
             let width = t.width.is_none_or(|w| w.is_finite() && w > 0.0);
@@ -201,6 +202,7 @@ impl Project {
                 TypeData::LevelMark { text_size, datum, .. } => {
                     repairs += crate::level_mark::repair_type(text_size, datum)
                 }
+                TypeData::BarTag { text_size } => repairs += crate::bar_tag::repair_type(text_size),
                 TypeData::Room {}
                 | TypeData::CadImport {}
                 | TypeData::DetailLine {}
@@ -256,7 +258,18 @@ impl Project {
                     repairs += usize::from(fix_positive(width, 0.15)) + usize::from(fix_positive(height, 0.4));
                     repairs += fit_shape(shape, *width, *height);
                 }
-                TypeData::Rebar { diameter, .. } => repairs += usize::from(fix_positive(diameter, 0.01)),
+                TypeData::Rebar { diameter, grade, mass_per_meter, .. } => {
+                    repairs += usize::from(fix_positive(diameter, 0.01));
+                    // A mass per meter that is no mass is left to the diameter; a long grade is cut.
+                    if mass_per_meter.is_some_and(|m| !(m.is_finite() && m > 0.0 && m <= 1000.0)) {
+                        *mass_per_meter = None;
+                        repairs += 1;
+                    }
+                    if let Some((end, _)) = grade.char_indices().nth(crate::bar_marks::MAX_MARK_TEXT) {
+                        grade.truncate(end);
+                        repairs += 1;
+                    }
+                }
                 TypeData::CableTray { width, height, .. } => {
                     repairs += usize::from(fix_positive(width, 0.2)) + usize::from(fix_positive(height, 0.1));
                     for (v, max) in [(width, crate::mep::MAX_TRAY_WIDTH), (height, crate::mep::MAX_TRAY_HEIGHT)] {
@@ -368,6 +381,9 @@ impl Project {
         // Browser schemes: distinct ids, names, bounded criteria, a scheme in use that exists.
         repairs += self.browser.repair();
 
+        // Bar marking: numbers in range, usable frozen marks.
+        repairs += self.bar_marking.repair();
+
         // Fill patterns: valid patterns, and references to patterns that are gone dropped.
         repairs += self.repair_fill_patterns();
         repairs += self.repair_profiles();
@@ -424,6 +440,13 @@ impl Project {
                         ElementKind::Dimension(d) => self.view(d.view).is_some(),
                         ElementKind::Text(t) => self.view(t.view).is_some(),
                         ElementKind::LevelMark(m) => self.view(m.view).is_some(),
+                        // A bar tag needs its view and its set.
+                        ElementKind::BarTag(t) => {
+                            self.view(t.view).is_some()
+                                && self.element(t.set).is_some_and(|s| {
+                                    matches!(s.kind, ElementKind::Rebar(_) | ElementKind::ShapedRebar(_))
+                                })
+                        }
                         ElementKind::CadImport(c) => self.view(c.view).is_some(),
                         ElementKind::DetailLine(l) => self.view(l.view).is_some(),
                         ElementKind::DetailComponent(c) => self.view(c.view).is_some(),
@@ -506,6 +529,7 @@ impl Project {
                 ElementKind::Pad(p) => repairs += p.repair(),
                 ElementKind::Stair(s) => repairs += s.layout.repair(),
                 ElementKind::LevelMark(m) => repairs += m.repair(),
+                ElementKind::BarTag(t) => repairs += t.repair(),
                 ElementKind::Ramp(r) => repairs += r.layout.repair(),
                 ElementKind::Railing(r) => {
                     if r.stair.is_some_and(|h| !stairs.contains(&h.host)) {
@@ -715,6 +739,10 @@ impl Project {
         let title_blocks = self.title_blocks();
         for view in self.views.values_mut() {
             match &mut view.kind {
+                // A bending schedule's options within their limits.
+                ViewKind::Schedule { def, .. } => {
+                    repairs += def.bending.as_mut().map_or(0, crate::BendingOptions::repair);
+                }
                 ViewKind::Sheet { viewports, size, title_block, issue_date, fields, .. } => {
                     if title_block.is_some_and(|t| !title_blocks.contains(&t)) {
                         *title_block = title_blocks.first().copied();

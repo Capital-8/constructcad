@@ -85,6 +85,18 @@ fn stock_length(p: &Project) -> f64 {
 /// The lap splices of bars of `type_id` running along a beam: `max_length`
 /// (default: the stock length; 0 for whole bars) and `lap` (default: 40 bar
 /// diameters).
+/// A partition as it is kept: trimmed, at most [`cc_core::bar_marks::MAX_MARK_TEXT`] characters.
+pub(crate) fn partition_arg(text: Option<&str>) -> Result<String> {
+    let text = text.unwrap_or("").trim();
+    if text.chars().count() > cc_core::bar_marks::MAX_MARK_TEXT {
+        return Err(EngineError::invalid(format!(
+            "partition has at most {} characters",
+            cc_core::bar_marks::MAX_MARK_TEXT
+        )));
+    }
+    Ok(text.to_string())
+}
+
 pub(crate) fn splice(
     p: &Project,
     type_id: ElementTypeId,
@@ -170,6 +182,10 @@ pub struct RebarCreate {
     /// following the whole outline. The section must have only square corners.
     #[serde(default)]
     pub overlapping: Option<bool>,
+    /// The part of the structure the sets belong to (e.g. "FOUNDATION", "WALL"), which
+    /// schedules filter and group by (default: none).
+    #[serde(default)]
+    pub partition: Option<String>,
     /// Columns, `perimeter`: heights above the column's base where its vertical bars are
     /// cut, rising (the construction joints): the bars of each lift run `lap` past the next
     /// height. Instead of the equal lifts of `max_length`.
@@ -291,9 +307,19 @@ impl Command for RebarCreate {
             (false, None) => super::rebar::splice(p, type_id, None, self.lap)?,
             (_, splice) => splice,
         };
+        let partition = partition_arg(self.partition.as_deref())?;
         let set = |host| {
             let (layout, faces, lifts) = (layout.clone(), faces.clone(), lifts.clone());
-            ElementKind::Rebar(Rebar { host, layout, cover, splice, faces, lap_at_joins, overlapping, lifts })
+            let partition = partition.clone();
+            ElementKind::Rebar(Rebar {
+                splice,
+                faces,
+                lap_at_joins,
+                overlapping,
+                lifts,
+                partition,
+                ..Rebar::new(host, layout, cover)
+            })
         };
         // The other members of the host's type, each on its own level.
         let host_type = p.element(host_id).map(|e| e.type_id);

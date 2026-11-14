@@ -5,6 +5,8 @@
 //! [`Document::edit`], which records a [`Transaction`] for undo/redo.
 
 pub mod arc;
+pub mod bar_marks;
+pub mod bar_tag;
 pub mod bracing;
 pub mod browser;
 pub mod cad;
@@ -120,7 +122,7 @@ pub use project::{
 };
 pub use ramp::{RampCheck, RampIssue, RampLayout, RampRules, RampShape, ramp_flights};
 pub use region::Region;
-pub use schedule::{ScheduleDef, ScheduleField};
+pub use schedule::{BendingOptions, ScheduleDef, ScheduleField};
 pub use section_props::SectionProperties;
 pub use stair::{
     LandingBeams, LandingPosts, PostAt, StairBuild, StairCheck, StairConstruction, StairIssue, StairLayout,

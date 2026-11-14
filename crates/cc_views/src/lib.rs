@@ -5,6 +5,8 @@
 //! computes tables.
 
 mod annotate;
+pub mod bar_tags;
+pub mod bending;
 pub mod cad;
 pub mod callout;
 pub mod component_view;
@@ -148,6 +150,7 @@ pub fn generate_temporary(
     annotate::dimensions(&mut d, project, view.id, view.scale);
     notes::notes(&mut d, project, view.id, view.scale);
     level_marks::level_marks(&mut d, project, view);
+    bar_tags::bar_tags(&mut d, project, geom, view);
     callout::marks(&mut d, project, view);
     graphics::apply(&mut d, &mut graphics::Resolver::new(project, geom, view, temporary), view.scale);
     underlay(&mut d, project, geom, view);

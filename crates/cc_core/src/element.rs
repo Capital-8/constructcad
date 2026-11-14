@@ -93,6 +93,9 @@ pub enum ElementKind {
     MaskingRegion(crate::region::Region),
     /// The elevation of a point, written in one view.
     LevelMark(Box<crate::level_mark::LevelMark>),
+    /// The count, mark, diameter, spacing and length of a reinforcement
+    /// set's bars, written in one view.
+    BarTag(Box<crate::bar_tag::BarTag>),
     /// A 2D component placed in one view (construction details).
     DetailComponent(Box<crate::detail_component::DetailComponent>),
 }
@@ -138,8 +141,29 @@ impl Element {
             ElementKind::FilledRegion(_) => Category::FilledRegion,
             ElementKind::MaskingRegion(_) => Category::MaskingRegion,
             ElementKind::LevelMark(_) => Category::LevelMark,
+            ElementKind::BarTag(_) => Category::BarTag,
             ElementKind::DetailComponent(_) => Category::DetailComponent,
         }
+    }
+
+    /// The partition of a reinforcement set or of shaped bars.
+    pub fn rebar_partition(&self) -> Option<&str> {
+        match &self.kind {
+            ElementKind::Rebar(r) => Some(r.partition.as_str()),
+            ElementKind::ShapedRebar(r) => Some(r.partition.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The mark given by hand to a reinforcement set's or shaped bars' bars.
+    pub fn rebar_bar_mark(&self) -> Option<&str> {
+        match &self.kind {
+            ElementKind::Rebar(r) => r.bar_mark.as_deref(),
+            ElementKind::ShapedRebar(r) => r.bar_mark.as_deref(),
+            _ => None,
+        }
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
     }
 
     /// The view that owns the element (dimensions, text notes, detail lines
@@ -152,6 +176,7 @@ impl Element {
             ElementKind::DetailLine(l) => Some(l.view),
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => Some(r.view),
             ElementKind::LevelMark(m) => Some(m.view),
+            ElementKind::BarTag(t) => Some(t.view),
             ElementKind::DetailComponent(c) => Some(c.view),
             _ => None,
         }
@@ -167,6 +192,7 @@ impl Element {
             ElementKind::DetailLine(l) => &mut l.view,
             ElementKind::FilledRegion(r) | ElementKind::MaskingRegion(r) => &mut r.view,
             ElementKind::LevelMark(m) => &mut m.view,
+            ElementKind::BarTag(t) => &mut t.view,
             ElementKind::DetailComponent(c) => &mut c.view,
             _ => return false,
         };
@@ -330,6 +356,12 @@ impl Element {
                 }
             }
             ElementKind::LevelMark(m) => m.position += delta,
+            ElementKind::BarTag(t) => {
+                t.position += delta;
+                if let Some(l) = &mut t.leader {
+                    *l += delta;
+                }
+            }
             ElementKind::DetailComponent(c) => c.position += delta,
             ElementKind::Text(t) => {
                 t.position += delta;
@@ -1600,6 +1632,14 @@ pub struct Rebar {
     /// whole bars, or the equal lifts of `splice`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lifts: Vec<f64>,
+    /// The part of the structure the set belongs to (e.g. "FOUNDATION",
+    /// "WALL"), which schedules filter and group by; empty for none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub partition: String,
+    /// A mark given by hand to all the set's bars, instead of the one the
+    /// project's marking gives their shape (see [`crate::bar_marks`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bar_mark: Option<String>,
 }
 
 impl Rebar {
@@ -1617,6 +1657,8 @@ impl Rebar {
             lap_at_joins: false,
             overlapping: false,
             lifts: Vec::new(),
+            partition: String::new(),
+            bar_mark: None,
         }
     }
 
@@ -1629,7 +1671,11 @@ impl Rebar {
 
     /// Whether the values are usable (finite and within their limits).
     pub fn is_valid(&self) -> bool {
-        self.layout.is_valid() && self.cover.is_finite() && self.cover >= 0.0 && Self::lifts_are_valid(&self.lifts)
+        self.layout.is_valid()
+            && self.cover.is_finite()
+            && self.cover >= 0.0
+            && Self::lifts_are_valid(&self.lifts)
+            && texts_fit(&self.partition, self.bar_mark.as_deref())
     }
 
     /// The pieces `(from, to)` of a vertical bar of a column `height` high
@@ -1664,6 +1710,18 @@ pub struct ShapedRebar {
     /// marks, grade), written back on export.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub properties: Vec<crate::properties::PropertySet>,
+    /// The part of the structure the bars belong to, as [`Rebar::partition`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub partition: String,
+    /// A mark given by hand to all the bars, as [`Rebar::bar_mark`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bar_mark: Option<String>,
+}
+
+/// Whether a partition and a bar mark are short enough to keep.
+fn texts_fit(partition: &str, bar_mark: Option<&str>) -> bool {
+    let fits = |t: &str| t.chars().count() <= crate::bar_marks::MAX_MARK_TEXT;
+    fits(partition) && bar_mark.is_none_or(fits)
 }
 
 impl ShapedRebar {
@@ -1686,6 +1744,7 @@ impl ShapedRebar {
                     && b.iter().all(|p| p.is_finite())
                     && b.windows(2).any(|w| w[0].distance(w[1]) > 1e-6)
             })
+            && texts_fit(&self.partition, self.bar_mark.as_deref())
     }
 }
 

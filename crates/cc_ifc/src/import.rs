@@ -2595,7 +2595,14 @@ impl<'a> Importer<'a> {
         }
         let (level, elevation) = self.level_for(id, z0);
         let bars = lines.into_iter().map(|l| l.into_iter().map(|p| p - DVec3::Z * elevation).collect()).collect();
-        let rebar = ShapedRebar { bars, properties: self.property_sets(id) };
+        // The partition and the mark given by hand, as this program writes them.
+        let own = |name: &str| {
+            let is_set = |n: &str| n == crate::export::REBAR_PSET;
+            let text = self.pset_texts(id, &is_set, name).first().map(|t| clean_name(t));
+            text.filter(|t| !t.is_empty() && t.chars().count() <= cc_core::bar_marks::MAX_MARK_TEXT)
+        };
+        let (partition, bar_mark, own_grade) = (own("Partition").unwrap_or_default(), own("BarMark"), own("Grade"));
+        let rebar = ShapedRebar { bars, properties: self.property_sets(id), partition, bar_mark };
         if !rebar.is_valid() {
             return false;
         }
@@ -2622,6 +2629,10 @@ impl<'a> Importer<'a> {
             (None, None) => self.material("IFC", color),
         };
         let size = format!("Ø {:.1} mm", diameter * 1000.0);
+        // The type's steel grade: this program's own, else the bar's.
+        let fits = |g: &String| g.chars().count() <= cc_core::bar_marks::MAX_MARK_TEXT;
+        let type_grade = own_grade.or_else(|| grade.clone().filter(fits)).unwrap_or_default();
+        let wanted_grade = type_grade.clone();
         let fallback = grade.map_or_else(|| size.clone(), |g| format!("{size} {g}"));
         let name = self.type_entity(id).and_then(|t| t.arg(2).as_str()).map(clean_name).filter(|s| !s.is_empty());
         let uid = self.type_uid(id);
@@ -2631,12 +2642,15 @@ impl<'a> Importer<'a> {
             fallback,
             uid,
             |t| match t {
-                TypeData::Rebar { diameter: d, material: m } => {
-                    (d - diameter).abs() <= 1e-5 && material.as_ref().is_none_or(|want| m == want)
+                // A bar of a grade takes a type of that grade.
+                TypeData::Rebar { diameter: d, material: m, grade: g, .. } => {
+                    (d - diameter).abs() <= 1e-5
+                        && material.as_ref().is_none_or(|want| m == want)
+                        && (wanted_grade.is_empty() || *g == wanted_grade)
                 }
                 _ => false,
             },
-            || TypeData::Rebar { diameter, material: fallback_material },
+            || TypeData::Rebar { diameter, material: fallback_material, grade: type_grade, mass_per_meter: None },
         );
         // The bar mark: the tag, else the name.
         let mark = Some(Self::tag(e)).filter(|t| !t.is_empty()).or_else(|| e.arg(2).as_str().map(clean_name));
@@ -2689,6 +2703,7 @@ impl<'a> Importer<'a> {
             if name == crate::export::COMPONENT_PSET
                 || name == crate::export::PHASING_PSET
                 || name == crate::export::DESIGN_OPTION_PSET
+                || name == crate::export::REBAR_PSET
             {
                 continue;
             }

@@ -212,6 +212,19 @@ impl Command for ElementsList {
 pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     let e = s.project().element(id)?.clone();
     let params = super::cad::params(&e.kind);
+    // A bar tag's text, as its view writes it.
+    let tag_text = match &e.kind {
+        ElementKind::BarTag(t) => super::bar_marks::tag_text(s, t),
+        _ => None,
+    };
+    // The marks of a reinforcement set's bars, each once.
+    let bar_marks: Vec<String> = {
+        let (p, g) = s.project_and_geometry();
+        match g.rebar.contains_key(&id) {
+            true => cc_geom::bar_marks::resolve(p, &g.rebar).of_set(id).into_iter().map(|m| m.mark.clone()).collect(),
+            false => Vec::new(),
+        }
+    };
     let p = s.project();
     let mut derived = serde_json::Map::new();
     match &e.kind {
@@ -277,6 +290,11 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             if let Some(g) = cc_geom::ramp_geom(p, &e, r) {
                 derived.insert("run".into(), json!(g.run()));
                 derived.insert("check".into(), json!(g.check));
+            }
+        }
+        ElementKind::BarTag(_) => {
+            if let Some(text) = &tag_text {
+                derived.insert("text".into(), json!(text));
             }
         }
         ElementKind::LevelMark(m) => {
@@ -442,6 +460,9 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         let bars: Vec<Value> =
             lengths.iter().rev().map(|(mm, count)| json!({"length": *mm as f64 / 1000.0, "count": count})).collect();
         derived.insert("bars".into(), json!(bars));
+        // The marks of its bars, in the order they first have them, and what a meter of bar weighs.
+        derived.insert("marks".into(), json!(bar_marks));
+        derived.insert("mass_per_meter".into(), json!(set.mass_per_meter()));
     }
     if let Some(lines) = geom.roof_ridges.get(&id) {
         // Ridges, hips and valleys in plan.
@@ -616,6 +637,33 @@ impl Command for MaterialGet {
     }
 }
 
+/// A schedule table as JSON: translated headers, rows (with their element;
+/// group headings marked `heading`), totals and any table under it (`summary`, with its `caption`).
+fn table_json(table: &cc_views::Table, cell: &dyn Fn(&cc_views::Cell) -> String) -> Value {
+    let rows: Vec<Value> = table
+        .rows
+        .iter()
+        .map(|r| {
+            let mut row = json!({"element": r.element.0, "cells": r.cells.iter().map(cell).collect::<Vec<_>>()});
+            if r.heading {
+                row["heading"] = json!(true);
+            }
+            row
+        })
+        .collect();
+    let mut out = json!({
+        "headers": table.headers.iter().map(|h| crate::i18n::tr(h)).collect::<Vec<_>>(),
+        "rows": rows,
+        "totals": table.totals,
+    });
+    if let Some(caption) = table.caption {
+        out["caption"] = json!(crate::i18n::tr(caption));
+    }
+    if let Some(summary) = &table.summary {
+        out["summary"] = table_json(summary, cell);
+    }
+    out
+}
 /// The table of a schedule view: headers, one row per element (with its id) and totals,
 /// formatted with the project units.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -635,11 +683,7 @@ impl Command for ScheduleTable {
             cc_views::Cell::Text(t) => t.clone(),
             cc_views::Cell::Key(k) => crate::i18n::tr(k),
         };
-        Ok(json!({
-            "headers": table.headers.iter().map(|h| crate::i18n::tr(h)).collect::<Vec<_>>(),
-            "rows": table.rows.iter().map(|r| json!({"element": r.element.0, "cells": r.cells.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
-            "totals": table.totals,
-        }))
+        Ok(table_json(&table, &cell))
     }
 }
 

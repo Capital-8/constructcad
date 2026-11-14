@@ -3353,3 +3353,24 @@ tpl-imp-type-bed = Doppelbett 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Kleiderschrank 5'-0"
 tpl-imp-type-kitchen-sink = Edelstahlspüle 4'-0"
 tpl-imp-type-floor-drain = Bodenablauf 6"
+
+# Positionsnummern, Biegelisten und Bewehrungsbeschriftungen
+category-bar-tag = Bewehrungsbeschriftungen
+tpl-type-bar-tag = Bewehrungsbeschriftung 2,5 mm
+col-grade = Stahlsorte
+col-shape = Form
+col-unit-length-cm = Einzellänge (cm)
+col-note = Hinweis
+col-waste-percent = Verschnitt (%)
+col-weight-with-waste = Gewicht mit Verschnitt
+bending-over-stock = Länger als die Lieferlänge: stoßen
+bending-no-partition = (ohne Bauteilgruppe)
+bending-summary = Zusammenfassung je Durchmesser
+default-bending-schedule-name = Biegeliste
+tx-bar-marks-update = Positionsnummern festschreiben
+tx-bar-marks-renumber = Positionsnummern neu vergeben
+tx-bar-marking-set = Positionsnummerierung ändern
+tx-create-bar-tag = Bewehrungsbeschriftung erstellen
+msg-bar-tag-view = Bewehrungsbeschriftungen gehören in Grundrisse, Ansichten und Schnitte.
+msg-bar-tag-set = Eine Bewehrungsbeschriftung beschriftet einen Bewehrungssatz.
+col-partition = Bauteilgruppe

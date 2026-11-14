@@ -56,6 +56,8 @@ pub enum Category {
     MaskingRegion,
     /// Level marks: the elevation of a point in a plan, elevation or section.
     LevelMark,
+    /// Bar tags: the bars of a reinforcement set written in a view.
+    BarTag,
     /// Detail components: reusable 2D components placed in one view.
     DetailComponent,
     /// Cable trays: open runs carrying electrical circuits.
@@ -69,7 +71,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 39] = [
+    pub const ALL: [Category; 40] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -100,6 +102,7 @@ impl Category {
         Category::MaskingRegion,
         Category::DetailComponent,
         Category::LevelMark,
+        Category::BarTag,
         Category::CadImport,
         Category::Mass,
         Category::Shaft,
@@ -196,6 +199,7 @@ impl Category {
             Category::Dimension => "category-dimension",
             Category::Text => "category-text",
             Category::LevelMark => "category-level-mark",
+            Category::BarTag => "category-bar-tag",
             Category::TitleBlock => "category-title-block",
             Category::Column => "category-column",
             Category::Beam => "category-beam",
@@ -389,6 +393,10 @@ pub enum TypeData {
     /// Level marks with text of `text_size` paper millimeters, writing
     /// `datum` plus each level, followed by `finished_suffix` (the finished
     /// level) or `raw_suffix` (the raw, structural one).
+    /// Bar tags with text of `text_size` paper millimeters.
+    BarTag {
+        text_size: f64,
+    },
     LevelMark {
         text_size: f64,
         #[serde(default)]
@@ -434,6 +442,15 @@ pub enum TypeData {
     Rebar {
         diameter: f64,
         material: String,
+        /// Steel grade (e.g. "CA-50"); empty for none. Bars of different
+        /// grades never share a mark, and bending schedules total by it.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        grade: String,
+        /// Mass per meter, kg/m, when it is not that of a round bar of
+        /// `diameter` in steel of 7850 kg/m³ (ribbed bars are listed by
+        /// their nominal mass).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mass_per_meter: Option<f64>,
     },
     /// Pipes of outside `diameter`.
     Pipe {
@@ -581,6 +598,12 @@ pub(crate) fn default_major_every() -> u32 {
 }
 
 impl TypeData {
+    /// A type of reinforcing bars of `diameter` in `material`, with no grade
+    /// and the mass per meter of a round bar.
+    pub fn rebar(diameter: f64, material: String) -> TypeData {
+        TypeData::Rebar { diameter, material, grade: String::new(), mass_per_meter: None }
+    }
+
     /// Material names referenced by this type.
     pub fn materials(&self) -> Vec<&str> {
         match self {
@@ -626,6 +649,7 @@ impl TypeData {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }
@@ -704,6 +728,7 @@ impl TypeData {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }
@@ -926,6 +951,7 @@ impl ElementType {
             TypeData::Dimension { .. } => Category::Dimension,
             TypeData::Text { .. } => Category::Text,
             TypeData::LevelMark { .. } => Category::LevelMark,
+            TypeData::BarTag { .. } => Category::BarTag,
             TypeData::Column { .. } => Category::Column,
             TypeData::Beam { .. } => Category::Beam,
             TypeData::Foundation { .. } => Category::Foundation,
@@ -1104,6 +1130,7 @@ impl ElementType {
             | TypeData::Dimension { .. }
             | TypeData::Text { .. }
             | TypeData::LevelMark { .. }
+            | TypeData::BarTag { .. }
             | TypeData::CadImport {}
             | TypeData::DetailLine {}
             | TypeData::FilledRegion { .. }

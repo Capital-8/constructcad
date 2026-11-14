@@ -120,6 +120,10 @@ pub struct SlabRebarCreate {
     /// Lap length of the splices, meters (default: 40 bar diameters).
     #[serde(default)]
     pub lap: Option<f64>,
+    /// The part of the structure the sets belong to (e.g. "FOUNDATION", "BOTTOM SLAB"), which
+    /// schedules filter and group by (default: none).
+    #[serde(default)]
+    pub partition: Option<String>,
 }
 
 /// A slab to reinforce: its element, level, whether it has openings, and
@@ -294,11 +298,12 @@ impl Command for SlabRebarCreate {
         if todo.is_empty() {
             return Ok(json!({"created": [], "slabs": 0}));
         }
+        let partition = super::rebar::partition_arg(self.partition.as_deref())?;
         let created = edit(s, t!("tx-create-rebar"), |e| {
             Ok(todo
                 .into_iter()
                 .map(|(host, level, ty, layout, splice)| {
-                    let rebar = Rebar { splice, ..Rebar::new(host, layout, cover) };
+                    let rebar = Rebar { splice, partition: partition.clone(), ..Rebar::new(host, layout, cover) };
                     add_element(e, level, ty, ElementKind::Rebar(rebar))
                 })
                 .collect::<Vec<_>>())
