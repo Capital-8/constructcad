@@ -439,6 +439,8 @@ registry![
         levels::LevelDelete,
         views::ViewCreate,
         views::ViewSet,
+        schedule::ScheduleGet,
+        schedule::ScheduleSet,
         views::ViewDuplicate,
         views::ViewDelete,
         callout::CalloutCreate,

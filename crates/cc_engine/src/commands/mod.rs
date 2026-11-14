@@ -50,6 +50,7 @@ pub mod ramp;
 pub mod rebar;
 pub mod region;
 pub mod roofing;
+pub mod schedule;
 pub mod shaft;
 pub mod sheets;
 pub mod site;
