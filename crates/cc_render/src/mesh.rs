@@ -138,8 +138,46 @@ fn complement(hidden: impl Iterator<Item = Range<u32>>) -> Vec<Range<u32>> {
 #[derive(Debug, Clone, Default)]
 pub struct Tessellation {
     solids: Vec<SolidTess>,
-    /// Shared horizontal origin of all positions in the tessellation.
+    /// The model point every position (and surface pattern coordinate) is
+    /// taken from before it becomes `f32` (see [`local_origin`]); its `z` is 0.
     pub origin: DVec3,
+}
+
+/// The grid, in meters, the local origin of a tessellation snaps to.
+///
+/// Survey coordinates put a model hundreds of kilometers from the project
+/// origin, where an `f32` has a step of centimeters: the 3D view takes its
+/// positions from a nearby model point instead. Snapped to a coarse grid,
+/// that point stays put while the model is edited (a moving origin would
+/// shift the surface patterns), and a model within half a grid cell of the
+/// project origin keeps it. Within a kilometer of the origin an `f32` still
+/// resolves a tenth of a millimeter.
+pub const LOCAL_ORIGIN_GRID: f64 = 1024.0;
+
+/// The local origin of a model whose geometry spans `bounds`: the grid point
+/// ([`LOCAL_ORIGIN_GRID`]) nearest its center, on the ground (`z` 0, so the
+/// ground plane and the sun's heights need no shift).
+pub fn local_origin(bounds: Option<(DVec3, DVec3)>) -> DVec3 {
+    let Some((lo, hi)) = bounds else { return DVec3::ZERO };
+    let center = (lo + hi) * 0.5;
+    if !center.is_finite() {
+        return DVec3::ZERO;
+    }
+    let snap = |c: f64| (c / LOCAL_ORIGIN_GRID).round() * LOCAL_ORIGIN_GRID;
+    DVec3::new(snap(center.x), snap(center.y), 0.0)
+}
+
+/// A vertex of a [`SolidTess`].
+#[derive(Debug, Clone, Copy)]
+struct TessVertex {
+    /// From the tessellation's origin.
+    pos: [f32; 3],
+    normal: [f32; 3],
+    /// Plane coordinates (meters, see [`plane_axes`]), where image textures are laid.
+    uv: [f64; 2],
+    /// The same from the tessellation's origin: what the surface patterns
+    /// are laid along, precise as `f32`.
+    plane: [f32; 2],
 }
 
 /// The faces of a solid that show one material: all of them, or those
@@ -151,8 +189,7 @@ struct SolidTess {
     look: cc_geom::Look,
     /// The detail levels of the views that show it (a component's piece).
     detail: cc_core::component::DetailLevels,
-    /// Position, normal and plane coordinates (meters, see [`plane_axes`]) of each vertex.
-    vertices: Vec<([f32; 3], [f32; 3], [f64; 2])>,
+    vertices: Vec<TessVertex>,
     /// Where each face's vertices start in `vertices`.
     faces: Vec<u32>,
     /// Triangles, as indices into `vertices`.
@@ -190,14 +227,7 @@ fn facet_shifts(solid: &cc_geom::Solid) -> Vec<[f64; 2]> {
 
 impl Tessellation {
     pub fn new(geom: &ModelGeometry) -> Self {
-        let origin = geom.bounds().map_or(DVec3::ZERO, |(lo, hi)| {
-            let center = (lo + hi) * 0.5;
-            if center.is_finite() && center.truncate().abs().max_element() > 1024.0 {
-                DVec3::new(center.x.round(), center.y.round(), 0.0)
-            } else {
-                DVec3::ZERO
-            }
-        });
+        let origin = local_origin(geom.bounds());
         let mut solids = Vec::new();
         for solid in &geom.solids {
             let part = |look: cc_geom::Look| SolidTess {
@@ -237,7 +267,13 @@ impl Tessellation {
                 let start = s.vertices.len() as u32;
                 s.faces.push(start);
                 s.vertices.extend(face.verts.iter().zip(normals).map(|(p, n)| {
-                    ((*p - origin).as_vec3().to_array(), n.as_vec3().to_array(), [p.dot(u) + du, p.dot(v) + dv])
+                    let local = *p - origin;
+                    TessVertex {
+                        pos: local.as_vec3().to_array(),
+                        normal: n.as_vec3().to_array(),
+                        uv: [p.dot(u) + du, p.dot(v) + dv],
+                        plane: [(local.dot(u) + du) as f32, (local.dot(v) + dv) as f32],
+                    }
                 }));
                 if inner.get(fi) == Some(&true) {
                     continue;
@@ -297,7 +333,7 @@ impl SceneMesh {
                 // Per face, whole repeats are taken off so the coordinates stay precise as f32.
                 let mut shift = [0.0, 0.0];
                 let mut next_face = solid.faces.iter().peekable();
-                for (i, &(pos, normal, uv)) in solid.vertices.iter().enumerate() {
+                for (i, &TessVertex { pos, normal, uv, plane }) in solid.vertices.iter().enumerate() {
                     // Image rows run down from the top: the texture's up is the face's up.
                     let [x, y] = t.map(uv);
                     let y = -y;
@@ -305,18 +341,17 @@ impl SceneMesh {
                         shift = [x.floor(), y.floor()];
                     }
                     let tex = [(x - shift[0]) as f32, (y - shift[1]) as f32, index as f32 + 1.0, 0.0];
-                    let plane = [uv[0] as f32, uv[1] as f32];
                     self.vertices.push(Vertex { pos, normal, color, fg, bg, tex, plane });
                 }
             }
-            None => self.vertices.extend(solid.vertices.iter().map(|&(pos, normal, uv)| Vertex {
+            None => self.vertices.extend(solid.vertices.iter().map(|&TessVertex { pos, normal, plane, .. }| Vertex {
                 pos,
                 normal,
                 color,
                 fg,
                 bg,
                 tex: [0.0; 4],
-                plane: [uv[0] as f32, uv[1] as f32],
+                plane,
             })),
         }
         let target = if color[3] < 0.999 { &mut self.transparent_indices } else { &mut self.indices };
@@ -489,14 +524,10 @@ impl SceneMesh {
 
     /// The bars [`SceneMesh::build_rebar`] highlights, drawn over a mesh
     /// it built with no selection (the same lines, so they win the depth test).
-    pub fn rebar_highlight(geom: &ModelGeometry, selected: &BTreeSet<ElementId>) -> Highlight {
-        Self::rebar_highlight_at(geom, selected, DVec3::ZERO)
-    }
-
-    /// Build selected rebar in the same local frame as its base mesh.
-    pub fn rebar_highlight_at(geom: &ModelGeometry, selected: &BTreeSet<ElementId>, origin: DVec3) -> Highlight {
-        let mut mesh = Self { origin, ..Self::default() };
-        rebar_lines(geom, selected, true, origin, &mut mesh.edges);
+    /// It takes the tessellation that mesh was built from, for its origin.
+    pub fn rebar_highlight(geom: &ModelGeometry, tess: &Tessellation, selected: &BTreeSet<ElementId>) -> Highlight {
+        let mut mesh = Self { origin: tess.origin, ..Self::default() };
+        rebar_lines(geom, selected, true, tess.origin, &mut mesh.edges);
         Highlight { mesh, shown: None }
     }
 
@@ -536,22 +567,15 @@ impl SceneMesh {
     }
 
     /// The members [`SceneMesh::build_analytical`] highlights, drawn over a
-    /// mesh it built with no selection (the same lines, so they win the depth test).
+    /// mesh it built with no selection (the same lines, so they win the depth
+    /// test). It takes the tessellation that mesh was built from, for its origin.
     pub fn analytical_highlight(
+        tess: &Tessellation,
         model: &cc_geom::analytical::AnalyticalModel,
         selected: &BTreeSet<ElementId>,
     ) -> Highlight {
-        Self::analytical_highlight_at(model, selected, DVec3::ZERO)
-    }
-
-    /// Build selected analytical members in the same local frame as their base mesh.
-    pub fn analytical_highlight_at(
-        model: &cc_geom::analytical::AnalyticalModel,
-        selected: &BTreeSet<ElementId>,
-        origin: DVec3,
-    ) -> Highlight {
-        let mut mesh = Self { origin, ..Self::default() };
-        member_lines(model, selected, true, origin, &mut mesh.edges);
+        let mut mesh = Self { origin: tess.origin, ..Self::default() };
+        member_lines(model, selected, true, tess.origin, &mut mesh.edges);
         Highlight { mesh, shown: None }
     }
 }
@@ -640,6 +664,53 @@ pub(crate) mod tests {
             SceneMesh::highlight(&tessellation, &mesh.spans, &BTreeSet::from([ElementId(1)])).mesh.origin,
             mesh.origin
         );
+    }
+
+    /// The surface patterns are laid along plane coordinates taken from the
+    /// local origin: at survey coordinates they keep millimeters as `f32`
+    /// (from the project origin their step would be 3 cm).
+    #[test]
+    fn survey_coordinates_keep_surface_patterns_precise() {
+        let mut geometry = ModelGeometry::default();
+        let mut solid = cc_geom::Solid::new(ElementId(1), cc_core::Category::Wall, [200; 3]);
+        let corner = glam::DVec2::new(417_626.123, 78_712.456);
+        let along = glam::DVec2::new(0.6, 0.8);
+        solid.add_box(corner, along, along.perp(), 0.0, 3.37, -0.007, 0.007, 0.0, 2.9);
+        geometry.solids.push(solid);
+        let tess = Tessellation::new(&geometry);
+        let mut checked = 0;
+        for s in &tess.solids {
+            let ends = s.faces.iter().skip(1).map(|e| *e as usize).chain([s.vertices.len()]);
+            for (start, end) in s.faces.iter().map(|f| *f as usize).zip(ends) {
+                let face = &s.vertices[start..end];
+                let TessVertex { uv: uv0, plane: plane0, .. } = face[0];
+                for &TessVertex { uv, plane, .. } in face {
+                    for k in 0..2 {
+                        let exact = uv[k] - uv0[k];
+                        assert!((f64::from(plane[k] - plane0[k]) - exact).abs() < 1e-4, "{plane:?} {uv:?}");
+                    }
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked >= 24, "{checked}");
+    }
+
+    /// The local origin is a grid point near the model, on the ground; a
+    /// model near the project origin keeps it, and an edit that moves the
+    /// model's center a little does not move it.
+    #[test]
+    fn the_local_origin_snaps_to_a_coarse_grid() {
+        let span = |c: DVec3, half: f64| Some((c - DVec3::splat(half), c + DVec3::splat(half)));
+        assert_eq!(local_origin(None), DVec3::ZERO);
+        assert_eq!(local_origin(span(DVec3::new(200.0, -300.0, 40.0), 30.0)), DVec3::ZERO);
+        assert_eq!(local_origin(Some((DVec3::splat(f64::NAN), DVec3::ONE))), DVec3::ZERO);
+        let survey = DVec3::new(417_626.123, 7_812_456.7, 812.0);
+        let origin = local_origin(span(survey, 25.0));
+        assert_eq!(origin.z, 0.0);
+        assert!((origin - survey).truncate().abs().max_element() <= LOCAL_ORIGIN_GRID * 0.5);
+        assert_eq!(origin.x % LOCAL_ORIGIN_GRID, 0.0);
+        assert_eq!(local_origin(span(survey + DVec3::new(12.0, -7.0, 3.0), 60.0)), origin);
     }
 
     /// A round column, 1 m in radius and 4 m tall, of 24 smooth facets (no ends).
@@ -934,7 +1005,7 @@ pub(crate) mod tests {
         };
         let member = model.members.first().unwrap().element;
         let sel = BTreeSet::from([member]);
-        let h = SceneMesh::analytical_highlight(&model, &sel);
+        let h = SceneMesh::analytical_highlight(&tess, &model, &sel);
         assert!(h.shown.is_none() && !h.mesh.edges.is_empty());
         assert_eq!(
             drawn(&h.mesh.edges, 0..h.mesh.edges.len() as u32),
@@ -942,7 +1013,7 @@ pub(crate) mod tests {
         );
         let set = geom.rebar.values().next().unwrap().element;
         let sel = BTreeSet::from([set]);
-        let h = SceneMesh::rebar_highlight(&geom, &sel);
+        let h = SceneMesh::rebar_highlight(&geom, &tess, &sel);
         assert!(h.shown.is_none() && !h.mesh.edges.is_empty());
         assert_eq!(
             drawn(&h.mesh.edges, 0..h.mesh.edges.len() as u32),

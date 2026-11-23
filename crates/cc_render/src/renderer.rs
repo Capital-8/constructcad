@@ -435,11 +435,13 @@ impl Renderer3D {
     }
 
     /// Draw `highlight` (made for the mesh last uploaded) over that mesh, or
-    /// nothing with `None`; the base mesh's buffers stay as they are.
+    /// nothing with `None`; the base mesh's buffers stay as they are. A
+    /// highlight made around another origin than that mesh's (from another
+    /// tessellation) is not drawn, rather than drawn out of place.
     pub fn set_highlight(&mut self, device: &wgpu::Device, highlight: Option<&Highlight>) {
         self.drawn = None;
         self.highlight = None;
-        let Some(h) = highlight else { return };
+        let Some(h) = highlight.filter(|h| h.mesh.origin == self.origin) else { return };
         let mesh = &h.mesh;
         let largest = [
             std::mem::size_of_val(mesh.vertices.as_slice()),
