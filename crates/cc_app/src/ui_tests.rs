@@ -116,6 +116,11 @@ fn ribbon_snapshots() {
         let mut harness = ribbon_harness(state, 1100.0);
         results.add(harness.try_snapshot(format!("ribbon_{tab:?}").to_lowercase()));
     }
+    // The wall tool's Modify | Place Wall tab with its Draw group.
+    let mut state = sample_state();
+    let wall = state.project().default_type(cc_core::Category::Wall).unwrap();
+    state.set_tool(crate::tools::Tool::Wall { type_id: wall });
+    results.add(ribbon_harness(state, 1600.0).try_snapshot("ribbon_place_wall"));
     // Narrow window: the groups scroll.
     let mut state = sample_state();
     state.ribbon_tab = RibbonTab::Architecture;
