@@ -158,6 +158,8 @@ pub enum Icon {
     DrawArc3,
     DrawArcCenter,
     DrawArcTangent,
+    DrawFillet,
+    PickLines,
     DrawPoint,
     EditBoundary,
     EditProfile,
@@ -220,7 +222,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 203] = [
+    pub const ALL: [Icon; 205] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -366,6 +368,8 @@ impl Icon {
         Icon::DrawArc3,
         Icon::DrawArcCenter,
         Icon::DrawArcTangent,
+        Icon::DrawFillet,
+        Icon::PickLines,
         Icon::DrawPoint,
         Icon::EditBoundary,
         Icon::EditProfile,
@@ -574,6 +578,8 @@ impl Icon {
             Icon::DrawArc3 => include_str!("../../../assets/icons/ui/draw-arc3.svg"),
             Icon::DrawArcCenter => include_str!("../../../assets/icons/ui/draw-arc-center.svg"),
             Icon::DrawArcTangent => include_str!("../../../assets/icons/ui/draw-arc-tangent.svg"),
+            Icon::DrawFillet => include_str!("../../../assets/icons/ui/draw-fillet.svg"),
+            Icon::PickLines => include_str!("../../../assets/icons/ui/pick-lines.svg"),
             Icon::DrawPoint => include_str!("../../../assets/icons/ui/draw-point.svg"),
             Icon::EditBoundary => include_str!("../../../assets/icons/ui/edit-boundary.svg"),
             Icon::EditProfile => include_str!("../../../assets/icons/ui/edit-profile.svg"),

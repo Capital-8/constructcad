@@ -109,6 +109,7 @@ mod update;
 mod update_install;
 mod view3d;
 mod view_cube;
+mod wall_draw_ui;
 mod wall_framing_ui;
 mod wall_profile_ui;
 

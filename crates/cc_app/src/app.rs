@@ -360,7 +360,7 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
     if escape {
         if !state.typed.is_empty() || state.typed.angle_active {
             state.typed.clear();
-        } else if crate::detail_ui::escape(state) {
+        } else if crate::detail_ui::escape(state) || crate::wall_draw_ui::escape(state) {
             // The curve being drawn was dropped; the tool stays.
         } else if crate::tools::spline_wall_escape(state) {
             // The spline wall being drawn was ended where it was.

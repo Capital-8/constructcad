@@ -396,6 +396,14 @@ fn ribbon_buttons_are_accessible() {
     for node in harness.query_all_by_role(Role::Button) {
         found.insert(node.accesskit_node().label().unwrap_or_default());
     }
+    // The wall tool's Modify | Place Wall tab adds its own drawing modes.
+    let mut state = sample_state();
+    let wall = state.project().default_type(cc_core::Category::Wall).unwrap();
+    state.set_tool(crate::tools::Tool::Wall { type_id: wall });
+    let harness = ribbon_harness(state, 2400.0);
+    for node in harness.query_all_by_role(Role::Button) {
+        found.insert(node.accesskit_node().label().unwrap_or_default());
+    }
     // So does an open sketch.
     let mut state = sample_state();
     let floor = state.project().default_type(cc_core::Category::Floor).unwrap();
@@ -423,26 +431,54 @@ fn ribbon_buttons_are_accessible() {
     }
 }
 
-/// The wall tool switches between straight, arc and spline walls in the options bar.
+/// Picking the wall tool opens the *Modify | Place Wall* tab, whose Draw
+/// group switches between its modes; leaving the tool goes back to the tab
+/// shown before.
 #[test]
-fn wall_tool_has_an_arc_mode() {
+fn wall_tool_draw_modes_are_in_its_modify_tab() {
+    use crate::tools::{Tool, WallMode};
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Architecture;
+    let wall_type = state.project().default_type(cc_core::Category::Wall).unwrap();
+    state.set_tool(Tool::Wall { type_id: wall_type });
+    assert_eq!(state.ribbon_tab, RibbonTab::Modify);
+    let mut harness = ribbon_harness(state, 2400.0);
+    let title =
+        format!("{} | {}", t!("ribbon-modify"), t!("ribbon-place-tool", "tool" => crate::i18n::tr("tool-wall")));
+    assert!(harness.query_by_label(&title).is_some(), "the tab names the tool");
+    assert_eq!(harness.state().wall_mode, WallMode::Line);
+    for (label, mode) in [
+        (t!("sketch-tool-arc3"), WallMode::Arc),
+        (t!("sketch-tool-rect"), WallMode::Rect),
+        (t!("sketch-tool-polygon-out"), WallMode::PolygonOut),
+        (t!("sketch-tool-ellipse"), WallMode::Ellipse),
+        (t!("sketch-tool-spline"), WallMode::Spline),
+        (t!("wall-tool-fillet"), WallMode::Fillet),
+        (t!("wall-tool-pick-lines"), WallMode::PickLines),
+        (t!("sketch-tool-line"), WallMode::Line),
+    ] {
+        harness.get_by_role_and_label(Role::Button, &label).click();
+        harness.run();
+        assert_eq!(harness.state().wall_mode, mode, "{label}");
+    }
+    harness.state_mut().set_tool(Tool::Select);
+    assert_eq!(harness.state().ribbon_tab, RibbonTab::Architecture, "back to the tab shown before");
+}
+
+/// The options bar of a shape mode shows its offset, radius and sides.
+#[test]
+fn wall_shape_modes_have_their_options() {
     use crate::tools::WallMode;
     let mut state = sample_state();
     let wall_type = state.project().default_type(cc_core::Category::Wall).unwrap();
     state.tool = crate::tools::Tool::Wall { type_id: wall_type };
-    let mut harness = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+    state.wall_mode = WallMode::Polygon;
+    let harness = themed_harness(state, egui::vec2(1800.0, 60.0), egui::Theme::Light, |ui, state| {
         crate::ribbon::options_bar(ui, state)
     });
-    assert_eq!(harness.state().wall_mode, WallMode::Line);
-    harness.get_by_label(&t!("wall-mode-arc")).click();
-    harness.run();
-    assert_eq!(harness.state().wall_mode, WallMode::Arc);
-    harness.get_by_label(&t!("wall-mode-spline")).click();
-    harness.run();
-    assert_eq!(harness.state().wall_mode, WallMode::Spline);
-    harness.get_by_label(&t!("wall-mode-line")).click();
-    harness.run();
-    assert_eq!(harness.state().wall_mode, WallMode::Line);
+    for key in ["opt-offset", "opt-radius", "sketch-sides", "opt-wall-join"] {
+        assert!(harness.query_by_label(&crate::i18n::tr(key)).is_some(), "{key}");
+    }
 }
 
 /// The options bar of the hosted tool over `state`, 1600 px wide.
@@ -8723,4 +8759,46 @@ fn material_libraries_load_and_cancel() {
     harness.get_by_label(&t!("action-cancel")).click();
     harness.run();
     assert_eq!(harness.state().project().materials.len(), before + 12, "Cancel undoes the load");
+}
+
+/// Issue #497: the wall tool's Rectangle mode makes four joined walls from
+/// two corners, in one undo step, and stays for the next shape; Esc drops
+/// a first corner.
+#[test]
+fn the_wall_tool_draws_rectangles() {
+    let mut state = spline_state();
+    state.wall_mode = crate::tools::WallMode::Rect;
+    let mut harness = spline_canvas(state, egui::Theme::Light);
+    let (walls, depth) = (walls_of(harness.state()).len(), harness.state().session.doc.undo_depth());
+    spline_click(&mut harness, [-1.0, -0.5]);
+    spline_click(&mut harness, [1.0, 1.0]);
+    let state = harness.state();
+    assert!(state.message.is_empty(), "{}", state.message);
+    assert_eq!(walls_of(state).len(), walls + 4);
+    assert_eq!(state.session.doc.undo_depth(), depth + 1, "one undo step");
+    assert_eq!(state.selection.len(), 4, "the new walls are selected");
+    assert!(matches!(state.tool, crate::tools::Tool::Wall { .. }));
+    spline_click(&mut harness, [2.0, 0.0]);
+    assert!(crate::wall_draw_ui::typing(harness.state()), "a first corner");
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert!(!crate::wall_draw_ui::typing(harness.state()), "Esc drops it");
+    assert!(matches!(harness.state().tool, crate::tools::Tool::Wall { .. }), "the tool stays");
+    assert_eq!(walls_of(harness.state()).len(), walls + 4);
+}
+
+/// With a radius in the options bar, one click places a circle: two
+/// half-circle walls.
+#[test]
+fn a_circle_with_a_radius_takes_one_click() {
+    let mut state = spline_state();
+    state.wall_mode = crate::tools::WallMode::Circle;
+    state.wall_draw.radius = 1.0;
+    let mut harness = spline_canvas(state, egui::Theme::Light);
+    let walls = walls_of(harness.state()).len();
+    spline_click(&mut harness, [0.0, 0.0]);
+    let new = walls_of(harness.state());
+    assert_eq!(new.len(), walls + 2, "{}", harness.state().message);
+    let arcs: Vec<_> = new.iter().filter_map(|e| e.as_wall().and_then(|w| w.arc())).collect();
+    assert!(arcs.iter().filter(|a| (a.radius - 1.0).abs() < 1e-9).count() >= 2);
 }

@@ -969,7 +969,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         for ((tab, label), text_w) in tabs.into_iter().zip(text_widths) {
             let width = text_w + pad;
             let active = state.ribbon_tab == tab && (!collapsed || state.ribbon_peek);
-            let contextual = tab == RibbonTab::Modify && !state.selection.is_empty();
+            let contextual = tab == RibbonTab::Modify && (!state.selection.is_empty() || places(&state.tool));
             let r = tab_title(ui, &label, active, contextual, width);
             // A double click collapses or expands; a click on a collapsed
             // ribbon shows that tab's panel over the views, or hides it again.
@@ -1418,16 +1418,38 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     });
     group(ui, t!("group-group"), |ui| command_buttons(ui, state, &[Group, Ungroup, Explode]));
     group(ui, t!("group-phasing"), |ui| command_button(ui, state, Demolish));
+    // The active tool's drawing modes, highlighted.
+    if matches!(state.tool, Tool::Wall { .. }) {
+        let draw: &[&[UiCommand]] = &[
+            &[SketchLine, SketchRect, SketchPolygon],
+            &[SketchPolygonOut, SketchCircle, SketchEllipse],
+            &[SketchArc3, SketchArcCenter, SketchArcTangent],
+            &[WallFillet, SketchSpline, WallPickLines],
+        ];
+        group_with(ui, t!("group-draw"), true, None, |ui| stacks(ui, state, draw));
+    }
     // What edits only the selected categories (and the active sheet), highlighted.
     for (caption, list) in commands::contextual(state) {
         group_with(ui, caption, true, None, |ui| command_buttons(ui, state, &list));
     }
 }
 
-/// The Modify tab's title: "Modify | Walls" while one category is selected,
-/// "Modify | Multiple" for several, plain "Modify" with nothing selected.
+/// Whether `tool` has its own *Modify | Place …* tab, with its drawing
+/// modes, that the ribbon opens while it is active.
+pub fn places(tool: &Tool) -> bool {
+    matches!(tool, Tool::Wall { .. })
+}
+
+/// The Modify tab's title: "Modify | Place Wall" while such a tool is
+/// active (see [`places`]), "Modify | Walls" while one category is
+/// selected, "Modify | Multiple" for several, plain "Modify" with nothing
+/// selected.
 fn modify_title(state: &AppState) -> String {
     let modify = t!("ribbon-modify");
+    if places(&state.tool) {
+        let tool = crate::i18n::tr(state.tool.key());
+        return format!("{modify} | {}", t!("ribbon-place-tool", "tool" => tool));
+    }
     let project = state.project();
     let mut categories = state.selection.iter().take(2000).filter_map(|id| project.element(*id)).map(|e| e.category());
     let Some(first) = categories.next() else { return modify };
@@ -1912,23 +1934,9 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("hint-select")));
             }
             Tool::Wall { .. } => {
-                // Straight walls, arcs through a third point, or splines through the points clicked.
+                // The drawing mode is picked in the ribbon's Draw group; its options come first.
                 use crate::tools::WallMode;
-                let mut mode = state.wall_mode;
-                ui.selectable_value(&mut mode, WallMode::Line, t!("wall-mode-line")).on_hover_text(t!("hint-wall"));
-                ui.selectable_value(&mut mode, WallMode::Arc, t!("wall-mode-arc")).on_hover_text(t!("hint-wall-arc"));
-                ui.selectable_value(&mut mode, WallMode::Spline, t!("wall-mode-spline"))
-                    .on_hover_text(t!("hint-wall-spline"));
-                if mode != state.wall_mode {
-                    state.wall_mode = mode;
-                    state.interaction.points.clear();
-                    // A spline goes on from where a chain stands; other modes start afresh after one.
-                    if mode == WallMode::Spline {
-                        state.interaction.points.extend(state.interaction.anchor.take());
-                    }
-                    state.interaction.prev_dir = None;
-                }
-                ui.separator();
+                crate::wall_draw_ui::options(ui, state);
                 ui.label(t!("prop-top-constraint"));
                 let levels: Vec<_> = state.project().levels.iter().map(|l| (l.id, l.name.clone())).collect();
                 let current = match state.wall_top_level.and_then(|id| levels.iter().find(|l| l.0 == id)) {
@@ -1961,6 +1969,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     WallMode::Arc => t!("hint-wall-arc"),
                     WallMode::Spline if state.interaction.points.is_empty() => t!("hint-wall-spline"),
                     WallMode::Spline => t!("hint-wall-spline-next"),
+                    _ => crate::wall_draw_ui::hint(state),
                 };
                 ui.label(theme::muted(hint));
             }

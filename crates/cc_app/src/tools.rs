@@ -1780,6 +1780,9 @@ pub fn handle(
             }
             select(ui, resp, painter, state, false, xf, drawing, None);
         }
+        (Tool::Wall { type_id }, Some(level)) if crate::wall_draw_ui::handles(state.wall_mode) => {
+            crate::wall_draw_ui::tool(ui, resp, painter, state, level, *type_id, xf, drawing)
+        }
         (Tool::Wall { type_id }, Some(level)) => wall_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Hosted { category, type_id }, Some(level)) => {
             hosted_tool(ui, resp, painter, state, level, *category, *type_id, xf)
@@ -3802,6 +3805,41 @@ pub enum WallMode {
     Arc,
     /// A smooth curve through the points clicked (see [`cc_core::wall_spline`]).
     Spline,
+    /// Four walls from two opposite corners.
+    Rect,
+    /// A regular polygon by its center and a corner.
+    Polygon,
+    /// A regular polygon by its center and the middle of a side.
+    PolygonOut,
+    /// Two half-circle walls by the center and a point on the circle.
+    Circle,
+    /// An arc by its center, start and end.
+    ArcCenter,
+    /// An arc tangent to the free end of a wall.
+    ArcTangent,
+    /// Spline walls along an ellipse: its center, an axis end, the other axis.
+    Ellipse,
+    /// An arc wall rounding the corner of two straight walls.
+    Fillet,
+    /// Walls along picked lines (detail lines and grids).
+    PickLines,
+}
+
+impl WallMode {
+    /// The sketch tool that draws the shape modes (see [`crate::wall_draw_ui`]).
+    pub fn shape(self) -> Option<crate::sketch_mode::Draw> {
+        use crate::sketch_mode::Draw;
+        Some(match self {
+            WallMode::Rect => Draw::Rect,
+            WallMode::Polygon => Draw::Polygon,
+            WallMode::PolygonOut => Draw::PolygonOut,
+            WallMode::Circle => Draw::Circle,
+            WallMode::ArcCenter => Draw::ArcCenter,
+            WallMode::ArcTangent => Draw::ArcTangent,
+            WallMode::Ellipse => Draw::Ellipse,
+            _ => return None,
+        })
+    }
 }
 
 /// The wall tool's Spline mode: each click adds a point the wall passes
