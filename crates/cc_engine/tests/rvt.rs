@@ -95,6 +95,29 @@ fn a_converter_that_crashes_or_hangs_keeps_the_project() {
     }
 }
 
+/// A stop asked from another thread (the app's Cancel) kills the converter
+/// long before the timeout; the command fails as cancelled and the project stays.
+#[test]
+fn a_stop_request_kills_the_converter_and_keeps_the_project() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let path = temp_rvt("stopped-hangs.rvt", &std::fs::read(fixture()).unwrap());
+    let mut s = session_with_a_wall();
+    let stop = Arc::new(AtomicBool::new(false));
+    s.set_stop_flag(Arc::clone(&stop));
+    let started = std::time::Instant::now();
+    let canceller = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        stop.store(true, Ordering::Relaxed);
+    });
+    let err = s.execute("rvt_import", json!({"path": path})).unwrap_err();
+    canceller.join().unwrap();
+    std::fs::remove_file(&path).ok();
+    assert_eq!(err.code, ErrorCode::Cancelled, "{err:?}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(30), "stopped, not timed out");
+    assert_eq!(s.project().walls().count(), 1);
+}
+
 #[test]
 fn the_timeout_is_a_positive_number_of_seconds() {
     let mut s = session_with_a_wall();

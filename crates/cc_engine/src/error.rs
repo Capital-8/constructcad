@@ -121,6 +121,7 @@ impl From<cc_rvt::RvtError> for EngineError {
             E::Partial { streams } => t!("err-rvt-partial", "count" => streams),
             E::Timeout { seconds } => t!("err-rvt-timeout", "seconds" => seconds),
             E::Crashed(detail) => t!("err-rvt-crashed", "detail" => detail),
+            E::Cancelled => return Self::new(ErrorCode::Cancelled, t!("job-cancelled")),
             E::Process(detail) => t!("err-rvt-converter", "detail" => detail),
         })
     }

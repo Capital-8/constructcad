@@ -86,6 +86,10 @@ pub enum RvtError
 
   The converter did not finish within this many seconds and was stopped.
 
+- `Cancelled`
+
+  The caller cancelled the conversion and the converter was stopped.
+
 - `Crashed(String)`
 
   The converter ended without a report: a crash, such as a stack
@@ -217,12 +221,13 @@ converter's own (`<file.rvt> <out.ifc> <report.json>`).
 ### fn `convert_in_child`
 
 ```rust
-pub fn convert_in_child(converter: &Converter, input: &Path, timeout: Duration) -> Result<Converted, RvtError>
+pub fn convert_in_child(converter: &Converter, input: &Path, timeout: Duration, stop: &dyn Fn() -> bool) -> Result<Converted, RvtError>
 ```
 
 Convert the Revit file `input` to IFC4 in a child process that runs
-`converter`, stopped when it takes longer than `timeout`. The IFC file
-and the report are written to a new folder under the system's temporary
-folder, deleted afterwards.
+`converter`, stopped when it takes longer than `timeout` or when `stop`
+returns true (checked every few milliseconds; the caller cancelled). The
+IFC file and the report are written to a new folder under the system's
+temporary folder, deleted afterwards.
 
 {% endraw %}

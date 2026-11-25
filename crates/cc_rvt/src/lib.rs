@@ -54,6 +54,9 @@ pub enum RvtError {
     /// The converter did not finish within this many seconds and was stopped.
     #[error("the converter did not finish within {seconds} s")]
     Timeout { seconds: u64 },
+    /// The caller cancelled the conversion and the converter was stopped.
+    #[error("the conversion was cancelled")]
+    Cancelled,
     /// The converter ended without a report: a crash, such as a stack
     /// overflow, or a kill. The text is its last error line or exit status.
     #[error("the converter stopped without a result ({0})")]
@@ -289,7 +292,7 @@ mod tests {
     #[test]
     fn the_child_converts_a_revit_file() {
         let input = temp_file("child.rvt", SYNTHETIC);
-        let out = convert_in_child(&this_binary_as("tests::child_converts"), &input, DEFAULT_TIMEOUT);
+        let out = convert_in_child(&this_binary_as("tests::child_converts"), &input, DEFAULT_TIMEOUT, &|| false);
         std::fs::remove_file(&input).ok();
         let out = out.unwrap();
         assert!(out.ifc.contains("IFCPROJECT("));
@@ -299,7 +302,7 @@ mod tests {
     #[test]
     fn the_child_reports_what_it_could_not_read() {
         let input = temp_file("not-revit.rvt", b"ISO-10303-21;");
-        let out = convert_in_child(&this_binary_as("tests::child_converts"), &input, DEFAULT_TIMEOUT);
+        let out = convert_in_child(&this_binary_as("tests::child_converts"), &input, DEFAULT_TIMEOUT, &|| false);
         std::fs::remove_file(&input).ok();
         assert!(matches!(out, Err(RvtError::Read(_))), "{out:?}");
     }
@@ -308,9 +311,21 @@ mod tests {
     fn a_converter_that_never_ends_is_stopped() {
         let input = temp_file("hangs.rvt", SYNTHETIC);
         let started = std::time::Instant::now();
-        let out = convert_in_child(&this_binary_as("tests::child_hangs"), &input, Duration::from_millis(500));
+        let out =
+            convert_in_child(&this_binary_as("tests::child_hangs"), &input, Duration::from_millis(500), &|| false);
         std::fs::remove_file(&input).ok();
         assert_eq!(out.unwrap_err(), RvtError::Timeout { seconds: 1 });
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn a_cancelled_conversion_stops_the_converter() {
+        let input = temp_file("cancelled.rvt", SYNTHETIC);
+        let started = std::time::Instant::now();
+        let stop = || started.elapsed() > Duration::from_millis(300);
+        let out = convert_in_child(&this_binary_as("tests::child_hangs"), &input, DEFAULT_TIMEOUT, &stop);
+        std::fs::remove_file(&input).ok();
+        assert_eq!(out.unwrap_err(), RvtError::Cancelled);
         assert!(started.elapsed() < Duration::from_secs(30));
     }
 
@@ -318,7 +333,8 @@ mod tests {
     #[test]
     fn a_converter_that_overflows_its_stack_is_an_error() {
         let input = temp_file("overflows.rvt", SYNTHETIC);
-        let out = convert_in_child(&this_binary_as("tests::child_overflows_its_stack"), &input, DEFAULT_TIMEOUT);
+        let out =
+            convert_in_child(&this_binary_as("tests::child_overflows_its_stack"), &input, DEFAULT_TIMEOUT, &|| false);
         std::fs::remove_file(&input).ok();
         assert!(matches!(out, Err(RvtError::Crashed(_))), "{out:?}");
     }
@@ -326,7 +342,7 @@ mod tests {
     #[test]
     fn a_converter_that_cannot_start_is_an_error() {
         let converter = Converter { program: PathBuf::from("/no/such/converter"), args: Vec::new() };
-        let out = convert_in_child(&converter, Path::new("in.rvt"), DEFAULT_TIMEOUT);
+        let out = convert_in_child(&converter, Path::new("in.rvt"), DEFAULT_TIMEOUT, &|| false);
         assert!(matches!(out, Err(RvtError::Process(_))), "{out:?}");
     }
 

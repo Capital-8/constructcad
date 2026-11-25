@@ -6,6 +6,8 @@ use cc_views::Drawing2D;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// How long [`Session::wait_job`] waits for the extension at a time.
@@ -60,6 +62,9 @@ pub struct Session {
     blocking: bool,
     /// The plugin command left waiting, if any (see [`Session::poll_job`]).
     job: Option<PendingJob>,
+    /// Set by another thread to ask the running command to stop (see
+    /// [`Session::set_stop_flag`]).
+    stop: Option<Arc<AtomicBool>>,
 }
 
 /// What [`Session::execute`] noted before a command ran, to finish it when
@@ -155,6 +160,7 @@ impl Session {
             fold_events: false,
             blocking: true,
             job: None,
+            stop: None,
         }
     }
 
@@ -993,6 +999,19 @@ impl Session {
             Ok(r) => r,
             Err(payload) => std::panic::resume_unwind(payload),
         }
+    }
+
+    /// Let another thread ask the commands of this session to stop: a long
+    /// command that can stop (`rvt_import`) checks the flag while it runs and
+    /// fails as [`ErrorCode::Cancelled`] once it is set. The app sets it when
+    /// the user cancels a job running on a worker thread.
+    pub fn set_stop_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.stop = Some(flag);
+    }
+
+    /// Whether the running command was asked to stop ([`Session::set_stop_flag`]).
+    pub fn stop_requested(&self) -> bool {
+        self.stop.as_ref().is_some_and(|f| f.load(Ordering::Relaxed))
     }
 
     /// Whether a plugin command is waiting (see [`Session::poll_job`]).

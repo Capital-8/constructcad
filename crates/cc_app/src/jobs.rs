@@ -17,6 +17,8 @@ use cc_engine::{EngineError, ErrorCode, Session};
 use egui::{Context, RichText};
 use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
@@ -49,6 +51,8 @@ pub struct Job {
     base: Base,
     rx: Receiver<Outcome>,
     finish: Option<Finish>,
+    /// Asks the worker's command to stop ([`Session::set_stop_flag`]), set on cancel.
+    stop: Arc<AtomicBool>,
 }
 
 /// A job is running, or a plugin command waits for an external program
@@ -77,9 +81,12 @@ pub fn start(
         Base::Current => state.session.doc.clone(),
     };
     let (tx, rx) = mpsc::channel();
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_stop = Arc::clone(&stop);
     let work = move || {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
             let mut session = Session::new(doc);
+            session.set_stop_flag(worker_stop);
             let answer = run(&mut session);
             answer.map(|value| (session.doc, value))
         }))
@@ -92,7 +99,7 @@ pub fn start(
         return;
     }
     let size = std::fs::metadata(&path).ok().map(|m| m.len());
-    state.job = Some(Job { title, path, size, started: Instant::now(), base, rx, finish: Some(finish) });
+    state.job = Some(Job { title, path, size, started: Instant::now(), base, rx, finish: Some(finish), stop });
 }
 
 /// Install the result of a job that ended; call it once per frame.
@@ -128,9 +135,12 @@ fn complete(state: &mut AppState, mut job: Job, outcome: Outcome) {
     }
 }
 
-/// Stop waiting for the running job: its result is dropped and the document stays as it was.
+/// Stop waiting for the running job: its result is dropped and the document
+/// stays as it was. A command that can stop (`rvt_import`, which kills its
+/// converter) is asked to; the others run to their end on the worker thread.
 pub fn cancel(state: &mut AppState) {
-    if state.job.take().is_some() {
+    if let Some(job) = state.job.take() {
+        job.stop.store(true, Ordering::Relaxed);
         state.message = t!("job-cancelled");
     }
 }
