@@ -77,6 +77,7 @@ pub mod types;
 pub mod valve;
 pub mod view_marks;
 pub mod views;
+pub mod wall_draw;
 pub mod wall_framing;
 pub mod wall_profile;
 pub mod wall_rebar;

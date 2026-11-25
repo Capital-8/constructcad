@@ -809,6 +809,7 @@ copy-of = { $name }（副本）
 
 # Transactions (undo history)
 tx-create-wall = 创建墙
+tx-create-walls = 创建墙
 tx-create-door = 放置门
 tx-create-window = 放置窗
 tx-create-niche = 放置壁龛

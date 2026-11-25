@@ -800,6 +800,7 @@ copy-of = { $name } (ສຳເນົາ)
 
 # Transactions (undo history)
 tx-create-wall = ສ້າງຝາ
+tx-create-walls = ສ້າງຝາ
 tx-create-door = ວາງປະຕູ
 tx-create-window = ວາງປ່ອງຢ້ຽມ
 tx-create-niche = ວາງຊ່ອງຝາ

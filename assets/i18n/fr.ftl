@@ -809,6 +809,7 @@ copy-of = { $name } (copie)
 
 # Transactions (historique d'annulation)
 tx-create-wall = Créer un mur
+tx-create-walls = Créer des murs
 tx-create-door = Placer une porte
 tx-create-window = Placer une fenêtre
 tx-create-niche = Placer une niche

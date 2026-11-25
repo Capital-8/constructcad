@@ -228,6 +228,7 @@ registry![
     ],
     "Creating elements" => [
         create::WallCreate,
+        wall_draw::WallsCreate,
         curtain::CurtainTypeCreate,
         curtain::CurtainGet,
         curtain::CurtainGridSet,
