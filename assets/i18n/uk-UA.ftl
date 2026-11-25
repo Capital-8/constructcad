@@ -809,6 +809,8 @@ copy-of = { $name } (копія)
 
 # Транзакції (історія скасування)
 tx-create-wall = Створити стіну
+tx-create-walls = Створити стіни
+tx-wall-fillet = Скруглення стін
 tx-create-door = Розмістити двері
 tx-create-window = Розмістити вікно
 tx-create-niche = Розмістити нішу
@@ -4214,3 +4216,17 @@ file-filter-material-library = Бібліотека матеріалів
 material-library-br-aco-estrutural = Конструкційні сталі (NBR 7007, NBR 7008, ASTM)
 material-library-br-aco-armadura = Арматурні сталі (NBR 7480)
 material-library-br-concreto = Бетони (NBR 8953, NBR 6118)
+ribbon-place-tool = Розмістити { $tool }
+wall-tool-fillet = Дуга скруглення
+wall-tool-pick-lines = Вибрати лінії
+cmd-desc-wall-tool-fillet = Скруглює кут між двома прямими стінами дуговою стіною радіуса з панелі параметрів.
+cmd-desc-wall-tool-pick-lines = Створює стіни вздовж клацнутих ліній деталей і осей (з Ланцюжком — уздовж з’єднаних ліній).
+why-wall-tool = Спершу виберіть інструмент «Стіна»
+opt-offset = Зміщення
+opt-radius = Радіус
+opt-wall-join = Приєднувати
+hint-wall-fillet = Клацніть першу пряму стіну
+hint-wall-fillet-second = Клацніть другу стіну (Esc: вибрати іншу першу)
+hint-wall-pick-lines = Клацніть лінію деталі або вісь, щоб поставити вздовж неї стіни
+hint-wall-circle-radius = Клацніть центр кола (радіус береться з панелі параметрів)
+hint-wall-arc-tangent = Клацніть вільний кінець стіни

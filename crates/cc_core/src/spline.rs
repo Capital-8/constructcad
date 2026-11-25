@@ -238,6 +238,45 @@ pub fn interpolate(fit: &[DVec2], closed: bool) -> Vec<DVec2> {
     out
 }
 
+/// An ellipse, or the part of it from parameter angle `start_deg` turning
+/// `sweep_deg` (degrees, negative clockwise), as the control points of
+/// cubic segments of at most a quarter turn each: the circle's Bézier arcs
+/// stretched to the semi-axes `radii` and turned `rotation_deg`, which keeps
+/// them within 0.03 % of the radius. `None` for a degenerate ellipse.
+pub fn ellipse(center: DVec2, radii: DVec2, rotation_deg: f64, start_deg: f64, sweep_deg: f64) -> Option<Vec<DVec2>> {
+    let finite = [rotation_deg, start_deg, sweep_deg].iter().all(|v| v.is_finite()) && center.is_finite();
+    if !finite || !(radii.x > TOL && radii.y > TOL && radii.is_finite()) || sweep_deg.abs() <= 1e-9 {
+        return None;
+    }
+    let sweep = sweep_deg.clamp(-360.0, 360.0).to_radians();
+    let n = ((sweep.abs() / std::f64::consts::FRAC_PI_2) - 1e-9).ceil().max(1.0) as usize;
+    let step = sweep / n as f64;
+    let k = 4.0 / 3.0 * (step / 4.0).tan();
+    let turn = DVec2::from_angle(rotation_deg.to_radians());
+    // A point of the unit circle stretched and turned onto the ellipse.
+    let place = |v: DVec2| center + turn.rotate(v * radii);
+    let start = start_deg.to_radians();
+    let mut out = Vec::with_capacity(3 * n + 1);
+    for i in 0..n {
+        let (t0, t1) = (start + step * i as f64, start + step * (i + 1) as f64);
+        let (u0, u1) = (DVec2::from_angle(t0), DVec2::from_angle(t1));
+        if i == 0 {
+            out.push(place(u0));
+        }
+        out.push(place(u0 + u0.perp() * k));
+        out.push(place(u1 - u1.perp() * k));
+        out.push(place(u1));
+    }
+    // A whole ellipse ends exactly where it starts.
+    if sweep_deg.abs() >= 360.0 - 1e-9
+        && let Some(&first) = out.first()
+        && let Some(last) = out.last_mut()
+    {
+        *last = first;
+    }
+    Some(out)
+}
+
 /// A spline `d` to the left of this one (to the right when negative), as
 /// near as offsetting each segment's control points along its end normals
 /// allows (exact for straight segments, close for gentle curves).
@@ -346,5 +385,26 @@ mod tests {
         assert!(!is_valid(&[DVec2::ZERO; 4]));
         assert!(!is_valid(&[DVec2::ZERO, DVec2::X, DVec2::NAN, DVec2::Y]));
         assert!(!is_valid(&vec![DVec2::X; 3 * (MAX_SEGMENTS + 1) + 1]));
+    }
+
+    #[test]
+    fn ellipse_segments_stay_on_the_ellipse() {
+        let (c, r) = (DVec2::new(1.0, 2.0), DVec2::new(3.0, 1.5));
+        let pts = ellipse(c, r, 30.0, 10.0, 360.0).unwrap_or_default();
+        assert_eq!(segment_count(&pts), Some(4));
+        assert!(is_closed(&pts));
+        let turn = DVec2::from_angle(-30f64.to_radians());
+        for seg in segments(&pts) {
+            for i in 0..=8 {
+                let q = turn.rotate(point(seg, i as f64 / 8.0) - c) / r;
+                assert!((q.length() - 1.0).abs() < 1e-3, "{q}");
+            }
+        }
+        let part = ellipse(c, r, 0.0, 0.0, -100.0).unwrap_or_default();
+        assert_eq!(segment_count(&part), Some(2));
+        assert!(part[0].distance(c + DVec2::new(3.0, 0.0)) < 1e-9);
+        let end = 100f64.to_radians();
+        assert!(part[6].distance(c + DVec2::new(3.0 * end.cos(), -1.5 * end.sin())) < 1e-9);
+        assert!(ellipse(c, DVec2::new(0.0, 1.0), 0.0, 0.0, 360.0).is_none());
     }
 }

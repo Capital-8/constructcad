@@ -471,6 +471,15 @@ pub fn offset_chain(curves: &[SketchCurve], i: usize, distance: f64, toward: DVe
         .collect::<Option<_>>()?;
     let at = links.iter().position(|&(k, _)| k == i)?;
     let v = distance.abs() * side(oriented.get(at)?, toward);
+    offset_left_chain(&oriented, closed, v)
+}
+
+/// Copies of the curves `oriented`, joined end to end in that order (and
+/// back to the first when `closed`), moved `v` to their left (right when
+/// negative), neighbors meeting where their copies cross (or joined by a
+/// line, after the others, where they do not); `None` when a curve has no
+/// offset.
+pub fn offset_left_chain(oriented: &[SketchCurve], closed: bool, v: f64) -> Option<Vec<SketchCurve>> {
     let mut out: Vec<SketchCurve> = oriented.iter().map(|c| offset_left(c, v)).collect::<Option<_>>()?;
     let n = out.len();
     let corners = match (n, closed) {

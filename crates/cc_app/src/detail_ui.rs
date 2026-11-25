@@ -168,14 +168,22 @@ pub(crate) fn create(state: &mut AppState, view: ViewId, style: LineStyleRef, cu
 }
 
 /// The Detail Line tool takes typed values now: it has the first point of
-/// a line, arc, circle, ellipse or rectangle.
+/// a line, arc, circle, ellipse or rectangle (or a wall shape is drawn, see
+/// [`crate::wall_draw_ui::typing`]).
 pub fn typing(state: &AppState) -> bool {
-    state.tool == Tool::DetailLine && state.detail_draw.as_ref().is_some_and(|d| d.session.typing())
+    (state.tool == Tool::DetailLine && state.detail_draw.as_ref().is_some_and(|d| d.session.typing()))
+        || crate::wall_draw_ui::typing(state)
 }
 
-/// Where typed values go: the detail line being drawn (see [`typing`]),
-/// else the other tools' lengths.
+/// Where typed values go: the detail line or wall shape being drawn (see
+/// [`typing`]), else the other tools' lengths.
 pub fn typed_target(state: &mut AppState) -> &mut TypedInput {
+    if crate::wall_draw_ui::typing(state) {
+        return match state.wall_shape.as_mut() {
+            Some(d) => d.typed_mut(),
+            None => &mut state.typed,
+        };
+    }
     let detail = typing(state);
     match (detail, state.detail_draw.as_mut()) {
         (true, Some(d)) => &mut d.session.typed,

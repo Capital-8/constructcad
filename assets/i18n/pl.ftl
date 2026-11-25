@@ -809,6 +809,8 @@ copy-of = { $name } (kopia)
 
 # Transakcje (historia cofania)
 tx-create-wall = Utwórz ścianę
+tx-create-walls = Utwórz ściany
+tx-wall-fillet = Zaokrąglenie ścian
 tx-create-door = Wstaw drzwi
 tx-create-window = Wstaw okno
 tx-create-niche = Wstaw wnękę
@@ -4213,3 +4215,17 @@ file-filter-material-library = Biblioteka materiałów
 material-library-br-aco-estrutural = Stale konstrukcyjne (NBR 7007, NBR 7008, ASTM)
 material-library-br-aco-armadura = Stale zbrojeniowe (NBR 7480)
 material-library-br-concreto = Betony (NBR 8953, NBR 6118)
+ribbon-place-tool = Umieść { $tool }
+wall-tool-fillet = Łuk zaokrąglenia
+wall-tool-pick-lines = Wskaż linie
+cmd-desc-wall-tool-fillet = Zaokrągla narożnik dwóch prostych ścian ścianą łukową o promieniu z paska opcji.
+cmd-desc-wall-tool-pick-lines = Tworzy ściany wzdłuż klikniętych linii szczegółu i osi (z Łańcuchem wzdłuż połączonych linii).
+why-wall-tool = Najpierw wybierz narzędzie Ściana
+opt-offset = Odsunięcie
+opt-radius = Promień
+opt-wall-join = Łącz
+hint-wall-fillet = Kliknij pierwszą prostą ścianę
+hint-wall-fillet-second = Kliknij drugą ścianę (Esc: wybierz inną pierwszą)
+hint-wall-pick-lines = Kliknij linię szczegółu lub oś, aby postawić wzdłuż niej ściany
+hint-wall-circle-radius = Kliknij środek okręgu (promień pochodzi z paska opcji)
+hint-wall-arc-tangent = Kliknij wolny koniec ściany

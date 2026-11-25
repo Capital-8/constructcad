@@ -57,6 +57,9 @@ pub enum Target {
     /// Detail lines being drawn (see [`crate::detail_ui`]): each curve
     /// becomes an element as soon as it is drawn, so there is nothing to finish.
     Detail,
+    /// Walls drawn as shapes (see [`crate::wall_draw_ui`]): each shape
+    /// becomes walls as soon as it is drawn.
+    Walls,
 }
 
 /// How clicks draw.
@@ -749,7 +752,7 @@ pub fn finish(state: &mut AppState) {
             crate::title_block_env::finish_stroke(state);
             return;
         }
-        Target::Detail => return,
+        Target::Detail | Target::Walls => return,
     };
     let checked = if allows_openings { sketch.profile().map(|_| ()) } else { sketch.outline().map(|_| ()) };
     if let Err(e) = checked {
@@ -798,7 +801,12 @@ pub fn finish(state: &mut AppState) {
             }
             return;
         }
-        Target::Piece | Target::Section { .. } | Target::WallProfile { .. } | Target::Sheet | Target::Detail => None,
+        Target::Piece
+        | Target::Section { .. }
+        | Target::WallProfile { .. }
+        | Target::Sheet
+        | Target::Detail
+        | Target::Walls => None,
     };
     if let Some(id) = out {
         state.sketch = None;
@@ -935,7 +943,8 @@ fn walls_category(state: &AppState) -> Option<Category> {
         | Target::Section { .. }
         | Target::WallProfile { .. }
         | Target::Sheet
-        | Target::Detail => None,
+        | Target::Detail
+        | Target::Walls => None,
     }
 }
 

@@ -809,6 +809,8 @@ copy-of = { $name }（副本）
 
 # Transactions (undo history)
 tx-create-wall = 创建墙
+tx-create-walls = 创建墙
+tx-wall-fillet = 墙圆角
 tx-create-door = 放置门
 tx-create-window = 放置窗
 tx-create-niche = 放置壁龛
@@ -4213,3 +4215,17 @@ file-filter-material-library = 材料库
 material-library-br-aco-estrutural = 结构钢（NBR 7007、NBR 7008、ASTM）
 material-library-br-aco-armadura = 钢筋（NBR 7480）
 material-library-br-concreto = 混凝土（NBR 8953、NBR 6118）
+ribbon-place-tool = 放置 { $tool }
+wall-tool-fillet = 圆角弧
+wall-tool-pick-lines = 拾取线
+cmd-desc-wall-tool-fillet = 以选项栏中半径的弧形墙将两道直墙的转角倒圆。
+cmd-desc-wall-tool-pick-lines = 沿点选的详图线与轴网创建墙（勾选链接时沿相连的线）。
+why-wall-tool = 请先选择“墙”工具
+opt-offset = 偏移
+opt-radius = 半径
+opt-wall-join = 连接
+hint-wall-fillet = 点选第一道直墙
+hint-wall-fillet-second = 点选第二道墙（Esc：重新选第一道）
+hint-wall-pick-lines = 点选详图线或轴网以沿其创建墙
+hint-wall-circle-radius = 点选圆心（半径取自选项栏）
+hint-wall-arc-tangent = 点选墙的自由端

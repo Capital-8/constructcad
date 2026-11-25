@@ -809,6 +809,8 @@ copy-of = { $name } (Kopie)
 
 # Transaktionen (Rückgängig-Verlauf)
 tx-create-wall = Wand erstellen
+tx-create-walls = Wände erstellen
+tx-wall-fillet = Wände ausrunden
 tx-create-door = Tür platzieren
 tx-create-window = Fenster platzieren
 tx-create-niche = Nische platzieren
@@ -4213,3 +4215,17 @@ file-filter-material-library = Materialbibliothek
 material-library-br-aco-estrutural = Baustähle (NBR 7007, NBR 7008, ASTM)
 material-library-br-aco-armadura = Betonstähle (NBR 7480)
 material-library-br-concreto = Betone (NBR 8953, NBR 6118)
+ribbon-place-tool = { $tool } platzieren
+wall-tool-fillet = Ausrundungsbogen
+wall-tool-pick-lines = Linien wählen
+cmd-desc-wall-tool-fillet = Rundet die Ecke zwischen zwei geraden Wänden mit einer Bogenwand des Radius der Optionsleiste aus.
+cmd-desc-wall-tool-pick-lines = Erstellt Wände entlang der angeklickten Detaillinien und Raster (mit Verketten entlang der verbundenen Linien).
+why-wall-tool = Wählen Sie zuerst das Werkzeug Wand
+opt-offset = Versatz
+opt-radius = Radius
+opt-wall-join = Verbinden
+hint-wall-fillet = Klicken Sie auf die erste gerade Wand
+hint-wall-fillet-second = Klicken Sie auf die zweite Wand (Esc: eine andere erste wählen)
+hint-wall-pick-lines = Klicken Sie auf eine Detaillinie oder ein Raster, um Wände daran entlang zu setzen
+hint-wall-circle-radius = Klicken Sie auf den Kreismittelpunkt (der Radius kommt aus der Optionsleiste)
+hint-wall-arc-tangent = Klicken Sie auf das freie Ende einer Wand

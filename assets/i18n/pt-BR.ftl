@@ -809,6 +809,8 @@ copy-of = { $name } (cópia)
 
 # Transações (histórico de desfazer)
 tx-create-wall = Criar parede
+tx-create-walls = Criar paredes
+tx-wall-fillet = Concordância de paredes
 tx-create-door = Inserir porta
 tx-create-window = Inserir janela
 tx-create-niche = Inserir nicho
@@ -4213,3 +4215,17 @@ file-filter-material-library = Biblioteca de materiais
 material-library-br-aco-estrutural = Aços estruturais (NBR 7007, NBR 7008, ASTM)
 material-library-br-aco-armadura = Aços para armadura (NBR 7480)
 material-library-br-concreto = Concretos (NBR 8953, NBR 6118)
+ribbon-place-tool = Inserir { $tool }
+wall-tool-fillet = Arco de concordância
+wall-tool-pick-lines = Escolher linhas
+cmd-desc-wall-tool-fillet = Arredonda o canto entre duas paredes retas com uma parede em arco do raio da barra de opções.
+cmd-desc-wall-tool-pick-lines = Cria paredes ao longo das linhas de detalhe e eixos clicados (com Encadear, ao longo das linhas unidas).
+why-wall-tool = Escolha a ferramenta Parede primeiro
+opt-offset = Deslocamento
+opt-radius = Raio
+opt-wall-join = Unir
+hint-wall-fillet = Clique na primeira parede reta
+hint-wall-fillet-second = Clique na segunda parede (Esc: escolher outra primeira)
+hint-wall-pick-lines = Clique numa linha de detalhe ou num eixo para criar paredes ao longo dela
+hint-wall-circle-radius = Clique no centro do círculo (o raio vem da barra de opções)
+hint-wall-arc-tangent = Clique na extremidade livre de uma parede

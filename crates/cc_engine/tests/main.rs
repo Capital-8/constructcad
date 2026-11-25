@@ -100,6 +100,7 @@ mod view_detailing;
 mod view_marks;
 mod visual_style;
 mod wall_attach;
+mod wall_draw;
 mod wall_flip;
 mod wall_framing;
 mod wall_layer_extents;

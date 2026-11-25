@@ -102,6 +102,10 @@ pub enum UiCommand {
     SketchPickWalls,
     SketchFinish,
     SketchCancel,
+    /// The wall tool's *Fillet* mode: an arc wall rounding the corner of two walls.
+    WallFillet,
+    /// The wall tool's *Pick Lines* mode: walls along detail lines and grids.
+    WallPickLines,
     /// Open the sketch of the selected floor, ceiling, roof or mass.
     EditBoundary,
     /// Open the profile of the selected sweep's type in a sketch.
@@ -385,6 +389,8 @@ impl UiCommand {
             SketchPickWalls,
             SketchFinish,
             SketchCancel,
+            WallFillet,
+            WallPickLines,
             EditBoundary,
             EditProfile,
             EditWallProfile,
@@ -577,6 +583,8 @@ impl UiCommand {
             SketchPickWalls => Icon::Wall,
             SketchFinish => Icon::Finish,
             SketchCancel => Icon::Close,
+            WallFillet => Icon::DrawFillet,
+            WallPickLines => Icon::PickLines,
             EditBoundary => Icon::EditBoundary,
             EditProfile => Icon::EditProfile,
             EditWallProfile | ResetWallProfile => Icon::WallProfile,
@@ -807,6 +815,8 @@ impl UiCommand {
             SketchPickWalls => t!("sketch-from-walls"),
             SketchFinish => t!("sketch-finish-mode"),
             SketchCancel => t!("sketch-cancel-mode"),
+            WallFillet => t!("wall-tool-fillet"),
+            WallPickLines => t!("wall-tool-pick-lines"),
             EditBoundary => t!("edit-boundary"),
             EditProfile => t!("edit-profile"),
             EditWallProfile => t!("edit-wall-profile"),
@@ -1035,6 +1045,8 @@ impl UiCommand {
             SketchPickWalls => t!("cmd-desc-sketch-from-walls"),
             SketchFinish => t!("cmd-desc-sketch-finish-mode"),
             SketchCancel => t!("cmd-desc-sketch-cancel-mode"),
+            WallFillet => t!("cmd-desc-wall-tool-fillet"),
+            WallPickLines => t!("cmd-desc-wall-tool-pick-lines"),
             EditBoundary => t!("cmd-desc-edit-boundary"),
             EditProfile => t!("cmd-desc-edit-profile"),
             EditWallProfile => t!("cmd-desc-edit-wall-profile"),
@@ -1525,6 +1537,9 @@ impl UiCommand {
             Undo | Redo if state.sketch.is_some() => None,
             Undo if !state.session.doc.can_undo() => Some(t!("why-nothing-undo")),
             Redo if !state.session.doc.can_redo() => Some(t!("why-nothing-redo")),
+            // The wall tool draws with the same shapes.
+            WallFillet | WallPickLines if !wall_drawing(state) => Some(t!("why-wall-tool")),
+            command if wall_drawing(state) && wall_mode(command).is_some() => None,
             SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse
             | SketchSpline | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint | SketchPickWalls
             | SketchFinish | SketchCancel
@@ -1735,6 +1750,9 @@ impl UiCommand {
                 .component_env
                 .as_ref()
                 .is_some_and(|e| matches!(e.tool, crate::component_env::EnvTool::SheetImage { .. })),
+            command if wall_drawing(state) && wall_mode(command).is_some() => {
+                wall_mode(command) == Some(state.wall_mode)
+            }
             SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse
             | SketchSpline | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint => {
                 state.sketch.as_ref().is_some_and(|s| sketch_draw(self) == Some(s.draw))
@@ -1958,6 +1976,31 @@ pub fn invoke(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
 
 /// Run `command` (callers check availability first). Menu commands act on
 /// their most likely choice: the active level, the first elevation.
+/// The wall tool is drawing, outside a sketch: the Draw group's commands pick its mode.
+fn wall_drawing(state: &AppState) -> bool {
+    state.sketch.is_none() && matches!(state.tool, Tool::Wall { .. })
+}
+
+/// The wall tool's mode a Draw command picks.
+fn wall_mode(command: UiCommand) -> Option<crate::tools::WallMode> {
+    use crate::tools::WallMode;
+    Some(match command {
+        UiCommand::SketchLine => WallMode::Line,
+        UiCommand::SketchRect => WallMode::Rect,
+        UiCommand::SketchPolygon => WallMode::Polygon,
+        UiCommand::SketchPolygonOut => WallMode::PolygonOut,
+        UiCommand::SketchCircle => WallMode::Circle,
+        UiCommand::SketchEllipse => WallMode::Ellipse,
+        UiCommand::SketchSpline => WallMode::Spline,
+        UiCommand::SketchArc3 => WallMode::Arc,
+        UiCommand::SketchArcCenter => WallMode::ArcCenter,
+        UiCommand::SketchArcTangent => WallMode::ArcTangent,
+        UiCommand::WallFillet => WallMode::Fillet,
+        UiCommand::WallPickLines => WallMode::PickLines,
+        _ => return None,
+    })
+}
+
 /// The drawing tool a sketch command picks.
 fn sketch_draw(command: UiCommand) -> Option<crate::sketch_mode::Draw> {
     use crate::sketch_mode::Draw;
@@ -2118,6 +2161,12 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             crate::component_env::set_tool(state, crate::component_env::EnvTool::Select);
         }
         Select => state.set_tool(Tool::Select),
+        command if wall_drawing(state) && wall_mode(command).is_some() => {
+            if let Some(mode) = wall_mode(command) {
+                crate::wall_draw_ui::set_mode(state, mode);
+            }
+        }
+        WallFillet | WallPickLines => {}
         SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse | SketchSpline
         | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint => {
             if let Some(draw) = sketch_draw(command) {

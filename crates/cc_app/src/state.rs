@@ -269,6 +269,13 @@ pub struct AppState {
     /// What the wall tool draws: lines, arcs (start, end, then a point on
     /// the arc) or splines (the points the wall passes through).
     pub wall_mode: crate::tools::WallMode,
+    /// The options of the wall tool's shapes (offset, radius, sides, joins).
+    pub wall_draw: crate::wall_draw_ui::WallDrawOptions,
+    /// The wall shape being drawn (see [`crate::wall_draw_ui`]).
+    pub wall_shape: Option<crate::wall_draw_ui::ShapeDraw>,
+    /// The ribbon tab shown before a tool with its own *Modify | Place* tab
+    /// was picked, to go back to when it ends.
+    pub ribbon_tab_before_tool: Option<RibbonTab>,
     /// The footing tool, with a strip type, draws arc strips as the wall tool draws arcs.
     pub strip_arc: bool,
     /// The beam tool draws arc beams the same way.
@@ -389,6 +396,9 @@ impl AppState {
             railing_host: Default::default(),
             ramp_layout: Default::default(),
             wall_mode: Default::default(),
+            wall_draw: Default::default(),
+            wall_shape: None,
+            ribbon_tab_before_tool: None,
             strip_arc: false,
             beam_arc: false,
             wall_top_level: None,
@@ -586,7 +596,9 @@ impl AppState {
                 self.ribbon_tab_before = Some(self.ribbon_tab);
                 self.ribbon_tab = RibbonTab::Modify;
             }
+            // A tool with its own Modify tab keeps it while it selects what it makes.
             if self.selection.is_empty()
+                && !crate::ribbon::places(&self.tool)
                 && let Some(before) = self.ribbon_tab_before.take()
                 && self.ribbon_tab == RibbonTab::Modify
             {
@@ -637,10 +649,31 @@ impl AppState {
         // A profile's sketch dropped by another tool ends the manager's edits.
         crate::profiles_dialog::settle_abandoned(self);
         self.detail_draw = None;
+        self.wall_shape = None;
+        self.follow_tool(&tool);
         self.tool = tool;
         self.hosted_sill = None;
         self.interaction = Interaction::default();
         self.typed.clear();
+    }
+
+    /// A tool with its own *Modify | Place* tab (see [`crate::ribbon::places`])
+    /// opens the Modify tab; when it ends, the tab shown before comes back
+    /// (if Modify is still shown).
+    fn follow_tool(&mut self, next: &Tool) {
+        let (was, will) = (crate::ribbon::places(&self.tool), crate::ribbon::places(next));
+        if will && !was {
+            if self.ribbon_tab != RibbonTab::Modify {
+                self.ribbon_tab_before_tool = Some(self.ribbon_tab);
+            }
+            self.ribbon_tab = RibbonTab::Modify;
+        } else if was
+            && !will
+            && let Some(before) = self.ribbon_tab_before_tool.take()
+            && self.ribbon_tab == RibbonTab::Modify
+        {
+            self.ribbon_tab = before;
+        }
     }
 
     /// Level of the active plan view, if the active view is a plan.
