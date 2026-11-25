@@ -810,6 +810,7 @@ copy-of = { $name }（副本）
 # 交易（復原記錄）
 tx-create-wall = 建立牆
 tx-create-walls = 建立牆
+tx-wall-fillet = 牆圓角
 tx-create-door = 放置門
 tx-create-window = 放置窗
 tx-create-niche = 放置壁龕

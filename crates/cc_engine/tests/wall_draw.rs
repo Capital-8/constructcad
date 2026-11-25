@@ -118,3 +118,32 @@ fn bad_shapes_are_refused_and_change_nothing() {
     }
     assert_eq!(s.project().walls().count(), 0);
 }
+
+#[test]
+fn wall_fillet_rounds_the_corner_of_two_walls() {
+    let mut s = Session::default();
+    let a = run(&mut s, "wall_create", json!({"start": [0, 0], "end": [5, 0]}))["id"].as_u64().unwrap();
+    // Short of the corner: the fillet extends it first.
+    let b = run(&mut s, "wall_create", json!({"start": [5, 0.5], "end": [5, 4]}))["id"].as_u64().unwrap();
+    let before = s.doc.undo_depth();
+    let out = run(&mut s, "wall_fillet", json!({"a": a, "pick_a": [1, 0], "b": b, "pick_b": [5, 3], "radius": 1.0}));
+    assert_eq!(s.doc.undo_depth(), before + 1);
+    let get = |s: &Session, id: u64| s.project().element(ElementId(id)).and_then(|e| e.as_wall()).cloned().unwrap();
+    let (wa, wb, arc) = (get(&s, a), get(&s, b), get(&s, out["created"].as_u64().unwrap()));
+    assert!(wa.end.distance(DVec2::new(4.0, 0.0)) < 1e-9, "{}", wa.end);
+    assert!(wb.start.distance(DVec2::new(5.0, 1.0)) < 1e-9, "{}", wb.start);
+    assert!(arc.start.distance(wa.end) < 1e-9 && arc.end.distance(wb.start) < 1e-9);
+    assert!(arc.arc().is_some_and(|c| (c.radius - 1.0).abs() < 1e-9 && c.center.distance(DVec2::new(4.0, 1.0)) < 1e-9));
+    // Too large a radius, the same wall twice, or walls in line: refused.
+    for args in [
+        json!({"a": a, "pick_a": [1, 0], "b": b, "pick_b": [5, 3], "radius": 10.0}),
+        json!({"a": a, "pick_a": [1, 0], "b": a, "pick_b": [2, 0], "radius": 1.0}),
+    ] {
+        assert!(s.execute("wall_fillet", args).is_err());
+    }
+    let c = run(&mut s, "wall_create", json!({"start": [10, 0], "end": [12, 0]}))["id"].as_u64().unwrap();
+    let d = run(&mut s, "wall_create", json!({"start": [12, 0], "end": [14, 0]}))["id"].as_u64().unwrap();
+    assert!(
+        s.execute("wall_fillet", json!({"a": c, "pick_a": [11, 0], "b": d, "pick_b": [13, 0], "radius": 1.0})).is_err()
+    );
+}

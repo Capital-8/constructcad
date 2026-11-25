@@ -11,7 +11,7 @@ use super::create::{check_arc, top};
 use super::sketch::{CurveArg, sketch_of};
 use super::{add_element, edit, ids_json};
 use crate::error::{EngineError, Result};
-use crate::refs::{self, Ref, finite, positive};
+use crate::refs::{self, Point, Ref, finite, point, positive};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
@@ -130,6 +130,109 @@ impl Command for WallsCreate {
             Ok(walls.into_iter().map(|w| add_element(e, level, type_id, ElementKind::Wall(w))).collect::<Vec<_>>())
         })?;
         Ok(json!({ "ids": ids_json(&ids) }))
+    }
+}
+
+/// Round the corner between two straight walls with an arc wall of
+/// `radius`: both walls are trimmed or extended to meet (keeping the part
+/// each pick point is on, as `trim_corner` does), then cut back to where an
+/// arc of `radius` tangent to both leaves them, and the arc, a wall like
+/// the first, fills the gap. One undo step; returns the arc wall.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WallFillet {
+    /// First wall id.
+    pub a: u64,
+    /// A point on the part of `a` to keep.
+    pub pick_a: Point,
+    /// Second wall id.
+    pub b: u64,
+    /// A point on the part of `b` to keep.
+    pub pick_b: Point,
+    /// Radius of the arc's location line, meters.
+    pub radius: f64,
+}
+
+impl Command for WallFillet {
+    const NAME: &'static str = "wall_fillet";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let (a, b) = (refs::element(p, self.a)?, refs::element(p, self.b)?);
+        if a == b {
+            return Err(EngineError::invalid("pick two different walls"));
+        }
+        super::modify::not_pinned(p, a)?;
+        super::modify::not_pinned(p, b)?;
+        let radius = positive(self.radius, "radius")?;
+        let straight =
+            |id| p.element(id).and_then(|e| e.as_wall()).is_some_and(|w| !w.is_curved() && w.profile.is_none());
+        if !straight(a) || !straight(b) {
+            return Err(EngineError::invalid("a fillet joins two straight walls without an elevation profile"));
+        }
+        let (pa, pb) = (point(self.pick_a)?, point(self.pick_b)?);
+        let arc = edit(s, t!("tx-wall-fillet"), |e| {
+            e.trim_corner(a, pa, b, pb)?;
+            let wall = |e: &cc_core::EditCtx, id| e.project().element(id).and_then(|el| el.as_wall()).cloned();
+            let (Some(wa), Some(wb)) = (wall(e, a), wall(e, b)) else {
+                return Err(EngineError::not_found("wall"));
+            };
+            // The corner: the ends of the two walls that now meet.
+            let ends = [(wa.start, true), (wa.end, false)];
+            let (corner, a_start) = ends
+                .into_iter()
+                .min_by(|x, y| {
+                    let d = |q: DVec2| q.distance(wb.start).min(q.distance(wb.end));
+                    d(x.0).total_cmp(&d(y.0))
+                })
+                .ok_or_else(|| EngineError::invalid("the walls do not meet"))?;
+            let b_start = wb.start.distance(corner) <= wb.end.distance(corner);
+            let far = |w: &Wall, start: bool| if start { w.end } else { w.start };
+            let (fa, fb) = (far(&wa, a_start), far(&wb, b_start));
+            let (Some(ua), Some(ub)) = ((fa - corner).try_normalize(), (fb - corner).try_normalize()) else {
+                return Err(EngineError::invalid("a wall has no length left"));
+            };
+            // Heading into the corner along `a`, then out along `b`.
+            let turn = (-ua).perp_dot(ub).atan2((-ua).dot(ub));
+            if turn.abs() < 1e-6 || turn.abs() > std::f64::consts::PI - 1e-6 {
+                return Err(EngineError::invalid("the walls are in line: there is no corner to round"));
+            }
+            let cut = radius * (turn.abs() / 2.0).tan();
+            if cut >= corner.distance(fa) - JOIN_TOL || cut >= corner.distance(fb) - JOIN_TOL {
+                return Err(EngineError::invalid(format!("the radius {radius} m is too large for these walls")));
+            }
+            let (ta, tb) = (corner + ua * cut, corner + ub * cut);
+            let set = |e: &mut cc_core::EditCtx, id, start: bool, to: DVec2| {
+                if let Some(w) = e.element_mut(id).and_then(|el| match &mut el.kind {
+                    ElementKind::Wall(w) => Some(w),
+                    _ => None,
+                }) {
+                    if start { w.start = to } else { w.end = to }
+                }
+            };
+            set(e, a, a_start, ta);
+            set(e, b, b_start, tb);
+            let (level, type_id) = e
+                .project()
+                .element(a)
+                .map(|el| (el.level, el.type_id))
+                .ok_or_else(|| EngineError::not_found("wall"))?;
+            let arc = Wall {
+                start: ta,
+                end: tb,
+                bulge: (turn / 4.0).tan(),
+                join_start: true,
+                join_end: true,
+                attach_top: None,
+                profile: None,
+                spline: None,
+                curtain: Default::default(),
+                ..wa
+            };
+            check_arc(e.project(), type_id, &arc)?;
+            Ok(add_element(e, level, type_id, ElementKind::Wall(arc)))
+        })?;
+        Ok(json!({ "created": arc.0, "changed": [a.0, b.0] }))
     }
 }
 

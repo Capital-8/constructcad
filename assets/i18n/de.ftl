@@ -810,6 +810,7 @@ copy-of = { $name } (Kopie)
 # Transaktionen (Rückgängig-Verlauf)
 tx-create-wall = Wand erstellen
 tx-create-walls = Wände erstellen
+tx-wall-fillet = Wände ausrunden
 tx-create-door = Tür platzieren
 tx-create-window = Fenster platzieren
 tx-create-niche = Nische platzieren

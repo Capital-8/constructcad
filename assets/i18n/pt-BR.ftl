@@ -810,6 +810,7 @@ copy-of = { $name } (cópia)
 # Transações (histórico de desfazer)
 tx-create-wall = Criar parede
 tx-create-walls = Criar paredes
+tx-wall-fillet = Concordância de paredes
 tx-create-door = Inserir porta
 tx-create-window = Inserir janela
 tx-create-niche = Inserir nicho

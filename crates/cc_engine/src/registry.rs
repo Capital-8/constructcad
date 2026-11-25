@@ -229,6 +229,7 @@ registry![
     "Creating elements" => [
         create::WallCreate,
         wall_draw::WallsCreate,
+        wall_draw::WallFillet,
         curtain::CurtainTypeCreate,
         curtain::CurtainGet,
         curtain::CurtainGridSet,

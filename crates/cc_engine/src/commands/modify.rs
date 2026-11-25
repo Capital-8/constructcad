@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Refuse to edit a pinned element.
-fn not_pinned(p: &Project, id: ElementId) -> Result<()> {
+pub(crate) fn not_pinned(p: &Project, id: ElementId) -> Result<()> {
     if p.is_pinned(id) { Err(EngineError::rejected(t!("msg-pinned-skipped", "count" => 1))) } else { Ok(()) }
 }
 

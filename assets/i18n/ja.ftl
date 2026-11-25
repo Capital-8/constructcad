@@ -810,6 +810,7 @@ copy-of = { $name } のコピー
 # Transactions (undo history)
 tx-create-wall = 壁を作成
 tx-create-walls = 壁を作成
+tx-wall-fillet = 壁のフィレット
 tx-create-door = ドアを配置
 tx-create-window = 窓を配置
 tx-create-niche = ニッチを配置
