@@ -596,3 +596,27 @@ fn a_new_plugin_loads_and_passes_its_test() {
     assert!(!dir.join("Bad-Id").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `ccad rvt-to-ifc` converts a Revit file, and `-p file.rvt` imports one through it in a child process.
+#[cfg(feature = "rvt")]
+#[test]
+fn revit_files_are_converted_in_a_child_process() {
+    let rvt = concat!(env!("CARGO_MANIFEST_DIR"), "/../cc_rvt/tests/fixtures/synthetic.rvt");
+    let (ifc, report) = (scratch("synthetic.ifc"), scratch("synthetic.json"));
+    let (code, out, err) = ccad(&["rvt-to-ifc", rvt, &ifc], "");
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out["Ok"]["revit_version"], 2024, "{out}");
+    assert!(std::fs::read_to_string(&ifc).unwrap().contains("IFCPROJECT("));
+    assert_eq!(ccad(&["rvt-to-ifc", rvt, &ifc, &report], "").0, 0);
+    let written: Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(written, out);
+
+    let (code, levels, err) = ccad(&["-p", rvt, "run", "levels_list"], "");
+    assert_eq!(code, 0, "{err}");
+    assert!(levels.is_array(), "{levels}");
+
+    let (code, out, _) = ccad(&["rvt-to-ifc", &report, &ifc], "");
+    assert_eq!(code, 1);
+    assert!(out["Err"]["read"].is_string(), "{out}");
+    assert_eq!(ccad(&["rvt-to-ifc", rvt], "").0, 2);
+}

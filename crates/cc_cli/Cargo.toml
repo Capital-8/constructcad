@@ -17,5 +17,9 @@ cc_engine.workspace = true
 cc_plugins.workspace = true
 serde_json.workspace = true
 
+[features]
+# Revit import: `rvt_import` and its menu entries (see cc_engine's `rvt` feature).
+rvt = ["cc_engine/rvt"]
+
 [lints]
 workspace = true

@@ -1174,8 +1174,18 @@ fn insert_tab(ui: &mut Ui, state: &mut AppState) {
         ComponentLibrary, CreateDetailComponent, ImportCad, ImportGltf, ImportIfc, ImportImage, ImportObj, ImportSkp,
         LoadComponent, NewComponent, NewTitleBlock,
     };
+    let imports = [
+        ImportIfc,
+        #[cfg(feature = "rvt")]
+        UiCommand::ImportRvt,
+        ImportCad,
+        ImportSkp,
+        ImportObj,
+        ImportGltf,
+        ImportImage,
+    ];
     group(ui, t!("group-import"), |ui| {
-        command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportObj, ImportGltf, ImportImage]);
+        command_buttons(ui, state, &imports);
         plugin_file_entries(ui, state, false);
     });
     group(ui, t!("group-library"), |ui| {

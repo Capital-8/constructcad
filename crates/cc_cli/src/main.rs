@@ -82,6 +82,18 @@ Options:
 Environment: CCAD_LANG sets the language like --lang.
 ";
 
+/// The help of the Revit import, in builds with the `rvt` feature.
+#[cfg(feature = "rvt")]
+const RVT_USAGE: &str = "
+Revit files (this build has the rvt feature):
+  ccad rvt-to-ifc <file.rvt> <out.ifc> [<report.json>]
+                         convert a Revit file to IFC4; the report (JSON) goes
+                         to <report.json> or standard output
+  -p also takes a .rvt file, which rvt_import converts in a child process
+";
+#[cfg(not(feature = "rvt"))]
+const RVT_USAGE: &str = "";
+
 struct Options {
     project: Option<PathBuf>,
     save: bool,
@@ -174,8 +186,9 @@ fn default_plugin_cache_dir() -> PathBuf {
     std::env::temp_dir().join("constructcraft-plugin-cache")
 }
 
-/// The session for the options: a new project, or the given file (`.ifc`
-/// is imported), with the plugins of `--plugins`.
+/// The session for the options: a new project, or the given file (`.ifc`,
+/// and `.rvt` with the `rvt` feature, are imported), with the plugins of
+/// `--plugins`.
 fn session(o: &Options) -> Result<Session, EngineError> {
     let mut s = Session::default();
     if !o.plugins.is_empty() {
@@ -183,8 +196,13 @@ fn session(o: &Options) -> Result<Session, EngineError> {
         flush_messages(&mut s);
     }
     if let Some(path) = &o.project {
-        let is_ifc = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
-        let command = if is_ifc { "ifc_import" } else { "project_open" };
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+        let command = match ext.as_str() {
+            "ifc" => "ifc_import",
+            #[cfg(feature = "rvt")]
+            "rvt" => "rvt_import",
+            _ => "project_open",
+        };
         s.execute(command, json!({ "path": path }))?;
     }
     Ok(s)
@@ -456,6 +474,16 @@ fn save(s: &mut Session, o: &Options) -> Result<(), EngineError> {
 }
 
 fn main() -> ExitCode {
+    // The Revit converter that `rvt_import` starts; read before `std::env::args`, which takes UTF-8 only.
+    #[cfg(feature = "rvt")]
+    {
+        let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+        if let Some((first, rest)) = args.split_first()
+            && first == cc_engine::rvt::SUBCOMMAND
+        {
+            return ExitCode::from(cc_engine::rvt::child_main(rest));
+        }
+    }
     if let Some(lang) = std::env::var("CCAD_LANG").ok().and_then(|c| cc_engine::i18n::Language::from_code(&c)) {
         cc_engine::i18n::set_language(lang);
     } else {
@@ -466,7 +494,7 @@ fn main() -> ExitCode {
         Err(e) => return usage_error(&e),
     };
     let Some((sub, rest)) = o.rest.split_first() else {
-        print!("{USAGE}");
+        print!("{USAGE}{RVT_USAGE}");
         return ExitCode::SUCCESS;
     };
     match sub.as_str() {
@@ -475,7 +503,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         "-h" | "--help" | "help" => {
-            print!("{USAGE}");
+            print!("{USAGE}{RVT_USAGE}");
             ExitCode::SUCCESS
         }
         "commands" => {

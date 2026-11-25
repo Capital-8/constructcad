@@ -29,6 +29,8 @@ pub mod osm;
 pub mod reference;
 mod refs;
 mod registry;
+#[cfg(feature = "rvt")]
+pub mod rvt;
 pub mod script;
 mod session;
 pub mod skp;

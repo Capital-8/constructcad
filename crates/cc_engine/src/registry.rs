@@ -127,14 +127,15 @@ fn run<C: Command>(session: &mut Session, args: Value) -> Result<Value> {
 }
 
 macro_rules! registry {
-    ($($group:literal => [$($c:ty),* $(,)?]),* $(,)?) => {
+    ($($group:literal => [$($(#[$attr:meta])* $c:ty),* $(,)?]),* $(,)?) => {
         /// Every command, in catalog order (grouped by area).
         pub fn catalog() -> Vec<CommandInfo> {
-            vec![$($(info::<$c>($group)),*),*]
+            vec![$($($(#[$attr])* info::<$c>($group)),*),*]
         }
 
         pub(crate) fn dispatch(session: &mut Session, name: &str, args: Value) -> Result<Value> {
             $($(
+                $(#[$attr])*
                 if name == <$c as Command>::NAME {
                     return run::<$c>(session, args);
                 }
@@ -146,6 +147,7 @@ macro_rules! registry {
         /// writes ([`Command::CHECKS_PATHS`]).
         pub fn checks_paths(name: &str) -> bool {
             $($(
+                $(#[$attr])*
                 if name == <$c as Command>::NAME {
                     return <$c as Command>::CHECKS_PATHS;
                 }
@@ -156,6 +158,7 @@ macro_rules! registry {
         /// The kind of a built-in command, without building the catalog.
         pub fn command_kind(name: &str) -> Option<CommandKind> {
             $($(
+                $(#[$attr])*
                 if name == <$c as Command>::NAME {
                     return Some(<$c as Command>::KIND);
                 }
@@ -186,6 +189,8 @@ registry![
         project::UnitsSet,
         project::LanguageSet,
         io::IfcImport,
+        #[cfg(feature = "rvt")]
+        io::RvtImport,
         io::SkpImport,
         io::SkpComponentLoad,
         io::ObjImport,

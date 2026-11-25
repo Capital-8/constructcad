@@ -120,6 +120,7 @@ mod tests {
 
     /// `docs/commands.md` is the generated reference of the current catalog.
     #[test]
+    #[cfg_attr(feature = "rvt", ignore = "docs/commands.md is the reference of the default build")]
     fn reference_is_current() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/commands.md");
         let written = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");

@@ -18,6 +18,7 @@ cc_raytracing.workspace = true
 cc_ifc.workspace = true
 cc_cad.workspace = true
 cc_skp.workspace = true
+cc_rvt = { workspace = true, optional = true }
 glam.workspace = true
 png.workspace = true
 draco-core.workspace = true
@@ -26,6 +27,11 @@ serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true
 sys-locale.workspace = true
+
+[features]
+# Revit import (`rvt_import`), off by default: the .rvt reader is a
+# reverse-engineered third-party crate (docs/architecture/interop.md, cc_rvt).
+rvt = ["dep:cc_rvt"]
 
 [lints]
 workspace = true

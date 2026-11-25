@@ -346,6 +346,8 @@ pub fn run_pending(state: &mut AppState, action: PendingAction) {
             }
         }
         PendingAction::ImportIfc => import_ifc(state),
+        #[cfg(feature = "rvt")]
+        PendingAction::ImportRvt => import_rvt(state),
         PendingAction::Close => close_project(state),
         PendingAction::Quit => state.quit_confirmed = true,
     }
@@ -359,11 +361,23 @@ fn close_project(state: &mut AppState) {
     state.message = t!("msg-project-closed");
 }
 
+/// The extensions Open takes: projects, IFC files and, with the `rvt` feature, Revit files.
+const OPENABLE: &[&str] = &[
+    "ccad",
+    "ifc",
+    #[cfg(feature = "rvt")]
+    "rvt",
+];
+
 pub fn open(state: &mut AppState) {
+    let openable = if cfg!(feature = "rvt") { t!("file-filter-openable-rvt") } else { t!("file-filter-openable") };
     let mut dialog = rfd::FileDialog::new()
-        .add_filter(t!("file-filter-openable"), &["ccad", "ifc"])
+        .add_filter(openable, OPENABLE)
         .add_filter(t!("file-filter"), &["ccad"])
         .add_filter(t!("file-filter-ifc"), &["ifc"]);
+    if cfg!(feature = "rvt") {
+        dialog = dialog.add_filter(t!("file-filter-rvt"), &["rvt"]);
+    }
     if let Some(dir) = state.prefs.projects_dir() {
         dialog = dialog.set_directory(dir);
     }
@@ -375,16 +389,21 @@ fn has_extension(path: &std::path::Path, ext: &str) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(ext))
 }
 
-/// Whether Open takes `path`: a project, or an IFC file it imports as a new project.
+/// Whether Open takes `path`: a project, or a file it imports as a new project ([`OPENABLE`]).
 pub fn opens(path: &std::path::Path) -> bool {
-    has_extension(path, "ccad") || has_extension(path, "ifc")
+    OPENABLE.iter().any(|ext| has_extension(path, ext))
 }
 
 /// Open the project at `path`, read on a worker thread behind the progress dialog.
-/// An IFC file is imported as a new project instead.
+/// An IFC or Revit file is imported as a new project instead.
 pub fn open_path(state: &mut AppState, path: std::path::PathBuf) {
     if has_extension(&path, "ifc") {
         import_ifc_path(state, path);
+        return;
+    }
+    #[cfg(feature = "rvt")]
+    if has_extension(&path, "rvt") {
+        import_rvt_path(state, path);
         return;
     }
     let (file, shown) = (path.clone(), path.clone());
@@ -530,6 +549,39 @@ fn import_ifc_path(state: &mut AppState, path: std::path::PathBuf) {
     let run = move |s: &mut cc_engine::Session| s.run(io::IfcImport { path: file });
     let finish: crate::jobs::Finish = Box::new(move |state, result, doc| ifc_imported(state, path, result, doc));
     crate::jobs::start(state, t!("job-importing-ifc"), shown, crate::jobs::Base::Fresh, run, finish);
+}
+
+/// Replace the document with a project converted from a Revit file. The
+/// result has no file path: saving asks where to write the `.ccad`.
+#[cfg(feature = "rvt")]
+fn import_rvt(state: &mut AppState) {
+    let mut dialog = rfd::FileDialog::new().add_filter(t!("file-filter-rvt"), &["rvt"]);
+    if let Some(dir) = state.prefs.projects_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.pick_file() else { return };
+    import_rvt_path(state, path);
+}
+
+/// Replace the document with a project converted from the Revit file at `path`.
+/// The converter's notes are English text: the message gives their count.
+#[cfg(feature = "rvt")]
+fn import_rvt_path(state: &mut AppState, path: std::path::PathBuf) {
+    let (file, shown) = (path.clone(), path.clone());
+    let run = move |s: &mut cc_engine::Session| s.run(io::RvtImport { path: file, timeout: None });
+    let finish: crate::jobs::Finish = Box::new(move |state, result, doc| {
+        let converted = result.as_ref().map(|r| r["converted"].clone()).unwrap_or_default();
+        let boxes = converted["boxes"].as_u64().unwrap_or(0);
+        let notes = converted["notes"].as_array().map_or(0, Vec::len);
+        ifc_imported(state, path, result, doc);
+        if boxes > 0 {
+            state.message = format!("{} {}", state.message, t!("msg-rvt-boxes", "count" => boxes));
+        }
+        if notes > 0 {
+            state.message = format!("{} {}", state.message, t!("msg-rvt-notes", "count" => notes));
+        }
+    });
+    crate::jobs::start(state, t!("job-importing-rvt"), shown, crate::jobs::Base::Fresh, run, finish);
 }
 
 fn ifc_imported(
@@ -1285,6 +1337,7 @@ mod tests {
         use std::path::Path;
         assert!(opens(Path::new("house.ccad")));
         assert!(opens(Path::new("P0032_EXT.IFC")));
+        assert_eq!(opens(Path::new("P0032_EXT.rvt")), cfg!(feature = "rvt"));
         assert!(!opens(Path::new("plan.dxf")));
         assert!(!opens(Path::new("ifc")));
     }
@@ -1308,6 +1361,99 @@ mod tests {
         assert!(state.dialogs.error.is_none(), "{:?}", state.dialogs.error);
         assert_eq!(state.project().walls().count(), 1);
         assert!(state.session.doc.path.is_none(), "an imported project has no file yet");
+    }
+
+    /// Revit files, with the `rvt` feature. `rvt_import` runs this test
+    /// binary as its converter: [`converter`](rvt::converter) with `rvt-to-ifc`'s arguments.
+    #[cfg(feature = "rvt")]
+    mod rvt {
+        use super::*;
+
+        #[test]
+        #[ignore = "the converter of the Revit tests, run as a child process"]
+        fn converter() {
+            let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+            let Some(at) = args.iter().position(|a| a == "--") else { return };
+            std::process::exit(i32::from(cc_engine::rvt::child_main(&args[at + 1..])));
+        }
+
+        fn use_test_converter() {
+            let args = ["--exact", "actions::tests::rvt::converter", "--ignored", "--quiet", "--"];
+            cc_engine::rvt::set_converter(Some(cc_engine::rvt::Converter {
+                program: std::env::current_exe().unwrap(),
+                args: args.iter().map(Into::into).collect(),
+            }));
+        }
+
+        /// A file dropped on the window.
+        #[derive(Debug)]
+        struct Dropped(std::path::PathBuf);
+
+        impl egui::DroppedFile for Dropped {
+            fn path(&self) -> &std::path::Path {
+                &self.0
+            }
+            fn bytes(&self) -> Result<Vec<u8>, String> {
+                std::fs::read(&self.0).map_err(|e| e.to_string())
+            }
+        }
+
+        fn synthetic() -> std::path::PathBuf {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../cc_rvt/tests/fixtures/synthetic.rvt")
+        }
+
+        /// Opening a Revit file converts and imports it as a new project.
+        #[test]
+        fn opening_a_revit_file_imports_it() {
+            use_test_converter();
+            let mut state = AppState::new(Document::new(new_project()));
+            open_path(&mut state, synthetic());
+            crate::jobs::wait(&mut state);
+            assert!(state.dialogs.error.is_none(), "{:?}", state.dialogs.error);
+            assert!(state.session.doc.path.is_none(), "an imported project has no file yet");
+        }
+
+        /// A truncated or corrupted Revit file, opened or dropped, is an error
+        /// message and the open project stays, also after confirming to discard it.
+        #[test]
+        fn a_damaged_revit_file_keeps_the_open_project() {
+            use_test_converter();
+            let data = std::fs::read(synthetic()).unwrap();
+            let mut corrupted = data.clone();
+            corrupted[..512].fill(0x5a);
+            let dir = std::env::temp_dir();
+            let truncated_path = dir.join(format!("ccad-truncated-{}.rvt", std::process::id()));
+            let corrupted_path = dir.join(format!("ccad-corrupted-{}.rvt", std::process::id()));
+            std::fs::write(&truncated_path, &data[..data.len() / 3]).unwrap();
+            std::fs::write(&corrupted_path, &corrupted).unwrap();
+
+            let mut state = AppState::new(Document::new(new_project()));
+            run_command(
+                &mut state,
+                cc_engine::commands::create::WallCreate { start: [0.0, 0.0], end: [5.0, 0.0], ..Default::default() },
+            )
+            .unwrap();
+
+            open_path(&mut state, truncated_path.clone());
+            crate::jobs::wait(&mut state);
+            assert!(state.dialogs.error.take().is_some(), "opening a truncated file is an error");
+            assert_eq!(state.project().walls().count(), 1);
+
+            let ctx = egui::Context::default();
+            let dropped: egui::DroppedFileHandle = std::sync::Arc::new(Dropped(corrupted_path.clone()));
+            ctx.begin_pass(egui::RawInput { dropped_files: vec![dropped], ..Default::default() });
+            crate::cad_ui::dropped_files(&ctx, &mut state);
+            ctx.end_pass().textures_delta.clear();
+            let confirm = state.dialogs.confirm.take();
+            assert!(matches!(confirm, Some(PendingAction::OpenPath(_))), "the unsaved project asks first");
+            run_pending(&mut state, confirm.unwrap());
+            crate::jobs::wait(&mut state);
+            std::fs::remove_file(&truncated_path).ok();
+            std::fs::remove_file(&corrupted_path).ok();
+            assert!(state.dialogs.error.is_some(), "dropping a corrupted file is an error");
+            assert_eq!(state.project().walls().count(), 1);
+            assert!(state.session.doc.is_dirty(), "the open project keeps its unsaved changes");
+        }
     }
 
     #[test]

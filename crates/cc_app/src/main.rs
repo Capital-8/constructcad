@@ -113,6 +113,16 @@ mod wall_framing_ui;
 mod wall_profile_ui;
 
 fn main() -> eframe::Result<()> {
+    // The Revit converter that `rvt_import` starts; read before `std::env::args`, which takes UTF-8 only.
+    #[cfg(feature = "rvt")]
+    {
+        let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+        if let Some((first, rest)) = args.split_first()
+            && first == cc_engine::rvt::SUBCOMMAND
+        {
+            std::process::exit(i32::from(cc_engine::rvt::child_main(rest)));
+        }
+    }
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if let Some(args) = mcp_bridge::mcp_args(&raw) {
         std::process::exit(mcp_bridge::run(args));

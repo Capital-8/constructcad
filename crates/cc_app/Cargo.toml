@@ -42,6 +42,10 @@ resvg.workspace = true
 ureq.workspace = true
 sha2.workspace = true
 
+[features]
+# Revit import: `rvt_import` and its menu entries (see cc_engine's `rvt` feature).
+rvt = ["cc_engine/rvt"]
+
 [lints]
 workspace = true
 

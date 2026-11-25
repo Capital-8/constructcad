@@ -183,8 +183,8 @@ pub fn import_image_path(state: &mut AppState, path: PathBuf) {
     crate::jobs::start(state, t!("job-importing-image"), path, crate::jobs::Base::Current, run, finish);
 }
 
-/// A project or IFC file dropped on the window opens, also on the home screen; DWG and DXF
-/// drawings, pictures and SVG files go into the active view.
+/// A file Open takes ([`crate::actions::opens`]) dropped on the window opens, also on the home
+/// screen; DWG and DXF drawings, pictures and SVG files go into the active view.
 pub fn dropped_files(ctx: &egui::Context, state: &mut AppState) {
     if crate::jobs::busy(state) {
         return;

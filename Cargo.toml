@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/cc_core", "crates/cc_geom", "crates/cc_views", "crates/cc_render", "crates/cc_raytracing", "crates/cc_ifc", "crates/cc_cad", "crates/cc_skp", "crates/cc_script", "crates/cc_engine", "crates/cc_plugins", "crates/cc_cli", "crates/cc_app", "tools/api_doc"]
+members = ["crates/cc_core", "crates/cc_geom", "crates/cc_views", "crates/cc_render", "crates/cc_raytracing", "crates/cc_ifc", "crates/cc_cad", "crates/cc_skp", "crates/cc_rvt", "crates/cc_script", "crates/cc_engine", "crates/cc_plugins", "crates/cc_cli", "crates/cc_app", "tools/api_doc"]
 
 [workspace.package]
 version = "0.14.1"
@@ -18,6 +18,7 @@ cc_raytracing = { path = "crates/cc_raytracing" }
 cc_ifc = { path = "crates/cc_ifc" }
 cc_cad = { path = "crates/cc_cad" }
 cc_skp = { path = "crates/cc_skp" }
+cc_rvt = { path = "crates/cc_rvt" }
 cc_script = { path = "crates/cc_script" }
 cc_engine = { path = "crates/cc_engine" }
 cc_plugins = { path = "crates/cc_plugins" }
@@ -53,6 +54,8 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 # DWG reading (cc_cad), MPL-2.0, pure Rust; without `parallel` (no rayon).
 acadrust = { version = "0.6.8", default-features = false }
+# Revit files (cc_rvt), Apache-2.0, pure Rust, `forbid(unsafe_code)`; they are converted to IFC4.
+rvt = "0.25.0"
 # Code-page text of pre-2007 DXF files (cc_cad), already used by acadrust.
 encoding_rs = "0.8"
 # Update notice (cc_app): HTTPS with rustls, no other TLS stack.

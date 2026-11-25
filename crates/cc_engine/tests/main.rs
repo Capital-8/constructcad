@@ -73,6 +73,7 @@ mod ring_footings;
 mod roof_edge_overhangs;
 mod roof_join;
 mod roof_notch;
+mod rvt;
 mod schedule_def;
 mod section_marks;
 mod shaft;

@@ -14,6 +14,7 @@
 | [`cc_plugins`](cc_plugins.md) | 5 | 29 | 18 | Lua scripts and plugins for ConstructCraft. |
 | [`cc_raytracing`](cc_raytracing.md) | 7 | 45 | 29 | Photorealistic rendering of a 3D view: path tracing on the pure Rust `sort-raytracing` library, with no GPU. |
 | [`cc_render`](cc_render.md) | 8 | 38 | 35 | Offscreen wgpu renderer for the 3D view. |
+| [`cc_rvt`](cc_rvt.md) | 2 | 9 | 1 | Revit project files (.rvt), read by the crates.io `rvt` crate (rvt-rs, Apache-2.0, pure Rust, `forbid(unsafe_code)`) and written as IFC4 text, which `cc_ifc` imports as it imports any IFC file. |
 | [`cc_script`](cc_script.md) | 5 | 23 | 9 | ConstructCraft's sandboxed Lua 5.4. |
 | [`cc_skp`](cc_skp.md) | 35 | 322 | 155 | SketchUp (.skp) files: reader (current and legacy formats, scenes and per-definition instanced scenes) and writer (`create`, `edit`). |
 | [`cc_views`](cc_views.md) | 34 | 273 | 73 | View generation for ConstructCraft. |
