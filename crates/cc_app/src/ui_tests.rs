@@ -129,7 +129,7 @@ fn ribbon_snapshots() {
     // The rich tooltip of an unavailable command.
     let mut state = sample_state();
     state.ribbon_tab = RibbonTab::Modify;
-    let mut harness = ribbon_harness_sized(state, egui::vec2(900.0, 300.0));
+    let mut harness = ribbon_harness_sized(state, egui::vec2(1600.0, 300.0));
     harness.get_by_label(&t!("tool-move")).hover();
     harness.run();
     results.add(harness.try_snapshot("ribbon_tooltip"));
@@ -210,7 +210,10 @@ fn narrow_ribbon_scrolls() {
 /// tab's panel over the views, and running a command closes it.
 #[test]
 fn ribbon_collapses_and_peeks() {
-    let mut harness = ribbon_harness_sized(sample_state(), egui::vec2(1100.0, 220.0));
+    let mut state = sample_state();
+    // Text is in the default quick access toolbar; without it the button shows only in the panel.
+    state.prefs.quick_access = Some(Vec::new());
+    let mut harness = ribbon_harness_sized(state, egui::vec2(1100.0, 220.0));
     let tab = t!("ribbon-annotate");
     harness.get_by_label(&tab).click();
     harness.run();
@@ -316,9 +319,11 @@ fn ribbon_buttons_are_accessible() {
         let mut state = sample_state();
         state.ribbon_tab = tab;
         state.prefs.structure_material = material;
-        let mut harness = ribbon_harness(state, 1600.0);
-        // Families too long for the row open as menus: open each one.
-        let menus = [t!("group-temporary"), t!("group-documentation")];
+        // File is a page over the window: it needs the window's height.
+        let height = if tab == RibbonTab::File { 800.0 } else { 150.0 };
+        let mut harness = ribbon_harness_sized(state, egui::vec2(1600.0, height));
+        // Families too long for the row open as menus, and File's exports are a page: open each one.
+        let menus = [t!("group-temporary"), t!("group-documentation"), t!("group-export")];
         let mut open = vec![None];
         open.extend(menus.iter().map(Some));
         for menu in open {
@@ -7924,7 +7929,9 @@ fn plugin_exporters_and_importers_join_the_ribbon() {
     state.ribbon_tab = RibbonTab::File;
     let mut harness = wide_ribbon_harness(state);
     harness.run();
-    assert!(harness.query_by_role_and_label(Role::Button, "EnergyPlus (.idf)").is_some(), "File tab, Export");
+    harness.get_by_role_and_label(Role::Button, &t!("group-export")).click();
+    harness.run();
+    assert!(harness.query_by_role_and_label(Role::Button, "EnergyPlus (.idf)").is_some(), "File, Export page");
     assert!(harness.query_by_role_and_label(Role::Button, "Weather (.epw)").is_none(), "no Import group there");
     harness.state_mut().ribbon_tab = RibbonTab::Insert;
     harness.run();
@@ -8520,4 +8527,90 @@ fn right_click_opens_the_selection_menu() {
     assert_ne!(before, after, "the wall was flipped");
     assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
     assert!(entry(&harness, "action-delete").is_none(), "the menu closed");
+}
+
+/// A narrow window first turns rows of large buttons into medium ones, then
+/// the last groups into menus, and scrolls only when nothing else fits; a
+/// collapsed group's menu holds its buttons.
+#[test]
+fn ribbon_compacts_before_scrolling() {
+    use crate::commands::UiCommand;
+    let state = sample_state();
+    let grid = UiCommand::Place(cc_core::Category::Grid).label(&state);
+    // Wide: as designed, no group menus.
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Architecture;
+    let harness = ribbon_harness(state, 1600.0);
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("group-datum")).is_none());
+    // Narrow: the last group is a menu and the row fits without arrows.
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Architecture;
+    let mut harness = ribbon_harness_sized(state, egui::vec2(700.0, 400.0));
+    harness.run();
+    assert!(harness.query_by_label(&t!("ribbon-scroll-right")).is_none(), "compacted, not scrolled");
+    assert!(harness.query_by_role_and_label(Role::Button, &grid).is_none(), "Grid is inside the menu");
+    harness.get_by_role_and_label(Role::Button, &t!("group-datum")).click();
+    harness.run();
+    harness.get_by_role_and_label(Role::Button, &grid).click();
+    harness.run();
+    assert!(matches!(harness.state().tool, crate::tools::Tool::Grid { .. }), "the menu's button runs");
+    // Wide again: back as designed.
+    harness.set_size(egui::vec2(1600.0, 400.0));
+    harness.run();
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("group-datum")).is_none(), "groups back");
+    assert!(harness.query_by_role_and_label(Role::Button, &grid).is_some());
+}
+
+/// A ribbon button's right-click menu adds it to the quick access toolbar;
+/// the toolbar's menu moves and removes it, and restores the default set.
+#[test]
+fn quick_access_toolbar_is_customized() {
+    use crate::commands::UiCommand;
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Manage;
+    let mut harness = ribbon_harness_sized(state, egui::vec2(1600.0, 500.0));
+    let levels = UiCommand::Levels.label(harness.state());
+    assert_eq!(harness.query_all_by_role_and_label(Role::Button, &levels).count(), 1, "only in the tab");
+    harness.get_by_role_and_label(Role::Button, &levels).click_secondary();
+    harness.run();
+    harness.get_by_role_and_label(Role::Button, &t!("qat-add")).click();
+    harness.run();
+    let ids = harness.state().prefs.quick_access.clone().unwrap();
+    assert_eq!(ids.last().map(String::as_str), Some("Levels"));
+    assert_eq!(harness.query_all_by_role_and_label(Role::Button, &levels).count(), 2, "and in the toolbar");
+    assert_eq!(crate::ribbon::quick_access(harness.state()).last(), Some(&UiCommand::Levels));
+    // Its menu moves it left, then removes it.
+    harness.get_by_role_and_label(Role::Button, &t!("qat-customize")).click();
+    harness.run();
+    harness.get_all_by_role_and_label(Role::Button, "←").last().unwrap().click();
+    harness.run();
+    let list = crate::ribbon::quick_access(harness.state());
+    assert_eq!(list[list.len() - 2], UiCommand::Levels, "moved one place left");
+    harness.get_all_by_role_and_label(Role::Button, "×").nth(list.len() - 2).unwrap().click();
+    harness.run();
+    assert!(!crate::ribbon::quick_access(harness.state()).contains(&UiCommand::Levels));
+    harness.get_by_role_and_label(Role::Button, &t!("qat-reset")).click();
+    harness.run();
+    assert_eq!(harness.state().prefs.quick_access, None, "the default set again");
+}
+
+/// File opens a page over the window with the recent projects and, on its
+/// Export page, the export formats; Esc goes back to the tab shown before.
+#[test]
+fn file_is_a_page_over_the_window() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::View;
+    state.recent = vec![std::path::PathBuf::from("Z:/nowhere/old house.ccad")];
+    let mut harness = ribbon_harness_sized(state, egui::vec2(1400.0, 700.0));
+    harness.get_by_label(&t!("ribbon-file")).click();
+    harness.run();
+    assert_eq!(harness.state().ribbon_tab, RibbonTab::File);
+    assert!(harness.query_by_role_and_label(Role::Button, "old house").is_some(), "the recent projects");
+    harness.get_by_role_and_label(Role::Button, &t!("group-export")).click();
+    harness.run();
+    let ifc = crate::commands::UiCommand::ExportIfc.label(harness.state());
+    assert!(harness.query_by_role_and_label(Role::Button, &ifc).is_some(), "the export formats");
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert_eq!(harness.state().ribbon_tab, RibbonTab::View, "back to the tab shown before");
 }

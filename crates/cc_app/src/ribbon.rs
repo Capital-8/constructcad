@@ -248,6 +248,9 @@ fn stack_rows(n: usize) -> usize {
 /// so unrelated commands never share one. Two-row columns are centered on
 /// the large buttons' height. Returns the clicked command.
 fn stacked(ui: &mut Ui, state: &AppState, family: &[UiCommand]) -> Option<UiCommand> {
+    if let Some(first) = family.first() {
+        remember_icon(ui.ctx(), first.icon());
+    }
     let mut clicked = None;
     stack_columns(ui, family, |ui, command| {
         let why = command.unavailable(state);
@@ -296,6 +299,9 @@ fn stacked_labelled(ui: &mut Ui, state: &AppState, family: &[UiCommand]) -> Opti
 /// `commands` as medium buttons one under the other, all as wide as the
 /// widest. Returns the clicked command.
 fn labelled_column(ui: &mut Ui, state: &AppState, commands: &[UiCommand]) -> Option<UiCommand> {
+    if let Some(first) = commands.first() {
+        remember_icon(ui.ctx(), first.icon());
+    }
     let font = egui::FontId::proportional(12.0);
     let labels: Vec<String> = commands.iter().map(|c| c.label(state)).collect();
     let text_w = labels
@@ -418,28 +424,81 @@ pub fn env_group(ui: &mut Ui, state: &mut AppState, caption: String, commands: &
 
 /// A captioned group of ribbon buttons followed by a vertical divider.
 fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
-    group_with(ui, caption, false, add);
+    group_with(ui, caption, false, None, add);
+}
+
+/// A group's launcher: the command opening the settings of what the group
+/// makes, drawn as a small arrow at the right of its caption, and its name.
+type Launcher = Option<(UiCommand, String)>;
+
+/// The launcher of `command`, named for `state`.
+fn launcher(state: &AppState, command: UiCommand) -> Launcher {
+    Some((command, command.label(state)))
 }
 
 /// [`group`], on a soft accent ground when `highlight` (the Modify tab's
 /// groups for the selected categories).
-fn group_with(ui: &mut Ui, caption: String, highlight: bool, add: impl FnOnce(&mut Ui)) {
+/// `launcher` adds a small arrow at the right of the caption. While the row
+/// is compacted (see [`tab_row`]) a group from [`RowFrame::collapse_from`] on
+/// is one large button, named after the group, that opens its buttons as a menu.
+fn group_with(ui: &mut Ui, caption: String, highlight: bool, launcher: Launcher, add: impl FnOnce(&mut Ui)) {
+    let ctx = ui.ctx().clone();
+    let mut frame = RowFrame::get(&ctx);
+    let index = frame.next;
+    frame.next += 1;
+    frame.set(&ctx);
+    let collapsed = !frame.popup && index >= frame.collapse_from;
+    let icon_id = egui::Id::new(("ribbon-group-icon", caption.clone()));
     let ground = ui.painter().add(egui::Shape::Noop);
-    let caption_w =
-        ui.painter().layout_no_wrap(caption.clone(), egui::FontId::proportional(11.0), PALETTE.text).size().x;
+    let caption_font = egui::FontId::proportional(11.0);
+    let caption_w = ui.painter().layout_no_wrap(caption.clone(), caption_font, PALETTE.text).size().x;
+    let launcher_w = if launcher.is_some() { LAUNCHER_SIZE + 4.0 } else { 0.0 };
     let inner = ui.vertical(|ui| {
         // At least as wide as the caption, so it never wraps.
-        ui.set_min_width(caption_w + 8.0);
+        ui.set_min_width(caption_w + launcher_w + 8.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            add(ui);
+            if collapsed {
+                let icon = ctx.data(|d| d.get_temp::<Icon>(icon_id)).unwrap_or(Icon::ChevronDown);
+                let r = big_button(ui, Glyph::Icon(icon, None), &caption, false, true, true);
+                egui::Popup::menu(&r).show(|ui| {
+                    RowFrame::popup(&ctx, true);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        add(ui);
+                    });
+                    RowFrame::popup(&ctx, false);
+                });
+            } else {
+                // The first icon drawn in the group stands for it once it is collapsed.
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new(CURRENT_GROUP), Some(icon_id)));
+                add(ui);
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new(CURRENT_GROUP), None::<egui::Id>));
+            }
         });
         let width = ui.min_rect().width();
-        ui.allocate_ui_with_layout(vec2(width, 14.0), Layout::top_down(Align::Center), |ui| {
-            ui.label(theme::caption(caption));
+        let caption_row = ui.allocate_ui_with_layout(vec2(width, 14.0), Layout::top_down(Align::Center), |ui| {
+            ui.label(RichText::new(&caption).size(11.0).color(PALETTE.text_muted));
         });
+        if let Some((command, label)) = launcher {
+            let row = caption_row.response.rect;
+            let at = egui::pos2(row.left() + width - LAUNCHER_SIZE / 2.0 - 1.0, row.center().y);
+            let rect = egui::Rect::from_center_size(at, vec2(LAUNCHER_SIZE, LAUNCHER_SIZE));
+            let r = ui.interact(rect, egui::Id::new(("ribbon-launcher", command.id())), Sense::click());
+            paint_launcher(ui.painter(), rect, r.hovered());
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+            if r.on_hover_text(&label).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                defer(&ctx, command);
+            }
+        }
     });
     let height = inner.response.rect.height();
+    if !frame.popup {
+        let width = inner.response.rect.width() + 13.0;
+        ctx.data_mut(|d| {
+            d.get_temp_mut_or_default::<Vec<(bool, f32)>>(egui::Id::new(DRAWN_GROUPS)).push((collapsed, width))
+        });
+    }
     if highlight {
         let rect = inner.response.rect.expand2(vec2(4.0, 2.0));
         ui.painter().set(ground, egui::Shape::rect_filled(rect, theme::RADIUS as f32, PALETTE.accent_soft));
@@ -447,6 +506,272 @@ fn group_with(ui: &mut Ui, caption: String, highlight: bool, add: impl FnOnce(&m
     let (r, _) = ui.allocate_exact_size(vec2(13.0, height), Sense::hover());
     ui.painter().vline(r.center().x, r.y_range().shrink(4.0), Stroke::new(1.0, PALETTE.border));
 }
+
+/// Side of a group's launcher.
+const LAUNCHER_SIZE: f32 = 11.0;
+
+/// The launcher's arrow: a corner and a diagonal pointing down and right.
+fn paint_launcher(painter: &egui::Painter, rect: egui::Rect, hovered: bool) {
+    if hovered {
+        painter.rect_filled(rect.expand(2.0), 2.0, PALETTE.hover);
+    }
+    let stroke = Stroke::new(1.2, if hovered { PALETTE.accent_text } else { PALETTE.text_muted });
+    let r = rect.shrink(1.5);
+    painter.line_segment([r.left_top(), r.right_bottom()], stroke);
+    painter.line_segment([r.right_bottom(), r.right_bottom() - vec2(4.0, 0.0)], stroke);
+    painter.line_segment([r.right_bottom(), r.right_bottom() - vec2(0.0, 4.0)], stroke);
+}
+
+/// Temp-data key of the group being drawn (the key its icon is kept under).
+const CURRENT_GROUP: &str = "ribbon-current-group";
+
+/// Keep `icon` as the icon of the group being drawn, unless it has one.
+fn remember_icon(ctx: &egui::Context, icon: Icon) {
+    let Some(Some(group)) = ctx.data(|d| d.get_temp::<Option<egui::Id>>(egui::Id::new(CURRENT_GROUP))) else {
+        return;
+    };
+    if ctx.data(|d| d.get_temp::<Icon>(group)).is_none() {
+        ctx.data_mut(|d| d.insert_temp(group, icon));
+    }
+}
+
+/// The quick access toolbar's first commands, which the user cannot remove.
+const QUICK_ACCESS_FIXED: [UiCommand; 6] =
+    [UiCommand::Home, UiCommand::New, UiCommand::Open, UiCommand::Save, UiCommand::Undo, UiCommand::Redo];
+
+/// The quick access toolbar's commands after Undo and Redo when the user has not changed them.
+fn default_quick_access() -> Vec<UiCommand> {
+    vec![
+        UiCommand::ExportPdf,
+        UiCommand::Measure,
+        UiCommand::Dimension(DimensionMode::Aligned),
+        UiCommand::Text,
+        UiCommand::Default3D,
+        UiCommand::Section,
+        UiCommand::CloseInactiveViews,
+    ]
+}
+
+/// The quick access toolbar's commands after Undo and Redo: the user's
+/// (`Preferences::quick_access`, unknown ids skipped) or the default set.
+pub fn quick_access(state: &AppState) -> Vec<UiCommand> {
+    let Some(ids) = &state.prefs.quick_access else { return default_quick_access() };
+    let all = UiCommand::all();
+    ids.iter().filter_map(|id| all.iter().find(|c| c.id() == *id).copied()).collect()
+}
+
+/// A change to the quick access toolbar a menu asked for, applied once the ribbon is drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum QatEdit {
+    Add(UiCommand),
+    Remove(UiCommand),
+    /// Move the command one place left (-1) or right (+1).
+    Move(UiCommand, isize),
+    Reset,
+}
+
+/// Temp-data key of a pending [`QatEdit`].
+const QAT_EDIT: &str = "ribbon-qat-edit";
+
+/// Apply `edit` to the user's quick access commands.
+fn apply_quick_access(state: &mut AppState, edit: QatEdit) {
+    let mut list = quick_access(state);
+    match edit {
+        QatEdit::Add(c) if !list.contains(&c) => list.push(c),
+        QatEdit::Remove(c) => list.retain(|x| *x != c),
+        QatEdit::Move(c, by) => {
+            if let Some(i) = list.iter().position(|x| *x == c) {
+                let j = i.saturating_add_signed(by).min(list.len().saturating_sub(1));
+                list.swap(i, j);
+            }
+        }
+        QatEdit::Reset => {
+            state.prefs.quick_access = None;
+            return;
+        }
+        QatEdit::Add(_) => {}
+    }
+    state.prefs.quick_access = Some(list.iter().map(|c| c.id()).collect());
+}
+
+/// The ▾ at the end of the quick access toolbar: its commands, each moved
+/// left or right or removed, and the default set back.
+fn quick_access_menu(ui: &mut Ui, state: &AppState) {
+    let label = t!("qat-customize");
+    // A fixed id, so the menu stays open while its list changes the toolbar's width.
+    let (rect, _) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::hover());
+    let r = ui.interact(rect, egui::Id::new("quick-access-menu"), Sense::click());
+    if r.hovered() {
+        ui.painter().rect_filled(rect, theme::RADIUS as f32, PALETTE.hover);
+    }
+    icons::paint(ui.painter(), rect.shrink(7.0), Icon::ChevronDown, PALETTE.text_muted);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+    let r = r.on_hover_text(&label);
+    let mut edit = None;
+    egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        ui.set_min_width(260.0);
+        ui.label(RichText::new(&label).family(theme::semibold()).color(PALETTE.text));
+        let list = quick_access(state);
+        if list.is_empty() {
+            ui.label(theme::muted(t!("qat-empty")));
+        }
+        let last = list.len().saturating_sub(1);
+        for (i, command) in list.iter().enumerate() {
+            ui.horizontal(|ui| {
+                let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+                icons::paint(ui.painter(), rect, command.icon(), PALETTE.text_muted);
+                ui.label(command.label(state));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui.small_button("×").on_hover_text(t!("qat-remove")).clicked() {
+                        edit = Some(QatEdit::Remove(*command));
+                    }
+                    if ui.add_enabled(i < last, Button::new("→").small()).on_hover_text(t!("qat-move-right")).clicked()
+                    {
+                        edit = Some(QatEdit::Move(*command, 1));
+                    }
+                    if ui.add_enabled(i > 0, Button::new("←").small()).on_hover_text(t!("qat-move-left")).clicked() {
+                        edit = Some(QatEdit::Move(*command, -1));
+                    }
+                });
+            });
+        }
+        ui.separator();
+        if ui.button(t!("qat-reset")).clicked() {
+            edit = Some(QatEdit::Reset);
+        }
+    });
+    if let Some(edit) = edit {
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new(QAT_EDIT), Some(edit)));
+    }
+}
+
+/// Temp-data key of a command a ribbon click asked for, run once the row is drawn.
+const DEFERRED: &str = "ribbon-deferred";
+
+/// Run `command` once the ribbon is drawn (for clicks where the state is borrowed).
+fn defer(ctx: &egui::Context, command: UiCommand) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new(DEFERRED), Some(command)));
+}
+
+/// What the groups drawn this frame read about the row's compaction.
+#[derive(Clone, Copy)]
+struct RowFrame {
+    /// Rows of large buttons are drawn as medium ones.
+    medium: bool,
+    /// Groups from this index on are drawn as menus.
+    collapse_from: usize,
+    /// The index of the next group drawn.
+    next: usize,
+    /// A collapsed group's menu is being drawn: its buttons as designed.
+    popup: bool,
+}
+
+impl Default for RowFrame {
+    fn default() -> Self {
+        Self { medium: false, collapse_from: usize::MAX, next: 0, popup: false }
+    }
+}
+
+impl RowFrame {
+    fn id() -> egui::Id {
+        egui::Id::new("ribbon-row-frame")
+    }
+
+    fn get(ctx: &egui::Context) -> Self {
+        ctx.data(|d| d.get_temp(Self::id())).unwrap_or_default()
+    }
+
+    fn set(self, ctx: &egui::Context) {
+        ctx.data_mut(|d| d.insert_temp(Self::id(), self));
+    }
+
+    fn popup(ctx: &egui::Context, on: bool) {
+        let mut frame = Self::get(ctx);
+        frame.popup = on;
+        frame.set(ctx);
+    }
+
+    /// Whether rows of large buttons are drawn as medium ones here.
+    fn medium_here(ctx: &egui::Context) -> bool {
+        let frame = Self::get(ctx);
+        frame.medium && !frame.popup
+    }
+}
+
+/// How far a tab's row is compacted to fit the window: 0 as designed, 1 its
+/// rows of large buttons as medium ones, 1 + k also its last k groups as menus.
+/// Each group's width is measured as it is drawn, so the level that fits is
+/// predicted rather than reached one step per frame.
+#[derive(Clone, Default)]
+struct Compaction {
+    level: usize,
+    /// The groups the tab drew last frame.
+    groups: usize,
+    /// The row's width as designed, when last drawn so.
+    full: Option<f32>,
+    /// Each group's width with medium buttons, and as a menu.
+    medium: Vec<Option<f32>>,
+    collapsed: Vec<Option<f32>>,
+}
+
+/// Width assumed for a group drawn as a menu before it has been measured.
+const COLLAPSED_GUESS: f32 = 84.0;
+
+impl Compaction {
+    /// The frame the groups read at this level.
+    fn frame(&self) -> RowFrame {
+        let collapsed = self.level.saturating_sub(1);
+        RowFrame {
+            medium: self.level >= 1,
+            collapse_from: if collapsed == 0 { usize::MAX } else { self.groups.saturating_sub(collapsed) },
+            next: 0,
+            popup: false,
+        }
+    }
+
+    /// After a frame: the row was `content` wide for `room`, its groups as
+    /// `drawn` (whether a menu, width). Keeps the widths and picks the least
+    /// compaction predicted to fit. Returns whether the level changed.
+    fn measured(&mut self, content: f32, room: f32, drawn: &[(bool, f32)]) -> bool {
+        let n = drawn.len();
+        self.groups = n;
+        self.medium.resize(n, None);
+        self.collapsed.resize(n, None);
+        for (i, (collapsed, width)) in drawn.iter().enumerate() {
+            if *collapsed {
+                self.collapsed[i] = Some(*width);
+            } else if self.level >= 1 {
+                self.medium[i] = Some(*width);
+            }
+        }
+        if self.level == 0 {
+            self.full = Some(content);
+        }
+        let fits = |width: f32| width <= room - 2.0;
+        let target = if self.full.is_some_and(fits) {
+            0
+        } else if self.level == 0 || self.medium.iter().any(Option::is_none) {
+            // The medium widths are measured at level 1 first.
+            1
+        } else {
+            let predict = |k: usize| -> f32 {
+                (0..n)
+                    .map(|i| match i >= n - k {
+                        true => self.collapsed[i].unwrap_or(COLLAPSED_GUESS),
+                        false => self.medium[i].unwrap_or(0.0),
+                    })
+                    .sum()
+            };
+            1 + (0..=n).find(|k| fits(predict(*k))).unwrap_or(n)
+        };
+        let changed = target != self.level;
+        self.level = target;
+        changed
+    }
+}
+
+/// Temp-data key of the groups drawn this frame: whether each is a menu, and its width.
+const DRAWN_GROUPS: &str = "ribbon-drawn-groups";
 
 /// A ribbon tab title in the top strip.
 /// Font of a ribbon tab title (semibold when active).
@@ -504,6 +829,7 @@ fn command_menu(ui: &mut Ui, state: &AppState, command: UiCommand) -> Response {
 }
 
 fn command_big(ui: &mut Ui, state: &AppState, command: UiCommand, dropdown: bool) -> Response {
+    remember_icon(ui.ctx(), command.icon());
     let why = command.unavailable(state);
     let label = command.label(state);
     let glyph = Glyph::Icon(command.icon(), command.badge());
@@ -515,9 +841,25 @@ fn command_big(ui: &mut Ui, state: &AppState, command: UiCommand, dropdown: bool
 /// is unavailable, and the engine command that scripts call for the same change.
 /// With detailed tooltips off (a preference), only the title, shortcut and
 /// why it is unavailable.
+/// The tooltip also comes with a right-click menu that adds the command to
+/// the quick access toolbar, or removes it from there.
 pub fn command_tooltip(response: Response, state: &AppState, command: UiCommand, why: Option<String>) -> Response {
     let title = command.title(state);
     let detailed = state.prefs.detailed_tooltips;
+    if !QUICK_ACCESS_FIXED.contains(&command) {
+        let shown = quick_access(state).contains(&command);
+        response.context_menu(|ui| {
+            let (label, edit) = if shown {
+                (t!("qat-remove"), QatEdit::Remove(command))
+            } else {
+                (t!("qat-add"), QatEdit::Add(command))
+            };
+            if ui.button(label).clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new(QAT_EDIT), Some(edit)));
+                ui.close();
+            }
+        });
+    }
     response.on_hover_ui(|ui| {
         ui.set_max_width(300.0);
         ui.spacing_mut().item_spacing.y = 4.0;
@@ -586,17 +928,12 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         divider(ui);
         command_icon(ui, state, UiCommand::Undo);
         command_icon(ui, state, UiCommand::Redo);
-        // Frequent commands that already live in the ribbon.
+        // The user's frequent commands (right-click a ribbon button to add it), then the menu to arrange them.
         divider(ui);
-        for command in [
-            UiCommand::ExportPdf,
-            UiCommand::Dimension(DimensionMode::Aligned),
-            UiCommand::Default3D,
-            UiCommand::Section,
-            UiCommand::CloseInactiveViews,
-        ] {
+        for command in quick_access(state) {
             command_icon(ui, state, command);
         }
+        quick_access_menu(ui, state);
     });
     // Ribbon tab titles, each as wide as its own text (measured bold, as when
     // active, so a tab keeps its width when picked) plus some room around it.
@@ -640,7 +977,13 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
                 state.ribbon_collapsed = !state.ribbon_collapsed;
                 state.ribbon_peek = false;
             } else if r.clicked() {
-                if collapsed {
+                if tab == RibbonTab::File {
+                    // File is a page over the window, not a row of buttons.
+                    if state.ribbon_tab != RibbonTab::File {
+                        crate::backstage::opened(ui.ctx(), state.ribbon_tab);
+                    }
+                    state.ribbon_peek = false;
+                } else if collapsed {
                     state.ribbon_peek = !(state.ribbon_peek && state.ribbon_tab == tab);
                 }
                 state.ribbon_tab = tab;
@@ -660,11 +1003,24 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
     });
     let strip_bottom = ui.min_rect().bottom();
     ui.painter().hline(ui.max_rect().x_range(), strip_bottom + 3.0, Stroke::new(1.0, PALETTE.border));
-    if !collapsed {
+    if state.ribbon_tab == RibbonTab::File {
+        // The File page covers the window under the tab titles; the row keeps its room.
+        if !collapsed {
+            ui.add_space(8.0 + BUTTON_HEIGHT + 30.0);
+        }
+        crate::backstage::show(&ui.ctx().clone(), state, strip_bottom + 4.0);
+    } else if !collapsed {
         ui.add_space(8.0);
         tab_row(ui, state, full_width);
     } else if state.ribbon_peek {
         peek(ui, state, strip_bottom + 4.0);
+    }
+    let ctx = ui.ctx().clone();
+    if let Some(Some(command)) = ctx.data_mut(|d| d.remove_temp::<Option<UiCommand>>(egui::Id::new(DEFERRED))) {
+        commands::run(state, &ctx, command);
+    }
+    if let Some(Some(edit)) = ctx.data_mut(|d| d.remove_temp::<Option<QatEdit>>(egui::Id::new(QAT_EDIT))) {
+        apply_quick_access(state, edit);
     }
     ui.add_space(2.0);
 }
@@ -716,8 +1072,13 @@ struct RowExtent {
 
 /// The active tab's groups. When they are wider than the window they
 /// scroll sideways, with arrows at the ends (and the mouse wheel).
+/// A row too wide is first compacted (see [`Compaction`]), and scrolls only
+/// once every group is a menu.
 fn tab_row(ui: &mut Ui, state: &mut AppState, available: f32) {
     let id = egui::Id::new(("ribbon-row", state.ribbon_tab as u8));
+    let compaction_id = id.with("compaction");
+    let mut compaction: Compaction = ui.ctx().data(|d| d.get_temp(compaction_id)).unwrap_or_default();
+    compaction.frame().set(ui.ctx());
     let mut extent: RowExtent = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
     let overflow = extent.content > available + 0.5;
     ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
@@ -739,7 +1100,8 @@ fn tab_row(ui: &mut Ui, state: &mut AppState, available: f32) {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 match state.ribbon_tab {
-                    RibbonTab::File => file_tab(ui, state),
+                    // File is a page (`backstage`), never a row.
+                    RibbonTab::File => {}
                     RibbonTab::Architecture => architecture_tab(ui, state),
                     RibbonTab::Structure => structure_tab(ui, state),
                     RibbonTab::Mep => mep_tab(ui, state),
@@ -761,6 +1123,12 @@ fn tab_row(ui: &mut Ui, state: &mut AppState, available: f32) {
         extent.offset = out.state.offset.x;
         extent.visible = out.inner_rect.width();
     });
+    RowFrame::default().set(ui.ctx());
+    let drawn = ui.ctx().data_mut(|d| d.remove_temp::<Vec<(bool, f32)>>(egui::Id::new(DRAWN_GROUPS)));
+    if compaction.measured(extent.content, available, &drawn.unwrap_or_default()) {
+        ui.ctx().request_repaint();
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(compaction_id, compaction));
     if (extent.content > available + 0.5) != overflow {
         // The arrows appear or go: lay out again with them.
         ui.ctx().request_repaint();
@@ -788,23 +1156,15 @@ fn scroll_arrow(ui: &mut Ui, right: bool, enabled: bool) -> Response {
 }
 
 /// Large buttons for `list`, in order.
+/// While the row is compacted, rows of two or more are medium buttons.
 fn command_buttons(ui: &mut Ui, state: &mut AppState, list: &[UiCommand]) {
+    if list.len() > 1 && RowFrame::medium_here(ui.ctx()) {
+        labelled(ui, state, &[list]);
+        return;
+    }
     for command in list {
         command_button(ui, state, *command);
     }
-}
-
-fn file_tab(ui: &mut Ui, state: &mut AppState) {
-    use UiCommand::{
-        CloseProject, ExportDxf, ExportGltf, ExportIfc, ExportImage, ExportPdf, ExportSvg, New, Open, Save, SaveAs,
-    };
-    group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[New, Open, Save, SaveAs, CloseProject]));
-    group(ui, t!("group-export"), |ui| {
-        command_buttons(ui, state, &[ExportIfc, ExportGltf, ExportPdf, ExportSvg, ExportImage, ExportDxf]);
-        plugin_file_entries(ui, state, true);
-    });
-    group(ui, t!("group-settings"), |ui| command_button(ui, state, UiCommand::Preferences));
-    group(ui, t!("group-help"), |ui| command_buttons(ui, state, &[UiCommand::About, UiCommand::CheckUpdates]));
 }
 
 /// Files brought into the project, and the reusable types (components,
@@ -947,8 +1307,9 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
 
 fn mep_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
-    group(ui, t!("group-plumbing"), |ui| {
-        // The pipe catalog lives in Manage (and in the pipe tool's type list).
+    // The pipe catalog (in Manage) opens from the group's launcher too.
+    let catalog = launcher(state, PipeCatalog);
+    group_with(ui, t!("group-plumbing"), false, catalog, |ui| {
         command_buttons(ui, state, &[place(Category::Pipe), place(Category::Valve), PlaceFixture]);
     });
     group(ui, t!("group-electrical"), |ui| {
@@ -985,12 +1346,10 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-dimension"), |ui| {
         command_buttons(ui, state, &DimensionMode::ALL.map(UiCommand::Dimension));
     });
-    group(ui, t!("group-detail"), |ui| {
-        command_buttons(
-            ui,
-            state,
-            &[UiCommand::DetailLine, UiCommand::FilledRegion, UiCommand::MaskingRegion, UiCommand::LineStyles],
-        )
+    // Line styles and tag types (in Manage) open from the groups' launchers too.
+    let styles = launcher(state, UiCommand::LineStyles);
+    group_with(ui, t!("group-detail"), false, styles, |ui| {
+        command_buttons(ui, state, &[UiCommand::DetailLine, UiCommand::FilledRegion, UiCommand::MaskingRegion])
     });
     // Making a detail component lives in Insert, with the other reusable types.
     group(ui, t!("group-detail-components"), |ui| command_button(ui, state, UiCommand::DetailComponent));
@@ -999,9 +1358,8 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-level-marks"), |ui| {
         command_buttons(ui, state, &[UiCommand::LevelMarkPlan, UiCommand::LevelMarkSection]);
     });
-    group(ui, t!("group-tags"), |ui| {
-        command_buttons(ui, state, &[UiCommand::StructureTags, UiCommand::TagTypes]);
-    });
+    let tag_types = launcher(state, UiCommand::TagTypes);
+    group_with(ui, t!("group-tags"), false, tag_types, |ui| command_button(ui, state, UiCommand::StructureTags));
 }
 
 /// The text note selected alone, if any.
@@ -1052,7 +1410,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-phasing"), |ui| command_button(ui, state, Demolish));
     // What edits only the selected categories (and the active sheet), highlighted.
     for (caption, list) in commands::contextual(state) {
-        group_with(ui, caption, true, |ui| command_buttons(ui, state, &list));
+        group_with(ui, caption, true, None, |ui| command_buttons(ui, state, &list));
     }
 }
 
@@ -1158,8 +1516,10 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
 
 fn manage_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
-    group(ui, t!("group-project"), |ui| {
-        command_buttons(ui, state, &[ProjectInfo, Units, Levels, Materials, FillPatterns, Profiles, PipeCatalog])
+    group(ui, t!("group-project"), |ui| command_buttons(ui, state, &[ProjectInfo, Units, Levels]));
+    // The project's definitions; line styles, tag types and the pipe catalog also open from launchers.
+    group(ui, t!("group-standards"), |ui| {
+        command_buttons(ui, state, &[Materials, FillPatterns, LineStyles, TagTypes, Profiles, PipeCatalog])
     });
     // View templates and filters live in View, the site's location in Massing & Site.
     group(ui, t!("group-browser"), |ui| command_button(ui, state, BrowserOrganization));
@@ -1295,7 +1655,7 @@ fn plugin_tooltip(response: Response, state: &AppState, b: &RibbonButton, why: O
 /// entries of an Export or Import group: a separator, then one button each,
 /// its tooltip naming the plugin. A click asks for the file first (see
 /// [`crate::plugins_ui::run_file_entry`]).
-fn plugin_file_entries(ui: &mut Ui, state: &mut AppState, export: bool) {
+pub(crate) fn plugin_file_entries(ui: &mut Ui, state: &mut AppState, export: bool) {
     let entries = if export { state.plugins.exporters.clone() } else { state.plugins.importers.clone() };
     if entries.is_empty() {
         return;

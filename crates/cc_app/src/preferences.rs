@@ -78,6 +78,11 @@ const PLUGIN_DEV_FOLDER_KEY: &str = "plugin_dev_folder";
 const PANELS_KEY: &str = "side_panels";
 /// eframe storage key of the Structure tab's material (`StructuralMaterial::code`).
 const STRUCTURE_MATERIAL_KEY: &str = "structure_material";
+/// eframe storage key of the quick access toolbar's commands (one `UiCommand::id` per
+/// line; `default` or no value: the default set).
+const QUICK_ACCESS_KEY: &str = "quick_access";
+/// The most commands kept in the quick access toolbar.
+const MAX_QUICK_ACCESS: usize = 40;
 
 /// eframe storage key of the template last picked for a new project (`MeasurementSystem::code`).
 const NEW_PROJECT_KEY: &str = "new_project_system";
@@ -167,6 +172,9 @@ pub struct Preferences {
     pub panels: crate::side_panels::PanelLayout,
     /// The material the Structure tab's column and beam tools place.
     pub structure_material: cc_core::StructuralMaterial,
+    /// The commands the user put in the quick access toolbar after Undo and
+    /// Redo, by `UiCommand::id`, in order; `None`: the default set.
+    pub quick_access: Option<Vec<String>>,
 
     /// The template last picked in the New Project dialog, picked first next time.
     pub new_project_system: cc_core::MeasurementSystem,
@@ -200,6 +208,7 @@ impl Default for Preferences {
             plugin_dev_folder: None,
             panels: Default::default(),
             structure_material: Default::default(),
+            quick_access: None,
 
             new_project_system: cc_core::MeasurementSystem::Metric,
         }
@@ -309,6 +318,14 @@ impl Preferences {
             structure_material: get(STRUCTURE_MATERIAL_KEY)
                 .and_then(|v| cc_core::StructuralMaterial::from_code(&v))
                 .unwrap_or(d.structure_material),
+            quick_access: get(QUICK_ACCESS_KEY).filter(|v| v.trim() != "default").map(|v| {
+                v.lines()
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty() && id.len() <= 64)
+                    .take(MAX_QUICK_ACCESS)
+                    .map(str::to_string)
+                    .collect()
+            }),
 
             new_project_system: get(NEW_PROJECT_KEY)
                 .and_then(|v| cc_core::MeasurementSystem::from_code(&v))
@@ -346,6 +363,16 @@ impl Preferences {
         set(PLUGIN_DEV_FOLDER_KEY, text(&self.plugin_dev_folder));
         set(PANELS_KEY, self.panels.to_text());
         set(STRUCTURE_MATERIAL_KEY, self.structure_material.code().to_string());
+        let quick = self.quick_access.as_ref().map_or_else(
+            || "default".to_string(),
+            |ids| {
+                ids.join(
+                    "
+",
+                )
+            },
+        );
+        set(QUICK_ACCESS_KEY, quick);
 
         set(NEW_PROJECT_KEY, self.new_project_system.code().to_string());
     }
@@ -1189,6 +1216,7 @@ mod tests {
                 right: vec![vec![crate::side_panels::Pane::Properties], vec![crate::side_panels::Pane::Browser]],
             },
             structure_material: cc_core::StructuralMaterial::Timber,
+            quick_access: Some(vec!["Measure".to_string(), "Text".to_string()]),
 
             new_project_system: cc_core::MeasurementSystem::Imperial,
         };
