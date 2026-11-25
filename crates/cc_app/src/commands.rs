@@ -1969,6 +1969,54 @@ fn sketch_draw(command: UiCommand) -> Option<crate::sketch_mode::Draw> {
     })
 }
 
+/// The commands that edit only some categories, for what is selected: one
+/// group per selected category that has any, with the category's name, and
+/// the active sheet's title block. These are the Modify tab's highlighted
+/// groups and part of the right-click menu over a view, their only places in
+/// the ribbon.
+pub fn contextual(state: &AppState) -> Vec<(String, Vec<UiCommand>)> {
+    use UiCommand::*;
+    let project = state.project();
+    // Bounded: a box selection can hold thousands of elements.
+    let elements: Vec<&cc_core::Element> =
+        state.selection.iter().take(2000).filter_map(|id| project.element(*id)).collect();
+    let categories: std::collections::BTreeSet<Category> = elements.iter().map(|e| e.category()).collect();
+    let mut groups = Vec::new();
+    for category in categories {
+        let of = || elements.iter().filter(move |e| e.category() == category);
+        let mut list = Vec::new();
+        // An outline drawn as a sketch (floors, ceilings, roofs, pads…).
+        if of().any(|e| e.sketched_profile().is_some()) {
+            list.push(EditBoundary);
+        }
+        list.extend_from_slice(match category {
+            Category::Wall => &[FlipWalls, AttachTop, DetachTop, EditWallProfile, ResetWallProfile][..],
+            Category::Roof => &[JoinRoof, UnjoinRoof],
+            Category::Grid => &[AlignGridEnds],
+            Category::Sweep => &[EditProfile],
+            Category::Text => &[AddLeader],
+            _ => &[],
+        });
+        // Components (not detail ones) open in the component editor.
+        let component = of().any(|e| {
+            matches!(
+                project.element_type(e.type_id).map(|t| &t.data),
+                Some(cc_core::TypeData::Component { def, .. }) if def.kind != cc_core::ComponentKind::Detail
+            )
+        });
+        if component {
+            list.push(EditComponent);
+        }
+        if !list.is_empty() {
+            groups.push((actions::t_category(category), list));
+        }
+    }
+    if crate::title_block_env::sheet_title_block(state).is_some() {
+        groups.push((t!("prop-title-block"), vec![EditTitleBlock]));
+    }
+    groups
+}
+
 pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
     use UiCommand::*;
     // A ribbon panel shown over the views closes once a command runs.

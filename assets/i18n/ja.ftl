@@ -41,6 +41,7 @@ tab-section = 断面図: { $name }
 ribbon-file = ファイル
 ribbon-architecture = 建築
 ribbon-modify = 修正
+ribbon-modify-several = 複数
 ribbon-view = ビュー
 ribbon-manage = 管理
 ribbon-plugins = プラグイン

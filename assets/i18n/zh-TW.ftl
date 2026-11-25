@@ -41,6 +41,7 @@ tab-section = 剖面圖：{ $name }
 ribbon-file = 檔案
 ribbon-architecture = 建築
 ribbon-modify = 修改
+ribbon-modify-several = 多個
 ribbon-view = 檢視
 ribbon-manage = 管理
 ribbon-plugins = 外掛

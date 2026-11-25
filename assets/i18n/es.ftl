@@ -41,6 +41,7 @@ tab-section = Sección: { $name }
 ribbon-file = Archivo
 ribbon-architecture = Arquitectura
 ribbon-modify = Modificar
+ribbon-modify-several = Varios
 ribbon-view = Vista
 ribbon-manage = Gestionar
 ribbon-plugins = Plugins

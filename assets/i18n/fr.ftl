@@ -41,6 +41,7 @@ tab-section = Coupe : { $name }
 ribbon-file = Fichier
 ribbon-architecture = Architecture
 ribbon-modify = Modifier
+ribbon-modify-several = Plusieurs
 ribbon-view = Vue
 ribbon-manage = Gérer
 ribbon-plugins = Plugins

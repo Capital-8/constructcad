@@ -218,6 +218,9 @@ pub struct AppState {
     pub tab_bar: crate::tab_list::TabBar,
     pub dialogs: Dialogs,
     pub ribbon_tab: RibbonTab,
+    /// The tab shown before a selection brought Modify forward, shown again
+    /// when the selection is cleared while Modify is still the tab.
+    pub ribbon_tab_before: Option<RibbonTab>,
     /// The ribbon shows only its tabs; clicking one shows its panel over the views (`ribbon_peek`).
     pub ribbon_collapsed: bool,
     pub ribbon_peek: bool,
@@ -361,6 +364,7 @@ impl AppState {
             tab_bar: Default::default(),
             dialogs: Dialogs::default(),
             ribbon_tab: RibbonTab::default(),
+            ribbon_tab_before: None,
             ribbon_collapsed: false,
             ribbon_peek: false,
             palette: None,
@@ -563,7 +567,8 @@ impl AppState {
     }
 
     /// Picking objects with the Select tool opens the Modify tab (drawing
-    /// tools, which select what they create, keep their tab).
+    /// tools, which select what they create, keep their tab); clearing the
+    /// selection goes back to the tab shown before, if Modify is still shown.
     pub fn follow_selection(&mut self) {
         if self.selection != self.seen_selection {
             // Picking one member of a group picks the whole group.
@@ -573,8 +578,15 @@ impl AppState {
                     self.selection = whole;
                 }
             }
-            if !self.selection.is_empty() && self.tool == Tool::Select {
+            if !self.selection.is_empty() && self.tool == Tool::Select && self.ribbon_tab != RibbonTab::Modify {
+                self.ribbon_tab_before = Some(self.ribbon_tab);
                 self.ribbon_tab = RibbonTab::Modify;
+            }
+            if self.selection.is_empty()
+                && let Some(before) = self.ribbon_tab_before.take()
+                && self.ribbon_tab == RibbonTab::Modify
+            {
+                self.ribbon_tab = before;
             }
             self.seen_selection = self.selection.clone();
         }
@@ -746,6 +758,13 @@ mod tests {
         let doc = Document::new(crate::home::sample_project("casa_simples").unwrap());
         let mut state = AppState::new(doc);
         let wall = state.project().walls().next().map(|(e, _)| e.id).unwrap();
+        state.follow_selection();
+        assert_eq!(state.ribbon_tab, RibbonTab::Architecture);
+        state.selection.insert(wall);
+        state.follow_selection();
+        assert_eq!(state.ribbon_tab, RibbonTab::Modify);
+        // Clearing the selection goes back to the tab shown before.
+        state.selection.clear();
         state.follow_selection();
         assert_eq!(state.ribbon_tab, RibbonTab::Architecture);
         state.selection.insert(wall);

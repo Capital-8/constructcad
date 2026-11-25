@@ -697,6 +697,8 @@ pub struct Interaction {
     pub fitting_menu: Option<(ViewId, String)>,
     /// The level a context menu was opened on in an elevation or a section: the view and the level.
     pub level_menu: Option<(ViewId, LevelId)>,
+    /// The view whose right-click menu of the selection (or of the view) is open (see [`crate::context_menu`]).
+    pub element_menu: Option<ViewId>,
     /// Tab cycling the Select tool's pre-selection (issue #406).
     pub tab: crate::preselect::TabCycle,
 }
@@ -4674,6 +4676,18 @@ fn select(
         if let Some(text) = crate::preselect::label(state.project(), c, cycled) {
             state.hint.set(text);
         }
+    }
+
+    // A right click off tags, labels and levels: the menu of what is under the
+    // pointer (selected first), else of the selection or the view.
+    if let Some(view) = cycling {
+        let i = &state.interaction;
+        let other_menu = i.tag_menu.is_some() || i.fitting_menu.is_some() || i.level_menu.is_some();
+        if resp.secondary_clicked() && !other_menu {
+            let hit: Vec<ElementId> = current.map(|c| c.ids().to_vec()).unwrap_or_default();
+            crate::context_menu::picked(state, view, &hit);
+        }
+        crate::context_menu::show(resp, state, view);
     }
 
     // Pre-selection highlight (a candidate Tab stepped to even when selected).

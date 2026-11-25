@@ -41,6 +41,7 @@ tab-section = Schnitt: { $name }
 ribbon-file = Datei
 ribbon-architecture = Architektur
 ribbon-modify = Ändern
+ribbon-modify-several = Mehrere
 ribbon-view = Ansicht
 ribbon-manage = Verwalten
 ribbon-plugins = Plugins

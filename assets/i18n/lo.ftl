@@ -41,6 +41,7 @@ tab-section = ຮູບຕັດ: { $name }
 ribbon-file = ໄຟລ໌
 ribbon-architecture = ສະຖາປັດຕະຍະກຳ
 ribbon-modify = ດັດແກ້
+ribbon-modify-several = ຫຼາຍປະເພດ
 ribbon-view = ມຸມມອງ
 ribbon-manage = ຈັດການ
 ribbon-plugins = ປລັກອິນ

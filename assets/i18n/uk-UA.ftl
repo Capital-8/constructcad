@@ -41,6 +41,7 @@ tab-section = Розріз: { $name }
 ribbon-file = Файл
 ribbon-architecture = Архітектура
 ribbon-modify = Змінити
+ribbon-modify-several = Кілька
 ribbon-view = Вид
 ribbon-manage = Керування
 ribbon-plugins = Плагіни

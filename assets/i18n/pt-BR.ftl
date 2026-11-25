@@ -41,6 +41,7 @@ tab-section = Corte: { $name }
 ribbon-file = Arquivo
 ribbon-architecture = Arquitetura
 ribbon-modify = Modificar
+ribbon-modify-several = Vários
 ribbon-view = Vista
 ribbon-manage = Gerenciar
 ribbon-plugins = Plugins

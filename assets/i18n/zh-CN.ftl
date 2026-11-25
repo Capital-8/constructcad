@@ -41,6 +41,7 @@ tab-section = 剖面：{ $name }
 ribbon-file = 文件
 ribbon-architecture = 建筑
 ribbon-modify = 修改
+ribbon-modify-several = 多个
 ribbon-view = 视图
 ribbon-manage = 管理
 ribbon-plugins = 插件

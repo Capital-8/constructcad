@@ -126,6 +126,11 @@ Cancel, Repeat last, Zoom to Fit, View Properties, Visibility/Graphics.
 Engine commands do not change in any phase; only where the interface shows
 them. Scripts, MCP and `ccad` are unaffected.
 
+## Status
+
+- Phase 1: PR #511.
+- Phase 2: branch `feat/ui-reorg-phase-2`. Not done: *Repeat last* and *Cancel* in the context menu (the app keeps no last command), and a preference to turn off the automatic switch to Modify (that switch predates this work).
+
 ## Measuring
 
 Five CAD/BIM users before and after each phase, timing these tasks and

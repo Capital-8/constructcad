@@ -418,6 +418,13 @@ pub fn env_group(ui: &mut Ui, state: &mut AppState, caption: String, commands: &
 
 /// A captioned group of ribbon buttons followed by a vertical divider.
 fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
+    group_with(ui, caption, false, add);
+}
+
+/// [`group`], on a soft accent ground when `highlight` (the Modify tab's
+/// groups for the selected categories).
+fn group_with(ui: &mut Ui, caption: String, highlight: bool, add: impl FnOnce(&mut Ui)) {
+    let ground = ui.painter().add(egui::Shape::Noop);
     let caption_w =
         ui.painter().layout_no_wrap(caption.clone(), egui::FontId::proportional(11.0), PALETTE.text).size().x;
     let inner = ui.vertical(|ui| {
@@ -433,6 +440,10 @@ fn group(ui: &mut Ui, caption: String, add: impl FnOnce(&mut Ui)) {
         });
     });
     let height = inner.response.rect.height();
+    if highlight {
+        let rect = inner.response.rect.expand2(vec2(4.0, 2.0));
+        ui.painter().set(ground, egui::Shape::rect_filled(rect, theme::RADIUS as f32, PALETTE.accent_soft));
+    }
     let (r, _) = ui.allocate_exact_size(vec2(13.0, height), Sense::hover());
     ui.painter().vline(r.center().x, r.y_range().shrink(4.0), Stroke::new(1.0, PALETTE.border));
 }
@@ -458,11 +469,14 @@ const TAB_PAD: f32 = 28.0;
 const TAB_PAD_MIN: f32 = 4.0;
 
 /// A tab title in a cell of `width`, its text centered.
-fn tab_title(ui: &mut Ui, label: &str, active: bool, width: f32) -> Response {
+/// `contextual` (Modify while something is selected) sits on a soft accent ground.
+fn tab_title(ui: &mut Ui, label: &str, active: bool, contextual: bool, width: f32) -> Response {
     let color = if active { PALETTE.accent_text } else { PALETTE.text_muted };
     let galley = ui.painter().layout_no_wrap(label.to_string(), tab_font(active), color);
     let (rect, response) = ui.allocate_exact_size(vec2(width, galley.size().y + 12.0), Sense::click());
-    if response.hovered() && !active {
+    if contextual {
+        ui.painter().rect_filled(rect.shrink2(vec2(2.0, 3.0)), theme::RADIUS as f32, PALETTE.accent_soft);
+    } else if response.hovered() && !active {
         ui.painter().rect_filled(rect.shrink2(vec2(2.0, 3.0)), theme::RADIUS as f32, PALETTE.hover);
     }
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, label));
@@ -606,7 +620,7 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         tabs.push((RibbonTab::Plugins, t!("ribbon-plugins")));
     }
     // Modify last: the selection's edits, where the ribbon goes when something is selected.
-    tabs.push((RibbonTab::Modify, t!("ribbon-modify")));
+    tabs.push((RibbonTab::Modify, modify_title(state)));
     let text_widths: Vec<f32> = tabs
         .iter()
         .map(|(_, label)| ui.painter().layout_no_wrap(label.clone(), tab_font(true), PALETTE.text).size().x)
@@ -618,7 +632,8 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         for ((tab, label), text_w) in tabs.into_iter().zip(text_widths) {
             let width = text_w + pad;
             let active = state.ribbon_tab == tab && (!collapsed || state.ribbon_peek);
-            let r = tab_title(ui, &label, active, width);
+            let contextual = tab == RibbonTab::Modify && !state.selection.is_empty();
+            let r = tab_title(ui, &label, active, contextual, width);
             // A double click collapses or expands; a click on a collapsed
             // ribbon shows that tab's panel over the views, or hides it again.
             if r.double_clicked() {
@@ -796,8 +811,8 @@ fn file_tab(ui: &mut Ui, state: &mut AppState) {
 /// detail components, title blocks) loaded or made. Exports live in File.
 fn insert_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::{
-        ComponentLibrary, CreateDetailComponent, EditComponent, ImportCad, ImportGltf, ImportIfc, ImportImage,
-        ImportObj, ImportSkp, LoadComponent, NewComponent, NewTitleBlock,
+        ComponentLibrary, CreateDetailComponent, ImportCad, ImportGltf, ImportIfc, ImportImage, ImportObj, ImportSkp,
+        LoadComponent, NewComponent, NewTitleBlock,
     };
     group(ui, t!("group-import"), |ui| {
         command_buttons(ui, state, &[ImportIfc, ImportCad, ImportSkp, ImportObj, ImportGltf, ImportImage]);
@@ -805,7 +820,8 @@ fn insert_tab(ui: &mut Ui, state: &mut AppState) {
     });
     group(ui, t!("group-library"), |ui| {
         command_buttons(ui, state, &[LoadComponent, ComponentLibrary]);
-        labelled(ui, state, &[&[NewComponent, EditComponent], &[CreateDetailComponent, NewTitleBlock]]);
+        // Editing a component is in Modify, with one selected.
+        labelled(ui, state, &[&[NewComponent, CreateDetailComponent, NewTitleBlock]]);
     });
 }
 
@@ -825,7 +841,8 @@ fn architecture_tab(ui: &mut Ui, state: &mut AppState) {
     group(ui, t!("group-room"), |ui| command_button(ui, state, place(Room)));
     // Making, editing and loading components live in Insert.
     group(ui, t!("group-model"), |ui| command_buttons(ui, state, &buttons(&[Component, Sweep])));
-    group(ui, t!("group-datum"), |ui| command_buttons(ui, state, &[place(Grid), UiCommand::AlignGridEnds]));
+    // Aligning grid ends is in Modify, with a grid selected.
+    group(ui, t!("group-datum"), |ui| command_button(ui, state, place(Grid)));
 }
 
 /// Conceptual masses (and the buildings made from them) and the terrain.
@@ -977,7 +994,8 @@ fn annotate_tab(ui: &mut Ui, state: &mut AppState) {
     });
     // Making a detail component lives in Insert, with the other reusable types.
     group(ui, t!("group-detail-components"), |ui| command_button(ui, state, UiCommand::DetailComponent));
-    group(ui, t!("group-text"), |ui| command_buttons(ui, state, &[UiCommand::Text, UiCommand::AddLeader]));
+    // Adding a leader is in Modify, with a text note selected.
+    group(ui, t!("group-text"), |ui| command_button(ui, state, UiCommand::Text));
     group(ui, t!("group-level-marks"), |ui| {
         command_buttons(ui, state, &[UiCommand::LevelMarkPlan, UiCommand::LevelMarkSection]);
     });
@@ -1028,18 +1046,25 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     });
     group(ui, t!("group-measure"), |ui| command_button(ui, state, Measure));
     group(ui, t!("group-geometry"), |ui| {
-        command_buttons(
-            ui,
-            state,
-            &[JoinGeometry, UnjoinGeometry, JoinRoof, UnjoinRoof, AttachTop, DetachTop, FlipWalls, Paint, RemovePaint],
-        )
+        command_buttons(ui, state, &[JoinGeometry, UnjoinGeometry, Paint, RemovePaint])
     });
-    group(ui, t!("group-sketch"), |ui| {
-        command_buttons(ui, state, &[EditBoundary, EditProfile, EditWallProfile, ResetWallProfile])
-    });
-    group(ui, t!("prop-title-block"), |ui| command_button(ui, state, EditTitleBlock));
     group(ui, t!("group-group"), |ui| command_buttons(ui, state, &[Group, Ungroup, Explode]));
     group(ui, t!("group-phasing"), |ui| command_button(ui, state, Demolish));
+    // What edits only the selected categories (and the active sheet), highlighted.
+    for (caption, list) in commands::contextual(state) {
+        group_with(ui, caption, true, |ui| command_buttons(ui, state, &list));
+    }
+}
+
+/// The Modify tab's title: "Modify | Walls" while one category is selected,
+/// "Modify | Multiple" for several, plain "Modify" with nothing selected.
+fn modify_title(state: &AppState) -> String {
+    let modify = t!("ribbon-modify");
+    let project = state.project();
+    let mut categories = state.selection.iter().take(2000).filter_map(|id| project.element(*id)).map(|e| e.category());
+    let Some(first) = categories.next() else { return modify };
+    let what = if categories.all(|c| c == first) { actions::t_category(first) } else { t!("ribbon-modify-several") };
+    format!("{modify} | {what}")
 }
 
 /// Paste (a menu of where to paste), then cut, copy, match type and create similar.

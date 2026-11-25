@@ -519,9 +519,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     let mut attach_pick = None;
     let mut paint_pick = None;
     let mut form_pick = None;
+    let mut menu_pick = None;
     // The modify tools that work in 3D take the clicks themselves (see `modify3d`).
     let modifying = crate::modify3d::works_in_3d(&state.tool);
-    if resp.clicked()
+    // A right click (not a drag, which pans) with the Select tool opens the selection's menu.
+    let menu_click = resp.secondary_clicked() && state.tool == crate::tools::Tool::Select;
+    if (resp.clicked() || menu_click)
         && !zooming
         && !modifying
         && let Some(pos) = resp.interact_pointer_pos()
@@ -552,6 +555,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
             _ => None,
         };
         match picked {
+            _ if menu_click => menu_pick = Some(picked.map(|(id, _)| id)),
             _ if painting.is_some() => paint_pick = painting.map(|remove| (remove, picked.map(|(id, _)| id), ray)),
             _ if demolishing => demolish_pick = Some(picked.map(|(id, _)| id)),
             _ if attaching => attach_pick = Some(picked.map(|(id, _)| id)),
@@ -687,6 +691,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     if let Some(picked) = attach_pick {
         crate::modify::attach_pick(state, picked);
     }
+    if let Some(picked) = menu_pick {
+        let hit: Vec<_> = picked.into_iter().collect();
+        crate::context_menu::picked(state, view_id, &hit);
+    }
     if let Some(picked) = form_pick {
         crate::plugin_form::picked_element(state, picked);
     }
@@ -697,6 +705,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let ids = crate::phases_dialog::demolishable(state, view_id, picked);
         crate::phases_dialog::demolish(state, view_id, &ids);
     }
+    crate::context_menu::show(&resp, state, view_id);
     crate::canvas::temporary_frame(ui, state, rect, view_id);
     if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, view_id, None, nav) {
         crate::canvas::zoom(state, view_id, cmd, 1.0);

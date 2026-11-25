@@ -41,6 +41,7 @@ tab-section = Przekrój: { $name }
 ribbon-file = Plik
 ribbon-architecture = Architektura
 ribbon-modify = Zmień
+ribbon-modify-several = Wiele
 ribbon-view = Widok
 ribbon-manage = Zarządzaj
 ribbon-plugins = Wtyczki

@@ -334,6 +334,37 @@ fn ribbon_buttons_are_accessible() {
             }
         }
     }
+    // Modify shows the commands of the selected category (and of the active sheet).
+    let mut state = sample_state();
+    let plan = state.project().views_of(cc_core::ViewCategory::FloorPlan).next().map(|v| v.id).unwrap();
+    let sweep = serde_json::json!({"path": [[0.0, 0.0], [3.0, 0.0]]});
+    let sweep = state.session.execute("sweep_create", sweep).unwrap()["id"].as_u64().unwrap();
+    let text = serde_json::json!({"view": plan.0, "position": [1.0, 1.0], "text": "A"});
+    let text = state.session.execute("text_create", text).unwrap()["id"].as_u64().unwrap();
+    let project = state.project();
+    let first = |c: cc_core::Category| project.elements_of(c).next().map(|e| e.id).unwrap();
+    let mut picks: Vec<Vec<cc_core::ElementId>> =
+        [cc_core::Category::Wall, cc_core::Category::Roof, cc_core::Category::Floor, cc_core::Category::Grid]
+            .map(|c| vec![first(c)])
+            .to_vec();
+    picks.push(vec![first(cc_core::Category::Component)]);
+    picks.push(vec![cc_core::ElementId(sweep), cc_core::ElementId(text)]);
+    let sheet = project.sheets_in_order()[0];
+    for pick in picks {
+        let mut state = sample_state();
+        state.session.execute("sweep_create", serde_json::json!({"path": [[0.0, 0.0], [3.0, 0.0]]})).unwrap();
+        state
+            .session
+            .execute("text_create", serde_json::json!({"view": plan.0, "position": [1.0, 1.0], "text": "A"}))
+            .unwrap();
+        state.selection = pick.into_iter().collect();
+        state.ribbon_tab = RibbonTab::Modify;
+        state.active_view = Some(sheet);
+        let harness = ribbon_harness(state, 2400.0);
+        for node in harness.query_all_by_role(Role::Button) {
+            found.insert(node.accesskit_node().label().unwrap_or_default());
+        }
+    }
     // The component environment shows its own ribbon.
     let mut state = sample_state();
     let table = state
@@ -8375,4 +8406,118 @@ fn plugin_catalog_tab_shows_categories_colors_and_details() {
     assert_eq!(harness.query_all_by_label("OMAR").count(), 2, "item card and details title shown");
     assert!(harness.query_by_label("000.697.68").is_some(), "article number shown");
     assert!(harness.query_by_role_and_label(Role::Button, &t!("lib-open-website")).is_some(), "Open Website shown");
+}
+
+/// With a wall selected the Modify tab is titled "Modify | Walls" and shows
+/// the wall commands; a grid shows its own and none of the wall's; nothing
+/// selected shows neither.
+#[test]
+fn modify_shows_the_selected_category_commands() {
+    let mut state = sample_state();
+    let wall = state.project().walls().next().map(|(e, _)| e.id).unwrap();
+    let grid = state.project().elements_of(cc_core::Category::Grid).next().map(|e| e.id).unwrap();
+    state.ribbon_tab = RibbonTab::Modify;
+    state.selection.insert(wall);
+    let harness = ribbon_harness(state, 2400.0);
+    let walls = crate::actions::t_category(cc_core::Category::Wall);
+    let title = format!("{} | {walls}", t!("ribbon-modify"));
+    assert!(harness.query_by_label(&title).is_some(), "the tab names the category");
+    for key in ["tool-flip-walls", "tool-attach-top", "edit-wall-profile"] {
+        assert!(harness.query_by_role_and_label(Role::Button, &crate::i18n::tr(key)).is_some(), "{key} with a wall");
+    }
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("action-align-grid-ends")).is_none());
+
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Modify;
+    state.selection.insert(grid);
+    let harness = ribbon_harness(state, 2400.0);
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("action-align-grid-ends")).is_some());
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("tool-attach-top")).is_none(), "no wall commands");
+
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Modify;
+    state.selection.extend([wall, grid]);
+    let harness = ribbon_harness(state, 2400.0);
+    let title = format!("{} | {}", t!("ribbon-modify"), t!("ribbon-modify-several"));
+    assert!(harness.query_by_label(&title).is_some(), "several categories");
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("tool-flip-walls")).is_some());
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("action-align-grid-ends")).is_some());
+
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Modify;
+    let harness = ribbon_harness(state, 2400.0);
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("ribbon-modify")).is_some());
+    assert!(harness.query_by_role_and_label(Role::Button, &t!("tool-flip-walls")).is_none());
+}
+
+/// A right click on a wall in a plan selects it and opens its menu, which
+/// holds the wall's commands; picking Flip flips it as one undo step.
+#[test]
+fn right_click_opens_the_selection_menu() {
+    static ORIGIN: std::sync::OnceLock<glam::DVec2> = std::sync::OnceLock::new();
+    let mut state = sample_state();
+    // A point on a wall where a click takes the wall (no grid, opening or tag there).
+    let walls: Vec<_> = state.project().walls().map(|(e, w)| (e.id, e.level, w.start, w.end)).collect();
+    let (wall, plan, mid) = walls
+        .into_iter()
+        .flat_map(|(wall, level, a, b)| {
+            let across = (b - a).perp().normalize_or_zero();
+            (1..10).flat_map(move |k| [-0.1, 0.1].map(|off| (wall, level, a.lerp(b, k as f64 / 10.0) + across * off)))
+        })
+        .find_map(|(wall, level, at)| {
+            let p = state.project();
+            let plan = p.views.values().find(|v| v.is_plan() && v.level() == Some(level))?.id;
+            let drawing = state.drawing(plan)?;
+            let first = drawing.hits_at(at, 5.0 / 20.0).first().copied();
+            let tagged = drawing.tags.iter().any(|t| t.center.distance(at) < 2.0);
+            (first == Some(wall) && !tagged).then_some((wall, plan, at))
+        })
+        .unwrap();
+    ORIGIN.set(mid).unwrap();
+    state.active_view = Some(plan);
+    state.set_tool(crate::tools::Tool::Select);
+    let depth = state.session.doc.undo_depth();
+    let mut harness = themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, |ui, state| {
+        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        let Some(origin) = ORIGIN.get().copied() else { return };
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin, scale: 20.0 };
+        let Some(view) = state.active_view.and_then(|v| state.project().view(v).cloned()) else { return };
+        let Some(drawing) = state.drawing(view.id) else { return };
+        crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
+    });
+    harness.run();
+    let pos = egui::pos2(300.0, 200.0);
+    harness.input_mut().events.push(egui::Event::PointerMoved(pos));
+    harness.run();
+    for pressed in [true, false] {
+        let (button, modifiers) = (egui::PointerButton::Secondary, egui::Modifiers::NONE);
+        harness.input_mut().events.push(egui::Event::PointerButton { pos, button, pressed, modifiers });
+        harness.run();
+    }
+    harness.run();
+    assert_eq!(
+        harness.state().selection,
+        std::collections::BTreeSet::from([wall]),
+        "the wall under the pointer is selected"
+    );
+    assert_eq!(harness.state().interaction.element_menu, Some(plan));
+    // A menu entry's name is its label, then its shortcut.
+    let entry = |h: &Harness<'static, AppState>, key: &str| {
+        let label = crate::i18n::tr(key);
+        h.query_all_by_role(Role::Button)
+            .map(|n| n.accesskit_node().label().unwrap_or_default())
+            .find(|l| l.starts_with(&label))
+    };
+    for key in ["action-select-instances", "action-delete", "props-edit-type", "tool-attach-top"] {
+        assert!(entry(&harness, key).is_some(), "{key} in the menu");
+    }
+    let before = harness.state().project().element(wall).and_then(|e| e.as_wall()).map(|w| (w.start, w.end));
+    let flip = entry(&harness, "tool-flip-walls").unwrap();
+    harness.get_by_role_and_label(Role::Button, &flip).click();
+    harness.run();
+    harness.run();
+    let after = harness.state().project().element(wall).and_then(|e| e.as_wall()).map(|w| (w.start, w.end));
+    assert_ne!(before, after, "the wall was flipped");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth + 1);
+    assert!(entry(&harness, "action-delete").is_none(), "the menu closed");
 }
