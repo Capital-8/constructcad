@@ -38,10 +38,16 @@ impl Converter {
 }
 
 /// Convert the Revit file `input` to IFC4 in a child process that runs
-/// `converter`, stopped when it takes longer than `timeout`. The IFC file
-/// and the report are written to a new folder under the system's temporary
-/// folder, deleted afterwards.
-pub fn convert_in_child(converter: &Converter, input: &Path, timeout: Duration) -> Result<Converted, RvtError> {
+/// `converter`, stopped when it takes longer than `timeout` or when `stop`
+/// returns true (checked every few milliseconds; the caller cancelled). The
+/// IFC file and the report are written to a new folder under the system's
+/// temporary folder, deleted afterwards.
+pub fn convert_in_child(
+    converter: &Converter,
+    input: &Path,
+    timeout: Duration,
+    stop: &dyn Fn() -> bool,
+) -> Result<Converted, RvtError> {
     let folder = RunFolder::create()?;
     let (ifc, report) = (folder.0.join("model.ifc"), folder.0.join("report.json"));
     let mut command = Command::new(&converter.program);
@@ -79,6 +85,11 @@ pub fn convert_in_child(converter: &Converter, input: &Path, timeout: Duration) 
                 let _ = child.wait();
                 return Err(process(e));
             }
+        }
+        if stop() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(RvtError::Cancelled);
         }
         if started.elapsed() >= timeout {
             let _ = child.kill();

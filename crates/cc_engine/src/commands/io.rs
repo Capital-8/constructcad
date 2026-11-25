@@ -55,7 +55,8 @@ fn import_report(report: &cc_ifc::ImportReport) -> serde_json::Map<String, Value
 /// files without Revit) and imported as `ifc_import` imports an IFC file.
 /// The conversion runs in a separate process, stopped after `timeout`: a
 /// file that crashes or hangs the converter is an error and the open
-/// project is kept. Files saved by Revit 2023 to 2025 come across best; an
+/// project is kept; so is a conversion stopped by the session's stop flag
+/// (`Session::set_stop_flag`, a `cancelled` error). Files saved by Revit 2023 to 2025 come across best; an
 /// element whose shape the converter cannot decode comes in as its bounding
 /// box, and parametric families, views and sheets do not come across.
 /// Returns what `ifc_import` returns, plus `revit_version` and `converted`:
@@ -88,7 +89,8 @@ impl Command for RvtImport {
         if len > cc_rvt::MAX_RVT_BYTES {
             return Err(EngineError::io(t!("err-rvt-too-large", "mb" => cc_rvt::MAX_RVT_BYTES >> 20)));
         }
-        let converted = cc_rvt::convert_in_child(&crate::rvt::converter()?, &self.path, timeout)?;
+        let stop = || s.stop_requested();
+        let converted = cc_rvt::convert_in_child(&crate::rvt::converter()?, &self.path, timeout, &stop)?;
         let (project, report) = guard(|| cc_ifc::import(&converted.ifc, new_project()))??;
         s.replace(Document::new(project));
         let summary = converted.summary;
