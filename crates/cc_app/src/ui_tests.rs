@@ -121,6 +121,11 @@ fn ribbon_snapshots() {
     let wall = state.project().default_type(cc_core::Category::Wall).unwrap();
     state.set_tool(crate::tools::Tool::Wall { type_id: wall });
     results.add(ribbon_harness(state, 1600.0).try_snapshot("ribbon_place_wall"));
+    // A floor sketch: Modify | Create Boundary with its Draw and Mode groups.
+    let mut state = sample_state();
+    let floor = state.project().default_type(cc_core::Category::Floor).unwrap();
+    state.set_tool(crate::tools::Tool::Sketch { category: cc_core::Category::Floor, type_id: floor });
+    results.add(ribbon_harness(state, 1600.0).try_snapshot("ribbon_sketch_floor"));
     // Narrow window: the groups scroll.
     let mut state = sample_state();
     state.ribbon_tab = RibbonTab::Architecture;
@@ -8828,4 +8833,34 @@ fn a_circle_with_a_radius_takes_one_click() {
     assert_eq!(new.len(), walls + 2, "{}", harness.state().message);
     let arcs: Vec<_> = new.iter().filter_map(|e| e.as_wall().and_then(|w| w.arc())).collect();
     assert!(arcs.iter().filter(|a| (a.radius - 1.0).abs() < 1e-9).count() >= 2);
+}
+
+/// A sketch (a new floor) opens the main ribbon's Modify tab as *Modify |
+/// Create Boundary*, with the drawing tools, *From Walls* and Finish and
+/// Cancel; the other tabs wait, and Cancel brings back the tab shown before.
+#[test]
+fn a_sketch_opens_its_contextual_modify_tab() {
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Architecture;
+    let floor = state.project().default_type(cc_core::Category::Floor).unwrap();
+    state.set_tool(crate::tools::Tool::Sketch { category: cc_core::Category::Floor, type_id: floor });
+    assert!(state.sketch.is_some(), "the floor tool opens a sketch");
+    let mut harness = ribbon_harness(state, 1600.0);
+    harness.run();
+    assert_eq!(harness.state().ribbon_tab, RibbonTab::Modify);
+    let title = format!("{} | {}", t!("ribbon-modify"), crate::sketch_mode::title(harness.state()));
+    assert!(harness.query_by_label(&title).is_some(), "the tab is named after the sketch");
+    use crate::commands::UiCommand;
+    for command in [UiCommand::SketchRect, UiCommand::SketchPickWalls, UiCommand::SketchFinish] {
+        let label = command.label(harness.state());
+        assert!(harness.query_by_label(&label).is_some(), "{label} is in the tab");
+    }
+    let architecture = t!("ribbon-architecture");
+    assert!(harness.get_by_label(&architecture).accesskit_node().is_disabled(), "the other tabs wait for the sketch");
+    let cancel = UiCommand::SketchCancel.label(harness.state());
+    harness.get_by_label(&cancel).click();
+    harness.run();
+    harness.run();
+    assert!(harness.state().sketch.is_none());
+    assert_eq!(harness.state().ribbon_tab, RibbonTab::Architecture, "the tab before comes back");
 }

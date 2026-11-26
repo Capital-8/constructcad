@@ -4242,6 +4242,7 @@ hint-wall-fillet-second = ຄລິກຝາທີສອງ (Esc: ເລືອ�
 hint-wall-pick-lines = ຄລິກເສັ້ນລາຍລະອຽດ ຫຼື ເສັ້ນກິດເພື່ອວາງຝາຕາມມັນ
 hint-wall-circle-radius = ຄລິກຈຸດສູນກາງຂອງວົງມົນ (ລັດສະໝີມາຈາກແຖບຕົວເລືອກ)
 hint-wall-arc-tangent = ຄລິກປາຍທີ່ວ່າງຂອງຝາ
+sketch-finish-first = ສຳເລັດ ຫຼື ຍົກເລີກການແຕ້ມກ່ອນ.
 pref-drawing = ການແຕ້ມ ແລະ ການນຳທາງ
 pref-general-desc = ພາສາ, ການອັບເດດ ແລະ ການນຳເຂົ້າໄຟລ໌.
 pref-interface-desc = ຮູບແບບ, ຂະໜາດ ແລະ ການຈັດວາງຂອງໜ້າຕ່າງ.

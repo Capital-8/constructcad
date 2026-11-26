@@ -4240,6 +4240,7 @@ hint-wall-fillet-second = 點選第二道牆（Esc：重新選第一道）
 hint-wall-pick-lines = 點選詳圖線或網格以沿其建立牆
 hint-wall-circle-radius = 點選圓心（半徑取自選項列）
 hint-wall-arc-tangent = 點選牆的自由端
+sketch-finish-first = 請先完成或取消草圖。
 pref-drawing = 繪圖與導覽
 pref-general-desc = 語言、更新與檔案匯入。
 pref-interface-desc = 視窗的佈景主題、大小與配置。

@@ -13,6 +13,7 @@
 //! also takes its measured points (*Point*, at the elevation in the options
 //! bar), which undo with the curves.
 
+use crate::commands::UiCommand;
 use crate::paint::{HIGHLIGHT, PREVIEW, Xf};
 use crate::state::AppState;
 use crate::t;
@@ -1641,13 +1642,13 @@ fn modify(
 
 // --- Ribbon, options bar and properties ---
 
-/// The sketch's ribbon: mode, drawing tools and tools.
-pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
+/// What the open sketch makes or edits, as the ribbon names it.
+pub fn title(state: &AppState) -> String {
     use crate::commands::UiCommand::*;
     // The tool's name says what the sketch makes (the edited element's category opens it).
     let what = crate::i18n::tr(state.tool.key());
     let piece = crate::component_sketch::piece(state).map(|p| p.kind);
-    let title = match (state.sketch.as_ref().map(|s| s.target), piece) {
+    match (state.sketch.as_ref().map(|s| s.target), piece) {
         (_, Some(kind)) => {
             let what = match kind {
                 crate::component_sketch::PieceKind::Extrusion => CompExtrusion,
@@ -1673,46 +1674,70 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         }
         (Some(Target::Sheet), _) => t!("sketch-title-sheet"),
         _ => t!("sketch-title-new", "category" => what),
-    };
+    }
+}
+
+/// The sketch's own ribbon (in the component environment): its title over its groups.
+pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
+    let title = title(state);
     ui.horizontal(|ui| {
         ui.label(theme::title(title));
     });
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        crate::ribbon::env_group(ui, state, t!("group-selection"), &[Select]);
-        // A wall's profile is one outline of lines and arcs.
-        let wall_profile = crate::wall_profile_ui::is_open(state);
-        let draw: &[&[_]] = if wall_profile {
-            &[&[SketchLine, SketchRect], &[SketchArc3, SketchArcCenter, SketchArcTangent]]
-        } else {
-            &[
-                &[SketchLine, SketchRect, SketchPolygon],
-                &[SketchPolygonOut, SketchCircle, SketchEllipse],
-                &[SketchArc3, SketchArcCenter, SketchArcTangent],
-                &[SketchSpline],
-            ]
-        };
-        crate::ribbon::env_stacks(ui, state, t!("group-draw"), draw);
-        crate::ribbon::env_stacks(
-            ui,
-            state,
-            t!("group-modify"),
-            &[&[Move, CopyElements, Rotate], &[MirrorPick, MirrorDraw, Offset], &[TrimCorner, TrimExtend, Split]],
-        );
-        // Walls are picked in plans only.
-        let profile = matches!(
-            state.sketch.as_ref().map(|s| s.target),
-            Some(Target::Profile { .. } | Target::Section { .. } | Target::WallProfile { .. })
-        );
-        let sheet = matches!(state.sketch.as_ref().map(|s| s.target), Some(Target::Sheet));
-        let tools: &[_] = if piece.is_some() || profile || sheet { &[Delete] } else { &[SketchPickWalls, Delete] };
-        if takes_points(state) {
-            crate::ribbon::env_group(ui, state, t!("group-points"), &[SketchPoint]);
-        }
-        crate::ribbon::env_group(ui, state, t!("group-sketch-tools"), tools);
-        crate::ribbon::env_group(ui, state, t!("group-mode"), &[SketchFinish, SketchCancel]);
+        groups(ui, state, false);
     });
+}
+
+/// The sketch's groups: Select, the Modify tools, the Draw group (the
+/// drawing tools and what this sketch draws besides: lines from walls,
+/// points of a terrain) and Mode (Finish, Cancel). In the main ribbon's
+/// Modify tab (`contextual`) Draw and Mode stand on the accent ground, as
+/// a placing tool's do.
+pub fn groups(ui: &mut Ui, state: &mut AppState, contextual: bool) {
+    use crate::commands::UiCommand::*;
+    let piece = crate::component_sketch::piece(state).is_some();
+    crate::ribbon::env_group(ui, state, t!("group-selection"), &[Select]);
+    crate::ribbon::env_stacks(
+        ui,
+        state,
+        t!("group-modify"),
+        &[
+            &[Move, CopyElements, Rotate],
+            &[MirrorPick, MirrorDraw, Offset],
+            &[TrimCorner, TrimExtend, Split],
+            &[Delete],
+        ],
+    );
+    // A wall's profile is one outline of lines and arcs.
+    let wall_profile = crate::wall_profile_ui::is_open(state);
+    let mut draw: Vec<&[_]> = if wall_profile {
+        vec![&[SketchLine, SketchRect], &[SketchArc3, SketchArcCenter, SketchArcTangent]]
+    } else {
+        vec![
+            &[SketchLine, SketchRect, SketchPolygon],
+            &[SketchPolygonOut, SketchCircle, SketchEllipse],
+            &[SketchArc3, SketchArcCenter, SketchArcTangent],
+            &[SketchSpline],
+        ]
+    };
+    // Walls are picked in plans only, for what stands on a level.
+    let profile = matches!(
+        state.sketch.as_ref().map(|s| s.target),
+        Some(Target::Profile { .. } | Target::Section { .. } | Target::WallProfile { .. })
+    );
+    let sheet = matches!(state.sketch.as_ref().map(|s| s.target), Some(Target::Sheet));
+    let picks: Vec<UiCommand> =
+        [(!(piece || profile || sheet)).then_some(SketchPickWalls), takes_points(state).then_some(SketchPoint)]
+            .into_iter()
+            .flatten()
+            .collect();
+    if !picks.is_empty() {
+        draw.push(&picks);
+    }
+    crate::ribbon::sketch_stacks(ui, state, t!("group-draw"), contextual, &draw);
+    crate::ribbon::sketch_group(ui, state, t!("group-mode"), contextual, &[SketchFinish, SketchCancel]);
 }
 
 /// The options bar: chaining, polygon sides, the modify tools' options and the hint.

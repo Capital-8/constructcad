@@ -4240,6 +4240,7 @@ hint-wall-fillet-second = 2 つ目の壁をクリックします（Esc: 1 つ目
 hint-wall-pick-lines = 詳細線または通芯をクリックして、それに沿って壁を配置します
 hint-wall-circle-radius = 円の中心をクリックします（半径はオプション バーの値）
 hint-wall-arc-tangent = 壁の自由端をクリックします
+sketch-finish-first = 先にスケッチを終了またはキャンセルしてください。
 pref-drawing = 作図とナビゲーション
 pref-general-desc = 言語、更新、ファイルの読み込み。
 pref-interface-desc = ウィンドウのテーマ、サイズ、レイアウト。

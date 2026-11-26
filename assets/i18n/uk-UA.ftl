@@ -4241,6 +4241,7 @@ hint-wall-fillet-second = Клацніть другу стіну (Esc: вибр�
 hint-wall-pick-lines = Клацніть лінію деталі або вісь, щоб поставити вздовж неї стіни
 hint-wall-circle-radius = Клацніть центр кола (радіус береться з панелі параметрів)
 hint-wall-arc-tangent = Клацніть вільний кінець стіни
+sketch-finish-first = Спершу завершіть або скасуйте ескіз.
 pref-drawing = Креслення й навігація
 pref-general-desc = Мова, оновлення та імпорт файлів.
 pref-interface-desc = Тема, розмір і компонування вікна.

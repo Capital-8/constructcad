@@ -4240,6 +4240,7 @@ hint-wall-fillet-second = Fai clic sul secondo muro (Esc: scegline un altro come
 hint-wall-pick-lines = Fai clic su una linea di dettaglio o una griglia per creare muri lungo di essa
 hint-wall-circle-radius = Fai clic sul centro del cerchio (il raggio viene dalla barra delle opzioni)
 hint-wall-arc-tangent = Fai clic sull’estremità libera di un muro
+sketch-finish-first = Prima termina o annulla lo schizzo.
 pref-drawing = Disegno e navigazione
 pref-general-desc = Lingua, aggiornamenti e importazione di file.
 pref-interface-desc = Tema, dimensioni e disposizione della finestra.

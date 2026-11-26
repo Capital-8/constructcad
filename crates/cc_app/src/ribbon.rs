@@ -185,6 +185,20 @@ impl Glyph<'_> {
 
 /// A large ribbon button: icon above a label of up to two lines. `dropdown` adds a chevron.
 fn big_button(ui: &mut Ui, glyph: Glyph<'_>, label: &str, selected: bool, enabled: bool, dropdown: bool) -> Response {
+    big_button_ink(ui, glyph, label, selected, enabled, dropdown, None)
+}
+
+/// [`big_button`] whose icon strokes are `ink` when given (Finish in green,
+/// Cancel in red).
+fn big_button_ink(
+    ui: &mut Ui,
+    glyph: Glyph<'_>,
+    label: &str,
+    selected: bool,
+    enabled: bool,
+    dropdown: bool,
+    ink: Option<egui::Color32>,
+) -> Response {
     let text_color = if enabled { PALETTE.text } else { PALETTE.text_faint };
     let font = egui::FontId::proportional(12.0);
     let galleys: Vec<_> = label_lines(ui, label, &font)
@@ -213,7 +227,10 @@ fn big_button(ui: &mut Ui, glyph: Glyph<'_>, label: &str, selected: bool, enable
             (true, false) => PALETTE.text,
         };
         let icon_center = egui::pos2(rect.center().x, rect.top() + 6.0 + ICON_SIZE / 2.0);
-        let tones = Tones::of(theme::palette(ui.ctx()), glyph.badge(), enabled, selected);
+        let mut tones = Tones::of(theme::palette(ui.ctx()), glyph.badge(), enabled, selected);
+        if let Some(ink) = ink.filter(|_| enabled) {
+            tones.ink = ink;
+        }
         let icon_rect = egui::Rect::from_center_size(icon_center, vec2(ICON_SIZE, ICON_SIZE));
         glyph.paint(painter, icon_rect, tones);
         // Lines start right under the icon, each centered; the chevron follows the last one.
@@ -420,6 +437,45 @@ fn icon_button(ui: &mut Ui, (icon, badge): (Icon, Option<Badge>), enabled: bool)
 /// A group of the component environment's ribbon.
 pub fn env_group(ui: &mut Ui, state: &mut AppState, caption: String, commands: &[UiCommand]) {
     group(ui, caption, |ui| command_buttons(ui, state, commands));
+}
+
+/// A group of large buttons, on the accent ground when `highlight`.
+pub fn sketch_group(ui: &mut Ui, state: &mut AppState, caption: String, highlight: bool, commands: &[UiCommand]) {
+    group_with(ui, caption, highlight, None, |ui| command_buttons(ui, state, commands));
+}
+
+/// A group of small buttons in columns, on the accent ground when `highlight`.
+pub fn sketch_stacks(ui: &mut Ui, state: &mut AppState, caption: String, highlight: bool, families: &[&[UiCommand]]) {
+    group_with(ui, caption, highlight, None, |ui| stacks(ui, state, families));
+}
+
+/// Whether the main ribbon shows an open sketch: its Modify tab becomes
+/// *Modify | Create Boundary: …* with the sketch's tools, and the other tabs
+/// wait until it is finished or cancelled (the component environment keeps
+/// its own ribbon).
+pub fn sketching(state: &AppState) -> bool {
+    state.sketch.is_some() && state.component_env.is_none()
+}
+
+/// Open the Modify tab when a sketch starts, and bring back the tab shown
+/// before when it ends (if Modify is still shown).
+fn follow_sketch(state: &mut AppState) {
+    let now = sketching(state);
+    if now == state.ribbon_sketching {
+        return;
+    }
+    state.ribbon_sketching = now;
+    if now {
+        if state.ribbon_tab != RibbonTab::Modify {
+            state.ribbon_tab_before_tool = Some(state.ribbon_tab);
+        }
+        state.ribbon_tab = RibbonTab::Modify;
+    } else if !places(&state.tool)
+        && let Some(before) = state.ribbon_tab_before_tool.take()
+        && state.ribbon_tab == RibbonTab::Modify
+    {
+        state.ribbon_tab = before;
+    }
 }
 
 /// A captioned group of ribbon buttons followed by a vertical divider.
@@ -833,7 +889,13 @@ fn command_big(ui: &mut Ui, state: &AppState, command: UiCommand, dropdown: bool
     let why = command.unavailable(state);
     let label = command.label(state);
     let glyph = Glyph::Icon(command.icon(), command.badge());
-    let r = big_button(ui, glyph, &label, command.selected(state), why.is_none(), dropdown);
+    // A sketch's Finish and Cancel in the colors of yes and no.
+    let ink = match command {
+        UiCommand::SketchFinish => Some(PALETTE.success),
+        UiCommand::SketchCancel => Some(PALETTE.danger),
+        _ => None,
+    };
+    let r = big_button_ink(ui, glyph, &label, command.selected(state), why.is_none(), dropdown, ink);
     command_tooltip(r, state, command, why)
 }
 
@@ -906,6 +968,8 @@ fn command_icon(ui: &mut Ui, state: &mut AppState, command: UiCommand) {
 }
 
 pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
+    follow_sketch(state);
+    let sketch = sketching(state);
     // Measured first: rows wider than the window grow the Ui's rectangle.
     let full_width = ui.available_width();
     // Quick access toolbar at the top left, where desktop applications keep it.
@@ -969,8 +1033,11 @@ pub fn ribbon(ui: &mut Ui, state: &mut AppState) {
         for ((tab, label), text_w) in tabs.into_iter().zip(text_widths) {
             let width = text_w + pad;
             let active = state.ribbon_tab == tab && (!collapsed || state.ribbon_peek);
-            let contextual = tab == RibbonTab::Modify && (!state.selection.is_empty() || places(&state.tool));
-            let r = tab_title(ui, &label, active, contextual, width);
+            let contextual = tab == RibbonTab::Modify && (!state.selection.is_empty() || places(&state.tool) || sketch);
+            // While a sketch is open only its tab answers: finish or cancel it first.
+            let waits = sketch && tab != RibbonTab::Modify;
+            let r = ui.add_enabled_ui(!waits, |ui| tab_title(ui, &label, active, contextual, width)).inner;
+            let r = if waits { r.on_disabled_hover_text(t!("sketch-finish-first")) } else { r };
             // A double click collapses or expands; a click on a collapsed
             // ribbon shows that tab's panel over the views, or hides it again.
             if r.double_clicked() {
@@ -1404,6 +1471,10 @@ fn labelled(ui: &mut Ui, state: &mut AppState, families: &[&[UiCommand]]) {
 
 fn modify_tab(ui: &mut Ui, state: &mut AppState) {
     use UiCommand::*;
+    if sketching(state) {
+        crate::sketch_mode::groups(ui, state, true);
+        return;
+    }
     group(ui, t!("group-selection"), |ui| command_buttons(ui, state, &[Select, SelectInstances]));
     group(ui, t!("group-clipboard"), |ui| clipboard_group(ui, state));
     group(ui, t!("group-modify"), |ui| {
@@ -1446,6 +1517,9 @@ pub fn places(tool: &Tool) -> bool {
 /// selected.
 fn modify_title(state: &AppState) -> String {
     let modify = t!("ribbon-modify");
+    if sketching(state) {
+        return format!("{modify} | {}", crate::sketch_mode::title(state));
+    }
     if places(&state.tool) {
         let tool = crate::i18n::tr(state.tool.key());
         return format!("{modify} | {}", t!("ribbon-place-tool", "tool" => tool));

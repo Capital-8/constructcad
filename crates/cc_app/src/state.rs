@@ -276,6 +276,9 @@ pub struct AppState {
     /// The ribbon tab shown before a tool with its own *Modify | Place* tab
     /// was picked, to go back to when it ends.
     pub ribbon_tab_before_tool: Option<RibbonTab>,
+    /// The ribbon showed an open sketch in its Modify tab last frame (see
+    /// `ribbon::follow_sketch`).
+    pub ribbon_sketching: bool,
     /// The footing tool, with a strip type, draws arc strips as the wall tool draws arcs.
     pub strip_arc: bool,
     /// The beam tool draws arc beams the same way.
@@ -399,6 +402,7 @@ impl AppState {
             wall_draw: Default::default(),
             wall_shape: None,
             ribbon_tab_before_tool: None,
+            ribbon_sketching: false,
             strip_arc: false,
             beam_arc: false,
             wall_top_level: None,

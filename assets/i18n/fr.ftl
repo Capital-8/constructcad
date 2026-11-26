@@ -4240,6 +4240,7 @@ hint-wall-fillet-second = Cliquez sur le second mur (Échap : choisir un autre p
 hint-wall-pick-lines = Cliquez sur une ligne de détail ou un quadrillage pour y placer des murs
 hint-wall-circle-radius = Cliquez sur le centre du cercle (le rayon vient de la barre d’options)
 hint-wall-arc-tangent = Cliquez sur l’extrémité libre d’un mur
+sketch-finish-first = Terminez ou annulez d'abord l'esquisse.
 pref-drawing = Dessin et navigation
 pref-general-desc = Langue, mises à jour et importation de fichiers.
 pref-interface-desc = Thème, taille et disposition de la fenêtre.

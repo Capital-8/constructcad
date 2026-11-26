@@ -4240,6 +4240,7 @@ hint-wall-fillet-second = Clique na segunda parede (Esc: escolher outra primeira
 hint-wall-pick-lines = Clique numa linha de detalhe ou num eixo para criar paredes ao longo dela
 hint-wall-circle-radius = Clique no centro do círculo (o raio vem da barra de opções)
 hint-wall-arc-tangent = Clique na extremidade livre de uma parede
+sketch-finish-first = Conclua ou cancele o esboço primeiro.
 pref-drawing = Desenho e navegação
 pref-general-desc = Idioma, atualizações e importação de arquivos.
 pref-interface-desc = Tema, tamanho e organização da janela.
