@@ -1,0 +1,287 @@
+{
+  "format": 1,
+  "code": "PAINTS",
+  "name": "Tintas e vernizes",
+  "standard": "ISO 4618, ISO 2813",
+  "sources": [
+    "ISO 4618: termos e definições de tintas e vernizes; ISO 2813: brilho especular (fosco, acetinado, semibrilho, brilhante)",
+    "Cores e brilhos são referências genéricas, sem marca: as cores dos fabricantes variam; uma película não tem valores térmicos ou mecânicos próprios"
+  ],
+  "materials": [
+    {
+      "name": "Tinta látex PVA fosca branca",
+      "class": "Paint",
+      "color": [
+        246,
+        246,
+        242
+      ],
+      "description": "Tinta látex PVA, acabamento fosco, para paredes e tetos internos",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca branca",
+      "class": "Paint",
+      "color": [
+        246,
+        246,
+        242
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca gelo",
+      "class": "Paint",
+      "color": [
+        236,
+        234,
+        226
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca palha",
+      "class": "Paint",
+      "color": [
+        232,
+        222,
+        190
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca areia",
+      "class": "Paint",
+      "color": [
+        214,
+        200,
+        170
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca cinza claro",
+      "class": "Paint",
+      "color": [
+        200,
+        200,
+        198
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca cinza médio",
+      "class": "Paint",
+      "color": [
+        150,
+        150,
+        148
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca grafite",
+      "class": "Paint",
+      "color": [
+        72,
+        74,
+        77
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica fosca terracota",
+      "class": "Paint",
+      "color": [
+        178,
+        98,
+        66
+      ],
+      "description": "Tinta acrílica, acabamento fosco, para áreas internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica semibrilho branca",
+      "class": "Paint",
+      "color": [
+        246,
+        246,
+        242
+      ],
+      "description": "Tinta acrílica, acabamento semibrilho, lavável",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Tinta acrílica semibrilho gelo",
+      "class": "Paint",
+      "color": [
+        236,
+        234,
+        226
+      ],
+      "description": "Tinta acrílica, acabamento semibrilho, lavável",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Tinta acrílica acetinada branca",
+      "class": "Paint",
+      "color": [
+        246,
+        246,
+        242
+      ],
+      "description": "Tinta acrílica, acabamento acetinado",
+      "finish": "Satin"
+    },
+    {
+      "name": "Esmalte sintético brilhante branco",
+      "class": "Paint",
+      "color": [
+        248,
+        248,
+        246
+      ],
+      "description": "Esmalte sintético à base de solvente, brilhante, para metais e madeiras",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Esmalte sintético brilhante preto",
+      "class": "Paint",
+      "color": [
+        28,
+        28,
+        30
+      ],
+      "description": "Esmalte sintético à base de solvente, brilhante, para metais e madeiras",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Esmalte sintético brilhante cinza",
+      "class": "Paint",
+      "color": [
+        128,
+        130,
+        132
+      ],
+      "description": "Esmalte sintético à base de solvente, brilhante, para metais e madeiras",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Esmalte sintético brilhante marrom",
+      "class": "Paint",
+      "color": [
+        92,
+        62,
+        44
+      ],
+      "description": "Esmalte sintético à base de solvente, brilhante, para metais e madeiras",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Esmalte sintético acetinado branco",
+      "class": "Paint",
+      "color": [
+        248,
+        248,
+        246
+      ],
+      "description": "Esmalte sintético à base de solvente, acetinado, para metais e madeiras",
+      "finish": "Satin"
+    },
+    {
+      "name": "Esmalte à base de água acetinado branco",
+      "class": "Paint",
+      "color": [
+        248,
+        248,
+        246
+      ],
+      "description": "Esmalte à base de água, acetinado, para metais e madeiras",
+      "finish": "Satin"
+    },
+    {
+      "name": "Tinta epóxi para piso cinza",
+      "class": "Paint",
+      "color": [
+        140,
+        142,
+        144
+      ],
+      "description": "Tinta epóxi bicomponente, brilhante, para pisos de concreto",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Tinta acrílica para piso cinza",
+      "class": "Paint",
+      "color": [
+        128,
+        130,
+        130
+      ],
+      "description": "Tinta acrílica para pisos cimentados e quadras, fosca",
+      "finish": "Matte"
+    },
+    {
+      "name": "Tinta acrílica para piso amarelo demarcação",
+      "class": "Paint",
+      "color": [
+        240,
+        196,
+        30
+      ],
+      "description": "Tinta acrílica para piso, faixas de demarcação",
+      "finish": "Matte"
+    },
+    {
+      "name": "Textura acrílica branca",
+      "class": "Paint",
+      "color": [
+        244,
+        242,
+        236
+      ],
+      "description": "Revestimento texturizado acrílico, para paredes internas e externas",
+      "finish": "Matte"
+    },
+    {
+      "name": "Verniz marítimo brilhante",
+      "class": "Paint",
+      "color": [
+        170,
+        112,
+        60
+      ],
+      "description": "Verniz alquídico para madeiras externas, brilhante (cor da madeira envernizada)",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Stain para madeira acetinado",
+      "class": "Paint",
+      "color": [
+        140,
+        90,
+        52
+      ],
+      "description": "Impregnante (stain) para madeiras externas, acetinado",
+      "finish": "Satin"
+    },
+    {
+      "name": "Seladora acrílica",
+      "class": "Paint",
+      "color": [
+        240,
+        238,
+        232
+      ],
+      "description": "Fundo selador acrílico para paredes rebocadas",
+      "finish": "Matte"
+    }
+  ]
+}

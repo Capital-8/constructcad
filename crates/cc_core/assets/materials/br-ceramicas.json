@@ -1,0 +1,123 @@
+{
+  "format": 1,
+  "code": "BR-CERAMICAS",
+  "name": "Cerâmicas (NBR 15220-2)",
+  "region": "brazil",
+  "standard": "ABNT NBR 15220-2, NBR ISO 13006, NBR 15270, NBR 15310",
+  "sources": [
+    "ABNT NBR 15220-2:2005, Tabela B.3: cerâmica 1 300 a 1 600 kg/m³ λ = 0,90; 1 600 a 1 800 kg/m³ λ = 1,00; 1 800 a 2 000 kg/m³ λ = 1,05 W/(m·K); c = 920 J/(kg·K)",
+    "ABNT NBR ISO 13006: grupos de absorção de água; ABNT NBR 15270: blocos e tijolos cerâmicos; ABNT NBR 15310: telhas cerâmicas",
+    "Densidades: um valor dentro da faixa da tabela"
+  ],
+  "materials": [
+    {
+      "name": "Grês (NBR 15220-2)",
+      "class": "Ceramic",
+      "color": [
+        178,
+        150,
+        122
+      ],
+      "description": "Placa cerâmica grês, para pisos, grupo BIb da ISO 13006 (absorção de água de 0,5 % a 3 %)",
+      "finish": "Matte",
+      "density": 2000.0,
+      "thermal_conductivity": 1.05,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Piso cerâmico semi-grês (NBR 15220-2)",
+      "class": "Ceramic",
+      "color": [
+        200,
+        182,
+        152
+      ],
+      "description": "Placa cerâmica esmaltada semi-grês, para pisos, grupo BIIa da ISO 13006 (absorção de água de 3 % a 6 %)",
+      "finish": "Satin",
+      "density": 2000.0,
+      "thermal_conductivity": 1.05,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Piso cerâmico semiporoso (NBR 15220-2)",
+      "class": "Ceramic",
+      "color": [
+        206,
+        192,
+        166
+      ],
+      "description": "Placa cerâmica esmaltada semiporosa, para pisos de baixo tráfego e paredes, grupo BIIb da ISO 13006 (absorção de água de 6 % a 10 %)",
+      "finish": "Glossy",
+      "density": 1900.0,
+      "thermal_conductivity": 1.05,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Azulejo branco (NBR 15220-2)",
+      "class": "Ceramic",
+      "color": [
+        246,
+        246,
+        243
+      ],
+      "description": "Revestimento cerâmico poroso esmaltado, para paredes internas, grupo BIII da ISO 13006 (absorção de água > 10 %)",
+      "finish": "Glossy",
+      "density": 1700.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Lajota cerâmica rústica (NBR 15220-2)",
+      "class": "Ceramic",
+      "color": [
+        180,
+        96,
+        62
+      ],
+      "description": "Lajota de cerâmica vermelha, para pisos rústicos, grupo BIII da ISO 13006 (absorção de água > 10 %)",
+      "finish": "Matte",
+      "density": 1900.0,
+      "thermal_conductivity": 1.05,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Tijolo maciço aparente (NBR 15220-2)",
+      "class": "Masonry",
+      "color": [
+        170,
+        86,
+        56
+      ],
+      "description": "Tijolo cerâmico maciço, para alvenaria aparente (NBR 15270)",
+      "density": 1700.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Bloco cerâmico (NBR 15220-2)",
+      "class": "Masonry",
+      "color": [
+        186,
+        104,
+        70
+      ],
+      "description": "Bloco cerâmico de vedação ou estrutural (NBR 15270); os valores são os da cerâmica, não os do bloco vazado",
+      "density": 1600.0,
+      "thermal_conductivity": 0.9,
+      "specific_heat": 920.0
+    },
+    {
+      "name": "Telha cerâmica (NBR 15220-2)",
+      "class": "Ceramic",
+      "color": [
+        176,
+        90,
+        58
+      ],
+      "description": "Telha cerâmica de capa e canal, francesa ou romana (NBR 15310)",
+      "density": 1900.0,
+      "thermal_conductivity": 1.05,
+      "specific_heat": 920.0
+    }
+  ]
+}

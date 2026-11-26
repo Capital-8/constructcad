@@ -1,0 +1,140 @@
+{
+  "format": 1,
+  "code": "BR-PEDRAS",
+  "name": "Pedras (NBR 15220-2)",
+  "region": "brazil",
+  "standard": "ABNT NBR 15220-2",
+  "sources": [
+    "ABNT NBR 15220-2:2005, Tabela B.3: granito, gnaisse 2 300 a 2 900 kg/m³ λ = 3,00; ardósia, xisto 2 000 a 2 800 kg/m³ λ = 2,20; basalto 2 700 a 3 000 kg/m³ λ = 1,60; calcários e mármore > 2 600 kg/m³ λ = 2,90; outras calcárias 2 300 a 2 600 kg/m³ λ = 2,40 W/(m·K); c = 840 J/(kg·K)",
+    "ISO 10456:2007, Tabela 3: rocha cristalina ρ = 2 800 kg/m³, λ = 3,5 W/(m·K), c = 1 000 J/(kg·K) (quartzitos)",
+    "Pedras com os nomes do mercado brasileiro; a cor e as propriedades de cada lote variam. Densidades: um valor dentro da faixa da tabela"
+  ],
+  "materials": [
+    {
+      "name": "Granito (NBR 15220-2)",
+      "class": "Stone",
+      "color": [
+        140,
+        140,
+        140
+      ],
+      "description": "Granito (NBR 15220-2: granito, gnaisse 2 300 a 2 900 kg/m³)",
+      "finish": "Polished",
+      "density": 2700.0,
+      "thermal_conductivity": 3.0,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Mármore (NBR 15220-2)",
+      "class": "Stone",
+      "color": [
+        240,
+        238,
+        232
+      ],
+      "description": "Mármore (NBR 15220-2: calcários e mármore > 2 600 kg/m³)",
+      "finish": "Polished",
+      "density": 2700.0,
+      "thermal_conductivity": 2.9,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Ardósia (NBR 15220-2)",
+      "class": "Stone",
+      "color": [
+        92,
+        97,
+        98
+      ],
+      "description": "Ardósia (NBR 15220-2: ardósia, xisto 2 000 a 2 800 kg/m³)",
+      "finish": "Matte",
+      "density": 2600.0,
+      "thermal_conductivity": 2.2,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Basalto (NBR 15220-2)",
+      "class": "Stone",
+      "color": [
+        60,
+        60,
+        62
+      ],
+      "description": "Basalto (NBR 15220-2: basalto 2 700 a 3 000 kg/m³)",
+      "finish": "Matte",
+      "density": 2900.0,
+      "thermal_conductivity": 1.6,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Pedra Miracema",
+      "class": "Stone",
+      "color": [
+        150,
+        140,
+        125
+      ],
+      "description": "Gnaisse em placas, para pisos e muros (NBR 15220-2: granito, gnaisse)",
+      "finish": "Matte",
+      "density": 2650.0,
+      "thermal_conductivity": 3.0,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Pedra São Tomé",
+      "class": "Stone",
+      "color": [
+        226,
+        206,
+        160
+      ],
+      "description": "Quartzito em placas, para pisos e bordas de piscina (ISO 10456: rocha cristalina; a NBR 15220-2 não tabela quartzitos)",
+      "finish": "Matte",
+      "density": 2800.0,
+      "thermal_conductivity": 3.5,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Pedra Goiás",
+      "class": "Stone",
+      "color": [
+        200,
+        195,
+        170
+      ],
+      "description": "Quartzito em placas, para pisos externos (ISO 10456: rocha cristalina; a NBR 15220-2 não tabela quartzitos)",
+      "finish": "Matte",
+      "density": 2800.0,
+      "thermal_conductivity": 3.5,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Pedra portuguesa branca",
+      "class": "Stone",
+      "color": [
+        232,
+        228,
+        218
+      ],
+      "description": "Calcário em cubos para mosaico de passeios (NBR 15220-2: outras calcárias 2 300 a 2 600 kg/m³)",
+      "finish": "Matte",
+      "density": 2450.0,
+      "thermal_conductivity": 2.4,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Pedra portuguesa preta",
+      "class": "Stone",
+      "color": [
+        45,
+        45,
+        48
+      ],
+      "description": "Basalto em cubos para mosaico de passeios (NBR 15220-2: basalto)",
+      "finish": "Matte",
+      "density": 2900.0,
+      "thermal_conductivity": 1.6,
+      "specific_heat": 840.0
+    }
+  ]
+}
