@@ -4229,3 +4229,4 @@ hint-wall-fillet-second = Kliknij drugą ścianę (Esc: wybierz inną pierwszą)
 hint-wall-pick-lines = Kliknij linię szczegółu lub oś, aby postawić wzdłuż niej ściany
 hint-wall-circle-radius = Kliknij środek okręgu (promień pochodzi z paska opcji)
 hint-wall-arc-tangent = Kliknij wolny koniec ściany
+sketch-finish-first = Najpierw zakończ lub anuluj szkic.

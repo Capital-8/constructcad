@@ -4229,3 +4229,4 @@ hint-wall-fillet-second = Haga clic en el segundo muro (Esc: elegir otro primero
 hint-wall-pick-lines = Haga clic en una línea de detalle o una rejilla para crear muros a lo largo
 hint-wall-circle-radius = Haga clic en el centro del círculo (el radio viene de la barra de opciones)
 hint-wall-arc-tangent = Haga clic en el extremo libre de un muro
+sketch-finish-first = Termine o cancele el boceto primero.

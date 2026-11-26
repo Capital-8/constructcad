@@ -4229,3 +4229,4 @@ hint-wall-fillet-second = 点选第二道墙（Esc：重新选第一道）
 hint-wall-pick-lines = 点选详图线或轴网以沿其创建墙
 hint-wall-circle-radius = 点选圆心（半径取自选项栏）
 hint-wall-arc-tangent = 点选墙的自由端
+sketch-finish-first = 请先完成或取消草图。

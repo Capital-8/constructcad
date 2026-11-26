@@ -4231,3 +4231,4 @@ hint-wall-fillet-second = ຄລິກຝາທີສອງ (Esc: ເລືອ�
 hint-wall-pick-lines = ຄລິກເສັ້ນລາຍລະອຽດ ຫຼື ເສັ້ນກິດເພື່ອວາງຝາຕາມມັນ
 hint-wall-circle-radius = ຄລິກຈຸດສູນກາງຂອງວົງມົນ (ລັດສະໝີມາຈາກແຖບຕົວເລືອກ)
 hint-wall-arc-tangent = ຄລິກປາຍທີ່ວ່າງຂອງຝາ
+sketch-finish-first = ສຳເລັດ ຫຼື ຍົກເລີກການແຕ້ມກ່ອນ.

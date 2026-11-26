@@ -4229,3 +4229,4 @@ hint-wall-fillet-second = Klicken Sie auf die zweite Wand (Esc: eine andere erst
 hint-wall-pick-lines = Klicken Sie auf eine Detaillinie oder ein Raster, um Wände daran entlang zu setzen
 hint-wall-circle-radius = Klicken Sie auf den Kreismittelpunkt (der Radius kommt aus der Optionsleiste)
 hint-wall-arc-tangent = Klicken Sie auf das freie Ende einer Wand
+sketch-finish-first = Schließen Sie die Skizze zuerst ab oder brechen Sie sie ab.

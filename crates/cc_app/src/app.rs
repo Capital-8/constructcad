@@ -563,7 +563,7 @@ impl ConstructApp {
         egui::Panel::top("ribbon").frame(bar(PALETTE.panel, 6).stroke(egui::Stroke::new(1.0, PALETTE.border))).show(
             ui,
             |ui| {
-                if state.sketch.is_some() {
+                if env && state.sketch.is_some() {
                     crate::sketch_mode::ribbon(ui, state)
                 } else if env {
                     crate::component_env::ribbon(ui, state)

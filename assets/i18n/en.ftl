@@ -4229,3 +4229,4 @@ hint-wall-fillet-second = Click the second wall (Esc: pick another first one)
 hint-wall-pick-lines = Click a detail line or a grid to put walls along it
 hint-wall-circle-radius = Click the circle’s center (the radius comes from the options bar)
 hint-wall-arc-tangent = Click the free end of a wall
+sketch-finish-first = Finish or cancel the sketch first.
