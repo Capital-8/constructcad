@@ -431,12 +431,16 @@ fn presets(ui: &mut Ui, state: &mut AppState, d: &mut SunDialog, sun: &SunSettin
                         let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
                         let tone = if on { PALETTE.accent_text } else { PALETTE.text_muted };
                         crate::icons::paint(ui.painter(), rect, icon, tone);
-                        let text = if on {
-                            RichText::new(name).color(PALETTE.accent_text).strong()
+                        // Painted: the row itself carries the name (one node per preset).
+                        let font = if on {
+                            egui::FontId::new(13.0, crate::theme::semibold())
                         } else {
-                            RichText::new(name)
+                            egui::FontId::proportional(13.0)
                         };
-                        ui.add(egui::Label::new(text).selectable(false).sense(egui::Sense::hover()));
+                        let color = if on { PALETTE.accent_text } else { PALETTE.text };
+                        let galley = ui.painter().layout_no_wrap(name.clone(), font, color);
+                        let (rect, _) = ui.allocate_exact_size(galley.size(), egui::Sense::hover());
+                        ui.painter().galley(rect.min, galley, color);
                     });
                     r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, name));
                     if r.clicked() {
