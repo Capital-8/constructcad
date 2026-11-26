@@ -143,9 +143,15 @@ side walls and from the floor to the room's height.
    walls left out; the cut plane never behind the marker; a deleted wall
    takes its view; a wall of a re-entrant corner seen from inside; a
    round room; a wall out of the space keeps its view; a format 36 file.
-4. **Finishing touches.** The floor and ceiling lines of the space, a view
-   template for interior elevations in the project templates, and the
-   views in schedules of views and sheets.
+4. **Finishing touches.** The floor and ceiling lines of the space, and
+   view templates applying to interior elevations. Two things first
+   listed here were dropped when the stage was done, because they assumed
+   what the program does not have: a view template for interior
+   elevations in the project templates (the project templates hold no
+   view templates at all, so adding the first is its own decision), and
+   the views in schedules of views and sheets (there are no such
+   schedules: schedules list elements by category, and `views_list` is a
+   query).
 
 ## Decisions
 
