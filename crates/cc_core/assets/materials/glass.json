@@ -11,6 +11,19 @@
   "materials": [
     {
       "name": "Vidro float incolor",
+      "names": {
+        "en": "Clear float glass",
+        "es": "Vidrio float incoloro",
+        "fr": "Verre float clair",
+        "de": "Floatglas klar",
+        "it": "Vetro float incolore",
+        "lo": "ແກ້ວໂຟລດ ໃສ",
+        "pl": "Szkło float bezbarwne",
+        "uk-UA": "Флоат-скло прозоре",
+        "zh-TW": "透明浮法玻璃",
+        "zh-CN": "无色浮法玻璃",
+        "ja": "透明フロート板ガラス"
+      },
       "class": "Glass",
       "color": [
         205,
@@ -28,6 +41,19 @@
     },
     {
       "name": "Vidro float verde",
+      "names": {
+        "en": "Green float glass",
+        "es": "Vidrio float verde",
+        "fr": "Verre float vert",
+        "de": "Floatglas grün",
+        "it": "Vetro float verde",
+        "lo": "ແກ້ວໂຟລດ ສີຂຽວ",
+        "pl": "Szkło float zielone",
+        "uk-UA": "Флоат-скло зелене",
+        "zh-TW": "綠色浮法玻璃",
+        "zh-CN": "绿色浮法玻璃",
+        "ja": "グリーンフロート板ガラス"
+      },
       "class": "Glass",
       "color": [
         150,
@@ -45,6 +71,19 @@
     },
     {
       "name": "Vidro float fumê",
+      "names": {
+        "en": "Grey float glass",
+        "es": "Vidrio float gris",
+        "fr": "Verre float gris",
+        "de": "Floatglas grau",
+        "it": "Vetro float fumé",
+        "lo": "ແກ້ວໂຟລດ ສີຊາ",
+        "pl": "Szkło float dymione",
+        "uk-UA": "Флоат-скло димчасте",
+        "zh-TW": "灰色浮法玻璃",
+        "zh-CN": "灰色浮法玻璃",
+        "ja": "グレーフロート板ガラス"
+      },
       "class": "Glass",
       "color": [
         110,
@@ -62,6 +101,19 @@
     },
     {
       "name": "Vidro float bronze",
+      "names": {
+        "en": "Bronze float glass",
+        "es": "Vidrio float bronce",
+        "fr": "Verre float bronze",
+        "de": "Floatglas bronze",
+        "it": "Vetro float bronzo",
+        "lo": "ແກ້ວໂຟລດ ສີບຣອນ",
+        "pl": "Szkło float brązowe",
+        "uk-UA": "Флоат-скло бронзове",
+        "zh-TW": "茶色浮法玻璃",
+        "zh-CN": "茶色浮法玻璃",
+        "ja": "ブロンズフロート板ガラス"
+      },
       "class": "Glass",
       "color": [
         150,
@@ -79,6 +131,19 @@
     },
     {
       "name": "Vidro temperado incolor",
+      "names": {
+        "en": "Clear tempered glass",
+        "es": "Vidrio templado incoloro",
+        "fr": "Verre trempé clair",
+        "de": "Einscheiben-Sicherheitsglas klar",
+        "it": "Vetro temperato incolore",
+        "lo": "ແກ້ວນິລະໄພ ໃສ",
+        "pl": "Szkło hartowane bezbarwne",
+        "uk-UA": "Загартоване скло прозоре",
+        "zh-TW": "透明強化玻璃",
+        "zh-CN": "无色钢化玻璃",
+        "ja": "透明強化ガラス"
+      },
       "class": "Glass",
       "color": [
         205,
@@ -96,6 +161,19 @@
     },
     {
       "name": "Vidro laminado incolor",
+      "names": {
+        "en": "Clear laminated glass",
+        "es": "Vidrio laminado incoloro",
+        "fr": "Verre feuilleté clair",
+        "de": "Verbund-Sicherheitsglas klar",
+        "it": "Vetro stratificato incolore",
+        "lo": "ແກ້ວລາມິເນດ ໃສ",
+        "pl": "Szkło laminowane bezbarwne",
+        "uk-UA": "Ламіноване скло прозоре",
+        "zh-TW": "透明膠合玻璃",
+        "zh-CN": "无色夹层玻璃",
+        "ja": "透明合わせガラス"
+      },
       "class": "Glass",
       "color": [
         200,
@@ -113,6 +191,19 @@
     },
     {
       "name": "Vidro laminado verde",
+      "names": {
+        "en": "Green laminated glass",
+        "es": "Vidrio laminado verde",
+        "fr": "Verre feuilleté vert",
+        "de": "Verbund-Sicherheitsglas grün",
+        "it": "Vetro stratificato verde",
+        "lo": "ແກ້ວລາມິເນດ ສີຂຽວ",
+        "pl": "Szkło laminowane zielone",
+        "uk-UA": "Ламіноване скло зелене",
+        "zh-TW": "綠色膠合玻璃",
+        "zh-CN": "绿色夹层玻璃",
+        "ja": "グリーン合わせガラス"
+      },
       "class": "Glass",
       "color": [
         146,
@@ -130,6 +221,19 @@
     },
     {
       "name": "Vidro refletivo prata",
+      "names": {
+        "en": "Silver reflective glass",
+        "es": "Vidrio reflectante plata",
+        "fr": "Verre réfléchissant argent",
+        "de": "Reflexionsglas silber",
+        "it": "Vetro riflettente argento",
+        "lo": "ແກ້ວສະທ້ອນແສງ ສີເງິນ",
+        "pl": "Szkło refleksyjne srebrne",
+        "uk-UA": "Рефлективне скло срібне",
+        "zh-TW": "銀色反射玻璃",
+        "zh-CN": "银色镀膜反射玻璃",
+        "ja": "熱線反射ガラス シルバー"
+      },
       "class": "Glass",
       "color": [
         170,
@@ -147,6 +251,19 @@
     },
     {
       "name": "Vidro impresso canelado",
+      "names": {
+        "en": "Reeded patterned glass",
+        "es": "Vidrio impreso acanalado",
+        "fr": "Verre imprimé cannelé",
+        "de": "Ornamentglas geriffelt",
+        "it": "Vetro stampato cannettato",
+        "lo": "ແກ້ວລາຍເສັ້ນ",
+        "pl": "Szkło wzorzyste ryflowane",
+        "uk-UA": "Візерунчасте скло рифлене",
+        "zh-TW": "長虹玻璃",
+        "zh-CN": "长虹玻璃",
+        "ja": "フルーテッド型板ガラス"
+      },
       "class": "Glass",
       "color": [
         210,
@@ -164,6 +281,19 @@
     },
     {
       "name": "Vidro jateado",
+      "names": {
+        "en": "Sandblasted glass",
+        "es": "Vidrio arenado",
+        "fr": "Verre sablé",
+        "de": "Glas sandgestrahlt",
+        "it": "Vetro sabbiato",
+        "lo": "ແກ້ວພົ່ນຊາຍ",
+        "pl": "Szkło piaskowane",
+        "uk-UA": "Піскоструменеве скло",
+        "zh-TW": "噴砂玻璃",
+        "zh-CN": "喷砂玻璃",
+        "ja": "サンドブラストガラス"
+      },
       "class": "Glass",
       "color": [
         226,

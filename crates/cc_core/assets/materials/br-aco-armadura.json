@@ -11,6 +11,19 @@
   "materials": [
     {
       "name": "Aço CA-25 (NBR 7480)",
+      "names": {
+        "en": "Steel CA-25 (NBR 7480)",
+        "es": "Acero CA-25 (NBR 7480)",
+        "fr": "Acier CA-25 (NBR 7480)",
+        "de": "Stahl CA-25 (NBR 7480)",
+        "it": "Acciaio CA-25 (NBR 7480)",
+        "lo": "ເຫຼັກເສັ້ນ CA-25 (NBR 7480)",
+        "pl": "Stal CA-25 (NBR 7480)",
+        "uk-UA": "Сталь CA-25 (NBR 7480)",
+        "zh-TW": "鋼筋 CA-25 (NBR 7480)",
+        "zh-CN": "钢筋 CA-25 (NBR 7480)",
+        "ja": "鉄筋 CA-25 (NBR 7480)"
+      },
       "class": "Metal",
       "color": [
         107,
@@ -26,6 +39,19 @@
     },
     {
       "name": "Aço CA-50 (NBR 7480)",
+      "names": {
+        "en": "Steel CA-50 (NBR 7480)",
+        "es": "Acero CA-50 (NBR 7480)",
+        "fr": "Acier CA-50 (NBR 7480)",
+        "de": "Stahl CA-50 (NBR 7480)",
+        "it": "Acciaio CA-50 (NBR 7480)",
+        "lo": "ເຫຼັກເສັ້ນ CA-50 (NBR 7480)",
+        "pl": "Stal CA-50 (NBR 7480)",
+        "uk-UA": "Сталь CA-50 (NBR 7480)",
+        "zh-TW": "鋼筋 CA-50 (NBR 7480)",
+        "zh-CN": "钢筋 CA-50 (NBR 7480)",
+        "ja": "鉄筋 CA-50 (NBR 7480)"
+      },
       "class": "Metal",
       "color": [
         107,
@@ -41,6 +67,19 @@
     },
     {
       "name": "Aço CA-60 (NBR 7480)",
+      "names": {
+        "en": "Steel CA-60 (NBR 7480)",
+        "es": "Acero CA-60 (NBR 7480)",
+        "fr": "Acier CA-60 (NBR 7480)",
+        "de": "Stahl CA-60 (NBR 7480)",
+        "it": "Acciaio CA-60 (NBR 7480)",
+        "lo": "ເຫຼັກເສັ້ນ CA-60 (NBR 7480)",
+        "pl": "Stal CA-60 (NBR 7480)",
+        "uk-UA": "Сталь CA-60 (NBR 7480)",
+        "zh-TW": "鋼筋 CA-60 (NBR 7480)",
+        "zh-CN": "钢筋 CA-60 (NBR 7480)",
+        "ja": "鉄筋 CA-60 (NBR 7480)"
+      },
       "class": "Metal",
       "color": [
         107,

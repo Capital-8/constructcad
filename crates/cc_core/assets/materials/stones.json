@@ -10,6 +10,19 @@
   "materials": [
     {
       "name": "Granito cinza polido",
+      "names": {
+        "en": "Polished grey granite",
+        "es": "Granito gris pulido",
+        "fr": "Granit gris poli",
+        "de": "Granit grau poliert",
+        "it": "Granito grigio lucidato",
+        "lo": "ຫີນແກຣນິດສີເທົາ ຂັດເງົາ",
+        "pl": "Granit szary polerowany",
+        "uk-UA": "Граніт сірий полірований",
+        "zh-TW": "拋光灰色花崗岩",
+        "zh-CN": "抛光灰色花岗岩",
+        "ja": "グレー花崗岩 本磨き"
+      },
       "class": "Stone",
       "color": [
         140,
@@ -24,6 +37,19 @@
     },
     {
       "name": "Granito cinza flameado",
+      "names": {
+        "en": "Flamed grey granite",
+        "es": "Granito gris flameado",
+        "fr": "Granit gris flammé",
+        "de": "Granit grau geflammt",
+        "it": "Granito grigio fiammato",
+        "lo": "ຫີນແກຣນິດສີເທົາ ໜ້າເຜົາໄຟ",
+        "pl": "Granit szary płomieniowany",
+        "uk-UA": "Граніт сірий термооброблений",
+        "zh-TW": "火燒面灰色花崗岩",
+        "zh-CN": "火烧面灰色花岗岩",
+        "ja": "グレー花崗岩 ジェットバーナー"
+      },
       "class": "Stone",
       "color": [
         152,
@@ -38,6 +64,19 @@
     },
     {
       "name": "Granito preto polido",
+      "names": {
+        "en": "Polished black granite",
+        "es": "Granito negro pulido",
+        "fr": "Granit noir poli",
+        "de": "Granit schwarz poliert",
+        "it": "Granito nero lucidato",
+        "lo": "ຫີນແກຣນິດສີດຳ ຂັດເງົາ",
+        "pl": "Granit czarny polerowany",
+        "uk-UA": "Граніт чорний полірований",
+        "zh-TW": "拋光黑色花崗岩",
+        "zh-CN": "抛光黑色花岗岩",
+        "ja": "黒花崗岩 本磨き"
+      },
       "class": "Stone",
       "color": [
         36,
@@ -52,6 +91,19 @@
     },
     {
       "name": "Granito branco polido",
+      "names": {
+        "en": "Polished white granite",
+        "es": "Granito blanco pulido",
+        "fr": "Granit blanc poli",
+        "de": "Granit weiß poliert",
+        "it": "Granito bianco lucidato",
+        "lo": "ຫີນແກຣນິດສີຂາວ ຂັດເງົາ",
+        "pl": "Granit biały polerowany",
+        "uk-UA": "Граніт білий полірований",
+        "zh-TW": "拋光白色花崗岩",
+        "zh-CN": "抛光白色花岗岩",
+        "ja": "白花崗岩 本磨き"
+      },
       "class": "Stone",
       "color": [
         220,
@@ -66,6 +118,19 @@
     },
     {
       "name": "Granito verde polido",
+      "names": {
+        "en": "Polished green granite",
+        "es": "Granito verde pulido",
+        "fr": "Granit vert poli",
+        "de": "Granit grün poliert",
+        "it": "Granito verde lucidato",
+        "lo": "ຫີນແກຣນິດສີຂຽວ ຂັດເງົາ",
+        "pl": "Granit zielony polerowany",
+        "uk-UA": "Граніт зелений полірований",
+        "zh-TW": "拋光綠色花崗岩",
+        "zh-CN": "抛光绿色花岗岩",
+        "ja": "グリーン花崗岩 本磨き"
+      },
       "class": "Stone",
       "color": [
         40,
@@ -80,6 +145,19 @@
     },
     {
       "name": "Granito amarelo polido",
+      "names": {
+        "en": "Polished yellow granite",
+        "es": "Granito amarillo pulido",
+        "fr": "Granit jaune poli",
+        "de": "Granit gelb poliert",
+        "it": "Granito giallo lucidato",
+        "lo": "ຫີນແກຣນິດສີເຫຼືອງ ຂັດເງົາ",
+        "pl": "Granit żółty polerowany",
+        "uk-UA": "Граніт жовтий полірований",
+        "zh-TW": "拋光黃色花崗岩",
+        "zh-CN": "抛光黄色花岗岩",
+        "ja": "イエロー花崗岩 本磨き"
+      },
       "class": "Stone",
       "color": [
         205,
@@ -94,6 +172,19 @@
     },
     {
       "name": "Mármore branco polido",
+      "names": {
+        "en": "Polished white marble",
+        "es": "Mármol blanco pulido",
+        "fr": "Marbre blanc poli",
+        "de": "Marmor weiß poliert",
+        "it": "Marmo bianco lucidato",
+        "lo": "ຫີນອ່ອນສີຂາວ ຂັດເງົາ",
+        "pl": "Marmur biały polerowany",
+        "uk-UA": "Мармур білий полірований",
+        "zh-TW": "拋光白色大理石",
+        "zh-CN": "抛光白色大理石",
+        "ja": "白大理石 本磨き"
+      },
       "class": "Stone",
       "color": [
         240,
@@ -108,6 +199,19 @@
     },
     {
       "name": "Travertino levigado",
+      "names": {
+        "en": "Honed travertine",
+        "es": "Travertino apomazado",
+        "fr": "Travertin adouci",
+        "de": "Travertin geschliffen",
+        "it": "Travertino levigato",
+        "lo": "ຫີນທຣາເວີທີນ ຂັດດ້ານ",
+        "pl": "Trawertyn szlifowany",
+        "uk-UA": "Травертин шліфований",
+        "zh-TW": "霧面洞石",
+        "zh-CN": "亚光面洞石",
+        "ja": "トラバーチン 水磨き"
+      },
       "class": "Stone",
       "color": [
         226,
@@ -122,6 +226,19 @@
     },
     {
       "name": "Calcário",
+      "names": {
+        "en": "Limestone",
+        "es": "Caliza",
+        "fr": "Calcaire",
+        "de": "Kalkstein",
+        "it": "Calcare",
+        "lo": "ຫີນປູນ",
+        "pl": "Wapień",
+        "uk-UA": "Вапняк",
+        "zh-TW": "石灰岩",
+        "zh-CN": "石灰岩",
+        "ja": "石灰岩"
+      },
       "class": "Stone",
       "color": [
         222,
@@ -136,6 +253,19 @@
     },
     {
       "name": "Ardósia cinza",
+      "names": {
+        "en": "Grey slate",
+        "es": "Pizarra gris",
+        "fr": "Ardoise grise",
+        "de": "Schiefer grau",
+        "it": "Ardesia grigia",
+        "lo": "ຫີນຊະນວນ ສີເທົາ",
+        "pl": "Łupek szary",
+        "uk-UA": "Сланець сірий",
+        "zh-TW": "灰色板岩",
+        "zh-CN": "灰色板岩",
+        "ja": "グレー粘板岩"
+      },
       "class": "Stone",
       "color": [
         92,
@@ -150,6 +280,19 @@
     },
     {
       "name": "Ardósia preta",
+      "names": {
+        "en": "Black slate",
+        "es": "Pizarra negra",
+        "fr": "Ardoise noire",
+        "de": "Schiefer schwarz",
+        "it": "Ardesia nera",
+        "lo": "ຫີນຊະນວນ ສີດຳ",
+        "pl": "Łupek czarny",
+        "uk-UA": "Сланець чорний",
+        "zh-TW": "黑色板岩",
+        "zh-CN": "黑色板岩",
+        "ja": "黒粘板岩"
+      },
       "class": "Stone",
       "color": [
         50,
@@ -164,6 +307,17 @@
     },
     {
       "name": "Basalto",
+      "names": {
+        "en": "Basalt",
+        "fr": "Basalte",
+        "de": "Basalt",
+        "lo": "ຫີນບາຊອລ",
+        "pl": "Bazalt",
+        "uk-UA": "Базальт",
+        "zh-TW": "玄武岩",
+        "zh-CN": "玄武岩",
+        "ja": "玄武岩"
+      },
       "class": "Stone",
       "color": [
         60,
@@ -178,6 +332,19 @@
     },
     {
       "name": "Gnaisse",
+      "names": {
+        "en": "Gneiss",
+        "es": "Gneis",
+        "fr": "Gneiss",
+        "de": "Gneis",
+        "it": "Gneiss",
+        "lo": "ຫີນໄນສ໌",
+        "pl": "Gnejs",
+        "uk-UA": "Гнейс",
+        "zh-TW": "片麻岩",
+        "zh-CN": "片麻岩",
+        "ja": "片麻岩"
+      },
       "class": "Stone",
       "color": [
         150,
@@ -192,6 +359,19 @@
     },
     {
       "name": "Quartzito",
+      "names": {
+        "en": "Quartzite",
+        "es": "Cuarcita",
+        "fr": "Quartzite",
+        "de": "Quarzit",
+        "it": "Quarzite",
+        "lo": "ຫີນຄວອດໄຊ",
+        "pl": "Kwarcyt",
+        "uk-UA": "Кварцит",
+        "zh-TW": "石英岩",
+        "zh-CN": "石英岩",
+        "ja": "珪岩"
+      },
       "class": "Stone",
       "color": [
         214,
@@ -206,6 +386,19 @@
     },
     {
       "name": "Arenito",
+      "names": {
+        "en": "Sandstone",
+        "es": "Arenisca",
+        "fr": "Grès",
+        "de": "Sandstein",
+        "it": "Arenaria",
+        "lo": "ຫີນຊາຍ",
+        "pl": "Piaskowiec",
+        "uk-UA": "Пісковик",
+        "zh-TW": "砂岩",
+        "zh-CN": "砂岩",
+        "ja": "砂岩"
+      },
       "class": "Stone",
       "color": [
         210,

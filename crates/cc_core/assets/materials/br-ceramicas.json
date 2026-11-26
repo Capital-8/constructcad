@@ -12,6 +12,19 @@
   "materials": [
     {
       "name": "Grês (NBR 15220-2)",
+      "names": {
+        "en": "Stoneware tile (NBR 15220-2)",
+        "es": "Gres (NBR 15220-2)",
+        "fr": "Carreau de grès (NBR 15220-2)",
+        "de": "Steinzeug (NBR 15220-2)",
+        "it": "Gres (NBR 15220-2)",
+        "lo": "ກະເບື້ອງສະໂຕນແວ (NBR 15220-2)",
+        "pl": "Gres (NBR 15220-2)",
+        "uk-UA": "Гресова плитка (NBR 15220-2)",
+        "zh-TW": "石質磚 (NBR 15220-2)",
+        "zh-CN": "炻瓷砖 (NBR 15220-2)",
+        "ja": "せっ器質タイル (NBR 15220-2)"
+      },
       "class": "Ceramic",
       "color": [
         178,
@@ -26,6 +39,19 @@
     },
     {
       "name": "Piso cerâmico semi-grês (NBR 15220-2)",
+      "names": {
+        "en": "Semi-vitreous ceramic floor tile (NBR 15220-2)",
+        "es": "Baldosa cerámica semigres (NBR 15220-2)",
+        "fr": "Carrelage céramique semi-grès (NBR 15220-2)",
+        "de": "Bodenfliese Halbsteinzeug (NBR 15220-2)",
+        "it": "Piastrella da pavimento in semigres (NBR 15220-2)",
+        "lo": "ກະເບື້ອງປູພື້ນກຶ່ງສະໂຕນແວ (NBR 15220-2)",
+        "pl": "Płytka podłogowa półgresowa (NBR 15220-2)",
+        "uk-UA": "Напівгресова підлогова плитка (NBR 15220-2)",
+        "zh-TW": "半石質地磚 (NBR 15220-2)",
+        "zh-CN": "细炻地砖 (NBR 15220-2)",
+        "ja": "施釉せっ器質床タイル (NBR 15220-2)"
+      },
       "class": "Ceramic",
       "color": [
         200,
@@ -40,6 +66,19 @@
     },
     {
       "name": "Piso cerâmico semiporoso (NBR 15220-2)",
+      "names": {
+        "en": "Semi-porous ceramic floor tile (NBR 15220-2)",
+        "es": "Baldosa cerámica semiporosa (NBR 15220-2)",
+        "fr": "Carrelage céramique semi-poreux (NBR 15220-2)",
+        "de": "Bodenfliese halbporös (NBR 15220-2)",
+        "it": "Piastrella da pavimento semiporosa (NBR 15220-2)",
+        "lo": "ກະເບື້ອງປູພື້ນກຶ່ງດູດນ້ຳ (NBR 15220-2)",
+        "pl": "Płytka podłogowa półporowata (NBR 15220-2)",
+        "uk-UA": "Напівпориста підлогова плитка (NBR 15220-2)",
+        "zh-TW": "半陶質地磚 (NBR 15220-2)",
+        "zh-CN": "炻质地砖 (NBR 15220-2)",
+        "ja": "施釉陶器質床タイル (NBR 15220-2)"
+      },
       "class": "Ceramic",
       "color": [
         206,
@@ -54,6 +93,19 @@
     },
     {
       "name": "Azulejo branco (NBR 15220-2)",
+      "names": {
+        "en": "White wall tile (NBR 15220-2)",
+        "es": "Azulejo blanco (NBR 15220-2)",
+        "fr": "Faïence murale blanche (NBR 15220-2)",
+        "de": "Wandfliese weiß (NBR 15220-2)",
+        "it": "Piastrella da rivestimento bianca (NBR 15220-2)",
+        "lo": "ກະເບື້ອງບຸຜະໜັງ ສີຂາວ (NBR 15220-2)",
+        "pl": "Płytka ścienna biała (NBR 15220-2)",
+        "uk-UA": "Біла настінна плитка (NBR 15220-2)",
+        "zh-TW": "白色壁磚 (NBR 15220-2)",
+        "zh-CN": "白色釉面内墙砖 (NBR 15220-2)",
+        "ja": "白色内装壁タイル (NBR 15220-2)"
+      },
       "class": "Ceramic",
       "color": [
         246,
@@ -68,6 +120,19 @@
     },
     {
       "name": "Lajota cerâmica rústica (NBR 15220-2)",
+      "names": {
+        "en": "Rustic terracotta tile (NBR 15220-2)",
+        "es": "Baldosa de barro rústica (NBR 15220-2)",
+        "fr": "Carreau de terre cuite rustique (NBR 15220-2)",
+        "de": "Rustikale Terrakottafliese (NBR 15220-2)",
+        "it": "Cotto rustico (NBR 15220-2)",
+        "lo": "ກະເບື້ອງດິນເຜົາປູພື້ນ (NBR 15220-2)",
+        "pl": "Rustykalna płytka ceramiczna (NBR 15220-2)",
+        "uk-UA": "Рустикальна теракотова плитка (NBR 15220-2)",
+        "zh-TW": "紅陶地磚 (NBR 15220-2)",
+        "zh-CN": "陶土仿古地砖 (NBR 15220-2)",
+        "ja": "素焼きテラコッタ床タイル (NBR 15220-2)"
+      },
       "class": "Ceramic",
       "color": [
         180,
@@ -82,6 +147,19 @@
     },
     {
       "name": "Tijolo maciço aparente (NBR 15220-2)",
+      "names": {
+        "en": "Solid face brick (NBR 15220-2)",
+        "es": "Ladrillo macizo visto (NBR 15220-2)",
+        "fr": "Brique pleine apparente (NBR 15220-2)",
+        "de": "Vollziegel für Sichtmauerwerk (NBR 15220-2)",
+        "it": "Mattone pieno faccia vista (NBR 15220-2)",
+        "lo": "ດິນຈີ່ຕັນໂຊຜິວ (NBR 15220-2)",
+        "pl": "Cegła pełna licowa (NBR 15220-2)",
+        "uk-UA": "Повнотіла лицьова цегла (NBR 15220-2)",
+        "zh-TW": "清水實心磚 (NBR 15220-2)",
+        "zh-CN": "清水实心砖 (NBR 15220-2)",
+        "ja": "化粧れんが (NBR 15220-2)"
+      },
       "class": "Masonry",
       "color": [
         170,
@@ -95,6 +173,19 @@
     },
     {
       "name": "Bloco cerâmico (NBR 15220-2)",
+      "names": {
+        "en": "Clay block (NBR 15220-2)",
+        "es": "Bloque cerámico (NBR 15220-2)",
+        "fr": "Bloc en terre cuite (NBR 15220-2)",
+        "de": "Hochlochziegel (NBR 15220-2)",
+        "it": "Blocco in laterizio (NBR 15220-2)",
+        "lo": "ບລັອກດິນເຜົາ (NBR 15220-2)",
+        "pl": "Pustak ceramiczny (NBR 15220-2)",
+        "uk-UA": "Керамічний блок (NBR 15220-2)",
+        "zh-TW": "陶土空心磚 (NBR 15220-2)",
+        "zh-CN": "烧结空心砌块 (NBR 15220-2)",
+        "ja": "空洞れんがブロック (NBR 15220-2)"
+      },
       "class": "Masonry",
       "color": [
         186,
@@ -108,6 +199,19 @@
     },
     {
       "name": "Telha cerâmica (NBR 15220-2)",
+      "names": {
+        "en": "Clay roof tile (NBR 15220-2)",
+        "es": "Teja cerámica (NBR 15220-2)",
+        "fr": "Tuile en terre cuite (NBR 15220-2)",
+        "de": "Tondachziegel (NBR 15220-2)",
+        "it": "Tegola in laterizio (NBR 15220-2)",
+        "lo": "ກະເບື້ອງມຸງດິນເຜົາ (NBR 15220-2)",
+        "pl": "Dachówka ceramiczna (NBR 15220-2)",
+        "uk-UA": "Керамічна черепиця (NBR 15220-2)",
+        "zh-TW": "陶瓦 (NBR 15220-2)",
+        "zh-CN": "陶瓦 (NBR 15220-2)",
+        "ja": "粘土瓦 (NBR 15220-2)"
+      },
       "class": "Ceramic",
       "color": [
         176,

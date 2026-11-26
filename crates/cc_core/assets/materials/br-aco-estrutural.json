@@ -14,6 +14,19 @@
   "materials": [
     {
       "name": "Aço MR250 (NBR 7007)",
+      "names": {
+        "en": "Steel MR250 (NBR 7007)",
+        "es": "Acero MR250 (NBR 7007)",
+        "fr": "Acier MR250 (NBR 7007)",
+        "de": "Stahl MR250 (NBR 7007)",
+        "it": "Acciaio MR250 (NBR 7007)",
+        "lo": "ເຫຼັກໂຄງສ້າງ MR250 (NBR 7007)",
+        "pl": "Stal MR250 (NBR 7007)",
+        "uk-UA": "Сталь MR250 (NBR 7007)",
+        "zh-TW": "結構鋼 MR250 (NBR 7007)",
+        "zh-CN": "结构钢 MR250 (NBR 7007)",
+        "ja": "構造用鋼 MR250 (NBR 7007)"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -30,6 +43,19 @@
     },
     {
       "name": "Aço AR350 (NBR 7007)",
+      "names": {
+        "en": "Steel AR350 (NBR 7007)",
+        "es": "Acero AR350 (NBR 7007)",
+        "fr": "Acier AR350 (NBR 7007)",
+        "de": "Stahl AR350 (NBR 7007)",
+        "it": "Acciaio AR350 (NBR 7007)",
+        "lo": "ເຫຼັກໂຄງສ້າງ AR350 (NBR 7007)",
+        "pl": "Stal AR350 (NBR 7007)",
+        "uk-UA": "Сталь AR350 (NBR 7007)",
+        "zh-TW": "結構鋼 AR350 (NBR 7007)",
+        "zh-CN": "结构钢 AR350 (NBR 7007)",
+        "ja": "構造用鋼 AR350 (NBR 7007)"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -46,6 +72,19 @@
     },
     {
       "name": "Aço AR415 (NBR 7007)",
+      "names": {
+        "en": "Steel AR415 (NBR 7007)",
+        "es": "Acero AR415 (NBR 7007)",
+        "fr": "Acier AR415 (NBR 7007)",
+        "de": "Stahl AR415 (NBR 7007)",
+        "it": "Acciaio AR415 (NBR 7007)",
+        "lo": "ເຫຼັກໂຄງສ້າງ AR415 (NBR 7007)",
+        "pl": "Stal AR415 (NBR 7007)",
+        "uk-UA": "Сталь AR415 (NBR 7007)",
+        "zh-TW": "結構鋼 AR415 (NBR 7007)",
+        "zh-CN": "结构钢 AR415 (NBR 7007)",
+        "ja": "構造用鋼 AR415 (NBR 7007)"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -62,6 +101,19 @@
     },
     {
       "name": "Aço ASTM A36",
+      "names": {
+        "en": "Steel ASTM A36",
+        "es": "Acero ASTM A36",
+        "fr": "Acier ASTM A36",
+        "de": "Stahl ASTM A36",
+        "it": "Acciaio ASTM A36",
+        "lo": "ເຫຼັກໂຄງສ້າງ ASTM A36",
+        "pl": "Stal ASTM A36",
+        "uk-UA": "Сталь ASTM A36",
+        "zh-TW": "結構鋼 ASTM A36",
+        "zh-CN": "结构钢 ASTM A36",
+        "ja": "構造用鋼 ASTM A36"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -78,6 +130,19 @@
     },
     {
       "name": "Aço ASTM A572 Gr50",
+      "names": {
+        "en": "Steel ASTM A572 Gr50",
+        "es": "Acero ASTM A572 Gr50",
+        "fr": "Acier ASTM A572 Gr50",
+        "de": "Stahl ASTM A572 Gr50",
+        "it": "Acciaio ASTM A572 Gr50",
+        "lo": "ເຫຼັກໂຄງສ້າງ ASTM A572 Gr50",
+        "pl": "Stal ASTM A572 Gr50",
+        "uk-UA": "Сталь ASTM A572 Gr50",
+        "zh-TW": "結構鋼 ASTM A572 Gr50",
+        "zh-CN": "结构钢 ASTM A572 Gr50",
+        "ja": "構造用鋼 ASTM A572 Gr50"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -94,6 +159,19 @@
     },
     {
       "name": "Aço ASTM A992",
+      "names": {
+        "en": "Steel ASTM A992",
+        "es": "Acero ASTM A992",
+        "fr": "Acier ASTM A992",
+        "de": "Stahl ASTM A992",
+        "it": "Acciaio ASTM A992",
+        "lo": "ເຫຼັກໂຄງສ້າງ ASTM A992",
+        "pl": "Stal ASTM A992",
+        "uk-UA": "Сталь ASTM A992",
+        "zh-TW": "結構鋼 ASTM A992",
+        "zh-CN": "结构钢 ASTM A992",
+        "ja": "構造用鋼 ASTM A992"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -110,6 +188,19 @@
     },
     {
       "name": "Aço ASTM A588",
+      "names": {
+        "en": "Steel ASTM A588",
+        "es": "Acero ASTM A588",
+        "fr": "Acier ASTM A588",
+        "de": "Stahl ASTM A588",
+        "it": "Acciaio ASTM A588",
+        "lo": "ເຫຼັກໂຄງສ້າງ ASTM A588",
+        "pl": "Stal ASTM A588",
+        "uk-UA": "Сталь ASTM A588",
+        "zh-TW": "結構鋼 ASTM A588",
+        "zh-CN": "结构钢 ASTM A588",
+        "ja": "構造用鋼 ASTM A588"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -126,6 +217,19 @@
     },
     {
       "name": "Aço ZAR 230 (NBR 7008)",
+      "names": {
+        "en": "Steel ZAR 230 (NBR 7008)",
+        "es": "Acero ZAR 230 (NBR 7008)",
+        "fr": "Acier ZAR 230 (NBR 7008)",
+        "de": "Stahl ZAR 230 (NBR 7008)",
+        "it": "Acciaio ZAR 230 (NBR 7008)",
+        "lo": "ເຫຼັກໂຄງສ້າງ ZAR 230 (NBR 7008)",
+        "pl": "Stal ZAR 230 (NBR 7008)",
+        "uk-UA": "Сталь ZAR 230 (NBR 7008)",
+        "zh-TW": "結構鋼 ZAR 230 (NBR 7008)",
+        "zh-CN": "结构钢 ZAR 230 (NBR 7008)",
+        "ja": "構造用鋼 ZAR 230 (NBR 7008)"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -142,6 +246,19 @@
     },
     {
       "name": "Aço ZAR 280 (NBR 7008)",
+      "names": {
+        "en": "Steel ZAR 280 (NBR 7008)",
+        "es": "Acero ZAR 280 (NBR 7008)",
+        "fr": "Acier ZAR 280 (NBR 7008)",
+        "de": "Stahl ZAR 280 (NBR 7008)",
+        "it": "Acciaio ZAR 280 (NBR 7008)",
+        "lo": "ເຫຼັກໂຄງສ້າງ ZAR 280 (NBR 7008)",
+        "pl": "Stal ZAR 280 (NBR 7008)",
+        "uk-UA": "Сталь ZAR 280 (NBR 7008)",
+        "zh-TW": "結構鋼 ZAR 280 (NBR 7008)",
+        "zh-CN": "结构钢 ZAR 280 (NBR 7008)",
+        "ja": "構造用鋼 ZAR 280 (NBR 7008)"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -158,6 +275,19 @@
     },
     {
       "name": "Aço ZAR 345 (NBR 7008)",
+      "names": {
+        "en": "Steel ZAR 345 (NBR 7008)",
+        "es": "Acero ZAR 345 (NBR 7008)",
+        "fr": "Acier ZAR 345 (NBR 7008)",
+        "de": "Stahl ZAR 345 (NBR 7008)",
+        "it": "Acciaio ZAR 345 (NBR 7008)",
+        "lo": "ເຫຼັກໂຄງສ້າງ ZAR 345 (NBR 7008)",
+        "pl": "Stal ZAR 345 (NBR 7008)",
+        "uk-UA": "Сталь ZAR 345 (NBR 7008)",
+        "zh-TW": "結構鋼 ZAR 345 (NBR 7008)",
+        "zh-CN": "结构钢 ZAR 345 (NBR 7008)",
+        "ja": "構造用鋼 ZAR 345 (NBR 7008)"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -174,6 +304,19 @@
     },
     {
       "name": "Aço CIVIL 300",
+      "names": {
+        "en": "Steel CIVIL 300",
+        "es": "Acero CIVIL 300",
+        "fr": "Acier CIVIL 300",
+        "de": "Stahl CIVIL 300",
+        "it": "Acciaio CIVIL 300",
+        "lo": "ເຫຼັກໂຄງສ້າງ CIVIL 300",
+        "pl": "Stal CIVIL 300",
+        "uk-UA": "Сталь CIVIL 300",
+        "zh-TW": "結構鋼 CIVIL 300",
+        "zh-CN": "结构钢 CIVIL 300",
+        "ja": "構造用鋼 CIVIL 300"
+      },
       "class": "Metal",
       "color": [
         157,
@@ -190,6 +333,19 @@
     },
     {
       "name": "Aço CIVIL 350",
+      "names": {
+        "en": "Steel CIVIL 350",
+        "es": "Acero CIVIL 350",
+        "fr": "Acier CIVIL 350",
+        "de": "Stahl CIVIL 350",
+        "it": "Acciaio CIVIL 350",
+        "lo": "ເຫຼັກໂຄງສ້າງ CIVIL 350",
+        "pl": "Stal CIVIL 350",
+        "uk-UA": "Сталь CIVIL 350",
+        "zh-TW": "結構鋼 CIVIL 350",
+        "zh-CN": "结构钢 CIVIL 350",
+        "ja": "構造用鋼 CIVIL 350"
+      },
       "class": "Metal",
       "color": [
         157,

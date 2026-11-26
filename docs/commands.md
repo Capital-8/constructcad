@@ -3073,18 +3073,20 @@ No parameters.
 
 ### `material_catalog`
 
-*query* — The built-in material libraries (the materials of a region or standard, such as Brazil's structural steels, reinforcing steels and concretes): each one's `code`, translated `name`, `region`, `standard` and number of `materials`. With `library`, that library alone, with its `sources` and its `materials` (name, class, color, description and physical values in SI units: kg/m³, W/(m·K), J/(kg·K), 1/K, MPa), each saying whether the project has a material of that name (`in_project`).
+*query* — The built-in material libraries (the materials of a region or standard, such as Brazil's structural steels, reinforcing steels and concretes): each one's `code`, translated `name`, `region`, `standard` and number of `materials`. With `library`, that library alone, with its `sources` and its `materials` (name, class, color, description and physical values in SI units: kg/m³, W/(m·K), J/(kg·K), 1/K, MPa), each saying whether the project has a material of any of its names (`in_project`). A material's `name` is the one of `language` (its `main_name` when it has none), and `names` holds its translations.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `language` | string | optional | The language of the materials' names, a code such as `en` or `pt-BR` (default: the active language). |
 | `library` | string | optional | A built-in library's code (ignoring case): list its materials. |
 
 ### `material_library_import`
 
-*edit* — Import materials from a library into the project: a built-in one by `library` (see `material_catalog`), or a library file (JSON, the format `material_library_export` writes) by `path` or `text`. `materials` picks some by name (default: all). A material whose name the project already has is kept as it is. One undo step; returns the names `imported` and `kept`.
+*edit* — Import materials from a library into the project: a built-in one by `library` (see `material_catalog`), or a library file (JSON, the format `material_library_export` writes) by `path` or `text`. `materials` picks some by name, in any of their languages (default: all). Materials are named in `language` when the library has their name in it. A material the project already has under any of its names is kept as it is. One undo step; returns the names `imported` and `kept`.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
+| `language` | string | optional | The language to name them in, a code such as `en` or `pt-BR` (default: the active language). |
 | `library` | string | optional | A built-in library's code (or give `path` or `text`). |
 | `materials` | [string, …] | optional | The materials to import, by name (default: all of the library's). |
 | `path` | string | optional | Path of a library file. |

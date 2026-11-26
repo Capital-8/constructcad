@@ -10,6 +10,19 @@
   "materials": [
     {
       "name": "Tinta látex PVA fosca branca",
+      "names": {
+        "en": "Matte PVA latex paint, white",
+        "es": "Pintura látex PVA mate blanca",
+        "fr": "Peinture latex PVA mate blanche",
+        "de": "PVA-Dispersionsfarbe matt weiß",
+        "it": "Idropittura PVA opaca bianca",
+        "lo": "ສີລາເຕັກ PVA ດ້ານ ສີຂາວ",
+        "pl": "Farba winylowa PVA matowa biała",
+        "uk-UA": "Фарба ПВА матова біла",
+        "zh-TW": "白色PVA乳膠漆 平光",
+        "zh-CN": "白色PVA乳胶漆 哑光",
+        "ja": "PVAエマルション塗料 つや消し 白"
+      },
       "class": "Paint",
       "color": [
         246,
@@ -21,6 +34,19 @@
     },
     {
       "name": "Tinta acrílica fosca branca",
+      "names": {
+        "en": "Matte acrylic paint, white",
+        "es": "Pintura acrílica mate blanca",
+        "fr": "Peinture acrylique mate blanche",
+        "de": "Acrylfarbe matt weiß",
+        "it": "Pittura acrilica opaca bianca",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີຂາວ",
+        "pl": "Farba akrylowa matowa biała",
+        "uk-UA": "Акрилова фарба матова біла",
+        "zh-TW": "白色壓克力漆 平光",
+        "zh-CN": "白色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し 白"
+      },
       "class": "Paint",
       "color": [
         246,
@@ -32,6 +58,19 @@
     },
     {
       "name": "Tinta acrílica fosca gelo",
+      "names": {
+        "en": "Matte acrylic paint, off-white",
+        "es": "Pintura acrílica mate blanco roto",
+        "fr": "Peinture acrylique mate blanc cassé",
+        "de": "Acrylfarbe matt eisweiß",
+        "it": "Pittura acrilica opaca ghiaccio",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີຂາວນວນ",
+        "pl": "Farba akrylowa matowa lodowa",
+        "uk-UA": "Акрилова фарба матова крижана",
+        "zh-TW": "米白色壓克力漆 平光",
+        "zh-CN": "米白色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し オフホワイト"
+      },
       "class": "Paint",
       "color": [
         236,
@@ -43,6 +82,19 @@
     },
     {
       "name": "Tinta acrílica fosca palha",
+      "names": {
+        "en": "Matte acrylic paint, straw",
+        "es": "Pintura acrílica mate paja",
+        "fr": "Peinture acrylique mate paille",
+        "de": "Acrylfarbe matt stroh",
+        "it": "Pittura acrilica opaca paglia",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີເຟືອງ",
+        "pl": "Farba akrylowa matowa słomkowa",
+        "uk-UA": "Акрилова фарба матова солом'яна",
+        "zh-TW": "草黃色壓克力漆 平光",
+        "zh-CN": "草黄色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し ストロー"
+      },
       "class": "Paint",
       "color": [
         232,
@@ -54,6 +106,19 @@
     },
     {
       "name": "Tinta acrílica fosca areia",
+      "names": {
+        "en": "Matte acrylic paint, sand",
+        "es": "Pintura acrílica mate arena",
+        "fr": "Peinture acrylique mate sable",
+        "de": "Acrylfarbe matt sand",
+        "it": "Pittura acrilica opaca sabbia",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີຊາຍ",
+        "pl": "Farba akrylowa matowa piaskowa",
+        "uk-UA": "Акрилова фарба матова пісочна",
+        "zh-TW": "沙色壓克力漆 平光",
+        "zh-CN": "沙色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し サンド"
+      },
       "class": "Paint",
       "color": [
         214,
@@ -65,6 +130,19 @@
     },
     {
       "name": "Tinta acrílica fosca cinza claro",
+      "names": {
+        "en": "Matte acrylic paint, light grey",
+        "es": "Pintura acrílica mate gris claro",
+        "fr": "Peinture acrylique mate gris clair",
+        "de": "Acrylfarbe matt hellgrau",
+        "it": "Pittura acrilica opaca grigio chiaro",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີເທົາອ່ອນ",
+        "pl": "Farba akrylowa matowa jasnoszara",
+        "uk-UA": "Акрилова фарба матова світло-сіра",
+        "zh-TW": "淺灰色壓克力漆 平光",
+        "zh-CN": "浅灰色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し ライトグレー"
+      },
       "class": "Paint",
       "color": [
         200,
@@ -76,6 +154,19 @@
     },
     {
       "name": "Tinta acrílica fosca cinza médio",
+      "names": {
+        "en": "Matte acrylic paint, medium grey",
+        "es": "Pintura acrílica mate gris medio",
+        "fr": "Peinture acrylique mate gris moyen",
+        "de": "Acrylfarbe matt mittelgrau",
+        "it": "Pittura acrilica opaca grigio medio",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີເທົາກາງ",
+        "pl": "Farba akrylowa matowa średnioszara",
+        "uk-UA": "Акрилова фарба матова середньо-сіра",
+        "zh-TW": "中灰色壓克力漆 平光",
+        "zh-CN": "中灰色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し ミディアムグレー"
+      },
       "class": "Paint",
       "color": [
         150,
@@ -87,6 +178,19 @@
     },
     {
       "name": "Tinta acrílica fosca grafite",
+      "names": {
+        "en": "Matte acrylic paint, graphite",
+        "es": "Pintura acrílica mate grafito",
+        "fr": "Peinture acrylique mate graphite",
+        "de": "Acrylfarbe matt graphit",
+        "it": "Pittura acrilica opaca grafite",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີເທົາຖ່ານ",
+        "pl": "Farba akrylowa matowa grafitowa",
+        "uk-UA": "Акрилова фарба матова графітова",
+        "zh-TW": "石墨灰壓克力漆 平光",
+        "zh-CN": "石墨灰丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し グラファイト"
+      },
       "class": "Paint",
       "color": [
         72,
@@ -98,6 +202,19 @@
     },
     {
       "name": "Tinta acrílica fosca terracota",
+      "names": {
+        "en": "Matte acrylic paint, terracotta",
+        "es": "Pintura acrílica mate terracota",
+        "fr": "Peinture acrylique mate terre cuite",
+        "de": "Acrylfarbe matt terrakotta",
+        "it": "Pittura acrilica opaca terracotta",
+        "lo": "ສີອາຄຣີລິກ ດ້ານ ສີດິນເຜົາ",
+        "pl": "Farba akrylowa matowa terakotowa",
+        "uk-UA": "Акрилова фарба матова теракотова",
+        "zh-TW": "赤陶色壓克力漆 平光",
+        "zh-CN": "赤陶色丙烯酸涂料 哑光",
+        "ja": "アクリル塗料 つや消し テラコッタ"
+      },
       "class": "Paint",
       "color": [
         178,
@@ -109,6 +226,19 @@
     },
     {
       "name": "Tinta acrílica semibrilho branca",
+      "names": {
+        "en": "Semi-gloss acrylic paint, white",
+        "es": "Pintura acrílica semibrillante blanca",
+        "fr": "Peinture acrylique semi-brillante blanche",
+        "de": "Acrylfarbe seidenglänzend weiß",
+        "it": "Pittura acrilica semilucida bianca",
+        "lo": "ສີອາຄຣີລິກ ກຶ່ງເງົາ ສີຂາວ",
+        "pl": "Farba akrylowa półpołysk biała",
+        "uk-UA": "Акрилова фарба напівглянцева біла",
+        "zh-TW": "白色壓克力漆 半光",
+        "zh-CN": "白色丙烯酸涂料 半光",
+        "ja": "アクリル塗料 半つや 白"
+      },
       "class": "Paint",
       "color": [
         246,
@@ -120,6 +250,19 @@
     },
     {
       "name": "Tinta acrílica semibrilho gelo",
+      "names": {
+        "en": "Semi-gloss acrylic paint, off-white",
+        "es": "Pintura acrílica semibrillante blanco roto",
+        "fr": "Peinture acrylique semi-brillante blanc cassé",
+        "de": "Acrylfarbe seidenglänzend eisweiß",
+        "it": "Pittura acrilica semilucida ghiaccio",
+        "lo": "ສີອາຄຣີລິກ ກຶ່ງເງົາ ສີຂາວນວນ",
+        "pl": "Farba akrylowa półpołysk lodowa",
+        "uk-UA": "Акрилова фарба напівглянцева крижана",
+        "zh-TW": "米白色壓克力漆 半光",
+        "zh-CN": "米白色丙烯酸涂料 半光",
+        "ja": "アクリル塗料 半つや オフホワイト"
+      },
       "class": "Paint",
       "color": [
         236,
@@ -131,6 +274,19 @@
     },
     {
       "name": "Tinta acrílica acetinada branca",
+      "names": {
+        "en": "Satin acrylic paint, white",
+        "es": "Pintura acrílica satinada blanca",
+        "fr": "Peinture acrylique satinée blanche",
+        "de": "Acrylfarbe seidenmatt weiß",
+        "it": "Pittura acrilica satinata bianca",
+        "lo": "ສີອາຄຣີລິກ ຊາຕິນ ສີຂາວ",
+        "pl": "Farba akrylowa satynowa biała",
+        "uk-UA": "Акрилова фарба сатинова біла",
+        "zh-TW": "白色壓克力漆 柔光",
+        "zh-CN": "白色丙烯酸涂料 丝光",
+        "ja": "アクリル塗料 3分つや 白"
+      },
       "class": "Paint",
       "color": [
         246,
@@ -142,6 +298,19 @@
     },
     {
       "name": "Esmalte sintético brilhante branco",
+      "names": {
+        "en": "Gloss alkyd enamel, white",
+        "es": "Esmalte sintético brillante blanco",
+        "fr": "Laque alkyde brillante blanche",
+        "de": "Kunstharzlack glänzend weiß",
+        "it": "Smalto sintetico lucido bianco",
+        "lo": "ສີເຄືອບສັງເຄາະ ເງົາ ສີຂາວ",
+        "pl": "Emalia alkidowa połysk biała",
+        "uk-UA": "Алкідна емаль глянцева біла",
+        "zh-TW": "白色合成樹脂調合漆 亮光",
+        "zh-CN": "白色醇酸磁漆 亮光",
+        "ja": "合成樹脂調合ペイント つや有り 白"
+      },
       "class": "Paint",
       "color": [
         248,
@@ -153,6 +322,19 @@
     },
     {
       "name": "Esmalte sintético brilhante preto",
+      "names": {
+        "en": "Gloss alkyd enamel, black",
+        "es": "Esmalte sintético brillante negro",
+        "fr": "Laque alkyde brillante noire",
+        "de": "Kunstharzlack glänzend schwarz",
+        "it": "Smalto sintetico lucido nero",
+        "lo": "ສີເຄືອບສັງເຄາະ ເງົາ ສີດຳ",
+        "pl": "Emalia alkidowa połysk czarna",
+        "uk-UA": "Алкідна емаль глянцева чорна",
+        "zh-TW": "黑色合成樹脂調合漆 亮光",
+        "zh-CN": "黑色醇酸磁漆 亮光",
+        "ja": "合成樹脂調合ペイント つや有り 黒"
+      },
       "class": "Paint",
       "color": [
         28,
@@ -164,6 +346,19 @@
     },
     {
       "name": "Esmalte sintético brilhante cinza",
+      "names": {
+        "en": "Gloss alkyd enamel, grey",
+        "es": "Esmalte sintético brillante gris",
+        "fr": "Laque alkyde brillante grise",
+        "de": "Kunstharzlack glänzend grau",
+        "it": "Smalto sintetico lucido grigio",
+        "lo": "ສີເຄືອບສັງເຄາະ ເງົາ ສີເທົາ",
+        "pl": "Emalia alkidowa połysk szara",
+        "uk-UA": "Алкідна емаль глянцева сіра",
+        "zh-TW": "灰色合成樹脂調合漆 亮光",
+        "zh-CN": "灰色醇酸磁漆 亮光",
+        "ja": "合成樹脂調合ペイント つや有り グレー"
+      },
       "class": "Paint",
       "color": [
         128,
@@ -175,6 +370,19 @@
     },
     {
       "name": "Esmalte sintético brilhante marrom",
+      "names": {
+        "en": "Gloss alkyd enamel, brown",
+        "es": "Esmalte sintético brillante marrón",
+        "fr": "Laque alkyde brillante marron",
+        "de": "Kunstharzlack glänzend braun",
+        "it": "Smalto sintetico lucido marrone",
+        "lo": "ສີເຄືອບສັງເຄາະ ເງົາ ສີນ້ຳຕານ",
+        "pl": "Emalia alkidowa połysk brązowa",
+        "uk-UA": "Алкідна емаль глянцева коричнева",
+        "zh-TW": "棕色合成樹脂調合漆 亮光",
+        "zh-CN": "棕色醇酸磁漆 亮光",
+        "ja": "合成樹脂調合ペイント つや有り ブラウン"
+      },
       "class": "Paint",
       "color": [
         92,
@@ -186,6 +394,19 @@
     },
     {
       "name": "Esmalte sintético acetinado branco",
+      "names": {
+        "en": "Satin alkyd enamel, white",
+        "es": "Esmalte sintético satinado blanco",
+        "fr": "Laque alkyde satinée blanche",
+        "de": "Kunstharzlack seidenmatt weiß",
+        "it": "Smalto sintetico satinato bianco",
+        "lo": "ສີເຄືອບສັງເຄາະ ຊາຕິນ ສີຂາວ",
+        "pl": "Emalia alkidowa satynowa biała",
+        "uk-UA": "Алкідна емаль сатинова біла",
+        "zh-TW": "白色合成樹脂調合漆 柔光",
+        "zh-CN": "白色醇酸磁漆 丝光",
+        "ja": "合成樹脂調合ペイント 3分つや 白"
+      },
       "class": "Paint",
       "color": [
         248,
@@ -197,6 +418,19 @@
     },
     {
       "name": "Esmalte à base de água acetinado branco",
+      "names": {
+        "en": "Satin water-based enamel, white",
+        "es": "Esmalte al agua satinado blanco",
+        "fr": "Laque en phase aqueuse satinée blanche",
+        "de": "Wasserlack seidenmatt weiß",
+        "it": "Smalto all'acqua satinato bianco",
+        "lo": "ສີເຄືອບສູດນ້ຳ ຊາຕິນ ສີຂາວ",
+        "pl": "Emalia wodna satynowa biała",
+        "uk-UA": "Емаль на водній основі сатинова біла",
+        "zh-TW": "白色水性調合漆 柔光",
+        "zh-CN": "白色水性磁漆 丝光",
+        "ja": "水性エナメル塗料 3分つや 白"
+      },
       "class": "Paint",
       "color": [
         248,
@@ -208,6 +442,19 @@
     },
     {
       "name": "Tinta epóxi para piso cinza",
+      "names": {
+        "en": "Epoxy floor paint, grey",
+        "es": "Pintura epoxi para suelos gris",
+        "fr": "Peinture époxy de sol grise",
+        "de": "Epoxid-Bodenbeschichtung grau",
+        "it": "Pittura epossidica per pavimenti grigia",
+        "lo": "ສີອີພັອກຊີທາພື້ນ ສີເທົາ",
+        "pl": "Farba epoksydowa do posadzek szara",
+        "uk-UA": "Епоксидна фарба для підлоги сіра",
+        "zh-TW": "灰色環氧樹脂地坪漆",
+        "zh-CN": "灰色环氧地坪漆",
+        "ja": "エポキシ樹脂床用塗料 グレー"
+      },
       "class": "Paint",
       "color": [
         140,
@@ -219,6 +466,19 @@
     },
     {
       "name": "Tinta acrílica para piso cinza",
+      "names": {
+        "en": "Acrylic floor paint, grey",
+        "es": "Pintura acrílica para suelos gris",
+        "fr": "Peinture acrylique de sol grise",
+        "de": "Acryl-Bodenfarbe grau",
+        "it": "Pittura acrilica per pavimenti grigia",
+        "lo": "ສີອາຄຣີລິກທາພື້ນ ສີເທົາ",
+        "pl": "Farba akrylowa do posadzek szara",
+        "uk-UA": "Акрилова фарба для підлоги сіра",
+        "zh-TW": "灰色壓克力地坪漆",
+        "zh-CN": "灰色丙烯酸地坪漆",
+        "ja": "アクリル床用塗料 グレー"
+      },
       "class": "Paint",
       "color": [
         128,
@@ -230,6 +490,19 @@
     },
     {
       "name": "Tinta acrílica para piso amarelo demarcação",
+      "names": {
+        "en": "Acrylic floor marking paint, yellow",
+        "es": "Pintura acrílica de señalización amarilla",
+        "fr": "Peinture acrylique de marquage au sol jaune",
+        "de": "Acryl-Bodenfarbe Markierungsgelb",
+        "it": "Pittura acrilica per pavimenti giallo segnaletica",
+        "lo": "ສີອາຄຣີລິກຂີດເສັ້ນພື້ນ ສີເຫຼືອງ",
+        "pl": "Farba akrylowa do posadzek żółta do oznakowań",
+        "uk-UA": "Акрилова фарба для підлоги жовта розміточна",
+        "zh-TW": "黃色壓克力標線漆",
+        "zh-CN": "黄色丙烯酸划线漆",
+        "ja": "アクリルライン塗料 黄"
+      },
       "class": "Paint",
       "color": [
         240,
@@ -241,6 +514,19 @@
     },
     {
       "name": "Textura acrílica branca",
+      "names": {
+        "en": "Acrylic textured coating, white",
+        "es": "Revestimiento texturizado acrílico blanco",
+        "fr": "Revêtement acrylique texturé blanc",
+        "de": "Acryl-Strukturbeschichtung weiß",
+        "it": "Rivestimento acrilico a spessore bianco",
+        "lo": "ສີລາຍນູນອາຄຣີລິກ ສີຂາວ",
+        "pl": "Powłoka strukturalna akrylowa biała",
+        "uk-UA": "Акрилова структурна фарба біла",
+        "zh-TW": "白色壓克力質感塗料",
+        "zh-CN": "白色丙烯酸质感涂料",
+        "ja": "アクリル系仕上塗材 白"
+      },
       "class": "Paint",
       "color": [
         244,
@@ -252,6 +538,19 @@
     },
     {
       "name": "Verniz marítimo brilhante",
+      "names": {
+        "en": "Gloss marine varnish",
+        "es": "Barniz marino brillante",
+        "fr": "Vernis marine brillant",
+        "de": "Bootslack glänzend",
+        "it": "Vernice marina lucida",
+        "lo": "ວານິດທາງທະເລ ເງົາ",
+        "pl": "Lakier jachtowy połysk",
+        "uk-UA": "Яхтний лак глянцевий",
+        "zh-TW": "船用凡立水 亮光",
+        "zh-CN": "船用清漆 亮光",
+        "ja": "マリンワニス つや有り"
+      },
       "class": "Paint",
       "color": [
         170,
@@ -263,6 +562,19 @@
     },
     {
       "name": "Stain para madeira acetinado",
+      "names": {
+        "en": "Satin wood stain",
+        "es": "Lasur para madera satinado",
+        "fr": "Lasure bois satinée",
+        "de": "Holzlasur seidenmatt",
+        "it": "Impregnante per legno satinato",
+        "lo": "ສີຍ້ອມໄມ້ ຊາຕິນ",
+        "pl": "Lazura do drewna satynowa",
+        "uk-UA": "Лазур для деревини сатинова",
+        "zh-TW": "護木漆 柔光",
+        "zh-CN": "木材着色防护剂 丝光",
+        "ja": "木材保護塗料 3分つや"
+      },
       "class": "Paint",
       "color": [
         140,
@@ -274,6 +586,19 @@
     },
     {
       "name": "Seladora acrílica",
+      "names": {
+        "en": "Acrylic sealer",
+        "es": "Sellador acrílico",
+        "fr": "Impression acrylique",
+        "de": "Acryl-Tiefgrund",
+        "it": "Fondo isolante acrilico",
+        "lo": "ສີຮອງພື້ນອາຄຣີລິກ",
+        "pl": "Grunt akrylowy",
+        "uk-UA": "Акрилова ґрунтовка",
+        "zh-TW": "壓克力封閉底漆",
+        "zh-CN": "丙烯酸封闭底漆",
+        "ja": "アクリルシーラー"
+      },
       "class": "Paint",
       "color": [
         240,

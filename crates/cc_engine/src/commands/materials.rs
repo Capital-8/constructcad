@@ -371,13 +371,32 @@ fn library_json(lib: &MaterialLibrary) -> Value {
 /// `materials`. With `library`, that library alone, with its `sources` and
 /// its `materials` (name, class, color, description and physical values in
 /// SI units: kg/m³, W/(m·K), J/(kg·K), 1/K, MPa), each saying whether the
-/// project has a material of that name (`in_project`).
+/// project has a material of any of its names (`in_project`). A material's
+/// `name` is the one of `language` (its `main_name` when it has none), and
+/// `names` holds its translations.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialCatalog {
     /// A built-in library's code (ignoring case): list its materials.
     #[serde(default)]
     pub library: Option<String>,
+    /// The language of the materials' names, a code such as `en` or `pt-BR`
+    /// (default: the active language).
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+/// The language code a material library command names materials in.
+fn names_language(language: &Option<String>) -> String {
+    language.as_deref().map(str::trim).filter(|l| !l.is_empty()).map_or_else(
+        || crate::i18n::language().code().to_string(),
+        |l| crate::i18n::Language::from_code(l).map_or_else(|| l.to_string(), |g| g.code().to_string()),
+    )
+}
+
+/// Whether the project has a material named any of `m`'s names.
+fn in_project(p: &cc_core::Project, m: &LibraryMaterial) -> bool {
+    m.all_names().any(|n| p.material(n).is_some())
 }
 
 impl Command for MaterialCatalog {
@@ -391,13 +410,16 @@ impl Command for MaterialCatalog {
         let (_, lib) = cc_core::material_library::find(code)
             .ok_or_else(|| EngineError::not_found(format!("no built-in material library '{code}'")))?;
         let p = s.project();
+        let lang = names_language(&self.language);
         let materials: Vec<Value> = lib
             .materials
             .iter()
             .map(|m| {
                 let mut v = serde_json::to_value(m).unwrap_or(Value::Null);
                 if let Some(o) = v.as_object_mut() {
-                    o.insert("in_project".into(), json!(p.material(&m.name).is_some()));
+                    o.insert("main_name".into(), json!(m.name));
+                    o.insert("name".into(), json!(m.name_in(&lang)));
+                    o.insert("in_project".into(), json!(in_project(p, m)));
                 }
                 v
             })
@@ -414,9 +436,10 @@ impl Command for MaterialCatalog {
 /// Import materials from a library into the project: a built-in one by
 /// `library` (see `material_catalog`), or a library file (JSON, the format
 /// `material_library_export` writes) by `path` or `text`. `materials` picks
-/// some by name (default: all). A material whose name the project already
-/// has is kept as it is. One undo step; returns the names `imported` and
-/// `kept`.
+/// some by name, in any of their languages (default: all). Materials are
+/// named in `language` when the library has their name in it. A material
+/// the project already has under any of its names is kept as it is. One
+/// undo step; returns the names `imported` and `kept`.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialLibraryImport {
@@ -432,6 +455,10 @@ pub struct MaterialLibraryImport {
     /// The materials to import, by name (default: all of the library's).
     #[serde(default)]
     pub materials: Option<Vec<String>>,
+    /// The language to name them in, a code such as `en` or `pt-BR`
+    /// (default: the active language).
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 /// A library file read for an import, its errors as engine errors.
@@ -470,12 +497,15 @@ impl Command for MaterialLibraryImport {
                 .collect::<Result<_>>()?,
         };
         let p = s.project();
+        let lang = names_language(&self.language);
         let (mut new, mut kept): (Vec<Material>, Vec<String>) = (Vec::new(), Vec::new());
         for m in picked {
-            if p.material(&m.name).is_some() || new.iter().any(|x| x.name.eq_ignore_ascii_case(&m.name)) {
-                kept.push(m.name.clone());
+            let name = m.name_in(&lang);
+            if in_project(p, m) || new.iter().any(|x| x.name.eq_ignore_ascii_case(name)) {
+                let have = m.all_names().find(|n| p.material(n).is_some()).unwrap_or(name);
+                kept.push(have.to_string());
             } else {
-                new.push(m.to_material());
+                new.push(m.to_material_in(&lang));
             }
         }
         let imported: Vec<String> = new.iter().map(|m| m.name.clone()).collect();

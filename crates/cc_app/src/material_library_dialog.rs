@@ -114,7 +114,8 @@ fn refresh(state: &mut AppState, d: &mut MaterialLibraryDialog) {
             d.picked.clear();
         }
         d.cache.detail = d.selected.clone().and_then(|code| {
-            let out = state.session.run(cmd::MaterialCatalog { library: Some(code.clone()) }).ok()?;
+            let out =
+                state.session.run(cmd::MaterialCatalog { library: Some(code.clone()), ..Default::default() }).ok()?;
             Some((code, out["libraries"][0].clone()))
         });
         d.cache.revision = Some(revision);

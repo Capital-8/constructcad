@@ -12,6 +12,19 @@
   "materials": [
     {
       "name": "Concreto C20 (NBR 6118)",
+      "names": {
+        "en": "Concrete C20 (NBR 6118)",
+        "es": "Hormigón C20 (NBR 6118)",
+        "fr": "Béton C20 (NBR 6118)",
+        "de": "Beton C20 (NBR 6118)",
+        "it": "Calcestruzzo C20 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C20 (NBR 6118)",
+        "pl": "Beton C20 (NBR 6118)",
+        "uk-UA": "Бетон C20 (NBR 6118)",
+        "zh-TW": "混凝土 C20 (NBR 6118)",
+        "zh-CN": "混凝土 C20 (NBR 6118)",
+        "ja": "コンクリート C20 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -27,6 +40,19 @@
     },
     {
       "name": "Concreto C25 (NBR 6118)",
+      "names": {
+        "en": "Concrete C25 (NBR 6118)",
+        "es": "Hormigón C25 (NBR 6118)",
+        "fr": "Béton C25 (NBR 6118)",
+        "de": "Beton C25 (NBR 6118)",
+        "it": "Calcestruzzo C25 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C25 (NBR 6118)",
+        "pl": "Beton C25 (NBR 6118)",
+        "uk-UA": "Бетон C25 (NBR 6118)",
+        "zh-TW": "混凝土 C25 (NBR 6118)",
+        "zh-CN": "混凝土 C25 (NBR 6118)",
+        "ja": "コンクリート C25 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -42,6 +68,19 @@
     },
     {
       "name": "Concreto C30 (NBR 6118)",
+      "names": {
+        "en": "Concrete C30 (NBR 6118)",
+        "es": "Hormigón C30 (NBR 6118)",
+        "fr": "Béton C30 (NBR 6118)",
+        "de": "Beton C30 (NBR 6118)",
+        "it": "Calcestruzzo C30 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C30 (NBR 6118)",
+        "pl": "Beton C30 (NBR 6118)",
+        "uk-UA": "Бетон C30 (NBR 6118)",
+        "zh-TW": "混凝土 C30 (NBR 6118)",
+        "zh-CN": "混凝土 C30 (NBR 6118)",
+        "ja": "コンクリート C30 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -57,6 +96,19 @@
     },
     {
       "name": "Concreto C35 (NBR 6118)",
+      "names": {
+        "en": "Concrete C35 (NBR 6118)",
+        "es": "Hormigón C35 (NBR 6118)",
+        "fr": "Béton C35 (NBR 6118)",
+        "de": "Beton C35 (NBR 6118)",
+        "it": "Calcestruzzo C35 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C35 (NBR 6118)",
+        "pl": "Beton C35 (NBR 6118)",
+        "uk-UA": "Бетон C35 (NBR 6118)",
+        "zh-TW": "混凝土 C35 (NBR 6118)",
+        "zh-CN": "混凝土 C35 (NBR 6118)",
+        "ja": "コンクリート C35 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -72,6 +124,19 @@
     },
     {
       "name": "Concreto C40 (NBR 6118)",
+      "names": {
+        "en": "Concrete C40 (NBR 6118)",
+        "es": "Hormigón C40 (NBR 6118)",
+        "fr": "Béton C40 (NBR 6118)",
+        "de": "Beton C40 (NBR 6118)",
+        "it": "Calcestruzzo C40 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C40 (NBR 6118)",
+        "pl": "Beton C40 (NBR 6118)",
+        "uk-UA": "Бетон C40 (NBR 6118)",
+        "zh-TW": "混凝土 C40 (NBR 6118)",
+        "zh-CN": "混凝土 C40 (NBR 6118)",
+        "ja": "コンクリート C40 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -87,6 +152,19 @@
     },
     {
       "name": "Concreto C45 (NBR 6118)",
+      "names": {
+        "en": "Concrete C45 (NBR 6118)",
+        "es": "Hormigón C45 (NBR 6118)",
+        "fr": "Béton C45 (NBR 6118)",
+        "de": "Beton C45 (NBR 6118)",
+        "it": "Calcestruzzo C45 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C45 (NBR 6118)",
+        "pl": "Beton C45 (NBR 6118)",
+        "uk-UA": "Бетон C45 (NBR 6118)",
+        "zh-TW": "混凝土 C45 (NBR 6118)",
+        "zh-CN": "混凝土 C45 (NBR 6118)",
+        "ja": "コンクリート C45 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -102,6 +180,19 @@
     },
     {
       "name": "Concreto C50 (NBR 6118)",
+      "names": {
+        "en": "Concrete C50 (NBR 6118)",
+        "es": "Hormigón C50 (NBR 6118)",
+        "fr": "Béton C50 (NBR 6118)",
+        "de": "Beton C50 (NBR 6118)",
+        "it": "Calcestruzzo C50 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C50 (NBR 6118)",
+        "pl": "Beton C50 (NBR 6118)",
+        "uk-UA": "Бетон C50 (NBR 6118)",
+        "zh-TW": "混凝土 C50 (NBR 6118)",
+        "zh-CN": "混凝土 C50 (NBR 6118)",
+        "ja": "コンクリート C50 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -117,6 +208,19 @@
     },
     {
       "name": "Concreto C55 (NBR 6118)",
+      "names": {
+        "en": "Concrete C55 (NBR 6118)",
+        "es": "Hormigón C55 (NBR 6118)",
+        "fr": "Béton C55 (NBR 6118)",
+        "de": "Beton C55 (NBR 6118)",
+        "it": "Calcestruzzo C55 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C55 (NBR 6118)",
+        "pl": "Beton C55 (NBR 6118)",
+        "uk-UA": "Бетон C55 (NBR 6118)",
+        "zh-TW": "混凝土 C55 (NBR 6118)",
+        "zh-CN": "混凝土 C55 (NBR 6118)",
+        "ja": "コンクリート C55 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -132,6 +236,19 @@
     },
     {
       "name": "Concreto C60 (NBR 6118)",
+      "names": {
+        "en": "Concrete C60 (NBR 6118)",
+        "es": "Hormigón C60 (NBR 6118)",
+        "fr": "Béton C60 (NBR 6118)",
+        "de": "Beton C60 (NBR 6118)",
+        "it": "Calcestruzzo C60 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C60 (NBR 6118)",
+        "pl": "Beton C60 (NBR 6118)",
+        "uk-UA": "Бетон C60 (NBR 6118)",
+        "zh-TW": "混凝土 C60 (NBR 6118)",
+        "zh-CN": "混凝土 C60 (NBR 6118)",
+        "ja": "コンクリート C60 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -147,6 +264,19 @@
     },
     {
       "name": "Concreto C70 (NBR 6118)",
+      "names": {
+        "en": "Concrete C70 (NBR 6118)",
+        "es": "Hormigón C70 (NBR 6118)",
+        "fr": "Béton C70 (NBR 6118)",
+        "de": "Beton C70 (NBR 6118)",
+        "it": "Calcestruzzo C70 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C70 (NBR 6118)",
+        "pl": "Beton C70 (NBR 6118)",
+        "uk-UA": "Бетон C70 (NBR 6118)",
+        "zh-TW": "混凝土 C70 (NBR 6118)",
+        "zh-CN": "混凝土 C70 (NBR 6118)",
+        "ja": "コンクリート C70 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -162,6 +292,19 @@
     },
     {
       "name": "Concreto C80 (NBR 6118)",
+      "names": {
+        "en": "Concrete C80 (NBR 6118)",
+        "es": "Hormigón C80 (NBR 6118)",
+        "fr": "Béton C80 (NBR 6118)",
+        "de": "Beton C80 (NBR 6118)",
+        "it": "Calcestruzzo C80 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C80 (NBR 6118)",
+        "pl": "Beton C80 (NBR 6118)",
+        "uk-UA": "Бетон C80 (NBR 6118)",
+        "zh-TW": "混凝土 C80 (NBR 6118)",
+        "zh-CN": "混凝土 C80 (NBR 6118)",
+        "ja": "コンクリート C80 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
@@ -177,6 +320,19 @@
     },
     {
       "name": "Concreto C90 (NBR 6118)",
+      "names": {
+        "en": "Concrete C90 (NBR 6118)",
+        "es": "Hormigón C90 (NBR 6118)",
+        "fr": "Béton C90 (NBR 6118)",
+        "de": "Beton C90 (NBR 6118)",
+        "it": "Calcestruzzo C90 (NBR 6118)",
+        "lo": "ຄອນກຣີດ C90 (NBR 6118)",
+        "pl": "Beton C90 (NBR 6118)",
+        "uk-UA": "Бетон C90 (NBR 6118)",
+        "zh-TW": "混凝土 C90 (NBR 6118)",
+        "zh-CN": "混凝土 C90 (NBR 6118)",
+        "ja": "コンクリート C90 (NBR 6118)"
+      },
       "class": "Concrete",
       "color": [
         168,
