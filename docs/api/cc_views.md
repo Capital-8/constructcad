@@ -1678,8 +1678,8 @@ elements in `blocks.skip`. Block names are sanitized like layer names.
 <sub>`crates/cc_views/src/export.rs`</sub>
 
 Vector export of drawings in paper millimeters (composed sheets) to SVG
-and PDF. Both writers are self-contained: the PDF uses the standard
-Helvetica font, so no font is embedded.
+and PDF. Both writers are self-contained. The PDF uses standard
+Helvetica for most text and embeds Inter for Cyrillic text.
 
 **Items:** [`to_svg`](#cc_views-export-to_svg) · [`to_pdf`](#cc_views-export-to_pdf) · [`MAX_PIXELS`](#cc_views-export-max_pixels) · [`view_on_paper`](#cc_views-export-view_on_paper) · [`to_png`](#cc_views-export-to_png)
 

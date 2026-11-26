@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Cyrillic text in PDF exports came out as `?` (Russian and Ukrainian labels, and Cyrillic names under any interface language). Texts with Cyrillic now use an embedded Inter font and can be copied; PDFs without Cyrillic are unchanged.
 - IFC files could only be brought in from *Insert → Import IFC…*, which the home screen does not show: *Open* listed only `.ccad` files, and dropping an IFC file on the window did nothing. *Open* (and `constructcraft <file>`) now takes an IFC file and imports it as a new project, the home screen has an *Import IFC…* button, and a project or IFC file dropped on the window opens, also on the home screen. Opening an IFC file from Finder (double-click, *Open With*) is still refused by macOS: the app does not declare the file type, since it cannot receive files from Finder without code the workspace does not allow (`unsafe`).
 - Columns of an annular sector came back from IFC with a section of chords. The sector was written as a polygon, read back as a sketch of its points: the column lost a little of its volume, and its stirrups, laid out again on the polygon, had a straight leg at each end of each arc, so their shape and bar mark changed after an export and an import. The section is now written with its two arcs (an `IfcArbitraryClosedProfileDef` of trimmed circles joined by its radial sides) and read back as the annular sector, for columns and for beams of that profile, with its volume and its stirrups unchanged.
 

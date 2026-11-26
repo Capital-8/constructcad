@@ -1,9 +1,10 @@
 //! Vector export of drawings in paper millimeters (composed sheets) to SVG
-//! and PDF. Both writers are self-contained: the PDF uses the standard
-//! Helvetica font, so no font is embedded.
+//! and PDF. Both writers are self-contained. The PDF uses standard
+//! Helvetica for most text and embeds Inter for Cyrillic text.
 
 use crate::{Anchor, Drawing2D, Prim};
 use glam::DVec2;
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 const TEXT_GRAY: u8 = 20;
@@ -218,6 +219,8 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
     // Pictures as image objects: size, compressed RGB and, when not opaque, compressed alpha.
     let mut pictures: Vec<PdfPicture> = Vec::new();
     let mut content: Vec<u8> = Vec::new();
+    // Inter is embedded only when a text has Cyrillic (below), so other PDFs stay as they were.
+    let mut unicode = PdfUnicodeFont::new();
     // Work in millimeters with the origin at the bottom-left corner.
     let _ = writeln!(Utf8(&mut content), "{} 0 0 {} 0 0 cm 1 J 1 j", num(PT_PER_MM), num(PT_PER_MM));
     for prim in &drawing.prims {
@@ -259,12 +262,20 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
                 let _ = writeln!(Utf8(&mut content), "q {gs}{} rg {path}h f Q", rgb([r, g, b]));
             }
             Prim::Text { pos, text, size, anchor, angle, color, .. } => {
-                let bytes: Vec<u8> = text.chars().map(win_ansi).collect();
                 if text.trim().is_empty() {
                     continue;
                 }
+                let (font, bytes, ems) = if let Some(font) =
+                    unicode.as_mut().filter(|_| text.chars().any(|c| ('\u{0400}'..='\u{052f}').contains(&c)))
+                {
+                    let (bytes, ems) = font.encode(text);
+                    ("F2", bytes, ems)
+                } else {
+                    let bytes: Vec<u8> = text.chars().map(win_ansi).collect();
+                    ("F1", pdf_string(&bytes), helvetica_width(&bytes))
+                };
                 let (base, frac) = anchor_offsets(*anchor);
-                let width = helvetica_width(&bytes) * size;
+                let width = ems * size;
                 let (sin, cos) = angle.sin_cos();
                 let along = DVec2::new(cos, sin);
                 let up = DVec2::new(-sin, cos);
@@ -275,7 +286,7 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
                 };
                 let _ = write!(
                     Utf8(&mut content),
-                    "BT {ink} /F1 {} Tf {} {} {} {} {} {} Tm ",
+                    "BT {ink} /{font} {} Tf {} {} {} {} {} {} Tm ",
                     num(*size),
                     num(cos),
                     num(sin),
@@ -284,7 +295,7 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
                     num(p.x),
                     num(p.y)
                 );
-                content.extend(pdf_string(&bytes));
+                content.extend(bytes);
                 content.extend(b" Tj ET\n");
             }
             Prim::Image { origin, u, v, image, faded, .. } => {
@@ -322,11 +333,14 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
     // Objects 1 to 5 are fixed; each picture takes two numbers from 6 (the image, then its alpha mask).
     let picture_object = |i: usize| 6 + 2 * i;
     let xobjects: String = (0..pictures.len()).map(|i| format!("/Im{i} {} 0 R ", picture_object(i))).collect();
+    let unicode = unicode.filter(|font| !font.glyphs.is_empty());
+    let font_object = picture_object(pictures.len());
+    let font_resource = if unicode.is_some() { format!(" /F2 {font_object} 0 R") } else { String::new() };
     let mut objects: Vec<Vec<u8>> = vec![
         b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
         format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 5 0 R >> /ExtGState << {ext}>> /XObject << {xobjects}>> >> /Contents 4 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 5 0 R{font_resource} >> /ExtGState << {ext}>> /XObject << {xobjects}>> >> /Contents 4 0 R >>",
             num(w),
             num(h)
         )
@@ -355,6 +369,9 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
             Some(a) => image_stream("", "/DeviceGray", a),
             None => b"<< >>".to_vec(),
         });
+    }
+    if let Some(font) = unicode {
+        objects.extend(font.objects(font_object));
     }
     objects.push(b"<< /Producer (ConstructCraft) >>".to_vec());
 
@@ -402,6 +419,85 @@ type PdfPicture = (u32, u32, Vec<u8>, Option<Vec<u8>>);
 const PDF_IMAGE_SIDE: u32 = 6000;
 
 const INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+
+/// A composite font whose character codes are Inter's TrueType glyph indices.
+/// The ToUnicode map restores the original characters when copying PDF text.
+struct PdfUnicodeFont {
+    font: skrifa::FontRef<'static>,
+    glyphs: BTreeMap<u32, (char, f64)>,
+}
+
+impl PdfUnicodeFont {
+    fn new() -> Option<Self> {
+        Some(Self { font: skrifa::FontRef::new(INTER).ok()?, glyphs: BTreeMap::new() })
+    }
+
+    fn encode(&mut self, text: &str) -> (Vec<u8>, f64) {
+        use skrifa::MetadataProvider;
+        use skrifa::instance::{LocationRef, Size};
+        let map = self.font.charmap();
+        let widths = self.font.glyph_metrics(Size::new(1000.0), LocationRef::default());
+        let mut encoded = String::from("<");
+        let mut width = 0.0;
+        for c in text.chars() {
+            let (c, glyph) = match map.map(c) {
+                Some(glyph) => (c, glyph),
+                None => ('?', map.map('?').unwrap_or(skrifa::GlyphId::NOTDEF)),
+            };
+            let id = glyph.to_u32();
+            let (_, advance) =
+                self.glyphs.entry(id).or_insert_with(|| (c, widths.advance_width(glyph).unwrap_or(0.0) as f64));
+            width += *advance;
+            let _ = write!(encoded, "{id:04X}");
+        }
+        encoded.push('>');
+        (encoded.into_bytes(), width / 1000.0)
+    }
+
+    fn objects(self, first: usize) -> [Vec<u8>; 5] {
+        use skrifa::MetadataProvider;
+        use skrifa::instance::{LocationRef, Size};
+        let (cid_font, descriptor, font_file, to_unicode) = (first + 1, first + 2, first + 3, first + 4);
+        let metrics = self.font.metrics(Size::new(1000.0), LocationRef::default());
+        let bounds = metrics.bounds.unwrap_or_default();
+        let widths: String = self.glyphs.iter().map(|(id, (_, width))| format!("{id} [{}] ", num(*width))).collect();
+        let mut cmap = String::from(
+            "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
+        );
+        let glyphs: Vec<_> = self.glyphs.into_iter().collect();
+        // A CMap operator takes at most 100 mappings per block.
+        for chunk in glyphs.chunks(100) {
+            let _ = writeln!(cmap, "{} beginbfchar", chunk.len());
+            for (id, (c, _)) in chunk {
+                let _ = write!(cmap, "<{id:04X}> <");
+                for code in c.encode_utf16(&mut [0; 2]) {
+                    let _ = write!(cmap, "{code:04X}");
+                }
+                cmap.push_str(">\n");
+            }
+            cmap.push_str("endbfchar\n");
+        }
+        cmap.push_str("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
+        let stream = |extra: &str, data: &[u8]| {
+            let mut object = format!("<< /Length {}{extra} >>\nstream\n", data.len()).into_bytes();
+            object.extend(data);
+            object.extend(b"\nendstream");
+            object
+        };
+        let compressed = miniz_oxide::deflate::compress_to_vec_zlib(INTER, 6);
+        [
+            format!("<< /Type /Font /Subtype /Type0 /BaseFont /Inter-Regular /Encoding /Identity-H /DescendantFonts [{cid_font} 0 R] /ToUnicode {to_unicode} 0 R >>").into_bytes(),
+            format!("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Inter-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {descriptor} 0 R /CIDToGIDMap /Identity /W [{widths}] >>").into_bytes(),
+            format!(
+                "<< /Type /FontDescriptor /FontName /Inter-Regular /Flags 4 /FontBBox [{} {} {} {}] /ItalicAngle 0 /Ascent {} /Descent {} /CapHeight {} /StemV 80 /FontFile2 {font_file} 0 R >>",
+                num(bounds.x_min as f64), num(bounds.y_min as f64), num(bounds.x_max as f64), num(bounds.y_max as f64),
+                num(metrics.ascent as f64), num(metrics.descent as f64), num(metrics.cap_height.unwrap_or(metrics.ascent) as f64)
+            ).into_bytes(),
+            stream(&format!(" /Filter /FlateDecode /Length1 {}", INTER.len()), &compressed),
+            stream("", cmap.as_bytes()),
+        ]
+    }
+}
 
 /// Writes glyph outlines as SVG path data, through `at` (glyph to page).
 struct GlyphPen<'a> {
@@ -717,5 +813,67 @@ endstream",
         v.line(DVec2::ZERO, DVec2::new(10.0, 5.0), crate::LineStyle::Cut, None);
         let (_, paper) = view_on_paper(&v, 100, 5.0);
         assert!((paper - DVec2::new(110.0, 60.0)).length() < 1e-9, "{paper}");
+    }
+    /// The text a PDF reader extracts from each text object: Helvetica strings
+    /// as written, Inter strings decoded through the ToUnicode map.
+    fn pdf_texts(pdf: &[u8]) -> Vec<String> {
+        let text = String::from_utf8_lossy(pdf);
+        let mut unicode = std::collections::HashMap::new();
+        let mut in_map = false;
+        for line in text.lines() {
+            match line {
+                l if l.ends_with("beginbfchar") => in_map = true,
+                "endbfchar" => in_map = false,
+                l if in_map => {
+                    let (code, value) = l.split_once(' ').unwrap();
+                    let units: Vec<u16> = value
+                        .trim_matches(['<', '>'])
+                        .as_bytes()
+                        .chunks(4)
+                        .map(|c| u16::from_str_radix(std::str::from_utf8(c).unwrap(), 16).unwrap())
+                        .collect();
+                    unicode.insert(code.trim_matches(['<', '>']).to_string(), String::from_utf16(&units).unwrap());
+                }
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        for line in text.lines().filter(|l| l.starts_with("BT ") && l.ends_with(" Tj ET")) {
+            let (_, string) = line.split_once(" Tm ").unwrap();
+            let string = string.trim_end_matches(" Tj ET");
+            if let Some(hex) = string.strip_prefix('<') {
+                let hex = hex.trim_end_matches('>');
+                out.push((0..hex.len() / 4).map(|i| unicode[&hex[4 * i..4 * i + 4]].as_str()).collect());
+            } else {
+                out.push(string[1..string.len() - 1].replace("\\(", "(").replace("\\)", ")"));
+            }
+        }
+        out
+    }
+
+    /// Cyrillic text is drawn with the embedded Inter whatever the interface
+    /// language, so it can be read and copied instead of turning into `?`.
+    #[test]
+    fn pdf_keeps_cyrillic_text() {
+        for label in ["Гостиная 101 (м²)", "Площа (м²): ґанок, їдальня, Євро"] {
+            let mut d = Drawing2D::default();
+            d.text_at(DVec2::new(10.0, 10.0), "Room", 3.0, Anchor::Center, 0.0);
+            d.text_at(DVec2::new(10.0, 20.0), label, 3.0, Anchor::Center, 0.0);
+            let pdf = to_pdf(&d, DVec2::new(100.0, 100.0));
+            assert_eq!(pdf_texts(&pdf), ["Room", label]);
+            let text = String::from_utf8_lossy(&pdf);
+            assert!(text.contains("/F1 5 0 R /F2 ") && text.contains("/BaseFont /Inter-Regular"), "{label}");
+            assert!(text.contains("BT 0.078 g /F1 3 Tf"), "Latin text keeps Helvetica");
+        }
+    }
+
+    /// A drawing without Cyrillic embeds no font: the PDF is the one it always was.
+    #[test]
+    fn pdf_without_cyrillic_embeds_no_font() {
+        let pdf = to_pdf(&sample(), DVec2::new(420.0, 297.0));
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(!text.contains("/F2") && !text.contains("Inter") && !text.contains("FontFile2"), "{text}");
+        assert_eq!(text.matches(" 0 obj").count(), 6, "catalog, pages, page, contents, Helvetica, info");
+        assert_eq!(pdf_texts(&pdf).len(), 1);
     }
 }
