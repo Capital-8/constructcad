@@ -343,7 +343,12 @@ pub enum ViewKind {
     /// the space around the marker when the view is drawn.
     InteriorElevation {
         marker: crate::ElementId,
+        #[serde(alias = "side")]
         face: crate::interior::Face,
+        /// A wall's view: whether it shows the wall's left face (to the left
+        /// of its line from start to end) or its right one.
+        #[serde(default)]
+        left: bool,
         /// The number in the view's name, among its marker's views.
         number: u32,
         /// Where the view looks from (see [`crate::Project::interior_frame`]).

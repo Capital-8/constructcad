@@ -163,9 +163,10 @@ pub fn generate_temporary(
             }
             d
         }
-        // Nothing to draw while no walls close a space around the marker.
-        ViewKind::InteriorElevation { .. } => match interior::resolve(project, geom, view) {
-            Some(r) => {
+        // While no walls close a space around the marker, or its wall is not
+        // one of them, the view says so instead.
+        ViewKind::InteriorElevation { .. } => match interior::try_resolve(project, geom, view) {
+            Ok(r) => {
                 crop = r.crop;
                 let mut d = projected::section_in(project, geom, &r.frame, view.scale, look);
                 joins::merge(project, &mut d);
@@ -174,7 +175,11 @@ pub fn generate_temporary(
                 annotate::projected_grids(&mut d, project, &r.frame, view.scale, &view.tags);
                 d
             }
-            None => Drawing2D::default(),
+            Err(why) => {
+                let mut d = Drawing2D::default();
+                d.text_at(glam::DVec2::ZERO, label(why.key()), 3.5, Anchor::LeftBottom, 0.0);
+                d
+            }
         },
         ViewKind::Section { start, end, depth, .. } => {
             let mut d = section(project, geom, (*start, *end), *depth, view.scale, look);

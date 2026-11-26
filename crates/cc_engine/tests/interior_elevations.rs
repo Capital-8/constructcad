@@ -150,7 +150,7 @@ fn the_views_follow_the_walls_the_marker_and_the_room() {
     assert!((origin.x - 4.0).abs() < 1e-9, "{origin}");
 
     // Sides: add east and west, drop north; numbers are reused from 1.
-    let out = run(&mut s, "interior_elevation_sides_set", json!({"marker": marker, "sides": ["east", "west"]}));
+    let out = run(&mut s, "interior_elevation_faces_set", json!({"marker": marker, "sides": ["east", "west"]}));
     let names: Vec<String> = views(&out).into_iter().map(|(.., n)| n).collect();
     assert_eq!(names, ["Kitchen 1", "Kitchen 2"], "the north view's number 1 is reused");
     assert!(s.project().view(north).is_none(), "the north view is gone");
@@ -313,10 +313,10 @@ fn the_walls_mode_makes_a_view_per_wall_cut_in_front_of_it() {
     assert!((origin - DVec2::new(3.0, 2.0)).length() < 1e-9, "never behind the marker: {origin}");
 
     // Faces: keep only the east and west walls; then back to directions, with its four sides.
-    let out = run(&mut s, "interior_elevation_sides_set", json!({"marker": marker, "walls": [east, west]}));
+    let out = run(&mut s, "interior_elevation_faces_set", json!({"marker": marker, "walls": [east, west]}));
     assert_eq!(out["views"].as_array().unwrap().len(), 2);
     assert_eq!(
-        fails(&mut s, "interior_elevation_sides_set", json!({"marker": marker, "sides": ["north"]})),
+        fails(&mut s, "interior_elevation_faces_set", json!({"marker": marker, "sides": ["north"]})),
         ErrorCode::InvalidArguments
     );
     let out = run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "directions"}));
@@ -325,34 +325,154 @@ fn the_walls_mode_makes_a_view_per_wall_cut_in_front_of_it() {
     assert!(s.project().view(view).is_none(), "the walls' views went with the mode");
 }
 
-#[test]
-fn short_walls_are_left_out_and_a_deleted_wall_takes_its_view() {
-    let mut s = Session::default();
-    let (walls, room) = kitchen(&mut s);
-    // A free-standing pier 0.2 m wide inside the room: its faces are not the space's boundary.
-    let pier = json!({"kind": "rectangle", "corner": [2.9, 3.4], "opposite": [3.1, 3.6]});
-    let pier: Vec<u64> = run(&mut s, "walls_create", json!({"curves": [pier]}))["ids"]
+/// Walls along the closed outline `pts`, and a room named Hall at `at`.
+fn outline_room(s: &mut Session, pts: &[[f64; 2]], at: [f64; 2]) -> (Vec<u64>, u64) {
+    let curves: Vec<Value> =
+        (0..pts.len()).map(|i| json!({"kind": "line", "start": pts[i], "end": pts[(i + 1) % pts.len()]})).collect();
+    let walls: Vec<u64> = run(s, "walls_create", json!({"curves": curves}))["ids"]
         .as_array()
         .unwrap()
         .iter()
         .map(|v| v.as_u64().unwrap())
         .collect();
+    let room = run(s, "room_create", json!({"point": at, "name": "Hall"}))["id"].as_u64().unwrap();
+    (walls, room)
+}
+
+fn view_kind(s: &Session, view: u64) -> (DVec2, DVec2) {
+    let cc_core::ViewKind::InteriorElevation { origin, look, .. } = s.project().view(ViewId(view)).unwrap().kind else {
+        panic!("an interior elevation")
+    };
+    (origin, look)
+}
+
+#[test]
+fn short_walls_are_left_out_and_a_deleted_wall_takes_its_view() {
+    let mut s = Session::default();
+    // A room with a 0.25 m return in its north side: six walls, one of them short.
+    let pts = [[0.0, 0.0], [6.0, 0.0], [6.0, 4.0], [3.0, 4.0], [3.0, 4.25], [0.0, 4.25]];
+    let (walls, room) = outline_room(&mut s, &pts, [3.0, 2.0]);
+    let short = walls[3];
     let out = run(&mut s, "interior_elevations_create", json!({"room": room, "mode": "walls"}));
     let marker = out["marker"].as_u64().unwrap();
+    // The default minimum length (0.30 m) leaves the return out.
     let shown = marker_walls(&mut s, marker);
-    assert!(pier.iter().all(|w| !shown.contains(w)), "the pier's faces are free-standing, not the space's boundary");
-    assert_eq!(shown.len(), 4);
+    assert_eq!(shown.len(), 5, "{shown:?}");
+    assert!(!shown.contains(&short));
+    assert_eq!(out["views"].as_array().unwrap().len(), 5);
+    // A lower one lets it in (to be added with faces_set); the views stay.
+    let out = run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "walls", "min_length": 0.1}));
+    assert_eq!(out["views"].as_array().unwrap().len(), 5);
+    assert!(marker_walls(&mut s, marker).contains(&short));
 
-    // With a minimum length of 5 m only the two long walls stay.
+    // With a minimum length of 5 m only the long south wall stays; one larger than
+    // every wall is refused, so the marker never loses its last view.
     let out = run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "walls", "min_length": 5.0}));
-    assert_eq!(out["views"].as_array().unwrap().len(), 2, "{out}");
-    let north = wall_at(&mut s, &walls, 1, 4.0);
-    let view = out["views"].as_array().unwrap().iter().find(|v| v["wall"].as_u64() == Some(north)).unwrap()["view"]
-        .as_u64()
-        .unwrap();
-    // Deleting the north wall deletes its view; undo brings both back.
-    run(&mut s, "elements_delete", json!({"ids": [north]}));
+    assert_eq!(out["views"].as_array().unwrap().len(), 1, "{out}");
+    assert_eq!(
+        fails(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "walls", "min_length": 50.0})),
+        ErrorCode::Rejected
+    );
+    assert_eq!(run(&mut s, "element_get", json!({"id": marker}))["derived"]["views"].as_array().unwrap().len(), 1);
+    let south = walls[0];
+    let view = out["views"][0]["view"].as_u64().unwrap();
+    assert_eq!(out["views"][0]["wall"].as_u64(), Some(south));
+    // Deleting the wall deletes its view; undo brings both back.
+    run(&mut s, "elements_delete", json!({"ids": [south]}));
     assert!(s.project().view(ViewId(view)).is_none());
     run(&mut s, "undo", json!({}));
     assert!(s.project().view(ViewId(view)).is_some());
+}
+
+/// In an L-shaped room the wall of the re-entrant corner is seen from
+/// inside the room, whichever side of its line the marker stands on.
+#[test]
+fn a_wall_is_seen_from_the_space_it_bounds() {
+    let mut s = Session::default();
+    // [0,6]x[0,3] and [0,3]x[3,6]: the wall on x = 3 for y in 3..6 bounds the upper arm on its west face.
+    let pts = [[0.0, 0.0], [6.0, 0.0], [6.0, 3.0], [3.0, 3.0], [3.0, 6.0], [0.0, 6.0]];
+    let (walls, _) = outline_room(&mut s, &pts, [1.5, 1.5]);
+    let inner = walls[3];
+    // The marker stands east of that wall's line, in the lower arm.
+    let out =
+        run(&mut s, "interior_elevations_create", json!({"position": [4.5, 1.5], "mode": "walls", "walls": [inner]}));
+    let view = out["views"][0]["view"].as_u64().unwrap();
+    let (origin, look) = view_kind(&s, view);
+    assert!((look - DVec2::X).length() < 1e-9, "it looks east at the wall's west face: {look}");
+    assert!(origin.x < 3.0, "from inside the upper arm: {origin}");
+    let (ids, ext) = drawn(&mut s, ViewId(view));
+    assert!(ids.contains(&inner) && ext.is_some(), "{ids:?}");
+}
+
+/// A round room of two half-circle walls: both are shown from the middle.
+#[test]
+fn curved_walls_are_seen_from_their_hollow_side() {
+    let mut s = Session::default();
+    let circle = json!({"kind": "circle", "center": [0, 0], "radius": 3});
+    let walls = run(&mut s, "walls_create", json!({"curves": [circle]}))["ids"].clone();
+    assert_eq!(walls.as_array().unwrap().len(), 2, "two half circles");
+    let out = run(&mut s, "interior_elevations_create", json!({"position": [0.0, 0.0], "mode": "walls"}));
+    let views = out["views"].as_array().unwrap();
+    assert_eq!(views.len(), 2, "{out}");
+    for v in views {
+        let view = v["view"].as_u64().unwrap();
+        let (origin, _) = view_kind(&s, view);
+        assert!(origin.length() < 3.0, "cut inside the room: {origin}");
+        let (ids, ext) = drawn(&mut s, ViewId(view));
+        assert!(ids.contains(&v["wall"].as_u64().unwrap()) && ext.is_some(), "{ids:?}");
+    }
+}
+
+/// A wall that stops bounding the space keeps its view, which says why it
+/// is empty; the marker's other faces can still be changed.
+#[test]
+fn a_wall_out_of_the_space_keeps_its_view() {
+    let mut s = Session::default();
+    let (walls, room) = kitchen(&mut s);
+    let out = run(&mut s, "interior_elevations_create", json!({"room": room, "mode": "walls"}));
+    let marker = out["marker"].as_u64().unwrap();
+    let east = wall_at(&mut s, &walls, 0, 6.0);
+    let east_view = out["views"].as_array().unwrap().iter().find(|v| v["wall"].as_u64() == Some(east)).unwrap()["view"]
+        .as_u64()
+        .unwrap();
+    // A partition closes the space short of the east wall.
+    let partition = run(&mut s, "wall_create", json!({"start": [4.5, 0.0], "end": [4.5, 4.0]}))["id"].as_u64().unwrap();
+    assert!(s.project().view(ViewId(east_view)).is_some(), "the view stays");
+    let d = s.drawing(ViewId(east_view)).unwrap();
+    assert!(d.prims.iter().all(|p| p.element().is_none()), "nothing of the model is drawn");
+    assert!(d.prims.iter().any(|p| matches!(p, Prim::Text { .. })), "it says why");
+    // The other faces can still be set, the stale one kept or dropped.
+    let keep: Vec<u64> = vec![east, partition];
+    let out = run(&mut s, "interior_elevation_faces_set", json!({"marker": marker, "walls": keep}));
+    let shown: Vec<u64> = out["views"].as_array().unwrap().iter().map(|v| v["wall"].as_u64().unwrap()).collect();
+    assert!(shown.contains(&east) && shown.contains(&partition) && shown.len() == 2, "{shown:?}");
+    // Changing the distance keeps it too.
+    run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "walls", "distance": 0.5}));
+    assert!(s.project().view(ViewId(east_view)).is_some());
+}
+
+/// `element_set` changing a marker's mode deletes the views of the other
+/// kind; a file of format 36 (a view's side written alone) still reads.
+#[test]
+fn modes_set_as_data_drop_stray_views_and_old_files_read() {
+    let mut s = Session::default();
+    let (_, room) = kitchen(&mut s);
+    let out = run(&mut s, "interior_elevations_create", json!({"room": room}));
+    let marker = out["marker"].as_u64().unwrap();
+    // A file as stage 1 wrote it: `side: North`, no `left`, format 36.
+    let text = cc_core::to_ron(s.project()).unwrap();
+    assert!(text.contains("face: Side(North)"), "the new form");
+    let old = text
+        .replace("face: Side(North)", "side: North")
+        .replace("face: Side(East)", "side: East")
+        .replace("face: Side(South)", "side: South")
+        .replace("face: Side(West)", "side: West")
+        .replace(&format!("format_version: {}", cc_core::FORMAT_VERSION), "format_version: 36");
+    let (read, repairs) = cc_core::from_ron_with_repairs(&old).unwrap();
+    assert_eq!(repairs, 0);
+    assert_eq!(read.marker_faces(cc_core::ElementId(marker)).len(), 4);
+
+    let walls_mode = json!({"mode": {"Walls": {"distance": 1.0, "min_length": 0.3}}});
+    run(&mut s, "element_set", json!({"id": marker, "params": walls_mode}));
+    assert!(s.project().marker_faces(cc_core::ElementId(marker)).is_empty(), "the sides' views went");
 }

@@ -14,7 +14,7 @@ use crate::table::{readonly_row, row, section};
 use cc_core::interior::{Face, FaceMode, InteriorMarker, Side};
 use cc_core::{ElementId, ElementKind, LevelId, ViewId, ViewKind};
 use cc_engine::Ref;
-use cc_engine::commands::interior::{InteriorElevationModeSet, InteriorElevationSidesSet, InteriorElevationsCreate};
+use cc_engine::commands::interior::{InteriorElevationFacesSet, InteriorElevationModeSet, InteriorElevationsCreate};
 use cc_views::Drawing2D;
 use egui::{DragValue, Painter, Pos2, Response, Stroke, Ui};
 
@@ -26,6 +26,40 @@ fn side_label(side: Side) -> String {
         Side::South => "tpl-elev-south",
         Side::West => "tpl-elev-west",
     })
+}
+
+/// The label of the `index`th wall around a marker: *Wall A*, *Wall B*…
+/// (letters, so they are not taken for the numbers of the views).
+fn wall_label(index: usize) -> String {
+    let mut letters = String::new();
+    let mut n = index;
+    loop {
+        letters.insert(0, char::from(b'A' + (n % 26) as u8));
+        if n < 26 {
+            break;
+        }
+        n = n / 26 - 1;
+    }
+    format!("{} {letters}", t!("tool-wall"))
+}
+
+/// The walls marker `id` can show, found once per change of the document
+/// (the properties are drawn every frame).
+fn walls_of(ui: &Ui, state: &mut AppState, id: ElementId, level: LevelId, m: &InteriorMarker) -> Vec<Face> {
+    let key = egui::Id::new(("interior-walls", id.0));
+    let revision = state.session.doc.revision();
+    if let Some((rev, walls)) = ui.ctx().data(|d| d.get_temp::<(u64, Vec<Face>)>(key))
+        && rev == revision
+    {
+        return walls;
+    }
+    let phase = state.session.doc.creation_phase;
+    let walls: Vec<Face> = cc_views::interior::wall_faces(state.project(), state.session.geom(), level, m, phase)
+        .iter()
+        .map(|f| Face::Wall(f.wall))
+        .collect();
+    ui.ctx().data_mut(|d| d.insert_temp(key, (revision, walls.clone())));
+    walls
 }
 
 /// The name of a mode in lists.
@@ -188,15 +222,17 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, m: &InteriorMarke
             crate::actions::run_command(state, command);
             return;
         }
-        // The faces the marker can show, with the view of each shown one.
-        let available: Vec<(Face, String)> = match m.mode {
+        // The faces the marker can show, with the view of each shown one; then
+        // the walls it still shows that are no longer walls of its space.
+        let mut available: Vec<(Face, String)> = match m.mode {
             FaceMode::Directions => Side::ALL.into_iter().map(|s| (Face::Side(s), side_label(s))).collect(),
-            FaceMode::Walls { .. } => cc_views::interior::wall_faces(state.project(), state.session.geom(), level, &m)
-                .iter()
-                .enumerate()
-                .map(|(i, f)| (Face::Wall(f.wall), format!("{} {}", t!("tool-wall"), i + 1)))
-                .collect(),
+            FaceMode::Walls { .. } => {
+                walls_of(ui, state, id, level, &m).into_iter().enumerate().map(|(i, f)| (f, wall_label(i))).collect()
+            }
         };
+        let out: Vec<Face> =
+            faces.iter().map(|(f, ..)| *f).filter(|f| !available.iter().any(|(a, _)| a == f)).collect();
+        available.extend(out.into_iter().map(|f| (f, t!("interior-wall-out"))));
         let (mut toggled, mut open) = (None, None);
         for (face, label) in &available {
             let view = faces.iter().find(|(f, ..)| f == face).map(|(_, _, v)| *v);
@@ -226,9 +262,9 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, m: &InteriorMarke
                 })
                 .collect();
             let command = match m.mode {
-                FaceMode::Directions => InteriorElevationSidesSet { marker: id.0, sides: Some(sides), walls: None },
+                FaceMode::Directions => InteriorElevationFacesSet { marker: id.0, sides: Some(sides), walls: None },
                 FaceMode::Walls { .. } => {
-                    InteriorElevationSidesSet { marker: id.0, sides: None, walls: Some(wall_ids) }
+                    InteriorElevationFacesSet { marker: id.0, sides: None, walls: Some(wall_ids) }
                 }
             };
             crate::actions::run_command(state, command);

@@ -15,12 +15,16 @@ use cc_core::{
     Category, EditCtx, ElementId, ElementKind, ElementType, ElementTypeId, LevelId, Project, TypeData, View, ViewId,
     ViewKind,
 };
+use cc_views::interior::WallFace;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Default scale of an interior elevation (1:50).
 pub const DEFAULT_SCALE: u32 = 50;
+
+/// A face to show, with the face of the wall a wall's view looks at.
+type Shown = (Face, bool);
 
 /// The interior marker type a project gets with its first marker.
 fn new_marker_type(id: ElementTypeId) -> ElementType {
@@ -72,24 +76,28 @@ fn mode_of(code: Option<&str>, distance: Option<f64>, min_length: Option<f64>) -
     }
 }
 
-/// The walls `marker` (on `level`) can show, clockwise from north.
-fn walls_around(s: &mut Session, level: LevelId, marker: &InteriorMarker) -> Vec<ElementId> {
-    let project = s.project().clone();
-    cc_views::interior::wall_faces(&project, s.geometry(), level, marker).into_iter().map(|f| f.wall).collect()
+/// Every wall of the space around `marker` (on `level`), clockwise from
+/// north, in the phase elements are created in.
+fn space_walls(s: &mut Session, level: LevelId, marker: &InteriorMarker) -> Vec<WallFace> {
+    let phase = s.doc.creation_phase;
+    let (project, geom) = s.project_and_geometry();
+    cc_views::interior::space_walls(project, geom, level, marker, phase)
 }
 
-/// The faces to show of a marker that can show `available` walls: the
-/// `sides` named in directions mode (default all four), the `walls` named
-/// in walls mode (default all of them; each must be one of `available`).
+/// The faces to show of a marker in `mode` whose space has `walls`: the
+/// `sides` named in directions mode (default all four); in walls mode the
+/// walls named (default every wall long enough), each one a wall of the
+/// space long enough or one in `kept`, the walls the marker already shows.
 fn faces_of(
     mode: FaceMode,
     sides: Option<&[String]>,
-    walls: Option<&[u64]>,
-    available: &[ElementId],
-) -> Result<Vec<Face>> {
-    match mode {
+    ids: Option<&[u64]>,
+    walls: &[WallFace],
+    kept: &[Shown],
+) -> Result<Vec<Shown>> {
+    let min_length = match mode {
         FaceMode::Directions => {
-            if walls.is_some() {
+            if ids.is_some() {
                 return Err(EngineError::invalid("walls are picked in the walls mode; this marker shows sides"));
             }
             let sides = match sides {
@@ -97,24 +105,34 @@ fn faces_of(
                 None => Side::ALL.to_vec(),
             };
             // Clockwise from north, so numbers follow the sides around the marker.
-            Ok(Side::ALL.into_iter().filter(|s| sides.contains(s)).map(Face::Side).collect())
+            return Ok(Side::ALL.into_iter().filter(|s| sides.contains(s)).map(|s| (Face::Side(s), false)).collect());
         }
-        FaceMode::Walls { .. } => {
-            if sides.is_some() {
-                return Err(EngineError::invalid("sides are picked in the directions mode; this marker shows walls"));
+        FaceMode::Walls { min_length, .. } => min_length,
+    };
+    if sides.is_some() {
+        return Err(EngineError::invalid("sides are picked in the directions mode; this marker shows walls"));
+    }
+    let long = |w: &&WallFace| w.length + 1e-9 >= min_length;
+    let Some(ids) = ids else {
+        return Ok(walls.iter().filter(long).map(|w| (Face::Wall(w.wall), w.left)).collect());
+    };
+    // In the order around the marker, then the walls kept that are no longer of the space.
+    let mut out: Vec<Shown> =
+        walls.iter().filter(long).filter(|w| ids.contains(&w.wall.0)).map(|w| (Face::Wall(w.wall), w.left)).collect();
+    for id in ids {
+        if out.iter().any(|(f, _)| *f == Face::Wall(ElementId(*id))) {
+            continue;
+        }
+        match kept.iter().find(|(f, _)| *f == Face::Wall(ElementId(*id))) {
+            Some(shown) => out.push(*shown),
+            None => {
+                return Err(EngineError::invalid(format!(
+                    "element {id} is not a wall of the marker's space long enough to show"
+                )));
             }
-            let Some(ids) = walls else { return Ok(available.iter().copied().map(Face::Wall).collect()) };
-            for id in ids {
-                if !available.iter().any(|w| w.0 == *id) {
-                    return Err(EngineError::invalid(format!(
-                        "element {id} is not a wall of the marker's space long enough to show"
-                    )));
-                }
-            }
-            // In the order around the marker.
-            Ok(available.iter().copied().filter(|w| ids.contains(&w.0)).map(Face::Wall).collect())
         }
     }
+    Ok(out)
 }
 
 /// The name of view number `number` of a marker: the room's name and the
@@ -130,10 +148,30 @@ fn view_name(p: &Project, room: Option<ElementId>, number: u32) -> String {
     }
 }
 
+/// The faces marker `marker` shows, each with the face of its wall.
+fn shown(p: &Project, marker: ElementId) -> Vec<Shown> {
+    p.marker_faces(marker)
+        .into_iter()
+        .filter_map(|(face, _, view)| match p.view(view).map(|v| &v.kind) {
+            Some(ViewKind::InteriorElevation { left, .. }) => Some((face, *left)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The views of marker `marker` whose face is not among `faces`.
+fn views_but(p: &Project, marker: ElementId, faces: &[Shown]) -> Vec<ViewId> {
+    p.marker_faces(marker)
+        .into_iter()
+        .filter(|(face, ..)| !faces.iter().any(|(f, _)| f == face))
+        .map(|(.., v)| v)
+        .collect()
+}
+
 /// Add the views of `faces` (in the order to number them) to marker
 /// `marker`; those it has are kept. Numbers are the lowest free ones.
 /// Returns the new views.
-fn add_faces(e: &mut EditCtx, marker: ElementId, faces: &[Face]) -> Vec<ViewId> {
+fn add_faces(e: &mut EditCtx, marker: ElementId, faces: &[Shown]) -> Vec<ViewId> {
     let p = e.project();
     let Some(ElementKind::InteriorMarker(m)) = p.element(marker).map(|el| el.kind.clone()) else {
         return Vec::new();
@@ -141,15 +179,15 @@ fn add_faces(e: &mut EditCtx, marker: ElementId, faces: &[Face]) -> Vec<ViewId> 
     let have = p.marker_faces(marker);
     let mut taken: Vec<u32> = have.iter().map(|(_, n, _)| *n).collect();
     let mut made = Vec::new();
-    for face in faces.iter().copied().filter(|f| m.takes(*f)) {
+    for (face, left) in faces.iter().copied().filter(|(f, _)| m.takes(*f)) {
         if have.iter().any(|(f, ..)| *f == face) {
             continue;
         }
-        let Some((origin, look)) = e.project().interior_frame(&m, face) else { continue };
+        let Some((origin, look)) = e.project().interior_frame(&m, face, left) else { continue };
         let number = next_number(&taken);
         taken.push(number);
         let name = view_name(e.project(), m.room, number);
-        let kind = ViewKind::InteriorElevation { marker, face, number, origin, look, auto_extents: true };
+        let kind = ViewKind::InteriorElevation { marker, face, left, number, origin, look, auto_extents: true };
         let id = ViewId(e.alloc_id());
         made.push(e.add_view(View::new(id, name, DEFAULT_SCALE, kind)));
     }
@@ -193,14 +231,14 @@ fn marker_of(p: &Project, id: u64) -> Result<(ElementId, LevelId, InteriorMarker
 /// mode (the default) the faces are up to four sides at right angles:
 /// each view looks from the marker at the wall on that side, through the
 /// whole space. In the `walls` mode there is a view per wall of the space
-/// with at least `min_length` along it: each looks square on at its wall
-/// from `distance` in front of it (from the marker, when it stands nearer),
-/// showing that wall's stretch of the space. Every view is cropped across
-/// to what it shows and from the level to the ceiling or what covers the
-/// space above (else the room's height, else the level above), and follows
-/// the walls, the marker and the room as they change. Views are named
-/// after the room and numbered clockwise from north ("Kitchen 1",
-/// "Kitchen 2"…), at 1:50.
+/// with at least `min_length` along it: each looks square on at the face
+/// of its wall that bounds the space, from `distance` in front of it (from
+/// the marker, when it stands nearer), showing that wall's stretch of the
+/// space. Every view is cropped across to what it shows and from the level
+/// to the ceiling or what covers the space above (else the room's height,
+/// else the level above), and follows the walls, the marker and the room
+/// as they change. Views are named after the room and numbered clockwise
+/// from north ("Kitchen 1", "Kitchen 2"…), at 1:50.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct InteriorElevationsCreate {
@@ -261,13 +299,13 @@ impl Command for InteriorElevationsCreate {
         if !marker.is_valid() {
             return Err(EngineError::invalid("the position is out of bounds"));
         }
-        let project = s.project().clone();
         let phase = s.doc.creation_phase;
-        if s.geometry().room_at(&project, level, position, phase).is_none() {
+        let (project, geom) = s.project_and_geometry();
+        if geom.room_at(project, level, position, phase).is_none() {
             return Err(EngineError::rejected("no walls close a space around the marker"));
         }
-        let available = if mode.is_directions() { Vec::new() } else { walls_around(s, level, &marker) };
-        let faces = faces_of(mode, self.sides.as_deref(), self.walls.as_deref(), &available)?;
+        let walls = if mode.is_directions() { Vec::new() } else { space_walls(s, level, &marker) };
+        let faces = faces_of(mode, self.sides.as_deref(), self.walls.as_deref(), &walls, &[])?;
         if faces.is_empty() {
             return Err(EngineError::invalid(if mode.is_directions() {
                 "give at least one side"
@@ -296,11 +334,12 @@ impl Command for InteriorElevationsCreate {
 /// Set the faces an interior elevation marker shows: `sides` for a marker
 /// in the directions mode, `walls` (ids) for one in the walls mode. Views
 /// are made for the faces added (numbered with the lowest numbers free) and
-/// deleted, with their viewports on sheets, for the faces left out. One
-/// undo step.
+/// deleted, with their viewports on sheets, for the faces left out. A wall
+/// the marker already shows may stay in the list after it stopped bounding
+/// the space. One undo step.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
-pub struct InteriorElevationSidesSet {
+pub struct InteriorElevationFacesSet {
     /// Marker id.
     pub marker: u64,
     /// Directions mode: the sides to show, `north`, `east`, `south`, `west` (at least one).
@@ -308,31 +347,26 @@ pub struct InteriorElevationSidesSet {
     pub sides: Option<Vec<String>>,
     /// Walls mode: the ids of the walls to show (at least one), among the
     /// walls of the marker's space long enough (see `element_get`'s
-    /// `derived.walls`).
+    /// `derived.walls`) and those it shows already.
     #[serde(default)]
     pub walls: Option<Vec<u64>>,
 }
 
-impl Command for InteriorElevationSidesSet {
-    const NAME: &'static str = "interior_elevation_sides_set";
+impl Command for InteriorElevationFacesSet {
+    const NAME: &'static str = "interior_elevation_faces_set";
     const KIND: CommandKind = CommandKind::Edit;
     fn run(self, s: &mut Session) -> Result<Value> {
         let (marker, level, m) = marker_of(s.project(), self.marker)?;
         if self.sides.is_none() && self.walls.is_none() {
             return Err(EngineError::invalid("give sides (directions mode) or walls (walls mode)"));
         }
-        let available = if m.mode.is_directions() { Vec::new() } else { walls_around(s, level, &m) };
-        let faces = faces_of(m.mode, self.sides.as_deref(), self.walls.as_deref(), &available)?;
+        let walls = if m.mode.is_directions() { Vec::new() } else { space_walls(s, level, &m) };
+        let kept = shown(s.project(), marker);
+        let faces = faces_of(m.mode, self.sides.as_deref(), self.walls.as_deref(), &walls, &kept)?;
         if faces.is_empty() {
             return Err(EngineError::invalid("give at least one face (delete the marker to remove them all)"));
         }
-        let gone: Vec<ViewId> = s
-            .project()
-            .marker_faces(marker)
-            .into_iter()
-            .filter(|(face, ..)| !faces.contains(face))
-            .map(|(.., v)| v)
-            .collect();
+        let gone = views_but(s.project(), marker, &faces);
         edit(s, t!("tx-interior-elevation-sides"), |e| {
             for view in gone {
                 e.remove_view(view);
@@ -350,8 +384,9 @@ impl Command for InteriorElevationSidesSet {
 /// `distance` and `min_length`). Changing the mode deletes the marker's
 /// views and makes those of every face of the new mode. In the walls mode,
 /// a new `distance` moves where its views are cut and a new `min_length`
-/// deletes the views of walls now too short (walls it lets in are added
-/// with `interior_elevation_sides_set`). One undo step.
+/// deletes the views of walls of the space now too short (walls it lets in
+/// are added with `interior_elevation_faces_set`); it is refused when no
+/// view would be left. One undo step.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct InteriorElevationModeSet {
@@ -382,26 +417,31 @@ impl Command for InteriorElevationModeSet {
             _ => (self.distance, self.min_length),
         };
         let mode = mode_of(Some(&self.mode), distance, min_length)?;
+        if mode == old.mode {
+            let p = s.project();
+            return Ok(json!({ "marker": marker.0, "views": faces_json(p, marker) }));
+        }
         let changed = old.mode.is_directions() != mode.is_directions();
         let new = InteriorMarker { mode, ..old };
-        let available = if mode.is_directions() { Vec::new() } else { walls_around(s, level, &new) };
-        // A new mode shows all its faces; the same one keeps those still there.
-        let faces: Vec<Face> = if changed {
-            faces_of(mode, None, None, &available)?
+        let walls = if mode.is_directions() { Vec::new() } else { space_walls(s, level, &new) };
+        let faces: Vec<Shown> = if changed {
+            // A new mode shows all its faces.
+            faces_of(mode, None, None, &walls, &[])?
         } else {
-            let all = faces_of(mode, None, None, &available)?;
-            s.project().marker_faces(marker).into_iter().map(|(f, ..)| f).filter(|f| all.contains(f)).collect()
+            // The same mode keeps its views, but those of walls of the space
+            // now too short; walls no longer of the space keep theirs.
+            let min_length = cc_views::interior::min_length(&new);
+            let short = |face: &Face| walls.iter().any(|w| Face::Wall(w.wall) == *face && w.length + 1e-9 < min_length);
+            shown(s.project(), marker).into_iter().filter(|(face, _)| !short(face)).collect()
         };
-        if changed && faces.is_empty() {
-            return Err(EngineError::rejected("no wall of the space is long enough to show"));
+        if faces.is_empty() {
+            return Err(EngineError::rejected(if changed {
+                "no wall of the space is long enough to show"
+            } else {
+                "no view would be left: every wall shown is shorter than that"
+            }));
         }
-        let gone: Vec<ViewId> = s
-            .project()
-            .marker_faces(marker)
-            .into_iter()
-            .filter(|(face, ..)| !faces.contains(face))
-            .map(|(.., v)| v)
-            .collect();
+        let gone = views_but(s.project(), marker, &faces);
         edit(s, t!("tx-interior-elevation-mode"), |e| {
             for view in gone {
                 e.remove_view(view);

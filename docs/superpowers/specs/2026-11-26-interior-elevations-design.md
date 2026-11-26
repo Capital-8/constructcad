@@ -57,9 +57,9 @@ side walls and from the floor to the room's height.
   around is the boundary of walls (and room separation lines) around its
   position, found as rooms find theirs, so it works with or without a
   room element.
-  - `FaceMode::Directions { rotation }`: up to four faces at right angles
+  - `FaceMode::Directions`: up to four faces at right angles
     (north, east, south and west of the marker), one arrow each. The
-    marker turns as a whole (`rotation`, degrees) to face slanted walls.
+    marker turns as a whole (its `rotation_deg`) to face slanted walls.
     An L-shaped space still has the four: each view takes the space's
     extent in that direction. The cut plane of each view passes through
     the marker.
@@ -72,7 +72,7 @@ side walls and from the floor to the room's height.
     stands against it. A curved wall is one face, its view on the chord.
 - **`ViewKind::InteriorElevation { marker: ElementId, face: Face }`**,
   browser category *Elevations* (a subgroup *Interior*), where
-  `Face::Direction(Direction)` or `Face::Wall(ElementId)`. A wall face
+  `Face::Side(Side)` or `Face::Wall(ElementId)`. A wall face
   keeps the wall's id, not an edge index, so it survives other edits; if
   the wall no longer bounds the room the view says so and draws nothing
   until the wall is back or the face is removed.
@@ -107,7 +107,7 @@ side walls and from the floor to the room's height.
   `room`) and a view per face picked (default: all four directions), one
   undo step; returns the marker and the views. Refused where no walls
   close a space around the position.
-- `interior_elevation_faces_set { marker, faces }`: the faces shown; adds
+- `interior_elevation_faces_set { marker, sides | walls }`: the faces shown; adds
   the views of new faces and deletes those of faces taken away (their
   sheets' viewports go with them, as when a view is deleted).
 - `element_get` of a marker lists its available faces and the view of
@@ -141,7 +141,8 @@ side walls and from the floor to the room's height.
    north as seen from the marker, the marker drawing an arrow in front of
    each wall pointing at it, `interior_elevation_mode_set`. Tests: short
    walls left out; the cut plane never behind the marker; a deleted wall
-   takes its view.
+   takes its view; a wall of a re-entrant corner seen from inside; a
+   round room; a wall out of the space keeps its view; a format 36 file.
 4. **Finishing touches.** The floor and ceiling lines of the space, a view
    template for interior elevations in the project templates, and the
    views in schedules of views and sheets.
@@ -166,8 +167,19 @@ Following what desktop BIM tools commonly do (2026-11-26):
   of never past the middle of the space. The view's origin and direction
   must be worked out from the model alone (the marker, the wall's line
   and its type's faces) so the view's projection needs no derived
-  geometry, and the middle of the space is derived geometry. With the
-  marker in the middle of the space, as it is placed, the two rules agree.
+  geometry, and the middle of the space is derived geometry. The two
+  rules agree for a marker in the middle of its space; one placed off the
+  middle (the tool puts it where the plan is clicked) may be cut past the
+  middle by a view of a wall farther than `distance` from it, which then
+  shows more of the space in front of that wall.
+- **Which face of a wall** (stage 3): the one that bounds the space, found
+  from the boundary when the view is made and kept on the view (`left`),
+  not the one on the marker's side of the wall's line: in an L-shaped
+  space the two differ for the wall of the re-entrant corner. A wall that
+  bounds the space on both faces (a fin standing into it) shows the face
+  with more of it along the space.
+- **A view with nothing to show** draws a line of text saying why: no
+  walls close a space around the marker, or its wall no longer bounds it.
 - **A wall deleted**: its view goes with it (undo brings both back). A
   wall that only stops bounding the space keeps its view, empty until it
   bounds it again or its face is taken away.

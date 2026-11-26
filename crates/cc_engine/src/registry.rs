@@ -309,7 +309,7 @@ registry![
         sweep::SweepProfileSet,
         shaft::ShaftCreate,
         interior::InteriorElevationsCreate,
-        interior::InteriorElevationSidesSet,
+        interior::InteriorElevationFacesSet,
         interior::InteriorElevationModeSet,
         shaft::ShaftTypeCreate,
         topography::TopographyCreate,

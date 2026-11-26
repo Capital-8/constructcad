@@ -9226,7 +9226,7 @@ fn the_interior_elevation_tool_makes_a_view_per_wall() {
         crate::properties::show(ui, state);
     });
     props.run();
-    let first = format!("{} 1", t!("tool-wall"));
+    let first = format!("{} A", t!("tool-wall"));
     props.get_by_role_and_label(Role::CheckBox, &first).click();
     props.run();
     assert_eq!(props.state().project().marker_faces(marker).len(), before - 1, "{}", props.state().message);

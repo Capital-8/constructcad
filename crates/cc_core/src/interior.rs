@@ -59,10 +59,34 @@ impl FaceMode {
 }
 
 /// What a view of a marker shows: a side of the marker, or a wall.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum Face {
     Side(Side),
     Wall(ElementId),
+}
+
+/// Files of format 36 wrote the side alone (`side: North`); those read as
+/// that side's face.
+impl<'de> Deserialize<'de> for Face {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        enum Written {
+            Side(Side),
+            Wall(ElementId),
+            North,
+            East,
+            South,
+            West,
+        }
+        Ok(match Written::deserialize(deserializer)? {
+            Written::Side(side) => Face::Side(side),
+            Written::Wall(wall) => Face::Wall(wall),
+            Written::North => Face::Side(Side::North),
+            Written::East => Face::Side(Side::East),
+            Written::South => Face::Side(Side::South),
+            Written::West => Face::Side(Side::West),
+        })
+    }
 }
 
 /// A marker of interior elevations in a plan.
@@ -173,12 +197,13 @@ impl Project {
 
     /// Where a view of `face` of `marker` looks from, and the unit
     /// direction it looks along. A side: from the marker, along the side. A
-    /// wall: square on to the wall (its chord, when curved), from the
-    /// marker's foot on a plane the mode's `distance` in front of the wall's
-    /// face on the marker's side, or through the marker when it stands
-    /// nearer than that. `None` when the wall is gone, has no length or the
-    /// marker stands in it.
-    pub fn interior_frame(&self, marker: &InteriorMarker, face: Face) -> Option<(DVec2, DVec2)> {
+    /// wall: square on to the face it shows (`left`: the face to the left of
+    /// the wall's line from start to end, else the right one; the chord's,
+    /// when curved), from the marker's foot on a plane the mode's `distance`
+    /// in front of that face. The plane passes through the marker instead
+    /// when it stands in front of the wall but nearer than that. `None`
+    /// when the wall is gone or has no length.
+    pub fn interior_frame(&self, marker: &InteriorMarker, face: Face, left: bool) -> Option<(DVec2, DVec2)> {
         let wall = match face {
             Face::Side(side) => return Some((marker.position, marker.look(side))),
             Face::Wall(id) => id,
@@ -186,25 +211,37 @@ impl Project {
         let e = self.element(wall)?;
         let w = e.as_wall()?;
         let dir = (w.end - w.start).try_normalize()?;
-        let left = dir.perp();
-        // Signed distances to the left of the chord: the marker, the faces and the wall's middle.
-        let at = (marker.position - w.start).dot(left);
+        // Towards the viewer: the side of the chord the face shown is on.
+        let out = if left { dir.perp() } else { -dir.perp() };
         let (face_left, face_right) = self.wall_faces(e.type_id, w.location_line);
-        let bow = (w.at(w.length() * 0.5, 0.0) - w.start).dot(left);
-        let (look, clear) = if at > face_left + bow.max(0.0) {
-            (-left, at - face_left - bow.max(0.0))
-        } else if at < face_right + bow.min(0.0) {
-            (left, face_right + bow.min(0.0) - at)
-        } else {
-            return None;
-        };
+        // Distances towards the viewer from the chord: the marker, the face
+        // at the chord, and how far the wall's middle bows.
+        let at = (marker.position - w.start).dot(out);
+        let face = if left { face_left } else { -face_right };
+        let bow = (w.at(w.length() * 0.5, 0.0) - w.start).dot(out);
+        // The face's nearest and farthest points, towards the viewer.
+        let (front, deep) = (face + bow.max(0.0), face + bow.min(0.0));
         let distance = match marker.mode {
             FaceMode::Walls { distance, .. } => distance,
             FaceMode::Directions => DEFAULT_DISTANCE,
-        };
-        let back = (clear - distance.clamp(0.0, MAX_DISTANCE)).max(0.0);
-        let origin = marker.position + look * back;
+        }
+        .clamp(0.0, MAX_DISTANCE);
+        // Where the cut plane stands: `distance` in front of the face, or
+        // through a marker that stands in front of the wall nearer than that.
+        let plane = if at > deep && at < front + distance { at } else { front + distance };
+        let origin = marker.position + out * (plane - at);
+        let look = -out;
         (origin.is_finite() && look.is_finite()).then_some((origin, look))
+    }
+
+    /// Whether `point`, on a face of wall `wall`, is on its left face (the
+    /// one to the left of its line from start to end) rather than its right.
+    pub fn wall_face_is_left(&self, wall: ElementId, point: DVec2) -> Option<bool> {
+        let e = self.element(wall)?;
+        let w = e.as_wall()?;
+        let (_, across) = w.project(point);
+        let (face_left, face_right) = self.wall_faces(e.type_id, w.location_line);
+        across.is_finite().then_some((across - face_left).abs() <= (across - face_right).abs())
     }
 
     /// Repair interior elevations: drop views whose marker is gone (or is
@@ -257,8 +294,8 @@ impl Project {
             .views
             .values()
             .filter_map(|v| match &v.kind {
-                ViewKind::InteriorElevation { marker, face, .. } => {
-                    Some((v.id, markers.get(marker).and_then(|m| self.interior_frame(m, *face))))
+                ViewKind::InteriorElevation { marker, face, left, .. } => {
+                    Some((v.id, markers.get(marker).and_then(|m| self.interior_frame(m, *face, *left))))
                 }
                 _ => None,
             })

@@ -17,7 +17,9 @@ use std::path::Path;
 /// `fitting_placements`), which older builds cannot read or would drop.
 /// 36: interior elevations (`ElementKind::InteriorMarker`,
 /// `ViewKind::InteriorElevation`), which older builds cannot read.
-pub const FORMAT_VERSION: u32 = 36;
+/// 37: interior elevations of walls (`interior::Face`, `FaceMode`); files
+/// of format 36 wrote a view's side alone and still read.
+pub const FORMAT_VERSION: u32 = 37;
 
 /// Largest project file read, bytes (pictures and textures are kept in it).
 pub const MAX_FILE_BYTES: u64 = 1 << 30;

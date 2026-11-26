@@ -239,8 +239,9 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
     // The walls an interior elevation marker can show, clockwise from north.
     let marker_walls = match &e.kind {
         ElementKind::InteriorMarker(m) => {
+            let phase = s.doc.creation_phase;
             let (p, g) = s.project_and_geometry();
-            let faces = cc_views::interior::wall_faces(p, g, e.level, m);
+            let faces = cc_views::interior::wall_faces(p, g, e.level, m, phase);
             Some(json!(faces.iter().map(|f| json!({ "wall": f.wall.0, "length": f.length })).collect::<Vec<_>>()))
         }
         _ => None,
