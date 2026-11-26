@@ -707,8 +707,11 @@ impl Command for ElementOffset {
 /// changes). Alignment is in plan, so the elements may be on different
 /// levels (a column above onto the face of the column below). With `view`
 /// an elevation or a section, the picks are points of that view and the
-/// lines its vertical lines (a wall's face cut, a beam's side): the element
-/// moves across the view until its line lies on the reference's.
+/// lines those drawn there: by vertical lines (a wall's face cut, a beam's
+/// side) the element moves across the view until its line lies on the
+/// reference's; by horizontal lines (a beam's underside, a wall's top) a
+/// wall's or column's top or bottom, whichever is picked, rises or drops
+/// onto the reference's line, and other elements move up or down whole.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementAlign {
@@ -864,10 +867,63 @@ fn upright(a: DVec2, b: DVec2) -> bool {
     d.y.abs() > 1e-12 && (d.x / d.y).abs() < 2e-4
 }
 
-/// Align in an elevation or a section: the vertical line of `id` nearest to
-/// its pick moves across the view onto the vertical line of the reference
-/// nearest to its pick, which moves the element in plan along the view's
-/// horizontal axis.
+/// Whether a line of a view runs across it (within a hundredth of a degree).
+fn level(a: DVec2, b: DVec2) -> bool {
+    upright(DVec2::new(a.y, a.x), DVec2::new(b.y, b.x))
+}
+
+/// The thinnest an element is left by aligning its top or bottom, meters.
+const MIN_ALIGNED_HEIGHT: f64 = 0.01;
+
+/// `kind` with its top (or bottom) raised by `dz`: walls and columns
+/// stretch (their other end stays), other elements move up or down whole.
+/// `None` for what has no height to change this way (a wall with a profile,
+/// the top of a wall attached to a roof).
+fn raised(kind: &ElementKind, top: bool, dz: f64) -> Option<ElementKind> {
+    use cc_core::WallTop;
+    let stretch = |base_offset: &mut f64, height: &mut f64, wall_top: &mut WallTop| {
+        if top {
+            match wall_top {
+                WallTop::Unconnected => *height += dz,
+                WallTop::Level { offset, .. } => *offset += dz,
+            }
+        } else {
+            *base_offset += dz;
+            if *wall_top == WallTop::Unconnected {
+                *height -= dz;
+            }
+        }
+    };
+    let mut kind = kind.clone();
+    match &mut kind {
+        ElementKind::Wall(w) => {
+            if w.profile.is_some() || (top && w.attach_top.is_some()) {
+                return None;
+            }
+            stretch(&mut w.base_offset, &mut w.height, &mut w.top);
+        }
+        ElementKind::Column(c) => stretch(&mut c.base_offset, &mut c.height, &mut c.top),
+        ElementKind::Beam(b) => {
+            b.top_offset += dz;
+            if let Some(end) = &mut b.end_offset {
+                *end += dz;
+            }
+        }
+        ElementKind::Floor(f) => f.height_offset += dz,
+        ElementKind::Ceiling(c) => c.height_offset += dz,
+        ElementKind::Roof(r) => r.base_offset += dz,
+        ElementKind::Foundation(f) => f.top_offset += dz,
+        ElementKind::Component(c) => c.base_offset += dz,
+        _ => return None,
+    }
+    Some(kind)
+}
+
+/// Align in an elevation or a section: the line of `id` nearest to its pick
+/// goes onto the line of the reference nearest to its pick. Vertical lines
+/// move the element in plan along the view's horizontal axis; horizontal
+/// ones raise or lower it ([`raised`]: the top or the bottom picked, of a
+/// wall or a column).
 fn align_in_view(
     s: &mut Session,
     view: cc_core::ViewId,
@@ -882,6 +938,9 @@ fn align_in_view(
     };
     let (m0, m1) = line(id, pick)?;
     let (r0, r1) = line(reference, reference_pick)?;
+    if level(m0, m1) && level(r0, r1) {
+        return align_height(s, frame, id, (m0, m1), (r0, r1));
+    }
     if !upright(m0, m1) || !upright(r0, r1) {
         return Err(EngineError::rejected(t!("msg-align-view-vertical")));
     }
@@ -897,6 +956,45 @@ fn align_in_view(
     let t = PlanTransform::translate(right * (dx / right.length_squared()));
     edit(s, t!("tx-align"), |e| {
         e.transform_elements(&[id], &t);
+        Ok(())
+    })?;
+    Ok(super::created(s, id))
+}
+
+/// Align the horizontal line `moved` of `id` onto the horizontal line
+/// `onto`, both of a view through `frame`: the element's top or bottom,
+/// whichever the line is nearer to, rises or drops by the difference.
+fn align_height(
+    s: &mut Session,
+    frame: &cc_views::Frame,
+    id: ElementId,
+    moved: (DVec2, DVec2),
+    onto: (DVec2, DVec2),
+) -> Result<Value> {
+    let z = |(a, b): (DVec2, DVec2)| frame.unproject((a + b) * 0.5, 0.0).z;
+    let dz = z(onto) - z(moved);
+    if !dz.is_finite() || frame.up.z < 1.0 - 1e-9 {
+        return Err(EngineError::rejected(t!("msg-align-view-vertical")));
+    }
+    if dz.abs() < 1e-12 {
+        return Ok(super::created(s, id));
+    }
+    let bounds =
+        s.geometry().solids_of(id).filter_map(|solid| solid.bounds()).reduce(|(a, b), (c, d)| (a.min(c), b.max(d)));
+    let (lo, hi) = bounds.ok_or_else(|| EngineError::invalid(format!("element {} has no body to align by", id.0)))?;
+    let at = z(moved);
+    let top = (at - hi.z).abs() <= (at - lo.z).abs();
+    let element = s.project().element(id).ok_or_else(|| EngineError::not_found("element"))?;
+    let kind = raised(&element.kind, top, dz).ok_or_else(|| EngineError::rejected(t!("msg-align-view-height")))?;
+    // Walls and columns stretch: they must keep some height.
+    let stretches = matches!(kind, ElementKind::Wall(_) | ElementKind::Column(_));
+    let (bottom, top_z) = if top { (lo.z, hi.z + dz) } else { (lo.z + dz, hi.z) };
+    if stretches && top_z - bottom < MIN_ALIGNED_HEIGHT {
+        return Err(EngineError::rejected(t!("msg-align-view-too-low")));
+    }
+    edit(s, t!("tx-align"), |e| {
+        let x = e.element_mut(id).ok_or_else(|| EngineError::not_found("element"))?;
+        x.kind = kind;
         Ok(())
     })?;
     Ok(super::created(s, id))
