@@ -1350,12 +1350,12 @@ fn slabs_join_their_supports_and_the_analytical_model() {
     // Running it again joins nothing new.
     assert_eq!(run(&mut s, "slab_join_supports", json!({}))["joined"], json!([]));
 
-    // The analytical model: the beam between the column axes, splitting both columns.
+    // The analytical model: the beam between the column axes, where both columns end.
     let m = run(&mut s, "analytical_model", json!({}));
     let members = m["members"].as_array().unwrap();
     let of = |id: u64| members.iter().filter(|x| x["element"] == json!(id)).count();
     assert_eq!(of(beam), 1);
-    assert_eq!(members.iter().filter(|x| x["kind"] == json!("column")).count(), 4, "{m}");
+    assert_eq!(members.iter().filter(|x| x["kind"] == json!("column")).count(), 2, "{m}");
     let node = |i: &Value| m["nodes"][i.as_u64().unwrap() as usize].clone();
     let main = members.iter().find(|x| x["element"] == json!(beam)).unwrap();
     assert_eq!((node(&main["start"])["x"].clone(), node(&main["end"])["x"].clone()), (json!(0.0), json!(6.0)));

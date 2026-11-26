@@ -1647,6 +1647,7 @@ mod tests {
                 height: 3.0,
                 top: cc_core::WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             e.add_element(element(col, column_t, ElementKind::Column(column)));
             let id = ElementId(e.alloc_id());
@@ -1774,6 +1775,7 @@ mod tests {
                 height: 3.0,
                 top: Default::default(),
                 structural,
+                base_support: Default::default(),
             });
             e.add_element(element(c, column_t, kind));
             if joined {

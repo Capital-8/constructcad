@@ -362,6 +362,8 @@ A ferramenta *Viga* tem dois modos na barra de opções, como a de parede: *Linh
 
 ## Seções de pilares e sua armadura
 
+Um pilar estrutural (a caixa *Estrutural* nas propriedades) tem a linha *Apoio na base* na mesma seção: *Engaste* (o padrão) ou *Articulado*. É o apoio que o modelo analítico e a sua exportação dão à base do pilar: o engaste restringe as translações e as rotações, o articulado só as translações.
+
 A seção de um tipo de pilar é um perfil estrutural. Além das formas padrão, o Gerenciador de Perfis (*Gerenciar → Perfis*) tem o *Setor anular*: o trecho de um anel entre um raio interno e um raio externo que gira um ângulo, como os pilares que continuam uma parede cilíndrica (raio interno 0 dá um setor circular). A seção é desenhada simétrica em relação ao eixo vertical, com a face externa para cima, e posicionada pelo meio da sua caixa envolvente; gire cada pilar do círculo pela sua rotação. A área e o volume do pilar são os do anel, não os das cordas com que ele é desenhado. Pilares em L, T, U e outros polígonos são perfis desenhados (um perfil novo da forma *Esboço*).
 
 `rebar_create` (paleta de comandos) arma um pilar de qualquer seção:

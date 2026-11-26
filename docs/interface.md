@@ -362,6 +362,8 @@ The *Beam* tool has two modes in the options bar, as the wall tool has: *Line* d
 
 ## Column sections and their reinforcement
 
+A structural column (the *Structural* checkbox of its properties) has a *Base support* row in the same section: *Fixed* (the default) or *Pinned*. It is the support the analytical model and its export give the column's base: fixed holds the translations and rotations, pinned only the translations.
+
 A column type's section is a structural profile. Besides the standard shapes, the Profile Manager (*Manage → Profiles*) has *Annular sector*: the piece of a ring between an inner radius and an outer radius turning by an angle, as the columns that continue a cylindrical wall have (an inner radius of 0 makes a circular sector). The section is drawn symmetric about its vertical axis with the outer face up, and placed by the middle of its bounding box; turn each column on the circle with its rotation. Its area and the column's volume are the ring's, not those of the chords it is drawn with. L, T, U and other polygonal columns are sketched profiles (a new profile of the *Sketch* shape).
 
 `rebar_create` (command palette) reinforces a column of any section:
