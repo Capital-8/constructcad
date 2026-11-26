@@ -70,6 +70,8 @@ Com uma folha como vista ativa, um grupo *Carimbo* traz *Editar carimbo*. Esses 
 
 Com a ferramenta Selecionar, o **clique direito** numa vista 2D ou 3D abre um menu. Sobre um elemento, ele o seleciona antes, a menos que já esteja selecionado; o menu oferece então *Selecionar todas as instâncias*, *Criar semelhante*, *Editar tipo…*, os mesmos comandos da categoria que a aba Modificar mostra, ocultar, isolar e sobrepor gráficos, e *Recortar*, *Copiar* e *Excluir*. Sem nada selecionado, ele oferece *Colar*, *Zoom para ajustar*, *Visibilidade/gráficos* e redefinir a ocultação temporária. Cada item mostra seu atalho; um que não pode rodar fica cinza, com o motivo ao passar o mouse. Arrastar com o botão direito continua girando a vista 3D, e o clique direito em etiquetas, rótulos de conexões e cabeças de nível mantém os menus próprios.
 
+Com qualquer outra ferramenta ativa (Parede, Porta, Janela, Mover…), o clique direito abre um menu curto: *Cancelar* sai da ferramenta como apertar Esc até voltar à ferramenta Selecionar faria (o que está sendo desenhado é descartado, uma parede em spline termina onde está), e *Zoom para ajustar*. Numa cadeia de cotas, o clique direito também encerra a cadeia.
+
 ## Ícones e selos
 
 Os ícones têm dois tons: os traços na cor do texto e os preenchimentos suaves no tom de destaque do tema. Um pequeno selo no canto inferior direito indica o tipo de ação do comando:

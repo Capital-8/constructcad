@@ -704,6 +704,8 @@ pub struct Interaction {
     pub level_menu: Option<(ViewId, LevelId)>,
     /// The view whose right-click menu of the selection (or of the view) is open (see [`crate::context_menu`]).
     pub element_menu: Option<ViewId>,
+    /// The view whose right-click menu of the active tool is open (see [`crate::context_menu::tool`]).
+    pub tool_menu: Option<ViewId>,
     /// Tab cycling the Select tool's pre-selection (issue #406).
     pub tab: crate::preselect::TabCycle,
 }

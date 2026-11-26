@@ -70,6 +70,8 @@ With a sheet as the active view, a *Title Block* group holds *Edit Title Block*.
 
 With the Select tool, a **right click** in a 2D or 3D view opens a menu. On an element it selects it first, unless it is already selected; the menu then offers *Select All Instances*, *Create Similar*, *Edit Type…*, the same category commands as the Modify tab, hiding, isolating and overriding graphics, and *Cut*, *Copy* and *Delete*. With nothing selected it offers *Paste*, *Zoom to Fit*, *Visibility/Graphics* and resetting temporary hiding. Each entry shows its shortcut; one that cannot run is greyed, with its reason on hover. A right drag still pans in 3D views; right clicks on tags, fitting labels and level heads keep their own menus.
 
+With any other tool active (Wall, Door, Window, Move…), a right click opens a short menu: *Cancel* leaves the tool as pressing Esc until the Select tool is back would (what is being drawn is dropped, a spline wall is ended where it is), and *Zoom to Fit*. In a chain of dimensions a right click also ends the chain.
+
 ## Icons and badges
 
 Icons are drawn in two tones: the strokes in the text color and the soft fills in the theme's accent tint. A small badge in the bottom-right corner marks what kind of action a command is:

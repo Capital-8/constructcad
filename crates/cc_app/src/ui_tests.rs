@@ -8770,6 +8770,63 @@ fn modify_shows_the_selected_category_commands() {
 
 /// A right click on a wall in a plan selects it and opens its menu, which
 /// holds the wall's commands; picking Flip flips it as one undo step.
+/// A right click while a tool is active opens a menu whose *Cancel* ends
+/// the tool as Esc does (issue #486): the wall begun is dropped and the
+/// Select tool is back.
+#[test]
+fn right_click_menu_cancels_the_active_tool() {
+    let mut state = sample_state();
+    let plan = state.project().views.values().find(|v| v.is_plan()).map(|v| v.id).unwrap();
+    state.active_view = Some(plan);
+    let wall_type = state.project().default_type(cc_core::Category::Wall).unwrap();
+    state.set_tool(crate::tools::Tool::Wall { type_id: wall_type });
+    let walls = state.project().walls().count();
+    let depth = state.session.doc.undo_depth();
+    let mut harness = themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, |ui, state| {
+        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        // Far from the model, so nothing snaps.
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin: glam::DVec2::new(-60.0, -60.0), scale: 20.0 };
+        let Some(view) = state.active_view.and_then(|v| state.project().view(v).cloned()) else { return };
+        let Some(drawing) = state.drawing(view.id) else { return };
+        crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
+        crate::context_menu::tool(&resp, state, view.id);
+    });
+    harness.run();
+    let click = |h: &mut Harness<'static, AppState>, pos: egui::Pos2, button: egui::PointerButton| {
+        h.input_mut().events.push(egui::Event::PointerMoved(pos));
+        h.run();
+        for pressed in [true, false] {
+            h.input_mut().events.push(egui::Event::PointerButton {
+                pos,
+                button,
+                pressed,
+                modifiers: Default::default(),
+            });
+            h.run();
+        }
+    };
+    // The wall's first point.
+    click(&mut harness, egui::pos2(250.0, 200.0), egui::PointerButton::Primary);
+    assert!(!harness.state().interaction.is_idle(), "a wall begun");
+    click(&mut harness, egui::pos2(350.0, 200.0), egui::PointerButton::Secondary);
+    harness.run();
+    assert_eq!(harness.state().interaction.tool_menu, Some(plan));
+    let cancel = crate::i18n::tr("action-cancel");
+    let entry = harness
+        .query_all_by_role(Role::Button)
+        .map(|n| n.accesskit_node().label().unwrap_or_default())
+        .find(|l| l.starts_with(&cancel))
+        .expect("Cancel in the menu");
+    harness.get_by_role_and_label(Role::Button, &entry).click();
+    harness.run();
+    harness.run();
+    assert_eq!(harness.state().tool, crate::tools::Tool::Select);
+    assert!(harness.state().interaction.is_idle());
+    assert_eq!(harness.state().interaction.tool_menu, None);
+    assert_eq!(harness.state().project().walls().count(), walls, "no wall made");
+    assert_eq!(harness.state().session.doc.undo_depth(), depth);
+}
+
 #[test]
 fn right_click_opens_the_selection_menu() {
     static ORIGIN: std::sync::OnceLock<glam::DVec2> = std::sync::OnceLock::new();
