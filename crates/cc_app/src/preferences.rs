@@ -11,6 +11,7 @@ use crate::commands::UiCommand;
 use crate::dialog::Dialog;
 use crate::i18n::Language;
 use crate::icons::{self, Icon};
+use crate::settings::{self, Pane};
 use crate::state::AppState;
 use crate::t;
 use crate::table;
@@ -513,22 +514,42 @@ pub enum Section {
     #[default]
     General,
     Interface,
+    Drawing,
     FileLocations,
     Saving,
     Shortcuts,
 }
 
 impl Section {
-    pub const ALL: [Section; 5] =
-        [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts];
+    pub const ALL: [Section; 6] = [
+        Section::General,
+        Section::Interface,
+        Section::Drawing,
+        Section::FileLocations,
+        Section::Saving,
+        Section::Shortcuts,
+    ];
 
     pub fn label(self) -> String {
         match self {
             Section::General => t!("pref-general"),
             Section::Interface => t!("pref-interface"),
+            Section::Drawing => t!("pref-drawing"),
             Section::FileLocations => t!("pref-file-locations"),
             Section::Saving => t!("pref-saving"),
             Section::Shortcuts => t!("pref-shortcuts"),
+        }
+    }
+
+    /// What the page holds, under its title.
+    fn description(self) -> String {
+        match self {
+            Section::General => t!("pref-general-desc"),
+            Section::Interface => t!("pref-interface-desc"),
+            Section::Drawing => t!("pref-drawing-desc"),
+            Section::FileLocations => t!("pref-file-locations-desc"),
+            Section::Saving => t!("pref-saving-desc"),
+            Section::Shortcuts => t!("pref-shortcuts-hint"),
         }
     }
 
@@ -536,6 +557,7 @@ impl Section {
         match self {
             Section::General => Icon::Settings,
             Section::Interface => Icon::Interface,
+            Section::Drawing => Icon::Select,
             Section::FileLocations => Icon::Open,
             Section::Saving => Icon::Save,
             Section::Shortcuts => Icon::Keyboard,
@@ -543,13 +565,13 @@ impl Section {
     }
 }
 
-/// Width of the window's body.
-const WIDTH: f32 = 780.0;
-/// Width of the list of pages.
-const NAV_WIDTH: f32 = 180.0;
-/// Height of a page: the same on every page, so the window does not jump;
-/// longer pages scroll.
-const PAGE_HEIGHT: f32 = 380.0;
+/// Width of the window's body (sidebar and page).
+const WIDTH: f32 = 880.0;
+/// Height of the body: the same on every page, so the window does not
+/// jump; longer pages scroll.
+const HEIGHT: f32 = 500.0;
+/// Width of the combo boxes.
+const COMBO_WIDTH: f32 = 190.0;
 
 /// What Cancel brings back: the preferences, language and ribbon state when the window opened.
 #[derive(Debug, Clone)]
@@ -600,24 +622,27 @@ fn restore(state: &mut AppState, snapshot: Snapshot) {
 }
 
 /// Restore Defaults: the default values of the page's preferences (the
-/// language and the folders are left as they are).
+/// language, the panel layout and the folders are left as they are).
 fn restore_page(state: &mut AppState, section: Section) {
     let d = Preferences::default();
     let p = &mut state.prefs;
     match section {
         Section::General => {
-            p.theme = d.theme;
             p.check_updates = d.check_updates;
             p.cad_blocks = d.cad_blocks;
-            p.snaps = d.snaps;
         }
         Section::Interface => {
+            p.theme = d.theme;
             p.ui_scale = d.ui_scale;
             p.font_size = d.font_size;
             p.ribbon_collapsed = d.ribbon_collapsed;
             p.detailed_tooltips = d.detailed_tooltips;
-            p.select_drag_3d = d.select_drag_3d;
             state.ribbon_collapsed = d.ribbon_collapsed;
+        }
+        Section::Drawing => {
+            p.snaps = d.snaps;
+            p.select_drag_3d = d.select_drag_3d;
+            p.trackpad_pans = d.trackpad_pans;
         }
         Section::FileLocations => {}
         Section::Saving => {
@@ -633,7 +658,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     let before = state.prefs.clone();
     let (mut ok, mut defaults) = (0, None);
     let section = dialog.section;
-    let response = Dialog::new("preferences", t!("dlg-preferences")).width(WIDTH).show(
+    let response = Dialog::new("preferences", t!("dlg-preferences")).width(WIDTH).flush().show(
         ctx,
         |ui| body(ui, state, &mut dialog),
         |f| {
@@ -664,329 +689,232 @@ pub fn show(ctx: &Context, state: &mut AppState) {
 }
 
 fn body(ui: &mut Ui, state: &mut AppState, dialog: &mut PreferencesDialog) {
-    crate::dialog::two_columns(ui, [NAV_WIDTH, WIDTH - NAV_WIDTH], |ui, column| {
-        if column == 0 {
-            ui.spacing_mut().item_spacing.y = 2.0;
+    settings::sidebar_layout(ui, &t!("dlg-preferences"), HEIGHT, |ui, pane| {
+        if pane == Pane::Sidebar {
             for section in Section::ALL {
-                if nav_item(ui, section, dialog.section == section).clicked() {
+                if settings::nav_item(ui, section.icon(), &section.label(), dialog.section == section).clicked() {
                     dialog.section = section;
                 }
             }
             return;
         }
-        ui.set_min_height(PAGE_HEIGHT);
-        ui.set_max_height(PAGE_HEIGHT);
-        if dialog.section == Section::Shortcuts {
+        let section = dialog.section;
+        let scroll = section != Section::Shortcuts;
+        settings::page(ui, section as u8, &section.label(), &section.description(), scroll, |ui| match section {
+            Section::General => general(ui, state),
+            Section::Interface => interface(ui, state),
+            Section::Drawing => drawing(ui, state),
+            Section::FileLocations => file_locations(ui, state),
+            Section::Saving => saving(ui, state),
             // The list scrolls under its search field.
-            shortcuts(ui, state, &mut dialog.shortcuts);
-            return;
-        }
-        egui::ScrollArea::vertical().id_salt(("pref-page", dialog.section as u8)).auto_shrink([false, false]).show(
-            ui,
-            |ui| match dialog.section {
-                Section::General => general(ui, state),
-                Section::Interface => interface(ui, state),
-                Section::FileLocations => file_locations(ui, state),
-                Section::Saving => saving(ui, state),
-                Section::Shortcuts => {}
-            },
-        );
-    });
-}
-
-/// A page in the list on the left: its icon and name, the current one
-/// marked with an accent bar.
-fn nav_item(ui: &mut Ui, section: Section, selected: bool) -> egui::Response {
-    let (rect, r) = ui.allocate_exact_size(egui::vec2(NAV_WIDTH, 32.0), egui::Sense::click());
-    let painter = ui.painter();
-    let radius = theme::RADIUS as f32;
-    if selected {
-        painter.rect_filled(rect, radius, PALETTE.accent_soft);
-        let bar =
-            egui::Rect::from_min_size(rect.left_top() + egui::vec2(0.0, 7.0), egui::vec2(3.0, rect.height() - 14.0));
-        painter.rect_filled(bar, 1.5, PALETTE.accent);
-    } else if r.hovered() {
-        painter.rect_filled(rect, radius, PALETTE.hover);
-    }
-    let color = if selected { PALETTE.accent_text } else { PALETTE.text };
-    let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 22.0, rect.center().y), egui::vec2(18.0, 18.0));
-    icons::paint(painter, icon, section.icon(), color);
-    let font = if selected { egui::FontId::new(13.0, theme::semibold()) } else { egui::FontId::proportional(13.0) };
-    painter.text(
-        egui::pos2(rect.left() + 40.0, rect.center().y),
-        egui::Align2::LEFT_CENTER,
-        section.label(),
-        font,
-        color,
-    );
-    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, section.label()));
-    r
-}
-
-/// A group of rows under a small heading.
-fn group(ui: &mut Ui, title: String, first: bool) {
-    if !first {
-        ui.add_space(16.0);
-    }
-    ui.label(RichText::new(title).family(theme::semibold()).size(12.5).color(PALETTE.text));
-    ui.add_space(4.0);
-}
-
-/// What the row above does, in small muted text under it.
-fn hint(ui: &mut Ui, text: String) {
-    ui.add_space(3.0);
-    ui.horizontal(|ui| {
-        ui.add_space(10.0);
-        ui.add(egui::Label::new(RichText::new(text).size(11.5).color(PALETTE.text_muted)).wrap());
-    });
-    ui.add_space(3.0);
-}
-
-/// A combo box in a table row choosing among `options`.
-fn combo<T: PartialEq + Copy>(
-    ui: &mut Ui,
-    id: &str,
-    value: &mut T,
-    options: impl IntoIterator<Item = T>,
-    label: impl Fn(T) -> String,
-) {
-    egui::ComboBox::from_id_salt(("pref", id)).selected_text(label(*value)).show_ui(ui, |ui| {
-        for option in options {
-            ui.selectable_value(value, option, label(option));
-        }
-    });
-}
-
-fn check(ui: &mut Ui, label: &str, value: &mut bool) {
-    ui.add_space(4.0);
-    // Unlike the flat cells around it, the box shows when unchecked too.
-    ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, PALETTE.border_strong);
-    let r = crate::table::checkbox(ui, value);
-    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *value, label));
-}
-
-/// A checkbox row with its explanation under it.
-fn check_row(ui: &mut Ui, label: &str, value: &mut bool, explanation: Option<String>) {
-    table::row(ui, label, |ui| check(ui, label, value));
-    if let Some(text) = explanation {
-        hint(ui, text);
-    }
-}
-
-/// A framed button that stands out in the flat table cells.
-fn cell_button(ui: &mut Ui, enabled: bool, text: String) -> egui::Response {
-    ui.scope(|ui| {
-        let w = &mut ui.visuals_mut().widgets;
-        w.inactive.bg_stroke = egui::Stroke::new(1.0, PALETTE.border_strong);
-        w.inactive.weak_bg_fill = PALETTE.panel;
-        w.hovered.weak_bg_fill = PALETTE.hover;
-        ui.add_enabled(enabled, egui::Button::new(RichText::new(text).size(12.0)))
-    })
-    .inner
-}
-
-fn general(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("pref-group-language-theme"), true);
-    let label = t!("settings-language");
-    table::row(ui, &label, |ui| {
-        let mut lang = crate::i18n::language();
-        combo(ui, "language", &mut lang, Language::ALL, |l| l.native_name().to_string());
-        crate::actions::set_language(state, lang);
-    });
-    table::row(ui, &t!("settings-theme"), |ui| {
-        combo(ui, "theme", &mut state.prefs.theme, ThemeChoice::ALL, ThemeChoice::label);
-    });
-    group(ui, t!("pref-group-updates"), false);
-    check_row(ui, &t!("update-auto"), &mut state.prefs.check_updates, Some(t!("update-auto-hint")));
-    group(ui, t!("group-import"), false);
-    check_row(ui, &t!("label-cad-blocks"), &mut state.prefs.cad_blocks, Some(t!("hint-cad-blocks")));
-    snaps(ui, &mut state.prefs.snaps);
-}
-
-/// Object snaps: the master switch, every element of the view, and each
-/// kind of snap point (issue #317).
-fn snaps(ui: &mut Ui, snaps: &mut crate::snaps::SnapSettings) {
-    group(ui, t!("pref-group-snaps"), false);
-    check_row(ui, &t!("pref-snap-enabled"), &mut snaps.enabled, Some(t!("pref-snap-enabled-hint")));
-    let enabled = snaps.enabled;
-    ui.add_enabled_ui(enabled, |ui| {
-        check_row(ui, &t!("pref-snap-elements"), &mut snaps.elements, Some(t!("pref-snap-elements-hint")));
-        for option in crate::snaps::SnapOption::KINDS {
-            check_row(ui, &crate::i18n::tr(option.key()), snaps.get_mut(option), None);
-        }
-    });
-}
-
-fn interface(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("pref-group-size"), true);
-    table::row(ui, &t!("pref-ui-scale"), |ui| {
-        let mut scale = clamp_scale(state.prefs.ui_scale);
-        let options = UI_SCALES.into_iter().chain((!UI_SCALES.contains(&scale)).then_some(scale));
-        combo(ui, "scale", &mut scale, options, |s| format!("{s}%"));
-        state.prefs.ui_scale = scale;
-    });
-    table::row(ui, &t!("pref-font-size"), |ui| {
-        let name = |p: u32| {
-            FONT_SIZES.iter().find(|(v, _)| *v == p).map_or_else(|| format!("{p}%"), |(_, key)| crate::i18n::tr(key))
-        };
-        let current = state.prefs.font_size;
-        let options = FONT_SIZES
-            .map(|(v, _)| v)
-            .into_iter()
-            .chain((!FONT_SIZES.iter().any(|(v, _)| *v == current)).then_some(current));
-        combo(ui, "font", &mut state.prefs.font_size, options, name);
-    });
-    group(ui, t!("pref-group-ribbon"), false);
-    let before = state.prefs.ribbon_collapsed;
-    check_row(ui, &t!("pref-ribbon-collapsed"), &mut state.prefs.ribbon_collapsed, None);
-    if state.prefs.ribbon_collapsed != before {
-        state.ribbon_collapsed = state.prefs.ribbon_collapsed;
-    }
-    let label = t!("pref-detailed-tooltips");
-    check_row(ui, &label, &mut state.prefs.detailed_tooltips, Some(t!("pref-detailed-tooltips-hint")));
-    group(ui, t!("pref-group-panels"), false);
-    table::row(ui, &t!("pref-panel-layout"), |ui| {
-        let default = crate::side_panels::PanelLayout::default();
-        let changed = state.prefs.panels != default;
-        if cell_button(ui, changed, t!("panel-reset-layout")).clicked() {
-            state.prefs.panels = default;
-        }
-    });
-    hint(ui, t!("panel-drag-hint"));
-    group(ui, t!("pref-group-3d"), false);
-    let label = t!("pref-select-drag-3d");
-    check_row(ui, &label, &mut state.prefs.select_drag_3d, Some(t!("pref-select-drag-3d-hint")));
-    group(ui, t!("pref-group-navigation"), false);
-    let label = t!("pref-trackpad-pans");
-    check_row(ui, &label, &mut state.prefs.trackpad_pans, Some(t!("pref-trackpad-pans-hint")));
-}
-
-/// `text` shortened in the middle to at most `max` characters.
-fn middle_ellipsis(text: &str, max: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= max || max < 8 {
-        return text.to_string();
-    }
-    let tail = (max - 1) * 3 / 5;
-    let head = max - 1 - tail;
-    let (start, end) = (chars.iter().take(head).collect::<String>(), chars.iter().skip(chars.len() - tail));
-    format!("{start}…{}", end.collect::<String>())
-}
-
-/// A folder's icon and path (shortened in the middle, whole on hover), or
-/// `empty` when there is none; a folder that is gone is marked.
-fn folder_label(ui: &mut Ui, path: Option<&Path>, empty: &str, room: f32) {
-    let missing = path.is_some_and(|p| !p.is_dir());
-    let (icon, icon_r) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-    let tone = if path.is_some() { PALETTE.text_muted } else { PALETTE.text_faint };
-    icons::paint(ui.painter(), icon, Icon::Open, if missing { PALETTE.warning } else { tone });
-    let Some(path) = path else {
-        ui.label(RichText::new(empty).color(PALETTE.text_faint));
-        return;
-    };
-    let full = path.display().to_string();
-    // About 6.5 points per character at the table's text size.
-    let max = ((room - if missing { 110.0 } else { 0.0 }) / 6.5).max(8.0) as usize;
-    let color = if missing { PALETTE.warning } else { PALETTE.text };
-    ui.add(egui::Label::new(RichText::new(middle_ellipsis(&full, max)).color(color)).truncate()).on_hover_text(&full);
-    if missing {
-        ui.label(RichText::new(t!("pref-missing")).size(11.5).color(PALETTE.warning));
-    }
-    icon_r.on_hover_text(full);
-}
-
-/// A folder in a table row: its path, Browse… and Clear.
-fn folder_row(ui: &mut Ui, label: &str, value: &mut Option<PathBuf>) {
-    table::row(ui, label, |ui| {
-        let room = ui.available_width() - 150.0;
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if cell_button(ui, value.is_some(), t!("pref-clear")).clicked() {
-                *value = None;
-            }
-            if cell_button(ui, true, t!("pref-browse")).clicked() {
-                let mut picker = rfd::FileDialog::new();
-                if let Some(dir) = value.as_deref().filter(|p| p.is_dir()) {
-                    picker = picker.set_directory(dir);
-                }
-                if let Some(folder) = picker.pick_folder() {
-                    *value = Some(folder);
-                }
-            }
-            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                ui.add_space(4.0);
-                folder_label(ui, value.as_deref(), &t!("pref-not-set"), room);
-            });
+            Section::Shortcuts => shortcuts(ui, state, &mut dialog.shortcuts),
         });
     });
 }
 
+fn general(ui: &mut Ui, state: &mut AppState) {
+    ui.add_space(8.0);
+    settings::setting(ui, &t!("settings-language"), Some(&t!("pref-language-hint")), |ui| {
+        let mut lang = crate::i18n::language();
+        settings::combo(ui, "language", COMBO_WIDTH, &mut lang, Language::ALL, |l| l.native_name().to_string());
+        crate::actions::set_language(state, lang);
+    });
+    settings::group(ui, &t!("pref-group-updates"));
+    settings::switch_setting(ui, &t!("update-auto"), Some(&t!("update-auto-hint")), &mut state.prefs.check_updates);
+    settings::group(ui, &t!("group-import"));
+    settings::switch_setting(ui, &t!("label-cad-blocks"), Some(&t!("hint-cad-blocks")), &mut state.prefs.cad_blocks);
+}
+
+fn interface(ui: &mut Ui, state: &mut AppState) {
+    settings::group(ui, &t!("settings-theme"));
+    ui.add_space(6.0);
+    ui.label(RichText::new(t!("pref-theme-hint")).size(12.0 * theme::font_scale()).color(PALETTE.text_muted));
+    ui.add_space(12.0);
+    settings::theme_cards(ui, &mut state.prefs.theme);
+    ui.add_space(6.0);
+
+    settings::group(ui, &t!("pref-group-size"));
+    settings::setting(ui, &t!("pref-ui-scale"), Some(&t!("pref-ui-scale-hint")), |ui| {
+        let mut scale = clamp_scale(state.prefs.ui_scale);
+        let options = UI_SCALES.into_iter().chain((!UI_SCALES.contains(&scale)).then_some(scale));
+        settings::combo(ui, "scale", COMBO_WIDTH, &mut scale, options, |s| format!("{s}%"));
+        state.prefs.ui_scale = scale;
+    });
+    settings::setting(ui, &t!("pref-font-size"), Some(&t!("pref-font-size-hint")), |ui| {
+        let current = state.prefs.font_size;
+        let mut options: Vec<settings::Segment<u32>> = FONT_SIZES
+            .iter()
+            .enumerate()
+            .map(|(i, (value, key))| settings::Segment {
+                value: *value,
+                text: "Aa".to_string(),
+                text_size: 11.0 + 2.0 * i as f32,
+                name: crate::i18n::tr(key),
+            })
+            .collect();
+        if !FONT_SIZES.iter().any(|(v, _)| *v == current) {
+            let text = format!("{current}%");
+            options.push(settings::Segment { value: current, text: text.clone(), text_size: 12.0, name: text });
+        }
+        settings::segmented(ui, &mut state.prefs.font_size, options);
+    });
+
+    settings::group(ui, &t!("pref-group-ribbon"));
+    let before = state.prefs.ribbon_collapsed;
+    let label = t!("pref-ribbon-collapsed");
+    settings::switch_setting(ui, &label, Some(&t!("pref-ribbon-collapsed-hint")), &mut state.prefs.ribbon_collapsed);
+    if state.prefs.ribbon_collapsed != before {
+        state.ribbon_collapsed = state.prefs.ribbon_collapsed;
+    }
+    let label = t!("pref-detailed-tooltips");
+    let hint = t!("pref-detailed-tooltips-hint");
+    settings::switch_setting(ui, &label, Some(&hint), &mut state.prefs.detailed_tooltips);
+
+    settings::group(ui, &t!("pref-group-panels"));
+    settings::setting(ui, &t!("pref-panel-layout"), Some(&t!("panel-drag-hint")), |ui| {
+        let default = crate::side_panels::PanelLayout::default();
+        let changed = state.prefs.panels != default;
+        if settings::button(ui, changed, &t!("panel-reset-layout")).clicked() {
+            state.prefs.panels = default;
+        }
+    });
+}
+
+/// Object snaps (issue #317) and how the views move.
+fn drawing(ui: &mut Ui, state: &mut AppState) {
+    let snaps = &mut state.prefs.snaps;
+    settings::group(ui, &t!("pref-group-snaps"));
+    settings::switch_setting(ui, &t!("pref-snap-enabled"), Some(&t!("pref-snap-enabled-hint")), &mut snaps.enabled);
+    ui.add_enabled_ui(snaps.enabled, |ui| {
+        let label = t!("pref-snap-elements");
+        settings::switch_setting(ui, &label, Some(&t!("pref-snap-elements-hint")), &mut snaps.elements);
+        settings::setting_row(ui, &t!("pref-snap-kinds"), Some(&t!("pref-snap-kinds-hint")), |_| ());
+        // The kinds of point in two columns.
+        let kinds = crate::snaps::SnapOption::KINDS;
+        let half = kinds.len().div_ceil(2);
+        let width = ui.available_width();
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(0.0, 8.0);
+            for column in [&kinds[..half], &kinds[half..]] {
+                ui.allocate_ui_with_layout(egui::vec2(width / 2.0, 0.0), Layout::top_down(Align::Min), |ui| {
+                    ui.set_width(width / 2.0);
+                    for option in column {
+                        let label = crate::i18n::tr(option.key());
+                        let value = snaps.get_mut(*option);
+                        let r =
+                            table::labeled_checkbox(ui, value, RichText::new(&label).size(13.0 * theme::font_scale()));
+                        let checked = *value;
+                        r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, checked, &label));
+                    }
+                });
+            }
+        });
+        ui.add_space(14.0);
+        settings::divider(ui);
+    });
+
+    settings::group(ui, &t!("pref-group-navigation"));
+    let label = t!("pref-select-drag-3d");
+    settings::switch_setting(ui, &label, Some(&t!("pref-select-drag-3d-hint")), &mut state.prefs.select_drag_3d);
+    let label = t!("pref-trackpad-pans");
+    settings::switch_setting(ui, &label, Some(&t!("pref-trackpad-pans-hint")), &mut state.prefs.trackpad_pans);
+}
+
+/// Pick a folder, starting in `current` when it exists.
+fn pick_folder(current: Option<&Path>) -> Option<PathBuf> {
+    let mut picker = rfd::FileDialog::new();
+    if let Some(dir) = current.filter(|p| p.is_dir()) {
+        picker = picker.set_directory(dir);
+    }
+    picker.pick_folder()
+}
+
+/// A folder setting: its name, what it is for, Browse… and Clear, and the
+/// folder under them.
+fn folder_setting(ui: &mut Ui, label: &str, hint: Option<&str>, value: &mut Option<PathBuf>) {
+    settings::setting_row(ui, label, hint, |ui| {
+        if settings::button(ui, value.is_some(), &t!("pref-clear")).clicked() {
+            *value = None;
+        }
+        if settings::button(ui, true, &t!("pref-browse")).clicked()
+            && let Some(folder) = pick_folder(value.as_deref())
+        {
+            *value = Some(folder);
+        }
+    });
+    settings::path_box(ui, value.as_deref(), &t!("pref-not-set"), &t!("pref-missing"));
+    ui.add_space(12.0);
+    settings::divider(ui);
+}
+
 fn file_locations(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("pref-group-folders"), true);
-    folder_row(ui, &t!("pref-macro-folder"), &mut state.prefs.macro_folder);
-    folder_row(ui, &t!("pref-projects-folder"), &mut state.prefs.projects_folder);
-    hint(ui, t!("pref-folders-hint"));
-    folder_row(ui, &t!("pref-plugin-folder"), &mut state.prefs.plugin_folder);
-    let default = crate::recovery::data_dir().map(|d| d.join("plugins").display().to_string()).unwrap_or_default();
-    hint(ui, t!("pref-plugin-folder-hint", "path" => default));
-    check_row(ui, &t!("pref-plugin-dev"), &mut state.prefs.plugin_dev_mode, Some(t!("pref-plugin-dev-hint")));
-    folder_row(ui, &t!("pref-plugin-dev-folder"), &mut state.prefs.plugin_dev_folder);
-    hint(ui, t!("pref-plugin-dev-folder-hint"));
-    group(ui, t!("lib-folders"), false);
-    let folders = &mut state.prefs.library_folders;
+    let prefs = &mut state.prefs;
+    settings::group(ui, &t!("pref-group-folders"));
+    folder_setting(ui, &t!("pref-projects-folder"), Some(&t!("pref-folders-hint")), &mut prefs.projects_folder);
+    folder_setting(ui, &t!("pref-macro-folder"), None, &mut prefs.macro_folder);
+
+    settings::group(ui, &t!("lib-folders"));
+    let folders = &mut prefs.library_folders;
     if folders.is_empty() {
-        hint(ui, t!("lib-empty"));
+        settings::note(ui, &t!("lib-empty"));
     }
     let mut remove = None;
     for (i, folder) in folders.iter().enumerate() {
-        let name =
-            folder.file_name().map_or_else(|| folder.display().to_string(), |n| n.to_string_lossy().into_owned());
-        table::row(ui, &name, |ui| {
-            let room = ui.available_width() - 80.0;
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let r = cell_button(ui, true, t!("action-remove"));
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), 30.0),
+            Layout::right_to_left(Align::Center),
+            |ui| {
+                let remove_label = t!("action-remove");
+                let r = settings::button(ui, true, &remove_label);
                 r.widget_info(|| {
-                    let label = format!("{} {}", t!("action-remove"), folder.display());
+                    let label = format!("{remove_label} {}", folder.display());
                     egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label)
                 });
                 if r.clicked() {
                     remove = Some(i);
                 }
-                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                    ui.add_space(4.0);
-                    folder_label(ui, Some(folder), "", room);
-                });
-            });
-        });
+                settings::path_box(ui, Some(folder), "", &t!("pref-missing"));
+            },
+        );
     }
     if let Some(i) = remove
         && i < folders.len()
     {
         folders.remove(i);
     }
-    ui.add_space(8.0);
+    ui.add_space(10.0);
     let add = format!("+ {}", t!("lib-add-folder"));
-    if cell_button(ui, folders.len() < MAX_LIBRARY_FOLDERS, add).clicked()
+    if settings::button(ui, folders.len() < MAX_LIBRARY_FOLDERS, &add).clicked()
         && let Some(folder) = rfd::FileDialog::new().pick_folder()
         && !folders.contains(&folder)
     {
         folders.push(folder);
     }
+
+    settings::group(ui, &t!("pref-group-plugins"));
+    let default = crate::recovery::data_dir().map(|d| d.join("plugins").display().to_string()).unwrap_or_default();
+    let hint = t!("pref-plugin-folder-hint", "path" => default);
+    folder_setting(ui, &t!("pref-plugin-folder"), Some(&hint), &mut prefs.plugin_folder);
+    let label = t!("pref-plugin-dev");
+    settings::switch_setting(ui, &label, Some(&t!("pref-plugin-dev-hint")), &mut prefs.plugin_dev_mode);
+    let hint = t!("pref-plugin-dev-folder-hint");
+    folder_setting(ui, &t!("pref-plugin-dev-folder"), Some(&hint), &mut prefs.plugin_dev_folder);
 }
 
 fn saving(ui: &mut Ui, state: &mut AppState) {
-    group(ui, t!("pref-group-recovery"), true);
-    table::row(ui, &t!("pref-autosave"), |ui| {
+    settings::group(ui, &t!("pref-group-recovery"));
+    settings::setting(ui, &t!("pref-autosave"), Some(&t!("pref-autosave-hint")), |ui| {
         let current = state.prefs.autosave_minutes;
         let options = AUTOSAVE_MINUTES.into_iter().chain((!AUTOSAVE_MINUTES.contains(&current)).then_some(current));
         let label = |m: u32| if m == 0 { t!("pref-autosave-off") } else { t!("pref-autosave-every", "count" => m) };
-        combo(ui, "autosave", &mut state.prefs.autosave_minutes, options, label);
+        settings::combo(ui, "autosave", COMBO_WIDTH, &mut state.prefs.autosave_minutes, options, label);
     });
-    hint(ui, t!("pref-autosave-hint"));
-    group(ui, t!("pref-group-home"), false);
-    table::row(ui, &t!("pref-recent-count"), |ui| {
+    settings::group(ui, &t!("pref-group-home"));
+    settings::setting(ui, &t!("pref-recent-count"), Some(&t!("pref-recent-count-hint")), |ui| {
         let current = state.prefs.recent_count;
         let options = RECENT_COUNTS.into_iter().chain((!RECENT_COUNTS.contains(&current)).then_some(current));
-        combo(ui, "recent", &mut state.prefs.recent_count, options, |n| n.to_string());
+        settings::combo(ui, "recent", COMBO_WIDTH, &mut state.prefs.recent_count, options, |n| n.to_string());
     });
 }
 
@@ -1023,22 +951,25 @@ fn set_keys(custom: &mut BTreeMap<String, String>, command: UiCommand, keys: &st
 /// The Shortcuts page: every command with its keys; two-letter keys are
 /// typed in place, Ctrl chords are fixed.
 fn shortcuts(ui: &mut Ui, state: &mut AppState, editor: &mut ShortcutEditor) {
-    ui.add(egui::Label::new(RichText::new(t!("pref-shortcuts-hint")).size(11.5).color(PALETTE.text_muted)).wrap());
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        let (icon, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-        icons::paint(ui.painter(), icon, Icon::Search, PALETTE.text_muted);
-        let search = egui::TextEdit::singleline(&mut editor.filter)
-            .hint_text(t!("pref-shortcuts-search"))
-            .desired_width(ui.available_width());
-        let r = ui.add(search);
-        r.widget_info(|| egui::WidgetInfo::text_edit(true, "", &editor.filter, t!("pref-shortcuts-search")));
-        if !editor.searched {
-            editor.searched = true;
-            r.request_focus();
-        }
-    });
-    ui.add_space(6.0);
+    // The search field, framed, with its icon inside.
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), egui::Sense::hover());
+    let field_ui =
+        &mut ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(Layout::left_to_right(Align::Center)));
+    settings::framed(field_ui);
+    field_ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, PALETTE.border_strong);
+    let search = egui::TextEdit::singleline(&mut editor.filter)
+        .hint_text(t!("pref-shortcuts-search"))
+        .margin(egui::Margin { left: 30, right: 8, top: 7, bottom: 7 })
+        .desired_width(rect.width());
+    let r = field_ui.add(search);
+    let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 16.0, rect.center().y), egui::vec2(15.0, 15.0));
+    icons::paint(ui.painter(), icon, Icon::Search, PALETTE.text_muted);
+    r.widget_info(|| egui::WidgetInfo::text_edit(true, "", &editor.filter, t!("pref-shortcuts-search")));
+    if !editor.searched {
+        editor.searched = true;
+        r.request_focus();
+    }
+    ui.add_space(8.0);
     let filter = editor.filter.trim().to_lowercase();
     let custom = state.prefs.shortcut_keys.clone();
     let commands: Vec<(UiCommand, String)> = UiCommand::all()
@@ -1052,96 +983,83 @@ fn shortcuts(ui: &mut Ui, state: &mut AppState, editor: &mut ShortcutEditor) {
         .collect();
     let mut change: Option<(UiCommand, String)> = None;
     egui::ScrollArea::vertical().id_salt("pref-shortcuts").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
         if commands.is_empty() {
-            hint(ui, t!("pref-shortcuts-none"));
+            settings::note(ui, &t!("pref-shortcuts-none"));
         }
         for (command, label) in commands {
             let keys = keys_of(&custom, command);
             let changed = custom.contains_key(&command.id());
-            table::row(ui, &label, |ui| {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if command.customizable() && changed {
-                        let reset = cell_button(ui, changed, t!("pref-shortcut-reset"));
-                        reset.widget_info(|| {
-                            let text = format!("{} {label}", t!("pref-shortcut-reset"));
-                            egui::WidgetInfo::labeled(egui::WidgetType::Button, changed, text)
-                        });
-                        if reset.clicked() {
-                            change = Some((command, command.default_shortcut().unwrap_or_default().to_string()));
-                        }
-                    }
-                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                        ui.add_space(4.0);
-                        if !command.customizable() {
-                            crate::ribbon::key_cap(ui, &keys.unwrap_or_default())
-                                .on_hover_text(t!("pref-shortcut-fixed"));
-                            return;
-                        }
-                        let editing = editor.editing.as_mut().filter(|(c, _, _)| *c == command);
-                        let mut text =
-                            editing.as_ref().map_or_else(|| keys.clone().unwrap_or_default(), |e| e.1.clone());
-                        let field = egui::TextEdit::singleline(&mut text)
-                            .id(ui.id().with(("shortcut", command.id())))
-                            .char_limit(2)
-                            .desired_width(44.0)
-                            .horizontal_align(Align::Center)
-                            .font(egui::FontId::new(12.5, theme::semibold()))
-                            .hint_text("—");
-                        // A visible box in the flat table cell.
-                        let v = ui.visuals_mut();
-                        v.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, PALETTE.border_strong);
-                        v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, PALETTE.accent);
-                        v.extreme_bg_color = PALETTE.panel;
-                        let r = ui.add(field);
-                        r.widget_info(|| {
-                            egui::WidgetInfo::text_edit(true, keys.clone().unwrap_or_default(), &text, &label)
-                        });
-                        let text: String =
-                            text.chars().filter(char::is_ascii_alphabetic).map(|c| c.to_ascii_uppercase()).collect();
-                        if r.gained_focus() {
-                            // Typed letters replace the keys.
-                            if let Some(mut s) = egui::text_edit::TextEditState::load(ui.ctx(), r.id) {
-                                let all = egui::text_selection::CCursorRange::two(
-                                    egui::text::CCursor::new(0),
-                                    egui::text::CCursor::new(text.chars().count()),
-                                );
-                                s.cursor.set_char_range(Some(all));
-                                s.store(ui.ctx(), r.id);
-                            }
-                        }
-                        if r.gained_focus() || (r.has_focus() && editor.editing.as_ref().is_none_or(|e| e.0 != command))
-                        {
-                            editor.editing = Some((command, text.clone(), None));
-                        } else if r.changed()
-                            && let Some(e) = editor.editing.as_mut()
-                        {
-                            e.1 = text.clone();
-                            e.2 = None;
-                            if text.len() == 2 {
-                                change = Some((command, text.clone()));
-                            }
-                        }
-                        if r.lost_focus() {
-                            // Leaving the field empty takes the keys away; one letter keeps the old ones.
-                            if text.is_empty() && keys.is_some() {
-                                change = Some((command, String::new()));
-                            }
-                            if editor.editing.as_ref().is_some_and(|e| e.0 == command && e.2.is_none()) {
-                                editor.editing = None;
-                            }
-                        }
-                        if let Some((_, _, Some(why))) = editor.editing.as_ref().filter(|e| e.0 == command) {
-                            ui.label(RichText::new(why).size(11.5).color(PALETTE.danger));
-                        } else if changed {
-                            let default = command.default_shortcut().unwrap_or("—");
-                            ui.label(
-                                RichText::new(t!("pref-shortcut-default", "keys" => default))
-                                    .size(11.5)
-                                    .color(PALETTE.text_faint),
-                            );
-                        }
+            settings::list_row(ui, &label, |ui| {
+                // Right to left: Default, then what the keys were or why they
+                // were refused, then the keys.
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if command.customizable() && changed {
+                    let reset = settings::button(ui, changed, &t!("pref-shortcut-reset"));
+                    reset.widget_info(|| {
+                        let text = format!("{} {label}", t!("pref-shortcut-reset"));
+                        egui::WidgetInfo::labeled(egui::WidgetType::Button, changed, text)
                     });
-                });
+                    if reset.clicked() {
+                        change = Some((command, command.default_shortcut().unwrap_or_default().to_string()));
+                    }
+                }
+                if !command.customizable() {
+                    crate::ribbon::key_cap(ui, &keys.unwrap_or_default()).on_hover_text(t!("pref-shortcut-fixed"));
+                    return;
+                }
+                let editing = editor.editing.as_ref().filter(|(c, _, _)| *c == command);
+                if let Some((_, _, Some(why))) = editing {
+                    ui.label(RichText::new(why).size(11.5).color(PALETTE.danger));
+                } else if changed {
+                    let default = command.default_shortcut().unwrap_or("—");
+                    let text = t!("pref-shortcut-default", "keys" => default);
+                    ui.label(RichText::new(text).size(11.5).color(PALETTE.text_faint));
+                }
+                let mut text = editing.map_or_else(|| keys.clone().unwrap_or_default(), |e| e.1.clone());
+                let field = egui::TextEdit::singleline(&mut text)
+                    .id(ui.id().with(("shortcut", command.id())))
+                    .char_limit(2)
+                    .desired_width(44.0)
+                    .horizontal_align(Align::Center)
+                    .font(egui::FontId::new(12.5, theme::semibold()))
+                    .hint_text("—");
+                settings::framed(ui);
+                let r = ui.add(field);
+                r.widget_info(|| egui::WidgetInfo::text_edit(true, keys.clone().unwrap_or_default(), &text, &label));
+                let text: String =
+                    text.chars().filter(char::is_ascii_alphabetic).map(|c| c.to_ascii_uppercase()).collect();
+                if r.gained_focus() {
+                    // Typed letters replace the keys.
+                    if let Some(mut s) = egui::text_edit::TextEditState::load(ui.ctx(), r.id) {
+                        let all = egui::text_selection::CCursorRange::two(
+                            egui::text::CCursor::new(0),
+                            egui::text::CCursor::new(text.chars().count()),
+                        );
+                        s.cursor.set_char_range(Some(all));
+                        s.store(ui.ctx(), r.id);
+                    }
+                }
+                if r.gained_focus() || (r.has_focus() && editor.editing.as_ref().is_none_or(|e| e.0 != command)) {
+                    editor.editing = Some((command, text.clone(), None));
+                } else if r.changed()
+                    && let Some(e) = editor.editing.as_mut()
+                {
+                    e.1 = text.clone();
+                    e.2 = None;
+                    if text.len() == 2 {
+                        change = Some((command, text.clone()));
+                    }
+                }
+                if r.lost_focus() {
+                    // Leaving the field empty takes the keys away; one letter keeps the old ones.
+                    if text.is_empty() && keys.is_some() {
+                        change = Some((command, String::new()));
+                    }
+                    if editor.editing.as_ref().is_some_and(|e| e.0 == command && e.2.is_none()) {
+                        editor.editing = None;
+                    }
+                }
             });
         }
     });
@@ -1343,14 +1261,5 @@ mod tests {
         assert_eq!(set_keys(&mut custom, UiCommand::Pin, ""), Ok(()));
         assert_eq!(keys_of(&custom, UiCommand::Pin), None);
         assert_eq!(keys_of(&custom, UiCommand::Save).as_deref(), Some("Ctrl+S"), "fixed");
-    }
-
-    #[test]
-    fn long_paths_are_shortened_in_the_middle() {
-        assert_eq!(middle_ellipsis("/short", 20), "/short");
-        let long = "/home/someone/Documents/ConstructCraft/library/doors";
-        let short = middle_ellipsis(long, 24);
-        assert_eq!(short.chars().count(), 24);
-        assert!(short.starts_with("/home/so") && short.ends_with("library/doors") && short.contains('…'));
     }
 }

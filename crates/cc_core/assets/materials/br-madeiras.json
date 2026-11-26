@@ -1,0 +1,169 @@
+{
+  "format": 1,
+  "code": "BR-MADEIRAS",
+  "name": "Madeiras brasileiras (NBR 15220-2)",
+  "region": "brazil",
+  "standard": "ABNT NBR 15220-2",
+  "sources": [
+    "ABNT NBR 15220-2:2005, Tabela B.3: madeiras de densidade aparente elevada 800 a 1 000 kg/m³ λ = 0,29; 600 a 750 kg/m³ λ = 0,23; 450 a 600 kg/m³ λ = 0,15; 300 a 450 kg/m³ λ = 0,12 W/(m·K); c = 1 340 J/(kg·K)",
+    "Densidades das espécies: valores aparentes típicos a 12 % de umidade, variáveis de lote a lote; a condutividade é a da faixa da NBR 15220-2. Não são classes de resistência para cálculo estrutural (NBR 7190)"
+  ],
+  "materials": [
+    {
+      "name": "Ipê",
+      "class": "Wood",
+      "color": [
+        110,
+        72,
+        44
+      ],
+      "description": "Madeira dura para decks, pisos e estruturas externas; densidade aparente típica a 12 % de umidade",
+      "density": 1050.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Cumaru",
+      "class": "Wood",
+      "color": [
+        140,
+        98,
+        58
+      ],
+      "description": "Madeira dura para decks e pisos; densidade aparente típica a 12 % de umidade",
+      "density": 1050.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Jatobá",
+      "class": "Wood",
+      "color": [
+        150,
+        74,
+        48
+      ],
+      "description": "Madeira dura para pisos, escadas e estruturas; densidade aparente típica a 12 % de umidade",
+      "density": 950.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Itaúba",
+      "class": "Wood",
+      "color": [
+        128,
+        104,
+        66
+      ],
+      "description": "Madeira dura para estruturas e embarcações; densidade aparente típica a 12 % de umidade",
+      "density": 950.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Garapeira",
+      "class": "Wood",
+      "color": [
+        176,
+        140,
+        78
+      ],
+      "description": "Madeira dura para pisos e estruturas; densidade aparente típica a 12 % de umidade",
+      "density": 850.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Peroba-rosa",
+      "class": "Wood",
+      "color": [
+        176,
+        118,
+        92
+      ],
+      "description": "Madeira dura para esquadrias, pisos e estruturas; densidade aparente típica a 12 % de umidade",
+      "density": 800.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Eucalipto citriodora",
+      "class": "Wood",
+      "color": [
+        176,
+        138,
+        98
+      ],
+      "description": "Madeira de reflorestamento para estruturas e postes; densidade aparente típica a 12 % de umidade",
+      "density": 1000.0,
+      "thermal_conductivity": 0.29,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Eucalipto grandis",
+      "class": "Wood",
+      "color": [
+        196,
+        154,
+        112
+      ],
+      "description": "Madeira de reflorestamento para estruturas e móveis; densidade aparente típica a 12 % de umidade",
+      "density": 650.0,
+      "thermal_conductivity": 0.23,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Cambará",
+      "class": "Wood",
+      "color": [
+        184,
+        126,
+        88
+      ],
+      "description": "Madeira para esquadrias, forros e estruturas leves; densidade aparente típica a 12 % de umidade",
+      "density": 650.0,
+      "thermal_conductivity": 0.23,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Freijó",
+      "class": "Wood",
+      "color": [
+        176,
+        150,
+        100
+      ],
+      "description": "Madeira para móveis, esquadrias e lambris; densidade aparente típica a 12 % de umidade",
+      "density": 600.0,
+      "thermal_conductivity": 0.23,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Cedro-rosa",
+      "class": "Wood",
+      "color": [
+        178,
+        100,
+        72
+      ],
+      "description": "Madeira leve para esquadrias, forros e móveis; densidade aparente típica a 12 % de umidade",
+      "density": 550.0,
+      "thermal_conductivity": 0.15,
+      "specific_heat": 1340.0
+    },
+    {
+      "name": "Pinus",
+      "class": "Wood",
+      "color": [
+        222,
+        190,
+        140
+      ],
+      "description": "Madeira de reflorestamento para formas, forros e estruturas leves; densidade aparente típica a 12 % de umidade",
+      "density": 500.0,
+      "thermal_conductivity": 0.15,
+      "specific_heat": 1340.0
+    }
+  ]
+}

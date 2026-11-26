@@ -165,8 +165,13 @@ fn list(ui: &mut Ui, state: &mut AppState, d: &mut MaterialLibraryDialog) {
         });
     });
     ui.add_space(4.0);
-    let rows: Vec<ListRow> =
-        d.cache.libraries.iter().filter(|r| d.region.is_none_or(|g| r.region == Some(g))).cloned().collect();
+    let rows: Vec<ListRow> = d
+        .cache
+        .libraries
+        .iter()
+        .filter(|r| d.region.is_none_or(|g| r.region.is_none_or(|x| x == g)))
+        .cloned()
+        .collect();
     egui::Frame::new().stroke(Stroke::new(1.0, PALETTE.border)).show(ui, |ui| {
         egui::ScrollArea::vertical().id_salt("mat-lib-list").max_height(380.0).auto_shrink([false, false]).show(
             ui,
@@ -234,10 +239,29 @@ fn export_file(state: &mut AppState, d: &mut MaterialLibraryDialog) {
 }
 
 /// A value of the catalog's JSON, rounded for the table, or a dash.
+/// The columns of the table: a library value and its header.
+const COLUMNS: [(&str, &str); 7] = [
+    ("density", "ρ (kg/m³)"),
+    ("thermal_conductivity", "λ (W/(m·K))"),
+    ("specific_heat", "c (J/(kg·K))"),
+    ("youngs_modulus", "E (MPa)"),
+    ("compressive_strength", "fck (MPa)"),
+    ("yield_strength", "fy (MPa)"),
+    ("tensile_strength", "fu (MPa)"),
+];
+
+/// A small square of a material's color (`[r, g, b]`).
+fn swatch(ui: &mut Ui, color: &Value) {
+    let c = |i: usize| color[i].as_u64().map_or(180, |v| v.min(255) as u8);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 2.0, egui::Color32::from_rgb(c(0), c(1), c(2)));
+    ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.0, PALETTE.border), egui::StrokeKind::Inside);
+}
+
 fn value(v: &Value) -> String {
     match v.as_f64() {
         Some(x) if x.abs() >= 100.0 => format!("{}", x.round()),
-        Some(x) => format!("{}", (x * 100.0).round() / 100.0),
+        Some(x) => format!("{}", (x * 1000.0).round() / 1000.0),
         None => "—".into(),
     }
 }
@@ -256,35 +280,43 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut MaterialLibraryDialog) {
     ui.add_space(4.0);
     let materials: Vec<Value> = detail["materials"].as_array().cloned().unwrap_or_default();
     table::section(ui, "mat-lib-materials", t!("mat-lib-materials"), |ui| {
-        egui::ScrollArea::vertical().id_salt("mat-lib-rows").max_height(300.0).show(ui, |ui| {
-            egui::Grid::new("mat-lib-grid").num_columns(8).striped(true).spacing([12.0, 3.0]).show(ui, |ui| {
-                // Symbols of the standards, as in their tables.
-                for h in ["", &t!("mat-lib-name"), "ρ (kg/m³)", "E (MPa)", "fck (MPa)", "fy (MPa)", "fu (MPa)", ""] {
-                    ui.label(theme::muted(h));
-                }
-                ui.end_row();
-                for m in &materials {
-                    let name = m["name"].as_str().unwrap_or_default().to_string();
-                    let have = m["in_project"].as_bool().unwrap_or(false);
-                    let mut on = d.picked.contains(&name);
-                    let r = ui.add_enabled(!have, egui::Checkbox::without_text(&mut on));
-                    if r.changed() {
-                        if on {
-                            d.picked.insert(name.clone());
-                        } else {
-                            d.picked.remove(&name);
-                        }
+        egui::ScrollArea::both().id_salt("mat-lib-rows").max_height(300.0).show(ui, |ui| {
+            // The values some material of the library has, with the
+            // symbols of the standards, as in their tables.
+            let columns: Vec<(&str, &str)> =
+                COLUMNS.iter().copied().filter(|(k, _)| materials.iter().any(|m| m[*k].is_number())).collect();
+            egui::Grid::new("mat-lib-grid").num_columns(columns.len() + 4).striped(true).spacing([12.0, 3.0]).show(
+                ui,
+                |ui| {
+                    let name_header = t!("mat-lib-name");
+                    let headers = ["", "", name_header.as_str()].into_iter().chain(columns.iter().map(|(_, h)| *h));
+                    for h in headers.chain([""]) {
+                        ui.label(theme::muted(h));
                     }
-                    let description = m["description"].as_str().unwrap_or_default();
-                    ui.label(&name).on_hover_text(description);
-                    for k in ["density", "youngs_modulus", "compressive_strength", "yield_strength", "tensile_strength"]
-                    {
-                        ui.label(value(&m[k]));
-                    }
-                    ui.label(if have { t!("mat-lib-in-project") } else { String::new() });
                     ui.end_row();
-                }
-            });
+                    for m in &materials {
+                        let name = m["name"].as_str().unwrap_or_default().to_string();
+                        let have = m["in_project"].as_bool().unwrap_or(false);
+                        let mut on = d.picked.contains(&name);
+                        let r = ui.add_enabled(!have, egui::Checkbox::without_text(&mut on));
+                        if r.changed() {
+                            if on {
+                                d.picked.insert(name.clone());
+                            } else {
+                                d.picked.remove(&name);
+                            }
+                        }
+                        swatch(ui, &m["color"]);
+                        let description = m["description"].as_str().unwrap_or_default();
+                        ui.label(&name).on_hover_text(description);
+                        for (k, _) in &columns {
+                            ui.label(value(&m[*k]));
+                        }
+                        ui.label(if have { t!("mat-lib-in-project") } else { String::new() });
+                        ui.end_row();
+                    }
+                },
+            );
         });
         table::button_row(ui, |ui| {
             let missing = materials.iter().filter(|m| m["in_project"].as_bool() != Some(true)).count();

@@ -1,0 +1,117 @@
+{
+  "format": 1,
+  "code": "WOODS",
+  "name": "Madeiras e painéis",
+  "standard": "ISO 10456",
+  "sources": [
+    "ISO 10456:2007, Tabela 3: madeira 450 kg/m³ λ = 0,12; 500 kg/m³ λ = 0,13; 700 kg/m³ λ = 0,18, c = 1 600; compensado 500 kg/m³ λ = 0,13, c = 1 600; OSB 650 kg/m³ λ = 0,13; aglomerado 600 kg/m³ λ = 0,14; chapa de fibras 800 kg/m³ λ = 0,18 W/(m·K), c = 1 700 J/(kg·K)",
+    "Não são classes de resistência para cálculo estrutural"
+  ],
+  "materials": [
+    {
+      "name": "Madeira leve",
+      "class": "Wood",
+      "color": [
+        222,
+        196,
+        150
+      ],
+      "description": "Madeira de baixa densidade (ISO 10456: madeira 450 kg/m³)",
+      "density": 450.0,
+      "thermal_conductivity": 0.12,
+      "specific_heat": 1600.0
+    },
+    {
+      "name": "Madeira macia",
+      "class": "Wood",
+      "color": [
+        214,
+        180,
+        130
+      ],
+      "description": "Madeira de coníferas, macia (ISO 10456: madeira 500 kg/m³)",
+      "density": 500.0,
+      "thermal_conductivity": 0.13,
+      "specific_heat": 1600.0
+    },
+    {
+      "name": "Madeira dura",
+      "class": "Wood",
+      "color": [
+        150,
+        96,
+        60
+      ],
+      "description": "Madeira de folhosas, dura (ISO 10456: madeira 700 kg/m³)",
+      "density": 700.0,
+      "thermal_conductivity": 0.18,
+      "specific_heat": 1600.0
+    },
+    {
+      "name": "Compensado",
+      "class": "Wood",
+      "color": [
+        204,
+        170,
+        120
+      ],
+      "description": "Chapa de madeira compensada (ISO 10456: compensado 500 kg/m³)",
+      "density": 500.0,
+      "thermal_conductivity": 0.13,
+      "specific_heat": 1600.0
+    },
+    {
+      "name": "OSB",
+      "class": "Wood",
+      "color": [
+        200,
+        160,
+        100
+      ],
+      "description": "Painel de tiras de madeira orientadas (ISO 10456: OSB)",
+      "density": 650.0,
+      "thermal_conductivity": 0.13,
+      "specific_heat": 1700.0
+    },
+    {
+      "name": "Aglomerado",
+      "class": "Wood",
+      "color": [
+        196,
+        170,
+        130
+      ],
+      "description": "Painel de partículas (ISO 10456: aglomerado 600 kg/m³)",
+      "density": 600.0,
+      "thermal_conductivity": 0.14,
+      "specific_heat": 1700.0
+    },
+    {
+      "name": "MDF",
+      "class": "Wood",
+      "color": [
+        180,
+        150,
+        110
+      ],
+      "description": "Painel de fibras de média densidade (ISO 10456: chapa de fibras 800 kg/m³)",
+      "density": 800.0,
+      "thermal_conductivity": 0.18,
+      "specific_heat": 1700.0
+    },
+    {
+      "name": "MDF branco",
+      "class": "Wood",
+      "color": [
+        244,
+        244,
+        240
+      ],
+      "description": "Painel MDF com revestimento melamínico branco (ISO 10456: chapa de fibras 800 kg/m³)",
+      "finish": "Satin",
+      "density": 800.0,
+      "thermal_conductivity": 0.18,
+      "specific_heat": 1700.0
+    }
+  ]
+}

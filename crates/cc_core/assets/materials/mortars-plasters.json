@@ -1,0 +1,188 @@
+{
+  "format": 1,
+  "code": "MORTARS-PLASTERS",
+  "name": "Argamassas, gessos e placas",
+  "standard": "ISO 10456, EN 520, ISO 13007",
+  "sources": [
+    "ISO 10456:2007, Tabela 3: reboco de cimento e areia 1 800 kg/m³ λ = 1,0; cal e areia 1 600 kg/m³ λ = 0,80; reboco de gesso 1 000 kg/m³ λ = 0,40 e 1 300 kg/m³ λ = 0,57; placa de gesso 900 kg/m³ λ = 0,25 W/(m·K); c = 1 000 J/(kg·K)",
+    "ISO 13007-1 e 13007-3: adesivos e argamassas de rejuntamento para placas cerâmicas; EN 520: chapas de gesso (tipos A, H e F)"
+  ],
+  "materials": [
+    {
+      "name": "Chapisco",
+      "class": "Mortar",
+      "color": [
+        150,
+        148,
+        140
+      ],
+      "description": "Argamassa de cimento e areia grossa, de aderência (ISO 10456: cimento e areia)",
+      "density": 1800.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Emboço",
+      "class": "Mortar",
+      "color": [
+        186,
+        182,
+        172
+      ],
+      "description": "Argamassa de cimento, cal e areia, camada de regularização (ISO 10456: cimento e areia)",
+      "density": 1800.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Reboco",
+      "class": "Mortar",
+      "color": [
+        206,
+        202,
+        192
+      ],
+      "description": "Argamassa de cimento, cal e areia fina, camada de acabamento (ISO 10456: cimento e areia)",
+      "density": 1800.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Reboco de cal",
+      "class": "Mortar",
+      "color": [
+        214,
+        210,
+        200
+      ],
+      "description": "Argamassa de cal e areia (ISO 10456: cal e areia)",
+      "density": 1600.0,
+      "thermal_conductivity": 0.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Argamassa de assentamento",
+      "class": "Mortar",
+      "color": [
+        176,
+        172,
+        162
+      ],
+      "description": "Argamassa de cimento, cal e areia para alvenaria (ISO 10456: cimento e areia)",
+      "density": 1800.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Contrapiso",
+      "class": "Mortar",
+      "color": [
+        160,
+        158,
+        150
+      ],
+      "description": "Argamassa de cimento e areia para regularização de pisos (ISO 10456: cimento e areia)",
+      "density": 1800.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Argamassa colante cimentícia",
+      "class": "Mortar",
+      "color": [
+        190,
+        190,
+        186
+      ],
+      "description": "Adesivo cimentício para placas cerâmicas (ISO 13007-1, tipo C); valores do modelo da classe"
+    },
+    {
+      "name": "Rejunte cimentício cinza",
+      "class": "Mortar",
+      "color": [
+        150,
+        150,
+        150
+      ],
+      "description": "Argamassa de rejuntamento cimentícia (ISO 13007-3, tipo CG); valores do modelo da classe"
+    },
+    {
+      "name": "Gesso liso",
+      "class": "Gypsum",
+      "color": [
+        242,
+        240,
+        234
+      ],
+      "description": "Revestimento de pasta de gesso (ISO 10456: reboco de gesso 1 000 kg/m³)",
+      "density": 1000.0,
+      "thermal_conductivity": 0.4,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Gesso projetado",
+      "class": "Gypsum",
+      "color": [
+        236,
+        234,
+        228
+      ],
+      "description": "Revestimento de gesso projetado (ISO 10456: reboco de gesso 1 300 kg/m³)",
+      "density": 1300.0,
+      "thermal_conductivity": 0.57,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Chapa de gesso standard",
+      "class": "Gypsum",
+      "color": [
+        236,
+        236,
+        233
+      ],
+      "description": "Chapa de gesso para drywall, standard (EN 520 tipo A; ISO 10456: placa de gesso)",
+      "density": 900.0,
+      "thermal_conductivity": 0.25,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Chapa de gesso resistente à umidade",
+      "class": "Gypsum",
+      "color": [
+        176,
+        204,
+        176
+      ],
+      "description": "Chapa de gesso para drywall, resistente à umidade (EN 520 tipo H; ISO 10456: placa de gesso)",
+      "density": 900.0,
+      "thermal_conductivity": 0.25,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Chapa de gesso resistente ao fogo",
+      "class": "Gypsum",
+      "color": [
+        230,
+        184,
+        184
+      ],
+      "description": "Chapa de gesso para drywall, resistente ao fogo (EN 520 tipo F; ISO 10456: placa de gesso)",
+      "density": 900.0,
+      "thermal_conductivity": 0.25,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Forro de gesso",
+      "class": "Gypsum",
+      "color": [
+        244,
+        243,
+        240
+      ],
+      "description": "Placas de gesso para forro (ISO 10456: placa de gesso)",
+      "density": 900.0,
+      "thermal_conductivity": 0.25,
+      "specific_heat": 1000.0
+    }
+  ]
+}

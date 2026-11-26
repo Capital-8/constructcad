@@ -12,8 +12,8 @@ use crate::theme::{self, PALETTE};
 use egui::{Color32, Context, RichText, Stroke, Ui, vec2};
 
 /// Minimum size of footer buttons.
-pub const BUTTON_SIZE: egui::Vec2 = egui::Vec2::new(88.0, 28.0);
-const PAD_X: i8 = 20;
+pub const BUTTON_SIZE: egui::Vec2 = egui::Vec2::new(88.0, 30.0);
+const PAD_X: i8 = 24;
 
 /// Icon shown next to the message of an alert.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +55,9 @@ pub fn styled_button(ui: &mut Ui, label: &str, style: Style) -> egui::Response {
         Style::Danger => {
             egui::Button::new(RichText::new(label).color(Color32::WHITE)).fill(PALETTE.danger).stroke(Stroke::NONE)
         }
-        Style::Secondary => egui::Button::new(label),
+        Style::Secondary => egui::Button::new(label)
+            .fill(if PALETTE.dark { PALETTE.surface } else { Color32::WHITE })
+            .stroke(Stroke::new(1.0, PALETTE.border_strong)),
     };
     ui.add(button.min_size(BUTTON_SIZE))
 }
@@ -143,6 +145,9 @@ impl Footer {
         total + FOOTER_SPACING * count.saturating_sub(1) as f32
     }
 }
+
+/// Corner radius of the dialog frame.
+pub const DIALOG_RADIUS: u8 = 10;
 
 /// Gap between footer buttons.
 const FOOTER_SPACING: f32 = 8.0;
@@ -243,11 +248,19 @@ pub struct Dialog {
     subtitle: Option<String>,
     width: f32,
     kind: Option<Kind>,
+    flush: bool,
 }
 
 impl Dialog {
     pub fn new(id: impl std::hash::Hash + std::fmt::Debug, title: impl Into<String>) -> Self {
-        Self { id: egui::Id::new(("dialog", id)), title: title.into(), subtitle: None, width: 420.0, kind: None }
+        Self {
+            id: egui::Id::new(("dialog", id)),
+            title: title.into(),
+            subtitle: None,
+            width: 420.0,
+            kind: None,
+            flush: false,
+        }
     }
 
     /// A muted text after the title (what the dialog belongs to), cut to fit the header.
@@ -259,6 +272,15 @@ impl Dialog {
     /// Width of the body content.
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
+        self
+    }
+
+    /// No header row and no padding around the body: the body draws the
+    /// whole area above the footer, its title included (a settings window
+    /// laid out by `settings::sidebar_layout`). The close button sits in
+    /// the top right corner, and the top strip moves the dialog.
+    pub fn flush(mut self) -> Self {
+        self.flush = true;
         self
     }
 
@@ -277,79 +299,113 @@ impl Dialog {
         footer(&mut buttons);
         let frame = egui::Frame::popup(&ctx.style_of(egui::Theme::Light))
             .inner_margin(egui::Margin::ZERO)
-            .corner_radius(8)
-            .fill(PALETTE.panel);
+            .corner_radius(DIALOG_RADIUS)
+            .fill(PALETTE.canvas);
         let mut clicked = None;
         let mut close_clicked = false;
         let mut placed = Placed::load(ctx, self.id);
         placed.follow(ctx, egui::LayerId::new(egui::Order::Foreground, self.id));
         let area = egui::Modal::default_area(self.id).anchor(egui::Align2::CENTER_CENTER, placed.offset);
         let modal = egui::Modal::new(self.id).area(area).frame(frame).show(ctx, |ui| {
+            // Padding around the body, none in a flush dialog.
+            let pad = if self.flush { 0.0 } else { PAD_X as f32 };
             // The footer buttons always fit: a dialog too narrow for them widens.
-            let body_width = self.width.max(buttons.width(ui).ceil() + 1.0);
+            let body_width = self.width.max(buttons.width(ui).ceil() + 1.0 + 2.0 * (PAD_X as f32 - pad));
             // A body that outgrew its width last frame takes the header and
             // the footer with it. The body itself is laid out at its own
             // width every frame, so the dialog narrows again when it can.
             let content_width = body_width.max(placed.body_width);
-            ui.set_width(content_width + 2.0 * PAD_X as f32);
+            ui.set_width(content_width + 2.0 * pad);
             ui.spacing_mut().item_spacing.y = 0.0;
+            let top = ui.cursor().min;
 
             // Header; dragging it moves the dialog (see `Placed::follow`).
             let mut close_rect = egui::Rect::NOTHING;
-            let header = egui::Frame::new()
-                .inner_margin(egui::Margin { left: PAD_X, right: 12, top: 14, bottom: 6 })
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        // Not selectable: a drag on the title moves the dialog.
-                        let title = RichText::new(&self.title).family(theme::semibold()).size(15.0).color(PALETTE.text);
-                        ui.add(egui::Label::new(title).selectable(false));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let (rect, r) = ui.allocate_exact_size(vec2(26.0, 26.0), egui::Sense::click());
-                            close_rect = rect;
-                            if r.hovered() {
-                                ui.painter().rect_filled(rect, theme::RADIUS as f32, PALETTE.hover);
-                            }
-                            let color = if r.hovered() { PALETTE.text } else { PALETTE.text_muted };
-                            icons::paint(ui.painter(), rect.shrink(8.0), Icon::Close, color);
-                            r.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::t!("action-close"))
-                            });
-                            close_clicked = r.on_hover_text(crate::t!("action-close")).clicked();
-                            // Between the title and the close button.
-                            if let Some(subtitle) = &self.subtitle {
-                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                                    let text = RichText::new(subtitle).size(12.5).color(PALETTE.text_muted);
-                                    ui.add(egui::Label::new(text).selectable(false).truncate());
+            let header = (!self.flush).then(|| {
+                egui::Frame::new().inner_margin(egui::Margin { left: PAD_X, right: 14, top: 16, bottom: 12 }).show(
+                    ui,
+                    |ui| {
+                        ui.horizontal(|ui| {
+                            // Not selectable: a drag on the title moves the dialog.
+                            let title =
+                                RichText::new(&self.title).family(theme::semibold()).size(16.0).color(PALETTE.text);
+                            ui.add(egui::Label::new(title).selectable(false));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let (rect, r) = ui.allocate_exact_size(vec2(26.0, 26.0), egui::Sense::click());
+                                close_rect = rect;
+                                if r.hovered() {
+                                    ui.painter().rect_filled(rect, theme::RADIUS as f32, PALETTE.hover);
+                                }
+                                let color = if r.hovered() { PALETTE.text } else { PALETTE.text_muted };
+                                icons::paint(ui.painter(), rect.shrink(8.0), Icon::Close, color);
+                                r.widget_info(|| {
+                                    egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::t!("action-close"))
                                 });
-                            }
+                                close_clicked = r.on_hover_text(crate::t!("action-close")).clicked();
+                                // Between the title and the close button.
+                                if let Some(subtitle) = &self.subtitle {
+                                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                        let text = RichText::new(subtitle).size(12.5).color(PALETTE.text_muted);
+                                        ui.add(egui::Label::new(text).selectable(false).truncate());
+                                    });
+                                }
+                            });
                         });
-                    });
-                });
-            placed.header = Some((header.response.rect, close_rect));
+                    },
+                )
+            });
+            if let Some(header) = header {
+                let r = header.response.rect;
+                // A line under the title, except over an alert's message.
+                if self.kind.is_none() {
+                    ui.painter().hline(r.x_range(), r.bottom(), Stroke::new(1.0, PALETTE.border));
+                }
+                placed.header = Some((r, close_rect));
+            }
 
             // Body.
-            let shown = egui::Frame::new()
-                .inner_margin(egui::Margin { left: PAD_X, right: PAD_X, top: 8, bottom: 18 })
-                .show(ui, |ui| {
-                    ui.spacing_mut().item_spacing.y = 6.0;
-                    match self.kind {
-                        Some(kind) => {
-                            ui.horizontal_top(|ui| {
-                                alert_icon(ui, kind);
-                                ui.add_space(6.0);
-                                ui.vertical(|ui| {
-                                    ui.set_width(body_width - 48.0);
-                                    body(ui);
-                                });
+            let margin = if self.flush {
+                egui::Margin::ZERO
+            } else {
+                let top = if self.kind.is_some() { 4 } else { 16 };
+                egui::Margin { left: PAD_X, right: PAD_X, top, bottom: 20 }
+            };
+            let shown = egui::Frame::new().inner_margin(margin).show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 6.0;
+                match self.kind {
+                    Some(kind) => {
+                        ui.horizontal_top(|ui| {
+                            alert_icon(ui, kind);
+                            ui.add_space(6.0);
+                            ui.vertical(|ui| {
+                                ui.set_width(body_width - 48.0);
+                                body(ui);
                             });
-                        }
-                        None => {
-                            ui.set_width(body_width);
-                            body(ui);
-                        }
+                        });
                     }
-                });
-            let measured = shown.response.rect.width() - 2.0 * PAD_X as f32;
+                    None => {
+                        ui.set_width(body_width);
+                        body(ui);
+                    }
+                }
+            });
+            let measured = shown.response.rect.width() - 2.0 * pad;
+            if self.flush {
+                // The close button over the body's top right corner; the strip
+                // along the top moves the dialog.
+                let width = content_width + 2.0 * pad;
+                let close = egui::Rect::from_min_size(top + vec2(width - 40.0, 12.0), vec2(28.0, 28.0));
+                let r = ui.interact(close, self.id.with("close"), egui::Sense::click());
+                if r.hovered() {
+                    ui.painter().rect_filled(close, theme::RADIUS as f32, PALETTE.hover);
+                }
+                let color = if r.hovered() { PALETTE.text } else { PALETTE.text_muted };
+                icons::paint(ui.painter(), close.shrink(8.0), Icon::Close, color);
+                r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::t!("action-close")));
+                close_clicked = r.on_hover_text(crate::t!("action-close")).clicked();
+                let strip = egui::Rect::from_min_size(top, vec2(width, 48.0));
+                placed.header = Some((strip, close));
+            }
             // A scroll area finding out it needs its bar overflows for one frame.
             placed.wide_frames = if measured > body_width + 1.0 { placed.wide_frames + 1 } else { 0 };
             #[cfg(test)]
@@ -364,9 +420,10 @@ impl Dialog {
             // Footer.
             let response = egui::Frame::new()
                 .fill(PALETTE.surface)
-                .inner_margin(egui::Margin { left: PAD_X, right: PAD_X, top: 12, bottom: 12 })
+                .corner_radius(egui::CornerRadius { sw: DIALOG_RADIUS, se: DIALOG_RADIUS, ..egui::CornerRadius::ZERO })
+                .inner_margin(egui::Margin { left: PAD_X, right: PAD_X, top: 14, bottom: 14 })
                 .show(ui, |ui| {
-                    ui.set_width(content_width);
+                    ui.set_width(content_width + 2.0 * (pad - PAD_X as f32));
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = FOOTER_SPACING;
                         for (i, (label, on)) in buttons.extras.iter().enumerate() {

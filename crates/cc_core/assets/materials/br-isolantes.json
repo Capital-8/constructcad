@@ -1,0 +1,91 @@
+{
+  "format": 1,
+  "code": "BR-ISOLANTES",
+  "name": "Isolantes térmicos (NBR 15220-2)",
+  "region": "brazil",
+  "standard": "ABNT NBR 15220-2",
+  "sources": [
+    "ABNT NBR 15220-2:2005, Tabela B.3: lã de rocha 20 a 200 kg/m³ λ = 0,045, c = 750; lã de vidro 10 a 100 kg/m³ λ = 0,045, c = 700; poliestireno expandido moldado 15 a 35 kg/m³ λ = 0,040, c = 1 420; poliestireno extrudado 25 a 40 kg/m³ λ = 0,035, c = 1 420; espuma rígida de poliuretano 30 a 40 kg/m³ λ = 0,030 W/(m·K), c = 1 670 J/(kg·K)",
+    "Densidades: um valor usual dentro da faixa da tabela; um produto declara o seu λ"
+  ],
+  "materials": [
+    {
+      "name": "Lã de rocha",
+      "class": "Insulation",
+      "color": [
+        192,
+        170,
+        122
+      ],
+      "description": "Painel de lã de rocha (NBR 15220-2: 20 a 200 kg/m³)",
+      "density": 64.0,
+      "thermal_conductivity": 0.045,
+      "specific_heat": 750.0
+    },
+    {
+      "name": "Lã de vidro",
+      "class": "Insulation",
+      "color": [
+        236,
+        210,
+        122
+      ],
+      "description": "Feltro ou painel de lã de vidro (NBR 15220-2: 10 a 100 kg/m³)",
+      "density": 16.0,
+      "thermal_conductivity": 0.045,
+      "specific_heat": 700.0
+    },
+    {
+      "name": "Poliestireno expandido (EPS)",
+      "class": "Insulation",
+      "color": [
+        244,
+        244,
+        242
+      ],
+      "description": "Placa de EPS moldado (NBR 15220-2: 15 a 35 kg/m³)",
+      "density": 15.0,
+      "thermal_conductivity": 0.04,
+      "specific_heat": 1420.0
+    },
+    {
+      "name": "Poliestireno expandido (EPS) alta densidade",
+      "class": "Insulation",
+      "color": [
+        240,
+        240,
+        238
+      ],
+      "description": "Placa de EPS moldado (NBR 15220-2: 15 a 35 kg/m³)",
+      "density": 30.0,
+      "thermal_conductivity": 0.04,
+      "specific_heat": 1420.0
+    },
+    {
+      "name": "Poliestireno extrudado (XPS)",
+      "class": "Insulation",
+      "color": [
+        172,
+        202,
+        230
+      ],
+      "description": "Placa de XPS (NBR 15220-2: 25 a 40 kg/m³)",
+      "density": 35.0,
+      "thermal_conductivity": 0.035,
+      "specific_heat": 1420.0
+    },
+    {
+      "name": "Espuma rígida de poliuretano (PU)",
+      "class": "Insulation",
+      "color": [
+        232,
+        216,
+        152
+      ],
+      "description": "Espuma rígida de PU, em placas ou projetada (NBR 15220-2: 30 a 40 kg/m³)",
+      "density": 35.0,
+      "thermal_conductivity": 0.03,
+      "specific_heat": 1670.0
+    }
+  ]
+}
