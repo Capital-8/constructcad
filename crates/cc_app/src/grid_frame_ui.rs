@@ -2,13 +2,14 @@
 //! and optional secondary beams for `grid_frame_create`.
 
 use crate::dialog::Dialog;
+use crate::settings;
 use crate::state::AppState;
 use crate::t;
 use crate::theme::PALETTE;
 use cc_core::{Category, ElementId, ElementKind, ElementTypeId, LevelId};
 use cc_engine::Ref;
 use cc_engine::commands::grid_frame::{GridFrameCreate, SecondaryArg};
-use egui::{Context, RichText};
+use egui::Context;
 
 #[derive(Debug, Clone)]
 pub struct GridFrameDialog {
@@ -87,41 +88,36 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     };
     let (column_types, beam_types) = (types(Category::Column), types(Category::Beam));
     let mut ok = None;
-    let response = Dialog::new("grid-frame", t!("dlg-grid-frame")).width(420.0).show(
+    let response = Dialog::new("grid-frame", t!("dlg-grid-frame")).width(480.0).show(
         ctx,
         |ui| {
-            egui::Grid::new("grid-frame-fields").num_columns(2).spacing([14.0, 8.0]).show(ui, |ui| {
-                let label = |ui: &mut egui::Ui, k: String| ui.label(RichText::new(k).color(PALETTE.text_muted));
-                label(ui, t!("label-base-level"));
-                combo(ui, "gf-base", &mut d.base, &levels);
-                ui.end_row();
-                label(ui, t!("label-top-level"));
-                combo(ui, "gf-top", &mut d.top, &levels);
-                ui.end_row();
-                label(ui, t!("label-column-type"));
-                combo(ui, "gf-column", &mut d.column_type, &column_types);
-                ui.end_row();
-                label(ui, t!("label-beam-type"));
-                combo(ui, "gf-beam", &mut d.beam_type, &beam_types);
-                ui.end_row();
+            const W: f32 = 220.0;
+            settings::setting(ui, &t!("label-base-level"), None, |ui| {
+                settings::combo_items(ui, "gf-base", W, &mut d.base, &levels);
             });
-            ui.add_space(6.0);
-            ui.checkbox(&mut d.secondary, t!("label-secondary-beams"));
+            settings::setting(ui, &t!("label-top-level"), None, |ui| {
+                settings::combo_items(ui, "gf-top", W, &mut d.top, &levels);
+            });
+            settings::setting(ui, &t!("label-column-type"), None, |ui| {
+                settings::combo_items(ui, "gf-column", W, &mut d.column_type, &column_types);
+            });
+            settings::setting(ui, &t!("label-beam-type"), None, |ui| {
+                settings::combo_items(ui, "gf-beam", W, &mut d.beam_type, &beam_types);
+            });
+            settings::switch_setting(ui, &t!("label-secondary-beams"), None, &mut d.secondary);
             ui.add_enabled_ui(d.secondary, |ui| {
-                egui::Grid::new("grid-frame-secondary").num_columns(2).spacing([14.0, 8.0]).show(ui, |ui| {
-                    ui.label(RichText::new(t!("label-parallel-to")).color(PALETTE.text_muted));
-                    let items: Vec<(Option<ElementId>, String)> =
-                        grids.iter().map(|(id, n)| (Some(*id), n.clone())).collect();
-                    combo(ui, "gf-parallel", &mut d.parallel_to, &items);
-                    ui.end_row();
-                    ui.label(RichText::new(t!("label-spacing")).color(PALETTE.text_muted));
-                    ui.add(egui::DragValue::new(&mut d.spacing).range(0.3..=50.0).speed(0.05).suffix(" m"));
-                    ui.end_row();
+                let items: Vec<(Option<ElementId>, String)> =
+                    grids.iter().map(|(id, n)| (Some(*id), n.clone())).collect();
+                settings::setting(ui, &t!("label-parallel-to"), None, |ui| {
+                    settings::combo_items(ui, "gf-parallel", W, &mut d.parallel_to, &items);
+                });
+                settings::setting_row(ui, &t!("label-spacing"), None, |ui| {
+                    settings::drag(ui, egui::DragValue::new(&mut d.spacing).range(0.3..=50.0).speed(0.05).suffix(" m"));
                 });
             });
             if let Some(e) = &d.error {
                 ui.add_space(6.0);
-                ui.label(RichText::new(e).color(PALETTE.danger));
+                settings::callout(ui, PALETTE.danger, e);
             }
         },
         |f| {

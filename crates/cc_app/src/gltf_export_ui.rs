@@ -3,11 +3,12 @@
 //! `gltf_export` writes the active 3D view (or the first).
 
 use crate::dialog::Dialog;
+use crate::icons::Icon;
+use crate::settings;
 use crate::state::AppState;
 use crate::t;
-use crate::theme::PALETTE;
 use cc_engine::commands::io;
-use egui::{Context, RichText};
+use egui::Context;
 
 /// Pick the .glb to write and open the options dialog for it.
 pub fn open(state: &mut AppState) {
@@ -28,14 +29,15 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     let Some(path) = state.dialogs.gltf_export.clone() else { return };
     let mut draco = state.dialogs.gltf_draco;
     let mut ok = None;
-    let response = Dialog::new("gltf-export", t!("dlg-export-gltf")).width(380.0).show(
+    let response = Dialog::new("gltf-export", t!("dlg-export-gltf")).width(460.0).show(
         ctx,
         |ui| {
             let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            ui.label(RichText::new(name).strong());
-            ui.add_space(8.0);
-            ui.checkbox(&mut draco, t!("label-gltf-draco"));
-            ui.add(egui::Label::new(RichText::new(t!("hint-gltf-draco")).color(PALETTE.text_muted).small()).wrap());
+            settings::file_box(ui, Icon::Export, &name);
+            let label = t!("label-gltf-draco");
+            settings::setting_row(ui, &label, Some(&t!("hint-gltf-draco")), |ui| {
+                settings::switch(ui, &mut draco, &label)
+            });
         },
         |f| {
             ok = Some(f.primary(t!("action-ok")));

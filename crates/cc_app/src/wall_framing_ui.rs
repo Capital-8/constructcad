@@ -7,6 +7,7 @@
 use crate::dialog::Dialog;
 use crate::grid_frame_ui::combo;
 use crate::member_host_ui::{length, member_rows};
+use crate::settings;
 use crate::state::AppState;
 use crate::t;
 use crate::table::{readonly_row, row, section};
@@ -15,7 +16,7 @@ use cc_core::wall_framing::{self as wf, FramingSystem, WallFraming};
 use cc_core::{Category, ElementId, ElementKind, ElementTypeId, StructuralMaterial};
 use cc_engine::Ref;
 use cc_engine::commands::wall_framing::WallFramingCreate;
-use egui::{Context, RichText, Ui};
+use egui::{Context, Ui};
 
 #[derive(Debug, Clone)]
 pub struct WallFramingDialog {
@@ -110,44 +111,40 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     let beams = choices(state, Category::Beam, d.system);
     let systems = systems();
     let mut ok = None;
-    let response = Dialog::new("wall-framing", t!("dlg-wall-framing")).width(440.0).show(
+    let response = Dialog::new("wall-framing", t!("dlg-wall-framing")).width(480.0).show(
         ctx,
         |ui| {
-            let label = |ui: &mut Ui, k: String| {
-                ui.label(RichText::new(k).color(PALETTE.text_muted));
-            };
-            egui::Grid::new("wall-framing-fields").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
-                label(ui, t!("prop-framing-system"));
+            const W: f32 = 220.0;
+            settings::setting(ui, &t!("prop-framing-system"), None, |ui| {
                 let system = d.system;
-                combo(ui, "wf-system", &mut d.system, &systems);
+                settings::combo_items(ui, "wf-system", W, &mut d.system, &systems);
                 if d.system != system {
                     // Another system: its spacing, top plates and catalog types.
                     let fresh = WallFramingDialog::new(d.system);
                     (d.spacing, d.double_top) = (fresh.spacing, fresh.double_top);
                     (d.stud_type, d.track_type, d.header_type) = (None, None, None);
                 }
-                ui.end_row();
-                label(ui, t!("prop-stud-spacing"));
-                ui.add(crate::properties::length_drag(&mut d.spacing).range(wf::SPACING));
-                ui.end_row();
-                label(ui, t!("label-stud-type"));
-                combo(ui, "wf-stud", &mut d.stud_type, &studs);
-                ui.end_row();
-                label(ui, t!("label-track-type"));
-                combo(ui, "wf-track", &mut d.track_type, &beams);
-                ui.end_row();
-                label(ui, t!("label-header-type"));
-                combo(ui, "wf-header", &mut d.header_type, &beams);
-                ui.end_row();
             });
-            ui.add_space(4.0);
+            settings::setting(ui, &t!("prop-stud-spacing"), None, |ui| {
+                settings::drag(ui, crate::properties::length_drag(&mut d.spacing).range(wf::SPACING));
+            });
+            settings::setting(ui, &t!("label-stud-type"), None, |ui| {
+                settings::combo_items(ui, "wf-stud", W, &mut d.stud_type, &studs);
+            });
+            settings::setting(ui, &t!("label-track-type"), None, |ui| {
+                settings::combo_items(ui, "wf-track", W, &mut d.track_type, &beams);
+            });
+            settings::setting(ui, &t!("label-header-type"), None, |ui| {
+                settings::combo_items(ui, "wf-header", W, &mut d.header_type, &beams);
+            });
             if d.system == FramingSystem::Wood {
-                ui.checkbox(&mut d.double_top, t!("prop-double-top"));
+                settings::switch_setting(ui, &t!("prop-double-top"), None, &mut d.double_top);
             }
-            ui.checkbox(&mut d.blocking, t!("prop-blocking"));
+            let label = t!("prop-blocking");
+            settings::setting_row(ui, &label, None, |ui| settings::switch(ui, &mut d.blocking, &label));
             if let Some(e) = &d.error {
                 ui.add_space(6.0);
-                ui.label(RichText::new(e).color(PALETTE.danger));
+                settings::callout(ui, PALETTE.danger, e);
             }
         },
         |f| {

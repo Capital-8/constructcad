@@ -32,7 +32,7 @@ fn done(state: &mut AppState, r: &egui::Response) {
 
 fn decimals(ui: &mut Ui, state: &mut AppState, field: &str, value: u8, apply: fn(&mut Units, u8)) {
     let mut v = value;
-    let r = ui.add(DragValue::new(&mut v).range(0..=MAX_DECIMALS).speed(0.05));
+    let r = crate::settings::drag_wide(ui, DragValue::new(&mut v).range(0..=MAX_DECIMALS).speed(0.05));
     if r.changed() {
         set(state, field, |u| apply(u, v));
     }
@@ -43,9 +43,10 @@ fn decimals(ui: &mut Ui, state: &mut AppState, field: &str, value: u8, apply: fn
 fn precision(ui: &mut Ui, state: &mut AppState, value: u8) {
     let label = |d: u8| if d == 0 { "1\"".to_string() } else { format!("1/{}\"", 1u32 << d) };
     let mut v = value.min(MAX_DECIMALS);
+    crate::settings::framed(ui);
     egui::ComboBox::from_id_salt("units-precision")
         .selected_text(label(v))
-        .width(70.0)
+        .width(ui.available_width() - 8.0)
         .show_ui(ui, |ui| {
             for d in 0..=MAX_DECIMALS {
                 ui.selectable_value(&mut v, d, label(d));
@@ -60,7 +61,8 @@ fn precision(ui: &mut Ui, state: &mut AppState, value: u8) {
 
 fn symbol(ui: &mut Ui, state: &mut AppState, field: &str, value: bool, apply: fn(&mut Units, bool)) {
     let mut v = value;
-    if crate::table::checkbox(ui, &mut v).changed() {
+    let label = format!("{} {field}", t!("units-symbol"));
+    if crate::settings::switch(ui, &mut v, &label).changed() {
         set(state, field, |u| apply(u, v));
     }
 }
@@ -75,9 +77,10 @@ fn unit_combo<U: Copy + PartialEq>(
     apply: fn(&mut Units, U),
 ) {
     let mut v = current;
+    crate::settings::framed(ui);
     egui::ComboBox::from_id_salt(id)
         .selected_text(label(current))
-        .width(if id == "style" { 240.0 } else { 150.0 })
+        .width(if id == "style" { 260.0 } else { ui.available_width() - 8.0 })
         .show_ui(ui, |ui| {
             for o in options {
                 ui.selectable_value(&mut v, *o, label(*o));
@@ -143,7 +146,7 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     }
     session::begin(state);
     let (mut ok, mut reset, mut imperial) = (0, 0, 0);
-    let response = Dialog::new("units", t!("dlg-units")).width(620.0).show(
+    let response = Dialog::new("units", t!("dlg-units")).width(760.0).show(
         ctx,
         |ui| body(ui, state),
         |f| {
@@ -166,83 +169,150 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     }
 }
 
+/// Widths of the cells of a quantity row: name, unit, decimals, symbol.
+const CELLS: [f32; 4] = [130.0, 200.0, 90.0, 70.0];
+
+/// A quantity row of the card: its name, then `cells` draws the unit,
+/// decimals and symbol cells, and its sample sits on the right.
+fn quantity(ui: &mut Ui, id: &str, name: &str, last: bool, sample: String, cells: impl FnOnce(&mut Ui)) {
+    crate::settings::card_row(ui, id, 48.0, false, last, |ui| {
+        crate::settings::cell(ui, CELLS[0], |ui| {
+            ui.label(RichText::new(name).family(theme::semibold()).size(13.0));
+        });
+        cells(ui);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let font = egui::FontId::monospace(13.0);
+            let galley = ui.painter().layout_no_wrap(sample, font, PALETTE.accent_text);
+            let (rect, _) = ui.allocate_exact_size(galley.size() + egui::vec2(20.0, 10.0), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 6.0, PALETTE.accent_soft.gamma_multiply(0.6));
+            ui.painter().galley(rect.center() - galley.size() / 2.0, galley, PALETTE.accent_text);
+        });
+    });
+}
+
 fn body(ui: &mut Ui, state: &mut AppState) {
     let u = state.project().units.clone();
     let comma = crate::i18n::language().decimal_comma();
-    ui.label(theme::muted(t!("units-intro")));
-    ui.add_space(6.0);
-    egui::Grid::new("units-grid").num_columns(5).striped(true).spacing([14.0, 8.0]).show(ui, |ui| {
-        for h in ["units-quantity", "units-unit", "units-decimals", "units-symbol", "units-example"] {
-            ui.label(RichText::new(tr(h)).color(PALETTE.text_muted).size(12.0));
-        }
-        ui.end_row();
+    ui.add(egui::Label::new(RichText::new(t!("units-intro")).size(12.0).color(PALETTE.text_muted)).wrap());
+    ui.add_space(14.0);
+    crate::settings::card(ui, |ui| {
+        let mut x = 0.0;
+        let names = ["units-quantity", "units-unit", "units-decimals", "units-symbol"].map(tr);
+        let mut columns: Vec<(f32, String)> = names
+            .into_iter()
+            .zip(CELLS)
+            .map(|(n, w)| {
+                let at = x;
+                x += w + crate::settings::CELL_GAP;
+                (at, n)
+            })
+            .collect();
+        let example_x = ui.available_width() - 2.0 * crate::settings::ROW_PAD_X - 120.0;
+        columns.push((example_x, tr("units-example")));
+        crate::settings::card_header(ui, &columns);
 
-        ui.label(crate::properties::field_label(cc_core::ScheduleField::Length));
-        unit_combo(ui, state, "length", u.length.unit, &LengthUnit::ALL, length_name, |u, v| u.length.unit = v);
-        if u.length.unit.is_fractional() {
-            precision(ui, state, u.length.decimals);
-            // Feet and inches always show their marks.
-            ui.label("");
-        } else {
-            decimals(ui, state, "length-decimals", u.length.decimals, |u, v| u.length.decimals = v);
-            symbol(ui, state, "length-symbol", u.length.symbol, |u, v| u.length.symbol = v);
-        }
-        let sample = SAMPLE / u.length.unit.per_meter();
-        ui.label(RichText::new(format::length_with(&u, comma, sample)).monospace());
-        ui.end_row();
-
-        ui.label(crate::properties::field_label(cc_core::ScheduleField::Area));
-        unit_combo(ui, state, "area", u.area.unit, &AreaUnit::ALL, area_name, |u, v| u.area.unit = v);
-        decimals(ui, state, "area-decimals", u.area.decimals, |u, v| u.area.decimals = v);
-        symbol(ui, state, "area-symbol", u.area.symbol, |u, v| u.area.symbol = v);
-        let sample = SAMPLE / u.area.unit.per_square_meter();
-        ui.label(RichText::new(format::area_with(&u, comma, sample)).monospace());
-        ui.end_row();
-
-        ui.label(crate::properties::field_label(cc_core::ScheduleField::Volume));
-        unit_combo(ui, state, "volume", u.volume.unit, &VolumeUnit::ALL, volume_name, |u, v| u.volume.unit = v);
-        decimals(ui, state, "volume-decimals", u.volume.decimals, |u, v| u.volume.decimals = v);
-        symbol(ui, state, "volume-symbol", u.volume.symbol, |u, v| u.volume.symbol = v);
-        let sample = SAMPLE / u.volume.unit.per_cubic_meter();
-        ui.label(RichText::new(format::volume_with(&u, comma, sample)).monospace());
-        ui.end_row();
-
-        ui.label(t!("units-angle"));
-        ui.label(t!("unit-degrees"));
-        decimals(ui, state, "angle-decimals", u.angle.decimals, |u, v| u.angle.decimals = v);
-        symbol(ui, state, "angle-symbol", u.angle.symbol, |u, v| u.angle.symbol = v);
-        ui.label(RichText::new(format::angle_with(&u, comma, 12.3456)).monospace());
-        ui.end_row();
-
-        ui.label(t!("units-slope"));
-        unit_combo(ui, state, "slope", u.slope.unit, &SlopeUnit::ALL, slope_name, |u, v| u.slope.unit = v);
-        decimals(ui, state, "slope-decimals", u.slope.decimals, |u, v| u.slope.decimals = v);
-        symbol(ui, state, "slope-symbol", u.slope.symbol, |u, v| u.slope.symbol = v);
-        ui.label(RichText::new(format::slope_with(&u, comma, 0.2345)).monospace());
-        ui.end_row();
-
-        ui.label(t!("units-currency"));
-        let mut currency = u.currency.clone();
-        let r = crate::table::live_text(ui, "units-currency", &mut currency, |ui, c| {
-            ui.add(egui::TextEdit::singleline(c).desired_width(150.0).hint_text(t!("units-currency-hint")))
+        let sample = format::length_with(&u, comma, SAMPLE / u.length.unit.per_meter());
+        let name = crate::properties::field_label(cc_core::ScheduleField::Length);
+        quantity(ui, "length", &name, false, sample, |ui| {
+            crate::settings::cell(ui, CELLS[1], |ui| {
+                unit_combo(ui, state, "length", u.length.unit, &LengthUnit::ALL, length_name, |u, v| u.length.unit = v);
+            });
+            if u.length.unit.is_fractional() {
+                crate::settings::cell(ui, CELLS[2], |ui| precision(ui, state, u.length.decimals));
+                // Feet and inches always show their marks.
+            } else {
+                crate::settings::cell(ui, CELLS[2], |ui| {
+                    decimals(ui, state, "length-decimals", u.length.decimals, |u, v| u.length.decimals = v);
+                });
+                crate::settings::cell(ui, CELLS[3], |ui| {
+                    symbol(ui, state, "length-symbol", u.length.symbol, |u, v| u.length.symbol = v)
+                });
+            }
         });
-        if r.changed() {
-            let currency: String = currency.chars().take(8).collect();
-            set(state, "currency", |u| u.currency = currency);
-        }
-        done(state, &r);
-        decimals(ui, state, "currency-decimals", u.currency_decimals, |u, v| u.currency_decimals = v);
-        ui.label("");
-        ui.label(RichText::new(format::money_with(&u, comma, SAMPLE)).monospace());
-        ui.end_row();
+
+        let sample = format::area_with(&u, comma, SAMPLE / u.area.unit.per_square_meter());
+        let name = crate::properties::field_label(cc_core::ScheduleField::Area);
+        quantity(ui, "area", &name, false, sample, |ui| {
+            crate::settings::cell(ui, CELLS[1], |ui| {
+                unit_combo(ui, state, "area", u.area.unit, &AreaUnit::ALL, area_name, |u, v| u.area.unit = v);
+            });
+            crate::settings::cell(ui, CELLS[2], |ui| {
+                decimals(ui, state, "area-decimals", u.area.decimals, |u, v| u.area.decimals = v)
+            });
+            crate::settings::cell(ui, CELLS[3], |ui| {
+                symbol(ui, state, "area-symbol", u.area.symbol, |u, v| u.area.symbol = v)
+            });
+        });
+
+        let sample = format::volume_with(&u, comma, SAMPLE / u.volume.unit.per_cubic_meter());
+        let name = crate::properties::field_label(cc_core::ScheduleField::Volume);
+        quantity(ui, "volume", &name, false, sample, |ui| {
+            crate::settings::cell(ui, CELLS[1], |ui| {
+                unit_combo(ui, state, "volume", u.volume.unit, &VolumeUnit::ALL, volume_name, |u, v| u.volume.unit = v);
+            });
+            crate::settings::cell(ui, CELLS[2], |ui| {
+                decimals(ui, state, "volume-decimals", u.volume.decimals, |u, v| u.volume.decimals = v);
+            });
+            crate::settings::cell(ui, CELLS[3], |ui| {
+                symbol(ui, state, "volume-symbol", u.volume.symbol, |u, v| u.volume.symbol = v)
+            });
+        });
+
+        let sample = format::angle_with(&u, comma, 12.3456);
+        quantity(ui, "angle", &t!("units-angle"), false, sample, |ui| {
+            crate::settings::cell(ui, CELLS[1], |ui| {
+                ui.add_space(8.0);
+                ui.label(t!("unit-degrees"));
+            });
+            crate::settings::cell(ui, CELLS[2], |ui| {
+                decimals(ui, state, "angle-decimals", u.angle.decimals, |u, v| u.angle.decimals = v)
+            });
+            crate::settings::cell(ui, CELLS[3], |ui| {
+                symbol(ui, state, "angle-symbol", u.angle.symbol, |u, v| u.angle.symbol = v)
+            });
+        });
+
+        let sample = format::slope_with(&u, comma, 0.2345);
+        quantity(ui, "slope", &t!("units-slope"), false, sample, |ui| {
+            crate::settings::cell(ui, CELLS[1], |ui| {
+                unit_combo(ui, state, "slope", u.slope.unit, &SlopeUnit::ALL, slope_name, |u, v| u.slope.unit = v);
+            });
+            crate::settings::cell(ui, CELLS[2], |ui| {
+                decimals(ui, state, "slope-decimals", u.slope.decimals, |u, v| u.slope.decimals = v)
+            });
+            crate::settings::cell(ui, CELLS[3], |ui| {
+                symbol(ui, state, "slope-symbol", u.slope.symbol, |u, v| u.slope.symbol = v)
+            });
+        });
+
+        let sample = format::money_with(&u, comma, SAMPLE);
+        quantity(ui, "currency", &t!("units-currency"), true, sample, |ui| {
+            crate::settings::cell(ui, CELLS[1], |ui| {
+                crate::settings::framed(ui);
+                let mut currency = u.currency.clone();
+                let r = crate::table::live_text(ui, "units-currency", &mut currency, |ui, c| {
+                    ui.add(crate::settings::text_edit(c, CELLS[1]).hint_text(t!("units-currency-hint")))
+                });
+                if r.changed() {
+                    let currency: String = currency.chars().take(8).collect();
+                    set(state, "currency", |u| u.currency = currency);
+                }
+                done(state, &r);
+            });
+            crate::settings::cell(ui, CELLS[2], |ui| {
+                decimals(ui, state, "currency-decimals", u.currency_decimals, |u, v| u.currency_decimals = v);
+            });
+        });
     });
-    ui.add_space(10.0);
-    ui.horizontal(|ui| {
-        ui.label(t!("units-style"));
+    ui.add_space(8.0);
+    crate::settings::setting(ui, &t!("units-style"), None, |ui| {
         unit_combo(ui, state, "style", u.style, &NumberStyle::ALL, |s| style_name(s, comma), |u, v| u.style = v);
     });
+    let label = t!("units-diameter-point");
     let mut point = u.diameter_point;
-    if ui.checkbox(&mut point, t!("units-diameter-point")).changed() {
-        set(state, "diameter-point", |u| u.diameter_point = point);
-    }
+    crate::settings::setting_row(ui, &label, None, |ui| {
+        if crate::settings::switch(ui, &mut point, &label).changed() {
+            set(state, "diameter-point", |u| u.diameter_point = point);
+        }
+    });
 }

@@ -6,6 +6,7 @@
 use crate::dialog::Dialog;
 use crate::grid_frame_ui::combo;
 use crate::member_host_ui::{finished, length, member_rows};
+use crate::settings;
 use crate::state::AppState;
 use crate::t;
 use crate::table::{row, section};
@@ -14,7 +15,7 @@ use cc_core::steel_building::{self as sb, FrameRoof, Secondary, SteelBuilding};
 use cc_core::{Category, ElementId, ElementKind, ElementTypeId, ProfileMaterial, StructuralMaterial};
 use cc_engine::Ref;
 use cc_engine::commands::steel_building::{SecondaryMembers, SteelBuildingCreate};
-use egui::{Context, DragValue, RichText, Ui};
+use egui::{Context, DragValue, Ui};
 
 #[derive(Debug, Clone)]
 pub struct SteelBuildingDialog {
@@ -85,67 +86,103 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     let beams = steel_choices(state, Category::Beam);
     let roofs = roofs();
     let mut ok = None;
-    let response = Dialog::new("steel-building", t!("dlg-steel-building")).width(460.0).show(
+    let response = Dialog::new("steel-building", t!("dlg-steel-building")).width(560.0).show(
         ctx,
         |ui| {
-            let label = |ui: &mut Ui, k: String| {
-                ui.label(RichText::new(k).color(PALETTE.text_muted));
+            // Fields three by three: the frame, where it stands, its members,
+            // then the purlins and the girts (each on or off, its type and spacing).
+            let length = |ui: &mut Ui, value: &mut f64, range| {
+                settings::drag_wide(ui, crate::properties::length_drag(value).range(range));
             };
-            egui::Grid::new("steel-building-fields").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
-                label(ui, t!("prop-span"));
-                ui.add(crate::properties::length_drag(&mut d.span).range(sb::SPAN));
-                ui.end_row();
-                label(ui, t!("prop-eave-height"));
-                ui.add(crate::properties::length_drag(&mut d.eave_height).range(sb::EAVE_HEIGHT));
-                ui.end_row();
-                label(ui, t!("prop-slope"));
-                ui.add(DragValue::new(&mut d.slope_percent).range(sb::SLOPE).speed(0.1).suffix(" %"));
-                ui.end_row();
-                label(ui, t!("prop-roof-shape"));
-                combo(ui, "sb-roof", &mut d.roof, &roofs);
-                ui.end_row();
-                label(ui, t!("prop-bays"));
-                ui.add(DragValue::new(&mut d.bays).range(sb::BAYS));
-                ui.end_row();
-                label(ui, t!("prop-bay-spacing"));
-                ui.add(crate::properties::length_drag(&mut d.bay_spacing).range(sb::BAY_SPACING));
-                ui.end_row();
-                label(ui, t!("fp-origin-x"));
-                ui.add(crate::properties::length_drag(&mut d.origin[0]));
-                ui.end_row();
-                label(ui, t!("fp-origin-y"));
-                ui.add(crate::properties::length_drag(&mut d.origin[1]));
-                ui.end_row();
-                label(ui, t!("prop-rotation"));
-                ui.add(DragValue::new(&mut d.rotation).speed(1.0).suffix("°"));
-                ui.end_row();
-                label(ui, t!("label-column-type"));
-                combo(ui, "sb-column", &mut d.column_type, &columns);
-                ui.end_row();
-                label(ui, t!("label-rafter-type"));
-                combo(ui, "sb-rafter", &mut d.rafter_type, &beams);
-                ui.end_row();
+            settings::columns_n(ui, 3, 16.0, |ui, i| match i {
+                0 => {
+                    settings::field(ui, &t!("prop-span"), None, |ui| length(ui, &mut d.span, sb::SPAN));
+                    let w = ui.available_width();
+                    settings::field(ui, &t!("prop-roof-shape"), None, |ui| {
+                        settings::combo_items(ui, "sb-roof", w, &mut d.roof, &roofs)
+                    });
+                }
+                1 => {
+                    settings::field(ui, &t!("prop-eave-height"), None, |ui| {
+                        length(ui, &mut d.eave_height, sb::EAVE_HEIGHT)
+                    });
+                    settings::field(ui, &t!("prop-bays"), None, |ui| {
+                        settings::drag_wide(ui, DragValue::new(&mut d.bays).range(sb::BAYS))
+                    });
+                }
+                _ => {
+                    settings::field(ui, &t!("prop-slope"), None, |ui| {
+                        settings::drag_wide(
+                            ui,
+                            DragValue::new(&mut d.slope_percent).range(sb::SLOPE).speed(0.1).suffix(" %"),
+                        )
+                    });
+                    settings::field(ui, &t!("prop-bay-spacing"), None, |ui| {
+                        length(ui, &mut d.bay_spacing, sb::BAY_SPACING)
+                    });
+                }
+            });
+            settings::columns_n(ui, 3, 16.0, |ui, i| match i {
+                0 => {
+                    settings::field(ui, &t!("fp-origin-x"), None, |ui| {
+                        settings::drag_wide(ui, crate::properties::length_drag(&mut d.origin[0]))
+                    });
+                }
+                1 => {
+                    settings::field(ui, &t!("fp-origin-y"), None, |ui| {
+                        settings::drag_wide(ui, crate::properties::length_drag(&mut d.origin[1]))
+                    });
+                }
+                _ => {
+                    settings::field(ui, &t!("prop-rotation"), None, |ui| {
+                        settings::drag_wide(ui, DragValue::new(&mut d.rotation).speed(1.0).suffix("°"))
+                    });
+                }
+            });
+            settings::divider(ui);
+            ui.add_space(10.0);
+            settings::columns(ui, 16.0, |ui, i| {
+                let w = ui.available_width();
+                if i == 0 {
+                    settings::field(ui, &t!("label-column-type"), None, |ui| {
+                        settings::combo_items(ui, "sb-column", w, &mut d.column_type, &columns)
+                    });
+                } else {
+                    settings::field(ui, &t!("label-rafter-type"), None, |ui| {
+                        settings::combo_items(ui, "sb-rafter", w, &mut d.rafter_type, &beams)
+                    });
+                }
             });
             for (salt, name, on, type_id, spacing) in [
                 ("sb-purlins", t!("prop-purlins"), &mut d.purlins, &mut d.purlin_type, &mut d.purlin_spacing),
                 ("sb-girts", t!("prop-girts"), &mut d.girts, &mut d.girt_type, &mut d.girt_spacing),
             ] {
-                ui.add_space(4.0);
-                ui.checkbox(on, name);
-                ui.add_enabled_ui(*on, |ui| {
-                    egui::Grid::new(salt).num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
-                        ui.label(RichText::new(t!("prop-type")).color(PALETTE.text_muted));
-                        combo(ui, &format!("{salt}-type"), type_id, &beams);
-                        ui.end_row();
-                        ui.label(RichText::new(t!("label-spacing")).color(PALETTE.text_muted));
-                        ui.add(crate::properties::length_drag(spacing).range(sb::SPACING));
-                        ui.end_row();
-                    });
+                let enabled = *on;
+                settings::columns_n(ui, 3, 16.0, |ui, i| match i {
+                    0 => {
+                        settings::field(ui, &name, None, |ui| {
+                            ui.add_space(4.0);
+                            settings::switch(ui, on, &name);
+                        });
+                    }
+                    1 => {
+                        let w = ui.available_width();
+                        ui.add_enabled_ui(enabled, |ui| {
+                            settings::field(ui, &t!("prop-type"), None, |ui| {
+                                settings::combo_items(ui, format!("{salt}-type"), w, type_id, &beams)
+                            });
+                        });
+                    }
+                    _ => {
+                        ui.add_enabled_ui(enabled, |ui| {
+                            settings::field(ui, &t!("label-spacing"), None, |ui| length(ui, spacing, sb::SPACING));
+                        });
+                    }
                 });
             }
             if let Some(e) = &d.error {
                 ui.add_space(6.0);
-                ui.label(RichText::new(e).color(PALETTE.danger));
+                settings::callout(ui, PALETTE.danger, e);
             }
         },
         |f| {
