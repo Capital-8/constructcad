@@ -8,6 +8,7 @@
 //! Every control reports its role and label (`Response::widget_info`), so
 //! the UI tests find a switch as a checkbox by the setting's name.
 
+use crate::dialog::DIALOG_RADIUS;
 use crate::icons::{self, Icon};
 use crate::theme::{self, PALETTE, Palette, ThemeChoice};
 use egui::{Align, Align2, Color32, CornerRadius, FontId, Layout, Rect, RichText, Sense, Stroke, Ui, UiBuilder};
@@ -25,8 +26,6 @@ const GAP: f32 = 24.0;
 const ROW_PAD_Y: f32 = 11.0;
 /// Width a control is first given, before its own width is known.
 const CONTROL_GUESS: f32 = 160.0;
-/// Corner radius of the dialog frame (see `dialog.rs`).
-const DIALOG_RADIUS: u8 = 8;
 
 /// Text sizes follow the font size preference.
 fn size(points: f32) -> f32 {
@@ -153,7 +152,9 @@ pub fn setting<R>(ui: &mut Ui, title: &str, description: Option<&str>, control: 
 /// A [`setting`] without the divider under it: something more of the
 /// setting follows (call [`divider`] after it).
 pub fn setting_row<R>(ui: &mut Ui, title: &str, description: Option<&str>, control: impl FnOnce(&mut Ui) -> R) -> R {
-    row(ui, title, description, ROW_PAD_Y, control)
+    // A setting without a description takes less room.
+    let pad = if description.is_some_and(|d| !d.is_empty()) { ROW_PAD_Y } else { 8.0 };
+    row(ui, title, description, pad, control)
 }
 
 /// A row of a long list (the commands and their keys): a [`setting`] with
@@ -496,4 +497,118 @@ fn fit_middle(ui: &Ui, text: &str, font: &FontId, room: f32) -> String {
         keep -= (keep / 12).max(1);
     }
     format!("…{}", chars.iter().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>())
+}
+
+// --- Forms: dialogs that ask for a few values ---
+
+/// A form field: its name above `add` (an input as wide as the form, see
+/// [`text_edit`]), and what it is for under it.
+pub fn field<R>(ui: &mut Ui, label: &str, hint: Option<&str>, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let name = RichText::new(label).family(theme::semibold()).size(size(12.5)).color(PALETTE.text);
+    ui.add(egui::Label::new(name).selectable(false));
+    ui.add_space(2.0);
+    let out = ui
+        .scope(|ui| {
+            framed(ui);
+            add(ui)
+        })
+        .inner;
+    if let Some(hint) = hint.filter(|h| !h.is_empty()) {
+        ui.add(egui::Label::new(RichText::new(hint).size(size(11.5)).color(PALETTE.text_muted)).wrap());
+    }
+    ui.add_space(8.0);
+    out
+}
+
+/// A one-line text input of a form, `width` wide (`f32::INFINITY`: the whole row).
+pub fn text_edit(text: &mut String, width: f32) -> egui::TextEdit<'_> {
+    egui::TextEdit::singleline(text).margin(egui::Margin::symmetric(8, 6)).desired_width(width)
+}
+
+/// Two columns of fields side by side, `gap` apart; `column` draws column 0 then 1.
+pub fn columns(ui: &mut Ui, gap: f32, column: impl FnMut(&mut Ui, usize)) {
+    columns_n(ui, 2, gap, column);
+}
+
+/// `n` columns of fields side by side, `gap` apart; `column` draws each in turn.
+pub fn columns_n(ui: &mut Ui, n: usize, gap: f32, mut column: impl FnMut(&mut Ui, usize)) {
+    let n = n.max(1);
+    let width = ((ui.available_width() - gap * (n - 1) as f32) / n as f32).floor();
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        for i in 0..n {
+            ui.allocate_ui_with_layout(vec2(width, 0.0), Layout::top_down(Align::Min), |ui| {
+                ui.set_width(width);
+                ui.spacing_mut().item_spacing.x = 8.0;
+                column(ui, i);
+            });
+        }
+    });
+}
+
+/// The file a dialog works on: its icon and name in a box across the form.
+pub fn file_box(ui: &mut Ui, icon: Icon, name: &str) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
+    let painter = ui.painter();
+    painter.rect(rect, 6.0, PALETTE.surface, Stroke::new(1.0, PALETTE.border), egui::StrokeKind::Inside);
+    let badge = Rect::from_center_size(pos2(rect.left() + 22.0, rect.center().y), vec2(26.0, 26.0));
+    painter.rect_filled(badge, 5.0, PALETTE.accent_soft);
+    icons::paint(painter, badge.shrink(5.0), icon, PALETTE.accent_text);
+    let font = FontId::new(size(13.0), theme::semibold());
+    let shown = fit_middle(ui, name, &font, rect.width() - 56.0);
+    painter.text(pos2(rect.left() + 44.0, rect.center().y), Align2::LEFT_CENTER, shown, font, PALETTE.text);
+    ui.add_space(4.0);
+}
+
+/// A framed combo box choosing among `items` (value and name).
+pub fn combo_items<T: PartialEq + Copy>(
+    ui: &mut Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    width: f32,
+    value: &mut T,
+    items: &[(T, String)],
+) -> bool {
+    let name = |v: T| items.iter().find(|(x, _)| *x == v).map(|(_, n)| n.clone()).unwrap_or_default();
+    combo(ui, id, width, value, items.iter().map(|(v, _)| *v), name)
+}
+
+/// A framed number field.
+pub fn drag(ui: &mut Ui, value: egui::DragValue<'_>) -> egui::Response {
+    ui.scope(|ui| {
+        framed(ui);
+        ui.spacing_mut().interact_size = vec2(80.0, 28.0);
+        ui.add(value)
+    })
+    .inner
+}
+
+/// A framed number field as wide as the form's column (in a [`field`]).
+pub fn drag_wide(ui: &mut Ui, value: egui::DragValue<'_>) -> egui::Response {
+    ui.scope(|ui| {
+        framed(ui);
+        ui.add_sized(vec2(ui.available_width(), 28.0), value)
+    })
+    .inner
+}
+
+/// A setting that only shows a value (a result), in the value's weight.
+pub fn value_row(ui: &mut Ui, title: &str, value: &str) {
+    setting(ui, title, None, |ui| {
+        ui.label(RichText::new(value).family(theme::semibold()).size(size(13.0)).color(PALETTE.text));
+    });
+}
+
+/// A message across the form in a tinted box: `color` is its tone
+/// (`PALETTE.warning`, `danger`, `success`, or `text_muted` for a note).
+pub fn callout(ui: &mut Ui, color: Color32, text: &str) {
+    let fill = color.gamma_multiply(0.1);
+    egui::Frame::new()
+        .fill(fill)
+        .stroke(Stroke::new(1.0, color.gamma_multiply(0.35)))
+        .corner_radius(6)
+        .inner_margin(egui::Margin::symmetric(12, 9))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.add(egui::Label::new(RichText::new(text).size(size(12.5)).color(color)).wrap());
+        });
 }

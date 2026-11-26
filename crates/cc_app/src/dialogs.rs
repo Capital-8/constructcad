@@ -107,23 +107,16 @@ fn project_info(ctx: &Context, state: &mut AppState) {
     }
     session::begin(state);
     let mut ok = 0;
-    let response = Dialog::new("project-info", t!("dlg-project-info")).width(440.0).show(
+    let response = Dialog::new("project-info", t!("dlg-project-info")).width(520.0).show(
         ctx,
         |ui| {
             let info = state.project().info.clone();
-            egui::Grid::new("info").num_columns(2).spacing([14.0, 8.0]).min_col_width(110.0).show(ui, |ui| {
-                let fields = [
-                    (t!("info-name"), "name", info.name),
-                    (t!("info-number"), "number", info.number),
-                    (t!("info-client"), "client", info.client),
-                    (t!("info-address"), "address", info.address),
-                    (t!("info-author"), "author", info.author),
-                ];
-                for (label, field, value) in fields {
-                    form_label(ui, &label);
+            // A field of the form, as wide as its column; edits are one undo step per field.
+            let mut info_field = |ui: &mut Ui, label: String, field: &'static str, value: String| {
+                crate::settings::field(ui, &label, None, |ui| {
                     let mut text = value;
                     let r = crate::table::live_text(ui, ("project-info", field), &mut text, |ui, t| {
-                        ui.add(egui::TextEdit::singleline(t).desired_width(300.0))
+                        ui.add(crate::settings::text_edit(t, f32::INFINITY))
                     });
                     if r.changed() {
                         crate::engine_edit::info(state, Some(key(("info", field))), |info| match field {
@@ -135,9 +128,18 @@ fn project_info(ctx: &Context, state: &mut AppState) {
                         });
                     }
                     done(state, &r);
-                    ui.end_row();
+                });
+            };
+            info_field(ui, t!("info-name"), "name", info.name);
+            crate::settings::columns(ui, 16.0, |ui, i| {
+                if i == 0 {
+                    info_field(ui, t!("info-number"), "number", info.number.clone());
+                } else {
+                    info_field(ui, t!("info-client"), "client", info.client.clone());
                 }
             });
+            info_field(ui, t!("info-address"), "address", info.address);
+            info_field(ui, t!("info-author"), "author", info.author);
             project_fields(ui, state);
         },
         |f| {
@@ -186,38 +188,41 @@ pub(crate) fn remove_project_field(state: &mut AppState, name: &str) -> bool {
 
 /// The project fields table: name (committed on Enter), value (as typed), ×.
 fn project_fields(ui: &mut Ui, state: &mut AppState) {
-    ui.add_space(12.0);
-    ui.label(theme::title(t!("info-project-fields")));
-    ui.add_space(4.0);
+    crate::settings::group(ui, &t!("info-project-fields"));
+    ui.add_space(6.0);
     let fields = state.project().info.fields.clone();
-    egui::Grid::new("info-fields").num_columns(3).spacing([10.0, 6.0]).show(ui, |ui| {
-        form_label(ui, &t!("prop-name"));
-        form_label(ui, &t!("prop-value"));
-        ui.end_row();
-        for f in &fields {
-            if let Some(new) = crate::table::commit_text(ui, ("info-field-name", &f.name), &f.name, 140.0, "") {
-                rename_project_field(state, &f.name, &new);
-            }
-            let mut value = f.value.clone();
-            let r = crate::table::live_text(ui, ("info-field-value", &f.name), &mut value, |ui, t| {
-                ui.add(egui::TextEdit::singleline(t).desired_width(220.0))
-            });
-            if r.changed() {
-                let name = f.name.clone();
-                crate::engine_edit::info(state, Some(key(("info-field", &f.name))), |i| {
-                    if let Some(x) = i.fields.iter_mut().find(|x| x.name == name) {
-                        x.value = value;
-                    }
-                });
-            }
-            done(state, &r);
-            if ui.small_button("×").on_hover_text(t!("action-delete")).clicked() {
-                remove_project_field(state, &f.name);
-            }
+    crate::settings::framed(ui);
+    if !fields.is_empty() {
+        egui::Grid::new("info-fields").num_columns(3).spacing([10.0, 8.0]).show(ui, |ui| {
+            form_label(ui, &t!("prop-name"));
+            form_label(ui, &t!("prop-value"));
             ui.end_row();
-        }
-    });
-    if ui.button(format!("+ {}", t!("info-add-field"))).clicked() {
+            for f in &fields {
+                if let Some(new) = crate::table::commit_text(ui, ("info-field-name", &f.name), &f.name, 160.0, "") {
+                    rename_project_field(state, &f.name, &new);
+                }
+                let mut value = f.value.clone();
+                let r = crate::table::live_text(ui, ("info-field-value", &f.name), &mut value, |ui, t| {
+                    ui.add(egui::TextEdit::singleline(t).desired_width(270.0))
+                });
+                if r.changed() {
+                    let name = f.name.clone();
+                    crate::engine_edit::info(state, Some(key(("info-field", &f.name))), |i| {
+                        if let Some(x) = i.fields.iter_mut().find(|x| x.name == name) {
+                            x.value = value;
+                        }
+                    });
+                }
+                done(state, &r);
+                if ui.small_button("×").on_hover_text(t!("action-delete")).clicked() {
+                    remove_project_field(state, &f.name);
+                }
+                ui.end_row();
+            }
+        });
+    }
+    ui.add_space(4.0);
+    if crate::settings::button(ui, true, &format!("+ {}", t!("info-add-field"))).clicked() {
         add_project_field(state);
     }
 }

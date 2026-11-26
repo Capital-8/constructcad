@@ -5,6 +5,7 @@
 //! per rack (`cabling_list`). Every change is an engine command.
 
 use crate::dialog::Dialog;
+use crate::settings;
 use crate::state::AppState;
 use crate::t;
 use crate::theme::PALETTE;
@@ -88,7 +89,7 @@ fn lps_check(ctx: &Context, state: &mut AppState) {
     }
     let out = state.dialogs.lps_result.as_ref().map(|r| r.2.clone()).unwrap_or_default();
     let mut chosen = class;
-    let response = Dialog::new("lps-check", t!("dlg-lps-check")).width(460.0).show(
+    let response = Dialog::new("lps-check", t!("dlg-lps-check")).width(480.0).show(
         ctx,
         |ui| lps_body(ui, &out, &mut chosen),
         |f| {
@@ -103,39 +104,26 @@ fn lps_check(ctx: &Context, state: &mut AppState) {
 }
 
 fn lps_body(ui: &mut Ui, out: &Value, class: &mut LpsClass) {
-    egui::Grid::new("lps-check").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
-        ui.label(t!("prop-lps-class"));
-        egui::ComboBox::from_id_salt("lps-class").selected_text(class.name()).show_ui(ui, |ui| {
-            for c in LpsClass::ALL {
-                ui.selectable_value(class, c, c.name());
-            }
-        });
-        ui.end_row();
-        ui.label(t!("lps-sphere-radius"));
-        ui.label(meters_text(&out["sphere_radius"], 0));
-        ui.end_row();
-        ui.label(t!("lps-mesh-width"));
-        ui.label(meters_text(&out["mesh_width"], 0));
-        ui.end_row();
-        ui.label(t!("lps-air-points"));
-        ui.label(out["air_points"].to_string());
-        ui.end_row();
-        ui.label(t!("lps-points-protected"));
-        ui.label(format!("{} / {}", out["protected"], out["checked"]));
-        ui.end_row();
+    settings::setting(ui, &t!("prop-lps-class"), None, |ui| {
+        let classes: Vec<(LpsClass, String)> = LpsClass::ALL.iter().map(|c| (*c, c.name().to_string())).collect();
+        settings::combo_items(ui, "lps-class", 120.0, class, &classes);
     });
-    ui.add_space(6.0);
+    settings::value_row(ui, &t!("lps-sphere-radius"), &meters_text(&out["sphere_radius"], 0));
+    settings::value_row(ui, &t!("lps-mesh-width"), &meters_text(&out["mesh_width"], 0));
+    settings::value_row(ui, &t!("lps-air-points"), &out["air_points"].to_string());
+    settings::value_row(ui, &t!("lps-points-protected"), &format!("{} / {}", out["protected"], out["checked"]));
+    ui.add_space(12.0);
     let (text, color) = match (out["checked"].as_u64(), out["ok"].as_bool()) {
         (Some(0) | None, _) => (t!("lps-no-roofs"), PALETTE.text_muted),
-        (_, Some(true)) => (t!("lps-all-protected"), PALETTE.text_muted),
+        (_, Some(true)) => (t!("lps-all-protected"), PALETTE.success),
         _ => (
             t!("lps-unprotected", "percent" => cc_views::format::number(100.0 - 100.0 * out["ratio"].as_f64().unwrap_or(0.0), 0)),
             PALETTE.warning,
         ),
     };
-    ui.label(RichText::new(text).color(color));
+    settings::callout(ui, color, &text);
     ui.add_space(6.0);
-    ui.label(RichText::new(t!("lps-check-note")).size(11.0).color(PALETTE.text_faint));
+    ui.add(egui::Label::new(RichText::new(t!("lps-check-note")).size(11.5).color(PALETTE.text_muted)).wrap());
 }
 
 /// The cabling per rack: outlets, cables, their lengths and those over the limit.

@@ -4995,6 +4995,14 @@ fn every_dialog_keeps_its_body_inside() {
             "gltf export".into(),
             Box::new(|s| s.dialogs.gltf_export = Some(std::path::PathBuf::from("a rather long project name.glb"))),
         ),
+        ("obj import".into(), Box::new(|s| s.dialogs.obj_import = Some(std::path::PathBuf::from("a model.obj")))),
+        ("gltf import".into(), Box::new(|s| s.dialogs.obj_import = Some(std::path::PathBuf::from("a model.glb")))),
+        ("grid frame".into(), Box::new(crate::grid_frame_ui::open)),
+        ("steel building".into(), Box::new(crate::steel_building_ui::open)),
+        (
+            "wall framing".into(),
+            Box::new(|s| crate::wall_framing_ui::open(s, cc_core::wall_framing::FramingSystem::Wood)),
+        ),
         ("macro restart".into(), Box::new(|s| crate::macro_ui::ask(s, true))),
         ("macro discard".into(), Box::new(|s| crate::macro_ui::ask(s, false))),
         (

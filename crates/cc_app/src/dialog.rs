@@ -12,8 +12,8 @@ use crate::theme::{self, PALETTE};
 use egui::{Color32, Context, RichText, Stroke, Ui, vec2};
 
 /// Minimum size of footer buttons.
-pub const BUTTON_SIZE: egui::Vec2 = egui::Vec2::new(88.0, 28.0);
-const PAD_X: i8 = 20;
+pub const BUTTON_SIZE: egui::Vec2 = egui::Vec2::new(88.0, 30.0);
+const PAD_X: i8 = 24;
 
 /// Icon shown next to the message of an alert.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +55,9 @@ pub fn styled_button(ui: &mut Ui, label: &str, style: Style) -> egui::Response {
         Style::Danger => {
             egui::Button::new(RichText::new(label).color(Color32::WHITE)).fill(PALETTE.danger).stroke(Stroke::NONE)
         }
-        Style::Secondary => egui::Button::new(label),
+        Style::Secondary => egui::Button::new(label)
+            .fill(if PALETTE.dark { PALETTE.surface } else { Color32::WHITE })
+            .stroke(Stroke::new(1.0, PALETTE.border_strong)),
     };
     ui.add(button.min_size(BUTTON_SIZE))
 }
@@ -143,6 +145,9 @@ impl Footer {
         total + FOOTER_SPACING * count.saturating_sub(1) as f32
     }
 }
+
+/// Corner radius of the dialog frame.
+pub const DIALOG_RADIUS: u8 = 10;
 
 /// Gap between footer buttons.
 const FOOTER_SPACING: f32 = 8.0;
@@ -294,8 +299,8 @@ impl Dialog {
         footer(&mut buttons);
         let frame = egui::Frame::popup(&ctx.style_of(egui::Theme::Light))
             .inner_margin(egui::Margin::ZERO)
-            .corner_radius(8)
-            .fill(PALETTE.panel);
+            .corner_radius(DIALOG_RADIUS)
+            .fill(PALETTE.canvas);
         let mut clicked = None;
         let mut close_clicked = false;
         let mut placed = Placed::load(ctx, self.id);
@@ -317,13 +322,13 @@ impl Dialog {
             // Header; dragging it moves the dialog (see `Placed::follow`).
             let mut close_rect = egui::Rect::NOTHING;
             let header = (!self.flush).then(|| {
-                egui::Frame::new().inner_margin(egui::Margin { left: PAD_X, right: 12, top: 14, bottom: 6 }).show(
+                egui::Frame::new().inner_margin(egui::Margin { left: PAD_X, right: 14, top: 16, bottom: 12 }).show(
                     ui,
                     |ui| {
                         ui.horizontal(|ui| {
                             // Not selectable: a drag on the title moves the dialog.
                             let title =
-                                RichText::new(&self.title).family(theme::semibold()).size(15.0).color(PALETTE.text);
+                                RichText::new(&self.title).family(theme::semibold()).size(16.0).color(PALETTE.text);
                             ui.add(egui::Label::new(title).selectable(false));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let (rect, r) = ui.allocate_exact_size(vec2(26.0, 26.0), egui::Sense::click());
@@ -350,14 +355,20 @@ impl Dialog {
                 )
             });
             if let Some(header) = header {
-                placed.header = Some((header.response.rect, close_rect));
+                let r = header.response.rect;
+                // A line under the title, except over an alert's message.
+                if self.kind.is_none() {
+                    ui.painter().hline(r.x_range(), r.bottom(), Stroke::new(1.0, PALETTE.border));
+                }
+                placed.header = Some((r, close_rect));
             }
 
             // Body.
             let margin = if self.flush {
                 egui::Margin::ZERO
             } else {
-                egui::Margin { left: PAD_X, right: PAD_X, top: 8, bottom: 18 }
+                let top = if self.kind.is_some() { 4 } else { 16 };
+                egui::Margin { left: PAD_X, right: PAD_X, top, bottom: 20 }
             };
             let shown = egui::Frame::new().inner_margin(margin).show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
@@ -409,7 +420,8 @@ impl Dialog {
             // Footer.
             let response = egui::Frame::new()
                 .fill(PALETTE.surface)
-                .inner_margin(egui::Margin { left: PAD_X, right: PAD_X, top: 12, bottom: 12 })
+                .corner_radius(egui::CornerRadius { sw: DIALOG_RADIUS, se: DIALOG_RADIUS, ..egui::CornerRadius::ZERO })
+                .inner_margin(egui::Margin { left: PAD_X, right: PAD_X, top: 14, bottom: 14 })
                 .show(ui, |ui| {
                     ui.set_width(content_width + 2.0 * (pad - PAD_X as f32));
                     ui.horizontal(|ui| {

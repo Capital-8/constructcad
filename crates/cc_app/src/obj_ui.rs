@@ -4,11 +4,12 @@
 //! then `obj_import` or `gltf_import` runs as a background job.
 
 use crate::dialog::Dialog;
+use crate::icons::Icon;
+use crate::settings;
 use crate::state::AppState;
 use crate::t;
-use crate::theme::PALETTE;
 use cc_engine::commands::io::{GltfImport, ObjImport, ObjUnits};
-use egui::{Context, RichText};
+use egui::Context;
 use std::path::PathBuf;
 
 /// The choices of the import dialog, kept for the next import.
@@ -26,11 +27,6 @@ const UNITS: [(ObjUnits, &str); 5] = [
     (ObjUnits::In, "unit-inch"),
     (ObjUnits::Ft, "unit-foot"),
 ];
-
-fn unit_label(units: ObjUnits) -> String {
-    let key = UNITS.iter().find(|(u, _)| *u == units);
-    key.map(|(_, k)| crate::i18n::tr(k)).unwrap_or_default()
-}
 
 /// Pick an .obj file and open the options dialog for it.
 pub fn import_obj(state: &mut AppState) {
@@ -66,38 +62,29 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     let mut ok = None;
     let gltf = is_gltf(&path);
     let title = if gltf { t!("dlg-import-gltf") } else { t!("dlg-import-obj") };
-    let response = Dialog::new("obj-import", title).width(380.0).show(
+    let response = Dialog::new("obj-import", title).width(460.0).show(
         ctx,
         |ui| {
             let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            ui.label(RichText::new(name).strong());
-            ui.add_space(8.0);
+            settings::file_box(ui, Icon::Component, &name);
             // glTF is in meters with Y up.
             if !gltf {
-                egui::Grid::new("obj-options").num_columns(2).spacing([14.0, 8.0]).min_col_width(110.0).show(
-                    ui,
-                    |ui| {
-                        ui.label(RichText::new(t!("label-obj-units")).color(PALETTE.text_muted));
-                        egui::ComboBox::from_id_salt("obj-units").selected_text(unit_label(options.units)).show_ui(
-                            ui,
-                            |ui| {
-                                for (units, key) in UNITS {
-                                    ui.selectable_value(&mut options.units, units, crate::i18n::tr(key));
-                                }
-                            },
-                        );
-                        ui.end_row();
-                        ui.label(RichText::new(t!("label-obj-up")).color(PALETTE.text_muted));
-                        ui.horizontal(|ui| {
-                            ui.radio_value(&mut options.z_up, false, "Y");
-                            ui.radio_value(&mut options.z_up, true, "Z");
-                        });
-                        ui.end_row();
-                    },
-                );
+                settings::setting(ui, &t!("label-obj-units"), None, |ui| {
+                    let units: Vec<(ObjUnits, String)> = UNITS.iter().map(|(u, k)| (*u, crate::i18n::tr(k))).collect();
+                    settings::combo_items(ui, "obj-units", 160.0, &mut options.units, &units);
+                });
+                settings::setting(ui, &t!("label-obj-up"), None, |ui| {
+                    let axis = |value, text: &str| settings::Segment {
+                        value,
+                        text: text.to_string(),
+                        text_size: 13.0,
+                        name: text.to_string(),
+                    };
+                    settings::segmented(ui, &mut options.z_up, vec![axis(false, "Y"), axis(true, "Z")]);
+                });
             }
-            ui.add_space(4.0);
-            ui.checkbox(&mut options.merge, t!("label-obj-merge"));
+            let label = t!("label-obj-merge");
+            settings::setting_row(ui, &label, None, |ui| settings::switch(ui, &mut options.merge, &label));
         },
         |f| {
             ok = Some(f.primary(t!("action-ok")));
