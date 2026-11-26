@@ -617,8 +617,40 @@ pub fn render(
                 .filter_map(|(a, b)| planes.iter().skip(1).try_fold((a, b), |(a, b), &(p, n)| clip_segment(a, b, p, n)))
                 .map(|(a, b)| (frame.project(a), frame.project(b)))
                 .collect();
+            // A layered wall's cut shows its layers (at the medium and fine levels, as in plan).
+            let wall = geom
+                .walls
+                .get(&solid.element)
+                .filter(|g| cut.is_some() && !solid.secondary && g.curtain.is_none() && g.layers.len() > 1);
             for pts in chain_loops(&segs).into_iter().filter(|_| style.fills()) {
                 match cut {
+                    Some(c) if let Some(g) = wall => {
+                        let v_of = |s: DVec2| g.local((point + frame.right * s.x + frame.up * s.y).truncate()).1;
+                        let v: Vec<f64> = pts.iter().map(|&s| v_of(s)).collect();
+                        for (lo, hi, material) in &g.layers {
+                            let (lo, hi) = (lo.min(*hi), lo.max(*hi));
+                            let piece = clip_by(&pts, |s| v_of(s) - lo);
+                            let piece = clip_by(&piece, |s| hi - v_of(s));
+                            if piece.len() >= 3 && signed_area(&piece).abs() > 1e-12 {
+                                crate::cut::cut_fill(
+                                    &mut d,
+                                    c.project,
+                                    material,
+                                    piece,
+                                    c.spacing,
+                                    Some(solid.element),
+                                );
+                            }
+                        }
+                        // The lines between layers, pens by their function as in plan.
+                        let functions = crate::plan::layer_functions(c.project, g);
+                        for (k, &(_, at, _)) in g.layers.iter().enumerate().take(g.layers.len() - 1) {
+                            let pen = crate::plan::layer_pen(crate::plan::boundary_function(&functions, k));
+                            for (a, b) in level_crossings(&pts, &v, at) {
+                                d.polyline_pen(&[a, b], false, LineStyle::Thin, pen, Some(solid.element));
+                            }
+                        }
+                    }
                     Some(c) => {
                         let ty = c.project.element(solid.element).and_then(|e| c.project.element_type(e.type_id));
                         let material = ty.map_or("", |t| match &t.data {
@@ -636,6 +668,46 @@ pub fn render(
         }
     }
     d
+}
+
+/// The part of `poly` where `side` is not negative (Sutherland-Hodgman, the
+/// side taken linear along each edge; a polygon that is not convex may come
+/// out with zero-width bridges along the boundary, which fill nothing).
+fn clip_by(poly: &[DVec2], side: impl Fn(DVec2) -> f64) -> Vec<DVec2> {
+    let sides: Vec<f64> = poly.iter().map(|&p| side(p)).collect();
+    let mut out = Vec::with_capacity(poly.len() + 2);
+    for (i, (&p, &sp)) in poly.iter().zip(&sides).enumerate() {
+        let j = (i + 1) % poly.len();
+        let (Some(&q), Some(&sq)) = (poly.get(j), sides.get(j)) else { continue };
+        if sp >= 0.0 {
+            out.push(p);
+        }
+        if (sp >= 0.0) != (sq >= 0.0) && (sp - sq).abs() > 1e-15 {
+            out.push(p + (q - p) * (sp / (sp - sq)));
+        }
+    }
+    out
+}
+
+/// The stretches of the line where `values` (one per vertex of `poly`, taken
+/// linear along its edges) equal `at` that lie inside `poly`: its crossings,
+/// sorted along the line and paired (even-odd).
+fn level_crossings(poly: &[DVec2], values: &[f64], at: f64) -> Vec<(DVec2, DVec2)> {
+    let mut hits = Vec::new();
+    for i in 0..poly.len() {
+        let j = (i + 1) % poly.len();
+        let (Some(&p), Some(&q), Some(&a), Some(&b)) = (poly.get(i), poly.get(j), values.get(i), values.get(j)) else {
+            continue;
+        };
+        // Half-open, so a vertex on the level counts once.
+        if (a >= at) != (b >= at) && (a - b).abs() > 1e-15 {
+            hits.push(p + (q - p) * ((a - at) / (a - b)));
+        }
+    }
+    let (Some(&first), Some(&last)) = (hits.first(), hits.last()) else { return Vec::new() };
+    let along = (last - first).normalize_or_zero();
+    hits.sort_by(|p, q| p.dot(along).total_cmp(&q.dot(along)));
+    hits.as_chunks::<2>().0.iter().map(|&[a, b]| (a, b)).collect()
 }
 
 /// Depth (along the view direction) of the plane of `f` under screen point `s`.
@@ -1374,5 +1446,37 @@ mod tests {
             .count();
         assert!(hatch > 0);
         assert!(d.elements_in(DVec2::splat(-100.0), DVec2::splat(100.0), false).contains(&id));
+    }
+
+    #[test]
+    fn section_shows_a_layered_walls_layers_above_the_coarse_level() {
+        let (doc, id) = one_wall();
+        let geom = ModelGeometry::build(&doc.project);
+        let layers = geom.walls.get(&id).map_or(0, |g| g.layers.len());
+        assert!(layers > 1, "the template's wall has finish layers");
+        let line = (DVec2::new(2.0, 2.0), DVec2::new(2.0, -2.0));
+        let between = |d: &Drawing2D| {
+            d.prims
+                .iter()
+                .filter(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: Some(e), .. } if *e == id))
+                .count()
+        };
+        let fills = |d: &Drawing2D| {
+            d.prims.iter().filter(|p| matches!(p, Prim::Fill { cut: true, element: Some(e), .. } if *e == id)).count()
+        };
+        let medium = section(&doc.project, &geom, line, 5.0, 50, Look::plain());
+        // One fill per layer and one line between each two, across the whole height.
+        assert_eq!(fills(&medium), layers);
+        assert_eq!(between(&medium), layers - 1);
+        for p in &medium.prims {
+            if let Prim::Line { style: LineStyle::Thin, element: Some(e), a, b, .. } = p
+                && *e == id
+            {
+                assert!((a.x - b.x).abs() < 1e-9 && ((a.y - b.y).abs() - 3.0).abs() < 1e-6, "{a} {b}");
+            }
+        }
+        let coarse = section(&doc.project, &geom, line, 5.0, 50, Look { detail: DetailLevel::Coarse, ..Look::plain() });
+        assert_eq!(fills(&coarse), 1);
+        assert_eq!(between(&coarse), 0);
     }
 }
