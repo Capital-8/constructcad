@@ -4693,6 +4693,10 @@ fn select(
     if crate::interior_ui::open_arrow(resp, state, xf, drawing) {
         return;
     }
+    // A double click on a section mark or an elevation marker opens its view.
+    if crate::section_mark::open(resp, state, xf, drawing) {
+        return;
+    }
     if movable && crate::section_mark::select(ui, resp, painter, state, xf, drawing) {
         return;
     }
