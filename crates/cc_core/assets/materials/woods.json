@@ -10,6 +10,19 @@
   "materials": [
     {
       "name": "Madeira leve",
+      "names": {
+        "en": "Lightweight wood",
+        "es": "Madera ligera",
+        "fr": "Bois léger",
+        "de": "Leichtholz",
+        "it": "Legno leggero",
+        "lo": "ໄມ້ເບົາ",
+        "pl": "Drewno lekkie",
+        "uk-UA": "Легка деревина",
+        "zh-TW": "輕質木材",
+        "zh-CN": "轻质木材",
+        "ja": "低密度木材"
+      },
       "class": "Wood",
       "color": [
         222,
@@ -23,6 +36,19 @@
     },
     {
       "name": "Madeira macia",
+      "names": {
+        "en": "Softwood",
+        "es": "Madera blanda",
+        "fr": "Bois tendre",
+        "de": "Weichholz",
+        "it": "Legno tenero",
+        "lo": "ໄມ້ເນື້ອອ່ອນ",
+        "pl": "Drewno miękkie",
+        "uk-UA": "М'яка деревина",
+        "zh-TW": "軟材 (針葉樹)",
+        "zh-CN": "软木材 (针叶树)",
+        "ja": "軟材 (針葉樹)"
+      },
       "class": "Wood",
       "color": [
         214,
@@ -36,6 +62,19 @@
     },
     {
       "name": "Madeira dura",
+      "names": {
+        "en": "Hardwood",
+        "es": "Madera dura",
+        "fr": "Bois dur",
+        "de": "Hartholz",
+        "it": "Legno duro",
+        "lo": "ໄມ້ເນື້ອແຂງ",
+        "pl": "Drewno twarde",
+        "uk-UA": "Тверда деревина",
+        "zh-TW": "硬材 (闊葉樹)",
+        "zh-CN": "硬木材 (阔叶树)",
+        "ja": "硬材 (広葉樹)"
+      },
       "class": "Wood",
       "color": [
         150,
@@ -49,6 +88,19 @@
     },
     {
       "name": "Compensado",
+      "names": {
+        "en": "Plywood",
+        "es": "Contrachapado",
+        "fr": "Contreplaqué",
+        "de": "Sperrholz",
+        "it": "Compensato",
+        "lo": "ໄມ້ອັດ",
+        "pl": "Sklejka",
+        "uk-UA": "Фанера",
+        "zh-TW": "夾板",
+        "zh-CN": "胶合板",
+        "ja": "合板"
+      },
       "class": "Wood",
       "color": [
         204,
@@ -62,6 +114,11 @@
     },
     {
       "name": "OSB",
+      "names": {
+        "lo": "ແຜ່ນ OSB",
+        "zh-TW": "OSB 定向粒片板",
+        "zh-CN": "OSB 定向刨花板"
+      },
       "class": "Wood",
       "color": [
         200,
@@ -75,6 +132,18 @@
     },
     {
       "name": "Aglomerado",
+      "names": {
+        "en": "Particleboard",
+        "fr": "Panneau de particules",
+        "de": "Spanplatte",
+        "it": "Pannello truciolare",
+        "lo": "ແຜ່ນໄມ້ປາຕິເຄິນ",
+        "pl": "Płyta wiórowa",
+        "uk-UA": "Деревностружкова плита",
+        "zh-TW": "塑合板",
+        "zh-CN": "刨花板",
+        "ja": "パーティクルボード"
+      },
       "class": "Wood",
       "color": [
         196,
@@ -88,6 +157,11 @@
     },
     {
       "name": "MDF",
+      "names": {
+        "lo": "ແຜ່ນ MDF",
+        "zh-TW": "MDF 中密度纖維板",
+        "zh-CN": "MDF 中密度纤维板"
+      },
       "class": "Wood",
       "color": [
         180,
@@ -101,6 +175,19 @@
     },
     {
       "name": "MDF branco",
+      "names": {
+        "en": "White MDF",
+        "es": "MDF blanco",
+        "fr": "MDF blanc",
+        "de": "MDF weiß",
+        "it": "MDF bianco",
+        "lo": "ແຜ່ນ MDF ເຄືອບສີຂາວ",
+        "pl": "MDF biały",
+        "uk-UA": "MDF білий",
+        "zh-TW": "白色貼皮 MDF",
+        "zh-CN": "白色饰面 MDF",
+        "ja": "白色メラミン化粧 MDF"
+      },
       "class": "Wood",
       "color": [
         244,

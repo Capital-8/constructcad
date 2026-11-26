@@ -11,6 +11,19 @@
   "materials": [
     {
       "name": "Porcelanato polido",
+      "names": {
+        "en": "Polished porcelain tile",
+        "es": "Porcelánico pulido",
+        "fr": "Grès cérame poli",
+        "de": "Feinsteinzeug poliert",
+        "it": "Gres porcellanato lucidato",
+        "lo": "ກະເບື້ອງພໍສະເລນ ຂັດເງົາ",
+        "pl": "Gres porcelanowy polerowany",
+        "uk-UA": "Керамограніт полірований",
+        "zh-TW": "拋光石英磚",
+        "zh-CN": "抛光瓷质砖",
+        "ja": "磁器質タイル 本磨き"
+      },
       "class": "Ceramic",
       "color": [
         226,
@@ -25,6 +38,19 @@
     },
     {
       "name": "Porcelanato acetinado",
+      "names": {
+        "en": "Satin porcelain tile",
+        "es": "Porcelánico satinado",
+        "fr": "Grès cérame satiné",
+        "de": "Feinsteinzeug satiniert",
+        "it": "Gres porcellanato satinato",
+        "lo": "ກະເບື້ອງພໍສະເລນ ໜ້າຊາຕິນ",
+        "pl": "Gres porcelanowy satynowy",
+        "uk-UA": "Керамограніт сатинований",
+        "zh-TW": "柔光釉面石英磚",
+        "zh-CN": "丝光釉面瓷质砖",
+        "ja": "磁器質タイル サテン"
+      },
       "class": "Ceramic",
       "color": [
         212,
@@ -39,6 +65,19 @@
     },
     {
       "name": "Porcelanato natural cinza",
+      "names": {
+        "en": "Unpolished porcelain tile, grey",
+        "es": "Porcelánico natural gris",
+        "fr": "Grès cérame naturel gris",
+        "de": "Feinsteinzeug natur grau",
+        "it": "Gres porcellanato naturale grigio",
+        "lo": "ກະເບື້ອງພໍສະເລນ ໜ້າທຳມະຊາດ ສີເທົາ",
+        "pl": "Gres porcelanowy naturalny szary",
+        "uk-UA": "Керамограніт натуральний сірий",
+        "zh-TW": "灰色自然面石英磚",
+        "zh-CN": "灰色自然面瓷质砖",
+        "ja": "磁器質タイル 無研磨 グレー"
+      },
       "class": "Ceramic",
       "color": [
         170,
@@ -53,6 +92,19 @@
     },
     {
       "name": "Porcelanato técnico",
+      "names": {
+        "en": "Full-body porcelain tile",
+        "es": "Porcelánico técnico",
+        "fr": "Grès cérame pleine masse",
+        "de": "Feinsteinzeug durchgefärbt",
+        "it": "Gres porcellanato tecnico",
+        "lo": "ກະເບື້ອງພໍສະເລນ ເນື້ອດຽວ",
+        "pl": "Gres porcelanowy techniczny",
+        "uk-UA": "Керамограніт технічний",
+        "zh-TW": "通體石英磚",
+        "zh-CN": "通体瓷质砖",
+        "ja": "磁器質タイル 通し素地"
+      },
       "class": "Ceramic",
       "color": [
         188,
@@ -67,6 +119,19 @@
     },
     {
       "name": "Porcelanato amadeirado",
+      "names": {
+        "en": "Wood-look porcelain tile",
+        "es": "Porcelánico imitación madera",
+        "fr": "Grès cérame imitation bois",
+        "de": "Feinsteinzeug Holzoptik",
+        "it": "Gres porcellanato effetto legno",
+        "lo": "ກະເບື້ອງພໍສະເລນ ລາຍໄມ້",
+        "pl": "Gres porcelanowy drewnopodobny",
+        "uk-UA": "Керамограніт під дерево",
+        "zh-TW": "木紋石英磚",
+        "zh-CN": "木纹瓷质砖",
+        "ja": "木目調磁器質タイル"
+      },
       "class": "Ceramic",
       "color": [
         160,
@@ -81,6 +146,19 @@
     },
     {
       "name": "Pastilha de porcelana branca",
+      "names": {
+        "en": "White porcelain mosaic tile",
+        "es": "Mosaico de porcelana blanco",
+        "fr": "Mosaïque en porcelaine blanche",
+        "de": "Porzellanmosaik weiß",
+        "it": "Mosaico in porcellana bianco",
+        "lo": "ກະເບື້ອງໂມເສກພໍສະເລນ ສີຂາວ",
+        "pl": "Mozaika porcelanowa biała",
+        "uk-UA": "Порцелянова мозаїка біла",
+        "zh-TW": "白色瓷質馬賽克磚",
+        "zh-CN": "白色瓷质马赛克",
+        "ja": "白色磁器モザイクタイル"
+      },
       "class": "Ceramic",
       "color": [
         238,
@@ -95,6 +173,19 @@
     },
     {
       "name": "Grês",
+      "names": {
+        "en": "Stoneware tile",
+        "es": "Gres",
+        "fr": "Carreau de grès",
+        "de": "Steinzeug",
+        "it": "Gres",
+        "lo": "ກະເບື້ອງສະໂຕນແວ",
+        "pl": "Gres",
+        "uk-UA": "Гресова плитка",
+        "zh-TW": "石質磚",
+        "zh-CN": "炻瓷砖",
+        "ja": "せっ器質タイル"
+      },
       "class": "Ceramic",
       "color": [
         178,
@@ -106,6 +197,19 @@
     },
     {
       "name": "Piso cerâmico semi-grês",
+      "names": {
+        "en": "Semi-vitreous ceramic floor tile",
+        "es": "Baldosa cerámica semigres",
+        "fr": "Carrelage céramique semi-grès",
+        "de": "Bodenfliese Halbsteinzeug",
+        "it": "Piastrella da pavimento in semigres",
+        "lo": "ກະເບື້ອງປູພື້ນກຶ່ງສະໂຕນແວ",
+        "pl": "Płytka podłogowa półgresowa",
+        "uk-UA": "Напівгресова підлогова плитка",
+        "zh-TW": "半石質地磚",
+        "zh-CN": "细炻地砖",
+        "ja": "施釉せっ器質床タイル"
+      },
       "class": "Ceramic",
       "color": [
         200,
@@ -117,6 +221,19 @@
     },
     {
       "name": "Piso cerâmico semiporoso",
+      "names": {
+        "en": "Semi-porous ceramic floor tile",
+        "es": "Baldosa cerámica semiporosa",
+        "fr": "Carrelage céramique semi-poreux",
+        "de": "Bodenfliese halbporös",
+        "it": "Piastrella da pavimento semiporosa",
+        "lo": "ກະເບື້ອງປູພື້ນກຶ່ງດູດນ້ຳ",
+        "pl": "Płytka podłogowa półporowata",
+        "uk-UA": "Напівпориста підлогова плитка",
+        "zh-TW": "半陶質地磚",
+        "zh-CN": "炻质地砖",
+        "ja": "施釉陶器質床タイル"
+      },
       "class": "Ceramic",
       "color": [
         206,
@@ -128,6 +245,19 @@
     },
     {
       "name": "Azulejo branco",
+      "names": {
+        "en": "White wall tile",
+        "es": "Azulejo blanco",
+        "fr": "Faïence murale blanche",
+        "de": "Wandfliese weiß",
+        "it": "Piastrella da rivestimento bianca",
+        "lo": "ກະເບື້ອງບຸຜະໜັງ ສີຂາວ",
+        "pl": "Płytka ścienna biała",
+        "uk-UA": "Біла настінна плитка",
+        "zh-TW": "白色壁磚",
+        "zh-CN": "白色釉面内墙砖",
+        "ja": "白色内装壁タイル"
+      },
       "class": "Ceramic",
       "color": [
         246,
@@ -139,6 +269,19 @@
     },
     {
       "name": "Telha cerâmica",
+      "names": {
+        "en": "Clay roof tile",
+        "es": "Teja cerámica",
+        "fr": "Tuile en terre cuite",
+        "de": "Tondachziegel",
+        "it": "Tegola in laterizio",
+        "lo": "ກະເບື້ອງມຸງດິນເຜົາ",
+        "pl": "Dachówka ceramiczna",
+        "uk-UA": "Керамічна черепиця",
+        "zh-TW": "陶瓦",
+        "zh-CN": "陶瓦",
+        "ja": "粘土瓦"
+      },
       "class": "Ceramic",
       "color": [
         176,
@@ -152,6 +295,19 @@
     },
     {
       "name": "Telha cerâmica esmaltada",
+      "names": {
+        "en": "Glazed clay roof tile",
+        "es": "Teja cerámica esmaltada",
+        "fr": "Tuile en terre cuite émaillée",
+        "de": "Tondachziegel glasiert",
+        "it": "Tegola in laterizio smaltata",
+        "lo": "ກະເບື້ອງມຸງດິນເຜົາເຄືອບ",
+        "pl": "Dachówka ceramiczna glazurowana",
+        "uk-UA": "Глазурована керамічна черепиця",
+        "zh-TW": "釉面陶瓦",
+        "zh-CN": "釉面陶瓦",
+        "ja": "釉薬瓦"
+      },
       "class": "Ceramic",
       "color": [
         120,

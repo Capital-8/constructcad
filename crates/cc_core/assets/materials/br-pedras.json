@@ -12,6 +12,17 @@
   "materials": [
     {
       "name": "Granito (NBR 15220-2)",
+      "names": {
+        "en": "Granite (NBR 15220-2)",
+        "fr": "Granit (NBR 15220-2)",
+        "de": "Granit (NBR 15220-2)",
+        "lo": "ຫີນແກຣນິດ (NBR 15220-2)",
+        "pl": "Granit (NBR 15220-2)",
+        "uk-UA": "Граніт (NBR 15220-2)",
+        "zh-TW": "花崗岩 (NBR 15220-2)",
+        "zh-CN": "花岗岩 (NBR 15220-2)",
+        "ja": "花崗岩 (NBR 15220-2)"
+      },
       "class": "Stone",
       "color": [
         140,
@@ -26,6 +37,19 @@
     },
     {
       "name": "Mármore (NBR 15220-2)",
+      "names": {
+        "en": "Marble (NBR 15220-2)",
+        "es": "Mármol (NBR 15220-2)",
+        "fr": "Marbre (NBR 15220-2)",
+        "de": "Marmor (NBR 15220-2)",
+        "it": "Marmo (NBR 15220-2)",
+        "lo": "ຫີນອ່ອນ (NBR 15220-2)",
+        "pl": "Marmur (NBR 15220-2)",
+        "uk-UA": "Мармур (NBR 15220-2)",
+        "zh-TW": "大理石 (NBR 15220-2)",
+        "zh-CN": "大理石 (NBR 15220-2)",
+        "ja": "大理石 (NBR 15220-2)"
+      },
       "class": "Stone",
       "color": [
         240,
@@ -40,6 +64,19 @@
     },
     {
       "name": "Ardósia (NBR 15220-2)",
+      "names": {
+        "en": "Slate (NBR 15220-2)",
+        "es": "Pizarra (NBR 15220-2)",
+        "fr": "Ardoise (NBR 15220-2)",
+        "de": "Schiefer (NBR 15220-2)",
+        "it": "Ardesia (NBR 15220-2)",
+        "lo": "ຫີນຊະນວນ (NBR 15220-2)",
+        "pl": "Łupek (NBR 15220-2)",
+        "uk-UA": "Сланець (NBR 15220-2)",
+        "zh-TW": "板岩 (NBR 15220-2)",
+        "zh-CN": "板岩 (NBR 15220-2)",
+        "ja": "粘板岩 (NBR 15220-2)"
+      },
       "class": "Stone",
       "color": [
         92,
@@ -54,6 +91,17 @@
     },
     {
       "name": "Basalto (NBR 15220-2)",
+      "names": {
+        "en": "Basalt (NBR 15220-2)",
+        "fr": "Basalte (NBR 15220-2)",
+        "de": "Basalt (NBR 15220-2)",
+        "lo": "ຫີນບາຊອລ (NBR 15220-2)",
+        "pl": "Bazalt (NBR 15220-2)",
+        "uk-UA": "Базальт (NBR 15220-2)",
+        "zh-TW": "玄武岩 (NBR 15220-2)",
+        "zh-CN": "玄武岩 (NBR 15220-2)",
+        "ja": "玄武岩 (NBR 15220-2)"
+      },
       "class": "Stone",
       "color": [
         60,
@@ -68,6 +116,19 @@
     },
     {
       "name": "Pedra Miracema",
+      "names": {
+        "en": "Pedra Miracema (gneiss)",
+        "es": "Pedra Miracema (gneis)",
+        "fr": "Pedra Miracema (gneiss)",
+        "de": "Pedra Miracema (Gneis)",
+        "it": "Pedra Miracema (gneiss)",
+        "lo": "ຫີນໄນສ໌ Pedra Miracema",
+        "pl": "Pedra Miracema (gnejs)",
+        "uk-UA": "Pedra Miracema (гнейс)",
+        "zh-TW": "Pedra Miracema 片麻岩",
+        "zh-CN": "Pedra Miracema 片麻岩",
+        "ja": "Pedra Miracema 片麻岩"
+      },
       "class": "Stone",
       "color": [
         150,
@@ -82,6 +143,19 @@
     },
     {
       "name": "Pedra São Tomé",
+      "names": {
+        "en": "Pedra São Tomé (quartzite)",
+        "es": "Pedra São Tomé (cuarcita)",
+        "fr": "Pedra São Tomé (quartzite)",
+        "de": "Pedra São Tomé (Quarzit)",
+        "it": "Pedra São Tomé (quarzite)",
+        "lo": "ຫີນຄວອດໄຊ Pedra São Tomé",
+        "pl": "Pedra São Tomé (kwarcyt)",
+        "uk-UA": "Pedra São Tomé (кварцит)",
+        "zh-TW": "Pedra São Tomé 石英岩",
+        "zh-CN": "Pedra São Tomé 石英岩",
+        "ja": "Pedra São Tomé 珪岩"
+      },
       "class": "Stone",
       "color": [
         226,
@@ -96,6 +170,19 @@
     },
     {
       "name": "Pedra Goiás",
+      "names": {
+        "en": "Pedra Goiás (quartzite)",
+        "es": "Pedra Goiás (cuarcita)",
+        "fr": "Pedra Goiás (quartzite)",
+        "de": "Pedra Goiás (Quarzit)",
+        "it": "Pedra Goiás (quarzite)",
+        "lo": "ຫີນຄວອດໄຊ Pedra Goiás",
+        "pl": "Pedra Goiás (kwarcyt)",
+        "uk-UA": "Pedra Goiás (кварцит)",
+        "zh-TW": "Pedra Goiás 石英岩",
+        "zh-CN": "Pedra Goiás 石英岩",
+        "ja": "Pedra Goiás 珪岩"
+      },
       "class": "Stone",
       "color": [
         200,
@@ -110,6 +197,19 @@
     },
     {
       "name": "Pedra portuguesa branca",
+      "names": {
+        "en": "Portuguese pavement, white (limestone)",
+        "es": "Empedrado portugués blanco (caliza)",
+        "fr": "Pavé portugais blanc (calcaire)",
+        "de": "Portugiesisches Pflaster weiß",
+        "it": "Mosaico portoghese bianco",
+        "lo": "ຫີນປູທາງແບບປອກຕຸຍການ ສີຂາວ",
+        "pl": "Bruk portugalski biały",
+        "uk-UA": "Португальська бруківка біла",
+        "zh-TW": "白色葡式鋪石",
+        "zh-CN": "白色葡式马赛克石",
+        "ja": "ポルトガル舗石 白"
+      },
       "class": "Stone",
       "color": [
         232,
@@ -124,6 +224,19 @@
     },
     {
       "name": "Pedra portuguesa preta",
+      "names": {
+        "en": "Portuguese pavement, black (basalt)",
+        "es": "Empedrado portugués negro (basalto)",
+        "fr": "Pavé portugais noir (basalte)",
+        "de": "Portugiesisches Pflaster schwarz",
+        "it": "Mosaico portoghese nero",
+        "lo": "ຫີນປູທາງແບບປອກຕຸຍການ ສີດຳ",
+        "pl": "Bruk portugalski czarny",
+        "uk-UA": "Португальська бруківка чорна",
+        "zh-TW": "黑色葡式鋪石",
+        "zh-CN": "黑色葡式马赛克石",
+        "ja": "ポルトガル舗石 黒"
+      },
       "class": "Stone",
       "color": [
         45,

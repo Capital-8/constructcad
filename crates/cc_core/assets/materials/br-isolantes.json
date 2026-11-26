@@ -11,6 +11,19 @@
   "materials": [
     {
       "name": "Lã de rocha",
+      "names": {
+        "en": "Rock wool",
+        "es": "Lana de roca",
+        "fr": "Laine de roche",
+        "de": "Steinwolle",
+        "it": "Lana di roccia",
+        "lo": "ໃຍຫີນ",
+        "pl": "Wełna skalna",
+        "uk-UA": "Кам'яна вата",
+        "zh-TW": "岩棉",
+        "zh-CN": "岩棉",
+        "ja": "ロックウール"
+      },
       "class": "Insulation",
       "color": [
         192,
@@ -24,6 +37,19 @@
     },
     {
       "name": "Lã de vidro",
+      "names": {
+        "en": "Glass wool",
+        "es": "Lana de vidrio",
+        "fr": "Laine de verre",
+        "de": "Glaswolle",
+        "it": "Lana di vetro",
+        "lo": "ໃຍແກ້ວ",
+        "pl": "Wełna szklana",
+        "uk-UA": "Скловата",
+        "zh-TW": "玻璃棉",
+        "zh-CN": "玻璃棉",
+        "ja": "グラスウール"
+      },
       "class": "Insulation",
       "color": [
         236,
@@ -37,6 +63,18 @@
     },
     {
       "name": "Poliestireno expandido (EPS)",
+      "names": {
+        "en": "Expanded polystyrene (EPS)",
+        "fr": "Polystyrène expansé (EPS)",
+        "de": "Expandiertes Polystyrol (EPS)",
+        "it": "Polistirene espanso (EPS)",
+        "lo": "ໂຟມໂພລີສະໄຕຣີນ (EPS)",
+        "pl": "Polistyren ekspandowany (EPS)",
+        "uk-UA": "Пінополістирол (EPS)",
+        "zh-TW": "發泡聚苯乙烯 (EPS)",
+        "zh-CN": "模塑聚苯乙烯 (EPS)",
+        "ja": "ビーズ法ポリスチレンフォーム (EPS)"
+      },
       "class": "Insulation",
       "color": [
         244,
@@ -50,6 +88,19 @@
     },
     {
       "name": "Poliestireno expandido (EPS) alta densidade",
+      "names": {
+        "en": "Expanded polystyrene (EPS), high density",
+        "es": "Poliestireno expandido (EPS) de alta densidad",
+        "fr": "Polystyrène expansé (EPS) haute densité",
+        "de": "Expandiertes Polystyrol (EPS) hohe Dichte",
+        "it": "Polistirene espanso (EPS) alta densità",
+        "lo": "ໂຟມໂພລີສະໄຕຣີນ ຄວາມໜາແໜ້ນສູງ (EPS)",
+        "pl": "Polistyren ekspandowany (EPS) o wysokiej gęstości",
+        "uk-UA": "Пінополістирол (EPS) високої щільності",
+        "zh-TW": "高密度發泡聚苯乙烯 (EPS)",
+        "zh-CN": "高密度模塑聚苯乙烯 (EPS)",
+        "ja": "高密度ビーズ法ポリスチレンフォーム (EPS)"
+      },
       "class": "Insulation",
       "color": [
         240,
@@ -63,6 +114,19 @@
     },
     {
       "name": "Poliestireno extrudado (XPS)",
+      "names": {
+        "en": "Extruded polystyrene (XPS)",
+        "es": "Poliestireno extruido (XPS)",
+        "fr": "Polystyrène extrudé (XPS)",
+        "de": "Extrudiertes Polystyrol (XPS)",
+        "it": "Polistirene estruso (XPS)",
+        "lo": "ໂຟມໂພລີສະໄຕຣີນອັດຮີດ (XPS)",
+        "pl": "Polistyren ekstrudowany (XPS)",
+        "uk-UA": "Екструдований пінополістирол (XPS)",
+        "zh-TW": "擠塑聚苯乙烯 (XPS)",
+        "zh-CN": "挤塑聚苯乙烯 (XPS)",
+        "ja": "押出法ポリスチレンフォーム (XPS)"
+      },
       "class": "Insulation",
       "color": [
         172,
@@ -76,6 +140,18 @@
     },
     {
       "name": "Espuma rígida de poliuretano (PU)",
+      "names": {
+        "en": "Rigid polyurethane foam (PU)",
+        "fr": "Mousse rigide de polyuréthane (PU)",
+        "de": "Polyurethan-Hartschaum (PU)",
+        "it": "Schiuma rigida di poliuretano (PU)",
+        "lo": "ໂຟມໂພລີຢູຣີເທນແຂງ (PU)",
+        "pl": "Sztywna pianka poliuretanowa (PU)",
+        "uk-UA": "Жорсткий пінополіуретан (PU)",
+        "zh-TW": "硬質聚氨酯發泡 (PU)",
+        "zh-CN": "硬质聚氨酯泡沫 (PU)",
+        "ja": "硬質ウレタンフォーム (PU)"
+      },
       "class": "Insulation",
       "color": [
         232,

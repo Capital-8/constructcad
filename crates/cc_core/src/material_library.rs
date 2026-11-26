@@ -11,6 +11,7 @@ use crate::material::{Finish, Material, MaterialClass, template_properties};
 use crate::pipe_catalog::Region;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 /// The file format this module reads and writes.
@@ -25,6 +26,8 @@ const MAX_TEXT: usize = 200;
 const MAX_LONG_TEXT: usize = 2000;
 /// The most sources listed.
 const MAX_SOURCES: usize = 50;
+/// The most translated names of one material.
+const MAX_NAMES: usize = 32;
 
 /// A library: its code (unique among libraries), name, region and standard,
 /// the documents its values come from, and its materials.
@@ -49,9 +52,14 @@ impl MaterialLibrary {
         Region::ALL.into_iter().find(|r| r.code() == self.region)
     }
 
-    /// The material named `name` (case aside).
+    /// The material named `name` (case aside): its main name first, then
+    /// any of its translated names.
     pub fn material(&self, name: &str) -> Option<&LibraryMaterial> {
-        self.materials.iter().find(|m| m.name.eq_ignore_ascii_case(name.trim()))
+        let name = name.trim();
+        self.materials
+            .iter()
+            .find(|m| m.name.eq_ignore_ascii_case(name))
+            .or_else(|| self.materials.iter().find(|m| m.names.values().any(|n| n.eq_ignore_ascii_case(name))))
     }
 }
 
@@ -60,7 +68,11 @@ impl MaterialLibrary {
 /// template ([`template_properties`]) or stay unknown.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LibraryMaterial {
+    /// The main name (the library's own language).
     pub name: String,
+    /// The name in other languages, by language code (`en`, `es`, `zh-CN`…).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub names: BTreeMap<String, String>,
     #[serde(default)]
     pub class: MaterialClass,
     #[serde(default = "default_color")]
@@ -95,9 +107,24 @@ fn default_color() -> [u8; 3] {
 }
 
 impl LibraryMaterial {
+    /// The name in language `lang` (a code such as `en`), else the main name.
+    pub fn name_in(&self, lang: &str) -> &str {
+        self.names.get(lang).map_or(self.name.as_str(), String::as_str)
+    }
+
+    /// Every name it goes by: the main one and the translated ones.
+    pub fn all_names(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.name.as_str()).chain(self.names.values().map(String::as_str))
+    }
+
     /// The project material it makes: the class's template, then the library's values.
     pub fn to_material(&self) -> Material {
-        let mut m = Material::new(self.name.trim(), self.color);
+        self.to_material_in("")
+    }
+
+    /// [`Self::to_material`], named in language `lang` ([`Self::name_in`]).
+    pub fn to_material_in(&self, lang: &str) -> Material {
+        let mut m = Material::new(self.name_in(lang).trim(), self.color);
         template_properties(&mut m, self.class);
         m.identity.class = self.class;
         m.identity.description = self.description.clone();
@@ -128,6 +155,7 @@ impl LibraryMaterial {
         let p = &m.physical;
         Self {
             name: m.name.clone(),
+            names: BTreeMap::new(),
             class: m.identity.class,
             color: m.color,
             description: m.identity.description.clone(),
@@ -221,7 +249,7 @@ pub fn read_library(text: &str) -> Result<MaterialLibrary, LibraryError> {
     if long || lib.sources.len() > MAX_SOURCES || lib.sources.iter().any(|s| s.chars().count() > MAX_LONG_TEXT) {
         return Err(LibraryError::Header("a field is too long".into()));
     }
-    let mut names = std::collections::BTreeSet::new();
+    let mut names = BTreeSet::new();
     for (row, m) in lib.materials.iter_mut().enumerate() {
         let fail = |message: String| LibraryError::Material { row, message };
         m.name = m.name.trim().to_string();
@@ -234,11 +262,34 @@ pub fn read_library(text: &str) -> Result<MaterialLibrary, LibraryError> {
         if !names.insert(m.name.to_lowercase()) {
             return Err(fail(format!("\"{}\" appears twice", m.name)));
         }
+        if m.names.len() > MAX_NAMES {
+            return Err(fail(format!("more than {MAX_NAMES} translated names")));
+        }
+        let names_in = std::mem::take(&mut m.names);
+        for (lang, name) in names_in {
+            let ok_code = (1..=16).contains(&lang.len()) && lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+            let name = name.trim().to_string();
+            if !ok_code || name.is_empty() || name.chars().count() > MAX_TEXT {
+                return Err(fail(format!("the name in \"{lang}\" is not valid")));
+            }
+            m.names.insert(lang, name);
+        }
         for (field, v) in m.values() {
             let Some(v) = v else { continue };
             let poisson = field == "poisson";
             if !v.is_finite() || v < 0.0 || (poisson && v > 0.5) {
                 return Err(fail(format!("{field} = {v} is out of range")));
+            }
+        }
+    }
+    // In each language the names are distinct too.
+    let langs: BTreeSet<&String> = lib.materials.iter().flat_map(|m| m.names.keys()).collect();
+    for lang in langs {
+        let mut seen = BTreeSet::new();
+        for (row, m) in lib.materials.iter().enumerate() {
+            if !seen.insert(m.name_in(lang).to_lowercase()) {
+                let message = format!("\"{}\" appears twice in \"{lang}\"", m.name_in(lang));
+                return Err(LibraryError::Material { row, message });
             }
         }
     }
@@ -491,6 +542,31 @@ mod tests {
         let row = LibraryMaterial::of_material(&porcelain);
         assert_eq!(row.finish, Some(Finish::Polished));
         assert_eq!(LibraryMaterial::of_material(&Material::new("Plain", [1, 2, 3])).finish, None, "matte is left out");
+    }
+
+    /// A material goes by its main name and its translated ones; it takes
+    /// the one of the language asked for.
+    #[test]
+    fn translated_names_are_found_and_used() {
+        let text = r#"{"format": 1, "code": "X", "name": "X", "materials": [
+            {"name": "Vidro", "names": {"en": " Glass ", "es": "Vidrio"}},
+            {"name": "Pedra", "names": {"en": "Stone"}}]}"#;
+        let lib = read_library(text).unwrap();
+        let glass = lib.material("glass").unwrap();
+        assert_eq!((glass.name.as_str(), glass.name_in("en"), glass.name_in("fr")), ("Vidro", "Glass", "Vidro"));
+        assert_eq!(glass.to_material_in("es").name, "Vidrio");
+        assert_eq!(lib.material("Pedra").unwrap().to_material().name, "Pedra");
+        assert_eq!(glass.all_names().count(), 3);
+        // Two materials of the same name in one language, a bad code, an empty name.
+        for bad in [
+            r#"[{"name": "A", "names": {"en": "C"}}, {"name": "B", "names": {"en": "c"}}]"#,
+            r#"[{"name": "A", "names": {"en": "B"}}, {"name": "B"}]"#,
+            r#"[{"name": "A", "names": {"e n": "B"}}]"#,
+            r#"[{"name": "A", "names": {"en": "  "}}]"#,
+        ] {
+            let text = format!(r#"{{"format": 1, "code": "X", "name": "X", "materials": {bad}}}"#);
+            assert!(matches!(read_library(&text), Err(LibraryError::Material { .. })), "{bad}");
+        }
     }
 
     #[test]

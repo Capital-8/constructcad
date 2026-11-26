@@ -10,6 +10,19 @@
   "materials": [
     {
       "name": "Chapisco",
+      "names": {
+        "en": "Spatter dash",
+        "es": "Salpicado de cemento",
+        "fr": "Gobetis",
+        "de": "Spritzbewurf",
+        "it": "Rinzaffo",
+        "lo": "ປູນສາດຮອງພື້ນ",
+        "pl": "Obrzutka",
+        "uk-UA": "Набризк",
+        "zh-TW": "噴漿打底層",
+        "zh-CN": "甩浆层",
+        "ja": "下地吹付けモルタル"
+      },
       "class": "Mortar",
       "color": [
         150,
@@ -23,6 +36,19 @@
     },
     {
       "name": "Emboço",
+      "names": {
+        "en": "Base coat plaster",
+        "es": "Enfoscado",
+        "fr": "Corps d'enduit",
+        "de": "Unterputz",
+        "it": "Arriccio",
+        "lo": "ປູນສາບຊັ້ນຮອງ",
+        "pl": "Narzut",
+        "uk-UA": "Ґрунтовий шар штукатурки",
+        "zh-TW": "水泥砂漿打底",
+        "zh-CN": "抹灰底层",
+        "ja": "下塗りモルタル"
+      },
       "class": "Mortar",
       "color": [
         186,
@@ -36,6 +62,19 @@
     },
     {
       "name": "Reboco",
+      "names": {
+        "en": "Finish coat plaster",
+        "es": "Revoque fino",
+        "fr": "Enduit de finition",
+        "de": "Oberputz",
+        "it": "Intonaco di finitura",
+        "lo": "ປູນສາບຊັ້ນໜ້າ",
+        "pl": "Gładź tynkowa",
+        "uk-UA": "Накривний шар штукатурки",
+        "zh-TW": "水泥砂漿粉光",
+        "zh-CN": "抹灰面层",
+        "ja": "上塗りモルタル"
+      },
       "class": "Mortar",
       "color": [
         206,
@@ -49,6 +88,19 @@
     },
     {
       "name": "Reboco de cal",
+      "names": {
+        "en": "Lime plaster",
+        "es": "Revoque de cal",
+        "fr": "Enduit à la chaux",
+        "de": "Kalkputz",
+        "it": "Intonaco di calce",
+        "lo": "ປູນສາບປູນຂາວ",
+        "pl": "Tynk wapienny",
+        "uk-UA": "Вапняна штукатурка",
+        "zh-TW": "石灰粉刷",
+        "zh-CN": "石灰砂浆抹灰",
+        "ja": "しっくい塗り"
+      },
       "class": "Mortar",
       "color": [
         214,
@@ -62,6 +114,19 @@
     },
     {
       "name": "Argamassa de assentamento",
+      "names": {
+        "en": "Masonry mortar",
+        "es": "Mortero de albañilería",
+        "fr": "Mortier de hourdage",
+        "de": "Mauermörtel",
+        "it": "Malta da muratura",
+        "lo": "ປູນກໍ່ດິນຈີ່",
+        "pl": "Zaprawa murarska",
+        "uk-UA": "Кладковий розчин",
+        "zh-TW": "砌磚砂漿",
+        "zh-CN": "砌筑砂浆",
+        "ja": "組積用モルタル"
+      },
       "class": "Mortar",
       "color": [
         176,
@@ -75,6 +140,19 @@
     },
     {
       "name": "Contrapiso",
+      "names": {
+        "en": "Screed",
+        "es": "Mortero de nivelación",
+        "fr": "Chape",
+        "de": "Zementestrich",
+        "it": "Massetto",
+        "lo": "ປູນປັບລະດັບພື້ນ",
+        "pl": "Wylewka cementowa",
+        "uk-UA": "Цементна стяжка",
+        "zh-TW": "地坪水泥砂漿打底",
+        "zh-CN": "地面找平层",
+        "ja": "床下地モルタル"
+      },
       "class": "Mortar",
       "color": [
         160,
@@ -88,6 +166,19 @@
     },
     {
       "name": "Argamassa colante cimentícia",
+      "names": {
+        "en": "Cementitious tile adhesive",
+        "es": "Adhesivo cementoso",
+        "fr": "Mortier-colle",
+        "de": "Zementärer Fliesenkleber",
+        "it": "Adesivo cementizio per piastrelle",
+        "lo": "ກາວຊີມັງຕິດກະເບື້ອງ",
+        "pl": "Zaprawa klejowa cementowa",
+        "uk-UA": "Цементний плитковий клей",
+        "zh-TW": "水泥基磁磚黏著劑",
+        "zh-CN": "水泥基瓷砖胶",
+        "ja": "セメント系タイル接着剤"
+      },
       "class": "Mortar",
       "color": [
         190,
@@ -98,6 +189,19 @@
     },
     {
       "name": "Rejunte cimentício cinza",
+      "names": {
+        "en": "Grey cementitious grout",
+        "es": "Mortero de rejuntado gris",
+        "fr": "Mortier de jointoiement gris",
+        "de": "Zementärer Fugenmörtel grau",
+        "it": "Stucco cementizio grigio",
+        "lo": "ຢາແນວກະເບື້ອງຊີມັງ ສີເທົາ",
+        "pl": "Fuga cementowa szara",
+        "uk-UA": "Цементна затирка сіра",
+        "zh-TW": "灰色水泥基填縫劑",
+        "zh-CN": "灰色水泥基填缝剂",
+        "ja": "セメント系目地材 グレー"
+      },
       "class": "Mortar",
       "color": [
         150,
@@ -108,6 +212,19 @@
     },
     {
       "name": "Gesso liso",
+      "names": {
+        "en": "Gypsum plaster finish",
+        "es": "Enlucido de yeso",
+        "fr": "Enduit plâtre lissé",
+        "de": "Gipsputz",
+        "it": "Intonaco di gesso",
+        "lo": "ປູນສາບຍິບຊຳ",
+        "pl": "Tynk gipsowy",
+        "uk-UA": "Гіпсова штукатурка",
+        "zh-TW": "石膏抹面",
+        "zh-CN": "石膏抹灰",
+        "ja": "せっこうプラスター塗り"
+      },
       "class": "Gypsum",
       "color": [
         242,
@@ -121,6 +238,19 @@
     },
     {
       "name": "Gesso projetado",
+      "names": {
+        "en": "Spray-applied gypsum plaster",
+        "es": "Yeso proyectado",
+        "fr": "Plâtre projeté",
+        "de": "Gipsmaschinenputz",
+        "it": "Intonaco di gesso a spruzzo",
+        "lo": "ຍິບຊຳສີດ",
+        "pl": "Tynk gipsowy maszynowy",
+        "uk-UA": "Гіпсова штукатурка машинна",
+        "zh-TW": "噴塗石膏",
+        "zh-CN": "机喷石膏抹灰",
+        "ja": "吹付けせっこうプラスター"
+      },
       "class": "Gypsum",
       "color": [
         236,
@@ -134,6 +264,19 @@
     },
     {
       "name": "Chapa de gesso standard",
+      "names": {
+        "en": "Gypsum board, standard",
+        "es": "Placa de yeso estándar",
+        "fr": "Plaque de plâtre standard",
+        "de": "Gipsplatte Standard",
+        "it": "Lastra in cartongesso standard",
+        "lo": "ແຜ່ນຍິບຊຳມາດຕະຖານ",
+        "pl": "Płyta gipsowo-kartonowa standardowa",
+        "uk-UA": "Гіпсокартонний лист стандартний",
+        "zh-TW": "標準石膏板",
+        "zh-CN": "普通纸面石膏板",
+        "ja": "普通せっこうボード"
+      },
       "class": "Gypsum",
       "color": [
         236,
@@ -147,6 +290,19 @@
     },
     {
       "name": "Chapa de gesso resistente à umidade",
+      "names": {
+        "en": "Gypsum board, moisture-resistant",
+        "es": "Placa de yeso resistente a la humedad",
+        "fr": "Plaque de plâtre hydrofuge",
+        "de": "Gipsplatte imprägniert",
+        "it": "Lastra in cartongesso idrorepellente",
+        "lo": "ແຜ່ນຍິບຊຳກັນຄວາມຊື້ນ",
+        "pl": "Płyta gipsowo-kartonowa wodoodporna",
+        "uk-UA": "Гіпсокартонний лист вологостійкий",
+        "zh-TW": "防潮石膏板",
+        "zh-CN": "耐水纸面石膏板",
+        "ja": "耐水せっこうボード"
+      },
       "class": "Gypsum",
       "color": [
         176,
@@ -160,6 +316,19 @@
     },
     {
       "name": "Chapa de gesso resistente ao fogo",
+      "names": {
+        "en": "Gypsum board, fire-resistant",
+        "es": "Placa de yeso resistente al fuego",
+        "fr": "Plaque de plâtre résistante au feu",
+        "de": "Gipsplatte Feuerschutz",
+        "it": "Lastra in cartongesso ignifuga",
+        "lo": "ແຜ່ນຍິບຊຳກັນໄຟ",
+        "pl": "Płyta gipsowo-kartonowa ogniochronna",
+        "uk-UA": "Гіпсокартонний лист вогнестійкий",
+        "zh-TW": "防火石膏板",
+        "zh-CN": "耐火纸面石膏板",
+        "ja": "強化せっこうボード"
+      },
       "class": "Gypsum",
       "color": [
         230,
@@ -173,6 +342,19 @@
     },
     {
       "name": "Forro de gesso",
+      "names": {
+        "en": "Gypsum ceiling board",
+        "es": "Falso techo de yeso",
+        "fr": "Plafond en plâtre",
+        "de": "Gipsdeckenplatte",
+        "it": "Controsoffitto in gesso",
+        "lo": "ຝ້າຍິບຊຳ",
+        "pl": "Sufit gipsowy",
+        "uk-UA": "Гіпсова стеля",
+        "zh-TW": "石膏板天花板",
+        "zh-CN": "石膏板吊顶",
+        "ja": "せっこうボード天井"
+      },
       "class": "Gypsum",
       "color": [
         244,

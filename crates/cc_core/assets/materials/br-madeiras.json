@@ -11,6 +11,12 @@
   "materials": [
     {
       "name": "Ipê",
+      "names": {
+        "lo": "ໄມ້ Ipê",
+        "zh-TW": "Ipê 木",
+        "zh-CN": "Ipê 木",
+        "ja": "Ipê 材"
+      },
       "class": "Wood",
       "color": [
         110,
@@ -24,6 +30,12 @@
     },
     {
       "name": "Cumaru",
+      "names": {
+        "lo": "ໄມ້ Cumaru",
+        "zh-TW": "Cumaru 木",
+        "zh-CN": "Cumaru 木",
+        "ja": "Cumaru 材"
+      },
       "class": "Wood",
       "color": [
         140,
@@ -37,6 +49,12 @@
     },
     {
       "name": "Jatobá",
+      "names": {
+        "lo": "ໄມ້ Jatobá",
+        "zh-TW": "Jatobá 木",
+        "zh-CN": "Jatobá 木",
+        "ja": "Jatobá 材"
+      },
       "class": "Wood",
       "color": [
         150,
@@ -50,6 +68,12 @@
     },
     {
       "name": "Itaúba",
+      "names": {
+        "lo": "ໄມ້ Itaúba",
+        "zh-TW": "Itaúba 木",
+        "zh-CN": "Itaúba 木",
+        "ja": "Itaúba 材"
+      },
       "class": "Wood",
       "color": [
         128,
@@ -63,6 +87,12 @@
     },
     {
       "name": "Garapeira",
+      "names": {
+        "lo": "ໄມ້ Garapeira",
+        "zh-TW": "Garapeira 木",
+        "zh-CN": "Garapeira 木",
+        "ja": "Garapeira 材"
+      },
       "class": "Wood",
       "color": [
         176,
@@ -76,6 +106,12 @@
     },
     {
       "name": "Peroba-rosa",
+      "names": {
+        "lo": "ໄມ້ Peroba-rosa",
+        "zh-TW": "Peroba-rosa 木",
+        "zh-CN": "Peroba-rosa 木",
+        "ja": "Peroba-rosa 材"
+      },
       "class": "Wood",
       "color": [
         176,
@@ -89,6 +125,17 @@
     },
     {
       "name": "Eucalipto citriodora",
+      "names": {
+        "en": "Eucalyptus citriodora",
+        "fr": "Eucalyptus citriodora",
+        "de": "Eukalyptus citriodora",
+        "lo": "ໄມ້ຢູຄາລິບ citriodora",
+        "pl": "Eukaliptus citriodora",
+        "uk-UA": "Евкаліпт citriodora",
+        "zh-TW": "檸檬桉木",
+        "zh-CN": "柠檬桉木",
+        "ja": "レモンユーカリ材"
+      },
       "class": "Wood",
       "color": [
         176,
@@ -102,6 +149,17 @@
     },
     {
       "name": "Eucalipto grandis",
+      "names": {
+        "en": "Eucalyptus grandis",
+        "fr": "Eucalyptus grandis",
+        "de": "Eukalyptus grandis",
+        "lo": "ໄມ້ຢູຄາລິບ grandis",
+        "pl": "Eukaliptus grandis",
+        "uk-UA": "Евкаліпт grandis",
+        "zh-TW": "巨桉木",
+        "zh-CN": "巨桉木",
+        "ja": "グランディスユーカリ材"
+      },
       "class": "Wood",
       "color": [
         196,
@@ -115,6 +173,12 @@
     },
     {
       "name": "Cambará",
+      "names": {
+        "lo": "ໄມ້ Cambará",
+        "zh-TW": "Cambará 木",
+        "zh-CN": "Cambará 木",
+        "ja": "Cambará 材"
+      },
       "class": "Wood",
       "color": [
         184,
@@ -128,6 +192,12 @@
     },
     {
       "name": "Freijó",
+      "names": {
+        "lo": "ໄມ້ Freijó",
+        "zh-TW": "Freijó 木",
+        "zh-CN": "Freijó 木",
+        "ja": "Freijó 材"
+      },
       "class": "Wood",
       "color": [
         176,
@@ -141,6 +211,12 @@
     },
     {
       "name": "Cedro-rosa",
+      "names": {
+        "lo": "ໄມ້ Cedro-rosa",
+        "zh-TW": "Cedro-rosa 木",
+        "zh-CN": "Cedro-rosa 木",
+        "ja": "Cedro-rosa 材"
+      },
       "class": "Wood",
       "color": [
         178,
@@ -154,6 +230,19 @@
     },
     {
       "name": "Pinus",
+      "names": {
+        "en": "Pine",
+        "es": "Pino",
+        "fr": "Pin",
+        "de": "Kiefer",
+        "it": "Pino",
+        "lo": "ໄມ້ແປກ",
+        "pl": "Sosna",
+        "uk-UA": "Сосна",
+        "zh-TW": "松木",
+        "zh-CN": "松木",
+        "ja": "パイン材"
+      },
       "class": "Wood",
       "color": [
         222,

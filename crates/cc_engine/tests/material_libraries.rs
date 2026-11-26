@@ -117,3 +117,38 @@ fn finish_libraries_import_with_their_gloss() {
     let epoxy = one["libraries"][0]["materials"].as_array().unwrap().iter().find(|m| m["finish"] == "Glossy");
     assert!(epoxy.is_some_and(|m| m["in_project"] == true), "the catalog shows the finish");
 }
+
+#[test]
+fn materials_are_named_in_the_language_asked_for() {
+    let text = r#"{"format": 1, "code": "T", "name": "T", "materials": [
+        {"name": "Vidro T", "names": {"en": "Glass T", "es": "Vidrio T"}}, {"name": "Pedra T"}]}"#;
+    let mut s = Session::default();
+    let out = run(&mut s, "material_library_import", json!({"text": text, "materials": ["glass t"], "language": "en"}));
+    assert_eq!(out["imported"], json!(["Glass T"]));
+    // Under another name, the same material is not loaded twice.
+    let again = run(&mut s, "material_library_import", json!({"text": text, "language": "es"}));
+    assert_eq!((again["imported"].clone(), again["kept"].clone()), (json!(["Pedra T"]), json!(["Glass T"])));
+    assert!(s.project().material("Vidrio T").is_none());
+    // The catalog names them in the language asked for.
+    let one = run(&mut s, "material_catalog", json!({"library": "GLASS", "language": "en"}));
+    let first = &one["libraries"][0]["materials"][0];
+    assert_eq!(first["main_name"], "Vidro float incolor");
+    assert_ne!(first["name"], first["main_name"], "the built-in libraries are translated");
+}
+
+/// The built-in libraries name their materials in the app's languages only.
+#[test]
+fn built_in_translations_use_the_app_languages() {
+    use cc_engine::i18n::Language;
+    let mut translated = 0;
+    for (_, lib) in cc_core::material_library::built_in() {
+        for m in &lib.materials {
+            for lang in m.names.keys() {
+                let known = Language::from_code(lang).is_some_and(|l| l.code() == lang && l != Language::PtBr);
+                assert!(known, "{}: {lang}", m.name);
+            }
+            translated += usize::from(m.names.contains_key("en"));
+        }
+    }
+    assert!(translated > 100, "{translated}");
+}
