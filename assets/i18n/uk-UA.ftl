@@ -4245,3 +4245,7 @@ pref-recent-count-hint = Скільки проєктів показує поча
 pref-snap-kinds = Точки прив'язки
 pref-snap-kinds-hint = Види точок, на яких зупиняються інструменти.
 pref-group-plugins = Плагіни
+ls-project = Стилі проєкту
+ls-built-ins = Вбудовані
+tag-types-tags = Позначки
+tag-types-marks = Позначки видів

@@ -612,3 +612,225 @@ pub fn callout(ui: &mut Ui, color: Color32, text: &str) {
             ui.add(egui::Label::new(RichText::new(text).size(size(12.5)).color(color)).wrap());
         });
 }
+
+// --- Lists: cards of rows across the dialog ---
+
+/// Tabs as a row of names over a line, the current one underlined in the accent.
+pub fn tabs<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, items: &[(T, String)]) {
+    let top = ui.cursor().min;
+    let full = ui.available_width();
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        for (item, label) in items {
+            let selected = *value == *item;
+            let font =
+                if selected { FontId::new(size(13.5), theme::semibold()) } else { FontId::proportional(size(13.5)) };
+            let galley = ui.painter().layout_no_wrap(label.clone(), font, PALETTE.text);
+            let (rect, r) = ui.allocate_exact_size(vec2(galley.size().x + 24.0, 36.0), Sense::click());
+            if r.clicked() {
+                *value = *item;
+            }
+            let color = if selected {
+                PALETTE.accent_text
+            } else if r.hovered() {
+                PALETTE.text
+            } else {
+                PALETTE.text_muted
+            };
+            ui.painter().galley(rect.center() - galley.size() / 2.0, galley, color);
+            if selected {
+                let bar = Rect::from_min_max(
+                    pos2(rect.left() + 6.0, rect.bottom() - 2.5),
+                    pos2(rect.right() - 6.0, rect.bottom()),
+                );
+                ui.painter().rect_filled(bar, 1.0, PALETTE.accent);
+            }
+            r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, label));
+        }
+    });
+    let y = top.y + 36.0;
+    ui.painter().hline(top.x..=top.x + full, y, Stroke::new(1.0, PALETTE.border));
+    ui.add_space(14.0);
+}
+
+/// A section title over a list, with a count and room on the right for
+/// its buttons (`actions`, laid out right to left).
+pub fn list_title(ui: &mut Ui, title: &str, count: Option<usize>, actions: impl FnOnce(&mut Ui)) {
+    ui.horizontal(|ui| {
+        let text =
+            RichText::new(title.to_uppercase()).family(theme::semibold()).size(size(11.0)).color(PALETTE.text_faint);
+        ui.add(egui::Label::new(text).selectable(false));
+        if let Some(n) = count {
+            badge(ui, &n.to_string(), PALETTE.text_muted);
+        }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            actions(ui);
+        });
+    });
+    ui.add_space(6.0);
+}
+
+/// A small rounded label in `color` on a tint of it.
+pub fn badge(ui: &mut Ui, text: &str, color: Color32) -> egui::Response {
+    let font = FontId::new(size(11.0), theme::semibold());
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, color);
+    let (rect, r) = ui.allocate_exact_size(galley.size() + vec2(14.0, 6.0), Sense::hover());
+    ui.painter().rect_filled(rect, rect.height() / 2.0, color.gamma_multiply(0.14));
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, color);
+    r
+}
+
+/// A bordered card holding the rows of a list ([`card_row`]).
+pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    egui::Frame::new()
+        .fill(PALETTE.canvas)
+        .stroke(Stroke::new(1.0, PALETTE.border))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::same(1))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = 0.0;
+            add(ui)
+        })
+        .inner
+}
+
+/// The column names of a card: each name and the x where its cell starts
+/// (from the left of the row content, as the rows lay out their cells).
+pub fn card_header(ui: &mut Ui, columns: &[(f32, String)]) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 28.0), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, CornerRadius { nw: 7, ne: 7, ..CornerRadius::ZERO }, PALETTE.surface);
+    let font = FontId::new(size(11.0), theme::semibold());
+    for (x, name) in columns {
+        let at = pos2(rect.left() + ROW_PAD_X + x, rect.center().y);
+        painter.text(at, Align2::LEFT_CENTER, name.to_uppercase(), font.clone(), PALETTE.text_faint);
+    }
+    painter.hline(rect.x_range(), rect.bottom() - 0.5, Stroke::new(1.0, PALETTE.border));
+}
+
+/// Space at the left and right of the rows of a card.
+pub const ROW_PAD_X: f32 = 12.0;
+/// Space between the cells of a card row.
+pub const CELL_GAP: f32 = 10.0;
+
+/// A row of a card, `height` tall: highlighted when `selected`, tinted
+/// when hovered; `add` lays the cells out left to right (centered). The
+/// response is the row background (a click on it), and a divider follows
+/// unless it is the `last`.
+pub fn card_row<R>(
+    ui: &mut Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    height: f32,
+    selected: bool,
+    last: bool,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> (R, egui::Response) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
+    let r = ui.interact(rect, ui.id().with(("card-row", id)), Sense::click());
+    let fill = if selected {
+        Some(PALETTE.accent_soft)
+    } else if ui.rect_contains_pointer(rect) {
+        Some(PALETTE.hover.gamma_multiply(0.6))
+    } else {
+        None
+    };
+    if let Some(fill) = fill {
+        ui.painter().rect_filled(rect, 0.0, fill);
+    }
+    if selected {
+        let bar = Rect::from_min_size(rect.left_top(), vec2(3.0, rect.height()));
+        ui.painter().rect_filled(bar, 0.0, PALETTE.accent);
+    }
+    let inner = rect.shrink2(vec2(ROW_PAD_X, 0.0));
+    let mut child = ui.new_child(UiBuilder::new().max_rect(inner).layout(Layout::left_to_right(Align::Center)));
+    child.spacing_mut().item_spacing.x = CELL_GAP;
+    let out = add(&mut child);
+    if !last {
+        ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, Stroke::new(1.0, PALETTE.border));
+    }
+    (out, r)
+}
+
+/// A cell of a card row, `width` wide (its content left to right, centered).
+pub fn cell<R>(ui: &mut Ui, width: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let height = ui.available_height();
+    ui.allocate_ui_with_layout(vec2(width, height), Layout::left_to_right(Align::Center), |ui| {
+        ui.set_width(width);
+        ui.set_height(height);
+        add(ui)
+    })
+    .inner
+}
+
+/// A message in the middle of an empty list.
+pub fn empty_state(ui: &mut Ui, icon: Icon, text: &str) {
+    ui.add_space(18.0);
+    ui.vertical_centered(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::hover());
+        ui.painter().circle_filled(rect.center(), 20.0, PALETTE.surface);
+        icons::paint(ui.painter(), rect.shrink(10.0), icon, PALETTE.text_faint);
+        ui.add_space(6.0);
+        ui.label(RichText::new(text).size(size(12.5)).color(PALETTE.text_muted));
+    });
+    ui.add_space(18.0);
+}
+
+/// A small square button with `icon` (and `label` as its tooltip and
+/// accessible name); `danger` tints it red on hover.
+pub fn icon_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, danger: bool) -> egui::Response {
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, r) = ui.allocate_exact_size(vec2(28.0, 28.0), sense);
+    let hovered = enabled && r.hovered();
+    if hovered {
+        let fill = if danger { PALETTE.danger.gamma_multiply(0.12) } else { PALETTE.hover };
+        ui.painter().rect_filled(rect, 6.0, fill);
+    }
+    let color = match (enabled, hovered, danger) {
+        (false, _, _) => PALETTE.text_faint.gamma_multiply(0.6),
+        (_, true, true) => PALETTE.danger,
+        (_, true, false) => PALETTE.text,
+        _ => PALETTE.text_muted,
+    };
+    icons::paint(ui.painter(), rect.shrink(6.0), icon, color);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    if enabled { r.on_hover_text(label) } else { r.on_disabled_hover_text(label) }
+}
+
+/// A line as it prints: `weight_mm` thick, in `color`, dashed by `dashes_mm`
+/// (dash, gap, …), across a strip of white paper.
+pub fn line_sample(ui: &mut Ui, size: egui::Vec2, weight_mm: f64, color: Color32, dashes_mm: &[f64]) -> egui::Response {
+    let (rect, r) = ui.allocate_exact_size(size, Sense::hover());
+    paint_line_sample(ui.painter(), rect, weight_mm, color, dashes_mm);
+    r
+}
+
+/// [`line_sample`] painted in `rect`.
+pub fn paint_line_sample(painter: &egui::Painter, rect: Rect, weight_mm: f64, color: Color32, dashes_mm: &[f64]) {
+    painter.rect(rect, 5.0, PALETTE.paper, Stroke::new(1.0, PALETTE.border), egui::StrokeKind::Inside);
+    // Five points per paper millimeter; the weight a little bolder so thin lines read.
+    const SCALE: f32 = 5.0;
+    let width = (weight_mm as f32 * SCALE * 1.6).clamp(0.8, 7.0);
+    let stroke = Stroke::new(width, color);
+    let (x0, x1, y) = (rect.left() + 12.0, rect.right() - 12.0, rect.center().y);
+    let dashes: Vec<f32> = dashes_mm.iter().map(|d| (*d as f32 * SCALE).max(width.min(2.0))).collect();
+    if dashes.is_empty() {
+        painter.line_segment([pos2(x0, y), pos2(x1, y)], stroke);
+        return;
+    }
+    let (mut x, mut i) = (x0, 0usize);
+    // Bounded: a strip holds a few hundred pieces at most.
+    for _ in 0..1000 {
+        if x >= x1 {
+            break;
+        }
+        let len = dashes.get(i % dashes.len()).copied().unwrap_or(1.0).max(0.5);
+        let end = (x + len).min(x1);
+        if i % 2 == 0 {
+            painter.line_segment([pos2(x, y), pos2(end, y)], stroke);
+        }
+        x = end;
+        i += 1;
+    }
+}

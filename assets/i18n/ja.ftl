@@ -4244,3 +4244,7 @@ pref-recent-count-hint = ホーム画面に表示するプロジェクトの数�
 pref-snap-kinds = スナップ点
 pref-snap-kinds-hint = ツールが止まる点の種類。
 pref-group-plugins = プラグイン
+ls-project = プロジェクトのスタイル
+ls-built-ins = 組み込み
+tag-types-tags = タグ
+tag-types-marks = ビューマーク

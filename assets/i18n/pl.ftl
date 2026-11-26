@@ -4244,3 +4244,7 @@ pref-recent-count-hint = Ile projektów pokazuje ekran startowy.
 pref-snap-kinds = Punkty przyciągania
 pref-snap-kinds-hint = Rodzaje punktów, w których zatrzymują się narzędzia.
 pref-group-plugins = Wtyczki
+ls-project = Style projektu
+ls-built-ins = Wbudowane
+tag-types-tags = Etykiety
+tag-types-marks = Znaczniki widoków

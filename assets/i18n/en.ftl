@@ -4244,3 +4244,7 @@ pref-recent-count-hint = How many projects the home screen lists.
 pref-snap-kinds = Snap points
 pref-snap-kinds-hint = The kinds of point the tools stop at.
 pref-group-plugins = Plugins
+ls-project = Project styles
+ls-built-ins = Built-in
+tag-types-tags = Tags
+tag-types-marks = View marks

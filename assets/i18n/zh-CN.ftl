@@ -4244,3 +4244,7 @@ pref-recent-count-hint = 主屏幕列出的项目数量。
 pref-snap-kinds = 捕捉点
 pref-snap-kinds-hint = 工具会停住的点类型。
 pref-group-plugins = 插件
+ls-project = 项目样式
+ls-built-ins = 内置
+tag-types-tags = 标记
+tag-types-marks = 视图标记

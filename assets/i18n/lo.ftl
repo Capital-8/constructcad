@@ -4246,3 +4246,7 @@ pref-recent-count-hint = ຈຳນວນໂຄງການທີ່ໜ້າຈ�
 pref-snap-kinds = ຈຸດຈັບຢຶດ
 pref-snap-kinds-hint = ປະເພດຈຸດທີ່ເຄື່ອງມືຢຸດ.
 pref-group-plugins = ປລັກອິນ
+ls-project = ຮູບແບບຂອງໂຄງການ
+ls-built-ins = ມີໃນຕົວ
+tag-types-tags = ປ້າຍກຳກັບ
+tag-types-marks = ເຄື່ອງໝາຍມຸມມອງ

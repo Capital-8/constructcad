@@ -12,6 +12,7 @@
 
 use crate::dim_type_ui::{Edits, optional_row, weight_row};
 use crate::i18n::tr;
+use crate::icons::Icon;
 use crate::properties::paper_drag;
 use crate::state::AppState;
 use crate::t;
@@ -565,48 +566,92 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     }
     let mut ok = 0;
     let mut action: Option<&str> = None;
-    let response = crate::dialog::Dialog::new("tag-types", t!("dlg-tag-types")).width(520.0).show(
+    let mut add_to: Option<Kind> = None;
+    let response = crate::dialog::Dialog::new("tag-types", t!("dlg-tag-types")).width(720.0).show(
         ctx,
         |ui| {
-            ui.label(RichText::new(t!("tag-types-hint")).size(11.0).color(PALETTE.text_faint));
-            ui.add_space(4.0);
-            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                egui::Grid::new("tag-types-table").num_columns(2).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
-                    crate::graphics_dialog::header(ui, t!("tag-target"));
-                    crate::graphics_dialog::header(ui, t!("type-type"));
-                    ui.end_row();
-                    let mut last = None;
-                    for (kind, pick, name) in &list {
-                        let first = last != Some(*kind);
-                        last = Some(*kind);
-                        ui.label(if first { kind.label() } else { String::new() });
-                        let text = match pick {
-                            Pick::Default(_) => RichText::new(name).italics().color(PALETTE.text_muted),
-                            Pick::Type(_) => RichText::new(name),
-                        };
-                        let r = ui.selectable_label(selected == Some(*pick), text);
-                        if r.clicked() {
-                            selected = Some(*pick);
-                        }
-                        if r.double_clicked() {
-                            action = Some("edit");
-                        }
-                        ui.end_row();
+            ui.add(egui::Label::new(RichText::new(t!("tag-types-hint")).size(12.0).color(PALETTE.text_muted)).wrap());
+            ui.add_space(14.0);
+            egui::ScrollArea::vertical().max_height(500.0).auto_shrink([false, true]).show(ui, |ui| {
+                let groups = [
+                    (t!("tag-types-tags"), TagTarget::ALL.map(Kind::Tag).to_vec()),
+                    (t!("tag-types-marks"), MarkKind::ALL.map(Kind::Mark).to_vec()),
+                ];
+                for (g, (title, kinds)) in groups.into_iter().enumerate() {
+                    if g > 0 {
+                        ui.add_space(18.0);
                     }
-                });
+                    crate::settings::list_title(ui, &title, None, |_| {});
+                    crate::settings::card(ui, |ui| {
+                        let count = kinds.len();
+                        for (i, kind) in kinds.into_iter().enumerate() {
+                            let picks: Vec<&(Kind, Pick, String)> =
+                                list.iter().filter(|(k, _, _)| *k == kind).collect();
+                            let height = 48.0;
+                            crate::settings::card_row(
+                                ui,
+                                ("tag-kind", kind.label()),
+                                height,
+                                false,
+                                i + 1 == count,
+                                |ui| {
+                                    kind_badge(ui, kind);
+                                    crate::settings::cell(ui, 150.0, |ui| {
+                                        ui.label(
+                                            RichText::new(kind.label()).family(crate::theme::semibold()).size(13.0),
+                                        );
+                                    });
+                                    let room = ui.available_width() - 40.0;
+                                    crate::settings::cell(ui, room, |ui| {
+                                        ui.spacing_mut().item_spacing.x = 6.0;
+                                        for (_, pick, name) in picks {
+                                            let r = chip(
+                                                ui,
+                                                name,
+                                                selected == Some(*pick),
+                                                matches!(pick, Pick::Default(_)),
+                                            );
+                                            if r.clicked() {
+                                                selected = Some(*pick);
+                                            }
+                                            if r.double_clicked() {
+                                                selected = Some(*pick);
+                                                action = Some("edit");
+                                            }
+                                        }
+                                    });
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        let label = format!("{}: {}", t!("tag-types-new"), kind.label());
+                                        if crate::settings::icon_button(ui, Icon::Plus, &label, true, false).clicked() {
+                                            add_to = Some(kind);
+                                        }
+                                    });
+                                },
+                            );
+                        }
+                    });
+                }
             });
-            ui.add_space(6.0);
+            ui.add_space(12.0);
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
                 let some = selected.is_some();
                 let is_type = matches!(selected, Some(Pick::Type(_)));
-                if ui.add_enabled(some, egui::Button::new(t!("tag-types-new"))).clicked() {
+                if crate::settings::button(ui, some, &t!("tag-types-new")).clicked() {
                     action = Some("new");
                 }
-                if ui.add_enabled(is_type, egui::Button::new(t!("type-duplicate"))).clicked() {
+                if crate::settings::button(ui, is_type, &t!("type-duplicate")).clicked() {
                     action = Some("duplicate");
                 }
-                if ui.add_enabled(some, egui::Button::new(t!("tag-types-edit"))).clicked() {
+                if crate::settings::button(ui, some, &t!("tag-types-edit")).clicked() {
                     action = Some("edit");
+                }
+                if let Some(pick) = selected
+                    && let Some((kind, _, name)) = list.iter().find(|(_, p, _)| *p == pick)
+                {
+                    ui.add_space(6.0);
+                    let text = format!("{} · {}", kind.label(), name);
+                    ui.label(RichText::new(text).size(12.0).color(PALETTE.text_muted));
                 }
             });
         },
@@ -615,6 +660,11 @@ pub fn show(ctx: &Context, state: &mut AppState) {
             f.secondary(t!("action-cancel"));
         },
     );
+    if let Some(kind) = add_to
+        && let Some(id) = create(state, kind)
+    {
+        selected = Some(Pick::Type(id));
+    }
     let kind_of = |state: &AppState, pick: Pick| match pick {
         Pick::Default(kind) => Some(kind),
         Pick::Type(id) => state.project().element_type(id).and_then(|t| Kind::of(&t.data)),
@@ -843,4 +893,48 @@ pub fn view_rows(ui: &mut Ui, state: &mut AppState, id: ViewId) {
             }
         });
     }
+}
+
+/// The icon of what a kind of tag or mark is for, on a tinted square.
+fn kind_badge(ui: &mut egui::Ui, kind: Kind) {
+    let icon = match kind {
+        Kind::Tag(TagTarget::Door) => Icon::Door,
+        Kind::Tag(TagTarget::Window) => Icon::Window,
+        Kind::Tag(TagTarget::Room) => Icon::Room,
+        Kind::Tag(TagTarget::Column) => Icon::Column,
+        Kind::Tag(TagTarget::Beam) => Icon::Beam,
+        Kind::Tag(TagTarget::Foundation) => Icon::Footing,
+        Kind::Tag(TagTarget::Pipe) => Icon::Pipe,
+        Kind::Tag(TagTarget::Conduit) => Icon::Conduit,
+        Kind::Tag(TagTarget::CableTray) => Icon::CableTray,
+        Kind::Mark(MarkKind::Section) => Icon::Section,
+        Kind::Mark(MarkKind::Elevation) => Icon::Elevation,
+    };
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 30.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 6.0, PALETTE.accent_soft);
+    crate::icons::paint(ui.painter(), rect.shrink(6.0), icon, PALETTE.accent_text);
+}
+
+/// A type as a rounded chip: picked ones in the accent, the built-in
+/// default in muted italics.
+fn chip(ui: &mut egui::Ui, name: &str, selected: bool, default: bool) -> egui::Response {
+    let mut text = RichText::new(name).size(12.5);
+    text = if default { text.italics().color(PALETTE.text_muted) } else { text.color(PALETTE.text) };
+    if selected {
+        text = text.color(PALETTE.accent_text);
+    }
+    let galley =
+        egui::WidgetText::from(text).into_galley(ui, Some(egui::TextWrapMode::Truncate), 220.0, egui::TextStyle::Body);
+    let (rect, r) = ui.allocate_exact_size(galley.size() + egui::vec2(22.0, 10.0), egui::Sense::click());
+    let (fill, stroke) = if selected {
+        (PALETTE.accent_soft, egui::Stroke::new(1.5, PALETTE.accent))
+    } else if r.hovered() {
+        (PALETTE.hover, egui::Stroke::new(1.0, PALETTE.border_strong))
+    } else {
+        (PALETTE.canvas, egui::Stroke::new(1.0, PALETTE.border))
+    };
+    ui.painter().rect(rect, rect.height() / 2.0, fill, stroke, egui::StrokeKind::Inside);
+    ui.painter().galley(rect.center() - galley.size() / 2.0, galley, PALETTE.text);
+    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, name));
+    r
 }

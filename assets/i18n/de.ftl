@@ -4244,3 +4244,7 @@ pref-recent-count-hint = Wie viele Projekte der Startbildschirm auflistet.
 pref-snap-kinds = Fangpunkte
 pref-snap-kinds-hint = Die Arten von Punkten, an denen die Werkzeuge halten.
 pref-group-plugins = Plugins
+ls-project = Projektstile
+ls-built-ins = Integriert
+tag-types-tags = Beschriftungen
+tag-types-marks = Ansichtsmarken

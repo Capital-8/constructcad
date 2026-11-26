@@ -4244,3 +4244,7 @@ pref-recent-count-hint = 首頁畫面列出的專案數量。
 pref-snap-kinds = 鎖點
 pref-snap-kinds-hint = 工具會停住的點類型。
 pref-group-plugins = 外掛程式
+ls-project = 專案樣式
+ls-built-ins = 內建
+tag-types-tags = 標籤
+tag-types-marks = 視圖標記
