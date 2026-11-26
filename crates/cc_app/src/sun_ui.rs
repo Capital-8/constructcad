@@ -28,9 +28,9 @@ use cc_engine::commands::views::ViewSet;
 use egui::{Context, DragValue, RichText, Ui};
 
 /// Width of the dialog's body.
-const WIDTH: f32 = 660.0;
+const WIDTH: f32 = 780.0;
 /// Width of the left column (mode and presets).
-const LEFT: f32 = 220.0;
+const LEFT: f32 = 250.0;
 /// Height of the preset list.
 const LIST_HEIGHT: f32 = 170.0;
 /// The year of the built-in presets when the view's sun has no date.
@@ -229,8 +229,67 @@ fn body(ui: &mut Ui, state: &mut AppState, d: &mut SunDialog) {
             right(ui, state, d.view);
         }
     });
-    ui.add_space(6.0);
+    ui.add_space(12.0);
     status(ui, state, d.view);
+}
+
+/// A kind of sun as a tile: its icon over its name, the chosen one in the accent.
+fn mode_tile(ui: &mut Ui, width: f32, name: &str, label: &str, on: bool) -> egui::Response {
+    let (rect, r) = ui.allocate_exact_size(egui::vec2(width, 62.0), egui::Sense::click());
+    let (fill, stroke) = if on {
+        (PALETTE.accent_soft, egui::Stroke::new(1.5, PALETTE.accent))
+    } else if r.hovered() {
+        (PALETTE.hover, egui::Stroke::new(1.0, PALETTE.border_strong))
+    } else {
+        (PALETTE.canvas, egui::Stroke::new(1.0, PALETTE.border))
+    };
+    ui.painter().rect(rect, 8.0, fill, stroke, egui::StrokeKind::Inside);
+    let icon = match name {
+        "lighting" => crate::icons::Icon::Render,
+        "still" => crate::icons::Icon::Sun,
+        _ => crate::icons::Icon::Schedule,
+    };
+    let tone = if on { PALETTE.accent_text } else { PALETTE.text_muted };
+    let icon_rect =
+        egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 20.0), egui::vec2(20.0, 20.0));
+    crate::icons::paint(ui.painter(), icon_rect, icon, tone);
+    let font = if on { egui::FontId::new(12.5, crate::theme::semibold()) } else { egui::FontId::proportional(12.5) };
+    let color = if on { PALETTE.accent_text } else { PALETTE.text };
+    ui.painter().text(
+        egui::pos2(rect.center().x, rect.bottom() - 15.0),
+        egui::Align2::CENTER_CENTER,
+        label,
+        font,
+        color,
+    );
+    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, on, label));
+    r
+}
+
+/// The sky as a half dome seen from the side: the horizon, the arc of
+/// altitudes and the sun where it stands (azimuth along the horizon,
+/// altitude up the arc), grey under the horizon.
+fn sky(ui: &mut Ui, azimuth: f64, altitude: f64, above: bool) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(150.0, 78.0), egui::Sense::hover());
+    let ground = rect.bottom() - 12.0;
+    let sky_rect = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), ground));
+    let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
+    let dome = painter.with_clip_rect(sky_rect.intersect(ui.clip_rect()));
+    let center = egui::pos2(rect.center().x, ground);
+    let radius = (rect.width() / 2.0 - 8.0).min(ground - rect.top() - 4.0);
+    dome.circle_filled(center, radius, PALETTE.accent_soft.gamma_multiply(0.7));
+    dome.circle_stroke(center, radius, egui::Stroke::new(1.0, PALETTE.accent.gamma_multiply(0.3)));
+    painter.hline(rect.left()..=rect.right(), ground, egui::Stroke::new(1.5, PALETTE.text_muted));
+    // East on the left, west on the right: x follows the sine of the azimuth from north.
+    let a = (azimuth as f32).to_radians();
+    let h = (altitude as f32).to_radians();
+    let x = center.x - a.sin() * radius * h.cos();
+    let y = ground - h.sin() * radius;
+    let sun = egui::pos2(x.clamp(rect.left() + 6.0, rect.right() - 6.0), y.min(rect.bottom() - 4.0));
+    let color = if above { egui::Color32::from_rgb(0xF2, 0xA9, 0x1E) } else { PALETTE.text_faint };
+    painter.line_segment([center, sun], egui::Stroke::new(1.0, color.gamma_multiply(0.6)));
+    painter.circle_filled(sun, 7.0, color);
+    painter.circle_stroke(sun, 10.0, egui::Stroke::new(1.0, color.gamma_multiply(0.5)));
 }
 
 /// The view's sun (the default when it has none yet).
@@ -249,30 +308,37 @@ fn date_of(mode: &SunMode) -> Option<SunDate> {
 
 fn left(ui: &mut Ui, state: &mut AppState, d: &mut SunDialog) {
     let Some(sun) = current(state, d.view) else { return };
-    section(ui, "sun-study", t!("sun-study"), |ui| {
-        crate::table::padded(ui, |ui| {
-            ui.spacing_mut().item_spacing.y = 4.0;
-            for name in SunMode::NAMES {
+    crate::settings::group(ui, &t!("sun-study"));
+    ui.add_space(4.0);
+    // The kinds of sun as tiles, two by two.
+    let names: Vec<&str> = SunMode::NAMES.to_vec();
+    for pair in names.chunks(2) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let width = ((ui.available_width() - 8.0) / 2.0).floor();
+            for name in pair {
                 let Some(mode) = SunMode::from_name(name) else { continue };
-                let on = sun.mode.name() == name;
-                if ui.radio(on, tr(mode.key())).clicked() && !on {
+                let on = sun.mode.name() == *name;
+                if mode_tile(ui, width, name, &tr(mode.key()), on).clicked() && !on {
                     set_mode(state, d, &sun.mode, name);
                 }
             }
         });
-    });
-    crate::table::padded(ui, |ui| {
+        ui.add_space(8.0);
+    }
+    {
         let on = sun.mode.is_conventional();
-        let r =
-            ui.add_enabled(!on, egui::Button::new(t!("sun-conventional"))).on_hover_text(t!("sun-conventional-tip"));
+        let r = crate::settings::button(ui, !on, &t!("sun-conventional")).on_hover_text(t!("sun-conventional-tip"));
         if r.clicked() {
             if let Some(date) = date_of(&sun.mode) {
                 d.last_date = Some(date);
             }
             set_sun(state, d.view, SunArg { mode: Some(CONVENTIONAL.into()), frame: Some(0), ..Default::default() });
         }
-    });
-    section(ui, "sun-presets", t!("sun-presets"), |ui| presets(ui, state, d, &sun));
+    }
+    crate::settings::group(ui, &t!("sun-presets"));
+    ui.add_space(4.0);
+    presets(ui, state, d, &sun);
 }
 
 /// The built-in presets of a kind of sun (`SunMode::name`), dated in `year`.
@@ -352,24 +418,35 @@ fn presets(ui: &mut Ui, state: &mut AppState, d: &mut SunDialog, sun: &SunSettin
         .collect();
     let chosen = selected_preset(state, d, sun);
     let mut apply: Option<(SunMode, Option<String>)> = None;
-    egui::ScrollArea::vertical().id_salt("sun-presets").max_height(LIST_HEIGHT).auto_shrink([false, false]).show(
-        ui,
-        |ui| {
-            for (name, mode) in &builtins {
-                if ui.selectable_label(*mode == sun.mode, name).clicked() {
-                    apply = Some((mode.clone(), None));
+    crate::settings::card(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("sun-presets").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(
+            ui,
+            |ui| {
+                let count = builtins.len() + own.len();
+                let rows = builtins.iter().map(|(n, m)| (n, m, *m == sun.mode, false));
+                let rows = rows.chain(own.iter().map(|(n, m)| (n, m, chosen.as_ref() == Some(n), true)));
+                for (i, (name, mode, on, mine)) in rows.enumerate() {
+                    let (_, r) = crate::settings::card_row(ui, ("sun-preset", i), 34.0, on, i + 1 == count, |ui| {
+                        let icon = if mine { crate::icons::Icon::Save } else { crate::icons::Icon::Sun };
+                        let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+                        let tone = if on { PALETTE.accent_text } else { PALETTE.text_muted };
+                        crate::icons::paint(ui.painter(), rect, icon, tone);
+                        let text = if on {
+                            RichText::new(name).color(PALETTE.accent_text).strong()
+                        } else {
+                            RichText::new(name)
+                        };
+                        ui.add(egui::Label::new(text).selectable(false).sense(egui::Sense::hover()));
+                    });
+                    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, name));
+                    if r.clicked() {
+                        apply = Some((mode.clone(), mine.then(|| name.clone())));
+                    }
                 }
-            }
-            if !own.is_empty() {
-                ui.separator();
-            }
-            for (name, mode) in &own {
-                if ui.selectable_label(chosen.as_ref() == Some(name), name).clicked() {
-                    apply = Some((mode.clone(), Some(name.clone())));
-                }
-            }
-        },
-    );
+            },
+        );
+    });
+    ui.add_space(6.0);
     if let Some((mode, name)) = apply {
         apply_mode(state, d.view, mode);
         d.picked = name;
@@ -974,12 +1051,24 @@ fn status(ui: &mut Ui, state: &AppState, id: ViewId) {
         };
         text = format!("{text} · {day}");
     }
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(text).color(PALETTE.text_muted));
-        if sun.mode.is_dated() && !now.above_horizon {
-            ui.label(RichText::new(format!("· {}", t!("sun-below-horizon"))).color(PALETTE.warning));
-        }
-    });
+    let below = sun.mode.is_dated() && !now.above_horizon;
+    egui::Frame::new().fill(PALETTE.surface).corner_radius(8).inner_margin(egui::Margin::symmetric(12, 8)).show(
+        ui,
+        |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                sky(ui, now.azimuth, now.altitude, !below);
+                ui.add_space(8.0);
+                ui.vertical(|ui| {
+                    ui.add_space(14.0);
+                    ui.add(egui::Label::new(RichText::new(text).color(PALETTE.text)).wrap());
+                    if below {
+                        ui.label(RichText::new(t!("sun-below-horizon")).color(PALETTE.warning));
+                    }
+                });
+            });
+        },
+    );
 }
 
 // ---------------------------------------------------------------- properties
