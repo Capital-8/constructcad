@@ -79,6 +79,7 @@ mod ribbon;
 mod run_section_ui;
 mod schedule_ui;
 mod section_mark;
+mod settings;
 mod sheet;
 mod sheet_props;
 mod side_panels;

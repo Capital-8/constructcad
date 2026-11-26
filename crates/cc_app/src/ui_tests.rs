@@ -1701,9 +1701,13 @@ fn preferences_cancel_restores_and_ok_keeps() {
     let mut harness = app_harness(state);
     let tooltips = t!("pref-detailed-tooltips");
     let ribbon = t!("pref-ribbon-collapsed");
-    harness.get_by_role_and_label(Role::CheckBox, &tooltips).click();
-    harness.get_by_role_and_label(Role::CheckBox, &ribbon).click();
-    harness.run();
+    // The switches are down the page, which scrolls.
+    for label in [&tooltips, &ribbon] {
+        harness.get_by_role_and_label(Role::CheckBox, label).scroll_to_me();
+        harness.run();
+        harness.get_by_role_and_label(Role::CheckBox, label).click();
+        harness.run();
+    }
     assert!(!harness.state().prefs.detailed_tooltips);
     assert!(harness.state().prefs.ribbon_collapsed);
     assert!(harness.state().ribbon_collapsed, "the ribbon collapses at once");
@@ -1714,6 +1718,8 @@ fn preferences_cancel_restores_and_ok_keeps() {
     assert!(!harness.state().prefs.ribbon_collapsed && !harness.state().ribbon_collapsed);
     // Again, with OK.
     crate::preferences::open(harness.state_mut(), crate::preferences::Section::Interface);
+    harness.run();
+    harness.get_by_role_and_label(Role::CheckBox, &tooltips).scroll_to_me();
     harness.run();
     harness.get_by_role_and_label(Role::CheckBox, &tooltips).click();
     harness.run();
@@ -1797,12 +1803,20 @@ fn preferences_snapshots() {
         let mut state = sample_state();
         state.prefs.library_folders = vec![std::path::PathBuf::from("/no/such/library/ccad")];
         crate::preferences::open(&mut state, section);
-        let mut harness = themed_harness(state, egui::vec2(940.0, 600.0), egui::Theme::Light, |ui, state| {
+        let mut harness = themed_harness(state, egui::vec2(1000.0, 640.0), egui::Theme::Light, |ui, state| {
             crate::preferences::show(ui.ctx(), state)
         });
         harness.run();
         results.add(harness.try_snapshot(format!("preferences_{section:?}").to_lowercase()));
     }
+    // The dark theme, on the page with the theme cards.
+    let mut state = sample_state();
+    crate::preferences::open(&mut state, crate::preferences::Section::Interface);
+    let mut harness = themed_harness(state, egui::vec2(1000.0, 640.0), egui::Theme::Dark, |ui, state| {
+        crate::preferences::show(ui.ctx(), state)
+    });
+    harness.run();
+    results.add(harness.try_snapshot("preferences_interface_dark"));
     results.unwrap();
 }
 
@@ -4990,7 +5004,7 @@ fn every_dialog_keeps_its_body_inside() {
             }),
         ),
     ];
-    for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
+    for section in Section::ALL {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
     }
     // A plugin command's form with every kind of field (a wall selected), as
