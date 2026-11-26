@@ -1198,6 +1198,7 @@ hint-align = Cliquez sur la face ou la ligne de référence
 hint-align-second = Cliquez sur la face ou la ligne de l'élément à aligner (il pivote si elle n'est pas parallèle)
 hint-align-3d = Cliquez la face de l'élément de référence (l'alignement se fait en plan, entre niveaux)
 hint-align-3d-second = Cliquez sur la face de l'élément à aligner (il pivote si elle n'est pas parallèle)
+msg-align-view-vertical = Dans les élévations et les coupes, alignez sur des lignes verticales (faces coupées ou vues de chant)
 msg-not-parallel = Les arêtes ne sont pas parallèles
 tool-trim-corner = Ajuster/prolonger en angle
 tool-trim-extend = Ajuster/prolonger jusqu'à la référence

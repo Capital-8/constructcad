@@ -705,7 +705,10 @@ impl Command for ElementOffset {
 /// parallel the element first turns about the picked point of its edge. An
 /// arc wall moves onto the circle of a concentric arc wall (its radius
 /// changes). Alignment is in plan, so the elements may be on different
-/// levels (a column above onto the face of the column below).
+/// levels (a column above onto the face of the column below). With `view`
+/// an elevation or a section, the picks are points of that view and the
+/// lines its vertical lines (a wall's face cut, a beam's side): the element
+/// moves across the view until its line lies on the reference's.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ElementAlign {
@@ -723,6 +726,10 @@ pub struct ElementAlign {
     /// which a column or component does not have.
     #[serde(default)]
     pub reference_pick: Option<Point>,
+    /// The view the picks were made in. An elevation or a section takes the picks as points of
+    /// that view (both needed); a plan, or none, as plan points.
+    #[serde(default)]
+    pub view: Option<refs::Ref>,
 }
 
 /// The line of element `id` that Align uses: the edge of its plan outline
@@ -768,6 +775,21 @@ impl Command for ElementAlign {
         // Spline walls are neither aligned nor aligned to.
         if [id, reference_id].iter().any(|x| s.project().element(*x).is_some_and(cc_core::wall_ops::is_spline)) {
             return Err(EditError::Spline.into());
+        }
+        if let Some(view) = &self.view {
+            let view = refs::view(s.project(), view)?;
+            let level_view = |v: &&cc_core::View| {
+                use cc_core::ViewKind::*;
+                matches!(v.kind, Elevation { .. } | Section { .. } | InteriorElevation { .. })
+            };
+            if let Some(frame) = s.project().view(view).filter(level_view).and_then(cc_views::view_frame) {
+                let (Some(pick), Some(reference_pick)) = (pick, reference_pick) else {
+                    return Err(EngineError::invalid(
+                        "aligning in an elevation or a section needs pick and reference_pick",
+                    ));
+                };
+                return align_in_view(s, view, &frame, (id, pick), (reference_id, reference_pick));
+            }
         }
         s.geometry();
         let (project, geom) = (&s.doc.project, s.geom());
@@ -815,6 +837,69 @@ impl Command for ElementAlign {
         })?;
         Ok(super::created(s, id))
     }
+}
+
+/// The line of element `id` drawn in a view nearest to `at` (view
+/// coordinates): its cut and projected linework, not hatching or annotation.
+pub fn view_align_line(drawing: &cc_views::Drawing2D, id: ElementId, at: DVec2) -> Option<(DVec2, DVec2)> {
+    use cc_views::{LineStyle, Prim};
+    let ids = std::collections::BTreeSet::from([id]);
+    let mut best: Option<(f64, (DVec2, DVec2))> = None;
+    for i in drawing.prims_of(&ids) {
+        let Some(Prim::Line { a, b, style, .. }) = drawing.prims.get(i) else { continue };
+        if matches!(style, LineStyle::Hatch | LineStyle::Annotation | LineStyle::Faint) || a.distance(*b) < 1e-9 {
+            continue;
+        }
+        let d = cc_geom::polygon::closest_on_segment(*a, *b, at).0.distance(at);
+        if d.is_finite() && best.is_none_or(|(bd, _)| d < bd) {
+            best = Some((d, (*a, *b)));
+        }
+    }
+    best.map(|(_, line)| line)
+}
+
+/// Whether a line of a view runs up and down it (within a hundredth of a degree).
+fn upright(a: DVec2, b: DVec2) -> bool {
+    let d = b - a;
+    d.y.abs() > 1e-12 && (d.x / d.y).abs() < 2e-4
+}
+
+/// Align in an elevation or a section: the vertical line of `id` nearest to
+/// its pick moves across the view onto the vertical line of the reference
+/// nearest to its pick, which moves the element in plan along the view's
+/// horizontal axis.
+fn align_in_view(
+    s: &mut Session,
+    view: cc_core::ViewId,
+    frame: &cc_views::Frame,
+    (id, pick): (ElementId, DVec2),
+    (reference, reference_pick): (ElementId, DVec2),
+) -> Result<Value> {
+    let drawing = s.drawing(view).ok_or_else(|| EngineError::not_found("view"))?;
+    let line = |e: ElementId, at: DVec2| {
+        view_align_line(&drawing, e, at)
+            .ok_or_else(|| EngineError::invalid(format!("element {} is not drawn in the view", e.0)))
+    };
+    let (m0, m1) = line(id, pick)?;
+    let (r0, r1) = line(reference, reference_pick)?;
+    if !upright(m0, m1) || !upright(r0, r1) {
+        return Err(EngineError::rejected(t!("msg-align-view-vertical")));
+    }
+    let right = frame.right.truncate();
+    // Only views looking level (elevations, sections), whose horizontal axis lies in plan.
+    if right.length() < 1e-9 || frame.right.z.abs() > 1e-9 || frame.forward.z.abs() > 1e-9 {
+        return Err(EngineError::rejected(t!("msg-align-view-vertical")));
+    }
+    let dx = (r0.x + r1.x - m0.x - m1.x) * 0.5;
+    if dx.abs() < 1e-12 {
+        return Ok(super::created(s, id));
+    }
+    let t = PlanTransform::translate(right * (dx / right.length_squared()));
+    edit(s, t!("tx-align"), |e| {
+        e.transform_elements(&[id], &t);
+        Ok(())
+    })?;
+    Ok(super::created(s, id))
 }
 
 /// Where an element without a location line stands in plan: a column's or

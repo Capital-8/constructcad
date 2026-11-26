@@ -1198,6 +1198,7 @@ hint-align = Referenzfläche oder -linie anklicken
 hint-align-second = Fläche oder Linie des auszurichtenden Bauteils anklicken (es dreht sich, wenn sie nicht parallel ist)
 hint-align-3d = Die Fläche des Referenzbauteils klicken (Ausrichten im Grundriss, über Ebenen hinweg)
 hint-align-3d-second = Fläche des auszurichtenden Bauteils anklicken (es dreht sich, wenn sie nicht parallel ist)
+msg-align-view-vertical = In Ansichten und Schnitten an senkrechten Linien ausrichten (geschnittene oder von der Kante gesehene Flächen)
 msg-not-parallel = Die Kanten sind nicht parallel
 tool-trim-corner = Stutzen/Dehnen auf Ecke
 tool-trim-extend = Stutzen/Dehnen auf Referenz

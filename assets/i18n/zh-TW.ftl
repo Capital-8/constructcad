@@ -1198,6 +1198,7 @@ hint-align = 按一下參考面或參考線
 hint-align-second = 按一下要對齊元素的面或線（若不平行，元素會旋轉）
 hint-align-3d = 點選參考元素的面（在平面上對齊，可跨樓層）
 hint-align-3d-second = 按一下要對齊元素的面（若不平行，元素會旋轉）
+msg-align-view-vertical = 在立面圖和剖面圖中，請以垂直線對齊（剖切的面或側視的面）
 msg-not-parallel = 邊線彼此不平行
 tool-trim-corner = 修剪／延伸至轉角
 tool-trim-extend = 修剪／延伸至參考線

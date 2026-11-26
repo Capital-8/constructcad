@@ -1203,6 +1203,7 @@ hint-align = 基準となる面または線をクリック
 hint-align-second = 位置合わせする要素の面または線をクリック (平行でない場合は回転します)
 hint-align-3d = 基準要素の面をクリック (位置合わせは平面図上、レベルを跨いで行われます)
 hint-align-3d-second = 位置合わせする要素の面をクリック (平行でない場合は回転します)
+msg-align-view-vertical = 立面図と断面図では、垂直な線（切断面または側面から見た面）で位置合わせしてください
 msg-not-parallel = エッジが平行ではありません
 tool-trim-corner = コーナーにトリム/延長
 tool-trim-extend = 参照にトリム/延長

@@ -1198,6 +1198,7 @@ hint-align = Kliknij ścianę lub linię odniesienia
 hint-align-second = Kliknij ścianę lub linię elementu do wyrównania (obróci się, jeśli nie jest równoległa)
 hint-align-3d = Kliknij ścianę elementu odniesienia (wyrównanie w rzucie, między poziomami)
 hint-align-3d-second = Kliknij ścianę elementu do wyrównania (obróci się, jeśli nie jest równoległa)
+msg-align-view-vertical = W elewacjach i przekrojach wyrównuj do linii pionowych (ścian przeciętych lub widzianych krawędzią)
 msg-not-parallel = Krawędzie nie są równoległe
 tool-trim-corner = Utnij/wydłuż do narożnika
 tool-trim-extend = Utnij/wydłuż do odniesienia

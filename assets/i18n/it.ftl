@@ -1198,6 +1198,7 @@ hint-align = Fai clic sulla faccia o linea di riferimento
 hint-align-second = Fai clic sulla faccia o linea dell'elemento da allineare (ruota se non è parallela)
 hint-align-3d = Fai clic sulla faccia dell'elemento di riferimento (l'allineamento è in pianta, tra livelli)
 hint-align-3d-second = Fai clic sulla faccia dell'elemento da allineare (ruota se non è parallela)
+msg-align-view-vertical = Nei prospetti e nelle sezioni, allinea su linee verticali (facce tagliate o viste di taglio)
 msg-not-parallel = Gli spigoli non sono paralleli
 tool-trim-corner = Taglia/estendi ad angolo
 tool-trim-extend = Taglia/estendi al riferimento

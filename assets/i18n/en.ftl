@@ -1203,6 +1203,7 @@ hint-align = Click the reference face or line
 hint-align-second = Click the face or line of the element to align (it turns if not parallel)
 hint-align-3d = Click the face of the reference element (alignment is in plan, across levels)
 hint-align-3d-second = Click the face of the element to align (it turns if not parallel)
+msg-align-view-vertical = In elevations and sections, align by vertical lines (faces cut or seen edge-on)
 msg-not-parallel = The edges are not parallel
 tool-trim-corner = Trim/Extend to Corner
 tool-trim-extend = Trim/Extend to Reference

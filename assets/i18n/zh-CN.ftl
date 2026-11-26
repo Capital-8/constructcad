@@ -1203,6 +1203,7 @@ hint-align = 单击参照面或参照线
 hint-align-second = 单击要对齐图元的面或线（如不平行，图元会旋转）
 hint-align-3d = 单击参照图元的面（在平面中对齐，可跨标高）
 hint-align-3d-second = 单击要对齐图元的面（如不平行，图元会旋转）
+msg-align-view-vertical = 在立面图和剖面图中，请以垂直线对齐（剖切的面或侧视的面）
 msg-not-parallel = 边不平行
 tool-trim-corner = 修剪/延伸为角
 tool-trim-extend = 修剪/延伸到参照

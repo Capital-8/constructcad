@@ -2140,6 +2140,55 @@ fn align_columns_across_levels() {
     assert!(near(w["params"]["end"][0].as_f64().unwrap(), -0.1), "{w}");
 }
 
+/// Align in a section: the picks are points of the view, and a beam's side
+/// moves onto a wall's face cut by it, across the view (in plan, along the
+/// view's horizontal axis, which here runs west).
+#[test]
+fn align_a_beam_onto_a_wall_in_a_section() {
+    use cc_engine::commands::modify::view_align_line;
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0.0, -2.0], "end": [0.0, 4.0]})));
+    let beam = id(&run(&mut s, "beam_create", json!({"start": [3.0, -2.0], "end": [3.0, 4.0], "top_offset": 3.0})));
+    // Looking south: the view's x runs west, so a world x of 3 is drawn at -3.
+    let section = id(&run(&mut s, "view_create", json!({"kind": "section", "start": [-2.0, 1.0], "end": [6.0, 1.0]})));
+    let view = cc_core::ViewId(section);
+    let drawing = s.drawing(view).unwrap();
+    let (wall_a, wall_b) = view_align_line(&drawing, cc_core::ElementId(wall), glam::DVec2::new(-1.0, 1.0)).unwrap();
+    let east_face = wall_a.x;
+    assert!(near(wall_a.x, wall_b.x) && east_face < 0.0, "the wall's east face, drawn upright: {wall_a} {wall_b}");
+    let (beam_a, beam_b) = view_align_line(&drawing, cc_core::ElementId(beam), glam::DVec2::new(-2.0, 2.95)).unwrap();
+    assert!(near(beam_a.x, beam_b.x), "the beam's west side: {beam_a} {beam_b}");
+    let shift = beam_a.x - east_face;
+
+    let args = json!({
+        "id": beam, "reference": wall, "view": section,
+        "pick": [beam_a.x, 2.95], "reference_pick": [east_face, 1.0],
+    });
+    let depth = s.doc.undo_depth();
+    run(&mut s, "element_align", args);
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    let b = run(&mut s, "element_get", json!({"id": beam}));
+    let (x, y) = (b["params"]["start"][0].as_f64().unwrap(), b["params"]["start"][1].as_f64().unwrap());
+    assert!(near(x, 3.0 + shift) && near(y, -2.0), "moved east by {shift}, not along the beam: {b}");
+    let drawing = s.drawing(view).unwrap();
+    let (moved, _) = view_align_line(&drawing, cc_core::ElementId(beam), glam::DVec2::new(east_face, 2.95)).unwrap();
+    assert!(near(moved.x, east_face), "its side on the wall's face: {moved}");
+
+    // Horizontal lines (the beam's underside) are not aligned by yet.
+    let below = glam::DVec2::new(east_face - 0.01, 0.0);
+    let (a, b) = view_align_line(&drawing, cc_core::ElementId(beam), below).unwrap();
+    assert!(near(a.y, b.y), "the beam's underside: {a} {b}");
+    let flat = json!({
+        "id": beam, "reference": wall, "view": section,
+        "pick": [(a.x + b.x) / 2.0, a.y], "reference_pick": [east_face, 1.0],
+    });
+    assert_eq!(fails(&mut s, "element_align", flat), ErrorCode::Rejected);
+    // In a section the picks are needed.
+    let bare = json!({"id": beam, "reference": wall, "view": section});
+    assert_eq!(fails(&mut s, "element_align", bare), ErrorCode::InvalidArguments);
+}
+
 /// Pitched roofs over concave outlines and around courtyards: analytic
 /// heights, a valley, exact volumes; bad openings are refused.
 #[test]

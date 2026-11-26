@@ -1203,6 +1203,7 @@ hint-align = Clique na face ou linha de referência
 hint-align-second = Clique na face ou linha do elemento a alinhar (se não for paralela, ele gira)
 hint-align-3d = Clique na face do elemento de referência (o alinhamento é em planta, entre pavimentos)
 hint-align-3d-second = Clique na face do elemento a alinhar (se não for paralela, ele gira)
+msg-align-view-vertical = Em elevações e cortes, alinhe por linhas verticais (faces cortadas ou vistas de lado)
 msg-not-parallel = As arestas não são paralelas
 tool-trim-corner = Aparar/estender para canto
 tool-trim-extend = Aparar/estender até referência

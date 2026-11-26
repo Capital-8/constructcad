@@ -1198,6 +1198,7 @@ hint-align = Haga clic en la cara o línea de referencia
 hint-align-second = Haga clic en la cara o línea del elemento que se alineará (gira si no es paralela)
 hint-align-3d = Haga clic en la cara del elemento de referencia (la alineación es en planta, entre niveles)
 hint-align-3d-second = Haga clic en la cara del elemento que se alineará (gira si no es paralela)
+msg-align-view-vertical = En alzados y secciones, alinee por líneas verticales (caras cortadas o vistas de canto)
 msg-not-parallel = Las aristas no son paralelas
 tool-trim-corner = Recortar/extender en esquina
 tool-trim-extend = Recortar/extender hasta referencia
