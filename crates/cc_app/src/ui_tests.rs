@@ -4838,6 +4838,49 @@ fn callouts_are_drawn_resized_and_opened() {
     assert_eq!(harness.state().open_requests.last(), Some(&detail));
 }
 
+/// A double click on a section mark or an elevation marker in a plan opens its view.
+#[test]
+fn double_clicking_section_and_elevation_marks_opens_their_views() {
+    let mut state = sample_state();
+    let plan = state.project().views.values().find(|v| v.level().is_some()).map(|v| v.id).unwrap();
+    state.active_view = Some(plan);
+    let made = state
+        .session
+        .execute("view_create", serde_json::json!({"kind": "section", "start": [-2.0, 2.0], "end": [6.0, 2.0]}));
+    let section = cc_core::ViewId(made.unwrap()["id"].as_u64().unwrap());
+    let drawing = state.drawing(plan).unwrap();
+    let head = drawing.sections.iter().find(|h| h.view == section).map(|h| h.start).expect("the section's mark");
+    let mark = *drawing.marks.first().expect("an elevation marker in the sample's plan");
+    let mut harness = themed_harness(state, egui::vec2(800.0, 600.0), egui::Theme::Light, |ui, state| {
+        let (resp, _) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin: glam::DVec2::ZERO, scale: 20.0 };
+        if let Some(drawing) = state.active_view.and_then(|v| state.drawing(v)) {
+            crate::section_mark::open(&resp, state, &xf, &drawing);
+        }
+    });
+    harness.run();
+    harness.ctx.options_mut(|o| o.input_options.max_double_click_delay = 60.0);
+    let screen = |p: glam::DVec2| egui::pos2(400.0 + p.x as f32 * 20.0, 300.0 - p.y as f32 * 20.0);
+    let double_click = |h: &mut Harness<'static, AppState>, pos: egui::Pos2| {
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                h.input_mut().events.push(egui::Event::PointerMoved(pos));
+                let (button, modifiers) = (egui::PointerButton::Primary, egui::Modifiers::NONE);
+                h.input_mut().events.push(egui::Event::PointerButton { pos, button, pressed, modifiers });
+                h.run();
+            }
+        }
+    };
+    double_click(&mut harness, screen(head));
+    assert_eq!(harness.state().open_requests.last(), Some(&section));
+    // Wait out the double click before the next one.
+    harness.ctx.options_mut(|o| o.input_options.max_double_click_delay = 0.0);
+    harness.run();
+    harness.ctx.options_mut(|o| o.input_options.max_double_click_delay = 60.0);
+    double_click(&mut harness, screen(mark.center));
+    assert_eq!(harness.state().open_requests.last(), Some(&mark.view));
+}
+
 /// While a file is read on the worker thread, a dialog shows what is read
 /// and blocks the interface; Cancel leaves the project as it was.
 #[test]

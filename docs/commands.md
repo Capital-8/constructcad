@@ -2276,7 +2276,7 @@ No parameters.
 
 ### `element_align`
 
-*edit* — Align an element onto a line of a reference element, in plan: the edge picked on the element (a wall's face, a column's side) moves onto the line picked on the reference (a face or side, or the location line of a grid or of an element picked without a point). When the two are not parallel the element first turns about the picked point of its edge. An arc wall moves onto the circle of a concentric arc wall (its radius changes). Alignment is in plan, so the elements may be on different levels (a column above onto the face of the column below).
+*edit* — Align an element onto a line of a reference element, in plan: the edge picked on the element (a wall's face, a column's side) moves onto the line picked on the reference (a face or side, or the location line of a grid or of an element picked without a point). When the two are not parallel the element first turns about the picked point of its edge. An arc wall moves onto the circle of a concentric arc wall (its radius changes). Alignment is in plan, so the elements may be on different levels (a column above onto the face of the column below). With `view` an elevation or a section, the picks are points of that view and the lines those drawn there: by vertical lines (a wall's face cut, a beam's side) the element moves across the view until its line lies on the reference's; by horizontal lines (a beam's underside, a wall's top) a wall's or column's top or bottom, whichever is picked, rises or drops onto the reference's line, and other elements move up or down whole.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2284,6 +2284,7 @@ No parameters.
 | `reference` | integer | required | Element whose line it moves onto. |
 | `pick` | [x, y] | optional | Plan point `[x, y]` near the edge of `id` that moves onto the reference line (the edge of its plan outline nearest to it). Without it a linear element moves its location line, and other elements their insertion point, onto the line. |
 | `reference_pick` | [x, y] | optional | Plan point `[x, y]` near the line of `reference` to align to (the edge of its plan outline nearest to it, such as a wall face). Without it the reference's location line is used, which a column or component does not have. |
+| `view` | id or name | optional | The view the picks were made in. An elevation or a section takes the picks as points of that view (both needed); a plan, or none, as plan points. |
 
 ### `element_move_end`
 
