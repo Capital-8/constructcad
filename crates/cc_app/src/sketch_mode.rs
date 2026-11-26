@@ -33,6 +33,9 @@ use std::collections::BTreeSet;
 const SKETCH: Color32 = Color32::from_rgb(200, 40, 160);
 /// Most sketch states kept for undo.
 const MAX_UNDO: usize = 200;
+/// The fewest and most sides a polygon takes.
+pub(crate) const MIN_SIDES: usize = 3;
+pub(crate) const MAX_SIDES: usize = 64;
 /// Pick distance on screen, points.
 const PICK_PX: f64 = 6.0;
 
@@ -1396,7 +1399,7 @@ fn next_curves(s: &Session, picks: &[DVec2], p: DVec2, tol: f64) -> Option<Vec<S
         (Draw::Line, [a]) => Some(vec![SketchCurve::Line { a: *a, b: p }]),
         (Draw::Rect, [a]) => A::Rectangle { corner: a.to_array(), opposite: p.to_array(), rotation: 0.0 }.curves().ok(),
         (Draw::Polygon | Draw::PolygonOut, [c]) => {
-            let sides = s.sides.clamp(3, 64);
+            let sides = s.sides.clamp(MIN_SIDES, MAX_SIDES);
             let inscribed = s.draw == Draw::Polygon;
             // Circumscribed, the cursor marks the middle of a side: the first corner is half a side further round.
             let half = if inscribed { 0.0 } else { 180.0 / sides as f64 };
@@ -1772,7 +1775,7 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         }
         Draw::Polygon | Draw::PolygonOut => {
             ui.label(t!("sketch-sides"));
-            ui.add(egui::DragValue::new(&mut s.sides).range(3..=64));
+            ui.add(egui::DragValue::new(&mut s.sides).range(MIN_SIDES..=MAX_SIDES));
             ui.separator();
         }
         Draw::Copy => {
@@ -1817,7 +1820,18 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         }
         _ => {}
     }
-    let hint = match (s.draw, s.picks.len()) {
+    let hint = match s.draw {
+        Draw::TrimCorner if s.picked.is_some() => t!("hint-sketch-trim-corner-second"),
+        Draw::TrimExtend if s.picked.is_some() => t!("hint-sketch-trim-extend-second"),
+        draw => draw_hint(draw, s.picks.len()),
+    };
+    ui.label(theme::muted(hint));
+}
+
+/// What to click next with `draw`, `picks` points picked (also the Detail
+/// Line tool's hint).
+pub(crate) fn draw_hint(draw: Draw, picks: usize) -> String {
+    match (draw, picks) {
         (Draw::Select, _) => t!("hint-sketch-select"),
         (Draw::Line, 0) => t!("hint-sketch-line"),
         (Draw::Line, _) => t!("hint-sketch-line-next"),
@@ -1848,14 +1862,11 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         (Draw::MirrorPick, _) => t!("hint-sketch-mirror-pick"),
         (Draw::MirrorAxis, _) => t!("hint-mirror-draw"),
         (Draw::Offset, _) => t!("hint-sketch-offset"),
-        (Draw::TrimCorner, _) if s.picked.is_some() => t!("hint-sketch-trim-corner-second"),
         (Draw::TrimCorner, _) => t!("hint-sketch-trim-corner"),
-        (Draw::TrimExtend, _) if s.picked.is_some() => t!("hint-sketch-trim-extend-second"),
         (Draw::TrimExtend, _) => t!("hint-sketch-trim-extend"),
         (Draw::Split, _) => t!("hint-sketch-split"),
         (Draw::Point, _) => t!("hint-sketch-point"),
-    };
-    ui.label(theme::muted(hint));
+    }
 }
 
 /// The middle of the picked curves' extents.
