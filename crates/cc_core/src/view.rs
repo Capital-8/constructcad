@@ -336,16 +336,22 @@ pub enum ViewKind {
     Elevation {
         direction: Direction,
     },
-    /// The wall on `side` of an interior elevation marker (see
-    /// [`crate::interior`]), seen from the marker. `origin` and `look` are
-    /// copied from the marker by every edit; the depth and the crop come
-    /// from the space around it when the view is drawn.
+    /// A face of an interior elevation marker (see [`crate::interior`]): the
+    /// wall on one of its sides seen from the marker, or one wall of its
+    /// space seen square on. `origin` and `look` are worked out from the
+    /// marker and the wall by every edit; the depth and the crop come from
+    /// the space around the marker when the view is drawn.
     InteriorElevation {
         marker: crate::ElementId,
-        side: crate::interior::Side,
+        #[serde(alias = "side")]
+        face: crate::interior::Face,
+        /// A wall's view: whether it shows the wall's left face (to the left
+        /// of its line from start to end) or its right one.
+        #[serde(default)]
+        left: bool,
         /// The number in the view's name, among its marker's views.
         number: u32,
-        /// Where the view looks from (the marker's position).
+        /// Where the view looks from (see [`crate::Project::interior_frame`]).
         origin: DVec2,
         /// The unit direction it looks along.
         look: DVec2,

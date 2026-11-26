@@ -295,7 +295,8 @@ impl<'a> EditCtx<'a> {
                 self.touch_settings();
                 self.project.joins.retain(|&(a, b)| a != id && b != id);
             }
-            // A marker's interior elevations go with it; a room's markers stay, with no room.
+            // A marker's interior elevations go with it, and a wall's own view of a
+            // marker with it; a room's markers stay, with no room.
             for view in self.project.interior_views_of(id) {
                 self.remove_view(view);
             }
@@ -567,19 +568,38 @@ impl<'a> EditCtx<'a> {
         }
     }
 
-    /// Interior elevations look from where their marker stands, the way it
-    /// turns (see [`crate::interior`]).
+    /// Interior elevations look from where their marker and their wall put
+    /// them (see [`crate::Project::interior_frame`]); a view whose wall is
+    /// gone stays as it looked. Views of faces that are not of their
+    /// marker's mode go (a marker changed from sides to walls, or back).
     fn sync_interior_views(&mut self) {
+        let p = &*self.project;
+        let stray: Vec<ViewId> = p
+            .views
+            .values()
+            .filter(|v| match &v.kind {
+                ViewKind::InteriorElevation { marker, face, .. } => {
+                    matches!(p.element(*marker).map(|e| &e.kind), Some(crate::ElementKind::InteriorMarker(m)) if !m.takes(*face))
+                }
+                _ => false,
+            })
+            .map(|v| v.id)
+            .collect();
+        for view in stray {
+            self.remove_view(view);
+        }
         let p = &*self.project;
         let changed: Vec<(ViewId, glam::DVec2, glam::DVec2)> = p
             .views
             .values()
             .filter_map(|v| {
-                let ViewKind::InteriorElevation { marker, side, origin, look, .. } = &v.kind else { return None };
+                let ViewKind::InteriorElevation { marker, face, left, origin, look, .. } = &v.kind else {
+                    return None;
+                };
                 let Some(crate::ElementKind::InteriorMarker(m)) = p.element(*marker).map(|e| &e.kind) else {
                     return None;
                 };
-                let want = (m.position, m.look(*side));
+                let want = p.interior_frame(m, *face, *left)?;
                 (want != (*origin, *look)).then_some((v.id, want.0, want.1))
             })
             .collect();
