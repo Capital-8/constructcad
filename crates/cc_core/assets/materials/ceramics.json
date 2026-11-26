@@ -1,0 +1,168 @@
+{
+  "format": 1,
+  "code": "CERAMICS",
+  "name": "Cerâmicas (revestimentos e telhas)",
+  "standard": "ISO 13006, ISO 10456",
+  "sources": [
+    "ISO 13006: placas cerâmicas, grupos pela absorção de água (BIa ≤ 0,5 %, BIb 0,5 % a 3 %, BIIa 3 % a 6 %, BIIb 6 % a 10 %, BIII > 10 %)",
+    "ISO 10456:2007, Tabela 3: cerâmica e porcelana ρ = 2 300 kg/m³, λ = 1,3 W/(m·K), c = 840 J/(kg·K); telhas de argila ρ = 2 000 kg/m³, λ = 1,0 W/(m·K), c = 800 J/(kg·K)",
+    "Cores e acabamentos são referências genéricas"
+  ],
+  "materials": [
+    {
+      "name": "Porcelanato polido",
+      "class": "Ceramic",
+      "color": [
+        226,
+        221,
+        211
+      ],
+      "description": "Porcelanato polido, para pisos e paredes internos, grupo BIa da ISO 13006 (absorção de água ≤ 0,5 %)",
+      "finish": "Polished",
+      "density": 2300.0,
+      "thermal_conductivity": 1.3,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Porcelanato acetinado",
+      "class": "Ceramic",
+      "color": [
+        212,
+        206,
+        196
+      ],
+      "description": "Porcelanato esmaltado acetinado, grupo BIa da ISO 13006 (absorção de água ≤ 0,5 %)",
+      "finish": "Satin",
+      "density": 2300.0,
+      "thermal_conductivity": 1.3,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Porcelanato natural cinza",
+      "class": "Ceramic",
+      "color": [
+        170,
+        168,
+        162
+      ],
+      "description": "Porcelanato natural (não polido), para pisos internos e externos, grupo BIa da ISO 13006 (absorção de água ≤ 0,5 %)",
+      "finish": "Matte",
+      "density": 2300.0,
+      "thermal_conductivity": 1.3,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Porcelanato técnico",
+      "class": "Ceramic",
+      "color": [
+        188,
+        186,
+        180
+      ],
+      "description": "Porcelanato técnico (massa homogênea), para pisos de alto tráfego, grupo BIa da ISO 13006 (absorção de água ≤ 0,5 %)",
+      "finish": "Matte",
+      "density": 2300.0,
+      "thermal_conductivity": 1.3,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Porcelanato amadeirado",
+      "class": "Ceramic",
+      "color": [
+        160,
+        121,
+        86
+      ],
+      "description": "Porcelanato com aparência de madeira, grupo BIa da ISO 13006 (absorção de água ≤ 0,5 %)",
+      "finish": "Satin",
+      "density": 2300.0,
+      "thermal_conductivity": 1.3,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Pastilha de porcelana branca",
+      "class": "Ceramic",
+      "color": [
+        238,
+        238,
+        236
+      ],
+      "description": "Pastilha de porcelana esmaltada, para paredes e piscinas, grupo BIa da ISO 13006 (absorção de água ≤ 0,5 %)",
+      "finish": "Glossy",
+      "density": 2300.0,
+      "thermal_conductivity": 1.3,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Grês",
+      "class": "Ceramic",
+      "color": [
+        178,
+        150,
+        122
+      ],
+      "description": "Placa cerâmica grês, para pisos; sem valores físicos tabelados na ISO 10456, grupo BIb da ISO 13006 (absorção de água de 0,5 % a 3 %)",
+      "finish": "Matte"
+    },
+    {
+      "name": "Piso cerâmico semi-grês",
+      "class": "Ceramic",
+      "color": [
+        200,
+        182,
+        152
+      ],
+      "description": "Placa cerâmica esmaltada semi-grês, para pisos; sem valores físicos tabelados na ISO 10456, grupo BIIa da ISO 13006 (absorção de água de 3 % a 6 %)",
+      "finish": "Satin"
+    },
+    {
+      "name": "Piso cerâmico semiporoso",
+      "class": "Ceramic",
+      "color": [
+        206,
+        192,
+        166
+      ],
+      "description": "Placa cerâmica esmaltada semiporosa, para pisos de baixo tráfego e paredes; sem valores físicos tabelados na ISO 10456, grupo BIIb da ISO 13006 (absorção de água de 6 % a 10 %)",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Azulejo branco",
+      "class": "Ceramic",
+      "color": [
+        246,
+        246,
+        243
+      ],
+      "description": "Revestimento cerâmico poroso esmaltado, para paredes internas; sem valores físicos tabelados na ISO 10456, grupo BIII da ISO 13006 (absorção de água > 10 %)",
+      "finish": "Glossy"
+    },
+    {
+      "name": "Telha cerâmica",
+      "class": "Ceramic",
+      "color": [
+        176,
+        90,
+        58
+      ],
+      "description": "Telha de cerâmica vermelha (ISO 10456: telha de argila)",
+      "density": 2000.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 800.0
+    },
+    {
+      "name": "Telha cerâmica esmaltada",
+      "class": "Ceramic",
+      "color": [
+        120,
+        60,
+        40
+      ],
+      "description": "Telha de cerâmica esmaltada (ISO 10456: telha de argila)",
+      "finish": "Glossy",
+      "density": 2000.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 800.0
+    }
+  ]
+}

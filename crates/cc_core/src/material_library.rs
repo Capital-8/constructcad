@@ -7,7 +7,7 @@
 //! [`Project::materials`](crate::Project): a project keeps working when a
 //! library changes.
 
-use crate::material::{Material, MaterialClass, template_properties};
+use crate::material::{Finish, Material, MaterialClass, template_properties};
 use crate::pipe_catalog::Region;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -67,6 +67,9 @@ pub struct LibraryMaterial {
     pub color: [u8; 3],
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    /// The appearance's finish (matte when left out): a gloss paint, a polished stone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish: Option<Finish>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub density: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -98,6 +101,9 @@ impl LibraryMaterial {
         template_properties(&mut m, self.class);
         m.identity.class = self.class;
         m.identity.description = self.description.clone();
+        if let Some(finish) = self.finish {
+            m.appearance.finish = finish;
+        }
         let p = &mut m.physical;
         for (value, field) in [
             (self.density, &mut p.density),
@@ -125,6 +131,7 @@ impl LibraryMaterial {
             class: m.identity.class,
             color: m.color,
             description: m.identity.description.clone(),
+            finish: (m.appearance.finish != Finish::Matte).then_some(m.appearance.finish),
             density: p.density,
             thermal_conductivity: p.thermal_conductivity,
             specific_heat: p.specific_heat,
@@ -251,7 +258,9 @@ pub struct BuiltIn {
     pub code: &'static str,
     /// The i18n key of the library's name: `material-library-<code lowercased>`.
     pub name_key: &'static str,
-    pub region: Region,
+    /// The region whose standards it follows; `None` for an international
+    /// library (materials by their physical kind: paints, stones, glass).
+    pub region: Option<Region>,
     /// The file's name in `assets/materials`.
     pub file: &'static str,
     /// The file's text.
@@ -263,23 +272,100 @@ pub const BUILT_IN: &[BuiltIn] = &[
     BuiltIn {
         code: "BR-ACO-ESTRUTURAL",
         name_key: "material-library-br-aco-estrutural",
-        region: Region::Brazil,
+        region: Some(Region::Brazil),
         file: "br-aco-estrutural.json",
         text: include_str!("../assets/materials/br-aco-estrutural.json"),
     },
     BuiltIn {
         code: "BR-ACO-ARMADURA",
         name_key: "material-library-br-aco-armadura",
-        region: Region::Brazil,
+        region: Some(Region::Brazil),
         file: "br-aco-armadura.json",
         text: include_str!("../assets/materials/br-aco-armadura.json"),
     },
     BuiltIn {
         code: "BR-CONCRETO",
         name_key: "material-library-br-concreto",
-        region: Region::Brazil,
+        region: Some(Region::Brazil),
         file: "br-concreto.json",
         text: include_str!("../assets/materials/br-concreto.json"),
+    },
+    BuiltIn {
+        code: "PAINTS",
+        name_key: "material-library-paints",
+        region: None,
+        file: "paints.json",
+        text: include_str!("../assets/materials/paints.json"),
+    },
+    BuiltIn {
+        code: "CERAMICS",
+        name_key: "material-library-ceramics",
+        region: None,
+        file: "ceramics.json",
+        text: include_str!("../assets/materials/ceramics.json"),
+    },
+    BuiltIn {
+        code: "STONES",
+        name_key: "material-library-stones",
+        region: None,
+        file: "stones.json",
+        text: include_str!("../assets/materials/stones.json"),
+    },
+    BuiltIn {
+        code: "MORTARS-PLASTERS",
+        name_key: "material-library-mortars-plasters",
+        region: None,
+        file: "mortars-plasters.json",
+        text: include_str!("../assets/materials/mortars-plasters.json"),
+    },
+    BuiltIn {
+        code: "WOODS",
+        name_key: "material-library-woods",
+        region: None,
+        file: "woods.json",
+        text: include_str!("../assets/materials/woods.json"),
+    },
+    BuiltIn {
+        code: "GLASS",
+        name_key: "material-library-glass",
+        region: None,
+        file: "glass.json",
+        text: include_str!("../assets/materials/glass.json"),
+    },
+    BuiltIn {
+        code: "BR-CERAMICAS",
+        name_key: "material-library-br-ceramicas",
+        region: Some(Region::Brazil),
+        file: "br-ceramicas.json",
+        text: include_str!("../assets/materials/br-ceramicas.json"),
+    },
+    BuiltIn {
+        code: "BR-PEDRAS",
+        name_key: "material-library-br-pedras",
+        region: Some(Region::Brazil),
+        file: "br-pedras.json",
+        text: include_str!("../assets/materials/br-pedras.json"),
+    },
+    BuiltIn {
+        code: "BR-ARGAMASSAS-GESSO",
+        name_key: "material-library-br-argamassas-gesso",
+        region: Some(Region::Brazil),
+        file: "br-argamassas-gesso.json",
+        text: include_str!("../assets/materials/br-argamassas-gesso.json"),
+    },
+    BuiltIn {
+        code: "BR-MADEIRAS",
+        name_key: "material-library-br-madeiras",
+        region: Some(Region::Brazil),
+        file: "br-madeiras.json",
+        text: include_str!("../assets/materials/br-madeiras.json"),
+    },
+    BuiltIn {
+        code: "BR-ISOLANTES",
+        name_key: "material-library-br-isolantes",
+        region: Some(Region::Brazil),
+        file: "br-isolantes.json",
+        text: include_str!("../assets/materials/br-isolantes.json"),
     },
 ];
 
@@ -316,7 +402,7 @@ mod tests {
         let mut codes = std::collections::BTreeSet::new();
         for (b, lib) in built_in() {
             assert_eq!(lib.code, b.code, "{}", b.file);
-            assert_eq!(lib.region(), Some(b.region), "{}", b.file);
+            assert_eq!(lib.region(), b.region, "{}", b.file);
             assert_eq!(b.name_key, format!("material-library-{}", b.code.to_lowercase()));
             assert!(codes.insert(b.code), "{} repeats", b.code);
             assert!(!lib.materials.is_empty() && !lib.sources.is_empty(), "{}", b.file);
@@ -350,10 +436,68 @@ mod tests {
         assert!((c30 / 1000.0 - 27.0).abs() < 0.5 && (c90 / 1000.0 - 47.0).abs() < 0.5, "{c30} {c90}");
     }
 
+    /// The finish libraries: the international ones hold ISO 10456 values
+    /// only, the Brazilian ones the NBR 15220-2 bands; classes and gloss.
+    #[test]
+    fn finish_libraries_keep_their_classes_finishes_and_sources() {
+        let lib = |code: &str| &find(code).unwrap().1;
+        for m in &lib("PAINTS").materials {
+            assert_eq!(m.class, MaterialClass::Paint, "{}", m.name);
+            assert!(m.values().iter().all(|(_, v)| v.is_none()), "a film has no physical values: {}", m.name);
+        }
+        let epoxy = lib("PAINTS").material("Tinta epóxi para piso cinza").unwrap().to_material();
+        assert_eq!(epoxy.appearance.finish, Finish::Glossy);
+        let porcelain = lib("CERAMICS").material("Porcelanato polido").unwrap().to_material();
+        assert_eq!((porcelain.identity.class, porcelain.appearance.finish), (MaterialClass::Ceramic, Finish::Polished));
+        assert_eq!(porcelain.physical.thermal_conductivity, Some(1.3));
+        // International libraries: no region, no Brazilian standard in their values.
+        for (b, l) in built_in().iter().filter(|(b, _)| b.region.is_none()) {
+            assert!(!b.code.starts_with("BR-"), "{}", b.code);
+            assert!(l.sources.iter().all(|s| !s.contains("15220")), "{}", b.code);
+            assert!(l.materials.iter().all(|m| !m.description.contains("NBR")), "{}", b.code);
+        }
+        // ISO 10456: stones c = 1 000, granite λ = 2.8, soda-lime glass c = 750.
+        for m in &lib("STONES").materials {
+            assert_eq!((m.class, m.specific_heat), (MaterialClass::Stone, Some(1000.0)), "{}", m.name);
+        }
+        assert_eq!(lib("STONES").material("Granito preto polido").unwrap().thermal_conductivity, Some(2.8));
+        let glass = lib("GLASS").material("Vidro float incolor").unwrap().to_material();
+        assert_eq!((glass.physical.youngs_modulus, glass.physical.specific_heat), (Some(70_000.0), Some(750.0)));
+        // NBR 15220-2, Table B.3: the wood conductivity follows the density band.
+        let wood_band = |rho: f64| match rho {
+            r if r >= 800.0 => 0.29,
+            r if r >= 600.0 => 0.23,
+            r if r >= 450.0 => 0.15,
+            _ => 0.12,
+        };
+        for m in &lib("BR-MADEIRAS").materials {
+            assert_eq!(m.thermal_conductivity, Some(wood_band(m.density.unwrap())), "{}", m.name);
+        }
+        // Ceramics of 1 300 to 2 000 kg/m³ as in the same table.
+        for m in &lib("BR-CERAMICAS").materials {
+            let rho = m.density.unwrap();
+            let lambda = if rho > 1800.0 {
+                1.05
+            } else if rho > 1600.0 {
+                1.00
+            } else {
+                0.90
+            };
+            assert_eq!((m.thermal_conductivity, m.specific_heat), (Some(lambda), Some(920.0)), "{}", m.name);
+        }
+        let eps = lib("BR-ISOLANTES").material("Poliestireno expandido (EPS)").unwrap();
+        assert_eq!((eps.density, eps.thermal_conductivity), (Some(15.0), Some(0.040)));
+        // A finish survives a project material and back.
+        let row = LibraryMaterial::of_material(&porcelain);
+        assert_eq!(row.finish, Some(Finish::Polished));
+        assert_eq!(LibraryMaterial::of_material(&Material::new("Plain", [1, 2, 3])).finish, None, "matte is left out");
+    }
+
     #[test]
     fn files_round_trip_and_hostile_ones_are_refused() {
-        let (_, lib) = find("BR-CONCRETO").unwrap();
-        assert_eq!(read_library(&write_library(lib)).as_ref(), Ok(lib));
+        for (_, lib) in built_in() {
+            assert_eq!(read_library(&write_library(lib)).as_ref(), Ok(lib), "{}", lib.code);
+        }
         let base = |materials: &str| format!(r#"{{"format": 1, "code": "X", "name": "X", "materials": {materials}}}"#);
         assert!(read_library(&base(r#"[{"name": "A"}]"#)).is_ok());
         assert!(matches!(

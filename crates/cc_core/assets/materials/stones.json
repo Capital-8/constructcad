@@ -1,0 +1,222 @@
+{
+  "format": 1,
+  "code": "STONES",
+  "name": "Pedras naturais",
+  "standard": "ISO 10456",
+  "sources": [
+    "ISO 10456:2007, Tabela 3: granito 2 500 a 2 700 kg/m³ λ = 2,8; mármore 2 800 kg/m³ λ = 3,5; calcário duro 2 200 kg/m³ λ = 1,7; ardósia 2 000 a 2 800 kg/m³ λ = 2,2; basalto 2 700 a 3 000 kg/m³ λ = 3,5; gnaisse 2 400 a 2 700 kg/m³ λ = 3,5; rocha cristalina 2 800 kg/m³ λ = 3,5; arenito (sílica) 2 600 kg/m³ λ = 2,3 W/(m·K); c = 1 000 J/(kg·K)",
+    "Nomes pelo tipo de rocha, cor e acabamento, sem nomes comerciais; a cor e as propriedades de cada lote variam. Densidades de faixas: o meio da faixa"
+  ],
+  "materials": [
+    {
+      "name": "Granito cinza polido",
+      "class": "Stone",
+      "color": [
+        140,
+        140,
+        140
+      ],
+      "description": "Granito (ISO 10456: granito 2 500 a 2 700 kg/m³), polido",
+      "finish": "Polished",
+      "density": 2600.0,
+      "thermal_conductivity": 2.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Granito cinza flameado",
+      "class": "Stone",
+      "color": [
+        152,
+        152,
+        150
+      ],
+      "description": "Granito (ISO 10456: granito 2 500 a 2 700 kg/m³), flameado (antiderrapante)",
+      "finish": "Matte",
+      "density": 2600.0,
+      "thermal_conductivity": 2.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Granito preto polido",
+      "class": "Stone",
+      "color": [
+        36,
+        36,
+        39
+      ],
+      "description": "Granito (ISO 10456: granito 2 500 a 2 700 kg/m³), polido",
+      "finish": "Polished",
+      "density": 2600.0,
+      "thermal_conductivity": 2.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Granito branco polido",
+      "class": "Stone",
+      "color": [
+        220,
+        215,
+        205
+      ],
+      "description": "Granito (ISO 10456: granito 2 500 a 2 700 kg/m³), polido",
+      "finish": "Polished",
+      "density": 2600.0,
+      "thermal_conductivity": 2.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Granito verde polido",
+      "class": "Stone",
+      "color": [
+        40,
+        50,
+        45
+      ],
+      "description": "Granito (ISO 10456: granito 2 500 a 2 700 kg/m³), polido",
+      "finish": "Polished",
+      "density": 2600.0,
+      "thermal_conductivity": 2.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Granito amarelo polido",
+      "class": "Stone",
+      "color": [
+        205,
+        180,
+        140
+      ],
+      "description": "Granito (ISO 10456: granito 2 500 a 2 700 kg/m³), polido",
+      "finish": "Polished",
+      "density": 2600.0,
+      "thermal_conductivity": 2.8,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Mármore branco polido",
+      "class": "Stone",
+      "color": [
+        240,
+        238,
+        232
+      ],
+      "description": "Mármore (ISO 10456: mármore 2 800 kg/m³), polido",
+      "finish": "Polished",
+      "density": 2800.0,
+      "thermal_conductivity": 3.5,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Travertino levigado",
+      "class": "Stone",
+      "color": [
+        226,
+        210,
+        180
+      ],
+      "description": "Travertino (ISO 10456: calcário duro 2 200 kg/m³), levigado",
+      "finish": "Satin",
+      "density": 2200.0,
+      "thermal_conductivity": 1.7,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Calcário",
+      "class": "Stone",
+      "color": [
+        222,
+        214,
+        194
+      ],
+      "description": "Calcário (ISO 10456: calcário duro 2 200 kg/m³), para pisos e paredes",
+      "finish": "Matte",
+      "density": 2200.0,
+      "thermal_conductivity": 1.7,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Ardósia cinza",
+      "class": "Stone",
+      "color": [
+        92,
+        97,
+        98
+      ],
+      "description": "Ardósia (ISO 10456: ardósia 2 000 a 2 800 kg/m³), para pisos e paredes",
+      "finish": "Matte",
+      "density": 2400.0,
+      "thermal_conductivity": 2.2,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Ardósia preta",
+      "class": "Stone",
+      "color": [
+        50,
+        52,
+        55
+      ],
+      "description": "Ardósia (ISO 10456: ardósia 2 000 a 2 800 kg/m³), para pisos e paredes",
+      "finish": "Matte",
+      "density": 2400.0,
+      "thermal_conductivity": 2.2,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Basalto",
+      "class": "Stone",
+      "color": [
+        60,
+        60,
+        62
+      ],
+      "description": "Basalto (ISO 10456: basalto 2 700 a 3 000 kg/m³), para pisos e paredes externos",
+      "finish": "Matte",
+      "density": 2850.0,
+      "thermal_conductivity": 3.5,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Gnaisse",
+      "class": "Stone",
+      "color": [
+        150,
+        140,
+        125
+      ],
+      "description": "Gnaisse (ISO 10456: gnaisse 2 400 a 2 700 kg/m³), para pisos e muros",
+      "finish": "Matte",
+      "density": 2550.0,
+      "thermal_conductivity": 3.5,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Quartzito",
+      "class": "Stone",
+      "color": [
+        214,
+        204,
+        176
+      ],
+      "description": "Quartzito (ISO 10456: rocha cristalina 2 800 kg/m³), para pisos",
+      "finish": "Matte",
+      "density": 2800.0,
+      "thermal_conductivity": 3.5,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Arenito",
+      "class": "Stone",
+      "color": [
+        210,
+        180,
+        140
+      ],
+      "description": "Arenito (ISO 10456: arenito, sílica), para paredes e pisos",
+      "finish": "Matte",
+      "density": 2600.0,
+      "thermal_conductivity": 2.3,
+      "specific_heat": 1000.0
+    }
+  ]
+}

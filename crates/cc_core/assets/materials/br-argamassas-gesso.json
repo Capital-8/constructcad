@@ -1,0 +1,131 @@
+{
+  "format": 1,
+  "code": "BR-ARGAMASSAS-GESSO",
+  "name": "Argamassas, gessos e placas (NBR 15220-2)",
+  "region": "brazil",
+  "standard": "ABNT NBR 15220-2, NBR 14715-1",
+  "sources": [
+    "ABNT NBR 15220-2:2005, Tabela B.3: argamassa comum 1 800 a 2 100 kg/m³ λ = 1,15 W/(m·K), c = 1 000 J/(kg·K); argamassa de gesso (ou cal e gesso) 1 200 kg/m³ λ = 0,70; argamassa celular 600 a 1 000 kg/m³ λ = 0,40; gesso projetado ou de alta densidade 1 100 a 1 300 kg/m³ λ = 0,50; placa de gesso, gesso acartonado 750 a 1 000 kg/m³ λ = 0,35; fibrocimento 1 800 a 2 200 kg/m³ λ = 0,95 W/(m·K); gessos e fibrocimento c = 840 J/(kg·K)",
+    "ABNT NBR 14715-1: chapas de gesso para drywall (ST, RU, RF); ABNT NBR 7581: telhas onduladas de fibrocimento",
+    "Densidades: um valor dentro da faixa da tabela"
+  ],
+  "materials": [
+    {
+      "name": "Argamassa comum (NBR 15220-2)",
+      "class": "Mortar",
+      "color": [
+        190,
+        186,
+        176
+      ],
+      "description": "Argamassa de cimento, cal e areia: chapisco, emboço, reboco, assentamento e contrapiso (NBR 15220-2: argamassa comum 1 800 a 2 100 kg/m³)",
+      "density": 2000.0,
+      "thermal_conductivity": 1.15,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Argamassa celular (NBR 15220-2)",
+      "class": "Mortar",
+      "color": [
+        214,
+        212,
+        206
+      ],
+      "description": "Argamassa celular (NBR 15220-2: 600 a 1 000 kg/m³)",
+      "density": 800.0,
+      "thermal_conductivity": 0.4,
+      "specific_heat": 1000.0
+    },
+    {
+      "name": "Gesso liso (NBR 15220-2)",
+      "class": "Gypsum",
+      "color": [
+        242,
+        240,
+        234
+      ],
+      "description": "Revestimento de pasta de gesso (NBR 15220-2: argamassa de gesso ou de cal e gesso)",
+      "density": 1200.0,
+      "thermal_conductivity": 0.7,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Gesso projetado (NBR 15220-2)",
+      "class": "Gypsum",
+      "color": [
+        236,
+        234,
+        228
+      ],
+      "description": "Revestimento de gesso projetado (NBR 15220-2: gesso projetado ou de alta densidade)",
+      "density": 1200.0,
+      "thermal_conductivity": 0.5,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Chapa de gesso ST",
+      "class": "Gypsum",
+      "color": [
+        236,
+        236,
+        233
+      ],
+      "description": "Chapa de gesso para drywall, standard (NBR 14715-1; NBR 15220-2: placa de gesso, gesso acartonado)",
+      "density": 875.0,
+      "thermal_conductivity": 0.35,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Chapa de gesso RU",
+      "class": "Gypsum",
+      "color": [
+        176,
+        204,
+        176
+      ],
+      "description": "Chapa de gesso para drywall, resistente à umidade (NBR 14715-1; NBR 15220-2: gesso acartonado)",
+      "density": 875.0,
+      "thermal_conductivity": 0.35,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Chapa de gesso RF",
+      "class": "Gypsum",
+      "color": [
+        230,
+        184,
+        184
+      ],
+      "description": "Chapa de gesso para drywall, resistente ao fogo (NBR 14715-1; NBR 15220-2: gesso acartonado)",
+      "density": 875.0,
+      "thermal_conductivity": 0.35,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Placa cimentícia (NBR 15220-2)",
+      "class": "Generic",
+      "color": [
+        176,
+        176,
+        172
+      ],
+      "description": "Placa cimentícia reforçada com fibras (NBR 15220-2: fibrocimento)",
+      "density": 2000.0,
+      "thermal_conductivity": 0.95,
+      "specific_heat": 840.0
+    },
+    {
+      "name": "Telha de fibrocimento (NBR 15220-2)",
+      "class": "Generic",
+      "color": [
+        184,
+        184,
+        178
+      ],
+      "description": "Telha ondulada de fibrocimento (NBR 7581; NBR 15220-2: fibrocimento)",
+      "density": 2000.0,
+      "thermal_conductivity": 0.95,
+      "specific_heat": 840.0
+    }
+  ]
+}

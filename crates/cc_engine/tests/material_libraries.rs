@@ -14,7 +14,22 @@ fn the_catalog_lists_the_libraries_and_their_materials() {
     let mut s = Session::default();
     let all = run(&mut s, "material_catalog", json!({}));
     let codes: Vec<&str> = all["libraries"].as_array().unwrap().iter().map(|l| l["code"].as_str().unwrap()).collect();
-    assert_eq!(codes, ["BR-ACO-ESTRUTURAL", "BR-ACO-ARMADURA", "BR-CONCRETO"]);
+    assert_eq!(codes[..3], ["BR-ACO-ESTRUTURAL", "BR-ACO-ARMADURA", "BR-CONCRETO"]);
+    for code in [
+        "PAINTS",
+        "CERAMICS",
+        "STONES",
+        "MORTARS-PLASTERS",
+        "WOODS",
+        "GLASS",
+        "BR-CERAMICAS",
+        "BR-PEDRAS",
+        "BR-ARGAMASSAS-GESSO",
+        "BR-MADEIRAS",
+        "BR-ISOLANTES",
+    ] {
+        assert!(codes.contains(&code), "{code}");
+    }
     let one = run(&mut s, "material_catalog", json!({"library": "br-concreto"}));
     let lib = &one["libraries"][0];
     assert_eq!(lib["region"], "brazil");
@@ -84,4 +99,21 @@ fn hostile_library_files_are_refused() {
         assert!(s.execute("material_library_import", json!({"text": text})).is_err(), "{text}");
     }
     assert_eq!(s.project().materials.len(), before, "nothing imported");
+}
+
+#[test]
+fn finish_libraries_import_with_their_gloss() {
+    let mut s = Session::default();
+    let picks = json!({"library": "STONES", "materials": ["Granito preto polido"]});
+    let out = run(&mut s, "material_library_import", picks);
+    assert_eq!(out["imported"], json!(["Granito preto polido"]));
+    let granite = s.project().material("Granito preto polido").unwrap();
+    assert_eq!(granite.identity.class, cc_core::MaterialClass::Stone);
+    assert_eq!(granite.appearance.finish, cc_core::material::Finish::Polished);
+    assert_eq!(granite.physical.thermal_conductivity, Some(2.8));
+    let all = run(&mut s, "material_library_import", json!({"library": "PAINTS"}));
+    assert!(all["imported"].as_array().unwrap().len() > 20);
+    let one = run(&mut s, "material_catalog", json!({"library": "PAINTS"}));
+    let epoxy = one["libraries"][0]["materials"].as_array().unwrap().iter().find(|m| m["finish"] == "Glossy");
+    assert!(epoxy.is_some_and(|m| m["in_project"] == true), "the catalog shows the finish");
 }

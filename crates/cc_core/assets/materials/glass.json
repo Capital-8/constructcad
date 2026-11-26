@@ -1,0 +1,183 @@
+{
+  "format": 1,
+  "code": "GLASS",
+  "name": "Vidros",
+  "standard": "EN 572-1, ISO 10456",
+  "sources": [
+    "ISO 10456:2007, Tabela 3: vidro sodo-cálcico ρ = 2 500 kg/m³, λ = 1,00 W/(m·K), c = 750 J/(kg·K)",
+    "EN 572-1: vidro sodo-cálcico E = 70 000 MPa, ν = 0,2, α = 9 × 10⁻⁶ /K",
+    "EN 572-2: vidro float; EN 12150-1: vidro temperado; ISO 12543-2: vidro laminado de segurança"
+  ],
+  "materials": [
+    {
+      "name": "Vidro float incolor",
+      "class": "Glass",
+      "color": [
+        205,
+        226,
+        226
+      ],
+      "description": "Vidro float incolor (EN 572-2)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro float verde",
+      "class": "Glass",
+      "color": [
+        150,
+        196,
+        172
+      ],
+      "description": "Vidro float verde (EN 572-2)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro float fumê",
+      "class": "Glass",
+      "color": [
+        110,
+        116,
+        116
+      ],
+      "description": "Vidro float fumê (EN 572-2)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro float bronze",
+      "class": "Glass",
+      "color": [
+        150,
+        126,
+        100
+      ],
+      "description": "Vidro float bronze (EN 572-2)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro temperado incolor",
+      "class": "Glass",
+      "color": [
+        205,
+        226,
+        226
+      ],
+      "description": "Vidro de segurança temperado incolor (EN 12150-1)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro laminado incolor",
+      "class": "Glass",
+      "color": [
+        200,
+        222,
+        222
+      ],
+      "description": "Vidro de segurança laminado incolor (ISO 12543-2)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro laminado verde",
+      "class": "Glass",
+      "color": [
+        146,
+        192,
+        168
+      ],
+      "description": "Vidro de segurança laminado verde (ISO 12543-2)",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro refletivo prata",
+      "class": "Glass",
+      "color": [
+        170,
+        180,
+        186
+      ],
+      "description": "Vidro float com camada refletiva prata",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro impresso canelado",
+      "class": "Glass",
+      "color": [
+        210,
+        226,
+        224
+      ],
+      "description": "Vidro impresso (fantasia) canelado, translúcido",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    },
+    {
+      "name": "Vidro jateado",
+      "class": "Glass",
+      "color": [
+        226,
+        234,
+        234
+      ],
+      "description": "Vidro float jateado, translúcido",
+      "finish": "Polished",
+      "density": 2500.0,
+      "thermal_conductivity": 1.0,
+      "specific_heat": 750.0,
+      "thermal_expansion": 9e-06,
+      "youngs_modulus": 70000.0,
+      "poisson": 0.2
+    }
+  ]
+}
