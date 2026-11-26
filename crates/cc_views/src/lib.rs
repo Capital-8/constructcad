@@ -106,6 +106,8 @@ pub fn generate_temporary(
     let look = Look::of(project, geom, view, skip.as_ref(), indoors.as_ref());
     // The crop of the drawing: the view's own, or an interior elevation's space.
     let mut crop = view.crop;
+    // The space an interior elevation is fitted to, whose floor and ceiling it draws.
+    let mut space = None;
     let mut d = match &view.kind {
         ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height, .. } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
@@ -168,6 +170,9 @@ pub fn generate_temporary(
         ViewKind::InteriorElevation { .. } => match interior::try_resolve(project, geom, view) {
             Ok(r) => {
                 crop = r.crop;
+                if matches!(view.kind, ViewKind::InteriorElevation { auto_extents: true, .. }) {
+                    space = r.crop;
+                }
                 let mut d = projected::section_in(project, geom, &r.frame, view.scale, look);
                 joins::merge(project, &mut d);
                 rebar_view::draw_all(&mut d, project, geom, view);
@@ -232,6 +237,13 @@ pub fn generate_temporary(
     underlay(&mut d, project, geom, view);
     if let Some(rect) = crop.filter(|r| r.is_valid() && view.kind.croppable()) {
         callout::crop(&mut d, project, view.id, rect);
+    }
+    // The floor and the ceiling of an interior elevation's space, as cut
+    // lines over what the crop left (they are the crop's own bottom and top).
+    if let Some(rect) = space.filter(|r| r.is_valid()) {
+        let [a, b, c, e] = rect.corners();
+        d.line(a, b, LineStyle::Cut, None);
+        d.line(e, c, LineStyle::Cut, None);
     }
     // The sun path last, over everything: neither cropped nor overridden.
     sun_path::draw(&mut d, project, geom, view, label);

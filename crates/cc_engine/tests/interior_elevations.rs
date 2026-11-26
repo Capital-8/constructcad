@@ -476,3 +476,49 @@ fn modes_set_as_data_drop_stray_views_and_old_files_read() {
     run(&mut s, "element_set", json!({"id": marker, "params": walls_mode}));
     assert!(s.project().marker_faces(cc_core::ElementId(marker)).is_empty(), "the sides' views went");
 }
+
+/// An interior elevation draws the floor and the ceiling of its space as
+/// cut lines across what it shows, and follows a view template like the
+/// other elevations.
+#[test]
+fn interior_elevations_draw_their_floor_and_ceiling_and_take_templates() {
+    let mut s = Session::default();
+    let (walls, room) = kitchen(&mut s);
+    let t = wall_thickness(&mut s, walls[0]);
+    let ceiling = json!({"kind": "rectangle", "corner": [0, 0], "opposite": [6, 4]});
+    run(&mut s, "ceiling_create", json!({"curves": [ceiling], "offset": 2.4}));
+    let out = run(&mut s, "interior_elevations_create", json!({"room": room, "sides": ["north"]}));
+    let view = view_of(&out, "north");
+    let d = s.drawing(view).unwrap();
+    // Two cut lines of no element, as wide as the space: at the level and at the ceiling.
+    let mut heights: Vec<f64> = d
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            Prim::Line { a, b, style: cc_views::LineStyle::Cut, element: None, .. }
+                if (a.y - b.y).abs() < 1e-9 && ((a.x - b.x).abs() - (6.0 - t)).abs() < 0.05 =>
+            {
+                Some(a.y)
+            }
+            _ => None,
+        })
+        .collect();
+    heights.sort_by(f64::total_cmp);
+    assert_eq!(heights.len(), 2, "{heights:?}");
+    assert!(heights[0].abs() < 1e-6 && (heights[1] - 2.4).abs() < 1e-6, "{heights:?}");
+
+    // With the automatic extents off the crop is the user's: no space lines.
+    run(
+        &mut s,
+        "view_set",
+        json!({"view": view.0, "params": {"auto_extents": false}, "crop": [[-2.0, 0.0], [2.0, 2.0]]}),
+    );
+    let d = s.drawing(view).unwrap();
+    assert!(!d.prims.iter().any(|p| matches!(p, Prim::Line { style: cc_views::LineStyle::Cut, element: None, .. })));
+
+    // A view template applies: its scale becomes the view's.
+    let template = run(&mut s, "template_create", json!({"name": "Interiors"}))["id"].as_u64().unwrap();
+    run(&mut s, "template_set", json!({"template": template, "scale": 20}));
+    run(&mut s, "view_template_assign", json!({"views": [view.0], "template": template}));
+    assert_eq!(s.project().view(view).unwrap().scale, 20);
+}
