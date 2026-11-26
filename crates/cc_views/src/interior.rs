@@ -10,6 +10,7 @@
 
 use crate::projected::Frame;
 use cc_core::callout::CropBox;
+use cc_core::interior::{Face, FaceMode};
 use cc_core::{Category, ElementKind, Project, View, ViewKind};
 use cc_geom::{ModelGeometry, polygon};
 use glam::{DVec2, DVec3};
@@ -40,29 +41,47 @@ pub fn frame(view: &View) -> Option<Frame> {
 }
 
 /// How `view` (an interior elevation) is drawn now: `None` when it is not
-/// one, its marker is gone or no walls close a space around the marker.
+/// one, its marker is gone, no walls close a space around the marker or
+/// its wall is not one of that space's.
+///
+/// A side's view keeps the whole space across and looks to its far end; a
+/// wall's view keeps the stretch of the boundary on that wall and looks to
+/// the wall's outer face.
 pub fn resolve(project: &Project, geom: &ModelGeometry, view: &View) -> Option<Resolved> {
-    let ViewKind::InteriorElevation { marker, origin, look, auto_extents, .. } = view.kind else { return None };
+    let ViewKind::InteriorElevation { marker, face, origin, look, auto_extents, .. } = view.kind else { return None };
     let e = project.element(marker)?;
     let ElementKind::InteriorMarker(m) = &e.kind else { return None };
     let look = look.try_normalize()?;
-    let boundary = geom.room_at(project, e.level, origin, Some(view.phase))?;
     let right = DVec2::new(look.y, -look.x);
     let across = |p: &DVec2| (*p - origin).dot(right);
     let ahead = |p: &DVec2| (*p - origin).dot(look);
-    let (xa, xb) = boundary.iter().map(across).fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(x), b.max(x)));
-    let far = boundary.iter().map(ahead).fold(0.0_f64, f64::max);
+    // The points the view must reach, and how thick the wall behind them may be.
+    let (points, wall): (Vec<DVec2>, f64) = match face {
+        Face::Side(_) => {
+            (geom.room_at(project, e.level, m.position, Some(view.phase))?, thickest_wall(project, e.level))
+        }
+        Face::Wall(id) => {
+            let edges = geom.room_edges_at(project, e.level, m.position, Some(view.phase))?;
+            let points: Vec<DVec2> =
+                edges.iter().filter(|edge| edge.wall == Some(id)).flat_map(|edge| [edge.a, edge.b]).collect();
+            let thickness =
+                project.element(id).and_then(|w| project.types.get(&w.type_id)).map_or(0.0, |t| t.thickness());
+            (points, thickness)
+        }
+    };
+    let (xa, xb) = points.iter().map(across).fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(x), b.max(x)));
+    let far = points.iter().map(ahead).fold(0.0_f64, f64::max);
     let width = xb - xa;
-    if !width.is_finite() || width <= 1e-6 || !far.is_finite() {
+    if points.is_empty() || !width.is_finite() || width <= 1e-6 || !far.is_finite() {
         return None;
     }
-    let depth = far + thickest_wall(project, e.level).min(MAX_WALL) + 0.01;
+    let depth = far + if wall.is_finite() { wall.clamp(0.0, MAX_WALL) } else { 0.0 } + 0.01;
     let mut frame = frame(view)?;
     frame.far = Some(depth);
     frame.crop_x = Some((xa, xb));
     let crop = if auto_extents {
         let z0 = project.level_elevation(e.level);
-        let top = covered_at(geom, origin, z0)
+        let top = covered_at(geom, m.position, z0)
             .or_else(|| room_top(project, m.room, z0))
             .or_else(|| level_above(project, z0))
             .unwrap_or(z0 + DEFAULT_HEIGHT);
@@ -71,6 +90,61 @@ pub fn resolve(project: &Project, geom: &ModelGeometry, view: &View) -> Option<R
         view.crop
     };
     Some(Resolved { frame, crop: crop.filter(CropBox::is_valid) })
+}
+
+/// A wall a marker in walls mode can show: how much of it lies along the
+/// space and the middle of its longest stretch there.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WallFace {
+    pub wall: cc_core::ElementId,
+    pub length: f64,
+    pub mid: DVec2,
+}
+
+/// Most walls a marker lists.
+pub const MAX_WALL_FACES: usize = 256;
+
+/// The walls of the space around `marker` (an element on `level`) that its
+/// walls mode can show: those with at least the mode's `min_length` along
+/// the space (the default one in directions mode) that the marker does not
+/// stand in, clockwise from north as seen from the marker (by the middle of
+/// each wall's longest stretch). Empty where no walls close a space.
+pub fn wall_faces(
+    project: &Project,
+    geom: &ModelGeometry,
+    level: cc_core::LevelId,
+    marker: &cc_core::interior::InteriorMarker,
+) -> Vec<WallFace> {
+    let Some(edges) = geom.room_edges_at(project, level, marker.position, None) else { return Vec::new() };
+    let min_length = match marker.mode {
+        FaceMode::Walls { min_length, .. } => min_length,
+        FaceMode::Directions => cc_core::interior::DEFAULT_MIN_LENGTH,
+    };
+    // Per wall: its length along the space and its longest stretch.
+    let mut walls: std::collections::BTreeMap<cc_core::ElementId, (f64, f64, DVec2)> = Default::default();
+    for edge in &edges {
+        let Some(id) = edge.wall else { continue };
+        let length = edge.a.distance(edge.b);
+        let entry = walls.entry(id).or_insert((0.0, 0.0, edge.a));
+        entry.0 += length;
+        if length > entry.1 {
+            (entry.1, entry.2) = (length, (edge.a + edge.b) * 0.5);
+        }
+    }
+    let bearing = |p: DVec2| {
+        let d = p - marker.position;
+        d.x.atan2(d.y).rem_euclid(std::f64::consts::TAU)
+    };
+    let mut faces: Vec<WallFace> = walls
+        .into_iter()
+        .filter(|(id, (length, ..))| {
+            *length + 1e-9 >= min_length && project.interior_frame(marker, Face::Wall(*id)).is_some()
+        })
+        .map(|(wall, (length, _, mid))| WallFace { wall, length, mid })
+        .collect();
+    faces.sort_by(|a, b| bearing(a.mid).total_cmp(&bearing(b.mid)));
+    faces.truncate(MAX_WALL_FACES);
+    faces
 }
 
 /// The thickest type of the walls on `level`, meters.
@@ -131,8 +205,15 @@ const NUMBER_SIZE_MM: f64 = 2.2;
 /// The interior elevation markers on `level` in a plan at 1:`scale`: a
 /// circle (the marker, to pick and move) and, for each of its views, a
 /// filled arrow pointing at the wall it shows with the view's number (its
-/// drawing number once on a sheet).
-pub(crate) fn marks(d: &mut crate::Drawing2D, project: &Project, level: cc_core::LevelId, scale: u32) {
+/// drawing number once on a sheet). A side's arrow stands on the circle; a
+/// wall's stands where its view is cut, in front of the middle of the wall.
+pub(crate) fn marks(
+    d: &mut crate::Drawing2D,
+    project: &Project,
+    geom: &ModelGeometry,
+    level: cc_core::LevelId,
+    scale: u32,
+) {
     let r = MARKER_RADIUS_MM * f64::from(scale.max(1)) / 1000.0;
     for e in project.elements.values().filter(|e| e.level == level) {
         let ElementKind::InteriorMarker(m) = &e.kind else { continue };
@@ -141,20 +222,29 @@ pub(crate) fn marks(d: &mut crate::Drawing2D, project: &Project, level: cc_core:
             (0..24).map(|i| c + DVec2::from_angle(f64::from(i) / 24.0 * std::f64::consts::TAU) * r).collect();
         d.fill(circle.clone(), [255, 255, 255, 255], Some(e.id));
         d.polyline(&circle, true, crate::LineStyle::Annotation, Some(e.id));
-        for (side, number, view) in project.marker_sides(e.id) {
-            let look = m.look(side);
+        let walls = if m.mode.is_directions() { Vec::new() } else { wall_faces(project, geom, level, m) };
+        for (face, number, view) in project.marker_faces(e.id) {
+            let Some(v) = project.view(view) else { continue };
+            let ViewKind::InteriorElevation { origin, look, .. } = v.kind else { continue };
+            let Some(look) = look.try_normalize() else { continue };
             let across = look.perp();
-            let tip = c + look * (r * 1.9);
-            let arrow =
-                vec![c + across * (r * 0.95) + look * (r * 0.3), tip, c - across * (r * 0.95) + look * (r * 0.3)];
+            // Where the arrow's base stands, and where its number goes.
+            let (base, text) = match face {
+                Face::Side(_) => (c + look * (r * 0.3), c + look * (r * 0.55)),
+                Face::Wall(id) => {
+                    // In front of the middle of the wall's stretch, on the cut plane.
+                    let mid = walls.iter().find(|w| w.wall == id).map_or(origin, |w| w.mid);
+                    let on_plane = origin + across * (mid - origin).dot(across);
+                    (on_plane, on_plane - look * (r * 0.7))
+                }
+            };
+            let arrow = vec![base + across * (r * 0.95), base + look * (r * 1.6), base - across * (r * 0.95)];
             d.fill(arrow, [0, 0, 0, 255], Some(e.id));
-            d.interior_arrows.push(crate::InteriorArrow { view, center: c + look * (r * 1.1), radius: r * 0.9 });
-            let label = project
-                .view(view)
-                .map(|v| crate::plan::section_labels(project, v))
-                .filter(|(_, sheet)| sheet != "-")
-                .map_or_else(|| number.to_string(), |(n, _)| n);
-            d.text_at(c + look * (r * 0.55), label, NUMBER_SIZE_MM, crate::Anchor::Center, 0.0);
+            // Picked on the arrow's body, clear of the marker's circle.
+            d.interior_arrows.push(crate::InteriorArrow { view, center: base + look * (r * 0.8), radius: r * 0.9 });
+            let (drawing, sheet) = crate::plan::section_labels(project, v);
+            let label = if sheet == "-" { number.to_string() } else { drawing };
+            d.text_at(text, label, NUMBER_SIZE_MM, crate::Anchor::Center, 0.0);
         }
     }
 }

@@ -63,13 +63,13 @@ side walls and from the floor to the room's height.
     An L-shaped space still has the four: each view takes the space's
     extent in that direction. The cut plane of each view passes through
     the marker.
-  - `FaceMode::Walls { distance, min_length }`: one face per edge of the
-    boundary at least `min_length` long (default 0.30 m; shorter edges
-    such as a column's face are left out), each keeping its wall (the
-    views are numbered, see *Decisions*). Each view's cut plane stands
-    `distance` in front of its wall (default 1.00 m, never past the middle
-    of the space), so it shows the wall and what stands against it. A
-    curved wall is one face, its view on the chord.
+  - `FaceMode::Walls { distance, min_length }`: one face per wall of the
+    boundary with at least `min_length` along the space (default 0.30 m;
+    shorter stretches such as a column's face are left out), each keeping
+    its wall (the views are numbered, see *Decisions*). Each view's cut
+    plane stands `distance` in front of its wall (default 1.00 m, never
+    behind the marker: see *Decisions*), so it shows the wall and what
+    stands against it. A curved wall is one face, its view on the chord.
 - **`ViewKind::InteriorElevation { marker: ElementId, face: Face }`**,
   browser category *Elevations* (a subgroup *Interior*), where
   `Face::Direction(Direction)` or `Face::Wall(ElementId)`. A wall face
@@ -138,9 +138,10 @@ side walls and from the floor to the room's height.
    view's properties have *Automatic extents*.
 3. **One view per wall.** The boundary with its sources, `FaceMode::Walls`
    with `distance` and `min_length`, the views numbered clockwise from
-   the boundary's first wall, the marker drawing an arrow in front of
-   each wall pointing at it. Tests: short edges left out; the cut plane
-   never past the middle of a narrow space.
+   north as seen from the marker, the marker drawing an arrow in front of
+   each wall pointing at it, `interior_elevation_mode_set`. Tests: short
+   walls left out; the cut plane never behind the marker; a deleted wall
+   takes its view.
 4. **Finishing touches.** The floor and ceiling lines of the space, a view
    template for interior elevations in the project templates, and the
    views in schedules of views and sheets.
@@ -160,10 +161,20 @@ Following what desktop BIM tools commonly do (2026-11-26):
   the views take the level above as their top.
 - **Turning the marker**: the four arrows turn together to face slanted
   walls.
+- **Where a wall's view is cut** (stage 3, changed while implementing):
+  `distance` in front of the wall, but never behind the marker, instead
+  of never past the middle of the space. The view's origin and direction
+  must be worked out from the model alone (the marker, the wall's line
+  and its type's faces) so the view's projection needs no derived
+  geometry, and the middle of the space is derived geometry. With the
+  marker in the middle of the space, as it is placed, the two rules agree.
+- **A wall deleted**: its view goes with it (undo brings both back). A
+  wall that only stops bounding the space keeps its view, empty until it
+  bounds it again or its face is taken away.
 
 - **Names**: numbered per marker, the room's name and a number
   ("Kitchen 1", "Kitchen 2"…; "Interior Elevation 1"… with no room),
-  clockwise from the first arrow (north for directions, the first wall
-  of the boundary for walls). Short, so the arrows' texts fit in a small
+  clockwise from north as seen from the marker (for walls, by the middle
+  of each wall's longest stretch along the space). Short, so the arrows' texts fit in a small
   room; a number freed by a face taken away is reused by the next one
   added. The mark texts give the drawing number once on a sheet.

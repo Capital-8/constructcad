@@ -310,6 +310,7 @@ registry![
         shaft::ShaftCreate,
         interior::InteriorElevationsCreate,
         interior::InteriorElevationSidesSet,
+        interior::InteriorElevationModeSet,
         shaft::ShaftTypeCreate,
         topography::TopographyCreate,
         topography::TopographyPointsSet,

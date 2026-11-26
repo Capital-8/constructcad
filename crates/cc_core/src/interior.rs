@@ -1,13 +1,15 @@
 //! Interior elevations: the walls of a space seen from inside it. An
 //! [`InteriorMarker`] stands in a plan at a point of a space closed by walls
 //! (a room's, or any other); each of its interior elevation views
-//! ([`crate::ViewKind::InteriorElevation`]) looks from the marker towards
-//! one of four sides at right angles, turned with the marker.
+//! ([`crate::ViewKind::InteriorElevation`]) shows one [`Face`]: one of four
+//! sides at right angles, turned with the marker and seen from it
+//! ([`FaceMode::Directions`]), or one wall of the space, seen square on
+//! from a set distance in front of it ([`FaceMode::Walls`]).
 //!
-//! A view stores only its marker and its side; where it looks from and in
-//! which direction (`origin`, `look`) are copied from the marker by every
-//! edit (see [`crate::EditCtx`]), so the view's projection needs no
-//! geometry. How deep it looks and how it is cropped come from the space's
+//! A view stores only its marker and its face; where it looks from and in
+//! which direction (`origin`, `look`) are worked out from the marker and
+//! the wall by every edit ([`Project::interior_frame`], see
+//! [`crate::EditCtx`]), so the view's projection needs no geometry. How deep it looks and how it is cropped come from the space's
 //! boundary, worked out when the view is drawn (`cc_views::interior`).
 
 use crate::{ElementId, ElementKind, Project, ViewId, ViewKind};
@@ -16,6 +18,52 @@ use serde::{Deserialize, Serialize};
 
 /// Farthest a marker stands from the origin, meters.
 pub const MAX_POSITION: f64 = 1e6;
+/// How far in front of its wall a wall's view is cut by default, meters.
+pub const DEFAULT_DISTANCE: f64 = 1.0;
+/// Shortest stretch of a wall that gets a view by default, meters.
+pub const DEFAULT_MIN_LENGTH: f64 = 0.3;
+/// Largest distance and minimum length a marker takes, meters.
+pub const MAX_DISTANCE: f64 = 100.0;
+
+/// What a marker's views show.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum FaceMode {
+    /// Up to four sides at right angles, seen from the marker.
+    #[default]
+    Directions,
+    /// One view per wall of the space with at least `min_length` of it
+    /// along the space, each cut `distance` in front of its wall (never
+    /// behind the marker).
+    Walls { distance: f64, min_length: f64 },
+}
+
+impl FaceMode {
+    /// The walls mode with its default distance and minimum length.
+    pub fn walls() -> Self {
+        FaceMode::Walls { distance: DEFAULT_DISTANCE, min_length: DEFAULT_MIN_LENGTH }
+    }
+
+    pub fn is_directions(&self) -> bool {
+        matches!(self, FaceMode::Directions)
+    }
+
+    /// Finite values within [`MAX_DISTANCE`].
+    pub fn is_valid(&self) -> bool {
+        match *self {
+            FaceMode::Directions => true,
+            FaceMode::Walls { distance, min_length } => {
+                (0.0..=MAX_DISTANCE).contains(&distance) && (0.0..=MAX_DISTANCE).contains(&min_length)
+            }
+        }
+    }
+}
+
+/// What a view of a marker shows: a side of the marker, or a wall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Face {
+    Side(Side),
+    Wall(ElementId),
+}
 
 /// A marker of interior elevations in a plan.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,6 +78,9 @@ pub struct InteriorMarker {
     /// face north, east, south and west of the plan).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub rotation_deg: f64,
+    /// Four directions, or a view per wall.
+    #[serde(default, skip_serializing_if = "FaceMode::is_directions")]
+    pub mode: FaceMode,
 }
 
 fn is_zero(x: &f64) -> bool {
@@ -39,7 +90,15 @@ fn is_zero(x: &f64) -> bool {
 impl InteriorMarker {
     /// Finite and within [`MAX_POSITION`].
     pub fn is_valid(&self) -> bool {
-        self.position.is_finite() && self.position.abs().max_element() <= MAX_POSITION && self.rotation_deg.is_finite()
+        self.position.is_finite()
+            && self.position.abs().max_element() <= MAX_POSITION
+            && self.rotation_deg.is_finite()
+            && self.mode.is_valid()
+    }
+
+    /// Whether `face` is of the kind the marker's mode shows.
+    pub fn takes(&self, face: Face) -> bool {
+        matches!((self.mode, face), (FaceMode::Directions, Face::Side(_)) | (FaceMode::Walls { .. }, Face::Wall(_)))
     }
 
     /// The unit direction a view of `side` looks along.
@@ -90,12 +149,16 @@ impl Side {
 }
 
 impl Project {
-    /// The interior elevations of marker `marker` (detail views of them
+    /// The interior elevations that go with element `id`: those of the
+    /// marker it is, and those showing the wall it is (detail views of them
     /// included), in id order.
-    pub fn interior_views_of(&self, marker: ElementId) -> Vec<ViewId> {
+    pub fn interior_views_of(&self, id: ElementId) -> Vec<ViewId> {
         self.views
             .values()
-            .filter(|v| matches!(v.kind, ViewKind::InteriorElevation { marker: m, .. } if m == marker))
+            .filter(|v| match v.kind {
+                ViewKind::InteriorElevation { marker, face, .. } => marker == id || face == Face::Wall(id),
+                _ => false,
+            })
             .map(|v| v.id)
             .collect()
     }
@@ -108,12 +171,57 @@ impl Project {
         })
     }
 
+    /// Where a view of `face` of `marker` looks from, and the unit
+    /// direction it looks along. A side: from the marker, along the side. A
+    /// wall: square on to the wall (its chord, when curved), from the
+    /// marker's foot on a plane the mode's `distance` in front of the wall's
+    /// face on the marker's side, or through the marker when it stands
+    /// nearer than that. `None` when the wall is gone, has no length or the
+    /// marker stands in it.
+    pub fn interior_frame(&self, marker: &InteriorMarker, face: Face) -> Option<(DVec2, DVec2)> {
+        let wall = match face {
+            Face::Side(side) => return Some((marker.position, marker.look(side))),
+            Face::Wall(id) => id,
+        };
+        let e = self.element(wall)?;
+        let w = e.as_wall()?;
+        let dir = (w.end - w.start).try_normalize()?;
+        let left = dir.perp();
+        // Signed distances to the left of the chord: the marker, the faces and the wall's middle.
+        let at = (marker.position - w.start).dot(left);
+        let (face_left, face_right) = self.wall_faces(e.type_id, w.location_line);
+        let bow = (w.at(w.length() * 0.5, 0.0) - w.start).dot(left);
+        let (look, clear) = if at > face_left + bow.max(0.0) {
+            (-left, at - face_left - bow.max(0.0))
+        } else if at < face_right + bow.min(0.0) {
+            (left, face_right + bow.min(0.0) - at)
+        } else {
+            return None;
+        };
+        let distance = match marker.mode {
+            FaceMode::Walls { distance, .. } => distance,
+            FaceMode::Directions => DEFAULT_DISTANCE,
+        };
+        let back = (clear - distance.clamp(0.0, MAX_DISTANCE)).max(0.0);
+        let origin = marker.position + look * back;
+        (origin.is_finite() && look.is_finite()).then_some((origin, look))
+    }
+
     /// Repair interior elevations: drop views whose marker is gone (or is
-    /// not a marker), set their origin and look from their marker, give
-    /// them a number, and clear markers' rooms that are gone. Returns how
-    /// many were fixed.
+    /// not a marker) or whose face is not of the marker's mode, set their
+    /// origin and look from their marker, give them a number, reset bad
+    /// modes and clear markers' rooms that are gone. Returns how many were
+    /// fixed.
     pub(crate) fn repair_interior(&mut self) -> usize {
         let mut repairs = 0;
+        for e in self.elements.values_mut() {
+            if let ElementKind::InteriorMarker(m) = &mut e.kind
+                && !m.mode.is_valid()
+            {
+                m.mode = FaceMode::walls();
+                repairs += 1;
+            }
+        }
         let markers: std::collections::BTreeMap<ElementId, InteriorMarker> = self
             .elements
             .values()
@@ -123,8 +231,16 @@ impl Project {
             })
             .collect();
         let before = self.views.len();
+        let walls: std::collections::BTreeSet<ElementId> =
+            self.elements.values().filter(|e| e.as_wall().is_some()).map(|e| e.id).collect();
         self.views.retain(|_, v| match &v.kind {
-            ViewKind::InteriorElevation { marker, .. } => markers.contains_key(marker),
+            ViewKind::InteriorElevation { marker, face, .. } => {
+                let wall_ok = match face {
+                    Face::Wall(w) => walls.contains(w),
+                    Face::Side(_) => true,
+                };
+                wall_ok && markers.get(marker).is_some_and(|m| m.takes(*face))
+            }
             _ => true,
         });
         repairs += before - self.views.len();
@@ -137,10 +253,28 @@ impl Project {
                 repairs += n - viewports.len();
             }
         }
-        for v in self.views.values_mut() {
-            let ViewKind::InteriorElevation { marker, side, number, origin, look, .. } = &mut v.kind else { continue };
-            let Some(m) = markers.get(marker) else { continue };
-            let want = (m.position, m.look(*side));
+        let frames: Vec<(ViewId, Option<(DVec2, DVec2)>)> = self
+            .views
+            .values()
+            .filter_map(|v| match &v.kind {
+                ViewKind::InteriorElevation { marker, face, .. } => {
+                    Some((v.id, markers.get(marker).and_then(|m| self.interior_frame(m, *face))))
+                }
+                _ => None,
+            })
+            .collect();
+        for (id, frame) in frames {
+            let Some(ViewKind::InteriorElevation { number, origin, look, .. }) =
+                self.views.get_mut(&id).map(|v| &mut v.kind)
+            else {
+                continue;
+            };
+            // A wall that is gone leaves the view where it looked, finite at least.
+            let want = frame.unwrap_or(if origin.is_finite() && look.is_finite() {
+                (*origin, *look)
+            } else {
+                (DVec2::ZERO, DVec2::Y)
+            });
             if (*origin, *look) != want {
                 (*origin, *look) = want;
                 repairs += 1;
@@ -163,15 +297,15 @@ impl Project {
         repairs
     }
 
-    /// The side and number of each view of marker `marker` that is not a
+    /// The face and number of each view of marker `marker` that is not a
     /// detail view.
-    pub fn marker_sides(&self, marker: ElementId) -> Vec<(Side, u32, ViewId)> {
+    pub fn marker_faces(&self, marker: ElementId) -> Vec<(Face, u32, ViewId)> {
         self.views
             .values()
             .filter(|v| !v.is_detail())
             .filter_map(|v| match v.kind {
-                ViewKind::InteriorElevation { marker: m, side, number, .. } if m == marker => {
-                    Some((side, number, v.id))
+                ViewKind::InteriorElevation { marker: m, face, number, .. } if m == marker => {
+                    Some((face, number, v.id))
                 }
                 _ => None,
             })

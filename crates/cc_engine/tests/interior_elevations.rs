@@ -250,3 +250,109 @@ fn plans_draw_the_marker_with_an_arrow_per_view() {
         .collect();
     assert!(texts.contains(&"1".to_string()) && texts.contains(&"2".to_string()), "{texts:?}");
 }
+
+/// The walls `element_get` lists for a marker, clockwise from north.
+fn marker_walls(s: &mut Session, marker: u64) -> Vec<u64> {
+    run(s, "element_get", json!({"id": marker}))["derived"]["walls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["wall"].as_u64().unwrap())
+        .collect()
+}
+
+/// The wall of the kitchen whose line lies at `y` (horizontal) or `x` (vertical).
+fn wall_at(s: &mut Session, walls: &[u64], axis: usize, value: f64) -> u64 {
+    walls
+        .iter()
+        .copied()
+        .find(|w| {
+            let p = run(s, "element_get", json!({"id": w}))["params"].clone();
+            let c = |v: &Value| v.as_f64().unwrap_or(f64::NAN);
+            (c(&p["start"][axis]) - value).abs() < 1e-6 && (c(&p["end"][axis]) - value).abs() < 1e-6
+        })
+        .unwrap()
+}
+
+#[test]
+fn the_walls_mode_makes_a_view_per_wall_cut_in_front_of_it() {
+    let mut s = Session::default();
+    let (walls, room) = kitchen(&mut s);
+    let t = wall_thickness(&mut s, walls[0]);
+    let (north, east, south, west) = (
+        wall_at(&mut s, &walls, 1, 4.0),
+        wall_at(&mut s, &walls, 0, 6.0),
+        wall_at(&mut s, &walls, 1, 0.0),
+        wall_at(&mut s, &walls, 0, 0.0),
+    );
+    let out = run(&mut s, "interior_elevations_create", json!({"room": room, "mode": "walls"}));
+    let marker = out["marker"].as_u64().unwrap();
+    // One view per wall, numbered clockwise from north.
+    let order: Vec<u64> = out["views"].as_array().unwrap().iter().map(|v| v["wall"].as_u64().unwrap()).collect();
+    assert_eq!(order, [north, east, south, west]);
+    assert_eq!(marker_walls(&mut s, marker), order);
+    let names: Vec<&str> = out["views"].as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Kitchen 1", "Kitchen 2", "Kitchen 3", "Kitchen 4"]);
+
+    // The north wall's view is cut 1 m in front of its inner face (y = 4 - t/2), looking north.
+    let view = ViewId(out["views"][0]["view"].as_u64().unwrap());
+    let cc_core::ViewKind::InteriorElevation { origin, look, .. } = s.project().view(view).unwrap().kind else {
+        panic!()
+    };
+    assert!((look - DVec2::Y).length() < 1e-9, "{look}");
+    assert!((origin - DVec2::new(3.0, 4.0 - t / 2.0 - 1.0)).length() < 1e-9, "{origin}");
+    // It shows the wall's stretch of the room: 6 m less the side walls.
+    let (ids, ext) = drawn(&mut s, view);
+    assert!(ids.contains(&north), "{ids:?}");
+    let (lo, hi) = ext.unwrap();
+    assert!((hi.x - lo.x - (6.0 - t)).abs() < 0.05, "{lo} {hi}");
+
+    // A distance larger than the marker's own puts the cut plane through the marker, not behind it.
+    run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "walls", "distance": 5.0}));
+    let cc_core::ViewKind::InteriorElevation { origin, .. } = s.project().view(view).unwrap().kind else { panic!() };
+    assert!((origin - DVec2::new(3.0, 2.0)).length() < 1e-9, "never behind the marker: {origin}");
+
+    // Faces: keep only the east and west walls; then back to directions, with its four sides.
+    let out = run(&mut s, "interior_elevation_sides_set", json!({"marker": marker, "walls": [east, west]}));
+    assert_eq!(out["views"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        fails(&mut s, "interior_elevation_sides_set", json!({"marker": marker, "sides": ["north"]})),
+        ErrorCode::InvalidArguments
+    );
+    let out = run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "directions"}));
+    let sides: Vec<&str> = out["views"].as_array().unwrap().iter().map(|v| v["side"].as_str().unwrap()).collect();
+    assert_eq!(sides, ["north", "east", "south", "west"]);
+    assert!(s.project().view(view).is_none(), "the walls' views went with the mode");
+}
+
+#[test]
+fn short_walls_are_left_out_and_a_deleted_wall_takes_its_view() {
+    let mut s = Session::default();
+    let (walls, room) = kitchen(&mut s);
+    // A free-standing pier 0.2 m wide inside the room: its faces are not the space's boundary.
+    let pier = json!({"kind": "rectangle", "corner": [2.9, 3.4], "opposite": [3.1, 3.6]});
+    let pier: Vec<u64> = run(&mut s, "walls_create", json!({"curves": [pier]}))["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().unwrap())
+        .collect();
+    let out = run(&mut s, "interior_elevations_create", json!({"room": room, "mode": "walls"}));
+    let marker = out["marker"].as_u64().unwrap();
+    let shown = marker_walls(&mut s, marker);
+    assert!(pier.iter().all(|w| !shown.contains(w)), "the pier's faces are free-standing, not the space's boundary");
+    assert_eq!(shown.len(), 4);
+
+    // With a minimum length of 5 m only the two long walls stay.
+    let out = run(&mut s, "interior_elevation_mode_set", json!({"marker": marker, "mode": "walls", "min_length": 5.0}));
+    assert_eq!(out["views"].as_array().unwrap().len(), 2, "{out}");
+    let north = wall_at(&mut s, &walls, 1, 4.0);
+    let view = out["views"].as_array().unwrap().iter().find(|v| v["wall"].as_u64() == Some(north)).unwrap()["view"]
+        .as_u64()
+        .unwrap();
+    // Deleting the north wall deletes its view; undo brings both back.
+    run(&mut s, "elements_delete", json!({"ids": [north]}));
+    assert!(s.project().view(ViewId(view)).is_none());
+    run(&mut s, "undo", json!({}));
+    assert!(s.project().view(ViewId(view)).is_some());
+}

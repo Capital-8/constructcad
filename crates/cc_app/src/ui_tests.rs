@@ -9123,16 +9123,16 @@ fn the_interior_elevation_tool_places_a_marker_and_its_arrows_open_views() {
         .map(|e| e.id)
         .collect();
     assert_eq!(markers.len(), 1, "{}", state.message);
-    assert_eq!(state.project().marker_sides(markers[0]).len(), 4);
+    assert_eq!(state.project().marker_faces(markers[0]).len(), 4);
     assert_eq!(state.selection, [markers[0]].into_iter().collect(), "the marker is selected");
 
     // With the Select tool, a double click on the east arrow opens the east view.
     let plan = state.active_view.unwrap();
     let east = state
         .project()
-        .marker_sides(markers[0])
+        .marker_faces(markers[0])
         .into_iter()
-        .find(|(side, ..)| *side == cc_core::interior::Side::East)
+        .find(|(face, ..)| *face == cc_core::interior::Face::Side(cc_core::interior::Side::East))
         .unwrap()
         .2;
     canvas.state_mut().set_tool(crate::tools::Tool::Select);
@@ -9155,7 +9155,7 @@ fn interior_markers_set_their_sides_in_properties() {
     assert!(crate::commands::UiCommand::RoomInteriorElevations.unavailable(&state).is_none());
     crate::interior_ui::for_selected_rooms(&mut state);
     let marker = *state.selection.iter().next().unwrap();
-    assert_eq!(state.project().marker_sides(marker).len(), 4, "{}", state.message);
+    assert_eq!(state.project().marker_faces(marker).len(), 4, "{}", state.message);
 
     let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
         crate::properties::show(ui, state);
@@ -9164,13 +9164,14 @@ fn interior_markers_set_their_sides_in_properties() {
     let north = t!("tpl-elev-north");
     harness.get_by_role_and_label(Role::CheckBox, &north).click();
     harness.run();
-    let sides = harness.state().project().marker_sides(marker);
+    let sides = harness.state().project().marker_faces(marker);
     assert_eq!(sides.len(), 3, "{}", harness.state().message);
-    assert!(sides.iter().all(|(s, ..)| *s != cc_core::interior::Side::North));
+    let north_face = cc_core::interior::Face::Side(cc_core::interior::Side::North);
+    assert!(sides.iter().all(|(f, ..)| *f != north_face));
     harness.get_by_role_and_label(Role::CheckBox, &north).click();
     harness.run();
-    let sides = harness.state().project().marker_sides(marker);
-    let (_, number, _) = sides.iter().find(|(s, ..)| *s == cc_core::interior::Side::North).unwrap();
+    let sides = harness.state().project().marker_faces(marker);
+    let (_, number, _) = sides.iter().find(|(f, ..)| *f == north_face).unwrap();
     assert_eq!(*number, 1, "the freed number comes back");
 }
 
@@ -9182,7 +9183,7 @@ fn interior_elevations_can_keep_their_crop() {
     state.selection = [room].into_iter().collect();
     crate::interior_ui::for_selected_rooms(&mut state);
     let marker = *state.selection.iter().next().unwrap();
-    let view = state.project().marker_sides(marker)[0].2;
+    let view = state.project().marker_faces(marker)[0].2;
     state.selection.clear();
     state.active_view = Some(view);
     let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
@@ -9195,4 +9196,42 @@ fn interior_elevations_can_keep_their_crop() {
     let v = harness.state().project().view(view).unwrap().clone();
     assert!(matches!(v.kind, cc_core::ViewKind::InteriorElevation { auto_extents: false, .. }), "{:?}", v.kind);
     assert!(v.crop.is_some_and(|c| c.is_valid()), "the crop it had is kept: {:?}", v.crop);
+}
+
+/// The tool's options bar picks *One per wall*: a click then makes a view
+/// per wall of the space, and the marker's properties list those walls,
+/// each with its checkbox.
+#[test]
+fn the_interior_elevation_tool_makes_a_view_per_wall() {
+    let (mut state, _, at) = interior_state();
+    state.set_tool(crate::tools::Tool::InteriorElevation);
+    let mut bar = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::options_bar(ui, state)
+    });
+    bar.get_by_label(&t!("interior-mode-walls")).click();
+    bar.run();
+    assert!(bar.state().interior_walls);
+    let state = std::mem::replace(bar.state_mut(), sample_state());
+
+    let mut canvas = interior_canvas(state, at);
+    interior_click(&mut canvas, egui::pos2(300.0, 200.0), 1);
+    let state = std::mem::replace(canvas.state_mut(), sample_state());
+    let marker = *state.selection.iter().next().expect("the marker is selected");
+    let faces = state.project().marker_faces(marker);
+    assert!(faces.len() >= 3, "a view per wall: {} ({})", faces.len(), state.message);
+    assert!(faces.iter().all(|(f, ..)| matches!(f, cc_core::interior::Face::Wall(_))));
+
+    let before = faces.len();
+    let mut props = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    props.run();
+    let first = format!("{} 1", t!("tool-wall"));
+    props.get_by_role_and_label(Role::CheckBox, &first).click();
+    props.run();
+    assert_eq!(props.state().project().marker_faces(marker).len(), before - 1, "{}", props.state().message);
+    let cc_core::ElementKind::InteriorMarker(m) = &props.state().project().element(marker).unwrap().kind else {
+        panic!("a marker")
+    };
+    assert_eq!(m.mode, cc_core::interior::FaceMode::walls(), "the default distance and minimum length");
 }
