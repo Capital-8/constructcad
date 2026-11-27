@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod analytical_arcs;
+mod analytical_supports;
 mod arc_beams;
 mod arc_strip_footings;
 mod bar_marks;

@@ -2007,6 +2007,7 @@ mod tests {
                     height: 3.0,
                     top,
                     structural: true,
+                    base_support: Default::default(),
                 }),
             );
             let beam = add(

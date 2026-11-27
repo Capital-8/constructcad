@@ -750,6 +750,7 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `position` | [x, y] | required | Center of the column in plan. |
+| `base_support` | string | optional | The support at its base in the analytical model: `fixed` (default) or `pinned`. |
 | `height` | number | optional | Unconnected height (default: the level's height). |
 | `level` | id or name | optional | Level id or name (default: the lowest level). |
 | `rotation` | number | optional | Rotation in plan, degrees. |
@@ -1152,7 +1153,7 @@ No parameters.
 
 ### `analytical_model`
 
-*query* — The analytical model of the structure: structural columns and beams as members along their center lines between shared nodes. Beams framed into columns end on the column axis, beams ending on beams end on their line, and members are split where others connect. Each member carries its `section`: the profile's name, `width` and `height` (m), `area` (m²), `ix`, `iy` and `j` (m⁴). The members of an arc beam follow its arc: each has an `arc` (`bulge`, `center`, `radius`, `sweep` in degrees) and the arc's `length`.
+*query* — The analytical model of the structure: structural columns and beams as members along their center lines between shared nodes. Beams framed into columns end on the column axis, beams ending on beams end on their line, and members are split where others connect; a column top that only beams frame into ends on their axis. Support nodes (column bases) carry their `base_support` (`fixed` or `pinned`, the column's) and `restraint` (`[ux, uy, uz, rx, ry, rz]`, true where held). Each member carries its `section`: the profile's name, `shape` and `material`, `width` and `height` (m), `area` (m²), `ix`, `iy` and `j` (m⁴), about the section axes the document's `axes` describes. The members of an arc beam follow its arc: each has an `arc` (`bulge`, `center`, `radius`, `sweep` in degrees) and the arc's `length`. `materials` lists the members' materials with their `modulus`, `shear_modulus`, `poisson`, `density` and strengths (SI units, null where unknown).
 
 | Parameter | Type | | Description |
 |---|---|---|---|

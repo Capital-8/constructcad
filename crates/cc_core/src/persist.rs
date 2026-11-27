@@ -19,7 +19,8 @@ use std::path::Path;
 /// `ViewKind::InteriorElevation`), which older builds cannot read.
 /// 37: interior elevations of walls (`interior::Face`, `FaceMode`); files
 /// of format 36 wrote a view's side alone and still read.
-pub const FORMAT_VERSION: u32 = 37;
+/// 38: a column's `base_support` (fixed or pinned), which older builds would drop.
+pub const FORMAT_VERSION: u32 = 38;
 
 /// Largest project file read, bytes (pictures and textures are kept in it).
 pub const MAX_FILE_BYTES: u64 = 1 << 30;

@@ -1102,6 +1102,51 @@ pub struct Column {
     /// A load-bearing column; an architectural one (off) is cut by the walls it is joined with.
     #[serde(default = "yes")]
     pub structural: bool,
+    /// What holds a structural column at its base, where it rests on a
+    /// support (the analytical model's restraint there).
+    #[serde(default)]
+    pub base_support: BaseSupport,
+}
+
+/// The support at a column's base in the analytical model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum BaseSupport {
+    /// Translations and rotations held.
+    #[default]
+    Fixed,
+    /// Translations held, rotations free.
+    Pinned,
+}
+
+impl BaseSupport {
+    pub const ALL: [BaseSupport; 2] = [BaseSupport::Fixed, BaseSupport::Pinned];
+
+    /// The name commands and exports use.
+    pub fn code(self) -> &'static str {
+        match self {
+            BaseSupport::Fixed => "fixed",
+            BaseSupport::Pinned => "pinned",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.code().eq_ignore_ascii_case(code))
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            BaseSupport::Fixed => "base-support-fixed",
+            BaseSupport::Pinned => "base-support-pinned",
+        }
+    }
+
+    /// The degrees of freedom held, in global axes: `[ux, uy, uz, rx, ry, rz]`.
+    pub fn restraint(self) -> [bool; 6] {
+        match self {
+            BaseSupport::Fixed => [true; 6],
+            BaseSupport::Pinned => [true, true, true, false, false, false],
+        }
+    }
 }
 
 /// Which line across a beam's section its `start`-`end` location line follows.

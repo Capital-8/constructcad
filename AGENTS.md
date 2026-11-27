@@ -65,7 +65,7 @@ The detailed notes (types, functions, invariants, commands and app entry points 
 - [`docs/architecture/geometry.md`](docs/architecture/geometry.md) — cc_geom, cc_render, Joined pieces.
 - [`docs/architecture/walls.md`](docs/architecture/walls.md) — Curtain walls, Wall profiles, Spline walls, Niches, Wall flip, Wall draw shapes. 
 - [`docs/architecture/elements.md`](docs/architecture/elements.md) — Sketches, Roof coverings and framing, Roof joins, Conceptual masses, Terrain, Building pads, Shafts, Swept profiles.
-- [`docs/architecture/structure.md`](docs/architecture/structure.md) — Piles and pile caps, Structural profiles, Structure by material, Steel buildings, Member hosts and trusses, Bracing, Wall framing, Connections.
+- [`docs/architecture/structure.md`](docs/architecture/structure.md) — Piles and pile caps, Structural profiles, Structure by material, Steel buildings, Member hosts and trusses, Bracing, Wall framing, Connections, Analytical model.
 - [`docs/architecture/reinforcement.md`](docs/architecture/reinforcement.md) — Bar marks and bending schedule, Reinforcement in plans, elevations and sections, Wall reinforcement, Slab reinforcement, Strip footings with a beam and curved rafts, Pile caps and piles.
 - [`docs/architecture/mep.md`](docs/architecture/mep.md) — MEP, Run tags and fitting labels, Pipe series, Pipe Catalog (app).
 - [`docs/architecture/interop.md`](docs/architecture/interop.md) — cc_ifc, Imported CAD drawings, cc_skp, glTF export, cc_rvt.

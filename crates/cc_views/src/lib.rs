@@ -825,7 +825,7 @@ mod tests {
         // One line per member (tagged with its element), one marker per node.
         let members = d.prims.iter().filter(|p| matches!(p, crate::Prim::Line { element: Some(_), .. })).count();
         assert_eq!(members, model.members.len());
-        assert!(model.nodes.iter().any(|n| n.support));
+        assert!(model.nodes.iter().any(|n| n.support.is_some()));
         // The physical model is not drawn.
         assert!(!d.prims.iter().any(|p| matches!(p, crate::Prim::Fill { .. })));
     }

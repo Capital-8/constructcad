@@ -1125,7 +1125,7 @@ pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState)
     for n in &model.nodes {
         let p = frame.project(n.position);
         let r = 0.08;
-        let marker: Vec<DVec2> = if n.support {
+        let marker: Vec<DVec2> = if n.support.is_some() {
             vec![p, p + DVec2::new(r, -1.6 * r), p + DVec2::new(-r, -1.6 * r)]
         } else {
             (0..8).map(|i| p + DVec2::from_angle(i as f64 * std::f64::consts::FRAC_PI_4) * (r * 0.5)).collect()
