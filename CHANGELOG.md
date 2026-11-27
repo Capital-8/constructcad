@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The Windows release files (`constructcraft.exe`, `ccad.exe`, the portable `.zip` and the `.msi`) are code-signed through SignPath, with a certificate from SignPath Foundation; the README has the code signing policy.
+
 ## [0.15.0] - 2026-11-26
 
 ### Added
